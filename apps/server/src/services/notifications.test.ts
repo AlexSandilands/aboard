@@ -396,6 +396,23 @@ describe("clearing what is resolved", () => {
     expect(unread(inbox)).toEqual([]);
   });
 
+  it("notifies again when the same state returns after it was resolved", () => {
+    const { s, prLink, task, inbox } = setup();
+    s.links.setSnapshot(prLink.id, pr());
+    // A CI re-run on the same head: failing, pending, failing again.
+    s.links.setSnapshot(prLink.id, pr({ checks: "failing", headOid: "bbb" }));
+    s.links.setSnapshot(prLink.id, pr({ checks: "pending", headOid: "bbb" }));
+    s.links.setSnapshot(prLink.id, pr({ checks: "failing", headOid: "bbb" }));
+    expect(inbox().map((n) => n.readAt === null)).toEqual([true, false]);
+
+    // A failed round that is reopened and fails again.
+    const round = s.reviews.openRound(task.id, { trigger: "manual", actor: "agent" });
+    s.reviews.setRoundStatus(round.id, "failed", { actor: "board", error: "boom" });
+    s.reviews.setRoundStatus(round.id, "pending", { actor: "board" });
+    s.reviews.setRoundStatus(round.id, "failed", { actor: "board", error: "boom again" });
+    expect(inbox().filter((n) => n.kind === "review_finished" && n.readAt === null)).toHaveLength(1);
+  });
+
   it("reads an agent request when it is cleared", () => {
     const { s, task, inbox } = setup();
     s.attention.request(task.id, "Look", "claude-code");
@@ -429,6 +446,16 @@ describe("clearing what is resolved", () => {
     note(other.id, "d");
     s.tasks.update(other.id, { archived: true }, "user");
     expect(unread(inbox)).toEqual([]);
+
+    // Closing it counts too.
+    const closing = s.tasks.create({
+      projectId: project.id,
+      title: "Closing",
+      plan: { phases: [{ title: "Build", steps: [{ title: "a" }] }] },
+    });
+    note(closing.id, "f");
+    s.tasks.close(closing.id, { resolution: "wont_do" }, "user");
+    expect(inbox().find((n) => n.title === "f")!.readAt).not.toBeNull();
 
     // Later touches of a finished task don't quietly read what arrived since.
     note(task.id, "e");

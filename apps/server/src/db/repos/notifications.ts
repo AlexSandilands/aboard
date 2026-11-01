@@ -95,22 +95,27 @@ export function createNotificationsRepo(sql: Sql) {
         sql.run("UPDATE notifications SET read_at = ? WHERE task_id = ? AND read_at IS NULL", at, taskId).changes,
       );
     },
-    /** Marks a task's unread notifications of one kind read; returns how many changed. */
+    /**
+     * Marks a task's unread notifications of one kind resolved: read, and their dedupe key freed (the row keeps a
+     * key of its own), so the same state arising again, a re-run that fails or a reopened round, notifies again.
+     */
     markTaskKindRead(taskId: string, kind: NotificationKind, at: string): number {
       return Number(
         sql.run(
-          "UPDATE notifications SET read_at = ? WHERE task_id = ? AND kind = ? AND read_at IS NULL",
+          `UPDATE notifications SET read_at = ?, dedupe_key = dedupe_key || '#resolved:' || id
+           WHERE task_id = ? AND kind = ? AND read_at IS NULL`,
           at,
           taskId,
           kind,
         ).changes,
       );
     },
-    /** Marks the unread notifications whose dedupe key starts with `prefix` read; returns how many changed. */
+    /** Like `markTaskKindRead`, for the unread notifications whose dedupe key starts with `prefix`. */
     markKeyPrefixRead(prefix: string, at: string): number {
       return Number(
         sql.run(
-          "UPDATE notifications SET read_at = ? WHERE substr(dedupe_key, 1, length(?)) = ? AND read_at IS NULL",
+          `UPDATE notifications SET read_at = ?, dedupe_key = dedupe_key || '#resolved:' || id
+           WHERE substr(dedupe_key, 1, length(?)) = ? AND read_at IS NULL`,
           at,
           prefix,
           prefix,
