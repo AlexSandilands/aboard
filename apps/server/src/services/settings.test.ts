@@ -70,41 +70,41 @@ describe("CLI efforts", () => {
 describe("headless job models", () => {
   it("defaults to haiku for imports and the CLI's own model for the board reviewer", () => {
     const { services } = createTestHarness();
-    expect(services.settings.get()).toMatchObject({ issueImportModel: { model: "haiku" }, headlessReviewModel: null });
+    expect(services.settings.get()).toMatchObject({ issueImportModel: { model: "haiku" }, reviewModel: null });
   });
 
   it("reads a model saved as a bare string, as before tiers were an option", () => {
     const h = createTestHarness();
     createRepos(h.db).settings.set("issueImportModel", "claude-sonnet-5-5");
-    createRepos(h.db).settings.set("headlessReviewModel", "opus");
+    createRepos(h.db).settings.set("reviewModel", "opus");
     expect(h.services.settings.get()).toMatchObject({
       issueImportModel: { model: "claude-sonnet-5-5" },
-      headlessReviewModel: { model: "opus" },
+      reviewModel: { model: "opus" },
     });
   });
 
   it("falls back to the default for a stored value that is neither a model nor a tier", () => {
     const h = createTestHarness();
     createRepos(h.db).settings.set("issueImportModel", { tier: "huge" });
-    createRepos(h.db).settings.set("headlessReviewModel", 7);
+    createRepos(h.db).settings.set("reviewModel", 7);
     expect(h.services.settings.get()).toMatchObject({
       issueImportModel: { model: "haiku" },
-      headlessReviewModel: null,
+      reviewModel: null,
     });
   });
 
   it("saves a tier or a model, and a string from an older client as a model", async () => {
     const h = createTestHarness();
     const patch = (json: unknown) => h.request("/api/settings", { method: "PATCH", json });
-    await patch({ issueImportModel: { tier: "light" }, headlessReviewModel: "sonnet" });
+    await patch({ issueImportModel: { tier: "light" }, reviewModel: "sonnet" });
     expect(h.services.settings.get()).toMatchObject({
       issueImportModel: { tier: "light" },
-      headlessReviewModel: { model: "sonnet" },
+      reviewModel: { model: "sonnet" },
     });
-    await patch({ issueImportModel: "haiku", headlessReviewModel: null });
+    await patch({ issueImportModel: "haiku", reviewModel: null });
     expect(h.services.settings.get()).toMatchObject({
       issueImportModel: { model: "haiku" },
-      headlessReviewModel: null,
+      reviewModel: null,
     });
   });
 
@@ -112,7 +112,7 @@ describe("headless job models", () => {
     const h = createTestHarness();
     const patch = (json: unknown) => h.request("/api/settings", { method: "PATCH", json });
     expect((await patch({ issueImportModel: "haiku; rm -rf /" })).status).toBe(400);
-    expect((await patch({ headlessReviewModel: { tier: "huge" } })).status).toBe(400);
+    expect((await patch({ reviewModel: { tier: "huge" } })).status).toBe(400);
     expect((await patch({ issueImportModel: "" })).status).toBe(400);
   });
 });

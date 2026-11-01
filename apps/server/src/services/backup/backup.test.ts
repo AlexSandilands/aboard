@@ -504,7 +504,9 @@ describe("restore", () => {
       autopilot_recurring: [],
       autopilot_custom: [],
       suggestions: [],
-      projects: dump.projects.map(({ plan_skill_json: _ps, variables_json: _v, ...project }) => project),
+      projects: dump.projects.map(
+        ({ plan_skill_json: _ps, variables_json: _v, review_model_json: _rm, ...project }) => project,
+      ),
       tasks: dump.tasks.map((bundle) => {
         const {
           suggested_tier: _t,
@@ -516,6 +518,7 @@ describe("restore", () => {
           manual: _mn,
           due_date: _dd,
           auto_merge: _am,
+          review_model_json: _rm,
           template_id: _m,
           delivery: _d,
           integration_branch: _b,
@@ -535,6 +538,8 @@ describe("restore", () => {
     old.settings = [
       ...dump.settings.filter((r) => r.key !== "ticketSystems"),
       { key: "jiraBaseUrl", value_json: '"https://jira.example.com"' },
+      // Before the reviewer model was shared with the review subagent.
+      { key: "headlessReviewModel", value_json: '{"tier":"deep"}' },
     ];
     old.manifest.counts.settings = old.settings.length;
     old.tasks = old.tasks.map((bundle) => ({
@@ -573,6 +578,9 @@ describe("restore", () => {
         expect.objectContaining({ id: "jira", linkTemplate: "https://jira.example.com/browse/{key}" }),
       ]);
       expect(restored.prepare("SELECT key FROM settings WHERE key = 'jiraBaseUrl'").get()).toBeUndefined();
+      expect(restored.prepare("SELECT key, value_json FROM settings WHERE key LIKE '%eviewModel'").all()).toEqual([
+        { key: "reviewModel", value_json: '{"tier":"deep"}' },
+      ]);
       expect(restored.prepare("SELECT max(name) AS v FROM migrations").get()).toEqual({
         v: dump.manifest.schemaVersion,
       });

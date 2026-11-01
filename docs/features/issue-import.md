@@ -183,7 +183,7 @@ service normalizes a stored string on read (a value that is neither falls back t
 `claude-code` model of that tier in Settings → Model tiers (`resolveHeadlessModel`), at that tier's effort
 (`resolveHeadlessEffort`, as `--effort`; a typed model has none); a tier with none leaves
 `--model` off, so the CLI's own default runs. The picker (`HeadlessModelRow`) says which of the two it will be and
-links to the tier. The board reviewer's model (`headlessReviewModel`, see
+links to the tier. The board reviewer's model (`reviewModel`, see
 [local review](local-review.md#the-board-reviewer)) is the same type.
 
 ## Decisions

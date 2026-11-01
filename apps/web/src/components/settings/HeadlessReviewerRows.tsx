@@ -40,9 +40,9 @@ export function HeadlessReviewerRows({ settings }: { settings: AppSettings }) {
             description="A model tier, a model passed to claude --model, or the CLI's default."
             label="Board reviewer model"
             tiers={settings.modelTiers}
-            value={settings.headlessReviewModel}
+            value={settings.reviewModel}
             allowDefault
-            onChange={(next) => updateSettings.mutate({ headlessReviewModel: next })}
+            onChange={(next) => updateSettings.mutate({ reviewModel: next })}
           />
           <SettingsRow
             id="tasks.review.budget"

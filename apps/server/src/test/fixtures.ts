@@ -32,7 +32,7 @@ export const defaultSettings: AppSettings = {
   codexCli: null,
   handoffMenus: DEFAULT_HANDOFF_MENUS,
   headlessReviewBudgetUsd: 2,
-  headlessReviewModel: null,
+  reviewModel: null,
   issueImportEnabled: true,
   issueImportModel: { model: "haiku" },
   issueImportBudgetUsd: 0.5,

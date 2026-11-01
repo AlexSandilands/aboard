@@ -142,6 +142,7 @@ export function createProjectsService(
           icon: input.icon ?? null,
           t3ProjectId: input.t3ProjectId ?? null,
           reviewSkill: null,
+          reviewModel: null,
           planSkill: null,
           variables: [],
           position: nextPosition(),
@@ -168,6 +169,7 @@ export function createProjectsService(
         }
         if (input.icon !== undefined) next.icon = input.icon;
         if (input.reviewSkill !== undefined) next.reviewSkill = input.reviewSkill;
+        if (input.reviewModel !== undefined) next.reviewModel = input.reviewModel;
         if (input.planSkill !== undefined) next.planSkill = input.planSkill;
         // Which projects a custom automation still needs a variable in shows on its row.
         if (input.variables !== undefined) {

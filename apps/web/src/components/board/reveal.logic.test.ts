@@ -21,6 +21,7 @@ const project = (id: string, collapsed = false): Project => ({
   planSkill: null,
   variables: [],
   reviewSkill: null,
+  reviewModel: null,
   position: id,
   collapsed,
   archivedAt: null,

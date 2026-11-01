@@ -108,8 +108,8 @@ export function createReviewFallbacks(deps: {
         cli: settings.headlessReviewCli,
         cwd,
         budgetUsd: settings.headlessReviewBudgetUsd,
-        model: resolveHeadlessModel(settings.modelTiers, settings.headlessReviewModel),
-        effort: resolveHeadlessEffort(settings.modelTiers, settings.headlessReviewModel),
+        model: resolveHeadlessModel(settings.modelTiers, settings.reviewModel),
+        effort: resolveHeadlessEffort(settings.modelTiers, settings.reviewModel),
         prompt: headlessPrompt({
           taskNumber: task.number,
           round: round.round,
