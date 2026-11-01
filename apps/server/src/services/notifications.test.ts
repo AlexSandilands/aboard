@@ -196,6 +196,44 @@ describe("producers", () => {
     expect(inbox()).toHaveLength(2);
   });
 
+  it("notifies once for a thread shared by several tasks, naming each, and clears it for all", () => {
+    const { s, project, task, threadLink, inbox } = setup();
+    const others = ["Second", "Third"].map((title) =>
+      s.tasks.create({
+        projectId: project.id,
+        title,
+        links: [{ t3Thread: { environmentId: "env", threadId: "thread-1" } }],
+      }),
+    );
+    const links = s.links
+      .listByKind("t3_thread")
+      .filter((l) => l.kind === "t3_thread" && l.ref.threadId === "thread-1");
+    expect(links).toHaveLength(3);
+    for (const l of links) s.links.setSnapshot(l.id, thread({ status: "working" }));
+    // Each task's link is polled and moves to input, but it is one question.
+    for (const l of links)
+      s.links.setSnapshot(l.id, thread({ status: "input", lastActivityAt: "2026-10-01T10:06:00Z" }));
+    expect(inbox()).toHaveLength(1);
+    expect(inbox()[0]).toMatchObject({ taskId: task.id });
+    const body = inbox()[0]!.body;
+    for (const t of [task, ...others]) expect(body).toContain(`#${t.number} ${t.title}`);
+
+    // Opening any of the tasks has seen it.
+    expect(s.notifications.markTaskRead(others[1]!.id)).toBe(1);
+    expect(inbox()[0]!.readAt).not.toBeNull();
+
+    // Asked again after activity: a second notification, still one.
+    for (const l of links)
+      s.links.setSnapshot(l.id, thread({ status: "working", lastActivityAt: "2026-10-01T10:08:00Z" }));
+    for (const l of links)
+      s.links.setSnapshot(l.id, thread({ status: "input", lastActivityAt: "2026-10-01T10:09:00Z" }));
+    expect(inbox()).toHaveLength(2);
+    expect(inbox().filter((n) => n.readAt === null)).toHaveLength(1);
+    // One link moving on clears it, though the threads of the others have not been polled yet.
+    s.links.setSnapshot(threadLink.id, thread({ status: "working", lastActivityAt: "2026-10-01T10:10:00Z" }));
+    expect(inbox().filter((n) => n.readAt === null)).toHaveLength(0);
+  });
+
   it("notifies when checks start failing, and again for a new head that fails", () => {
     const { s, prLink, inbox } = setup();
     s.links.setSnapshot(prLink.id, pr());

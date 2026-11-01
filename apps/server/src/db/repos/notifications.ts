@@ -112,6 +112,17 @@ export function createNotificationsRepo(sql: Sql) {
         sql.run("UPDATE notifications SET read_at = ? WHERE task_id = ? AND read_at IS NULL", at, taskId).changes,
       );
     },
+    /** Marks the unread notifications whose dedupe key starts with `prefix` read, keeping their keys. */
+    markKeyPrefixSeen(prefix: string, at: string): number {
+      return Number(
+        sql.run(
+          "UPDATE notifications SET read_at = ? WHERE read_at IS NULL AND substr(dedupe_key, 1, length(?)) = ?",
+          at,
+          prefix,
+          prefix,
+        ).changes,
+      );
+    },
     /**
      * Marks a task's notifications of one kind resolved: read (if they weren't), and their dedupe key freed (the row
      * keeps a key of its own), so the same state arising again, a re-run that fails again or a reopened round, notifies

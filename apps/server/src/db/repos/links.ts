@@ -110,6 +110,17 @@ export function createLinksRepo(sql: Sql) {
         kind,
       );
     },
+    /** Every thread link to one T3 thread (a bulk planning session links it from each of its tasks), oldest first. */
+    byThread(environmentId: string, threadId: string): LinkRow[] {
+      return sql.all<LinkRow>(
+        `SELECT l.* FROM task_links l JOIN tasks t ON t.id = l.task_id
+         WHERE l.kind = 't3_thread' AND t.archived_at IS NULL
+           AND json_extract(l.ref_json, '$.environmentId') = ? AND json_extract(l.ref_json, '$.threadId') = ?
+         ORDER BY l.created_at, l.rowid`,
+        environmentId,
+        threadId,
+      );
+    },
     insert(r: LinkRow): void {
       sql.insert("task_links", { ...r });
     },

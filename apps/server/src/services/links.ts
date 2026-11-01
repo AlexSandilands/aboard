@@ -6,6 +6,7 @@ import {
   type ClassifiedLink,
   type LinkInput,
   type PrSnapshot,
+  type T3ThreadRef,
   type T3ThreadSnapshot,
   type TaskLink,
   type TicketRef,
@@ -205,17 +206,24 @@ export function createLinksService(
     } else if (row.kind === "t3_thread") {
       const prev = was as T3ThreadSnapshot;
       const next = now as T3ThreadSnapshot;
+      const ref = parseJson<T3ThreadRef>(row.ref_json);
+      if (!ref) return;
+      // One question is one notification however many tasks share the thread (a bulk planning session links it
+      // from each), so the key names the thread, not the link.
+      const threadKey = `thread:${ref.environmentId}:${ref.threadId}:`;
       const waiting = (s: T3ThreadSnapshot) => s.status === "input" || s.status === "approval";
-      if (!waiting(next) || next.archived) deps.notifications.resolve({ keyPrefix: `thread:${row.id}:` });
+      if (!waiting(next) || next.archived) deps.notifications.resolve({ keyPrefix: threadKey });
       // Waiting again on the same thing counts when the thread was active in between, which a poll can miss.
       const askedAgain = prev.status === next.status && (next.lastActivityAt ?? "") > (prev.lastActivityAt ?? "");
       if (waiting(next) && !next.archived && (!waiting(prev) || prev.status !== next.status || askedAgain)) {
+        const tasks = repos.links.byThread(ref.environmentId, ref.threadId).map((l) => deps.task(l.task_id));
+        const labels = (tasks.length > 0 ? tasks : [task]).map((t) => `#${t.number} ${t.title}`);
         deps.notifications.notify({
           kind: "thread_waiting",
-          taskId: task.id,
+          taskId: (tasks[0] ?? task).id,
           title: next.status === "input" ? "Thread waiting for input" : "Thread waiting for approval",
-          body: `${taskLabel}\n${next.title}`,
-          dedupeKey: `thread:${row.id}:${next.status}:${next.lastActivityAt ?? ""}`,
+          body: `${labels.join("\n")}\n${next.title}`,
+          dedupeKey: `${threadKey}${next.status}:${next.lastActivityAt ?? ""}`,
         });
       }
     }

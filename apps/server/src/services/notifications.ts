@@ -5,7 +5,9 @@ import {
   type NotificationKind,
   type NotificationList,
   type NotifyInput,
+  type T3ThreadRef,
 } from "@repo/contracts";
+import { parseJson } from "../db/database.ts";
 import type { Repos } from "../db/repos/index.ts";
 import { notFound } from "../errors.ts";
 import { loadAutopilotEngine } from "./autopilot.ts";
@@ -123,7 +125,13 @@ export function createNotificationsService(core: Core): NotificationsService {
 
     markTaskRead(taskId) {
       return core.write((fx) => {
-        const changed = repos.notifications.markTaskRead(taskId, core.now().toISOString());
+        const at = core.now().toISOString();
+        let changed = repos.notifications.markTaskRead(taskId, at);
+        // A thread several tasks share notifies once, under the first of them: opening any of them has seen it.
+        for (const link of repos.links.forTasks([taskId])) {
+          const ref = link.kind === "t3_thread" ? parseJson<T3ThreadRef>(link.ref_json) : null;
+          if (ref) changed += repos.notifications.markKeyPrefixSeen(`thread:${ref.environmentId}:${ref.threadId}:`, at);
+        }
         if (changed > 0) fx.notificationsChanged();
         return changed;
       });

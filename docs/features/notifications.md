@@ -18,7 +18,7 @@ write that made the change, so the change and its notification commit together.
 
 | Kind                   | Produced when                                                                  | Dedupe key                              |
 | ---------------------- | ------------------------------------------------------------------------------ | --------------------------------------- |
-| `thread_waiting`       | A linked T3 thread moves into `input` or `approval` (or from one to the other)  | `thread:<linkId>:<status>:<lastActivityAt>` |
+| `thread_waiting`       | A linked T3 thread moves into `input` or `approval` (or from one to the other). A thread several tasks share (a bulk planning session) notifies once: the body lists every task linked to it and `taskId` is the first | `thread:<environmentId>:<threadId>:<status>:<lastActivityAt>` |
 | `pr_checks_failing`    | An open or draft PR's checks become `failing`, or fail again on a new head      | `checks:<linkId>:<headOid>`             |
 | `pr_changes_requested` | An open or draft PR's review decision becomes `changes_requested`               | `changes:<linkId>:<updatedAt>`          |
 | `review_finished` ("Review needs you") | A local review loop ends without a clean result: a round is submitted with blocking or major findings open at the round limit (Stuck), or a round is set `failed` or `stalled` (`reviews.notifyIfUnresolved`). Not for every submitted round. Opening a round, or a new outcome for one, reads the task's earlier ones | `review:<roundId>:<state>` |
@@ -46,7 +46,7 @@ producer's own write:
 | `agent_request`        | The request is cleared or dismissed                                                    |
 | Any of a task's        | The task is Done or archived: `core.write` does it once for every task a write moved, closed or archived (the `status_changed`, `closed` and `archived` log entries), whichever route got it there. A task notified in that same write is skipped, and a later touch of a Done task reads nothing |
 
-Matching uses the dedupe key's prefix (`thread:<linkId>:`, `checks:<linkId>:`, `changes:<linkId>:`) or task and
+Matching uses the dedupe key's prefix (`thread:<environmentId>:<threadId>:`, `checks:<linkId>:`, `changes:<linkId>:`) or task and
 kind. A resolved row (read or not) keeps a key of its own, so the same state arising again (a CI re-run failing again, a reopened
 round failing again) notifies again. A new failing head reads the older head's notification before its own is made. A notification that was already read is untouched.
 

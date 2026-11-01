@@ -1,7 +1,7 @@
 import type { BoardSnapshot, Project, TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
-  attentionTasks,
+  attentionItems,
   buildLanes,
   columnCounts,
   COLUMN_PREVIEW_COUNT,
@@ -236,17 +236,80 @@ describe("reuseUnchangedLanes", () => {
   });
 });
 
-describe("attentionTasks", () => {
+describe("attentionItems", () => {
+  const input = { kind: "thread_needs_input", severity: "warning", message: "Thread awaiting input" } as const;
+  const failed = { kind: "thread_failed", severity: "error", message: "Thread failed" } as const;
+  const conflict = { kind: "pr_conflict", severity: "warning", message: "" } as const;
+  const threadLink = (
+    taskId: string,
+    threadId: string,
+    status: "input" | "failed" = "input",
+  ): TaskSummary["links"][number] => ({
+    id: `${taskId}-${threadId}`,
+    taskId,
+    kind: "t3_thread",
+    url: "",
+    label: null,
+    syncedAt: null,
+    createdAt: "",
+    ref: { environmentId: "env", threadId },
+    snapshot: { title: `Thread ${threadId}`, status },
+  });
+  const waiting = (id: string, threadId: string, overrides: Partial<TaskSummary> = {}) =>
+    task(id, { attention: [input], links: [threadLink(id, threadId)], ...overrides });
+
   it("puts errors first", () => {
-    const warn = task("warn", {
-      updatedAt: "2026-03-01",
-      attention: [{ kind: "pr_conflict", severity: "warning", message: "" }],
-    });
+    const warn = task("warn", { updatedAt: "2026-03-01", attention: [conflict] });
     const err = task("err", {
       updatedAt: "2026-01-01",
-      attention: [{ kind: "thread_failed", severity: "error", message: "" }],
+      attention: [{ kind: "review_failed", severity: "error", message: "" }],
     });
-    expect(attentionTasks([warn, task("calm"), err]).map((t) => t.id)).toEqual(["err", "warn"]);
+    expect(attentionItems([warn, task("calm"), err]).map((i) => i.key)).toEqual(["err", "warn"]);
+  });
+
+  it("makes one item of tasks sharing a waiting thread", () => {
+    const items = attentionItems([waiting("a", "t1"), waiting("b", "t1"), waiting("c", "t1")]);
+    expect(items).toHaveLength(1);
+    const [item] = items;
+    expect(item).toMatchObject({ type: "thread", key: "env:t1", title: "Thread t1" });
+    expect(item!.type === "thread" && item!.tasks.map((t) => t.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("makes one item per thread", () => {
+    const items = attentionItems([waiting("a", "t1"), waiting("b", "t1"), waiting("c", "t2"), waiting("d", "t2")]);
+    expect(items.map((i) => i.key).sort()).toEqual(["env:t1", "env:t2"]);
+  });
+
+  it("keeps a lone task as a task row", () => {
+    const items = attentionItems([waiting("a", "t1"), waiting("b", "t2")]);
+    expect(items.map((i) => i.type)).toEqual(["task", "task"]);
+  });
+
+  it("groups a failed thread as an error", () => {
+    const failedTask = (id: string) => task(id, { attention: [failed], links: [threadLink(id, "t1", "failed")] });
+    const [item] = attentionItems([failedTask("a"), failedTask("b")]);
+    expect(item).toMatchObject({ type: "thread", severity: "error" });
+  });
+
+  it("keeps a row for a grouped task's other reason, without the thread reason", () => {
+    const items = attentionItems([waiting("a", "t1"), waiting("b", "t1", { attention: [input, conflict] })]);
+    expect(items.map((i) => i.type).sort()).toEqual(["task", "thread"]);
+    const row = items.find((i) => i.type === "task");
+    expect(row?.type === "task" && row.reasons).toEqual([conflict]);
+  });
+
+  it("ranks a thread by its most recent member and errors first", () => {
+    const err = task("err", {
+      updatedAt: "2026-01-01",
+      attention: [{ kind: "review_failed", severity: "error", message: "" }],
+    });
+    const items = attentionItems([
+      waiting("a", "t1", { updatedAt: "2026-02-01" }),
+      waiting("b", "t1", { updatedAt: "2026-04-01" }),
+      task("c", { updatedAt: "2026-03-01", attention: [conflict] }),
+      err,
+    ]);
+    expect(items.map((i) => i.key)).toEqual(["err", "env:t1", "c"]);
   });
 });
 
