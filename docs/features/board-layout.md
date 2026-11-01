@@ -131,6 +131,31 @@ Web Animations API because React would drop a class on re-render. `#N` in the pa
 `useTaskLinks` and the same path; the task panel builds them once (`PanelTaskLinksProvider`) and its rows read them with
 `usePanelTaskLinks`.
 
+### Card motion
+
+`cardMotion.ts` holds all card animation. A card moved by an agent's `move_task` or any other event, by a status change
+from the panel or by a rolled-back move slides to its new place, and so do the neighbours closing or opening the gap; a
+card with no previous place fades in. It is a board-level FLIP:
+
+- Right before a cache write that can move cards, `snapshotCardRects()` records the rects of the rendered
+  `[data-task-card]` elements, relative to the board's scroll box. The writes that do: `task.*` and `project.*` events
+  in `useBoardEvents` (only a task whose status, place, project, epic, priority, title or labels changed, see
+  `eventMovesCards`) and the optimistic write in `useMoveTask`. Other direct writes (clearing the priority lane,
+  collapsing or reordering lanes, a refetch) don't, and their cards jump. Writes in one burst share the first snapshot,
+  which expires after 300 ms if no commit used it.
+- `useBoardFlip(board)` in `BoardContent` runs in the commit that renders the new board, diffs the rects
+  (`planCardMotion` in `cardMotion.logic.ts`, tested) and animates transform (or opacity, for a fade-in) with
+  `element.animate`. A card with no new rect (collapsed column, filtered out), or off screen before and after, is
+  skipped. Scrolling in between is compensated; if the scroll box itself resized (the task panel or sidebar sliding)
+  nothing animates, since every card moved. A card drawn twice (say an epic's child row beside its own card) has no
+  single place to slide from and is left alone.
+- It is off while a card is lifted: the drag overlay's drop animation lands the dropped card, and the drag preview has
+  already put the neighbours in their final places. It is also off in a hidden tab and when `data-panel-animations`
+  isn't `true` (Panel animations at 0, or `prefers-reduced-motion`). Otherwise the duration is the Panel animations
+  setting times 1.75 (150 ms gives 263 ms) with the same ease-out as the drop.
+- A rejected move calls `snapshotCardRects(taskId)`: that card's rect is the drop overlay's (it may still be
+  landing), and the overlay hides so the card isn't shown twice.
+
 ### Task panel sections
 
 The panel's sections are Labels, Sessions, Links, Relations, Automation, Local review, Autopilot, Plan, Details (description and plan context
@@ -497,6 +522,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/board/columnCollapse.logic.ts` | Column and cell collapse state, mixed state (tested)           |
 | `apps/web/src/components/board/board.logic.ts`         | `COLUMN_PREVIEW_COUNT`, `visibleCellTasks` (tested)              |
 | `apps/web/src/components/board/Board.tsx`, `BoardCell.tsx` | Column toggles in the sticky header, cell toggle rows |
+| `apps/web/src/components/board/cardMotion.ts`, `cardMotion.logic.ts` | Card motion: the drop animation and the board FLIP (diff tested) |
 | `apps/web/src/components/board/PriorityLane.tsx`, `dnd.logic.ts` | The priority lane, and the drop rules in and out of it (tested) |
 | `apps/web/src/components/board/useStuck.ts`, `stuck.logic.ts` | Whether the pinned lane is stuck, how far it has folded, and keeping its footprint (`stuckHeight` is tested) |
 | `apps/web/src/components/board/cardLinks.logic.ts`     | Which links a card shows (tested)                                |

@@ -53,7 +53,7 @@ import type {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { api, ApiError } from "~/lib/api";
-import { captureCardRect } from "~/components/board/cardMotion";
+import { snapshotCardRects } from "~/components/board/cardMotion";
 import { toastManager } from "~/components/ui/toast";
 import { applyMove, moveWasReverted, rollbackMove } from "./boardReducer";
 import { queryKeys } from "./queries";
@@ -263,7 +263,7 @@ export function useMoveTask(opts?: MutationOpts) {
     onError: (error, vars) => {
       const move = moves.get(vars);
       if (move) {
-        captureCardRect(move.original.id);
+        snapshotCardRects(move.original.id);
         queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (board) =>
           board ? rollbackMove(board, move.original, move.moved) : board,
         );
@@ -283,6 +283,7 @@ export function useMoveTask(opts?: MutationOpts) {
       const original = board?.tasks.find((t) => t.id === vars.id);
       if (!board || !original) return;
       const next = applyMove(board, vars);
+      snapshotCardRects();
       const moved = next.tasks.find((t) => t.id === vars.id);
       if (moved) moves.set(vars, { original, moved });
       queryClient.setQueryData(queryKeys.board, next);
