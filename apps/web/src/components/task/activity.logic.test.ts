@@ -151,6 +151,9 @@ describe("describeEvent", () => {
     expect(describeEvent(event("updated", { fields: ["title", "planContext"] }), ctx).text).toBe(
       "edited the title, plan context",
     );
+    expect(describeEvent(event("updated", { fields: ["autoReview", "reviewModel"] }), ctx).text).toBe(
+      "edited the auto-review setting, reviewer model",
+    );
   });
 
   it("falls back to the event name for unknown types", () => {
