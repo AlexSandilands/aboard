@@ -6,8 +6,9 @@
 
 <p align="center">
   <strong>Mission control for your coding agents.</strong><br>
-  A local kanban board where agents log ideas, write plans and report progress over MCP,<br>
-  so you can run dozens of streams of work at once without losing track of any of them.
+  A local kanban board where agents log ideas, write plans, report progress and review<br>
+  their own work over MCP, and Autopilot picks up planned tasks and carries them<br>
+  through to a pull request.
 </p>
 
 <p align="center">
