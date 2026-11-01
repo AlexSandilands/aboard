@@ -362,12 +362,14 @@ as comments only.
   (off by default), and has a `headOid` and `headRef`. Merged and closed PRs, PRs from forks (`isCrossRepository`:
   the branch isn't on `origin`), Done and archived tasks, epics and links with no snapshot yet are skipped. The
   dedupe key is `review:pr:<linkId>:<headOid>`: one review per PR and head commit, and a push gives a new one.
-- **After the local review.** A task in Review whose [local review](local-review.md) is still going (`reviewIsInProgress`:
-  a round pending, running or stalled, or, with auto-review on for the task, blocking or major findings open with
-  rounds left) isn't reviewed yet. An
-  agent that links its PR just before moving to Review would otherwise get it reviewed on GitHub while the loop is
-  still changing the code. Once the loop ends (clean, or the round limit, stuck included) the PR's current head is
-  reviewed as usual; a failed round isn't waited on, and tasks without local review are never held back.
+- **After the local review.** With auto-review on for the task, its PR isn't reviewed until the task is in Review and its
+  [local review](local-review.md) has ended. Before that it waits: a task still in Backlog, Planned or In Progress
+  hasn't started its loop (the move to Review opens round 1), and in Review a loop that is still going
+  (`reviewIsInProgress`: a round pending, running or stalled, or blocking or major findings open with rounds left)
+  holds it. An agent that opens its PR early would otherwise get it reviewed on GitHub while the loop is still
+  changing the code. A task sent back to In Progress after feedback waits for its next loop the same way. Once the
+  loop ends (clean, or the round limit, stuck included) the PR's current head is reviewed as usual; a failed round
+  isn't waited on, and tasks with auto-review off are never held back.
 - **One at a time, and rounds.** While a review of the PR is queued or running, a new head commit waits; the next
   pass reviews the latest head with the earlier review in view. A PR gets at most `prReviewRounds` reviews (engine
   setting, default 3): the rounds used are its real review runs, a failed one included and a skipped one (which

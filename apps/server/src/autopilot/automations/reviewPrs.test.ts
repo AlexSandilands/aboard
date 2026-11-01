@@ -315,7 +315,7 @@ describe("review PRs: triggers", () => {
     expect(requests).toHaveLength(1);
   });
 
-  it("isn't held back by tasks without local review, or by a loop on a task that left Review", async () => {
+  it("isn't held back by a task without local review", async () => {
     const { s, task, setPr, pass, turnOn, requests } = setup();
     turnOn();
     setPr();
@@ -323,16 +323,54 @@ describe("review PRs: triggers", () => {
     expect(s.tasks.summary(task.id).review).toBeNull();
     await pass();
     expect(requests).toHaveLength(1);
+  });
 
-    const other = setup();
-    other.s.settings.update({ autoReview: true });
-    other.turnOn();
-    other.setPr();
-    other.s.tasks.move(other.task.id, { status: "review" }, "agent");
-    other.s.tasks.move(other.task.id, { status: "in_progress" }, "agent");
-    expect(other.s.tasks.summary(other.task.id).review?.state).toBe("pending");
-    await other.pass();
-    expect(other.requests).toHaveLength(1);
+  it.each(["backlog", "planned"] as const)("holds a PR on a %s task while auto-review is on", async (status) => {
+    const { s, task, setPr, pass, turnOn, requests } = setup();
+    s.settings.update({ autoReview: true });
+    turnOn();
+    setPr();
+    s.tasks.move(task.id, { status }, "agent");
+    await pass();
+    expect(requests).toHaveLength(0);
+  });
+
+  it("holds a PR linked before the task reached Review while auto-review is on, then reviews it after a clean loop", async () => {
+    const { s, task, setPr, pass, turnOn, requests } = setup();
+    s.settings.update({ autoReview: true });
+    turnOn();
+    setPr();
+    s.tasks.move(task.id, { status: "in_progress" }, "agent");
+    await pass();
+    expect(requests).toHaveLength(0);
+    s.tasks.move(task.id, { status: "review" }, "agent");
+    await pass();
+    expect(requests).toHaveLength(0);
+    s.reviews.submit(task.id, { findings: [] }, "reviewer");
+    await pass();
+    expect(requests).toHaveLength(1);
+  });
+
+  it("reviews a PR on an in-progress task when auto-review is off for it", async () => {
+    const { s, task, setPr, pass, turnOn, requests } = setup();
+    s.tasks.update(task.id, { autoReview: false }, "agent");
+    turnOn();
+    setPr();
+    s.tasks.move(task.id, { status: "in_progress" }, "agent");
+    await pass();
+    expect(requests).toHaveLength(1);
+  });
+
+  it("waits for the next loop when a task goes back to In Progress after its loop", async () => {
+    const { s, task, setPr, pass, turnOn, requests } = setup();
+    s.settings.update({ autoReview: true });
+    turnOn();
+    setPr();
+    s.tasks.move(task.id, { status: "review" }, "agent");
+    s.tasks.move(task.id, { status: "in_progress" }, "agent");
+    expect(s.tasks.summary(task.id).review?.state).toBe("pending");
+    await pass();
+    expect(requests).toHaveLength(0);
   });
 
   it("reviews each head commit once, and a new one again as the next round", async () => {

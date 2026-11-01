@@ -1,4 +1,4 @@
-import { AgentHarness, AgentSessionRef } from "@repo/contracts";
+import { AgentHarness, AgentSessionRef, EARLY_PR_NEXT, prWaitsForLocalReview } from "@repo/contracts";
 import { z } from "zod";
 import { AppError } from "../../errors.ts";
 import { linkText } from "../format.ts";
@@ -14,8 +14,10 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
         "Attach a link to a task. Idempotent. `value` may be a GitHub/Azure DevOps/Bitbucket PR URL (GitHub PRs " +
         "show live state: checks, review, conflicts), a ticket key or URL from a ticket system the board is set up " +
         "for, a t3code:// thread link, a T3 thread ID, or any URL. " +
-        "Link the task's ticket when the task is created or picked up, and the PR as soon as you open it (then " +
-        "move_task to review). Inside T3 Code, pass `t3Thread` ({environmentId, threadId} from " +
+        "Link the task's ticket when the task is created or picked up, and the PR once you have opened it: with " +
+        "auto-review on that is after the local review loop ends (move_task to review and finish the loop first; " +
+        "Autopilot's PR review waits for it, and a PR opened earlier is reviewed on GitHub too), otherwise before " +
+        "move_task to review. Inside T3 Code, pass `t3Thread` ({environmentId, threadId} from " +
         "t3_environment_read and t3_thread_configuration) whenever you start or resume a task, so the user can " +
         "jump back to your thread. In Claude Code or Copilot CLI (inside T3 Code too), also pass `agentSession` " +
         "with your own session when you start or resume a task: the board shows whether it is running and can " +
@@ -78,8 +80,16 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
         if (link.kind === "agent_session") void ctx.integrations.refreshLink(link.id).catch(() => {});
         if (link.kind === "pr") ctx.integrations.prLinked(link.id);
         const summary = services.tasks.summary(id);
+        // A PR linked before the loop ended is reviewed on GitHub too once the task reaches Review; say so, but link anyway.
+        const early =
+          link.kind === "pr" &&
+          summary.status !== "done" &&
+          prWaitsForLocalReview(summary.status, summary.review, services.reviews.effectiveAutoReview(id));
         return textResult(
-          `Linked to #${summary.number}: ${linkText(link, services.settings.get().ticketSystems)}${warning ? `\nWarning: ${warning}` : ""}`,
+          `Linked to #${summary.number}: ${linkText(link, services.settings.get().ticketSystems)}${warning ? `\nWarning: ${warning}` : ""}` +
+            (early
+              ? `\nNote: local review is on for this task, so this PR was opened before the review loop ended. ${EARLY_PR_NEXT}`
+              : ""),
         );
       }),
   );
