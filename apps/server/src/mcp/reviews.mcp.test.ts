@@ -299,6 +299,18 @@ describe("local review loop over MCP", () => {
     expect(moved.text).not.toContain("Local review");
   });
 
+  it("names the reviewer's model in the loop once update_task sets one", async () => {
+    h.services.settings.update({ autoReview: true });
+    await call(agent, "update_task", { task: taskRef, reviewModel: "claude-opus-5-5" });
+    const moved = await call(agent, "move_task", { task: taskRef, status: "review" });
+    expect(moved.text).toContain('Run the reviewer on `claude-opus-5-5`: in Claude Code pass `model: "opus"`');
+    await call(agent, "update_task", { task: taskRef, reviewModel: "deep" });
+    expect(h.services.tasks.summary(h.services.tasks.resolveId(taskRef)).reviewModel).toEqual({ tier: "deep" });
+    await call(agent, "update_task", { task: taskRef, reviewModel: null });
+    expect(h.services.tasks.summary(h.services.tasks.resolveId(taskRef)).reviewModel).toBeNull();
+    expect((await call(agent, "update_task", { task: taskRef, reviewModel: "a b" })).isError).toBe(true);
+  });
+
   it("doesn't open a round when merged PRs finish the task on entering Review", async () => {
     h.services.settings.update({ autoReview: true });
     const id = h.services.tasks.resolveId(taskRef);

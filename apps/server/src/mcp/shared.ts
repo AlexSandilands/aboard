@@ -5,6 +5,7 @@ import {
   AUTOPILOT_START_PLANNED,
   deliveryHintApplies,
   DueDate,
+  HeadlessModel,
   MODEL_TIERS,
   ModelTier,
   PlanInput,
@@ -144,6 +145,27 @@ export const deliveryField = z
       "tasks are done until that branch has merged. Set it only after the user has chosen; " +
       "ask first, never on your own. Back to main only while none of the epic's tasks has started.",
   );
+
+export const reviewModelField = z
+  .string()
+  .trim()
+  .min(1)
+  .describe(
+    "The model that reviews this task's changes, for both the reviewer subagent and the board's own reviewer: a tier " +
+      "(light, standard or deep, which the user maps to a model) or a model id such as claude-opus-5-5. null follows " +
+      "the project's setting, then the board's. Set it only when the user has asked for it; never on your own.",
+  );
+
+/** The stored reviewer model for a tool's `reviewModel` argument: a tier name, else a model id (refused if it isn't one). */
+export const reviewModelValue = (choice: string | null): HeadlessModel | null => {
+  if (choice === null) return null;
+  const tier = ModelTier.safeParse(choice);
+  const parsed = HeadlessModel.safeParse(tier.success ? { tier: tier.data } : { model: choice });
+  if (!parsed.success) {
+    throw new AppError("VALIDATION", `"${choice}" is neither a tier (light, standard, deep) nor a model id.`);
+  }
+  return parsed.data;
+};
 
 /** The task's stored flag (null is Default) for a tool's `autopilot` or `autoMerge` argument. */
 export const autopilotValue = (choice: z.infer<typeof autopilotField>): boolean | null =>

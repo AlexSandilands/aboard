@@ -248,7 +248,8 @@ The user can turn on automatic local review (globally, or per task). Then moving
 opens review round 1, and the `move_task` result tells you what to do. In short:
 
 1. Start a **reviewer subagent with fresh context** and give it the reviewer brief from the result. Wait
-   for it; it records its findings on the board with `submit_review`.
+   for it; it records its findings on the board with `submit_review`. When the user chose a reviewer model,
+   the instructions name it (for Claude Code, the `model` to pass to the Agent tool): start the reviewer on it.
 2. `get_task`, fix every open **blocking** and **major** finding (minor and nit too when cheap), and mark
    each with `resolve_finding`: `fixed`, or `wont_fix` with a note saying why. Findings are labelled
    `R<round>.<n>`, e.g. `R1.2`.
