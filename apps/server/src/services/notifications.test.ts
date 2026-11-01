@@ -180,7 +180,7 @@ describe("producers", () => {
       kind: "thread_waiting",
       taskId: task.id,
       title: "Thread waiting for input",
-      body: `#${task.number} Ship it\nFix the build`,
+      body: `Fix the build\n#${task.number} Ship it`,
     });
 
     s.links.setSnapshot(threadLink.id, thread({ status: "approval", lastActivityAt: "2026-10-01T10:07:00Z" }));
@@ -232,6 +232,52 @@ describe("producers", () => {
     // One link moving on clears it, though the threads of the others have not been polled yet.
     s.links.setSnapshot(threadLink.id, thread({ status: "working", lastActivityAt: "2026-10-01T10:10:00Z" }));
     expect(inbox().filter((n) => n.readAt === null)).toHaveLength(0);
+  });
+
+  describe("a thread shared with finished tasks", () => {
+    const sharedThread = () => {
+      const ctx = setup();
+      const { s, project } = ctx;
+      const others = ["Second", "Third"].map((title) =>
+        s.tasks.create({
+          projectId: project.id,
+          title,
+          plan: { phases: [{ title: "Build", steps: [{ title: "a" }] }] },
+          links: [{ t3Thread: { environmentId: "env", threadId: "thread-1" } }],
+        }),
+      );
+      const links = s.links
+        .listByKind("t3_thread")
+        .filter((l) => l.kind === "t3_thread" && l.ref.threadId === "thread-1");
+      for (const l of links) s.links.setSnapshot(l.id, thread({ status: "working" }));
+      return { ...ctx, others, links };
+    };
+    const ask = (ctx: ReturnType<typeof sharedThread>) => {
+      for (const l of ctx.links)
+        ctx.s.links.setSnapshot(l.id, thread({ status: "input", lastActivityAt: "2026-10-01T10:06:00Z" }));
+    };
+
+    it("files the notification under a task that is still open, and names only those", () => {
+      const ctx = sharedThread();
+      ctx.s.tasks.move(ctx.task.id, { status: "done" }, "user");
+      ask(ctx);
+      expect(ctx.inbox()).toHaveLength(1);
+      expect(ctx.inbox()[0]).toMatchObject({ taskId: ctx.others[0]!.id });
+      expect(ctx.inbox()[0]!.body).not.toContain(ctx.task.title);
+      expect(ctx.inbox()[0]!.body).toContain(ctx.others[1]!.title);
+    });
+
+    it("keeps it unread, under another open task, when its task finishes while the thread still waits", () => {
+      const ctx = sharedThread();
+      ask(ctx);
+      expect(ctx.inbox()[0]).toMatchObject({ taskId: ctx.task.id, readAt: null });
+      ctx.s.tasks.move(ctx.task.id, { status: "done" }, "user");
+      expect(ctx.inbox()[0]).toMatchObject({ taskId: ctx.others[0]!.id, readAt: null });
+      // Once the last open task finishes, nothing is left to ask about.
+      ctx.s.tasks.move(ctx.others[0]!.id, { status: "done" }, "user");
+      ctx.s.tasks.move(ctx.others[1]!.id, { status: "done" }, "user");
+      expect(ctx.inbox()[0]!.readAt).not.toBeNull();
+    });
   });
 
   it("notifies when checks start failing, and again for a new head that fails", () => {

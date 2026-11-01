@@ -298,6 +298,18 @@ describe("attentionItems", () => {
     expect(row?.type === "task" && row.reasons).toEqual([conflict]);
   });
 
+  it("keeps a lone thread's reason on the task when its other thread is grouped", () => {
+    const both = task("a", {
+      attention: [input, failed],
+      links: [threadLink("a", "shared"), threadLink("a", "lone", "failed")],
+    });
+    const items = attentionItems([both, waiting("b", "shared")]);
+    const thread = items.find((i) => i.type === "thread");
+    expect(thread).toMatchObject({ severity: "warning", reason: { kind: "thread_needs_input" } });
+    const row = items.find((i) => i.type === "task");
+    expect(row?.type === "task" && row.reasons).toEqual([failed]);
+  });
+
   it("ranks a thread by its most recent member and errors first", () => {
     const err = task("err", {
       updatedAt: "2026-01-01",

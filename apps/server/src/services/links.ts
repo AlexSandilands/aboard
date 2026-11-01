@@ -22,6 +22,8 @@ import type { NotificationsService } from "./notifications.ts";
 import type { LinksService, SettingsService, TasksService } from "./types.ts";
 
 /** Resolves link input to a kind, canonical url and ref. */
+const MAX_LISTED_TASKS = 3;
+
 export function classifyLinkInput(input: LinkInput, ticketSystems: readonly TicketSystem[]): ClassifiedLink {
   if (input.t3Thread) {
     return { kind: "t3_thread", url: t3DesktopThreadUrl(input.t3Thread), ref: input.t3Thread };
@@ -216,13 +218,20 @@ export function createLinksService(
       // Waiting again on the same thing counts when the thread was active in between, which a poll can miss.
       const askedAgain = prev.status === next.status && (next.lastActivityAt ?? "") > (prev.lastActivityAt ?? "");
       if (waiting(next) && !next.archived && (!waiting(prev) || prev.status !== next.status || askedAgain)) {
-        const tasks = repos.links.byThread(ref.environmentId, ref.threadId).map((l) => deps.task(l.task_id));
-        const labels = (tasks.length > 0 ? tasks : [task]).map((t) => `#${t.number} ${t.title}`);
+        // The tasks still open: a finished one has nothing left to do with the question.
+        const open = repos.links
+          .byThread(ref.environmentId, ref.threadId)
+          .map((l) => deps.task(l.task_id))
+          .filter((t) => t.status !== "done");
+        const tasks = open.length > 0 ? open : [task];
+        const labels = tasks.slice(0, MAX_LISTED_TASKS).map((t) => `#${t.number} ${t.title}`);
+        if (tasks.length > MAX_LISTED_TASKS) labels.push(`+${tasks.length - MAX_LISTED_TASKS} more`);
         deps.notifications.notify({
           kind: "thread_waiting",
-          taskId: (tasks[0] ?? task).id,
+          taskId: tasks[0]!.id,
           title: next.status === "input" ? "Thread waiting for input" : "Thread waiting for approval",
-          body: `${labels.join("\n")}\n${next.title}`,
+          // The thread's title first: the inbox row clips a long body to two lines.
+          body: `${next.title}\n${labels.join("\n")}`,
           dedupeKey: `${threadKey}${next.status}:${next.lastActivityAt ?? ""}`,
         });
       }
