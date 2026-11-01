@@ -1,6 +1,14 @@
 import type { BoardSnapshot, TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { applyBoardEvent, applyMove, cellTasks, moveWasReverted, optimisticMove, rollbackMove } from "./boardReducer";
+import {
+  applyBoardEvent,
+  applyMove,
+  cellTasks,
+  eventMovesCards,
+  moveWasReverted,
+  optimisticMove,
+  rollbackMove,
+} from "./boardReducer";
 
 function task(id: string, status: TaskSummary["status"], position: string): TaskSummary {
   return {
@@ -187,5 +195,32 @@ describe("move rollback", () => {
   it("leaves the task alone once something newer has moved it", () => {
     const newer = { ...after, tasks: after.tasks.map((t) => (t.id === "a" ? { ...t, status: "review" as const } : t)) };
     expect(rollbackMove(newer, original, moved)).toBe(newer);
+  });
+});
+
+describe("eventMovesCards", () => {
+  const b = board([task("a", "backlog", "a0")]);
+  const upsert = (t: TaskSummary) => eventMovesCards(b, { type: "task.upserted", task: t });
+
+  it("is true for a task that is new, moved, retitled, relabelled, prioritised or archived", () => {
+    const a = task("a", "backlog", "a0");
+    expect(upsert(task("new", "backlog", "a1"))).toBe(true);
+    expect(upsert({ ...a, status: "planned" })).toBe(true);
+    expect(upsert({ ...a, position: "a1" })).toBe(true);
+    expect(upsert({ ...a, title: "A longer title" })).toBe(true);
+    expect(upsert({ ...a, labels: ["ui"] })).toBe(true);
+    expect(upsert({ ...a, priority: true })).toBe(true);
+    expect(upsert({ ...a, archivedAt: "x" })).toBe(true);
+  });
+
+  it("is false for an edit that changes nothing a card shows, or an archived task that was never shown", () => {
+    expect(upsert({ ...task("a", "backlog", "a0"), updatedAt: "later", progress: { done: 1, total: 2 } })).toBe(false);
+    expect(upsert({ ...task("new", "backlog", "a1"), archivedAt: "x" })).toBe(false);
+    expect(eventMovesCards(b, { type: "labels.colors_changed", labelColors: {} })).toBe(false);
+  });
+
+  it("is true for deletions and project changes", () => {
+    expect(eventMovesCards(b, { type: "task.deleted", taskId: "a" })).toBe(true);
+    expect(eventMovesCards(b, { type: "project.deleted", projectId: "p" })).toBe(true);
   });
 });

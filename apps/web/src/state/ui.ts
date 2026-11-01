@@ -5,10 +5,12 @@ import {
   type CreateTemplateInput,
   type MergeMethod,
   type TaskStatus,
+  type TaskSummary,
 } from "@repo/contracts";
 import { create } from "zustand";
 import type { BoardSearch } from "~/router";
 import { persist } from "zustand/middleware";
+import type { PickResolution } from "~/components/task/CloseTaskDialog";
 import { togglePicked } from "~/components/board/boardSelection.logic";
 import { toggleCell, toggleColumn, type CollapseState } from "~/components/board/columnCollapse.logic";
 import {
@@ -342,6 +344,14 @@ interface DialogsState {
   templateDraft: CreateTemplateInput | null;
   openTemplateDraft: (draft: CreateTemplateInput) => void;
   closeTemplateDraft: () => void;
+  /** The "Close as done by / duplicate of…" picker for one task, or for the picked cards (done by only). */
+  closeTaskAs: { tasks: Array<Pick<TaskSummary, "id" | "number" | "projectId">>; resolution: PickResolution } | null;
+  openCloseTaskAs: (tasks: NonNullable<DialogsState["closeTaskAs"]>["tasks"], resolution: PickResolution) => void;
+  closeCloseTaskAs: () => void;
+  /** The delete confirmation; `onDeleted` runs once it is confirmed (the panel closes itself). */
+  deleteTask: { task: Pick<TaskSummary, "id" | "number">; onDeleted?: () => void } | null;
+  openDeleteTask: (task: NonNullable<DialogsState["deleteTask"]>["task"], onDeleted?: () => void) => void;
+  closeDeleteTask: () => void;
   /** The pasted image open in the preview. */
   imagePreview: { id: string; filename: string } | null;
   openImagePreview: (image: { id: string; filename: string }) => void;
@@ -359,6 +369,8 @@ export function anyDialogOpen(state: DialogsState): boolean {
     state.mergePr !== null ||
     state.sessionWarning !== null ||
     state.templateDraft !== null ||
+    state.closeTaskAs !== null ||
+    state.deleteTask !== null ||
     state.imagePreview !== null
   );
 }
@@ -373,6 +385,8 @@ export const useDialogs = create<DialogsState>()((set) => ({
   mergePr: null,
   sessionWarning: null,
   templateDraft: null,
+  closeTaskAs: null,
+  deleteTask: null,
   imagePreview: null,
   setDigestOpen: (digestOpen) => set({ digestOpen }),
   openViewDialog: (viewDialog) => set({ viewDialog }),
@@ -394,6 +408,10 @@ export const useDialogs = create<DialogsState>()((set) => ({
   closeSessionWarning: () => set({ sessionWarning: null }),
   openTemplateDraft: (templateDraft) => set({ templateDraft }),
   closeTemplateDraft: () => set({ templateDraft: null }),
+  openCloseTaskAs: (tasks, resolution) => set({ closeTaskAs: { tasks, resolution } }),
+  closeCloseTaskAs: () => set({ closeTaskAs: null }),
+  openDeleteTask: (task, onDeleted) => set({ deleteTask: { task, ...(onDeleted ? { onDeleted } : {}) } }),
+  closeDeleteTask: () => set({ deleteTask: null }),
   openImagePreview: (imagePreview) => set({ imagePreview }),
   closeImagePreview: () => set({ imagePreview: null }),
 }));

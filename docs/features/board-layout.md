@@ -131,6 +131,31 @@ Web Animations API because React would drop a class on re-render. `#N` in the pa
 `useTaskLinks` and the same path; the task panel builds them once (`PanelTaskLinksProvider`) and its rows read them with
 `usePanelTaskLinks`.
 
+### Card motion
+
+`cardMotion.ts` holds all card animation. A card moved by an agent's `move_task` or any other event, by a status change
+from the panel or by a rolled-back move slides to its new place, and so do the neighbours closing or opening the gap; a
+card with no previous place fades in. It is a board-level FLIP:
+
+- Right before a cache write that can move cards, `snapshotCardRects()` records the rects of the rendered
+  `[data-task-card]` elements, relative to the board's scroll box. The writes that do: `task.*` and `project.*` events
+  in `useBoardEvents` (only a task whose status, place, project, epic, priority, title or labels changed, see
+  `eventMovesCards`) and the optimistic write in `useMoveTask`. Other direct writes (clearing the priority lane,
+  collapsing or reordering lanes, a refetch) don't, and their cards jump. Writes in one burst share the first snapshot,
+  which expires after 300 ms if no commit used it.
+- `useBoardFlip(board)` in `BoardContent` runs in the commit that renders the new board, diffs the rects
+  (`planCardMotion` in `cardMotion.logic.ts`, tested) and animates transform (or opacity, for a fade-in) with
+  `element.animate`. A card with no new rect (collapsed column, filtered out), or off screen before and after, is
+  skipped. Scrolling in between is compensated; if the scroll box itself resized (the task panel or sidebar sliding)
+  nothing animates, since every card moved. A card drawn twice (say an epic's child row beside its own card) has no
+  single place to slide from and is left alone.
+- It is off while a card is lifted: the drag overlay's drop animation lands the dropped card, and the drag preview has
+  already put the neighbours in their final places. It is also off in a hidden tab and when `data-panel-animations`
+  isn't `true` (Panel animations at 0, or `prefers-reduced-motion`). Otherwise the duration is the Panel animations
+  setting times 1.75 (150 ms gives 263 ms) with the same ease-out as the drop.
+- A rejected move calls `snapshotCardRects(taskId)`: that card's rect is the drop overlay's (it may still be
+  landing), and the overlay hides so the card isn't shown twice.
+
 ### Task panel sections
 
 The panel's sections are Labels, Sessions, Links, Relations, Automation, Local review, Autopilot, Plan, Details (description and plan context
@@ -305,6 +330,35 @@ with no snapshot yet counts as active, since it may be. The first ticket key sho
 top row. Settled and archived threads, other ticket keys and plain URLs appear in the panel only, where
 inactive threads are dimmed.
 
+### The card menu
+
+Right-click, the Menu key or Shift+F10 on a card (or an epic's header, in its band or as a finished epic's card) opens its menu: **Move to**
+(the statuses, through `useSetTaskStatus`, so the plan gate still opens the plan editor; not offered for an epic, whose
+status follows its tasks), then the panel's More menu without **Jump to card** (the card is in view; a click opens it). The two share their items (`TaskMenuItems` in `components/task`),
+which take a `TaskSummary`, since a card has no more; **Save as template…** fetches the task's detail when picked
+(`fetchTaskDetail`). Pin toggles are the panel's only. `CardContextMenu` wraps the card in a `ContextMenu`
+(`components/ui/context-menu.tsx`, Base UI) whose trigger draws no box (`display: contents`) and whose items mount only
+while the menu is open. The close-as and delete dialogs are app-level (`TaskMenuDialogs`, driven by
+`useDialogs.closeTaskAs` and `deleteTask`), because the menu is gone by the time they show. A right-click starts no drag
+(dnd-kit's `PointerSensor` takes the primary button only), opens no panel and leaves the pick alone.
+
+With two or more cards picked (Ctrl/⌘-click, any task card; see [agent-handoff.md](agent-handoff.md#plan-tasks-several-tasks-at-once)),
+right-clicking a **picked** card opens the bulk menu, headed "N tasks"; right-clicking an unpicked card opens its own.
+Each item applies to the picked cards it fits (`bulkMenu.logic.ts`) and is left out when it fits none, so a mixed pick
+offers both **Mark as priority** and **Remove priority** while a uniform one offers only the one that does something:
+
+- **Move to**: skips epics, archived cards and cards already there, and refuses planless cards outside Backlog like the
+  server does (shown as "N without a plan" beside the status, and counted as skipped in the toast).
+- **Mark as priority / Remove priority**, **Archive / Unarchive**.
+- **Close as**: **Won't do**, or **Done by another task…**, which opens the close dialog for all of them against one
+  task. Duplicate needs a task per card, so it is single-card only.
+- **Labels**: add (a find-or-create field and the labels in use) or remove one label.
+- **Copy references** (`#14, #16, #26`), and **Plan with an agent**, the lane's planning menu for the picked cards that
+  a planning session can take (one entry per project when they span several).
+
+Actions run the existing mutations once per card (`useBulkActions`), so optimistic moves and their rollback still work,
+and end in one summary toast ("Moved 2 tasks to Review, 1 skipped (no plan)"). The pick stays until a plain click or Esc.
+
 ### The settings page
 
 Settings is a route, `/settings/<group>` with group `board`, `tasks`, `models`, `autopilot`, `integrations` or `project`
@@ -468,9 +522,12 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/board/columnCollapse.logic.ts` | Column and cell collapse state, mixed state (tested)           |
 | `apps/web/src/components/board/board.logic.ts`         | `COLUMN_PREVIEW_COUNT`, `visibleCellTasks` (tested)              |
 | `apps/web/src/components/board/Board.tsx`, `BoardCell.tsx` | Column toggles in the sticky header, cell toggle rows |
+| `apps/web/src/components/board/cardMotion.ts`, `cardMotion.logic.ts` | Card motion: the drop animation and the board FLIP (diff tested) |
 | `apps/web/src/components/board/PriorityLane.tsx`, `dnd.logic.ts` | The priority lane, and the drop rules in and out of it (tested) |
 | `apps/web/src/components/board/useStuck.ts`, `stuck.logic.ts` | Whether the pinned lane is stuck, how far it has folded, and keeping its footprint (`stuckHeight` is tested) |
 | `apps/web/src/components/board/cardLinks.logic.ts`     | Which links a card shows (tested)                                |
+| `apps/web/src/components/board/CardContextMenu.tsx`, `BulkMenuItems.tsx`, `bulkActions.ts`, `bulkMenu.logic.ts` | The card menu, its bulk variant, the bulk mutations and which cards each item fits (`bulkMenu.logic.ts` is tested) |
+| `apps/web/src/components/task/TaskMenuItems.tsx`, `TaskMenuDialogs.tsx` | The items shared by the panel's More menu and the card menu, and their dialogs |
 | `apps/web/src/components/board/reveal.logic.ts`, `revealCard.ts` | Revealing a task: the steps and scroll target (tested), the scroll and flash |
 | `apps/web/src/components/autopilot/autopilot.logic.ts` | Pill state, Inherit labels, config and limit parsing, run labels (tested) |
 | `apps/web/src/components/autopilot/AutopilotPill.tsx`, `AutopilotEpicButton.tsx`, `ScopePopover.tsx`, `PauseAllButton.tsx`, `AutopilotBadge.tsx`, `AutopilotSection.tsx` | The lane pill, the epic button, their shared popover, header pause, card badge, panel section |

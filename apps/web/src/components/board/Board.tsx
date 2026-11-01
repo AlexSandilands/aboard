@@ -51,7 +51,7 @@ import { BoardHeader } from "./BoardHeader";
 import { BOARD_GRID_CLASS_NAME, BoardLane } from "./BoardLane";
 import { PriorityLane } from "./PriorityLane";
 import { useBoardFilters, useOpenTask, useProjectFilter, useSelectedTaskId } from "./boardNavigation";
-import { dropAnimation } from "./cardMotion";
+import { dropAnimation, useBoardFlip } from "./cardMotion";
 import {
   canDropIn,
   cellDroppableId,
@@ -244,6 +244,7 @@ function describeOver(
 }
 
 function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectFilter: ReadonlyArray<string> }) {
+  useBoardFlip(board);
   const queryClient = useQueryClient();
   const filters = useBoardFilters();
   const priorityLane = useBoardView((s) => s.showPriorityLane);
@@ -306,6 +307,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     () => ({
       openTask: (id) => void openTask(id, { reveal: false }),
       revealTask: (id) => void openTask(id),
+      openPlanEditor: (id) => void openTask(id, { reveal: false }).then(() => usePanel.getState().requestPlanEditor()),
       suppressClickRef,
       t3: board.integrations.t3,
       settings,

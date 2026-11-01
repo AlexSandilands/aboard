@@ -20,8 +20,9 @@ describe("resolutionLabel", () => {
 
 describe("closeDialogTitle", () => {
   it("reads per resolution", () => {
-    expect(closeDialogTitle(20, "completed")).toBe("Close #20 as done by…");
-    expect(closeDialogTitle(20, "duplicate")).toBe("Close #20 as a duplicate of…");
+    expect(closeDialogTitle([{ number: 20 }], "completed")).toBe("Close #20 as done by…");
+    expect(closeDialogTitle([{ number: 20 }], "duplicate")).toBe("Close #20 as a duplicate of…");
+    expect(closeDialogTitle([{ number: 20 }, { number: 21 }], "completed")).toBe("Close 2 tasks as done by…");
   });
 });
 
@@ -29,13 +30,18 @@ describe("closeCandidates", () => {
   const self = task(20, "Search titles");
   const tasks = [self, task(4, "Ship search"), task(7, "Dark mode"), task(9, "Search other", "q")];
 
+  it("excludes every task being closed", () => {
+    const other = task(21, "Other search");
+    expect(closeCandidates([...tasks, other], [self, other], "").map((t) => t.number)).toEqual([7, 4, 9]);
+  });
+
   it("excludes the task itself and puts its own project first, newest first", () => {
-    expect(closeCandidates(tasks, self, "").map((t) => t.number)).toEqual([7, 4, 9]);
+    expect(closeCandidates(tasks, [self], "").map((t) => t.number)).toEqual([7, 4, 9]);
   });
   it("matches #number, bare number and every title word", () => {
-    expect(closeCandidates(tasks, self, "#4").map((t) => t.number)).toEqual([4]);
-    expect(closeCandidates(tasks, self, "7").map((t) => t.number)).toEqual([7]);
-    expect(closeCandidates(tasks, self, "search ship").map((t) => t.number)).toEqual([4]);
-    expect(closeCandidates(tasks, self, "search").map((t) => t.number)).toEqual([4, 9]);
+    expect(closeCandidates(tasks, [self], "#4").map((t) => t.number)).toEqual([4]);
+    expect(closeCandidates(tasks, [self], "7").map((t) => t.number)).toEqual([7]);
+    expect(closeCandidates(tasks, [self], "search ship").map((t) => t.number)).toEqual([4]);
+    expect(closeCandidates(tasks, [self], "search").map((t) => t.number)).toEqual([4, 9]);
   });
 });

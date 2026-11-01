@@ -56,6 +56,7 @@ export function createAttentionService(
         repos.tasks.update({ ...task, attentionRequest: null, updatedAt: core.now().toISOString() });
         fx.log(taskId, actor, "attention_cleared", { requestedBy: task.attentionRequest.actor });
         fx.task(taskId);
+        deps.notifications.resolve({ taskId, kind: "agent_request" });
         return true;
       });
       return { cleared, task: deps.summary(taskId) };

@@ -8,6 +8,7 @@ import { cn } from "~/lib/utils";
 import { useBoardView } from "~/state/ui";
 import { laneHasCollapsibleCell, STATUS_ORDER, type EpicBand as Band } from "./board.logic";
 import { BoardCell } from "./BoardCell";
+import { CardContextMenu } from "./CardContextMenu";
 import { useBoardContext } from "./BoardContext";
 import type { OverCell } from "./dnd.logic";
 import { EpicActions } from "./EpicActions";
@@ -77,52 +78,55 @@ export const EpicBand = memo(function EpicBand({
         epic.archivedAt && "opacity-60",
       )}
     >
-      <header
-        // The marker the dependency lines look for: they end on the header, which stays when the band is collapsed.
-        data-task-card={epic.id}
-        className={cn(
-          "col-span-full flex min-w-0 items-center gap-1.5 ps-1 pe-2",
-          EPIC_HEADER_CLASS,
-          collapsed && "rounded-b-xl",
-          narrow ? "py-1" : "h-8",
-        )}
-      >
-        <Button
-          variant="ghost-muted"
-          size="icon-xs"
-          className={cn(narrow && "self-start")}
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? `Expand epic #${epic.number}` : `Collapse epic #${epic.number}`}
-          onClick={() => toggleEpicCollapsed(band.id)}
-        >
-          <ChevronRightIcon className={cn("size-3.5 transition-transform", !collapsed && "rotate-90")} />
-        </Button>
-        <button
-          type="button"
+      {/* The trigger draws no box, so the header stays a direct item of the band's grid. */}
+      <CardContextMenu task={epic}>
+        <header
+          // The marker the dependency lines look for: they end on the header, which stays when the band is collapsed.
+          data-task-card={epic.id}
           className={cn(
-            "flex min-w-0 flex-1 gap-x-1.5 rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            narrow ? "flex-col gap-y-1" : "items-center",
+            "col-span-full flex min-w-0 items-center gap-1.5 ps-1 pe-2",
+            EPIC_HEADER_CLASS,
+            collapsed && "rounded-b-xl",
+            narrow ? "py-1" : "h-8",
           )}
-          aria-current={selected || undefined}
-          title={describeEpicRollup(rollup)}
-          onClick={() => openTask(epic.id)}
         >
-          <span className="flex min-w-0 flex-1 items-center gap-1.5">
-            <GroupIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">#{epic.number}</span>
-            <span className="min-w-0 truncate text-sm font-medium text-foreground/90">{epic.title}</span>
-          </span>
-          <span className="flex shrink-0 items-center gap-1.5">
-            <EpicRollupBar rollup={rollup} className="w-16 shrink-0" />
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {rollup.total === 0 ? "No tasks yet" : `${rollup.done}/${rollup.total} done`}
+          <Button
+            variant="ghost-muted"
+            size="icon-xs"
+            className={cn(narrow && "self-start")}
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? `Expand epic #${epic.number}` : `Collapse epic #${epic.number}`}
+            onClick={() => toggleEpicCollapsed(band.id)}
+          >
+            <ChevronRightIcon className={cn("size-3.5 transition-transform", !collapsed && "rotate-90")} />
+          </Button>
+          <button
+            type="button"
+            className={cn(
+              "flex min-w-0 flex-1 gap-x-1.5 rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              narrow ? "flex-col gap-y-1" : "items-center",
+            )}
+            aria-current={selected || undefined}
+            title={describeEpicRollup(rollup)}
+            onClick={() => openTask(epic.id)}
+          >
+            <span className="flex min-w-0 flex-1 items-center gap-1.5">
+              <GroupIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">#{epic.number}</span>
+              <span className="min-w-0 truncate text-sm font-medium text-foreground/90">{epic.title}</span>
             </span>
-          </span>
-        </button>
-        <EpicBranchBadge epic={epic} className={cn(narrow && "self-start")} />
-        <EpicActions epic={epic} className={cn(narrow && "self-start")} />
-        <AutopilotEpicButton epic={epic} className={cn(narrow && "self-start")} />
-      </header>
+            <span className="flex shrink-0 items-center gap-1.5">
+              <EpicRollupBar rollup={rollup} className="w-16 shrink-0" />
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {rollup.total === 0 ? "No tasks yet" : `${rollup.done}/${rollup.total} done`}
+              </span>
+            </span>
+          </button>
+          <EpicBranchBadge epic={epic} className={cn(narrow && "self-start")} />
+          <EpicActions epic={epic} className={cn(narrow && "self-start")} />
+          <AutopilotEpicButton epic={epic} className={cn(narrow && "self-start")} />
+        </header>
+      </CardContextMenu>
       {collapsed
         ? null
         : columns.map((status) => (

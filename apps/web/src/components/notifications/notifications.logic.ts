@@ -1,4 +1,11 @@
-import { badgeText, type InboxNotification, type NotificationKind, type NotificationList } from "@repo/contracts";
+import {
+  badgeText,
+  NOTIFICATION_GROUPS,
+  NOTIFICATION_KIND_GROUP,
+  type InboxNotification,
+  type NotificationGroup,
+  type NotificationList,
+} from "@repo/contracts";
 
 /** The inbox keeps this many in the cache, the same as the server's default page. */
 const INBOX_LIMIT = 100;
@@ -9,17 +16,18 @@ export function withCreated(list: NotificationList, created: InboxNotification, 
   return { items: [created, ...list.items].slice(0, INBOX_LIMIT), unread };
 }
 
-/** The inbox narrowed to one kind; null shows everything. */
-export function filterByKind(
+/** The inbox narrowed to one group of kinds; null shows everything. */
+export function filterByGroup(
   items: ReadonlyArray<InboxNotification>,
-  kind: NotificationKind | null,
+  group: NotificationGroup | null,
 ): InboxNotification[] {
-  return kind ? items.filter((n) => n.kind === kind) : [...items];
+  return group ? items.filter((n) => NOTIFICATION_KIND_GROUP[n.kind] === group) : [...items];
 }
 
-/** The kinds present in the inbox, so the filter only offers what there is to see. */
-export function kindsPresent(items: ReadonlyArray<InboxNotification>): NotificationKind[] {
-  return [...new Set(items.map((n) => n.kind))];
+/** The groups present in the inbox, in the chips' fixed order, so the filter only offers what there is to see. */
+export function groupsPresent(items: ReadonlyArray<InboxNotification>): NotificationGroup[] {
+  const present = new Set(items.map((n) => NOTIFICATION_KIND_GROUP[n.kind]));
+  return NOTIFICATION_GROUPS.filter((g) => present.has(g));
 }
 
 /** "1 unread notification", read aloud for the bell and the taskbar overlay. */

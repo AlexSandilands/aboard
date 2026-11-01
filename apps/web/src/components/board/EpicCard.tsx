@@ -6,6 +6,7 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { useBoardContext } from "./BoardContext";
+import { CardContextMenu } from "./CardContextMenu";
 import { EpicActions } from "./EpicActions";
 import { EpicRollupBar } from "./EpicRollupBar";
 import {
@@ -62,48 +63,50 @@ export const EpicCard = memo(function EpicCard({
         epic.archivedAt && "opacity-60",
       )}
     >
-      <div
-        // The marker the dependency lines look for: they end on the header, not the whole card with its tasks.
-        data-task-card={epic.id}
-        className={cn("flex items-center gap-1 py-2 ps-1 pe-2.5", EPIC_HEADER_CLASS, !open && "rounded-b-xl")}
-      >
-        <Button
-          variant="ghost-muted"
-          size="icon-xs"
-          aria-expanded={open}
-          aria-label={open ? `Hide the tasks of epic #${epic.number}` : `Show the tasks of epic #${epic.number}`}
-          onClick={() => setOpen(!open)}
+      <CardContextMenu task={epic}>
+        <div
+          // The marker the dependency lines look for: they end on the header, not the whole card with its tasks.
+          data-task-card={epic.id}
+          className={cn("flex items-center gap-1 py-2 ps-1 pe-2.5", EPIC_HEADER_CLASS, !open && "rounded-b-xl")}
         >
-          <ChevronRightIcon className={cn("size-3.5 transition-transform", open && "rotate-90")} />
-        </Button>
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-current={selected || undefined}
-          title={describeEpicRollup(rollup)}
-          onClick={() => openTask(epic.id)}
-        >
-          <span className="flex min-w-0 items-center gap-1.5">
-            <GroupIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">#{epic.number}</span>
-            <span className="min-w-0 truncate text-sm font-medium text-foreground/90">{epic.title}</span>
-            {epic.archivedAt ? (
-              <Badge variant="secondary" size="sm">
-                Archived
-              </Badge>
-            ) : null}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <EpicRollupBar rollup={rollup} className="min-w-0 flex-1" />
-            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-              {rollup.done}/{rollup.total} done
+          <Button
+            variant="ghost-muted"
+            size="icon-xs"
+            aria-expanded={open}
+            aria-label={open ? `Hide the tasks of epic #${epic.number}` : `Show the tasks of epic #${epic.number}`}
+            onClick={() => setOpen(!open)}
+          >
+            <ChevronRightIcon className={cn("size-3.5 transition-transform", open && "rotate-90")} />
+          </Button>
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-current={selected || undefined}
+            title={describeEpicRollup(rollup)}
+            onClick={() => openTask(epic.id)}
+          >
+            <span className="flex min-w-0 items-center gap-1.5">
+              <GroupIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">#{epic.number}</span>
+              <span className="min-w-0 truncate text-sm font-medium text-foreground/90">{epic.title}</span>
+              {epic.archivedAt ? (
+                <Badge variant="secondary" size="sm">
+                  Archived
+                </Badge>
+              ) : null}
             </span>
-          </span>
-        </button>
-        <EpicBranchBadge epic={epic} />
-        <EpicActions epic={epic} />
-        {epic.archivedAt ? null : <ArchiveButton task={epic} />}
-      </div>
+            <span className="flex items-center gap-1.5">
+              <EpicRollupBar rollup={rollup} className="min-w-0 flex-1" />
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                {rollup.done}/{rollup.total} done
+              </span>
+            </span>
+          </button>
+          <EpicBranchBadge epic={epic} />
+          <EpicActions epic={epic} />
+          {epic.archivedAt ? null : <ArchiveButton task={epic} />}
+        </div>
+      </CardContextMenu>
       {open ? (
         <ul className="flex flex-col gap-0.5 border-t border-border/40 p-1">
           {tasks.map((task) => (

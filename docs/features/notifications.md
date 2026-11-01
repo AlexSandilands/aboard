@@ -21,7 +21,7 @@ write that made the change, so the change and its notification commit together.
 | `thread_waiting`       | A linked T3 thread moves into `input` or `approval` (or from one to the other)  | `thread:<linkId>:<status>:<lastActivityAt>` |
 | `pr_checks_failing`    | An open or draft PR's checks become `failing`, or fail again on a new head      | `checks:<linkId>:<headOid>`             |
 | `pr_changes_requested` | An open or draft PR's review decision becomes `changes_requested`               | `changes:<linkId>:<updatedAt>`          |
-| `review_finished`      | A local review round is submitted (`reviews.submit`)                            | `review:<reviewId>`                     |
+| `review_finished` ("Review needs you") | A local review loop ends without a clean result: a round is submitted with blocking or major findings open at the round limit (Stuck), or a round is set `failed` or `stalled` (`reviews.notifyIfUnresolved`). Not for every submitted round. Opening a round, or a new outcome for one, reads the task's earlier ones | `review:<roundId>:<state>` |
 | `autopilot_failed`     | A real Autopilot run fails, or ends flagged `needsAttention` (it gave up or needs you); also runs a restart stranded, except a Review PRs or Fix PRs run it retries | `autopilot:<runId>`     |
 | `agent_request`        | An agent calls `request_attention` on a task (`services/attention.ts`)         | `request:<taskId>:<requestedAt>`        |
 | `autopilot_notice`     | Anything else an automation sends through `notify()`: Unblock dependents, and a new digest (task-less, with the counts) | the caller's (`digest:<id>`) |
@@ -32,6 +32,24 @@ The thread and PR producers sit in `links.setSnapshot`, the call both pollers ma
 snapshot with the stored one. **A link seen for the first time never notifies**: whatever state it was linked
 in, you already know. Dry runs never notify.
 
+### Clearing what is resolved
+
+A notification is marked read (and `notifications.changed` sent) when its cause is over. The inbox is a list of
+things to act on, so an answered one shouldn't wait for a click. `notifications.resolve()` does it, from the
+producer's own write:
+
+| Kind                   | Read when                                                                              |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| `thread_waiting`       | The thread's next snapshot is not `input` or `approval`, or it is archived             |
+| `pr_checks_failing`    | The next snapshot's checks are not failing (a later head passes), or the PR is merged or closed |
+| `pr_changes_requested` | The decision is no longer `changes_requested`, or the PR is merged or closed           |
+| `agent_request`        | The request is cleared or dismissed                                                    |
+| Any of a task's        | The task is Done or archived: `core.write` does it once for every task a write moved, closed or archived (the `status_changed`, `closed` and `archived` log entries), whichever route got it there. A task notified in that same write is skipped, and a later touch of a Done task reads nothing |
+
+Matching uses the dedupe key's prefix (`thread:<linkId>:`, `checks:<linkId>:`, `changes:<linkId>:`) or task and
+kind. A resolved row (read or not) keeps a key of its own, so the same state arising again (a CI re-run failing again, a reopened
+round failing again) notifies again. A new failing head reads the older head's notification before its own is made. A notification that was already read is untouched.
+
 `notify()` returns null, and nothing is stored, when the kind's switch is off or the dedupe key already has a
 row (`dedupe_key` is unique). A key is free again once its row is pruned.
 
@@ -39,7 +57,8 @@ row (`dedupe_key` is unique). A key is free again once its row is pruned.
 
 `notifications` (`014_notifications.sql`): kind, optional task (cascade delete), title (the headline), body
 (the task as `#42 Title`, then detail), dedupe key, `created_at`, `read_at`. Rows older than 30 days are
-pruned on the next `notify()`, and reads ignore them meanwhile. The table is history only: **not in backups**
+pruned on the next `notify()`, and reads ignore them meanwhile. The list also leaves out rows **read** more than
+7 days ago (`READ_VISIBLE_DAYS`): they show dimmed until then; unread ones stay until pruned. The table is history only: **not in backups**
 and not over MCP, so agents can't read or clear it.
 
 REST (`http/routes/notifications.ts`):
@@ -91,8 +110,16 @@ where a pop-up belongs:
 ### Settings
 
 `AppSettings.notifications` (stored under the `notifications` settings key, exported in backups): a switch
-per kind and `muteInQuietHours`, both on by default. **Settings → Board → Notifications** shows them, the browser
+per kind and `muteInQuietHours`. Every switch defaults on except `autopilot_notice` (`DEFAULT_NOTIFICATION_KINDS`).
+Only switches the user set are stored, so a kind they never touched follows the default, including a changed one.
+Settings saved before this change hold the whole record, so those keep what they had. **Settings → Board → Notifications** shows them, the browser
 permission state, and what the quiet-hours window is.
+
+### The bell's filter
+
+The popover filters by **group**, not kind, so the row stays one line however many kinds exist.
+`NOTIFICATION_KIND_GROUP` (contracts) maps every kind to Agents, PRs, Reviews, Autopilot or Suggestions; it is an
+exhaustive `Record`, so a new kind has to pick one. The chips show only the groups present in the inbox.
 
 ### Agent requests
 
@@ -144,7 +171,7 @@ attention** list and the `attentionOnly` filters show it, and the same write sen
 | `apps/server/src/db/migrations/014_notifications.sql` | The table |
 | `apps/server/src/db/repos/notifications.ts` | SQL |
 | `apps/server/src/services/notifications.ts` | `notify`, list, read, pruning, quiet hours |
-| `apps/server/src/services/links.ts`, `reviews.ts`, `autopilot.ts` | The producers |
+| `apps/server/src/services/links.ts`, `reviews.ts`, `autopilot.ts` | The producers, and for links the auto-read |
 | `apps/server/src/services/core.ts` | `fx.notified` and the two events |
 | `apps/server/src/http/routes/notifications.ts` | REST |
 | `apps/web/src/components/notifications/` | Bell and inbox, settings section, delivery, badges, `notifications.logic.ts` |

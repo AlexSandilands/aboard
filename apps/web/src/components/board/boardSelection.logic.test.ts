@@ -1,6 +1,6 @@
 import type { TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { canPickTask, isPickClick, pickedAmong, plannableTasks, togglePicked } from "./boardSelection.logic";
+import { isPlannable, isPickClick, pickedAmong, plannableTasks, togglePicked } from "./boardSelection.logic";
 
 const task = (over: Partial<TaskSummary>): TaskSummary =>
   ({
@@ -26,15 +26,15 @@ describe("picking cards to plan", () => {
     expect(togglePicked(["a", "b"], "a")).toEqual(["b"]);
   });
 
-  it("picks Backlog and plan-less open tasks, never epics, archived or done ones", () => {
-    expect(canPickTask(task({}))).toBe(true);
-    expect(canPickTask(task({ manual: true }))).toBe(false);
-    expect(canPickTask(task({ status: "backlog", progress: { done: 0, total: 3 } }))).toBe(true);
-    expect(canPickTask(task({ status: "in_progress", progress: { done: 0, total: 0 } }))).toBe(true);
-    expect(canPickTask(task({ status: "planned", progress: { done: 0, total: 3 } }))).toBe(false);
-    expect(canPickTask(task({ kind: "epic" }))).toBe(false);
-    expect(canPickTask(task({ archivedAt: "2026-01-01" }))).toBe(false);
-    expect(canPickTask(task({ status: "done" }))).toBe(false);
+  it("plans Backlog and plan-less open tasks, never epics, archived or done ones", () => {
+    expect(isPlannable(task({}))).toBe(true);
+    expect(isPlannable(task({ manual: true }))).toBe(false);
+    expect(isPlannable(task({ status: "backlog", progress: { done: 0, total: 3 } }))).toBe(true);
+    expect(isPlannable(task({ status: "in_progress", progress: { done: 0, total: 0 } }))).toBe(true);
+    expect(isPlannable(task({ status: "planned", progress: { done: 0, total: 3 } }))).toBe(false);
+    expect(isPlannable(task({ kind: "epic" }))).toBe(false);
+    expect(isPlannable(task({ archivedAt: "2026-01-01" }))).toBe(false);
+    expect(isPlannable(task({ status: "done" }))).toBe(false);
   });
 
   it("lists the project's plannable tasks in number order and keeps the pick among them", () => {
@@ -47,5 +47,12 @@ describe("picking cards to plan", () => {
     const plannable = plannableTasks(tasks, "p-1");
     expect(plannable.map((t) => t.number)).toEqual([2, 5]);
     expect(pickedAmong(["t-5", "t-3", "t-2"], plannable)).toEqual(["t-2", "t-5"]);
+  });
+
+  it("keeps every picked card in the pick, but the planning picker ticks only the plannable ones", () => {
+    const tasks = [task({ number: 2 }), task({ number: 3, status: "done" }), task({ number: 4, kind: "epic" })];
+    const picked = togglePicked(togglePicked(togglePicked([], "t-2"), "t-3"), "t-4");
+    expect(picked).toEqual(["t-2", "t-3", "t-4"]);
+    expect(pickedAmong(picked, plannableTasks(tasks, "p-1"))).toEqual(["t-2"]);
   });
 });

@@ -53,7 +53,7 @@ import type {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { api, ApiError } from "~/lib/api";
-import { captureCardRect } from "~/components/board/cardMotion";
+import { snapshotCardRects } from "~/components/board/cardMotion";
 import { toastManager } from "~/components/ui/toast";
 import { applyMove, moveWasReverted, rollbackMove } from "./boardReducer";
 import { queryKeys } from "./queries";
@@ -242,9 +242,10 @@ type MoveVars = MoveTaskInput & { id: string };
  * Moves a task (status and/or order). `mutate` and `mutateAsync` write the optimistic move
  * synchronously, so a dropped card renders in its new slot in the same commit that ends the drag and
  * the drop animation lands there. A failed move slides the card back. PLAN_REQUIRED errors are NOT
- * toasted here: check `isPlanRequired(error)` in onError and offer to write a plan.
+ * toasted here: check `isPlanRequired(error)` in onError and offer to write a plan. `silent` skips the error toast
+ * for a caller that reports failures itself (the card menu's bulk move).
  */
-export function useMoveTask() {
+export function useMoveTask(opts?: MutationOpts) {
   const queryClient = useQueryClient();
   // Each move's task before and after the optimistic write, keyed by the variables object.
   const [moves] = useState(() => new WeakMap<MoveVars, { original: TaskSummary; moved: TaskSummary }>());
@@ -262,12 +263,12 @@ export function useMoveTask() {
     onError: (error, vars) => {
       const move = moves.get(vars);
       if (move) {
-        captureCardRect(move.original.id);
+        snapshotCardRects(move.original.id);
         queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (board) =>
           board ? rollbackMove(board, move.original, move.moved) : board,
         );
       }
-      if (!isPlanRequired(error)) {
+      if (!isPlanRequired(error) && !opts?.silent) {
         toastManager.add({
           type: "error",
           title: "Couldn't move task",
@@ -282,6 +283,7 @@ export function useMoveTask() {
       const original = board?.tasks.find((t) => t.id === vars.id);
       if (!board || !original) return;
       const next = applyMove(board, vars);
+      snapshotCardRects();
       const moved = next.tasks.find((t) => t.id === vars.id);
       if (moved) moves.set(vars, { original, moved });
       queryClient.setQueryData(queryKeys.board, next);

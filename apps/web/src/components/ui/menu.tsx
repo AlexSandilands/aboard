@@ -18,6 +18,17 @@ function MenuTrigger({ className, children, ...props }: MenuPrimitive.Trigger.Pr
   );
 }
 
+/** The popup surface, shared with the context menu. */
+export const MENU_POPUP_CLASS = cn(
+  "dropdown-glass relative flex origin-(--transform-origin) rounded-lg shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] outline-none focus:outline-none dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]",
+  // Portaled menus can overlap an Electron window drag region (e.g.
+  // the Review panel header). Drag hit-testing ignores z-index, so
+  // the topmost row would stay unhoverable without this opt-out.
+  "[-webkit-app-region:no-drag]",
+  // Menus size to their content from one minimum, never past the viewport.
+  "min-w-[min(10rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)]",
+);
+
 function MenuPopup({
   children,
   className,
@@ -47,20 +58,7 @@ function MenuPopup({
         side={side}
         sideOffset={sideOffset}
       >
-        <MenuPrimitive.Popup
-          className={cn(
-            "dropdown-glass relative flex origin-(--transform-origin) rounded-lg shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] outline-none focus:outline-none dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]",
-            // Portaled menus can overlap an Electron window drag region (e.g.
-            // the Review panel header). Drag hit-testing ignores z-index, so
-            // the topmost row would stay unhoverable without this opt-out.
-            "[-webkit-app-region:no-drag]",
-            // Menus size to their content from one minimum, never past the viewport.
-            "min-w-[min(10rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)]",
-            className,
-          )}
-          data-slot="menu-popup"
-          {...props}
-        >
+        <MenuPrimitive.Popup className={cn(MENU_POPUP_CLASS, className)} data-slot="menu-popup" {...props}>
           <div className="max-h-(--available-height) w-full overflow-y-auto p-1">{children}</div>
         </MenuPrimitive.Popup>
       </MenuPrimitive.Positioner>

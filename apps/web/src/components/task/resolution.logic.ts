@@ -16,19 +16,23 @@ export function resolutionLabel(task: Pick<TaskSummary, "resolution" | "resolved
 }
 
 /** Title of the picker dialog for resolutions that point at another task. */
-export function closeDialogTitle(number: number, resolution: Exclude<TaskResolution, "wont_do">): string {
-  return resolution === "completed" ? `Close #${number} as done by…` : `Close #${number} as a duplicate of…`;
+export function closeDialogTitle(
+  tasks: ReadonlyArray<Pick<TaskSummary, "number">>,
+  resolution: Exclude<TaskResolution, "wont_do">,
+): string {
+  const what = tasks.length === 1 ? `#${tasks[0]!.number}` : `${tasks.length} tasks`;
+  return resolution === "completed" ? `Close ${what} as done by…` : `Close ${what} as a duplicate of…`;
 }
 
 const MAX_CANDIDATES = 50;
 
 /**
  * Tasks the picker offers as the delivering/original task: every other task matching `query` (by "#n", number
- * or title words), the closing task's own project first, then newest first.
+ * or title words), the closing task's (or the first closing task's) project first, then newest first.
  */
 export function closeCandidates(
   tasks: ReadonlyArray<TaskSummary>,
-  self: Pick<TaskSummary, "id" | "projectId">,
+  self: ReadonlyArray<Pick<TaskSummary, "id" | "projectId">>,
   query: string,
 ): TaskSummary[] {
   const q = query.trim().toLowerCase();
@@ -41,10 +45,10 @@ export function closeCandidates(
     return words.every((word) => haystack.includes(word));
   };
   return tasks
-    .filter((task) => task.id !== self.id && matches(task))
+    .filter((task) => !self.some((s) => s.id === task.id) && matches(task))
     .sort((a, b) => {
-      const sameA = a.projectId === self.projectId ? 0 : 1;
-      const sameB = b.projectId === self.projectId ? 0 : 1;
+      const sameA = a.projectId === self[0]?.projectId ? 0 : 1;
+      const sameB = b.projectId === self[0]?.projectId ? 0 : 1;
       return sameA - sameB || b.number - a.number;
     })
     .slice(0, MAX_CANDIDATES);

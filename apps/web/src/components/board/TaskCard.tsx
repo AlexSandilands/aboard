@@ -18,7 +18,8 @@ import { cn } from "~/lib/utils";
 import { AttentionIcon } from "./attention";
 import { ATTENTION_LABELS, PRIORITY_ROW_ID, ticketKeys, topAttention } from "./board.logic";
 import { useBoardContext } from "./BoardContext";
-import { canPickTask, isPickClick } from "./boardSelection.logic";
+import { isPickClick } from "./boardSelection.logic";
+import { CardContextMenu } from "./CardContextMenu";
 import { blockedLabel } from "./dependencies.logic";
 import { CardLinks, chipClassName, hasCardLinks, linkHandlers, PrStatusChip } from "./CardLinks";
 import { cardLinks } from "./cardLinks.logic";
@@ -27,7 +28,6 @@ import { HandoffMenu } from "~/components/handoff/HandoffActions";
 import { LabelChip } from "~/components/labels/LabelChip";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { ReviewBadge } from "~/components/review/ReviewBadge";
-import { useCardFlip } from "./cardMotion";
 import type { DragData } from "./dnd.logic";
 import { TaskProgressLine } from "./TaskProgress";
 
@@ -321,7 +321,7 @@ function ResolutionChip({ task }: { task: TaskSummary }) {
 
 /**
  * A draggable card in a board cell. Click or Enter opens the detail panel; Space picks it up. Ctrl/⌘-click picks it
- * to plan with others (see boardSelection.logic) instead.
+ * to act on several at once (see boardSelection.logic) instead.
  */
 export const SortableTaskCard = memo(function SortableTaskCard({
   task,
@@ -352,11 +352,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({
     },
     [setNodeRef],
   );
-  useCardFlip(task.id, nodeRef, `${task.status}:${task.position}`);
-  const inPick = useBoardPick((s) => s.picked.includes(task.id));
-  const pickable = canPickTask(task);
-  // A picked card that got a plan meanwhile no longer counts, like the lane button's count; Ctrl-click still drops it.
-  const picked = inPick && pickable;
+  const picked = useBoardPick((s) => s.picked.includes(task.id));
 
   const open = () => {
     if (suppressClickRef.current) return;
@@ -367,45 +363,47 @@ export const SortableTaskCard = memo(function SortableTaskCard({
   const onClick = (event: MouseEvent<HTMLDivElement>) => {
     if (!isPickClick(event)) return open();
     event.preventDefault();
-    if (pickable || inPick) useBoardPick.getState().togglePicked(task.id);
+    useBoardPick.getState().togglePicked(task.id);
   };
 
   return (
-    <div
-      ref={ref}
-      style={{ transform: CSS.Translate.toString(transform), transition }}
-      {...attributes}
-      {...listeners}
-      // A Ctrl/⌘-press picks the card, so it never starts a drag.
-      onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
-        if (!isPickClick(event)) listeners?.onPointerDown?.(event);
-      }}
-      // Restates dnd-kit's defaults so the card's semantics are visible statically.
-      role="button"
-      tabIndex={0}
-      aria-label={`#${task.number} ${task.title}${picked ? " (picked to plan)" : ""}`}
-      aria-current={selected || undefined}
-      data-task-card={task.id}
-      className={cn(
-        taskCardClassName(task, selected),
-        "group/card",
-        // !important beats dnd-kit's inline transition, which slides cards aside while sorting.
-        compact ? "[contain-intrinsic-size:auto_28px]" : "[contain-intrinsic-size:auto_84px]",
-        "[content-visibility:auto] motion-reduce:transition-none!",
-        isDragging && "opacity-40",
-        // Inside the card: content-visibility clips anything drawn outside it.
-        picked && "bg-primary/8 ring-2 ring-primary/70 ring-inset",
-      )}
-      onClick={onClick}
-      onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
-        listeners?.onKeyDown?.(event);
-        if (event.defaultPrevented || event.key !== "Enter" || event.target !== event.currentTarget) return;
-        event.preventDefault();
-        open();
-      }}
-    >
-      <TaskCardContent task={task} archivable showProject={rowId === PRIORITY_ROW_ID} compact={compact} />
-    </div>
+    <CardContextMenu task={task}>
+      <div
+        ref={ref}
+        style={{ transform: CSS.Translate.toString(transform), transition }}
+        {...attributes}
+        {...listeners}
+        // A Ctrl/⌘-press picks the card, so it never starts a drag.
+        onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
+          if (!isPickClick(event)) listeners?.onPointerDown?.(event);
+        }}
+        // Restates dnd-kit's defaults so the card's semantics are visible statically.
+        role="button"
+        tabIndex={0}
+        aria-label={`#${task.number} ${task.title}${picked ? " (picked)" : ""}`}
+        aria-current={selected || undefined}
+        data-task-card={task.id}
+        className={cn(
+          taskCardClassName(task, selected),
+          "group/card",
+          // !important beats dnd-kit's inline transition, which slides cards aside while sorting.
+          compact ? "[contain-intrinsic-size:auto_28px]" : "[contain-intrinsic-size:auto_84px]",
+          "[content-visibility:auto] motion-reduce:transition-none!",
+          isDragging && "opacity-40",
+          // Inside the card: content-visibility clips anything drawn outside it.
+          picked && "bg-primary/8 ring-2 ring-primary/70 ring-inset",
+        )}
+        onClick={onClick}
+        onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+          listeners?.onKeyDown?.(event);
+          if (event.defaultPrevented || event.key !== "Enter" || event.target !== event.currentTarget) return;
+          event.preventDefault();
+          open();
+        }}
+      >
+        <TaskCardContent task={task} archivable showProject={rowId === PRIORITY_ROW_ID} compact={compact} />
+      </div>
+    </CardContextMenu>
   );
 });
 
@@ -426,7 +424,7 @@ export function TaskCardOverlay({
   // dnd-kit measures the overlay's first child to aim the drop, so the lift scale sits one level
   // deeper where it can't skew the landing spot.
   return (
-    <div>
+    <div data-card-overlay>
       <div
         className={cn(
           taskCardClassName(task, false),

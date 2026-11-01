@@ -32,14 +32,15 @@ import type {
   TerminalInfo,
   TaskTemplate,
 } from "@repo/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { taskActiveRun } from "~/components/autopilot/autopilot.logic";
 import { projectHasOrchestrateWork } from "~/components/autopilot/orchestrate.logic";
 import { deliverNotification } from "~/components/notifications/delivery";
 import { withCreated } from "~/components/notifications/notifications.logic";
 import { ApiError, api, eventsUrl } from "~/lib/api";
-import { applyBoardEvent } from "./boardReducer";
+import { snapshotCardRects } from "~/components/board/cardMotion";
+import { applyBoardEvent, eventMovesCards } from "./boardReducer";
 
 export const queryKeys = {
   board: ["board"] as const,
@@ -218,6 +219,15 @@ export function useTaskDetail(taskId: string | null | undefined) {
     queryKey: queryKeys.task(taskId ?? ""),
     queryFn: ({ signal }) => api<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId!)}`, { signal }),
     enabled: !!taskId,
+  });
+}
+
+/** The task's detail from the cache, or fetched when it isn't there: for menus that act on a card, which has none. */
+export function fetchTaskDetail(queryClient: QueryClient, taskId: string) {
+  return queryClient.fetchQuery({
+    queryKey: queryKeys.task(taskId),
+    queryFn: ({ signal }) => api<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`, { signal }),
+    staleTime: 30_000,
   });
 }
 
@@ -512,6 +522,8 @@ export function useBoardEvents() {
     };
     const onMessage = (message: MessageEvent) => {
       const event = JSON.parse(message.data as string) as BoardEvent;
+      const current = queryClient.getQueryData<BoardSnapshot>(queryKeys.board);
+      if (current && eventMovesCards(current, event)) snapshotCardRects();
       queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (board) =>
         board ? applyBoardEvent(board, event) : board,
       );

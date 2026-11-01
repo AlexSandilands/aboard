@@ -225,10 +225,22 @@ opening a session that is still running brings that window back to the front. On
 or longer than about 8,000 characters, can't go on the command line: the session starts with a short pointer to the
 task instead, and the full prompt is on your clipboard to paste.
 
+## The card menu
+
+Right-click a card or an epic's header (or press the Menu key or Shift+F10 on it) for its menu: **Move to** a column, and
+everything in the task panel's **More actions** menu, so you don't have to open the panel first.
+
+To act on several tasks at once, Ctrl-click (⌘-click on a Mac) their cards to pick them, then right-click one of the
+picked cards. The menu is headed "3 tasks" and offers **Move to**, **Mark as priority**, **Close as** (Won't do, or done
+by one other task), **Archive**, **Labels**, **Copy references** and **Plan with an agent**. Each applies to the picked
+cards it fits and only shows when it fits one of them (pick a priority and a non-priority task and you get both Mark
+and Remove priority), and tells you in one message what it did and what it skipped (a task without a plan can't leave Backlog).
+Esc or a plain click drops the pick.
+
 ## Planning several tasks at once
 
 To plan a batch of tasks in one go, Ctrl-click (⌘-click on a Mac) their cards to pick them, then use **Plan tasks…**
-in the project's lane header (the button shows how many are picked; Esc or a plain click drops the pick). Choose a new
+in the project's lane header (the button shows how many of the picked tasks can be planned; Esc or a plain click drops the pick). Choose a new
 T3 Code thread, a Claude Code or Copilot CLI session, or **Copy planning prompt**, tick the tasks you want in the list
 (picked cards are already ticked), and continue. One agent then walks you through a plan for each task: it looks into
 the code, shows you its draft and asks its questions, lets you approve simple tasks together and goes through bigger

@@ -140,7 +140,8 @@ toward transparent; above it they mix toward black or white (borders a quarter a
 variables are defined on `:root` and again on `[data-app-sidebar]`, and Tailwind's foreground, border and input
 colours read them (`@theme inline`), so every `text-foreground`, `text-muted-foreground` and `border` follows.
 
-**Panel animations**: the ported sidebar primitive already transitions when an ancestor has
+**Panel animations**: board cards sliding between columns use 1.75× the duration (`useBoardFlip`, see
+[board-layout.md](board-layout.md#card-motion)). The ported sidebar primitive already transitions when an ancestor has
 `data-panel-animations="true"`. The task panel grows in from its edge with the `.panel-enter` keyframe and
 shrinks back with `.panel-exit`: `AppLayout` keeps it mounted on the closed task until its `animationend`.
 Only the `<aside>`'s width animates. Its contents sit in an inner wrapper fixed at `var(--resizable-width)` (at least

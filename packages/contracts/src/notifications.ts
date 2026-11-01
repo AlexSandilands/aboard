@@ -24,7 +24,11 @@ export const NOTIFICATION_KINDS: ReadonlyArray<{ kind: NotificationKind; label: 
     label: "Changes requested",
     description: "A reviewer asked for changes on a linked pull request",
   },
-  { kind: "review_finished", label: "Review finished", description: "A local review round was submitted" },
+  {
+    kind: "review_finished",
+    label: "Review needs you",
+    description: "A local review ended Stuck, Review failed or Needs review",
+  },
   { kind: "autopilot_failed", label: "Autopilot failed", description: "An Autopilot run failed or gave up" },
   { kind: "autopilot_notice", label: "Autopilot updates", description: "Other things Autopilot wants you to know" },
   { kind: "suggestion", label: "Suggested changes", description: "An agent suggested a change to a prompt or skill" },
@@ -35,6 +39,31 @@ export const NOTIFICATION_KINDS: ReadonlyArray<{ kind: NotificationKind; label: 
     description: "An agent drafted an automation for you to review and import",
   },
 ];
+
+/** The inbox filter's chips: related kinds share one, so the row stays short however many kinds there are. */
+export const NOTIFICATION_GROUPS = ["agents", "prs", "reviews", "autopilot", "suggestions"] as const;
+export type NotificationGroup = (typeof NOTIFICATION_GROUPS)[number];
+
+export const NOTIFICATION_GROUP_LABELS: Record<NotificationGroup, string> = {
+  agents: "Agents",
+  prs: "PRs",
+  reviews: "Reviews",
+  autopilot: "Autopilot",
+  suggestions: "Suggestions",
+};
+
+/** Exhaustive on purpose: a new kind has to pick its group. */
+export const NOTIFICATION_KIND_GROUP: Record<NotificationKind, NotificationGroup> = {
+  thread_waiting: "agents",
+  agent_request: "agents",
+  pr_checks_failing: "prs",
+  pr_changes_requested: "prs",
+  review_finished: "reviews",
+  autopilot_failed: "autopilot",
+  autopilot_notice: "autopilot",
+  automation_draft: "autopilot",
+  suggestion: "suggestions",
+};
 
 export const InboxNotification = z.object({
   id: z.string(),
@@ -72,8 +101,21 @@ export const NotificationSettings = z.object({
 });
 export type NotificationSettings = z.infer<typeof NotificationSettings>;
 
+/** What the user is told about unless they switch it off: only what needs them. Digests and unblocks are news. */
+export const DEFAULT_NOTIFICATION_KINDS: Record<NotificationKind, boolean> = {
+  thread_waiting: true,
+  pr_checks_failing: true,
+  pr_changes_requested: true,
+  review_finished: true,
+  autopilot_failed: true,
+  autopilot_notice: false,
+  suggestion: true,
+  agent_request: true,
+  automation_draft: true,
+};
+
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
-  kinds: Object.fromEntries(NotificationKind.options.map((kind) => [kind, true])) as Record<NotificationKind, boolean>,
+  kinds: DEFAULT_NOTIFICATION_KINDS,
   muteInQuietHours: true,
 };
 

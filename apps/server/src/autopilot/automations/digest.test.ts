@@ -36,6 +36,8 @@ function setup(behaviour: Behaviour = NO_AGENT) {
     },
   };
   const h = createTestHarness({ integrations: { automations: [digest], autopilotRunner: runner } });
+  // Autopilot updates are off by default; these tests are about them.
+  h.services.settings.update({ notifications: { kinds: { autopilot_notice: true } } });
   const s = h.services;
   const engine = createAutopilotEngine({
     services: () => h.services,
