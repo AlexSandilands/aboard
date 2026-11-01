@@ -1,5 +1,6 @@
 import type { BoardEvent, InboxNotification, PrSnapshot, T3ThreadSnapshot } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
+import { createRepos } from "../db/repos/index.ts";
 import { createTestHarness } from "../test/harness.ts";
 
 const pr = (overrides: Partial<PrSnapshot> = {}): PrSnapshot => ({
@@ -205,6 +206,8 @@ describe("producers", () => {
 
     s.links.setSnapshot(prLink.id, pr({ checks: "failing", headOid: "ccc" }));
     expect(inbox()).toHaveLength(2);
+    // Only the newest head's failure stands; the older head's is read.
+    expect(inbox().map((n) => n.readAt !== null)).toEqual([false, true]);
   });
 
   it("notifies when changes are requested, not for a PR that is closed", () => {
@@ -247,6 +250,28 @@ describe("producers", () => {
     const stalled = s.reviews.openRound(task.id, { trigger: "manual", actor: "agent" });
     s.reviews.setRoundStatus(stalled.id, "stalled", { actor: "board", error: "nobody" });
     expect(inbox().map((n) => n.title)).toEqual(["Round 2 needs a reviewer", "Review failed on round 1"]);
+  });
+
+  it("keeps a stalled round's notice from hiding a later Stuck one, and reads the stale one", () => {
+    const { s, task, inbox } = setup();
+    for (let i = 0; i < 2; i++) {
+      s.reviews.openRound(task.id, { trigger: "manual", actor: "agent" });
+      s.reviews.submit(task.id, { findings: [{ severity: "major", title: `f${i}` }] }, "reviewer");
+    }
+    const third = s.reviews.openRound(task.id, { trigger: "manual", actor: "agent" });
+    s.reviews.setRoundStatus(third.id, "stalled", { actor: "board", error: "nobody" });
+    expect(inbox().map((n) => [n.title, n.readAt === null])).toEqual([["Round 3 needs a reviewer", true]]);
+
+    // An agent still submits the stalled round, and it ends Stuck: the old notice is stale.
+    s.reviews.submit(task.id, { findings: [{ severity: "major", title: "f3" }] }, "reviewer");
+    expect(inbox().map((n) => [n.title, n.readAt === null])).toEqual([
+      ["Review stuck on round 3", true],
+      ["Round 3 needs a reviewer", false],
+    ]);
+
+    // A new cycle clears it.
+    s.reviews.openRound(task.id, { trigger: "move", actor: "board" });
+    expect(inbox().every((n) => n.readAt !== null)).toBe(true);
   });
 
   it("notifies when an Autopilot run fails or asks for the user, not for a dry run", () => {
@@ -404,39 +429,67 @@ describe("clearing what is resolved", () => {
     note(other.id, "d");
     s.tasks.update(other.id, { archived: true }, "user");
     expect(unread(inbox)).toEqual([]);
+
+    // Later touches of a finished task don't quietly read what arrived since.
+    note(task.id, "e");
+    s.tasks.update(task.id, { title: "Ship it, renamed" }, "user");
+    expect(
+      inbox()
+        .filter((n) => n.readAt === null)
+        .map((n) => n.title),
+    ).toEqual(["e"]);
   });
 });
 
 describe("what the inbox lists", () => {
-  it("drops read notifications after 7 days but keeps unread ones until they are pruned", () => {
+  it("drops notifications 7 days after they were read, and keeps unread ones until they are pruned", () => {
     let now = new Date("2026-10-01T12:00:00");
     const { s } = setup(() => now);
     const make = (key: string) =>
       s.notifications.notify({ kind: "autopilot_notice", title: key, body: "", dedupeKey: key })!;
-    const read = make("read");
+    const old = make("old");
     make("unread");
-    s.notifications.markRead(read.id);
 
-    now = new Date("2026-10-07T12:00:00");
-    expect(s.notifications.list().items.map((n) => n.title)).toEqual(["unread", "read"]);
-    now = new Date("2026-10-09T12:00:00");
+    // Left unread for nine days, then read: it still shows, dimmed, for 7 days from the read.
+    now = new Date("2026-10-10T12:00:00");
+    s.notifications.markRead(old.id);
+    now = new Date("2026-10-16T12:00:00");
+    expect(s.notifications.list().items.map((n) => n.title)).toEqual(["unread", "old"]);
+    now = new Date("2026-10-18T12:00:00");
     expect(s.notifications.list()).toMatchObject({ items: [{ title: "unread" }], unread: 1 });
   });
 });
 
 describe("defaults", () => {
   it("turns Autopilot updates off and the rest on, until the user says otherwise", () => {
-    const { s } = setup();
+    const h = setup();
+    const s = h.s;
     const fresh = createTestHarness().services.settings.get().notifications.kinds;
     expect(fresh).toMatchObject({ autopilot_notice: false, autopilot_failed: true, review_finished: true });
     expect(Object.values({ ...fresh, autopilot_notice: true }).every(Boolean)).toBe(true);
 
     // Saving one switch stores only that one, so the other kinds keep following the defaults.
     s.settings.update({ notifications: { kinds: { suggestion: false } } });
+    expect(createRepos(h.db).settings.all().get("notifications")).toEqual({
+      muteInQuietHours: true,
+      kinds: { autopilot_notice: true, suggestion: false },
+    });
     expect(s.settings.get().notifications.kinds).toMatchObject({
       suggestion: false,
       autopilot_notice: true,
       thread_waiting: true,
+    });
+  });
+
+  it("keeps a full record saved before the defaults changed", () => {
+    const h = createTestHarness();
+    createRepos(h.db).settings.set("notifications", {
+      muteInQuietHours: false,
+      kinds: Object.fromEntries(Object.keys(h.services.settings.get().notifications.kinds).map((k) => [k, true])),
+    });
+    expect(h.services.settings.get().notifications).toMatchObject({
+      muteInQuietHours: false,
+      kinds: { autopilot_notice: true, thread_waiting: true },
     });
   });
 

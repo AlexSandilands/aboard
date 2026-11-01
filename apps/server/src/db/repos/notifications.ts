@@ -27,13 +27,13 @@ export function createNotificationsRepo(sql: Sql) {
   return {
     /**
      * Newest first (rowid breaks ties within a millisecond). `since` leaves out rows old enough to be pruned;
-     * `readSince` leaves out read ones that are older than it (unread ones stay until `since`).
+     * `readSince` leaves out ones read before it (unread ones stay until `since`).
      */
     list(opts: { since: string; readSince: string; kind?: NotificationKind; limit: number }): InboxNotification[] {
       return sql
         .all<NotificationRow>(
           `SELECT * FROM notifications
-           WHERE created_at >= ? AND (read_at IS NULL OR created_at >= ?) AND (? IS NULL OR kind = ?)
+           WHERE created_at >= ? AND (read_at IS NULL OR read_at >= ?) AND (? IS NULL OR kind = ?)
            ORDER BY created_at DESC, rowid DESC LIMIT ?`,
           opts.since,
           opts.readSince,

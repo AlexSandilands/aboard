@@ -182,6 +182,8 @@ export function createLinksService(
       const ref = parseJson<{ number: number }>(row.ref_json);
       const label = ref ? `PR #${ref.number}` : "PR";
       if (next.checks === "failing" && (prev.checks !== "failing" || prev.headOid !== next.headOid)) {
+        // Only the current head's failure stands: an older head's is obsolete.
+        deps.notifications.resolve({ keyPrefix: `checks:${row.id}:` });
         deps.notifications.notify({
           kind: "pr_checks_failing",
           taskId: task.id,
@@ -191,6 +193,7 @@ export function createLinksService(
         });
       }
       if (next.reviewDecision === "changes_requested" && prev.reviewDecision !== "changes_requested") {
+        deps.notifications.resolve({ keyPrefix: `changes:${row.id}:` });
         deps.notifications.notify({
           kind: "pr_changes_requested",
           taskId: task.id,

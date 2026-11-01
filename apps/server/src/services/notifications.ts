@@ -14,7 +14,7 @@ import { loadSettings } from "./settings.ts";
 
 /** Notifications older than this are dropped. */
 export const NOTIFICATION_RETENTION_DAYS = 30;
-/** Read notifications stay in the list, dimmed, this long; unread ones until they are pruned. */
+/** Read notifications stay in the list, dimmed, this long after being read; unread ones until they are pruned. */
 export const READ_VISIBLE_DAYS = 7;
 const LIST_LIMIT = 100;
 

@@ -50,11 +50,17 @@ export function createReviewsService(
     fx.task(taskId);
   };
 
+  const clearReviewNotifications = (taskId: string): void => {
+    deps.notifications.resolve({ taskId, kind: "review_finished" });
+  };
+
   /**
    * Tells the user when a round ended the loop without a clean result (Stuck, Review failed, Needs review): that is
    * the only review outcome that needs them. A round that just asks the agent to fix things is the agent's business.
    */
   const notifyIfUnresolved = (taskId: string, roundId: string, roundNumber: number): void => {
+    // Whatever an earlier round said is stale now that this one has an outcome.
+    clearReviewNotifications(taskId);
     const summary = deriveReviewSummary(
       repos.reviews.forTasks([taskId]),
       repos.reviews.findingsFor([taskId]),
@@ -81,7 +87,7 @@ export function createReviewsService(
       taskId,
       title: headline,
       body: `#${task.number} ${task.title}\n${detail}`,
-      dedupeKey: `review:${roundId}`,
+      dedupeKey: `review:${roundId}:${summary.state}`,
     });
   };
 
@@ -136,6 +142,7 @@ export function createReviewsService(
       };
       repos.reviews.update(reopened);
       fx.log(taskId, opts.actor, "review_opened", { round: reopened.round, trigger: opts.trigger });
+      clearReviewNotifications(taskId);
       touch(taskId, fx);
       return reopened;
     }
@@ -170,6 +177,7 @@ export function createReviewsService(
     };
     repos.reviews.insert(round);
     fx.log(taskId, opts.actor, "review_opened", { round: round.round, trigger: opts.trigger });
+    clearReviewNotifications(taskId);
     touch(taskId, fx);
     return round;
   };
@@ -334,6 +342,7 @@ export function createReviewsService(
         });
         touch(round.taskId, fx);
         if (status === "failed" || status === "stalled") notifyIfUnresolved(round.taskId, round.id, round.round);
+        else clearReviewNotifications(round.taskId);
         return round;
       });
       return updated ? review(updated.taskId, reviewId) : null;
