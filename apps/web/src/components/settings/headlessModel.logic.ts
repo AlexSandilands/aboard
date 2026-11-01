@@ -18,10 +18,13 @@ export interface HeadlessModelItem {
   label: string;
 }
 
-/** The picker's entries; the CLI default is only offered where "no choice" is a valid setting. */
-export function headlessModelItems(allowDefault: boolean): HeadlessModelItem[] {
+/**
+ * The picker's entries; "no choice" is only offered where it is a valid setting, under the name `defaultLabel` gives
+ * what runs then (the CLI default, or what a level above sets).
+ */
+export function headlessModelItems(allowDefault: boolean, defaultLabel = "CLI default"): HeadlessModelItem[] {
   return [
-    ...(allowDefault ? [{ value: "default" as const, label: "CLI default" }] : []),
+    ...(allowDefault ? [{ value: "default" as const, label: defaultLabel }] : []),
     ...MODEL_TIERS.map(({ value, label }) => ({ value, label: `${label} tier` })),
     { value: "custom", label: "Custom model" },
   ];

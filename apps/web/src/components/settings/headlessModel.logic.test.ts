@@ -17,6 +17,11 @@ describe("headless model picker", () => {
   it("offers the CLI default only where no choice is a setting", () => {
     expect(headlessModelItems(true).map((i) => i.value)).toEqual(["default", "light", "standard", "deep", "custom"]);
     expect(headlessModelItems(false).map((i) => i.value)).toEqual(["light", "standard", "deep", "custom"]);
+    expect(headlessModelItems(true)[0]!.label).toBe("CLI default");
+    expect(headlessModelItems(true, "Implementer's model")[0]).toEqual({
+      value: "default",
+      label: "Implementer's model",
+    });
   });
 
   it("shows the option a stored choice is", () => {

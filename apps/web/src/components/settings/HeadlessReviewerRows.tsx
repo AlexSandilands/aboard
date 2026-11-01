@@ -2,7 +2,6 @@ import type { AppSettings } from "@repo/contracts";
 import { Switch } from "~/components/ui/switch";
 import { useUpdateSettings } from "~/state/mutations";
 import { BlurInput } from "./BlurInput";
-import { HeadlessModelRow } from "./HeadlessModelRow";
 import { SettingsLink, SettingsRow } from "./settingsLayout";
 
 /**
@@ -34,16 +33,6 @@ export function HeadlessReviewerRows({ settings }: { settings: AppSettings }) {
       />
       {settings.headlessReviewEnabled ? (
         <>
-          <HeadlessModelRow
-            id="tasks.review.model"
-            title="Board reviewer model"
-            description="A model tier, a model passed to claude --model, or the CLI's default."
-            label="Board reviewer model"
-            tiers={settings.modelTiers}
-            value={settings.reviewModel}
-            allowDefault
-            onChange={(next) => updateSettings.mutate({ reviewModel: next })}
-          />
           <SettingsRow
             id="tasks.review.budget"
             title="Budget per review"
