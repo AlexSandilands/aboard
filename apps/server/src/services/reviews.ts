@@ -2,6 +2,7 @@ import {
   BOARD_ACTOR,
   deriveReviewSummary,
   FindingSeverity,
+  type HeadlessModel,
   reviewSkillName,
   reviewWantsAnotherRound,
   type ReviewFinding,
@@ -54,6 +55,12 @@ export function createReviewsService(
   const skillFor = (taskId: string): ReviewSkillRef => {
     const project = repos.projects.get(deps.task(taskId).projectId);
     return project?.reviewSkill ?? loadSettings(repos).reviewSkill;
+  };
+
+  /** The task's reviewer model, else its project's, else the board's; null runs the reviewer on its own default. */
+  const modelFor = (taskId: string): HeadlessModel | null => {
+    const task = deps.task(taskId);
+    return task.reviewModel ?? repos.projects.get(task.projectId)?.reviewModel ?? loadSettings(repos).reviewModel;
   };
 
   /** Finds a finding by id or "R2.3" label within the task. */
@@ -151,6 +158,8 @@ export function createReviewsService(
     },
 
     skillFor,
+
+    modelFor,
 
     openRound(taskId, opts) {
       const id = core.write((fx) => openRoundIn(taskId, opts, fx).id);

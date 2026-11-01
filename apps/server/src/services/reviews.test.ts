@@ -271,6 +271,24 @@ describe("reviews", () => {
     expect(s.reviews.openRound(task.id, { trigger: "manual", actor: "agent" }).skill).toBe("pr-review");
   });
 
+  it("resolves the reviewer model from task, project and global settings", () => {
+    const { s, project, task } = setup();
+    expect(s.reviews.modelFor(task.id)).toBeNull();
+    s.settings.update({ reviewModel: { tier: "standard" } });
+    expect(s.reviews.modelFor(task.id)).toEqual({ tier: "standard" });
+    s.projects.update(project.id, { reviewModel: { model: "sonnet" } });
+    expect(s.reviews.modelFor(task.id)).toEqual({ model: "sonnet" });
+    s.tasks.update(task.id, { reviewModel: { tier: "deep" } }, "user");
+    expect(s.reviews.modelFor(task.id)).toEqual({ tier: "deep" });
+    expect(s.tasks.summary(task.id).reviewModel).toEqual({ tier: "deep" });
+
+    // null inherits again, level by level.
+    s.tasks.update(task.id, { reviewModel: null }, "user");
+    expect(s.reviews.modelFor(task.id)).toEqual({ model: "sonnet" });
+    s.projects.update(project.id, { reviewModel: null });
+    expect(s.reviews.modelFor(task.id)).toEqual({ tier: "standard" });
+  });
+
   it("includes rounds in the task detail and drops them with the task", () => {
     const { s, task } = setup();
     s.reviews.submit(task.id, { findings: [{ severity: "minor", title: "x" }] }, "reviewer");
