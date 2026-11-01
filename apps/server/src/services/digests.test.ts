@@ -23,6 +23,8 @@ function setup() {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(at(8));
   const h = createTestHarness();
+  // Autopilot updates are off by default; these tests are about them.
+  h.services.settings.update({ notifications: { kinds: { autopilot_notice: true } } });
   const s = h.services;
   const alpha = s.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
   const beta = s.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });

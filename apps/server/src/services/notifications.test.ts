@@ -24,6 +24,8 @@ const thread = (overrides: Partial<T3ThreadSnapshot> = {}): T3ThreadSnapshot => 
 function setup(now: () => Date = () => new Date("2026-10-01T12:00:00")) {
   const h = createTestHarness({ integrations: { now } });
   const s = h.services;
+  // Autopilot updates are off by default; most of these tests use them as a plain kind.
+  s.settings.update({ notifications: { kinds: { autopilot_notice: true } } });
   const project = s.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
   const task = s.tasks.create({
     projectId: project.id,
@@ -152,8 +154,8 @@ describe("notify", () => {
 
   it("leaves with its task", () => {
     const { s, task, events } = setup();
-    s.notifications.notify({ kind: "autopilot_notice", taskId: task.id, title: "x", body: "", dedupeKey: "x" });
     s.tasks.update(task.id, { archived: true }, "user");
+    s.notifications.notify({ kind: "autopilot_notice", taskId: task.id, title: "x", body: "", dedupeKey: "x" });
     events.length = 0;
     s.tasks.delete(task.id, "user");
     expect(s.notifications.list().items).toEqual([]);
@@ -216,29 +218,35 @@ describe("producers", () => {
     expect(inbox()).toHaveLength(1);
   });
 
-  it("notifies when a review round is submitted, with what it found", () => {
+  it("tells the user about a review only when its loop ends without a clean result", () => {
     const { s, task, inbox } = setup();
+    // A round that asks the agent to fix things, with rounds left, is the agent's business.
     s.reviews.openRound(task.id, { trigger: "manual", actor: "agent" });
-    s.reviews.submit(
-      task.id,
-      {
-        findings: [
-          { severity: "major", title: "a" },
-          { severity: "major", title: "b" },
-          { severity: "nit", title: "c" },
-        ],
-      },
-      "reviewer",
-    );
-    expect(inbox()[0]).toMatchObject({
-      kind: "review_finished",
-      title: "Review round 1 finished",
-      body: `#${task.number} Ship it\n2 major, 1 nit`,
-    });
-
+    s.reviews.submit(task.id, { findings: [{ severity: "major", title: "a" }] }, "reviewer");
     s.reviews.openRound(task.id, { trigger: "manual", actor: "agent" });
     s.reviews.submit(task.id, { findings: [] }, "reviewer");
-    expect(inbox()[0]!.body).toContain("No findings");
+    expect(inbox()).toEqual([]);
+
+    // Round 1's finding was never resolved, so two are open after the last round: Stuck.
+    s.reviews.openRound(task.id, { trigger: "manual", actor: "agent" });
+    s.reviews.submit(task.id, { findings: [{ severity: "major", title: "b" }] }, "reviewer");
+    expect(inbox()[0]).toMatchObject({
+      kind: "review_finished",
+      title: "Review stuck on round 3",
+      body: `#${task.number} Ship it\n2 blocking or major still open after 3 rounds`,
+    });
+  });
+
+  it("tells the user when a round fails or finds no reviewer", () => {
+    const { s, task, inbox } = setup();
+    const failed = s.reviews.openRound(task.id, { trigger: "manual", actor: "agent" });
+    s.reviews.setRoundStatus(failed.id, "failed", { actor: "board", error: "boom" });
+    expect(inbox().map((n) => n.title)).toEqual(["Review failed on round 1"]);
+    s.reviews.submit(task.id, { findings: [] }, "reviewer");
+
+    const stalled = s.reviews.openRound(task.id, { trigger: "manual", actor: "agent" });
+    s.reviews.setRoundStatus(stalled.id, "stalled", { actor: "board", error: "nobody" });
+    expect(inbox().map((n) => n.title)).toEqual(["Round 2 needs a reviewer", "Review failed on round 1"]);
   });
 
   it("notifies when an Autopilot run fails or asks for the user, not for a dry run", () => {
@@ -303,5 +311,139 @@ describe("REST", () => {
       muteInQuietHours: false,
       kinds: { review_finished: false, thread_waiting: true },
     });
+  });
+});
+
+describe("clearing what is resolved", () => {
+  const unread = (inbox: () => InboxNotification[]) =>
+    inbox()
+      .filter((n) => n.readAt === null)
+      .map((n) => n.kind);
+
+  it("reads a thread notification once the thread leaves input or approval", () => {
+    const { s, threadLink, inbox, events } = setup();
+    s.links.setSnapshot(threadLink.id, thread());
+    s.links.setSnapshot(threadLink.id, thread({ status: "input", lastActivityAt: "2026-10-01T11:00:00Z" }));
+    expect(unread(inbox)).toEqual(["thread_waiting"]);
+    // Still waiting, so still unread.
+    s.links.setSnapshot(threadLink.id, thread({ status: "input", lastActivityAt: "2026-10-01T11:00:00Z", title: "x" }));
+    expect(unread(inbox)).toEqual(["thread_waiting"]);
+
+    events.length = 0;
+    s.links.setSnapshot(threadLink.id, thread({ status: "working", lastActivityAt: "2026-10-01T11:05:00Z" }));
+    expect(unread(inbox)).toEqual([]);
+    expect(events).toContainEqual({ type: "notifications.changed", unread: 0 });
+  });
+
+  it("reads checks and changes notifications when they are resolved", () => {
+    const { s, prLink, inbox } = setup();
+    s.links.setSnapshot(prLink.id, pr());
+    s.links.setSnapshot(
+      prLink.id,
+      pr({ checks: "failing", headOid: "bbb", reviewDecision: "changes_requested", updatedAt: "2026-10-01T11:00:00Z" }),
+    );
+    expect(unread(inbox).sort()).toEqual(["pr_changes_requested", "pr_checks_failing"]);
+
+    // Checks pass on a later head.
+    s.links.setSnapshot(
+      prLink.id,
+      pr({ checks: "passing", headOid: "ccc", reviewDecision: "changes_requested", updatedAt: "2026-10-01T11:10:00Z" }),
+    );
+    expect(unread(inbox)).toEqual(["pr_changes_requested"]);
+
+    // The decision changes.
+    s.links.setSnapshot(
+      prLink.id,
+      pr({ headOid: "ccc", reviewDecision: "approved", updatedAt: "2026-10-01T11:20:00Z" }),
+    );
+    expect(unread(inbox)).toEqual([]);
+  });
+
+  it("reads both when the PR is merged or closed", () => {
+    const { s, prLink, inbox } = setup();
+    s.links.setSnapshot(prLink.id, pr());
+    s.links.setSnapshot(
+      prLink.id,
+      pr({ checks: "failing", headOid: "bbb", reviewDecision: "changes_requested", updatedAt: "2026-10-01T11:00:00Z" }),
+    );
+    expect(unread(inbox)).toHaveLength(2);
+    s.links.setSnapshot(prLink.id, pr({ state: "closed", checks: "failing", headOid: "bbb" }));
+    expect(unread(inbox)).toEqual([]);
+  });
+
+  it("reads an agent request when it is cleared", () => {
+    const { s, task, inbox } = setup();
+    s.attention.request(task.id, "Look", "claude-code");
+    expect(unread(inbox)).toEqual(["agent_request"]);
+    s.attention.clear(task.id, "user");
+    expect(unread(inbox)).toEqual([]);
+  });
+
+  it("reads all of a task's notifications when it is Done or archived, but not other tasks'", () => {
+    const { s, task, project, inbox, events } = setup();
+    const other = s.tasks.create({
+      projectId: project.id,
+      title: "Other",
+      plan: { phases: [{ title: "Build", steps: [{ title: "a" }] }] },
+    });
+    const note = (taskId: string, key: string) =>
+      s.notifications.notify({ kind: "autopilot_notice", taskId, title: key, body: "", dedupeKey: key });
+    note(task.id, "a");
+    note(task.id, "b");
+    note(other.id, "c");
+    events.length = 0;
+
+    s.tasks.move(task.id, { status: "done" }, "user");
+    expect(
+      inbox()
+        .filter((n) => n.readAt === null)
+        .map((n) => n.title),
+    ).toEqual(["c"]);
+    expect(events).toContainEqual({ type: "notifications.changed", unread: 1 });
+
+    note(other.id, "d");
+    s.tasks.update(other.id, { archived: true }, "user");
+    expect(unread(inbox)).toEqual([]);
+  });
+});
+
+describe("what the inbox lists", () => {
+  it("drops read notifications after 7 days but keeps unread ones until they are pruned", () => {
+    let now = new Date("2026-10-01T12:00:00");
+    const { s } = setup(() => now);
+    const make = (key: string) =>
+      s.notifications.notify({ kind: "autopilot_notice", title: key, body: "", dedupeKey: key })!;
+    const read = make("read");
+    make("unread");
+    s.notifications.markRead(read.id);
+
+    now = new Date("2026-10-07T12:00:00");
+    expect(s.notifications.list().items.map((n) => n.title)).toEqual(["unread", "read"]);
+    now = new Date("2026-10-09T12:00:00");
+    expect(s.notifications.list()).toMatchObject({ items: [{ title: "unread" }], unread: 1 });
+  });
+});
+
+describe("defaults", () => {
+  it("turns Autopilot updates off and the rest on, until the user says otherwise", () => {
+    const { s } = setup();
+    const fresh = createTestHarness().services.settings.get().notifications.kinds;
+    expect(fresh).toMatchObject({ autopilot_notice: false, autopilot_failed: true, review_finished: true });
+    expect(Object.values({ ...fresh, autopilot_notice: true }).every(Boolean)).toBe(true);
+
+    // Saving one switch stores only that one, so the other kinds keep following the defaults.
+    s.settings.update({ notifications: { kinds: { suggestion: false } } });
+    expect(s.settings.get().notifications.kinds).toMatchObject({
+      suggestion: false,
+      autopilot_notice: true,
+      thread_waiting: true,
+    });
+  });
+
+  it("keeps a switch the user saved", () => {
+    const h = createTestHarness();
+    h.services.settings.update({ notifications: { kinds: { autopilot_notice: true } } });
+    h.services.settings.update({ notifications: { muteInQuietHours: false } });
+    expect(h.services.settings.get().notifications.kinds.autopilot_notice).toBe(true);
   });
 });

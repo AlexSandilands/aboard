@@ -1,4 +1,4 @@
-import { NOTIFICATION_KINDS, type InboxNotification, type NotificationKind } from "@repo/contracts";
+import { NOTIFICATION_GROUP_LABELS, type InboxNotification, type NotificationGroup } from "@repo/contracts";
 import { BellIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useOpenTask } from "~/components/board/boardNavigation";
@@ -11,12 +11,7 @@ import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import { useMarkAllNotificationsRead, useMarkNotificationRead } from "~/state/mutations";
 import { useNotifications } from "~/state/queries";
-import { bellText, filterByKind, kindsPresent, unreadDescription } from "./notifications.logic";
-
-const KIND_LABELS = Object.fromEntries(NOTIFICATION_KINDS.map((k) => [k.kind, k.label])) as Record<
-  NotificationKind,
-  string
->;
+import { bellText, filterByGroup, groupsPresent, unreadDescription } from "./notifications.logic";
 
 /** The header's bell: the unread count, and the attention inbox it opens. */
 export function NotificationsBell() {
@@ -61,17 +56,17 @@ export function BellBadge({ count }: { count: number }) {
 
 function Inbox({ onClose }: { onClose: () => void }) {
   const inbox = useNotifications();
-  const [kind, setKind] = useState<NotificationKind | null>(null);
+  const [group, setGroup] = useState<NotificationGroup | null>(null);
   const markRead = useMarkNotificationRead();
   const markAll = useMarkAllNotificationsRead();
   const openTask = useOpenTask();
   const openSettings = useOpenSettings();
   const items = inbox.data?.items;
   const unread = inbox.data?.unread ?? 0;
-  const present = useMemo(() => kindsPresent(items ?? []), [items]);
-  // A filter for a kind that has since aged out would show an empty list with no way back.
-  const activeKind = kind && present.includes(kind) ? kind : null;
-  const shown = useMemo(() => filterByKind(items ?? [], activeKind), [items, activeKind]);
+  const present = useMemo(() => groupsPresent(items ?? []), [items]);
+  // A filter for a group that has since aged out would show an empty list with no way back.
+  const activeGroup = group && present.includes(group) ? group : null;
+  const shown = useMemo(() => filterByGroup(items ?? [], activeGroup), [items, activeGroup]);
 
   const open = (n: InboxNotification) => {
     if (!n.readAt) markRead.mutate(n.id);
@@ -84,11 +79,11 @@ function Inbox({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="flex max-h-[min(32rem,var(--available-height))] flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-1.5">
         <h2 className="text-sm font-medium">Notifications</h2>
         <Button
           variant="ghost-muted"
-          size="xs"
+          size="sm"
           disabled={unread === 0 || markAll.isPending}
           onClick={() => markAll.mutate()}
         >
@@ -97,16 +92,16 @@ function Inbox({ onClose }: { onClose: () => void }) {
       </div>
       {present.length > 1 ? (
         <div
-          className="flex flex-wrap gap-1 border-b border-border/60 px-3 py-2"
+          className="flex gap-1 overflow-x-auto border-b border-border/60 px-3 py-2"
           role="group"
           aria-label="Filter by type"
         >
-          <FilterChip active={activeKind === null} onClick={() => setKind(null)}>
+          <FilterChip active={activeGroup === null} onClick={() => setGroup(null)}>
             All
           </FilterChip>
-          {present.map((k) => (
-            <FilterChip key={k} active={activeKind === k} onClick={() => setKind(k)}>
-              {KIND_LABELS[k]}
+          {present.map((g) => (
+            <FilterChip key={g} active={activeGroup === g} onClick={() => setGroup(g)}>
+              {NOTIFICATION_GROUP_LABELS[g]}
             </FilterChip>
           ))}
         </div>

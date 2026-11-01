@@ -25,13 +25,18 @@ const toNotification = (r: NotificationRow): InboxNotification => ({
 /** Typed access to notifications, the attention inbox. */
 export function createNotificationsRepo(sql: Sql) {
   return {
-    /** Newest first (rowid breaks ties within a millisecond). `since` leaves out rows old enough to be pruned. */
-    list(opts: { since: string; kind?: NotificationKind; limit: number }): InboxNotification[] {
+    /**
+     * Newest first (rowid breaks ties within a millisecond). `since` leaves out rows old enough to be pruned;
+     * `readSince` leaves out read ones that are older than it (unread ones stay until `since`).
+     */
+    list(opts: { since: string; readSince: string; kind?: NotificationKind; limit: number }): InboxNotification[] {
       return sql
         .all<NotificationRow>(
-          `SELECT * FROM notifications WHERE created_at >= ? AND (? IS NULL OR kind = ?)
+          `SELECT * FROM notifications
+           WHERE created_at >= ? AND (read_at IS NULL OR created_at >= ?) AND (? IS NULL OR kind = ?)
            ORDER BY created_at DESC, rowid DESC LIMIT ?`,
           opts.since,
+          opts.readSince,
           opts.kind ?? null,
           opts.kind ?? null,
           opts.limit,
@@ -88,6 +93,28 @@ export function createNotificationsRepo(sql: Sql) {
     markTaskRead(taskId: string, at: string): number {
       return Number(
         sql.run("UPDATE notifications SET read_at = ? WHERE task_id = ? AND read_at IS NULL", at, taskId).changes,
+      );
+    },
+    /** Marks a task's unread notifications of one kind read; returns how many changed. */
+    markTaskKindRead(taskId: string, kind: NotificationKind, at: string): number {
+      return Number(
+        sql.run(
+          "UPDATE notifications SET read_at = ? WHERE task_id = ? AND kind = ? AND read_at IS NULL",
+          at,
+          taskId,
+          kind,
+        ).changes,
+      );
+    },
+    /** Marks the unread notifications whose dedupe key starts with `prefix` read; returns how many changed. */
+    markKeyPrefixRead(prefix: string, at: string): number {
+      return Number(
+        sql.run(
+          "UPDATE notifications SET read_at = ? WHERE substr(dedupe_key, 1, length(?)) = ? AND read_at IS NULL",
+          at,
+          prefix,
+          prefix,
+        ).changes,
       );
     },
     prune(before: string): void {

@@ -171,7 +171,14 @@ export function createLinksService(
     if (row.kind === "pr") {
       const prev = was as PrSnapshot;
       const next = now as PrSnapshot;
-      if (next.state !== "open" && next.state !== "draft") return;
+      // What the PR's notifications reported is moot once it is finished, or has since got better.
+      if (next.state !== "open" && next.state !== "draft") {
+        deps.notifications.resolve({ keyPrefix: `checks:${row.id}:` });
+        deps.notifications.resolve({ keyPrefix: `changes:${row.id}:` });
+        return;
+      }
+      if (next.checks !== "failing") deps.notifications.resolve({ keyPrefix: `checks:${row.id}:` });
+      if (next.reviewDecision !== "changes_requested") deps.notifications.resolve({ keyPrefix: `changes:${row.id}:` });
       const ref = parseJson<{ number: number }>(row.ref_json);
       const label = ref ? `PR #${ref.number}` : "PR";
       if (next.checks === "failing" && (prev.checks !== "failing" || prev.headOid !== next.headOid)) {
@@ -196,6 +203,7 @@ export function createLinksService(
       const prev = was as T3ThreadSnapshot;
       const next = now as T3ThreadSnapshot;
       const waiting = (s: T3ThreadSnapshot) => s.status === "input" || s.status === "approval";
+      if (!waiting(next) || next.archived) deps.notifications.resolve({ keyPrefix: `thread:${row.id}:` });
       // Waiting again on the same thing counts when the thread was active in between, which a poll can miss.
       const askedAgain = prev.status === next.status && (next.lastActivityAt ?? "") > (prev.lastActivityAt ?? "");
       if (waiting(next) && !next.archived && (!waiting(prev) || prev.status !== next.status || askedAgain)) {

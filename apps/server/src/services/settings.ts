@@ -5,6 +5,7 @@ import {
   cliEffortFor,
   DEFAULT_HANDOFF_MENUS,
   DEFAULT_NOTIFICATION_SETTINGS,
+  type UpdateNotificationSettingsInput,
   DEFAULT_REVIEW_MAX_ROUNDS,
   EMPTY_MODEL_TIERS,
   type AppSettings,
@@ -189,7 +190,7 @@ export function storedProfileList(stored: unknown): ModelProfile[] {
   return profiles.slice(0, MODEL_PROFILES_MAX);
 }
 
-/** The stored notification settings over the defaults, so a kind added later starts on. */
+/** The stored notification settings over the defaults, so a kind added later follows its default. */
 const mergeNotificationSettings = (stored: Partial<NotificationSettings> | undefined): NotificationSettings => ({
   muteInQuietHours: stored?.muteInQuietHours ?? DEFAULT_NOTIFICATION_SETTINGS.muteInQuietHours,
   kinds: { ...DEFAULT_NOTIFICATION_SETTINGS.kinds, ...stored?.kinds },
@@ -329,10 +330,13 @@ export function createSettingsService(core: Core): SettingsService {
         }
         if (input.notifications !== undefined) {
           const current = load().notifications;
+          // Only the switches the user set are stored, not the merged record: a kind that isn't there follows the
+          // default, so changing a default later reaches everyone who never touched that switch.
+          const stored = repos.settings.all().get("notifications") as Partial<NotificationSettings> | undefined;
           repos.settings.set("notifications", {
             muteInQuietHours: input.notifications.muteInQuietHours ?? current.muteInQuietHours,
-            kinds: { ...current.kinds, ...input.notifications.kinds },
-          } satisfies NotificationSettings);
+            kinds: { ...stored?.kinds, ...input.notifications.kinds },
+          } satisfies UpdateNotificationSettingsInput & { muteInQuietHours: boolean });
         }
       });
       return get();

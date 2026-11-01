@@ -99,6 +99,23 @@ export function createCore(deps: {
     },
   });
 
+  /**
+   * A finished or archived task has nothing left to act on, so what it put in the inbox is read. Done here, once per
+   * write, because a task gets there by many routes (a move, a merge, closing, archiving, an epic finishing).
+   * Skips a task that was notified in this same write: that one is news.
+   */
+  const readFinished = (p: Pending): void => {
+    const fresh = new Set(p.notified.map((n) => n.notification.taskId));
+    const ids = [...p.tasks].filter((id) => !p.deletedTasks.has(id) && !fresh.has(id));
+    if (ids.length === 0) return;
+    const at = now().toISOString();
+    for (const task of repos.tasks.getMany(ids)) {
+      if ((task.status === "done" || task.archivedAt !== null) && repos.notifications.markTaskRead(task.id, at) > 0) {
+        p.notificationsChanged = true;
+      }
+    }
+  };
+
   const flush = (p: Pending): void => {
     const events: BoardEvent[] = [];
     for (const taskId of p.deletedTasks) events.push({ type: "task.deleted", taskId });
@@ -164,7 +181,11 @@ export function createCore(deps: {
       pending = p;
       let result: T;
       try {
-        result = transaction(db, () => fn(effectsFor(p)));
+        result = transaction(db, () => {
+          const value = fn(effectsFor(p));
+          readFinished(p);
+          return value;
+        });
       } finally {
         pending = null;
       }

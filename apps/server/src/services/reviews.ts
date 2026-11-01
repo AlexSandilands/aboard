@@ -1,7 +1,6 @@
 import {
   BOARD_ACTOR,
   deriveReviewSummary,
-  FindingSeverity,
   reviewSkillName,
   reviewWantsAnotherRound,
   type ReviewFinding,
@@ -49,6 +48,41 @@ export function createReviewsService(
   const touch = (taskId: string, fx: Effects): void => {
     repos.tasks.update({ ...deps.task(taskId), updatedAt: nowIso() });
     fx.task(taskId);
+  };
+
+  /**
+   * Tells the user when a round ended the loop without a clean result (Stuck, Review failed, Needs review): that is
+   * the only review outcome that needs them. A round that just asks the agent to fix things is the agent's business.
+   */
+  const notifyIfUnresolved = (taskId: string, roundId: string, roundNumber: number): void => {
+    const summary = deriveReviewSummary(
+      repos.reviews.forTasks([taskId]),
+      repos.reviews.findingsFor([taskId]),
+      loadSettings(repos).reviewMaxRounds,
+    );
+    const headline =
+      summary?.state === "stuck"
+        ? `Review stuck on round ${roundNumber}`
+        : summary?.state === "failed"
+          ? `Review failed on round ${roundNumber}`
+          : summary?.state === "stalled"
+            ? `Round ${roundNumber} needs a reviewer`
+            : null;
+    if (!summary || !headline) return;
+    const task = deps.task(taskId);
+    const detail =
+      summary.state === "stuck"
+        ? `${summary.open.blocking + summary.open.major} blocking or major still open after ${summary.round} rounds`
+        : summary.state === "failed"
+          ? "The board's reviewer couldn't finish"
+          : "Nobody ran the review";
+    deps.notifications.notify({
+      kind: "review_finished",
+      taskId,
+      title: headline,
+      body: `#${task.number} ${task.title}\n${detail}`,
+      dedupeKey: `review:${roundId}`,
+    });
   };
 
   const skillFor = (taskId: string): ReviewSkillRef => {
@@ -213,15 +247,7 @@ export function createReviewsService(
         const counts = countBySeverity(input.findings);
         fx.log(taskId, actor, "review_submitted", { round: round.round, findings: counts });
         touch(taskId, fx);
-        const task = deps.task(taskId);
-        const found = FindingSeverity.options.filter((s) => counts[s] > 0).map((s) => `${counts[s]} ${s}`);
-        deps.notifications.notify({
-          kind: "review_finished",
-          taskId,
-          title: `Review round ${round.round} finished`,
-          body: `#${task.number} ${task.title}\n${found.length > 0 ? found.join(", ") : "No findings"}`,
-          dedupeKey: `review:${round.id}`,
-        });
+        notifyIfUnresolved(taskId, round.id, round.round);
         return round.id;
       });
       return review(taskId, id);
@@ -307,6 +333,7 @@ export function createReviewsService(
           ...(opts.error ? { error: opts.error } : {}),
         });
         touch(round.taskId, fx);
+        if (status === "failed" || status === "stalled") notifyIfUnresolved(round.taskId, round.id, round.round);
         return round;
       });
       return updated ? review(updated.taskId, reviewId) : null;
