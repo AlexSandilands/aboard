@@ -131,7 +131,7 @@ These are prefs in the `useAppearance` store (`state/ui.ts`, persisted under `ap
 | ---------------- | ----------- | ------- | ------------------------------------------------------------------------------------------------- |
 | Contrast         | 50–200 %    | 100 %   | `--appearance-contrast-base/boost/border-boost`, read by the `--contrast-*` block                 |
 | Glass opacity    | 40–100 %    | 80 %    | `--glass-opacity`; at 100 % also `--glass-blur: 0px`                                              |
-| Panel animations | 0–400 ms    | 150 ms  | `--panel-animation-duration` and `data-panel-animations` (`false` under reduced motion)           |
+| Panel animations | 0–400 ms    | 150 ms  | `--panel-animation-duration` and `data-panel-animations` (`false` under reduced motion); cards slide for 1.75× it |
 | Interface font   | name; 12–20 px | system, 16 px | `--font-sans`; the size is the root font size, so every rem scales                         |
 | Monospace font   | name        | system  | `--font-mono`                                                                                     |
 

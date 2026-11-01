@@ -27,7 +27,6 @@ import { HandoffMenu } from "~/components/handoff/HandoffActions";
 import { LabelChip } from "~/components/labels/LabelChip";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { ReviewBadge } from "~/components/review/ReviewBadge";
-import { useCardFlip } from "./cardMotion";
 import type { DragData } from "./dnd.logic";
 import { TaskProgressLine } from "./TaskProgress";
 
@@ -352,7 +351,6 @@ export const SortableTaskCard = memo(function SortableTaskCard({
     },
     [setNodeRef],
   );
-  useCardFlip(task.id, nodeRef, `${task.status}:${task.position}`);
   const inPick = useBoardPick((s) => s.picked.includes(task.id));
   const pickable = canPickTask(task);
   // A picked card that got a plan meanwhile no longer counts, like the lane button's count; Ctrl-click still drops it.
@@ -426,7 +424,7 @@ export function TaskCardOverlay({
   // dnd-kit measures the overlay's first child to aim the drop, so the lift scale sits one level
   // deeper where it can't skew the landing spot.
   return (
-    <div>
+    <div data-card-overlay>
       <div
         className={cn(
           taskCardClassName(task, false),

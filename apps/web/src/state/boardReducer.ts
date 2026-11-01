@@ -47,6 +47,19 @@ export function applyBoardEvent(board: BoardSnapshot, event: BoardEvent): BoardS
   }
 }
 
+/** Whether applying the event can move, add or remove cards or resize them, so the board should remember where cards are first. */
+export function eventMovesCards(event: BoardEvent): boolean {
+  switch (event.type) {
+    case "task.upserted":
+    case "task.deleted":
+    case "project.upserted":
+    case "project.deleted":
+      return true;
+    default:
+      return false;
+  }
+}
+
 function sortByPosition<T extends { position: string }>(items: T[]): T[] {
   return [...items].sort((a, b) => (a.position < b.position ? -1 : a.position > b.position ? 1 : 0));
 }

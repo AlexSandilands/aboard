@@ -39,7 +39,8 @@ import { projectHasOrchestrateWork } from "~/components/autopilot/orchestrate.lo
 import { deliverNotification } from "~/components/notifications/delivery";
 import { withCreated } from "~/components/notifications/notifications.logic";
 import { ApiError, api, eventsUrl } from "~/lib/api";
-import { applyBoardEvent } from "./boardReducer";
+import { snapshotCardRects } from "~/components/board/cardMotion";
+import { applyBoardEvent, eventMovesCards } from "./boardReducer";
 
 export const queryKeys = {
   board: ["board"] as const,
@@ -512,6 +513,7 @@ export function useBoardEvents() {
     };
     const onMessage = (message: MessageEvent) => {
       const event = JSON.parse(message.data as string) as BoardEvent;
+      if (eventMovesCards(event)) snapshotCardRects();
       queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (board) =>
         board ? applyBoardEvent(board, event) : board,
       );
