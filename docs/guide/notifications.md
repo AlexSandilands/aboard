@@ -6,7 +6,7 @@ The board tells you when something needs you, so you don't have to keep it open.
 
 - A T3 Code thread linked to a task is **waiting for input or approval**.
 - A linked pull request's **checks start failing**, or a reviewer **requests changes**.
-- A **local review round finishes**, with what it found.
+- A **local review needs you**: its loop ended Stuck, Review failed or Needs review. A round that only asks the agent to fix things isn't announced.
 - An **Autopilot run fails** or gives up.
 - An **agent asks you to look at a task** (it is blocked, unsure, or has something ready to review). You decide when
   your agents do this, in your prompts or custom instructions, e.g. "after writing the plans, ask me to review them".
@@ -21,7 +21,12 @@ has; only for what changes after.
 ## The inbox
 
 The bell in the board's header shows how many are unread. Click it to see them, newest first. Click one to
-open its task and mark it read, filter by type, or use **Mark all read**. Notifications are kept for 30 days.
+open its task and mark it read, filter by group (Agents, PRs, Reviews, Autopilot, Suggestions; only the groups you
+have something in show), or use **Mark all read**.
+
+Notifications clear themselves when what they told you about is over. They are marked read when the thread stops
+waiting, the checks pass or the pull request is merged or closed, the reviewer's decision changes, the agent's
+request is dismissed, or the task is Done or archived. Read ones stay, dimmed, for 7 days after you read them, and unread ones for 30.
 
 ## Pop-ups
 
@@ -34,6 +39,7 @@ one tab, and only while you're not looking at the board. The tab's icon shows th
 
 ## Settings
 
-**Settings → Board → Notifications** has a switch for each type. A type that is off isn't recorded at all, in the inbox
-or as a pop-up. **Mute during quiet hours** keeps pop-ups quiet while Autopilot's quiet hours are on; the
+**Settings → Board → Notifications** has a switch for each type. Everything is on except **Autopilot updates** (digests and
+unblocked tasks), which is news rather than something that needs you. A type that is off isn't recorded at all,
+in the inbox or as a pop-up. **Mute during quiet hours** keeps pop-ups quiet while Autopilot's quiet hours are on; the
 notifications still wait in the inbox.

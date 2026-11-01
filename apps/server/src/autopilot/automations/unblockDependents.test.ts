@@ -14,6 +14,8 @@ function setup() {
   // The engine's clock is ours: boards are "now" for real, and the engine looks at them `daysLater` days on.
   let daysLater = 0;
   const h = createTestHarness({ integrations: { automations: [unblockDependents] } });
+  // Autopilot updates are off by default; these tests are about them.
+  h.services.settings.update({ notifications: { kinds: { autopilot_notice: true } } });
   const engine = createAutopilotEngine({
     services: () => h.services,
     bus: h.bus,

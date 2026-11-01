@@ -25,6 +25,8 @@ function setup() {
     },
   };
   const h = createTestHarness({ integrations: { automations: [unstick] } });
+  // Autopilot updates are off by default; these tests are about them.
+  h.services.settings.update({ notifications: { kinds: { autopilot_notice: true } } });
   const engine = createAutopilotEngine({
     services: () => h.services,
     bus: h.bus,

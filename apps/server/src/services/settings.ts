@@ -12,6 +12,7 @@ import {
   ModelProfile,
   type ModelTiers,
   type ModelTierSetting,
+  type NotificationKind,
   type NotificationSettings,
   parseHeadlessModel,
   type SavedViews,
@@ -189,8 +190,14 @@ export function storedProfileList(stored: unknown): ModelProfile[] {
   return profiles.slice(0, MODEL_PROFILES_MAX);
 }
 
-/** The stored notification settings over the defaults, so a kind added later starts on. */
-const mergeNotificationSettings = (stored: Partial<NotificationSettings> | undefined): NotificationSettings => ({
+/** Notification settings as stored: only what the user set. */
+interface StoredNotificationSettings {
+  muteInQuietHours?: boolean;
+  kinds?: Partial<Record<NotificationKind, boolean>>;
+}
+
+/** The stored notification settings over the defaults, so a kind added later follows its default. */
+const mergeNotificationSettings = (stored: StoredNotificationSettings | undefined): NotificationSettings => ({
   muteInQuietHours: stored?.muteInQuietHours ?? DEFAULT_NOTIFICATION_SETTINGS.muteInQuietHours,
   kinds: { ...DEFAULT_NOTIFICATION_SETTINGS.kinds, ...stored?.kinds },
 });
@@ -233,7 +240,7 @@ export function loadSettings(repos: Repos): StoredSettings {
     headlessReviewModel: parseHeadlessModel(stored.get("headlessReviewModel")),
     issueImportModel: parseHeadlessModel(stored.get("issueImportModel")) ?? DEFAULTS.issueImportModel,
     modelProfiles: storedProfileList(stored.get("modelProfiles")),
-    notifications: mergeNotificationSettings(stored.get("notifications") as Partial<NotificationSettings> | undefined),
+    notifications: mergeNotificationSettings(stored.get("notifications") as StoredNotificationSettings | undefined),
     keybindings: sanitizeKeybindingOverrides(stored.get("keybindings")),
     handoffMenus: { ...DEFAULT_HANDOFF_MENUS, ...(stored.get("handoffMenus") as StoredSettings["handoffMenus"]) },
   };
@@ -329,10 +336,13 @@ export function createSettingsService(core: Core): SettingsService {
         }
         if (input.notifications !== undefined) {
           const current = load().notifications;
+          // Only the switches the user set are stored, not the merged record: a kind that isn't there follows the
+          // default, so changing a default later reaches everyone who never touched that switch.
+          const stored = repos.settings.all().get("notifications") as StoredNotificationSettings | undefined;
           repos.settings.set("notifications", {
             muteInQuietHours: input.notifications.muteInQuietHours ?? current.muteInQuietHours,
-            kinds: { ...current.kinds, ...input.notifications.kinds },
-          } satisfies NotificationSettings);
+            kinds: { ...stored?.kinds, ...input.notifications.kinds },
+          } satisfies StoredNotificationSettings);
         }
       });
       return get();

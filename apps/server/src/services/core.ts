@@ -31,6 +31,9 @@ export interface Effects {
   log(taskId: string, actor: string, type: string, payload?: Record<string, unknown>): void;
 }
 
+/** Log entries that can leave a task Done or archived (`status_changed`, `closed`, `archived`). */
+const FINISHING_EVENTS: ReadonlySet<string> = new Set(["status_changed", "closed", "archived"]);
+
 interface Pending {
   tasks: Set<string>;
   details: Set<string>;
@@ -39,6 +42,8 @@ interface Pending {
   deletedTasks: Set<string>;
   labelColors: boolean;
   autopilot: boolean;
+  /** Tasks logged as moved, closed or archived in this write: the ones that may have just finished. */
+  finishing: Set<string>;
   notified: Array<{ notification: InboxNotification; popup: boolean }>;
   notificationsChanged: boolean;
   suggestions: boolean;
@@ -95,9 +100,28 @@ export function createCore(deps: {
     },
     log: (taskId, actor, type, payload) => {
       repos.events.append(taskId, nowIso(), actor, type, payload);
+      if (FINISHING_EVENTS.has(type)) p.finishing.add(taskId);
       p.tasks.add(taskId);
     },
   });
+
+  /**
+   * A finished or archived task has nothing left to act on, so what it put in the inbox is read. Done here, once per
+   * write, because a task gets there by many routes (a move, a merge, closing, archiving, an epic finishing).
+   * Only for tasks that were moved, closed or archived in this write, so a later touch of a Done task doesn't
+   * quietly read something new, and skips a task notified in this same write: that one is news.
+   */
+  const readFinished = (p: Pending): void => {
+    const fresh = new Set(p.notified.map((n) => n.notification.taskId));
+    const ids = [...p.finishing].filter((id) => !p.deletedTasks.has(id) && !fresh.has(id));
+    if (ids.length === 0) return;
+    const at = now().toISOString();
+    for (const task of repos.tasks.getMany(ids)) {
+      if ((task.status === "done" || task.archivedAt !== null) && repos.notifications.markTaskRead(task.id, at) > 0) {
+        p.notificationsChanged = true;
+      }
+    }
+  };
 
   const flush = (p: Pending): void => {
     const events: BoardEvent[] = [];
@@ -157,6 +181,7 @@ export function createCore(deps: {
         deletedTasks: new Set(),
         labelColors: false,
         autopilot: false,
+        finishing: new Set(),
         notified: [],
         notificationsChanged: false,
         suggestions: false,
@@ -164,7 +189,11 @@ export function createCore(deps: {
       pending = p;
       let result: T;
       try {
-        result = transaction(db, () => fn(effectsFor(p)));
+        result = transaction(db, () => {
+          const value = fn(effectsFor(p));
+          readFinished(p);
+          return value;
+        });
       } finally {
         pending = null;
       }

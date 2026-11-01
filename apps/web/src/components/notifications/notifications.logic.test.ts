@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   deliveryTarget,
   describeQuietHours,
-  filterByKind,
+  filterByGroup,
   isDeliveringTab,
-  kindsPresent,
+  groupsPresent,
   reduceTabs,
   unreadDescription,
   withCreated,
@@ -44,16 +44,21 @@ describe("the cached inbox", () => {
 });
 
 describe("filtering", () => {
-  const items = [note("a", { kind: "thread_waiting" }), note("b"), note("c", { kind: "thread_waiting" })];
+  const items = [
+    note("a", { kind: "thread_waiting" }),
+    note("b"),
+    note("c", { kind: "agent_request" }),
+    note("d", { kind: "pr_checks_failing" }),
+  ];
 
-  it("narrows to one kind, or shows all", () => {
-    expect(filterByKind(items, "thread_waiting").map((n) => n.id)).toEqual(["a", "c"]);
-    expect(filterByKind(items, null)).toHaveLength(3);
-    expect(filterByKind(items, "autopilot_failed")).toEqual([]);
+  it("narrows to one group, or shows all", () => {
+    expect(filterByGroup(items, "agents").map((n) => n.id)).toEqual(["a", "c"]);
+    expect(filterByGroup(items, null)).toHaveLength(4);
+    expect(filterByGroup(items, "autopilot")).toEqual([]);
   });
 
-  it("lists the kinds that are there", () => {
-    expect(kindsPresent(items).sort()).toEqual(["review_finished", "thread_waiting"]);
+  it("lists the groups that are there, in the chips' order", () => {
+    expect(groupsPresent(items)).toEqual(["agents", "prs", "reviews"]);
   });
 });
 
