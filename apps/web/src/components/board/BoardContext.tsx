@@ -10,6 +10,8 @@ export interface BoardContextValue {
   openTask: (taskId: string) => void;
   /** Opens the panel and scrolls the board to the task's card, for a link on a card that leads to another task. */
   revealTask: (taskId: string) => void;
+  /** Opens the panel on the task with its plan editor open, for a card menu's Write plan. */
+  openPlanEditor: (taskId: string) => void;
   /** Set while a drag finishes so the click that ends it does not open the panel. */
   suppressClickRef: RefObject<boolean>;
   t3: T3IntegrationStatus;

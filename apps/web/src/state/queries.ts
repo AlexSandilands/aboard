@@ -32,7 +32,7 @@ import type {
   TerminalInfo,
   TaskTemplate,
 } from "@repo/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { taskActiveRun } from "~/components/autopilot/autopilot.logic";
 import { projectHasOrchestrateWork } from "~/components/autopilot/orchestrate.logic";
@@ -219,6 +219,15 @@ export function useTaskDetail(taskId: string | null | undefined) {
     queryKey: queryKeys.task(taskId ?? ""),
     queryFn: ({ signal }) => api<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId!)}`, { signal }),
     enabled: !!taskId,
+  });
+}
+
+/** The task's detail from the cache, or fetched when it isn't there: for menus that act on a card, which has none. */
+export function fetchTaskDetail(queryClient: QueryClient, taskId: string) {
+  return queryClient.fetchQuery({
+    queryKey: queryKeys.task(taskId),
+    queryFn: ({ signal }) => api<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`, { signal }),
+    staleTime: 30_000,
   });
 }
 

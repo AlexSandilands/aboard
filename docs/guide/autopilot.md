@@ -59,6 +59,8 @@ agent itself only reads the pull request and reports its findings; Autopilot pos
 - It reviews the PR again each time its head commit changes, up to **PR review rounds** (3 by default, in
   Settings → Autopilot) per PR. Drafts are skipped unless you turn on **Review drafts**; merged and closed PRs
   are never reviewed.
+- With local review on for the task, the PR waits: it is reviewed once the task is in Review and its local review has
+  finished. A PR on a task still in Backlog, Planned or In Progress isn't reviewed until then.
 - From the second round it looks for regressions and for points still not fixed, and keeps new small points in an
   "FYI (no action needed)" section. On the last round only major and blocking points count.
 - The findings stay on GitHub, not on the board, so they don't mix with local review findings. The task gets a

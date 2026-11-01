@@ -3,6 +3,7 @@ import { DigestDialog } from "~/components/digest/DigestDialog";
 import { PlanSessionDialog, PlanTasksDialog } from "~/components/handoff/PlanTasksDialog";
 import { SessionLaunchDialog } from "~/components/handoff/SessionLaunchDialog";
 import { T3LaunchDialog } from "~/components/handoff/T3LaunchDialog";
+import { TaskMenuDialogs } from "~/components/task/TaskMenuDialogs";
 import { MergePrDialog } from "~/components/merge/MergePrDialog";
 import { SessionWarningDialog } from "~/components/sessions/SessionWarningDialog";
 import { TemplateDraftDialog } from "~/components/templates/TemplateDraftDialog";
@@ -22,6 +23,7 @@ export function AppDialogs() {
       <TemplateDraftDialog />
       <ImagePreviewDialog />
       <ViewDialog />
+      <TaskMenuDialogs />
     </>
   );
 }

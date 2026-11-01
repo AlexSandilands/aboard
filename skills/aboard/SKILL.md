@@ -148,7 +148,7 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 6. **Link on creation and pickup.** Link the task's ticket when the task is created: pass its key in
    `links` to `create_task` / `add_to_backlog`, or call `link`. Keys in the title may be linked
    automatically; if a link is wrong (a key that is no ticket), `unlink` it. Link your T3 thread whenever you start or resume a task (see below). `link` PR URLs
-   as soon as the PR is open; GitHub PRs show live checks/review state on the board. `link` is
+   as soon as the PR is open (with local review on, only after the review loop ends, see step 7); GitHub PRs show live checks/review state on the board. `link` is
    idempotent, so linking twice is harmless.
 7. **Status transitions.** `in_progress` while implementing → `review` when the work is done → `done`
    when merged or verified. If `move_task` returns `PLAN_REQUIRED`, call `set_plan` first. If the move to

@@ -15,7 +15,7 @@ import {
   prReviewHeader,
   prReviewMarker,
   prReviewOutput,
-  reviewIsInProgress,
+  prWaitsForLocalReview,
   type FindingSeverity,
   type PrReviewHandoff,
   type PrReviewIssue,
@@ -380,13 +380,9 @@ export const reviewPrs = defineAutomation({
       services.tasks.summaries({ projectId: project.id }).flatMap((task): Candidate[] => {
         if (task.kind === "epic" || task.manual || task.archivedAt !== null || task.status === "done") return [];
         // The local review comes first: a PR opened before it ended would be reviewed twice, and on a head the loop
-        // is about to change. Only in Review, where the watchdog runs rounds; later the PR is reviewed as usual.
-        if (
-          task.status === "review" &&
-          reviewIsInProgress(task.review, services.reviews.effectiveAutoReview(task.id))
-        ) {
-          return [];
-        }
+        // is about to change. A task not yet in Review hasn't started its loop (the move to Review opens round 1), so
+        // it waits too; in Review it waits while the loop runs. Without auto-review there is no loop to wait for.
+        if (prWaitsForLocalReview(task.status, task.review, services.reviews.effectiveAutoReview(task.id))) return [];
         const links = task.links.flatMap((link) => {
           if (link.kind !== "pr" || !link.ref || !link.snapshot) return [];
           const { state, headOid, headRef, isCrossRepository } = link.snapshot;

@@ -162,6 +162,30 @@ describe("local review loop over MCP", () => {
     expect(again.text).not.toContain("A pull request is already linked. Finish");
   });
 
+  it("warns when a PR is linked before the loop ended, and only then", async () => {
+    const pr = "https://github.com/acme/app/pull/3";
+    // Auto-review off: no loop to wait for.
+    const off = await call(agent, "link", { task: taskRef, value: pr });
+    expect(off.text).not.toContain("before the review loop ended");
+    await call(agent, "unlink", { task: taskRef, value: pr });
+
+    h.services.settings.update({ autoReview: true });
+    const early = await call(agent, "link", { task: taskRef, value: pr });
+    expect(early.text).toContain("Linked to");
+    expect(early.text).toContain("this PR was opened before the review loop ended");
+    expect(early.text).toContain("Finish the loop first");
+    await call(agent, "unlink", { task: taskRef, value: pr });
+
+    // In Review with a round still open it is just as early; once the loop is clean it isn't.
+    await call(agent, "move_task", { task: taskRef, status: "review" });
+    const inLoop = await call(agent, "link", { task: taskRef, value: pr });
+    expect(inLoop.text).toContain("before the review loop ended");
+    await call(agent, "unlink", { task: taskRef, value: pr });
+    await call(agent, "submit_review", { task: taskRef, round: 1, findings: [] });
+    const after = await call(agent, "link", { task: taskRef, value: pr });
+    expect(after.text).not.toContain("before the review loop ended");
+  });
+
   it("refuses rounds past the limit, and says to open the PR with the open findings", async () => {
     h.services.settings.update({ autoReview: true, reviewMaxRounds: 1 });
     await call(agent, "move_task", { task: taskRef, status: "review" });

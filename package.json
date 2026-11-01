@@ -3,7 +3,7 @@
   "displayName": "Aboard",
   "version": "0.1.0",
   "private": true,
-  "description": "Mission control for your coding agents: a local kanban board that agents update over MCP.",
+  "description": "A local kanban board where agents log ideas, write plans, report progress and review their own work over MCP, and Autopilot picks up planned tasks and carries them through to a pull request.",
   "homepage": "https://github.com/AlexSandilands/aboard",
   "license": "MIT",
   "author": "Alex Sandilands <profile.alex@proton.me>",

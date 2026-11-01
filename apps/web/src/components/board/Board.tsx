@@ -307,6 +307,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     () => ({
       openTask: (id) => void openTask(id, { reveal: false }),
       revealTask: (id) => void openTask(id),
+      openPlanEditor: (id) => void openTask(id, { reveal: false }).then(() => usePanel.getState().requestPlanEditor()),
       suppressClickRef,
       t3: board.integrations.t3,
       settings,

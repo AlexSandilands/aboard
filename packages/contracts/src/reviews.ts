@@ -237,6 +237,17 @@ export const reviewIsInProgress = (summary: TaskReviewSummary | null, autoReview
     summary.state === "stalled" ||
     (autoReview && reviewWantsAnotherRound(summary)));
 
+/**
+ * Whether a task's PR has to wait for the local loop: with auto-review on, until the task is in Review (the move opens
+ * round 1) and the loop has ended. Shared by Review PRs and the `link` note, so they can't drift apart.
+ */
+export const prWaitsForLocalReview = (status: string, review: TaskReviewSummary | null, autoReview: boolean): boolean =>
+  autoReview && (status !== "review" || reviewIsInProgress(review, autoReview));
+
+/** Said when a PR is linked before the loop ended: Autopilot's PR review holds off until the task is in Review and the loop is done. */
+export const EARLY_PR_NEXT =
+  "Finish the loop first (move_task to review if you haven't, then run the rounds it describes) and push the fixes to this PR; Autopilot's PR review waits for the loop to end.";
+
 /** A task that goes through the loop again (after PR feedback) already has its PR. */
 export const REVIEW_PR_LINKED =
   "If a pull request is already linked, push your changes to it instead of opening another.";

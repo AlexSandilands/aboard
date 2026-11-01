@@ -68,11 +68,15 @@ the same, without **Plan with me** or a task to link
 
 The second, **Plan tasks…**, starts one session that plans several of the project's tasks with the user. Ctrl/⌘-click
 picks cards on the board (`useBoardPick` in `state/ui.ts`, not persisted; a plain click on a card or Esc drops the
-pick, and a Ctrl/⌘-press never starts a drag), and the button shows how many of the lane's cards are picked. Its menu
+pick, and a Ctrl/⌘-press never starts a drag), and the button shows how many of the lane's cards are picked. Any card
+can be picked (a task card, not an epic), since the pick also drives the card menu's bulk actions (see
+[board-layout.md](board-layout.md#the-card-menu)); only the plannable ones count here. Its menu
 offers a new T3 Code thread, a session for each installed CLI, or the prompt to copy; each opens a picker
 (`PlanTasksDialog`) listing the tasks a planning session can take, with the picked ones ticked. Those are the open
 tasks still in Backlog or without a plan, never an epic (`planTaskProblem` in contracts, which the server checks too);
-one session takes up to 50.
+one session takes up to 50 (`isPlannable` in `boardSelection.logic.ts` filters the pick down to them, for the button's count
+and the picker's ticks). The card menu's **Plan with an agent** offers the same menu (`PlanTasksMenuItems`) for the
+picked cards.
 
 The prompt (`planTasksPrompt` in `packages/contracts/src/planPrompt.ts`) lists each task with its `get_task` call and
 says how to plan: the built-in **aboard-plan** skill's text (`BUILTIN_PLAN_SKILL_BODY`, shipped as
@@ -366,5 +370,5 @@ the user turns on **Let agents start threads** ([epics.md](epics.md#t3-code-thre
 | `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, the suggested tier's model (`resolveSuggestion`), workspace → `workspaceStrategy`, a launch without the dialog (`autoLaunchSettings`) |
 | `apps/server/src/integrations/t3.ts` | `launchOptions`, `startThread` and `launchTaskThread`, and linking the new thread to the task; `startProjectThread` for a project's Suggest epics |
 | `apps/web/src/components/handoff/` | Buttons, the dialog (for a task, a project or a set of tasks to plan) and its pickers, `PlanTasksDialog`; pasted images (`LaunchImages.tsx`, `launchImages.logic.ts`); pure logic in `handoff.logic.ts` |
-| `apps/web/src/components/board/boardSelection.logic.ts` | Ctrl/⌘-click picking of cards to plan |
+| `apps/web/src/components/board/boardSelection.logic.ts` | Ctrl/⌘-click picking of cards, and which of them a planning session can take |
 | `apps/web/src/components/settings/ModelTiersSection.tsx`, `modelTiers.logic.ts` | Settings → Model tiers; which providers' fields show and the per-tier update (`modelTiers.logic.ts` is tested) |

@@ -1,4 +1,4 @@
-import type { TaskDetail, TaskResolution } from "@repo/contracts";
+import type { TaskResolution, TaskSummary } from "@repo/contracts";
 import { useState } from "react";
 
 import { Button } from "~/components/ui/button";
@@ -13,19 +13,21 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
+import { useBulkActions } from "~/components/board/bulkActions";
 import { useResolveTask } from "~/state/mutations";
 import { useBoard } from "~/state/queries";
 import { closeCandidates, closeDialogTitle } from "./resolution.logic";
 
 export type PickResolution = Exclude<TaskResolution, "wont_do">;
 
-/** Picks the task that delivered (or duplicates) `task`, then closes it against that task. */
+/** Picks the task that delivered (or duplicates) `tasks`, then closes them against that task. */
 export function CloseTaskDialog({
-  task,
+  tasks,
   resolution,
   onOpenChange,
 }: {
-  task: TaskDetail;
+  /** One task, or the picked cards for a bulk "done by". */
+  tasks: ReadonlyArray<Pick<TaskSummary, "id" | "number" | "projectId">>;
   /** null keeps the dialog closed. */
   resolution: PickResolution | null;
   onOpenChange: (open: boolean) => void;
@@ -42,12 +44,26 @@ export function CloseTaskDialog({
   }
   const board = useBoard().data;
   const { mutate: resolveTask, isPending } = useResolveTask();
-  const candidates = closeCandidates(board?.tasks ?? [], task, query);
+  const { closeAgainst } = useBulkActions();
+  const candidates = closeCandidates(board?.tasks ?? [], tasks, query);
+  const [first] = tasks;
+  const [closing, setClosing] = useState(false);
+  const busy = isPending || closing;
 
   const pick = (byTask: string) => {
-    if (!shown || isPending) return;
+    if (!shown || !first || busy) return;
+    if (tasks.length > 1) {
+      // One run only: a second pick or Enter while it is in flight would close the tasks again. The summary toast
+      // says what failed, and the dialog closes either way so a retry can't re-close the ones that went through.
+      setClosing(true);
+      void closeAgainst(tasks, shown, byTask).finally(() => {
+        setClosing(false);
+        onOpenChange(false);
+      });
+      return;
+    }
     resolveTask(
-      { id: task.id, resolution: shown, byTask },
+      { id: first.id, resolution: shown, byTask },
       {
         onSuccess: () => onOpenChange(false),
       },
@@ -58,9 +74,10 @@ export function CloseTaskDialog({
     <Dialog open={resolution !== null} onOpenChange={onOpenChange}>
       <DialogPopup className="w-full sm:w-[28rem]">
         <DialogHeader>
-          <DialogTitle>{shown ? closeDialogTitle(task.number, shown) : null}</DialogTitle>
+          <DialogTitle>{shown ? closeDialogTitle(tasks, shown) : null}</DialogTitle>
           <DialogDescription>
-            It moves to Done without needing a plan, and the other task shows it also resolved #{task.number}.
+            {tasks.length === 1 ? "It moves" : "They move"} to Done without needing a plan, and the other task shows it
+            also resolved {tasks.map((t) => `#${t.number}`).join(", ")}.
           </DialogDescription>
         </DialogHeader>
         <DialogPanel className="flex min-h-0 flex-col gap-2">
@@ -72,23 +89,23 @@ export function CloseTaskDialog({
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
             onKeyDown={(event) => {
-              const first = candidates[0];
-              if (event.key !== "Enter" || !first) return;
+              const top = candidates[0];
+              if (event.key !== "Enter" || !top) return;
               event.preventDefault();
-              pick(first.id);
+              pick(top.id);
             }}
           />
           <ul className="flex max-h-72 flex-col overflow-y-auto" aria-label="Tasks">
             {candidates.map((candidate) => {
               const project =
-                candidate.projectId === task.projectId
+                candidate.projectId === first?.projectId
                   ? null
                   : board?.projects.find((p) => p.id === candidate.projectId);
               return (
                 <li key={candidate.id}>
                   <button
                     type="button"
-                    disabled={isPending}
+                    disabled={busy}
                     onClick={() => pick(candidate.id)}
                     className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-accent focus-visible:bg-accent disabled:opacity-60"
                   >
