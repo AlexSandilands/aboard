@@ -47,10 +47,27 @@ export function applyBoardEvent(board: BoardSnapshot, event: BoardEvent): BoardS
   }
 }
 
-/** Whether applying the event can move, add or remove cards or resize them, so the board should remember where cards are first. */
-export function eventMovesCards(event: BoardEvent): boolean {
+/**
+ * Whether applying the event can move, add or remove cards or resize them, so the board should
+ * remember where cards are first. A task edit that changes nothing a card shows doesn't.
+ */
+export function eventMovesCards(board: BoardSnapshot, event: BoardEvent): boolean {
   switch (event.type) {
-    case "task.upserted":
+    case "task.upserted": {
+      const task = event.task;
+      const before = board.tasks.find((t) => t.id === task.id);
+      if (!before) return !task.archivedAt;
+      return (
+        !!task.archivedAt !== !!before.archivedAt ||
+        task.status !== before.status ||
+        task.position !== before.position ||
+        task.projectId !== before.projectId ||
+        task.parent?.id !== before.parent?.id ||
+        task.priority !== before.priority ||
+        task.title !== before.title ||
+        task.labels.join("\n") !== before.labels.join("\n")
+      );
+    }
     case "task.deleted":
     case "project.upserted":
     case "project.deleted":

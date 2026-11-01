@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { flipDurationMs, planCardMotion, type CardRect } from "./cardMotion.logic";
+import {
+  canReuseSnapshot,
+  flipDurationMs,
+  planCardMotion,
+  settleSnapshot,
+  type BoardView,
+  type CardRect,
+  type CardSnapshot,
+} from "./cardMotion.logic";
 
 const viewport = { width: 1000, height: 800 };
 const rect = (left: number, top: number): CardRect => ({ left, top, width: 200, height: 80 });
@@ -49,5 +57,38 @@ describe("planCardMotion", () => {
 
   it("does not fade in a new card below the fold", () => {
     expect(planCardMotion(rects({}), rects({ a: rect(0, 5000) }), viewport)).toEqual([]);
+  });
+});
+
+describe("canReuseSnapshot", () => {
+  it("shares a snapshot within a burst and drops a stale one", () => {
+    expect(canReuseSnapshot(null, 1000)).toBe(false);
+    expect(canReuseSnapshot({ at: 1000 }, 1100)).toBe(true);
+    expect(canReuseSnapshot({ at: 1000 }, 1301)).toBe(false);
+  });
+});
+
+describe("settleSnapshot", () => {
+  const view: BoardView = { width: 900, height: 700, scrollLeft: 0, scrollTop: 100 };
+  const snapshot = (overrides: Partial<CardSnapshot> = {}): CardSnapshot => ({
+    rects: rects({ a: rect(10, 20) }),
+    at: 1000,
+    view,
+    ...overrides,
+  });
+
+  it("keeps the rects when nothing changed", () => {
+    expect(settleSnapshot(snapshot(), 1050, view)).toEqual(rects({ a: rect(10, 20) }));
+  });
+
+  it("follows the board's scroll, so scrolling is not a move", () => {
+    const settled = settleSnapshot(snapshot(), 1050, { ...view, scrollTop: 160, scrollLeft: 5 });
+    expect(settled?.get("a")).toEqual(rect(5, -40));
+  });
+
+  it("gives up when the snapshot is stale, empty or the scroll box resized", () => {
+    expect(settleSnapshot(snapshot(), 2000, view)).toBeNull();
+    expect(settleSnapshot(snapshot({ rects: rects({}) }), 1050, view)).toBeNull();
+    expect(settleSnapshot(snapshot(), 1050, { ...view, width: 700 })).toBeNull();
   });
 });

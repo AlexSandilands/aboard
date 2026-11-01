@@ -1,6 +1,14 @@
 import { defaultDropAnimationSideEffects, type DropAnimation } from "@dnd-kit/core";
 import { useLayoutEffect } from "react";
-import { flipDurationMs, planCardMotion, type CardRect } from "./cardMotion.logic";
+import {
+  canReuseSnapshot,
+  flipDurationMs,
+  planCardMotion,
+  settleSnapshot,
+  type BoardView,
+  type CardRect,
+  type CardSnapshot,
+} from "./cardMotion.logic";
 
 /*
  * Card motion in one place: the drag overlay's drop, and a board-level FLIP that slides every card
@@ -32,10 +40,8 @@ export function dropAnimation(): DropAnimation | null {
 }
 
 const FLIP_ANIMATION_ID = "card-flip";
-// A snapshot nothing consumed (the write changed no card) must not animate a much later render.
-const SNAPSHOT_TTL_MS = 300;
 
-let pending: { rects: Map<string, CardRect>; at: number } | null = null;
+let pending: CardSnapshot | null = null;
 
 /** How long a card slide takes: follows Settings, Appearance, Panel animations; 0 when those are off. */
 function flipDuration(): number {
@@ -44,17 +50,37 @@ function flipDuration(): number {
   return flipDurationMs(Number.parseFloat(root.style.getPropertyValue("--panel-animation-duration")) || 0);
 }
 
-function readCards(): Map<string, { node: HTMLElement; rect: CardRect }> {
+function boardScroller(): HTMLElement | null {
+  return document.querySelector<HTMLElement>("[data-board-scroll]");
+}
+
+function boardView(scroller: HTMLElement): BoardView {
+  return {
+    width: scroller.clientWidth,
+    height: scroller.clientHeight,
+    scrollLeft: scroller.scrollLeft,
+    scrollTop: scroller.scrollTop,
+  };
+}
+
+/** A rect relative to the board's scroll box, so the panel opening or the sidebar sliding isn't a card move. */
+function relativeRect(rect: DOMRect, scroller: HTMLElement): CardRect {
+  const box = scroller.getBoundingClientRect();
+  return { left: rect.left - box.left, top: rect.top - box.top, width: rect.width, height: rect.height };
+}
+
+function readCards(scroller: HTMLElement): Map<string, { node: HTMLElement; rect: CardRect }> {
   const cards = new Map<string, { node: HTMLElement; rect: CardRect }>();
   const duplicated = new Set<string>();
-  for (const node of document.querySelectorAll<HTMLElement>("[data-task-card]")) {
+  for (const node of scroller.querySelectorAll<HTMLElement>("[data-task-card]")) {
     const id = node.dataset.taskCard;
     if (!id) continue;
+    const bounds = node.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) continue;
+    // A card drawn twice (say an epic's child row beside its own card) has no single place to slide from.
     if (cards.has(id)) duplicated.add(id);
-    const { left, top, width, height } = node.getBoundingClientRect();
-    if (width > 0 && height > 0) cards.set(id, { node, rect: { left, top, width, height } });
+    cards.set(id, { node, rect: relativeRect(bounds, scroller) });
   }
-  // A card drawn twice has no single place to slide from.
   for (const id of duplicated) cards.delete(id);
   return cards;
 }
@@ -77,16 +103,22 @@ function isDragging(): boolean {
 export function snapshotCardRects(rolledBackId?: string) {
   const overlay = rolledBackId ? document.querySelector<HTMLElement>(".is-dropping") : null;
   if (overlay) overlay.style.visibility = "hidden";
-  if (flipDuration() === 0 || (!rolledBackId && isDragging())) return;
+  const scroller = boardScroller();
+  if (!scroller || document.hidden || flipDuration() === 0 || (!rolledBackId && isDragging())) return;
   const now = performance.now();
-  if (!pending || now - pending.at > SNAPSHOT_TTL_MS) {
-    pending = { rects: new Map([...readCards()].map(([id, card]) => [id, card.rect])), at: now };
-  }
+  const snapshot = canReuseSnapshot(pending, now)
+    ? pending
+    : {
+        rects: new Map([...readCards(scroller)].map(([id, card]) => [id, card.rect])),
+        at: now,
+        view: boardView(scroller),
+      };
+  pending = snapshot;
   if (rolledBackId) {
     const from = (
-      overlay ?? document.querySelector(`[data-task-card="${CSS.escape(rolledBackId)}"]`)
+      overlay ?? scroller.querySelector(`[data-task-card="${CSS.escape(rolledBackId)}"]`)
     )?.getBoundingClientRect();
-    if (from) pending.rects.set(rolledBackId, from);
+    if (from) snapshot.rects.set(rolledBackId, relativeRect(from, scroller));
   }
 }
 
@@ -99,15 +131,18 @@ export function useBoardFlip(board: unknown) {
   useLayoutEffect(() => {
     const snapshot = pending;
     pending = null;
-    if (!snapshot || performance.now() - snapshot.at > SNAPSHOT_TTL_MS) return;
+    const scroller = boardScroller();
+    if (!snapshot || !scroller) return;
     const duration = flipDuration();
     if (duration === 0) return;
+    const from = settleSnapshot(snapshot, performance.now(), boardView(scroller));
+    if (!from) return;
     // A slide still running would make the new rects read as mid-flight.
     for (const animation of document.getAnimations()) if (animation.id === FLIP_ANIMATION_ID) animation.cancel();
-    const cards = readCards();
+    const cards = readCards(scroller);
     const next = new Map([...cards].map(([id, card]) => [id, card.rect]));
-    const viewport = { width: window.innerWidth, height: window.innerHeight };
-    for (const motion of planCardMotion(snapshot.rects, next, viewport)) {
+    const viewport = { width: scroller.clientWidth, height: scroller.clientHeight };
+    for (const motion of planCardMotion(from, next, viewport)) {
       const node = cards.get(motion.id)?.node;
       if (!node) continue;
       const keyframes =
@@ -118,4 +153,11 @@ export function useBoardFlip(board: unknown) {
     }
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- board is the trigger: it just committed
   }, [board]);
+  // A snapshot taken while no board is mounted must not fade a board in that mounts a moment later.
+  useLayoutEffect(
+    () => () => {
+      pending = null;
+    },
+    [],
+  );
 }

@@ -513,7 +513,8 @@ export function useBoardEvents() {
     };
     const onMessage = (message: MessageEvent) => {
       const event = JSON.parse(message.data as string) as BoardEvent;
-      if (eventMovesCards(event)) snapshotCardRects();
+      const current = queryClient.getQueryData<BoardSnapshot>(queryKeys.board);
+      if (current && eventMovesCards(current, event)) snapshotCardRects();
       queryClient.setQueryData<BoardSnapshot>(queryKeys.board, (board) =>
         board ? applyBoardEvent(board, event) : board,
       );

@@ -48,3 +48,46 @@ export function planCardMotion(
   }
   return motions;
 }
+
+/** A snapshot nothing consumed (the write changed no card) must not animate a much later render. */
+export const SNAPSHOT_TTL_MS = 300;
+
+/** The board's scroll box when a snapshot was taken: rects are relative to its top left corner. */
+export interface BoardView {
+  width: number;
+  height: number;
+  scrollLeft: number;
+  scrollTop: number;
+}
+
+export interface CardSnapshot {
+  rects: Map<string, CardRect>;
+  at: number;
+  view: BoardView;
+}
+
+/** Writes in one burst share the first snapshot; a stale one is replaced. */
+export function canReuseSnapshot<T extends Pick<CardSnapshot, "at">>(pending: T | null, now: number): pending is T {
+  return pending !== null && now - pending.at <= SNAPSHOT_TTL_MS;
+}
+
+/**
+ * The snapshot's rects, moved to where they sit under the board's scroll position now, or null when
+ * there is nothing to animate from: it is stale, empty (no board was showing), or the scroll box
+ * itself resized (the task panel or sidebar sliding), which moves every card without moving any.
+ */
+export function settleSnapshot(
+  snapshot: CardSnapshot,
+  now: number,
+  view: BoardView,
+): ReadonlyMap<string, CardRect> | null {
+  if (!canReuseSnapshot(snapshot, now) || snapshot.rects.size === 0) return null;
+  if (
+    Math.abs(view.width - snapshot.view.width) >= MIN_SHIFT_PX ||
+    Math.abs(view.height - snapshot.view.height) >= MIN_SHIFT_PX
+  )
+    return null;
+  const dx = snapshot.view.scrollLeft - view.scrollLeft;
+  const dy = snapshot.view.scrollTop - view.scrollTop;
+  return new Map([...snapshot.rects].map(([id, rect]) => [id, { ...rect, left: rect.left + dx, top: rect.top + dy }]));
+}
