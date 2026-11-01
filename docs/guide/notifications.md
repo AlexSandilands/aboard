@@ -4,7 +4,8 @@ The board tells you when something needs you, so you don't have to keep it open.
 
 ## What you're told about
 
-- A T3 Code thread linked to a task is **waiting for input or approval**.
+- A T3 Code thread linked to a task is **waiting for input or approval**. A thread shared by several tasks (one
+  session planning a batch) is announced once, listing its tasks, and shows as one row under **Needs attention**.
 - A linked pull request's **checks start failing**, or a reviewer **requests changes**.
 - A **local review needs you**: its loop ended Stuck, Review failed or Needs review. A round that only asks the agent to fix things isn't announced.
 - An **Autopilot run fails** or gives up.

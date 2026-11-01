@@ -422,12 +422,104 @@ export const ATTENTION_LABELS: Record<AttentionReason["kind"], string> = {
   agent_request: "Asked for you",
 };
 
-/** Tasks for the sidebar's "Needs attention" list: errors first, then most recently updated. */
-export function attentionTasks(tasks: ReadonlyArray<TaskSummary>): TaskSummary[] {
-  const rank = (task: TaskSummary) => (task.attention.some((r) => r.severity === "error") ? 0 : 1);
-  return tasks
-    .filter((task) => task.attention.length > 0)
-    .sort((a, b) => rank(a) - rank(b) || (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
+const THREAD_REASONS = new Set<AttentionReason["kind"]>(["thread_needs_input", "thread_failed"]);
+
+/** One row of the sidebar's "Needs attention" list: a task, or a T3 thread several tasks share. */
+export type AttentionItem =
+  | { type: "task"; key: string; task: TaskSummary; reasons: ReadonlyArray<AttentionReason> }
+  | {
+      type: "thread";
+      key: string;
+      title: string;
+      severity: AttentionReason["severity"];
+      reason: AttentionReason;
+      /** Every task linked to the thread that it needs the user for, in board order. */
+      tasks: ReadonlyArray<TaskSummary>;
+    };
+
+function itemSeverity(item: AttentionItem): number {
+  return item.type === "thread"
+    ? item.severity === "error"
+      ? 0
+      : 1
+    : item.reasons.some((r) => r.severity === "error")
+      ? 0
+      : 1;
+}
+
+function itemUpdatedAt(item: AttentionItem): string {
+  return item.type === "task"
+    ? item.task.updatedAt
+    : item.tasks.reduce((m, t) => (t.updatedAt > m ? t.updatedAt : m), "");
+}
+
+/** The reason a T3 thread's status gives (see `deriveAttention`), or null when it needs nobody. */
+function threadReasonKind(status: string): "thread_needs_input" | "thread_failed" | null {
+  if (status === "input" || status === "approval") return "thread_needs_input";
+  return status === "failed" ? "thread_failed" : null;
+}
+
+/**
+ * Items for the sidebar's "Needs attention" list: errors first, then most recently updated. Tasks linked to the
+ * same T3 thread (a bulk planning session) that is waiting or failed collapse into one thread item, so one question
+ * is one row. A grouped task that has another reason too keeps its own row for that reason; a thread with a single
+ * task stays a task row.
+ */
+export function attentionItems(tasks: ReadonlyArray<TaskSummary>): AttentionItem[] {
+  const flagged = tasks.filter((task) => task.attention.length > 0);
+  type Member = { task: TaskSummary; kind: AttentionReason["kind"]; reason: AttentionReason | undefined };
+  const byThread = new Map<string, { title: string; members: Member[] }>();
+  // Per task and reason kind: how many thread links give it, to tell whether all of them ended up grouped.
+  const linked = new Map<string, number>();
+  const countKey = (task: TaskSummary, kind: string) => `${task.id}:${kind}`;
+  for (const task of flagged) {
+    for (const link of task.links) {
+      if (link.kind !== "t3_thread" || !link.snapshot) continue;
+      const kind = threadReasonKind(link.snapshot.status);
+      if (!kind) continue;
+      linked.set(countKey(task, kind), (linked.get(countKey(task, kind)) ?? 0) + 1);
+      const key = `${link.ref.environmentId}:${link.ref.threadId}`;
+      const group = byThread.get(key) ?? { title: link.snapshot.title, members: [] };
+      group.members.push({ task, kind, reason: task.attention.find((r) => r.kind === kind) });
+      byThread.set(key, group);
+    }
+  }
+  const groupedCount = new Map<string, number>();
+  const items: AttentionItem[] = [];
+  for (const [key, group] of byThread) {
+    if (group.members.length < 2) continue;
+    const failed = group.members.find((m) => m.kind === "thread_failed");
+    const top = failed ?? group.members[0]!;
+    const reason = top.reason ?? {
+      kind: top.kind,
+      severity: top.kind === "thread_failed" ? "error" : "warning",
+      message: ATTENTION_LABELS[top.kind],
+    };
+    for (const m of group.members)
+      groupedCount.set(countKey(m.task, m.kind), (groupedCount.get(countKey(m.task, m.kind)) ?? 0) + 1);
+    items.push({
+      type: "thread",
+      key,
+      title: group.title,
+      severity: reason.severity,
+      reason,
+      tasks: group.members.map((m) => m.task),
+    });
+  }
+  for (const task of flagged) {
+    // A reason is left to the thread row only when every thread link that gives it was grouped.
+    const covered = (kind: AttentionReason["kind"]) => {
+      const total = linked.get(countKey(task, kind)) ?? 0;
+      return total > 0 && groupedCount.get(countKey(task, kind)) === total;
+    };
+    const reasons = task.attention.filter((r) => !(THREAD_REASONS.has(r.kind) && covered(r.kind)));
+    if (reasons.length > 0) items.push({ type: "task", key: task.id, task, reasons });
+  }
+  return items.sort((a, b) => {
+    const at = itemUpdatedAt(a);
+    const bt = itemUpdatedAt(b);
+    return itemSeverity(a) - itemSeverity(b) || (at < bt ? 1 : at > bt ? -1 : 0);
+  });
 }
 
 /** Open (not Done) task counts per project, for the sidebar project list. Epics only group tasks, so they don't count. */

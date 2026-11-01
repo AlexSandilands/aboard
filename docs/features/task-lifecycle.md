@@ -157,7 +157,12 @@ agent's request, which is stored on the task. A task needs attention when it has
 - a local review that stalled, got stuck, failed, or was reviewed by the board with nobody fixing it;
 - a standing request from an agent (`request_attention`, see [notifications](notifications.md#agent-requests)).
 
-These drive the card's ring and the sidebar's **Needs attention** list.
+These drive the card's ring and the sidebar's **Needs attention** list. Every task keeps its own reasons (and its
+card's ring), but the list shows one row per waiting or failed T3 thread, not per task: tasks linked to the same
+thread (a bulk planning session) collapse into a row with the thread's title and the task numbers, which `attentionItems`
+(`apps/web/src/components/board/board.logic.ts`) groups by `environmentId:threadId`. The row opens the first task,
+each number its own. A thread with one task stays a task row, and a grouped task with another reason (failing
+checks, a blocked step) keeps a row of its own for it.
 
 ### Missing links
 

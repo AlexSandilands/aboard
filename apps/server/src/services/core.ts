@@ -1,7 +1,7 @@
-import type { BoardEvent, InboxNotification, T3IntegrationStatus } from "@repo/contracts";
+import type { BoardEvent, InboxNotification, T3IntegrationStatus, T3ThreadRef } from "@repo/contracts";
 import { generateKeyBetween } from "fractional-indexing";
 import type { EventBus } from "../bus.ts";
-import { nowIso, transaction, type Db } from "../db/database.ts";
+import { nowIso, parseJson, transaction, type Db } from "../db/database.ts";
 import type { Repos } from "../db/repos/index.ts";
 import { AppError } from "../errors.ts";
 import { loadAutopilotStatus } from "./autopilot.ts";
@@ -106,6 +106,29 @@ export function createCore(deps: {
   });
 
   /**
+   * A thread several tasks share notifies once, under one of them. When that task finishes while another one linked
+   * to the thread is still open, the thread is still waiting on the user, so the notification moves to that task
+   * instead of being read with the finished one's.
+   */
+  const handOverThreadNotices = (taskId: string): void => {
+    for (const link of repos.links.forTasks([taskId])) {
+      const ref = link.kind === "t3_thread" ? parseJson<T3ThreadRef>(link.ref_json) : null;
+      if (!ref) continue;
+      const others = repos.links
+        .byThread(ref.environmentId, ref.threadId)
+        .map((l) => l.task_id)
+        .filter((id) => id !== taskId);
+      // In link order, which is the order the notification picked its task in.
+      const byId = new Map(repos.tasks.getMany(others).map((t) => [t.id, t]));
+      const open = others.find((id) => {
+        const t = byId.get(id);
+        return t && t.status !== "done" && t.archivedAt === null;
+      });
+      if (open) repos.notifications.reassignKeyPrefix(`thread:${ref.environmentId}:${ref.threadId}:`, taskId, open);
+    }
+  };
+
+  /**
    * A finished or archived task has nothing left to act on, so what it put in the inbox is read. Done here, once per
    * write, because a task gets there by many routes (a move, a merge, closing, archiving, an epic finishing).
    * Only for tasks that were moved, closed or archived in this write, so a later touch of a Done task doesn't
@@ -117,7 +140,9 @@ export function createCore(deps: {
     if (ids.length === 0) return;
     const at = now().toISOString();
     for (const task of repos.tasks.getMany(ids)) {
-      if ((task.status === "done" || task.archivedAt !== null) && repos.notifications.markTaskRead(task.id, at) > 0) {
+      const finished = task.status === "done" || task.archivedAt !== null;
+      if (finished) handOverThreadNotices(task.id);
+      if (finished && repos.notifications.markTaskRead(task.id, at) > 0) {
         p.notificationsChanged = true;
       }
     }

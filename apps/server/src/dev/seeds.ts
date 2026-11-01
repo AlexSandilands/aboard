@@ -343,6 +343,23 @@ const threads: Scenario = (s, opts) => {
   thread("done", "Thread settled", { status: "done", settled: true });
   thread("done", "Thread archived", { status: "idle", archived: true });
 
+  // A bulk planning session: three tasks share one thread that is waiting for input. The sidebar lists it once.
+  for (const title of ["Planning batch: search", "Planning batch: export", "Planning batch: import"]) {
+    const id = addTask(s, project.id, {
+      title,
+      status: "planned",
+      links: ["t3code://threads/sandbox-env/thread-planning-batch"],
+    });
+    const link = s.tasks.detail(id).links[0]!;
+    s.links.setSnapshot(link.id, {
+      status: "input",
+      title: "Planning session",
+      lastActivityAt: now,
+      model: "claude-opus",
+      branch: null,
+    });
+  }
+
   // Cards show only active threads; the panel lists all three, settled and archived dimmed.
   const mixed = addTask(s, project.id, {
     title: "Threads active, settled and archived",

@@ -6,6 +6,7 @@ import {
   type ClassifiedLink,
   type LinkInput,
   type PrSnapshot,
+  type T3ThreadRef,
   type T3ThreadSnapshot,
   type TaskLink,
   type TicketRef,
@@ -21,6 +22,8 @@ import type { NotificationsService } from "./notifications.ts";
 import type { LinksService, SettingsService, TasksService } from "./types.ts";
 
 /** Resolves link input to a kind, canonical url and ref. */
+const MAX_LISTED_TASKS = 3;
+
 export function classifyLinkInput(input: LinkInput, ticketSystems: readonly TicketSystem[]): ClassifiedLink {
   if (input.t3Thread) {
     return { kind: "t3_thread", url: t3DesktopThreadUrl(input.t3Thread), ref: input.t3Thread };
@@ -205,17 +208,31 @@ export function createLinksService(
     } else if (row.kind === "t3_thread") {
       const prev = was as T3ThreadSnapshot;
       const next = now as T3ThreadSnapshot;
+      const ref = parseJson<T3ThreadRef>(row.ref_json);
+      if (!ref) return;
+      // One question is one notification however many tasks share the thread (a bulk planning session links it
+      // from each), so the key names the thread, not the link.
+      const threadKey = `thread:${ref.environmentId}:${ref.threadId}:`;
       const waiting = (s: T3ThreadSnapshot) => s.status === "input" || s.status === "approval";
-      if (!waiting(next) || next.archived) deps.notifications.resolve({ keyPrefix: `thread:${row.id}:` });
+      if (!waiting(next) || next.archived) deps.notifications.resolve({ keyPrefix: threadKey });
       // Waiting again on the same thing counts when the thread was active in between, which a poll can miss.
       const askedAgain = prev.status === next.status && (next.lastActivityAt ?? "") > (prev.lastActivityAt ?? "");
       if (waiting(next) && !next.archived && (!waiting(prev) || prev.status !== next.status || askedAgain)) {
+        // The tasks still open: a finished one has nothing left to do with the question.
+        const open = repos.links
+          .byThread(ref.environmentId, ref.threadId)
+          .map((l) => deps.task(l.task_id))
+          .filter((t) => t.status !== "done");
+        const tasks = open.length > 0 ? open : [task];
+        const labels = tasks.slice(0, MAX_LISTED_TASKS).map((t) => `#${t.number} ${t.title}`);
+        if (tasks.length > MAX_LISTED_TASKS) labels.push(`+${tasks.length - MAX_LISTED_TASKS} more`);
         deps.notifications.notify({
           kind: "thread_waiting",
-          taskId: task.id,
+          taskId: tasks[0]!.id,
           title: next.status === "input" ? "Thread waiting for input" : "Thread waiting for approval",
-          body: `${taskLabel}\n${next.title}`,
-          dedupeKey: `thread:${row.id}:${next.status}:${next.lastActivityAt ?? ""}`,
+          // The thread's title first: the inbox row clips a long body to two lines.
+          body: `${next.title}\n${labels.join("\n")}`,
+          dedupeKey: `${threadKey}${next.status}:${next.lastActivityAt ?? ""}`,
         });
       }
     }
