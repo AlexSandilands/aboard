@@ -44,6 +44,12 @@ describe("which menu opens", () => {
     expect(pickedTasks(["t-5", "t-3"], tasks).map((t) => t.number)).toEqual([3, 5]);
   });
 
+  it("counts a task once when the board and a stale archived list both have it", () => {
+    const live = task({ number: 3 });
+    const stale = task({ number: 3, archivedAt: "2026-01-01" });
+    expect(pickedTasks(["t-3"], [live, stale])).toEqual([live]);
+  });
+
   it("resolves the pick to existing cards in number order, dropping deleted ones", () => {
     const tasks = [task({ number: 5 }), task({ number: 2 }), task({ number: 9 })];
     expect(pickedTasks(["t-5", "t-2", "t-gone"], tasks).map((t) => t.number)).toEqual([2, 5]);

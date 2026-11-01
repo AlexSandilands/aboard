@@ -3,9 +3,15 @@ import { LABELS_PER_TASK_MAX, type TaskStatus, type TaskSummary } from "@repo/co
 // What the card menu's bulk actions do with several picked cards: which of them each action applies to, so items that
 // apply to none are disabled and the summary toast can say how many were skipped.
 
-/** The picked cards that still exist on the board, in number order. Deleted ones drop out of the pick's count. */
+/**
+ * The picked cards that still exist, in number order. Deleted ones drop out of the pick's count. `tasks` may list a
+ * task twice (the board snapshot and a stale archived cache); the first one wins.
+ */
 export function pickedTasks(picked: readonly string[], tasks: readonly TaskSummary[]): TaskSummary[] {
-  return tasks.filter((t) => picked.includes(t.id)).sort((a, b) => a.number - b.number);
+  const seen = new Set<string>();
+  return tasks
+    .filter((t) => picked.includes(t.id) && !seen.has(t.id) && seen.add(t.id))
+    .sort((a, b) => a.number - b.number);
 }
 
 /** Whether the menu is the bulk one: the right-clicked card is one of two or more picked. */
