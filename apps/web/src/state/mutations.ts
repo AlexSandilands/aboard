@@ -242,9 +242,10 @@ type MoveVars = MoveTaskInput & { id: string };
  * Moves a task (status and/or order). `mutate` and `mutateAsync` write the optimistic move
  * synchronously, so a dropped card renders in its new slot in the same commit that ends the drag and
  * the drop animation lands there. A failed move slides the card back. PLAN_REQUIRED errors are NOT
- * toasted here: check `isPlanRequired(error)` in onError and offer to write a plan.
+ * toasted here: check `isPlanRequired(error)` in onError and offer to write a plan. `silent` skips the error toast
+ * for a caller that reports failures itself (the card menu's bulk move).
  */
-export function useMoveTask() {
+export function useMoveTask(opts?: MutationOpts) {
   const queryClient = useQueryClient();
   // Each move's task before and after the optimistic write, keyed by the variables object.
   const [moves] = useState(() => new WeakMap<MoveVars, { original: TaskSummary; moved: TaskSummary }>());
@@ -267,7 +268,7 @@ export function useMoveTask() {
           board ? rollbackMove(board, move.original, move.moved) : board,
         );
       }
-      if (!isPlanRequired(error)) {
+      if (!isPlanRequired(error) && !opts?.silent) {
         toastManager.add({
           type: "error",
           title: "Couldn't move task",

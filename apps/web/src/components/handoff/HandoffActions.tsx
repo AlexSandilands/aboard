@@ -104,8 +104,6 @@ export function PlanTasksMenu({ project, canStartT3 }: { project: Project; canSt
   const pickedIds = useBoardPick((s) => s.picked);
   const tasks = useBoard().data?.tasks;
   const picked = pickedIds.length ? pickedAmong(pickedIds, plannableTasks(tasks ?? [], project.id)).length : 0;
-  const sessionClis = useHandoffClis();
-  const open = (target: PlanTarget) => useDialogs.getState().openPlanPicker(project.id, target);
   return (
     <Menu>
       <Tooltip>
@@ -128,25 +126,36 @@ export function PlanTasksMenu({ project, canStartT3 }: { project: Project; canSt
         <TooltipPopup>Plan tasks… (Ctrl/⌘-click cards to pick them)</TooltipPopup>
       </Tooltip>
       <MenuPopup align="start">
-        {canStartT3 ? (
-          <MenuItem onClick={() => open({ kind: "t3" })}>
-            <T3Icon className="size-4.5 sm:size-4" />
-            Plan in a new T3 Code thread…
-          </MenuItem>
-        ) : null}
-        {sessionClis.map((harness) => (
-          <MenuItem key={harness} onClick={() => open({ kind: "session", harness })}>
-            <HarnessIcon harness={harness} />
-            Plan in a new {AGENT_HARNESSES[harness].label} session…
-          </MenuItem>
-        ))}
-        {canStartT3 || sessionClis.length ? <MenuSeparator /> : null}
-        <MenuItem onClick={() => open({ kind: "copy" })}>
-          <ClipboardCopyIcon />
-          Copy planning prompt…
-        </MenuItem>
+        <PlanTasksMenuItems project={project} canStartT3={canStartT3} />
       </MenuPopup>
     </Menu>
+  );
+}
+
+/** The ways to start the planning session; shared by the lane button and the card menu's bulk Plan with an agent. */
+export function PlanTasksMenuItems({ project, canStartT3 }: { project: Project; canStartT3: boolean }) {
+  const sessionClis = useHandoffClis();
+  const open = (target: PlanTarget) => useDialogs.getState().openPlanPicker(project.id, target);
+  return (
+    <>
+      {canStartT3 ? (
+        <MenuItem onClick={() => open({ kind: "t3" })}>
+          <T3Icon className="size-4.5 sm:size-4" />
+          Plan in a new T3 Code thread…
+        </MenuItem>
+      ) : null}
+      {sessionClis.map((harness) => (
+        <MenuItem key={harness} onClick={() => open({ kind: "session", harness })}>
+          <HarnessIcon harness={harness} />
+          Plan in a new {AGENT_HARNESSES[harness].label} session…
+        </MenuItem>
+      ))}
+      {canStartT3 || sessionClis.length ? <MenuSeparator /> : null}
+      <MenuItem onClick={() => open({ kind: "copy" })}>
+        <ClipboardCopyIcon />
+        Copy planning prompt…
+      </MenuItem>
+    </>
   );
 }
 

@@ -305,6 +305,35 @@ with no snapshot yet counts as active, since it may be. The first ticket key sho
 top row. Settled and archived threads, other ticket keys and plain URLs appear in the panel only, where
 inactive threads are dimmed.
 
+### The card menu
+
+Right-click, the Menu key or Shift+F10 on a card (or an epic's header, in its band or as a finished epic's card) opens its menu: **Move to**
+(the statuses, through `useSetTaskStatus`, so the plan gate still opens the plan editor; not offered for an epic, whose
+status follows its tasks), then the panel's More menu without **Jump to card** (the card is in view; a click opens it). The two share their items (`TaskMenuItems` in `components/task`),
+which take a `TaskSummary`, since a card has no more; **Save as template…** fetches the task's detail when picked
+(`fetchTaskDetail`). Pin toggles are the panel's only. `CardContextMenu` wraps the card in a `ContextMenu`
+(`components/ui/context-menu.tsx`, Base UI) whose trigger draws no box (`display: contents`) and whose items mount only
+while the menu is open. The close-as and delete dialogs are app-level (`TaskMenuDialogs`, driven by
+`useDialogs.closeTaskAs` and `deleteTask`), because the menu is gone by the time they show. A right-click starts no drag
+(dnd-kit's `PointerSensor` takes the primary button only), opens no panel and leaves the pick alone.
+
+With two or more cards picked (Ctrl/⌘-click, any task card; see [agent-handoff.md](agent-handoff.md#plan-tasks-several-tasks-at-once)),
+right-clicking a **picked** card opens the bulk menu, headed "N tasks"; right-clicking an unpicked card opens its own.
+Each item applies to the picked cards it fits (`bulkMenu.logic.ts`) and is left out when it fits none, so a mixed pick
+offers both **Mark as priority** and **Remove priority** while a uniform one offers only the one that does something:
+
+- **Move to**: skips epics, archived cards and cards already there, and refuses planless cards outside Backlog like the
+  server does (shown as "N without a plan" beside the status, and counted as skipped in the toast).
+- **Mark as priority / Remove priority**, **Archive / Unarchive**.
+- **Close as**: **Won't do**, or **Done by another task…**, which opens the close dialog for all of them against one
+  task. Duplicate needs a task per card, so it is single-card only.
+- **Labels**: add (a find-or-create field and the labels in use) or remove one label.
+- **Copy references** (`#14, #16, #26`), and **Plan with an agent**, the lane's planning menu for the picked cards that
+  a planning session can take (one entry per project when they span several).
+
+Actions run the existing mutations once per card (`useBulkActions`), so optimistic moves and their rollback still work,
+and end in one summary toast ("Moved 2 tasks to Review, 1 skipped (no plan)"). The pick stays until a plain click or Esc.
+
 ### The settings page
 
 Settings is a route, `/settings/<group>` with group `board`, `tasks`, `models`, `autopilot`, `integrations` or `project`
@@ -471,6 +500,8 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/board/PriorityLane.tsx`, `dnd.logic.ts` | The priority lane, and the drop rules in and out of it (tested) |
 | `apps/web/src/components/board/useStuck.ts`, `stuck.logic.ts` | Whether the pinned lane is stuck, how far it has folded, and keeping its footprint (`stuckHeight` is tested) |
 | `apps/web/src/components/board/cardLinks.logic.ts`     | Which links a card shows (tested)                                |
+| `apps/web/src/components/board/CardContextMenu.tsx`, `BulkMenuItems.tsx`, `bulkActions.ts`, `bulkMenu.logic.ts` | The card menu, its bulk variant, the bulk mutations and which cards each item fits (`bulkMenu.logic.ts` is tested) |
+| `apps/web/src/components/task/TaskMenuItems.tsx`, `TaskMenuDialogs.tsx` | The items shared by the panel's More menu and the card menu, and their dialogs |
 | `apps/web/src/components/board/reveal.logic.ts`, `revealCard.ts` | Revealing a task: the steps and scroll target (tested), the scroll and flash |
 | `apps/web/src/components/autopilot/autopilot.logic.ts` | Pill state, Inherit labels, config and limit parsing, run labels (tested) |
 | `apps/web/src/components/autopilot/AutopilotPill.tsx`, `AutopilotEpicButton.tsx`, `ScopePopover.tsx`, `PauseAllButton.tsx`, `AutopilotBadge.tsx`, `AutopilotSection.tsx` | The lane pill, the epic button, their shared popover, header pause, card badge, panel section |

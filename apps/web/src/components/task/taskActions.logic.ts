@@ -4,7 +4,7 @@ import type { TaskDetail } from "@repo/contracts";
  * More-menu actions that can be pinned beside the title, in menu order. Submenus (move, close as)
  * need a second pick and delete is destructive, so neither is a sensible one-click button.
  */
-export const PINNABLE_ACTIONS = ["jump", "plan", "reopen", "archive", "copy-link", "copy-reference"] as const;
+export const PINNABLE_ACTIONS = ["jump", "plan", "reopen", "archive", "copy-link"] as const;
 
 export type PinnableAction = (typeof PINNABLE_ACTIONS)[number];
 

@@ -13,13 +13,15 @@ const open = { resolution: null, archivedAt: null, status: "in_progress", kind: 
 describe("normalizePins", () => {
   it("keeps menu order and drops duplicates and unknown ids", () => {
     expect(normalizePins(["copy-link", "plan", "plan", "delete", 3, null])).toEqual(["plan", "copy-link"]);
+    // Copy aboard link left the menu; a pin of it saved before then is dropped.
+    expect(normalizePins(["copy-reference", "plan"])).toEqual(["plan"]);
   });
 });
 
 describe("togglePin", () => {
   it("adds in menu order, whatever order pins were made", () => {
-    expect(togglePin(["copy-reference"], "plan")).toEqual(["plan", "copy-reference"]);
-    expect(togglePin(["plan", "copy-reference"], "archive")).toEqual(["plan", "archive", "copy-reference"]);
+    expect(togglePin(["copy-link"], "plan")).toEqual(["plan", "copy-link"]);
+    expect(togglePin(["plan", "copy-link"], "archive")).toEqual(["plan", "archive", "copy-link"]);
   });
   it("removes a pinned action", () => {
     expect(togglePin(["plan", "copy-link"], "plan")).toEqual(["copy-link"]);
@@ -39,7 +41,7 @@ describe("menuActions", () => {
   });
   it("offers an epic no plan or reopen", () => {
     const epic = { ...open, kind: "epic" } as const;
-    expect(menuActions(epic)).toEqual(["jump", "archive", "copy-link", "copy-reference"]);
+    expect(menuActions(epic)).toEqual(["jump", "archive", "copy-link"]);
     expect(pinnedButtons(["archive"], { ...epic, status: "done" })).toEqual(["archive"]);
   });
 });
