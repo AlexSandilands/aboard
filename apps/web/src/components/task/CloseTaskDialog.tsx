@@ -47,11 +47,19 @@ export function CloseTaskDialog({
   const { closeAgainst } = useBulkActions();
   const candidates = closeCandidates(board?.tasks ?? [], tasks, query);
   const [first] = tasks;
+  const [closing, setClosing] = useState(false);
+  const busy = isPending || closing;
 
   const pick = (byTask: string) => {
-    if (!shown || !first || isPending) return;
+    if (!shown || !first || busy) return;
     if (tasks.length > 1) {
-      void closeAgainst(tasks, shown, byTask).then((closed) => closed && onOpenChange(false));
+      // One run only: a second pick or Enter while it is in flight would close the tasks again. The summary toast
+      // says what failed, and the dialog closes either way so a retry can't re-close the ones that went through.
+      setClosing(true);
+      void closeAgainst(tasks, shown, byTask).finally(() => {
+        setClosing(false);
+        onOpenChange(false);
+      });
       return;
     }
     resolveTask(
@@ -97,7 +105,7 @@ export function CloseTaskDialog({
                 <li key={candidate.id}>
                   <button
                     type="button"
-                    disabled={isPending}
+                    disabled={busy}
                     onClick={() => pick(candidate.id)}
                     className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-accent focus-visible:bg-accent disabled:opacity-60"
                   >
