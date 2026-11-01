@@ -39,6 +39,11 @@ describe("which menu opens", () => {
     expect(isBulkMenu([], "a")).toBe(false);
   });
 
+  it("resolves archived cards too when they are passed in", () => {
+    const tasks = [task({ number: 5 }), task({ number: 3, archivedAt: "2026-01-01" })];
+    expect(pickedTasks(["t-5", "t-3"], tasks).map((t) => t.number)).toEqual([3, 5]);
+  });
+
   it("resolves the pick to existing cards in number order, dropping deleted ones", () => {
     const tasks = [task({ number: 5 }), task({ number: 2 }), task({ number: 9 })];
     expect(pickedTasks(["t-5", "t-2", "t-gone"], tasks).map((t) => t.number)).toEqual([2, 5]);

@@ -317,7 +317,7 @@ while the menu is open. The close-as and delete dialogs are app-level (`TaskMenu
 `useDialogs.closeTaskAs` and `deleteTask`), because the menu is gone by the time they show. A right-click starts no drag
 (dnd-kit's `PointerSensor` takes the primary button only), opens no panel and leaves the pick alone.
 
-With two or more cards picked (Ctrl/⌘-click, any card; see [agent-handoff.md](agent-handoff.md#plan-tasks-several-tasks-at-once)),
+With two or more cards picked (Ctrl/⌘-click, any task card; see [agent-handoff.md](agent-handoff.md#plan-tasks-several-tasks-at-once)),
 right-clicking a **picked** card opens the bulk menu, headed "N tasks"; right-clicking an unpicked card opens its own.
 Each item applies to the picked cards it fits (`bulkMenu.logic.ts`) and is disabled when it fits none:
 

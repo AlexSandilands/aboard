@@ -6,9 +6,10 @@ import { TaskMenuItems } from "~/components/task/TaskMenuItems";
 import { useSetTaskStatus } from "~/components/task/useSetTaskStatus";
 import { ContextMenu, ContextMenuPopup, ContextMenuTrigger } from "~/components/ui/context-menu";
 import { MenuItem, MenuItemLabel, MenuSeparator, MenuSub, MenuSubPopup, MenuSubTrigger } from "~/components/ui/menu";
-import { useBoard } from "~/state/queries";
+import { useArchivedTasks, useBoard } from "~/state/queries";
 import { useBoardPick } from "~/state/ui";
 import { useBoardContext } from "./BoardContext";
+import { useCloseTask, useSelectedTaskId } from "./boardNavigation";
 import { BulkMenuItems } from "./BulkMenuItems";
 import { isBulkMenu, pickedTasks } from "./bulkMenu.logic";
 
@@ -32,18 +33,26 @@ export function CardContextMenu({ task, children }: { task: TaskSummary; childre
 function CardMenuItems({ task }: { task: TaskSummary }) {
   const picked = useBoardPick((s) => s.picked);
   const boardTasks = useBoard().data?.tasks;
-  const bulk = isBulkMenu(picked, task.id) ? pickedTasks(picked, boardTasks ?? []) : [];
+  // Archived cards (Show archived) aren't in the board snapshot; their query is already cached while they are shown.
+  const archivedTasks = useArchivedTasks(false).data;
+  const bulk = isBulkMenu(picked, task.id)
+    ? pickedTasks(picked, [...(boardTasks ?? []), ...(archivedTasks ?? [])])
+    : [];
   return bulk.length >= 2 ? <BulkMenuItems tasks={bulk} /> : <SingleMenuItems task={task} />;
 }
 
 function SingleMenuItems({ task }: { task: TaskSummary }) {
   const { openTask, openPlanEditor, projects } = useBoardContext();
+  const closeTask = useCloseTask();
+  const selectedTaskId = useSelectedTaskId();
   const setStatus = useSetTaskStatus(task, () => openPlanEditor(task.id));
   return (
     <TaskMenuItems
       task={task}
       projects={projects}
       onOpenPlanEditor={() => openPlanEditor(task.id)}
+      // Deleting the task whose panel is open closes the panel, like deleting from the panel does.
+      onDeleted={task.id === selectedTaskId ? () => void closeTask() : undefined}
       leading={
         <>
           <MenuItem onClick={() => openTask(task.id)}>

@@ -24,14 +24,14 @@ function toast(title: string, counts: { ok: number; skipped?: number; failed?: n
  * still work) and shows one summary toast instead of one per task: the mutations are silent, failures are counted.
  */
 export function useBulkActions() {
-  const { mutateAsync: moveTask } = useMoveTask();
+  const { mutateAsync: moveTask } = useMoveTask({ silent: true });
   const { mutateAsync: updateTask } = useUpdateTask({ silent: true });
   const { mutateAsync: resolveTask } = useResolveTask({ silent: true });
 
   const move = async (tasks: readonly TaskSummary[], status: TaskStatus, label: string) => {
     const plan: BulkMove = bulkMove(tasks, status);
     // The plan gate is checked up front; a PLAN_REQUIRED the server still answers with (a plan deleted meanwhile) counts
-    // with the rest as failed. useMoveTask toasts other failures itself.
+    // with the rest as failed; the summary toast is the only one.
     const { ok, failed } = await runAll(plan.move, (t) => moveTask({ id: t.id, status }));
     const counts = { ok, skipped: plan.refused.length, failed };
     toast(

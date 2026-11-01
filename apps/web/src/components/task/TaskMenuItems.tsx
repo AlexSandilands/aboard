@@ -38,6 +38,7 @@ import {
   MenuSubPopup,
   MenuSubTrigger,
 } from "~/components/ui/menu";
+import { toastManager } from "~/components/ui/toast";
 import { cn } from "~/lib/utils";
 import { useResolveTask, useUpdateTask } from "~/state/mutations";
 import { fetchTaskDetail, useBoard } from "~/state/queries";
@@ -138,8 +139,16 @@ export function TaskMenuItems({
     ) : null;
 
   const saveAsTemplate = async () => {
-    const full = detail ?? (await fetchTaskDetail(queryClient, task.id));
-    useDialogs.getState().openTemplateDraft(draftFromTask(full));
+    try {
+      const full = detail ?? (await fetchTaskDetail(queryClient, task.id));
+      useDialogs.getState().openTemplateDraft(draftFromTask(full));
+    } catch (error) {
+      toastManager.add({
+        type: "error",
+        title: "Couldn't open the template",
+        description: error instanceof Error ? error.message : String(error),
+      });
+    }
   };
 
   return (

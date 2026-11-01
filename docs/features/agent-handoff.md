@@ -69,7 +69,7 @@ the same, without **Plan with me** or a task to link
 The second, **Plan tasks…**, starts one session that plans several of the project's tasks with the user. Ctrl/⌘-click
 picks cards on the board (`useBoardPick` in `state/ui.ts`, not persisted; a plain click on a card or Esc drops the
 pick, and a Ctrl/⌘-press never starts a drag), and the button shows how many of the lane's cards are picked. Any card
-can be picked, since the pick also drives the card menu's bulk actions (see
+can be picked (a task card, not an epic), since the pick also drives the card menu's bulk actions (see
 [board-layout.md](board-layout.md#the-card-menu)); only the plannable ones count here. Its menu
 offers a new T3 Code thread, a session for each installed CLI, or the prompt to copy; each opens a picker
 (`PlanTasksDialog`) listing the tasks a planning session can take, with the picked ones ticked. Those are the open
