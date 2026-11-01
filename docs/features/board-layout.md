@@ -147,7 +147,8 @@ card with no previous place fades in. It is a board-level FLIP:
   (`planCardMotion` in `cardMotion.logic.ts`, tested) and animates transform (or opacity, for a fade-in) with
   `element.animate`. A card with no new rect (collapsed column, filtered out), or off screen before and after, is
   skipped. Scrolling in between is compensated; if the scroll box itself resized (the task panel or sidebar sliding)
-  nothing animates, since every card moved. A card drawn twice (say an epic's child row beside its own card) has no
+  nothing animates, since every card moved (the sidebar's slide moves the whole main area with one transform instead,
+  see [appearance.md](appearance.md#contrast-glass-panel-animations-and-fonts)). A card drawn twice (say an epic's child row beside its own card) has no
   single place to slide from and is left alone.
 - It is off while a card is lifted: the drag overlay's drop animation lands the dropped card, and the drag preview has
   already put the neighbours in their final places. It is also off in a hidden tab and when `data-panel-animations`

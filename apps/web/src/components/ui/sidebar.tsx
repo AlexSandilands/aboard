@@ -13,6 +13,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useResizeDrag } from "~/hooks/useResizeDrag";
 import { useIsMobile } from "~/hooks/useMediaQuery";
 import { readStoredNumber, writeStoredNumber } from "~/lib/storage";
+import { glideStartOffset } from "./sidebarSlide.logic";
 import { resolveSidebarState, type ResponsiveSidebarState } from "./sidebarState";
 
 const SIDEBAR_WIDTH = "16rem";
@@ -82,6 +83,48 @@ function useSidebar() {
 function useSidebarVisibility() {
   const { isMobile, open, openMobile } = useSidebar();
   return isMobile ? openMobile : open;
+}
+
+const INSET_GLIDE_ID = "sidebar-inset-glide";
+
+/** The panel animations are on and the slide has a length, in ms; 0 when it should be instant. */
+function slideDuration(): number {
+  const root = document.documentElement;
+  if (root.dataset.panelAnimations !== "true") return 0;
+  return Number.parseFloat(root.style.getPropertyValue("--sidebar-slide-duration")) || 0;
+}
+
+/**
+ * Opening or closing the sidebar changes the gap beside it at once, so the main area lays out once at its final
+ * width (its text wraps once, not on every frame of the slide). This glides the main area from where it was to
+ * where it now sits with a transform, in step with the sidebar's own slide.
+ */
+function useInsetGlide(sidebarRef: React.RefObject<HTMLElement | null>, side: "left" | "right") {
+  const { open } = useSidebar();
+  const previousOpen = React.useRef(open);
+  React.useLayoutEffect(() => {
+    if (previousOpen.current === open) return;
+    previousOpen.current = open;
+    const sidebar = sidebarRef.current;
+    const duration = slideDuration();
+    if (!sidebar || duration === 0) return;
+    const container = sidebar.querySelector<HTMLElement>("[data-slot='sidebar-container']");
+    const inset = sidebar
+      .closest("[data-slot='sidebar-wrapper']")
+      ?.querySelector<HTMLElement>(":scope > [data-slot='sidebar-inset']");
+    if (!container || !inset) return;
+    // A glide still running is continued from where it is.
+    const running = inset.getAnimations().filter((animation) => animation.id === INSET_GLIDE_ID);
+    const current = running.length > 0 ? new DOMMatrix(getComputedStyle(inset).transform).m41 : 0;
+    for (const animation of running) animation.cancel();
+    const from = glideStartOffset({ current, width: container.offsetWidth, opening: open, side });
+    const easing = getComputedStyle(document.documentElement).getPropertyValue("--ease-sidebar-slide").trim();
+    inset.animate([{ transform: `translateX(${from}px)` }, { transform: "none" }], {
+      duration,
+      easing: easing || "ease-out",
+      id: INSET_GLIDE_ID,
+    });
+  }, [open, side, sidebarRef]);
 }
 
 function SidebarProvider({
@@ -181,6 +224,8 @@ function Sidebar({
   resizable?: boolean | SidebarResizableOptions;
 }) {
   const { isMobile, state, openMobile, setOpenMobile, setMobileSheetElement } = useSidebar();
+  const sidebarRef = React.useRef<HTMLDivElement>(null);
+  useInsetGlide(sidebarRef, side);
   const resolvedResizable = React.useMemo<SidebarResolvedResizableOptions | null>(() => {
     if (isMobile || collapsible === "none" || !resizable) {
       return null;
@@ -255,6 +300,7 @@ function Sidebar({
     <SidebarInstanceContext value={instanceContextValue}>
       <div
         className="group peer hidden text-sidebar-foreground md:block"
+        ref={sidebarRef}
         data-collapsible={state === "collapsed" ? collapsible : ""}
         data-side={side}
         data-slot="sidebar"
@@ -264,8 +310,8 @@ function Sidebar({
         {/* This is what handles the sidebar gap on desktop */}
         <div
           className={cn(
+            // No width transition: the main area lays out once (see useInsetGlide) and the container slides over the gap.
             "relative w-(--sidebar-width) bg-transparent",
-            "[[data-panel-animations=true]_&]:transition-[width] [[data-panel-animations=true]_&]:[transition-duration:var(--panel-animation-duration)] [[data-panel-animations=true]_&]:ease-out",
             "group-data-[collapsible=offcanvas]:w-0",
             "group-data-[side=right]:rotate-180",
             variant === "floating" || variant === "inset"
@@ -277,10 +323,11 @@ function Sidebar({
         <div
           className={cn(
             "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) md:flex",
-            "[[data-panel-animations=true]_&]:transition-[left,right,width] [[data-panel-animations=true]_&]:[transition-duration:var(--panel-animation-duration)] [[data-panel-animations=true]_&]:ease-out",
+            // Slides with a transform, so no layout per frame; the contents keep their full width.
+            "[[data-panel-animations=true]_&]:transition-transform [[data-panel-animations=true]_&]:[transition-duration:var(--sidebar-slide-duration)] [[data-panel-animations=true]_&]:ease-(--ease-sidebar-slide)",
             side === "left"
-              ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
-              : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
+              ? "left-0 group-data-[collapsible=offcanvas]:-translate-x-full"
+              : "right-0 group-data-[collapsible=offcanvas]:translate-x-full",
             // Adjust the padding for floating and inset variants.
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
@@ -465,7 +512,6 @@ function SidebarRail({
             className={cn(
               /* disable pointer events only when offcanvas sidebar is collapsed, that's when the rail sits over the native scrollbar on windows and linux. icon mode stays fully clickable. */
               "-translate-x-1/2 group-data-[side=left]:-right-4 absolute inset-y-0 z-20 hidden w-4 after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=right]:left-0 sm:flex [[data-collapsible=offcanvas][data-state=collapsed]_&]:pointer-events-none",
-              "[[data-panel-animations=true]_&]:transition-all [[data-panel-animations=true]_&]:[transition-duration:var(--panel-animation-duration)] [[data-panel-animations=true]_&]:ease-out",
               "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",
               "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
               "group-data-[collapsible=offcanvas]:translate-x-0 hover:group-data-[collapsible=offcanvas]:bg-sidebar group-data-[collapsible=offcanvas]:after:left-full",

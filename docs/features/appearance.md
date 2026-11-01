@@ -131,7 +131,7 @@ These are prefs in the `useAppearance` store (`state/ui.ts`, persisted under `ap
 | ---------------- | ----------- | ------- | ------------------------------------------------------------------------------------------------- |
 | Contrast         | 50–200 %    | 100 %   | `--appearance-contrast-base/boost/border-boost`, read by the `--contrast-*` block                 |
 | Glass opacity    | 40–100 %    | 80 %    | `--glass-opacity`; at 100 % also `--glass-blur: 0px`                                              |
-| Panel animations | 0–400 ms    | 150 ms  | `--panel-animation-duration` and `data-panel-animations` (`false` under reduced motion)           |
+| Panel animations | 0–400 ms    | 150 ms  | `--panel-animation-duration`, `--sidebar-slide-duration` and `data-panel-animations` (`false` under reduced motion) |
 | Interface font   | name; 12–20 px | system, 16 px | `--font-sans`; the size is the root font size, so every rem scales                         |
 | Monospace font   | name        | system  | `--font-mono`                                                                                     |
 
@@ -141,8 +141,16 @@ variables are defined on `:root` and again on `[data-app-sidebar]`, and Tailwind
 colours read them (`@theme inline`), so every `text-foreground`, `text-muted-foreground` and `border` follows.
 
 **Panel animations**: board cards sliding between columns use 1.75× the duration (`useBoardFlip`, see
-[board-layout.md](board-layout.md#card-motion)). The ported sidebar primitive already transitions when an ancestor has
-`data-panel-animations="true"`. The task panel grows in from its edge with the `.panel-enter` keyframe and
+[board-layout.md](board-layout.md#card-motion)). The sidebar slides for 3× the duration (`--sidebar-slide-duration`,
+set by `appearancePaint` from `slideDurationMs` in `components/ui/sidebarSlide.logic.ts`: 150 ms gives 450 ms) on
+`--ease-sidebar-slide`, `cubic-bezier(0.2, 0.9, 0.25, 1)`, fitted frame by frame from a recording of Antigravity's panel
+opening: fast start, long soft tail. Its container moves with `translateX`, not `left`, and keeps its width, so its
+contents never re-wrap. The gap beside it changes at once, so the main area lays out once at its final width (its
+text wraps once, not on every frame); `useInsetGlide` in `ui/sidebar.tsx` then glides `SidebarInset` from where it was to
+where it now sits with one transform, in step with the sidebar (a glide still running is continued, not restarted). Nothing
+resizes during the slide, so the board's `ResizeObserver`s measure once. The root has `overflow-x: clip` because
+a closing sidebar's main area starts beyond the window's right edge. Both are off with Panel animations at 0 and under
+reduced motion. The task panel grows in from its edge with the `.panel-enter` keyframe and
 shrinks back with `.panel-exit`: `AppLayout` keeps it mounted on the closed task until its `animationend`.
 Only the `<aside>`'s width animates. Its contents sit in an inner wrapper fixed at `var(--resizable-width)` (at least
 380px, the `@container` the panel's `@[460px]` queries measure), anchored left and clipped by the `<aside>`, so they

@@ -40,8 +40,9 @@ export function AppShell({
   useNotificationDelivery();
   useGlobalKeybindings(onBack, newTaskProjectId ?? undefined);
 
+  // overflow-x-clip: the main area glides in from beyond the window's edge when the sidebar closes.
   return (
-    <SidebarProvider className="h-dvh! min-h-0!">
+    <SidebarProvider className="h-dvh! min-h-0! overflow-x-clip">
       <Sidebar
         side="left"
         collapsible="offcanvas"
