@@ -67,6 +67,9 @@ function seed() {
     { summary: "One issue", findings: [{ severity: "major", title: "Bug", file: "x.ts" }] },
     "rev",
   );
+  // The reviewer model overrides, so every round trip below carries both columns.
+  s.projects.update(project.id, { reviewModel: { tier: "standard" } });
+  s.tasks.update(a.id, { reviewModel: { model: "claude-opus-5-5" } }, "agent");
   s.labels.setColor("ui", 120);
   // A recurring rule remembers the task it last made, so it must come back after the tasks.
   const weekly = s.templates.list({ projectId: project.id }).find((t) => t.name === "Weekly review")!;
