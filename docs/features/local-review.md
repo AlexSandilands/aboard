@@ -186,7 +186,8 @@ The board-run reviewer survives as fallback 3, where it fits: rounds nobody else
   already short of width, and cards narrower than now get too busy, so review state is a badge.
 - **No gate.** Moving to Review is never blocked by open findings; the card signals instead.
 - **Review before the PR.** With auto-review on, "Review" means "done, being reviewed locally", and the PR
-  is opened once the loop ends. Autopilot's PR review holds off until then. Without it, agents open and link the PR before moving to Review, as
+  is opened once the loop ends. Autopilot's PR review holds off until then, for a task not yet in Review as well
+  as one whose loop is running; `link` of an early PR still works but says to finish the loop first. Without it, agents open and link the PR before moving to Review, as
   before.
 - **Say it where the loop ends.** The brief at the start of the loop was the only place that said to open
   the PR, and agents sometimes stopped after the last round without doing it. So every end point repeats

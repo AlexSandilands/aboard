@@ -119,7 +119,9 @@ text when both are present.
   is redacted first ([agent-sessions.md](agent-sessions.md#transcripts)).
 - `resolve_finding` is where the loop moves on: resolving the last open blocking or major finding of a round makes
   the board open the next round (under the limit), and the result says so and points to `start_review` for its
-  brief. `move_task` to Review with a PR already linked adds that the loop must finish first and fixes go to that PR.
+  brief. `move_task` to Review with a PR already linked adds that the loop must finish first and fixes go to that PR;
+  `link` of a PR on an auto-review task whose loop hasn't ended (not yet in Review, or a round still open) adds the same
+  as a note, and still links.
   See [local-review.md](local-review.md).
 - **Plan progress** nudges agents to update steps as they work instead of ticking them in bulk at the end of a
   phase, so the board shows live progress. `progressHints` (`format.ts`) runs for open tasks with a plan, never
