@@ -56,8 +56,9 @@ function boardScroller(): HTMLElement | null {
 
 function boardView(scroller: HTMLElement): BoardView {
   return {
-    width: scroller.clientWidth,
-    height: scroller.clientHeight,
+    // offset size: a scrollbar appearing doesn't resize the box, so it doesn't count as a resize.
+    width: scroller.offsetWidth,
+    height: scroller.offsetHeight,
     scrollLeft: scroller.scrollLeft,
     scrollTop: scroller.scrollTop,
   };
