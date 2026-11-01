@@ -48,7 +48,8 @@ import { isPlannable } from "./boardSelection.logic";
 
 /**
  * The card menu for two or more picked cards: the actions that make sense for many at once, each applying to the picked
- * cards it fits. An item that fits none is disabled. Each runs the board's own mutations and ends in one summary toast.
+ * cards it fits. An item that fits none is left out, so a pick that mixes, say, priority and other cards offers both Mark
+ * and Remove, and a uniform one only the one that does something. Each runs the board's own mutations and ends in one summary toast.
  */
 export function BulkMenuItems({ tasks }: { tasks: readonly TaskSummary[] }) {
   const actions = useBulkActions();
@@ -61,69 +62,84 @@ export function BulkMenuItems({ tasks }: { tasks: readonly TaskSummary[] }) {
   const mark = bulkPriority(tasks, true);
   const unmark = bulkPriority(tasks, false);
   const wontDo = bulkWontDo(tasks);
+  const moves = TASK_STATUSES.map((status) => ({ status, plan: bulkMove(tasks, status.value) }));
 
   return (
     <>
       <MenuGroup>
         <MenuGroupLabel>{taskCount(tasks.length)}</MenuGroupLabel>
       </MenuGroup>
-      <MenuSub>
-        <MenuSubTrigger>
-          <MoveRightIcon />
-          Move to
-        </MenuSubTrigger>
-        <MenuSubPopup>
-          {TASK_STATUSES.map((status) => {
-            const plan = bulkMove(tasks, status.value);
-            return (
-              <MenuItem
-                key={status.value}
-                disabled={plan.move.length === 0}
-                onClick={() => void actions.move(tasks, status.value, status.label)}
-              >
-                <MenuItemLabel>{status.label}</MenuItemLabel>
-                {plan.refused.length ? (
-                  <span className="ms-auto ps-3 text-xs text-muted-foreground">
-                    {plan.refused.length} without a plan
-                  </span>
-                ) : null}
+      {/* Epics and archived cards don't move; a pick of only those has nothing to offer here. */}
+      {moves.some((m) => m.plan.move.length || m.plan.refused.length) ? (
+        <MenuSub>
+          <MenuSubTrigger>
+            <MoveRightIcon />
+            Move to
+          </MenuSubTrigger>
+          <MenuSubPopup>
+            {moves.map(({ status, plan }) => {
+              return (
+                <MenuItem
+                  key={status.value}
+                  disabled={plan.move.length === 0}
+                  onClick={() => void actions.move(tasks, status.value, status.label)}
+                >
+                  <MenuItemLabel>{status.label}</MenuItemLabel>
+                  {plan.refused.length ? (
+                    <span className="ms-auto ps-3 text-xs text-muted-foreground">
+                      {plan.refused.length} without a plan
+                    </span>
+                  ) : null}
+                </MenuItem>
+              );
+            })}
+          </MenuSubPopup>
+        </MenuSub>
+      ) : null}
+      {mark.length ? (
+        <MenuItem onClick={() => void actions.setPriority(mark, true)}>
+          <StarIcon />
+          Mark as priority
+        </MenuItem>
+      ) : null}
+      {unmark.length ? (
+        <MenuItem onClick={() => void actions.setPriority(unmark, false)}>
+          <StarIcon className="fill-current" />
+          Remove priority
+        </MenuItem>
+      ) : null}
+      {closeable.length ? (
+        <MenuSub>
+          <MenuSubTrigger>
+            <CircleCheckBigIcon />
+            Close as…
+          </MenuSubTrigger>
+          <MenuSubPopup>
+            <MenuItem onClick={() => useDialogs.getState().openCloseTaskAs(closeable, "completed")}>
+              <SquareCheckIcon />
+              Done by another task…
+            </MenuItem>
+            {wontDo.length ? (
+              <MenuItem onClick={() => void actions.wontDo(wontDo)}>
+                <XIcon />
+                Won&apos;t do
               </MenuItem>
-            );
-          })}
-        </MenuSubPopup>
-      </MenuSub>
-      <MenuItem disabled={mark.length === 0} onClick={() => void actions.setPriority(mark, true)}>
-        <StarIcon />
-        Mark as priority
-      </MenuItem>
-      <MenuItem disabled={unmark.length === 0} onClick={() => void actions.setPriority(unmark, false)}>
-        <StarIcon />
-        Remove priority
-      </MenuItem>
-      <MenuSub>
-        <MenuSubTrigger disabled={closeable.length === 0}>
-          <CircleCheckBigIcon />
-          Close as…
-        </MenuSubTrigger>
-        <MenuSubPopup>
-          <MenuItem onClick={() => useDialogs.getState().openCloseTaskAs(closeable, "completed")}>
-            <SquareCheckIcon />
-            Done by another task…
-          </MenuItem>
-          <MenuItem disabled={wontDo.length === 0} onClick={() => void actions.wontDo(wontDo)}>
-            <XIcon />
-            Won&apos;t do
-          </MenuItem>
-        </MenuSubPopup>
-      </MenuSub>
-      <MenuItem disabled={archive.length === 0} onClick={() => void actions.archive(archive, true)}>
-        <ArchiveIcon />
-        Archive
-      </MenuItem>
-      <MenuItem disabled={unarchive.length === 0} onClick={() => void actions.archive(unarchive, false)}>
-        <ArchiveRestoreIcon />
-        Unarchive
-      </MenuItem>
+            ) : null}
+          </MenuSubPopup>
+        </MenuSub>
+      ) : null}
+      {archive.length ? (
+        <MenuItem onClick={() => void actions.archive(archive, true)}>
+          <ArchiveIcon />
+          Archive
+        </MenuItem>
+      ) : null}
+      {unarchive.length ? (
+        <MenuItem onClick={() => void actions.archive(unarchive, false)}>
+          <ArchiveRestoreIcon />
+          Unarchive
+        </MenuItem>
+      ) : null}
       <MenuSub>
         <MenuSubTrigger>
           <TagIcon />
@@ -140,19 +156,17 @@ export function BulkMenuItems({ tasks }: { tasks: readonly TaskSummary[] }) {
         Copy references
       </MenuItem>
       {/* The planning session covers one project's tasks, so a pick across projects offers each its own. */}
-      {plannableProjects.length <= 1 ? (
+      {plannableProjects.length === 0 ? null : plannableProjects.length === 1 && plannableProjects[0] ? (
         <MenuSub>
-          <MenuSubTrigger disabled={plannableProjects.length === 0}>
+          <MenuSubTrigger>
             <ListTodoIcon />
             Plan with an agent
           </MenuSubTrigger>
           <MenuSubPopup>
-            {plannableProjects[0] ? (
-              <PlanTasksMenuItems
-                project={plannableProjects[0]}
-                canStartT3={canStartProjectT3Thread(plannableProjects[0], t3, settings)}
-              />
-            ) : null}
+            <PlanTasksMenuItems
+              project={plannableProjects[0]}
+              canStartT3={canStartProjectT3Thread(plannableProjects[0], t3, settings)}
+            />
           </MenuSubPopup>
         </MenuSub>
       ) : (
@@ -187,10 +201,11 @@ function LabelSub({ tasks, mode }: { tasks: readonly TaskSummary[]; mode: "add" 
       ? normalized
       : null;
   const empty = shown.length === 0 && !create;
+  if (mode === "remove" && choices.length === 0) return null;
 
   return (
     <MenuSub>
-      <MenuSubTrigger disabled={mode === "remove" && choices.length === 0}>
+      <MenuSubTrigger>
         {mode === "add" ? <PlusIcon /> : <XIcon />}
         {mode === "add" ? "Add label" : "Remove label"}
       </MenuSubTrigger>

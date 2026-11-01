@@ -307,9 +307,9 @@ inactive threads are dimmed.
 
 ### The card menu
 
-Right-click, the Menu key or Shift+F10 on a card (or a finished epic's header) opens its menu: **Open**, **Move to**
+Right-click, the Menu key or Shift+F10 on a card (or an epic's header, in its band or as a finished epic's card) opens its menu: **Move to**
 (the statuses, through `useSetTaskStatus`, so the plan gate still opens the plan editor; not offered for an epic, whose
-status follows its tasks), then the panel's More menu. The two share their items (`TaskMenuItems` in `components/task`),
+status follows its tasks), then the panel's More menu without **Jump to card** (the card is in view; a click opens it). The two share their items (`TaskMenuItems` in `components/task`),
 which take a `TaskSummary`, since a card has no more; **Save as template…** fetches the task's detail when picked
 (`fetchTaskDetail`). Pin toggles are the panel's only. `CardContextMenu` wraps the card in a `ContextMenu`
 (`components/ui/context-menu.tsx`, Base UI) whose trigger draws no box (`display: contents`) and whose items mount only
@@ -319,7 +319,8 @@ while the menu is open. The close-as and delete dialogs are app-level (`TaskMenu
 
 With two or more cards picked (Ctrl/⌘-click, any task card; see [agent-handoff.md](agent-handoff.md#plan-tasks-several-tasks-at-once)),
 right-clicking a **picked** card opens the bulk menu, headed "N tasks"; right-clicking an unpicked card opens its own.
-Each item applies to the picked cards it fits (`bulkMenu.logic.ts`) and is disabled when it fits none:
+Each item applies to the picked cards it fits (`bulkMenu.logic.ts`) and is left out when it fits none, so a mixed pick
+offers both **Mark as priority** and **Remove priority** while a uniform one offers only the one that does something:
 
 - **Move to**: skips epics, archived cards and cards already there, and refuses planless cards outside Backlog like the
   server does (shown as "N without a plan" beside the status, and counted as skipped in the toast).

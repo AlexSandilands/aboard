@@ -1,5 +1,5 @@
 import { TASK_STATUSES, type TaskSummary } from "@repo/contracts";
-import { CheckIcon, ExternalLinkIcon, MoveRightIcon } from "lucide-react";
+import { CheckIcon, MoveRightIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { TaskMenuItems } from "~/components/task/TaskMenuItems";
@@ -14,7 +14,7 @@ import { BulkMenuItems } from "./BulkMenuItems";
 import { isBulkMenu, pickedTasks } from "./bulkMenu.logic";
 
 /**
- * Right-click, the Menu key or Shift+F10 on a card opens its menu: the panel's More menu plus Open and Move to.
+ * Right-click, the Menu key or Shift+F10 on a card opens its menu: Move to, then the panel's More menu.
  * The trigger draws no box of its own (`contents`), so the card's layout and drag handling stay as they were; the
  * popup mounts only while open, so a board of cards carries one menu's worth of hooks, not hundreds.
  */
@@ -42,7 +42,7 @@ function CardMenuItems({ task }: { task: TaskSummary }) {
 }
 
 function SingleMenuItems({ task }: { task: TaskSummary }) {
-  const { openTask, openPlanEditor, projects } = useBoardContext();
+  const { openPlanEditor, projects } = useBoardContext();
   const closeTask = useCloseTask();
   const selectedTaskId = useSelectedTaskId();
   const setStatus = useSetTaskStatus(task, () => openPlanEditor(task.id));
@@ -51,16 +51,14 @@ function SingleMenuItems({ task }: { task: TaskSummary }) {
       task={task}
       projects={projects}
       onOpenPlanEditor={() => openPlanEditor(task.id)}
+      // The card is already in view, so Jump to card has nothing to do here.
+      omit={["jump"]}
       // Deleting the task whose panel is open closes the panel, like deleting from the panel does.
       onDeleted={task.id === selectedTaskId ? () => void closeTask() : undefined}
       leading={
-        <>
-          <MenuItem onClick={() => openTask(task.id)}>
-            <ExternalLinkIcon />
-            Open
-          </MenuItem>
-          {/* An epic's status follows its tasks, so there is nothing to move. */}
-          {task.kind === "epic" ? null : (
+        // An epic's status follows its tasks, so there is nothing to move.
+        task.kind === "epic" ? null : (
+          <>
             <MenuSub>
               <MenuSubTrigger>
                 <MoveRightIcon />
@@ -79,9 +77,9 @@ function SingleMenuItems({ task }: { task: TaskSummary }) {
                 ))}
               </MenuSubPopup>
             </MenuSub>
-          )}
-          <MenuSeparator />
-        </>
+            <MenuSeparator />
+          </>
+        )
       }
     />
   );

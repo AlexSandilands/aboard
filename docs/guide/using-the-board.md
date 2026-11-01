@@ -227,13 +227,14 @@ task instead, and the full prompt is on your clipboard to paste.
 
 ## The card menu
 
-Right-click a card (or press the Menu key or Shift+F10 on it) for its menu: **Open**, **Move to** a column, and
+Right-click a card or an epic's header (or press the Menu key or Shift+F10 on it) for its menu: **Move to** a column, and
 everything in the task panel's **More actions** menu, so you don't have to open the panel first.
 
 To act on several tasks at once, Ctrl-click (⌘-click on a Mac) their cards to pick them, then right-click one of the
 picked cards. The menu is headed "3 tasks" and offers **Move to**, **Mark as priority**, **Close as** (Won't do, or done
 by one other task), **Archive**, **Labels**, **Copy references** and **Plan with an agent**. Each applies to the picked
-cards it fits, and tells you in one message what it did and what it skipped (a task without a plan can't leave Backlog).
+cards it fits and only shows when it fits one of them (pick a priority and a non-priority task and you get both Mark
+and Remove priority), and tells you in one message what it did and what it skipped (a task without a plan can't leave Backlog).
 Esc or a plain click drops the pick.
 
 ## Planning several tasks at once

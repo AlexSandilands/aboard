@@ -1,4 +1,4 @@
-import { BRAND, type Project, type TaskDetail, type TaskSummary } from "@repo/contracts";
+import { type Project, type TaskDetail, type TaskSummary } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArchiveIcon,
@@ -9,7 +9,6 @@ import {
   FilePlus2Icon,
   FolderInputIcon,
   GroupIcon,
-  HashIcon,
   LinkIcon,
   ListTodoIcon,
   LocateFixedIcon,
@@ -25,7 +24,6 @@ import {
 import type { ReactNode, SyntheticEvent } from "react";
 
 import { useJumpToTask } from "~/components/board/boardNavigation";
-import { copyTaskReference } from "~/components/handoff/HandoffActions";
 import { useShortcutLabel } from "~/components/layout/useKeybindings";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { draftFromTask } from "~/components/templates/templates.logic";
@@ -83,11 +81,6 @@ export function useTaskMenuActions(task: TaskSummary, onOpenPlanEditor: () => vo
         copyToClipboard(url.toString(), "link");
       },
     },
-    "copy-reference": {
-      label: `Copy ${BRAND.id} link`,
-      icon: HashIcon,
-      run: () => copyTaskReference(task),
-    },
   };
 }
 
@@ -110,6 +103,7 @@ export function TaskMenuItems({
   onDeleted,
   pins,
   leading,
+  omit,
 }: {
   task: TaskSummary;
   detail?: TaskDetail;
@@ -118,8 +112,10 @@ export function TaskMenuItems({
   /** Runs when deleting is confirmed, e.g. the panel closing itself. */
   onDeleted?: () => void;
   pins?: MenuPins;
-  /** Items above the shared ones, e.g. a card's Open and Move to. */
+  /** Items above the shared ones, e.g. a card's Move to. */
   leading?: ReactNode;
+  /** Actions to leave out, e.g. Jump to card on the card itself. */
+  omit?: ReadonlyArray<PinnableAction>;
 }) {
   const { mutate: updateTask } = useUpdateTask();
   const { mutate: resolveTask } = useResolveTask();
@@ -131,7 +127,7 @@ export function TaskMenuItems({
   const isEpic = task.kind === "epic";
   const menu = menuActions(task);
   const item = (id: PinnableAction) =>
-    menu.includes(id) ? (
+    menu.includes(id) && !omit?.includes(id) ? (
       <ActionMenuItem
         action={actions[id]}
         pin={pins ? { pinned: pins.pinned.includes(id), toggle: () => pins.onToggle(id) } : undefined}
@@ -257,7 +253,6 @@ export function TaskMenuItems({
       ) : null}
       <MenuSeparator />
       {item("copy-link")}
-      {item("copy-reference")}
     </>
   );
 }
