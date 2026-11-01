@@ -155,6 +155,8 @@ function ReviewModelPicker({
 }) {
   // Custom was picked but nothing is typed yet, so there is nothing to save.
   const [typing, setTyping] = useState(false);
+  // Bumped when typed text is refused, to remount the field with the saved value.
+  const [rejected, setRejected] = useState(0);
   const option = headlessModelOption(value, typing);
   const items = headlessModelItems(true, "Inherit");
   return (
@@ -172,7 +174,7 @@ function ReviewModelPicker({
       />
       {option === "custom" ? (
         <BlurInput
-          key={value && "model" in value ? value.model : "typing"}
+          key={`${value && "model" in value ? value.model : "typing"}-${rejected}`}
           size="sm"
           className="w-28"
           aria-label="Reviewer model id"
@@ -180,7 +182,10 @@ function ReviewModelPicker({
           value={value && "model" in value ? value.model : ""}
           onSave={(next) => {
             const typed = typedHeadlessModel(next);
-            if (!typed) return;
+            if (!typed) {
+              setRejected((n) => n + 1);
+              return;
+            }
             setTyping(false);
             onChange(typed);
           }}
