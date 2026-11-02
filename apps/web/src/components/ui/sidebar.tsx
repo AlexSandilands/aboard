@@ -12,7 +12,7 @@ import { Sheet, SheetDescription, SheetHeader, SheetPopup, SheetTitle } from "~/
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useResizeDrag } from "~/hooks/useResizeDrag";
 import { useIsMobile } from "~/hooks/useMediaQuery";
-import { glideDurationMs, glideStartOffset } from "~/lib/sidebarSlide.logic";
+import { gapStartWidth, glideDurationMs, glideStartOffset, SLIDE_EASING } from "~/lib/sidebarSlide.logic";
 import { readStoredNumber, writeStoredNumber } from "~/lib/storage";
 import { resolveSidebarState, type ResponsiveSidebarState } from "./sidebarState";
 
@@ -85,7 +85,7 @@ function useSidebarVisibility() {
   return isMobile ? openMobile : open;
 }
 
-const INSET_GLIDE_ID = "sidebar-inset-glide";
+const SLIDE_ID = "sidebar-slide";
 
 /** The panel animations are on and the slide has a length, in ms; 0 when it should be instant. */
 function slideDuration(): number {
@@ -95,11 +95,16 @@ function slideDuration(): number {
 }
 
 /**
- * Opening or closing the sidebar changes the gap beside it at once, so the main area lays out once at its final
- * width (its text wraps once, not on every frame of the slide). This glides the main area from where it was to
- * where it now sits with a transform, in step with the sidebar's own slide.
+ * Slides the sidebar in or out with the main area making room at the same time, as the task panel does
+ * (`usePanelSlide`). Two animations share one clock and curve: the gap's width, which the main area lays out around
+ * on every frame, and the sidebar container's transform, which the compositor runs, so a busy main thread holds up
+ * the board for a frame but not the sidebar. The container keeps its width, so its contents never re-wrap.
+ *
+ * From rest the slide holds its first frame and starts its clock two frames later: the first rAF runs at the end of
+ * the frame that did React's work, and its timestamp is when that frame began. A toggle mid-slide turns around from
+ * where the sidebar is.
  */
-function useInsetGlide(sidebarRef: React.RefObject<HTMLElement | null>, side: "left" | "right") {
+function useSidebarSlide(sidebarRef: React.RefObject<HTMLElement | null>, side: "left" | "right") {
   const { open } = useSidebar();
   const previousOpen = React.useRef(open);
   React.useLayoutEffect(() => {
@@ -109,35 +114,50 @@ function useInsetGlide(sidebarRef: React.RefObject<HTMLElement | null>, side: "l
     const duration = slideDuration();
     if (!sidebar || duration === 0) return;
     const container = sidebar.querySelector<HTMLElement>("[data-slot='sidebar-container']");
-    const inset = sidebar
-      .closest("[data-slot='sidebar-wrapper']")
-      ?.querySelector<HTMLElement>(":scope > [data-slot='sidebar-inset']");
-    if (!container || !inset) return;
-    // A glide still running is continued from where it is.
-    const running = inset.getAnimations().filter((animation) => animation.id === INSET_GLIDE_ID);
-    const current = running.length > 0 ? new DOMMatrix(getComputedStyle(inset).transform).m41 : 0;
+    const gap = sidebar.querySelector<HTMLElement>("[data-slot='sidebar-gap']");
+    if (!container || !gap) return;
+    const running = [container, gap].flatMap((element) =>
+      element.getAnimations().filter((animation) => animation.id === SLIDE_ID),
+    );
+    const moving = running.some((animation) => animation.playState === "running");
+    const current = running.length > 0 ? new DOMMatrix(getComputedStyle(container).transform).m41 : 0;
     for (const animation of running) animation.cancel();
     const width = container.offsetWidth;
     const from = glideStartOffset({ current, width, opening: open, side });
-    const easing = getComputedStyle(document.documentElement).getPropertyValue("--ease-sidebar-slide").trim();
-    inset.animate([{ transform: `translateX(${from}px)` }, { transform: "none" }], {
+    const timing: KeyframeAnimationOptions = {
       duration: glideDurationMs(duration, from, width),
-      easing: easing || "ease-out",
-      id: INSET_GLIDE_ID,
+      easing: SLIDE_EASING,
+      id: SLIDE_ID,
+    };
+    container.style.willChange = "transform";
+    const slide = container.animate([{ transform: `translateX(${from}px)` }, { transform: "none" }], timing);
+    const room = gap.animate(
+      [{ width: `${gapStartWidth({ from, width, opening: open })}px` }, { width: `${open ? width : 0}px` }],
+      timing,
+    );
+    slide.addEventListener("finish", () => {
+      container.style.willChange = "";
     });
+    const start = () => {
+      // One start time, so the main area and the sidebar can't drift apart by a frame.
+      const now = document.timeline.currentTime;
+      for (const animation of [slide, room]) {
+        animation.play();
+        animation.startTime = now;
+      }
+    };
+    if (moving) {
+      start();
+      return;
+    }
+    slide.pause();
+    room.pause();
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (slide.playState === "paused") start();
+      }),
+    );
   }, [open, side, sidebarRef]);
-}
-
-/**
- * Ends a sidebar slide at once, the sidebar's own transition included so the two stay together. Mid-glide the main area
- * is transformed, which offsets what is positioned or measured against the viewport (a drag overlay, say), so a drag
- * finishes it first.
- */
-function finishSidebarGlide() {
-  for (const animation of document.getAnimations()) {
-    const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
-    if (animation.id === INSET_GLIDE_ID || target?.matches("[data-slot='sidebar-container']")) animation.finish();
-  }
 }
 
 function SidebarProvider({
@@ -238,7 +258,7 @@ function Sidebar({
 }) {
   const { isMobile, state, openMobile, setOpenMobile, setMobileSheetElement } = useSidebar();
   const sidebarRef = React.useRef<HTMLDivElement>(null);
-  useInsetGlide(sidebarRef, side);
+  useSidebarSlide(sidebarRef, side);
   const resolvedResizable = React.useMemo<SidebarResolvedResizableOptions | null>(() => {
     if (isMobile || collapsible === "none" || !resizable) {
       return null;
@@ -323,7 +343,7 @@ function Sidebar({
         {/* This is what handles the sidebar gap on desktop */}
         <div
           className={cn(
-            // No width transition: the main area lays out once (see useInsetGlide) and the container slides over the gap.
+            // useSidebarSlide animates the width, in step with the container's slide.
             "relative w-(--sidebar-width) bg-transparent",
             "group-data-[collapsible=offcanvas]:w-0",
             "group-data-[side=right]:rotate-180",
@@ -336,8 +356,7 @@ function Sidebar({
         <div
           className={cn(
             "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) md:flex",
-            // Slides with a transform, so no layout per frame; the contents keep their full width.
-            "[[data-panel-animations=true]_&]:transition-transform [[data-panel-animations=true]_&]:[transition-duration:var(--sidebar-slide-duration)] [[data-panel-animations=true]_&]:ease-(--ease-sidebar-slide)",
+            // Moves with a translate, so its contents keep their full width; useSidebarSlide animates the move.
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:-translate-x-full"
               : "right-0 group-data-[collapsible=offcanvas]:translate-x-full",
@@ -819,7 +838,6 @@ function SidebarMenuSubButton({
 }
 
 export {
-  finishSidebarGlide,
   SidebarInput,
   Sidebar,
   SidebarContent,

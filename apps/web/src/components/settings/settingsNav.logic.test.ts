@@ -23,7 +23,7 @@ describe("SETTINGS_GROUPS", () => {
 
   it("gives Keybindings a section per keybinding group, which rows of that group sit under", () => {
     const keybindings = SETTINGS_GROUPS.find((group) => group.id === "keybindings")!;
-    expect(keybindings.sections.map((entry) => entry.label)).toEqual(["General", "Navigation"]);
+    expect(keybindings.sections.map((entry) => entry.label)).toEqual(["General", "Navigation", "Layout"]);
     expect(sectionOf("keybindings.general.palette.open")?.id).toBe("keybindings.general");
     expect(parseSettingsTarget("keybindings.navigation")).toEqual({
       group: "keybindings",

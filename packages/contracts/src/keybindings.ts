@@ -3,7 +3,15 @@ import { z } from "zod";
 // User-configurable shortcuts (docs/features/board-layout.md#keyboard-shortcuts). Shaped like t3code's keybindings:
 // a command, a key and a `when` expression over a few context flags; the last matching binding wins.
 
-export const KeybindingCommand = z.enum(["palette.open", "idea.new", "settings.open", "back", "task.reveal"]);
+export const KeybindingCommand = z.enum([
+  "palette.open",
+  "idea.new",
+  "settings.open",
+  "back",
+  "task.reveal",
+  "sidebar.toggle",
+  "panel.toggle",
+]);
 export type KeybindingCommand = z.infer<typeof KeybindingCommand>;
 
 /** What a `when` expression can name. The web app builds one per key event from its stores and the event target. */
@@ -57,6 +65,21 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingCommand, KeybindingDef> = {
     group: "Navigation",
     key: "j",
     when: `panelOpen && !settingsOpen && ${NO_FOCUS_CLAIM}`,
+  },
+  // Not in text fields, where mod+b is bold.
+  "sidebar.toggle": {
+    title: "Show or hide the sidebar",
+    group: "Layout",
+    key: "mod+b",
+    when: "!overlayOpen && !editableFocus",
+    immediate: true,
+  },
+  "panel.toggle": {
+    title: "Close the task panel, or reopen the last task",
+    group: "Layout",
+    key: "mod+alt+b",
+    when: "!overlayOpen && !editableFocus && !settingsOpen",
+    immediate: true,
   },
 };
 

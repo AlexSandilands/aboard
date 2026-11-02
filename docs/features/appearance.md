@@ -143,24 +143,35 @@ colours read them (`@theme inline`), so every `text-foreground`, `text-muted-for
 **Panel animations**: board cards sliding between columns use 1.75× the duration (`useBoardFlip`, see
 [board-layout.md](board-layout.md#card-motion)). The sidebar slides for 3× the duration (`--sidebar-slide-duration`,
 set by `appearancePaint` from `slideDurationMs` in `lib/sidebarSlide.logic.ts`: 150 ms gives 450 ms) on
-`--ease-sidebar-slide`, `cubic-bezier(0.2, 0.9, 0.25, 1)`, fitted frame by frame from a recording of Antigravity's panel
-opening: fast start, long soft tail. Its container moves with `translateX`, not `left`, and keeps its width, so its
-contents never re-wrap. The gap beside it changes at once, so the main area lays out once at its final width (its
-text wraps once, not on every frame); `useInsetGlide` in `ui/sidebar.tsx` then glides `SidebarInset` from where it was to
-where it now sits with one transform, in step with the sidebar. A toggle mid-slide continues from where the glide is, over
-the share of the duration left (as the sidebar's own CSS transition does on reversal). The whole main area moves, the
-docked task panel and the header's right-hand controls included, so what sits at the window's right edge starts one
-sidebar width in from it and slides out (opening) or in (closing); a drag finishes the glide first, since a transformed
-ancestor would offset the drag overlay. Nothing resizes during the slide, so the board's `ResizeObserver`s measure once. The `SidebarProvider` wrapper has
-`overflow-x: clip` because a closing sidebar's main area starts beyond the window's right edge. The slide and the glide
-are both off with Panel animations at 0 and under reduced motion.
+`SLIDE_EASING`, `cubic-bezier(0.2, 0.9, 0.25, 1)`, fitted frame by frame from a recording of Antigravity's right-hand
+panel opening: fast start, long soft tail. It slides the same way as the task panel (below): `useSidebarSlide` in `ui/sidebar.tsx` animates the
+gap's `width`, which the main area lays out around every frame so the board moves with it, and a `transform` on the
+container, which keeps its width so its contents never re-wrap. Both share one start time, held for a frame from rest;
+a toggle mid-slide turns around from where the sidebar is. The button left of the wordmark (`SidebarBrandRow`) and
+`sidebar.toggle` (Ctrl/Cmd+B) hide it; the header's trigger brings it back. Both slides are off with Panel animations at
+0 and under reduced motion.
 
-The task panel grows in from its edge with the `.panel-enter` keyframe and
-shrinks back with `.panel-exit`: `AppLayout` keeps it mounted on the closed task until its `animationend`.
-Only the `<aside>`'s width animates. Its contents sit in an inner wrapper fixed at `var(--resizable-width)` (at least
-380px, the `@container` the panel's `@[460px]` queries measure), anchored left and clipped by the `<aside>`, so they
-slide in and out at full size instead of being re-laid out and wrapped on every frame. The keyframes set
-`overflow: hidden` only while they play, so the resize handle, which hangs over the panel's edge, isn't clipped at rest.
+Re-laying out the board every frame is what keeps everything moving together, and it costs frame rate: on a 280 Hz
+display a compositor-only animation draws every frame, while a slide that lays the board out draws about 150 to 180 a
+second, however cheap each frame is. `Button` has no `will-change` for that reason: it made each of the board's dozens
+of buttons a compositor layer that every frame re-layered.
+
+The task panel slides in from the window's right edge and back out on the same duration and curve as the sidebar
+(`usePanelSlide` in `task/TaskPanel.tsx`), with the board making room at the same time; `AppLayout` keeps it mounted on
+the closed task until the slide-out ends. Two Web Animations share one start time: the `<aside>`'s `width`, which the
+board lays out around every frame so its columns and cards move with the panel, and a `transform` on the panel's
+contents, which sit in an inner wrapper pinned to the aside's right edge at `var(--resizable-width)` (at least 380px,
+the `@container` the panel's `@[460px]` queries measure). The compositor runs the transform, so when React holds up the
+main thread the board waits a frame but the panel keeps moving. Opening or closing from rest holds the first frame
+and starts the clock two frames later (one rAF runs at the end of the frame that did React's work, with that frame's
+stale timestamp); a toggle mid-slide turns around from where the panel is.
+
+The slide runs on the main thread for the board's part, so React work during it is kept out of the way: a card
+prefetches its task's detail on pointer down (`usePrefetchTaskDetail`), so the panel renders its contents in the commit
+that mounts it rather than as a second render mid-slide; `AppLayout` renders `Board` through `memo` and keeps the
+mark-as-read mutation in a child of its own, since a mutation re-renders whoever holds it; and `BoardContent` reads the
+selected task through `useDeferredValue`, so the whole-board render that moves the card highlight is time-sliced
+between frames.
 
 **Fonts** are typed by name and applied on Enter or blur, only if the browser can draw the family (and, for
 the monospace font, if it is monospaced): T3 Code's canvas probes in `theme/fonts.ts`.
@@ -213,6 +224,6 @@ the monospace font, if it is monospaced): T3 Code's canvas probes in `theme/font
 | `apps/web/src/components/settings/ThemeLibrary.tsx`         | Mode tiles and theme cards                                           |
 | `apps/web/src/components/settings/ThemePreviewCircles.tsx`, `ThemeWireframe.tsx`, `PanelAnimationsPreview.tsx` | Copied T3 Code previews |
 | `apps/web/src/components/ui/slider.tsx`                     | The settings slider                                                  |
-| `apps/web/src/index.css`                                    | `html[data-theme-id]` mapping, `--contrast-*`, `.settings-slider`, `.panel-enter` |
+| `apps/web/src/index.css`                                    | `html[data-theme-id]` mapping, `--contrast-*`, `.settings-slider`                 |
 | `apps/web/index.html`                                       | The boot script                                                      |
 | `apps/desktop/src/main.ts`, `titleBar.ts`, `preload.ts`     | `desktop:set-background` and the window colours                      |

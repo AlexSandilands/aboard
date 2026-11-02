@@ -33,7 +33,7 @@ import type {
   TaskTemplate,
 } from "@repo/contracts";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { taskActiveRun } from "~/components/autopilot/autopilot.logic";
 import { projectHasOrchestrateWork } from "~/components/autopilot/orchestrate.logic";
 import { deliverNotification } from "~/components/notifications/delivery";
@@ -220,6 +220,24 @@ export function useTaskDetail(taskId: string | null | undefined) {
     queryFn: ({ signal }) => api<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId!)}`, { signal }),
     enabled: !!taskId,
   });
+}
+
+/**
+ * Starts loading a task's detail as the pointer goes down on its card, so it has usually arrived by the click. The
+ * panel then renders its contents in the same commit that mounts it, before its slide starts, instead of as a second
+ * render in the middle of the slide.
+ */
+export function usePrefetchTaskDetail() {
+  const queryClient = useQueryClient();
+  return useCallback(
+    (taskId: string) =>
+      void queryClient.prefetchQuery({
+        queryKey: queryKeys.task(taskId),
+        queryFn: ({ signal }) => api<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`, { signal }),
+        staleTime: 5_000,
+      }),
+    [queryClient],
+  );
 }
 
 /** The task's detail from the cache, or fetched when it isn't there: for menus that act on a card, which has none. */

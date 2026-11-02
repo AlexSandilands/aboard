@@ -1,12 +1,12 @@
 import { type KeybindingCommand, storageKey } from "@repo/contracts";
-import { type ReactNode, useEffect, useEffectEvent } from "react";
+import { type ReactNode, useEffect, useEffectEvent, useRef } from "react";
 import { CommandPalette } from "~/components/command/CommandPalette";
-import { useJumpToTask, useSelectedTaskId } from "~/components/board/boardNavigation";
+import { useCloseTask, useJumpToTask, useOpenTask, useSelectedTaskId } from "~/components/board/boardNavigation";
 import { useNotificationDelivery } from "~/components/notifications/useNotificationDelivery";
 import { AppDialogs } from "~/components/settings/AppDialogs";
 import { ThemeEditorHost } from "~/components/settings/ThemeEditorHost";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
-import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
+import { Sidebar, SidebarInset, SidebarProvider, SidebarRail, useSidebar } from "~/components/ui/sidebar";
 import { useBoardEvents } from "~/state/queries";
 import { anyDialogOpen, useDialogs, usePalette } from "~/state/ui";
 import { IS_MAC, isEditableTarget, isInsidePopup, isRecordingShortcut } from "./keyboard";
@@ -38,11 +38,9 @@ export function AppShell({
 }) {
   useBoardEvents();
   useNotificationDelivery();
-  useGlobalKeybindings(onBack, newTaskProjectId ?? undefined);
 
-  // overflow-x-clip: the main area glides in from beyond the window's edge when the sidebar closes.
   return (
-    <SidebarProvider className="h-dvh! min-h-0! overflow-x-clip">
+    <SidebarProvider className="h-dvh! min-h-0!">
       <Sidebar
         side="left"
         collapsible="offcanvas"
@@ -61,6 +59,7 @@ export function AppShell({
         <SidebarRail />
       </Sidebar>
       <SidebarInset className="min-h-0 flex-row overflow-hidden">{children}</SidebarInset>
+      <GlobalKeybindings onBack={onBack} newTaskProjectId={newTaskProjectId ?? undefined} />
       <CommandPalette />
       <AppDialogs />
       <ThemeEditorHost />
@@ -72,7 +71,8 @@ export function AppShell({
  * App-wide shortcuts, from the registry in `packages/contracts/src/keybindings.ts` with the user's overrides applied
  * (Settings → Keybindings). By default Ctrl/Cmd+K opens the palette, Ctrl/Cmd+, opens Settings, N starts a new
  * task (in the scoped project), J jumps to the open task's card on the board, Esc goes back (closes the detail panel,
- * or leaves Settings).
+ * or leaves Settings), Ctrl/Cmd+B shows or hides the sidebar and Ctrl/Cmd+Alt+B closes the task panel or reopens the last task.
+ * A component, not a hook, so it sits inside the SidebarProvider.
  *
  * It listens in the capture phase because card controls stop their keydowns from bubbling, which
  * would otherwise hide every shortcut while one of them has focus. Ctrl/Cmd+K runs right away.
@@ -82,10 +82,24 @@ export function AppShell({
  * They therefore can't `preventDefault` themselves, which is fine for the default keys: none has a default action
  * outside text fields.
  */
-function useGlobalKeybindings(onBack: (() => unknown) | null, newTaskProjectId: string | undefined) {
+function GlobalKeybindings({
+  onBack,
+  newTaskProjectId,
+}: {
+  onBack: (() => unknown) | null;
+  newTaskProjectId: string | undefined;
+}) {
   const openSettings = useOpenSettings();
   const selectedTaskId = useSelectedTaskId();
   const jumpToTask = useJumpToTask();
+  const openTask = useOpenTask();
+  const closeTask = useCloseTask();
+  const { toggleSidebar } = useSidebar();
+  // The task the panel last showed, which panel.toggle reopens.
+  const lastTaskId = useRef(selectedTaskId);
+  useEffect(() => {
+    if (selectedTaskId) lastTaskId.current = selectedTaskId;
+  }, [selectedTaskId]);
   const bindings = useResolvedKeybindings();
   const run = (command: KeybindingCommand) => {
     const palette = usePalette.getState();
@@ -104,6 +118,13 @@ function useGlobalKeybindings(onBack: (() => unknown) | null, newTaskProjectId: 
         return;
       case "task.reveal":
         if (selectedTaskId) jumpToTask(selectedTaskId);
+        return;
+      case "sidebar.toggle":
+        toggleSidebar();
+        return;
+      case "panel.toggle":
+        if (selectedTaskId) void closeTask();
+        else if (lastTaskId.current) void openTask(lastTaskId.current, { reveal: false });
         return;
       default:
         command satisfies never;
@@ -148,4 +169,5 @@ function useGlobalKeybindings(onBack: (() => unknown) | null, newTaskProjectId: 
     window.addEventListener("keydown", listener, { capture: true });
     return () => window.removeEventListener("keydown", listener, { capture: true });
   }, []);
+  return null;
 }

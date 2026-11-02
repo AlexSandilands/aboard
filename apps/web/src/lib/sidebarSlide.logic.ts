@@ -1,15 +1,16 @@
 /*
- * How the desktop sidebar slides. The gap beside it changes width at once, so the main area lays out once at its
- * final width instead of on every frame. The sidebar then moves with a transform, and the main area glides from where
- * it was to where it now sits, in step with it.
+ * How the desktop sidebar and the task panel slide: the space beside them changes width every frame, so the main area
+ * moves with them, while the sidebar or panel itself moves with a transform.
  */
 
 /**
  * The slide runs this many times the Panel animations setting: 150 ms gives 450 ms, in the 400 to 470 ms
- * range fitted from a recording of Antigravity's panel opening. The curve fitted from it is `--ease-sidebar-slide`
- * in index.css.
+ * range fitted from a recording of Antigravity's right-hand panel opening.
  */
 export const SLIDE_SCALE = 3;
+
+/** The slide's curve, fitted frame by frame from the same recording: a fast start and a long, soft tail. */
+export const SLIDE_EASING = "cubic-bezier(0.2, 0.9, 0.25, 1)";
 
 /** How long the slide takes for a Panel animations setting of `panelAnimationMs`; 0 is off. */
 export function slideDurationMs(panelAnimationMs: number): number {
@@ -17,10 +18,10 @@ export function slideDurationMs(panelAnimationMs: number): number {
 }
 
 /**
- * Where the main area's glide starts, as a translateX in px. Opening a left sidebar pushes the main area's left edge
- * `width` to the right, so it starts `width` to the left of where it now sits; closing starts `width` to the right.
- * A right sidebar mirrors that. `current` is the offset of a glide still running (0 when none), which the new one
- * continues from so a fast second toggle doesn't jump.
+ * Where the sidebar's slide starts, as a translateX in px from where it now rests. Opening a left sidebar starts it
+ * `width` to the left; closing starts it `width` to the right of its new, hidden place. A right sidebar mirrors that.
+ * `current` is the offset of a slide still running (0 when none), which the new one continues from so a fast second
+ * toggle doesn't jump.
  */
 export function glideStartOffset(input: {
   current: number;
@@ -32,10 +33,13 @@ export function glideStartOffset(input: {
   return input.current + (input.opening ? towardSidebar : -towardSidebar) * input.width;
 }
 
-/**
- * How long a glide that starts `from` px from rest runs. A reversal mid-slide restarts the sidebar's CSS transition with
- * its duration scaled by the share of the distance still to cover; the glide gets the same, so both finish together.
- */
+/** How long a slide that starts `from` px from rest runs: the share of the full duration for the distance left. */
 export function glideDurationMs(durationMs: number, from: number, width: number): number {
   return width > 0 ? durationMs * Math.min(1, Math.abs(from) / width) : durationMs;
+}
+
+/** How wide the gap beside the sidebar is when a slide starts `from` px from rest: the part of the sidebar on screen. */
+export function gapStartWidth(input: { from: number; width: number; opening: boolean }): number {
+  const hidden = Math.min(input.width, Math.abs(input.from));
+  return input.opening ? input.width - hidden : hidden;
 }

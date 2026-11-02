@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { glideDurationMs, glideStartOffset, slideDurationMs } from "./sidebarSlide.logic";
+import { gapStartWidth, glideDurationMs, glideStartOffset, slideDurationMs } from "./sidebarSlide.logic";
 
 describe("slideDurationMs", () => {
   it("scales the panel animation setting, so the default is 450 ms", () => {
@@ -15,11 +15,11 @@ describe("slideDurationMs", () => {
 describe("glideStartOffset", () => {
   const base = { current: 0, width: 256 };
 
-  it("starts an opening left sidebar's main area to the left of where it sits", () => {
+  it("starts an opening left sidebar a width to the left of where it rests", () => {
     expect(glideStartOffset({ ...base, opening: true, side: "left" })).toBe(-256);
   });
 
-  it("starts a closing left sidebar's main area to the right", () => {
+  it("starts a closing left sidebar a width to the right of its hidden place", () => {
     expect(glideStartOffset({ ...base, opening: false, side: "left" })).toBe(256);
   });
 
@@ -28,7 +28,7 @@ describe("glideStartOffset", () => {
     expect(glideStartOffset({ ...base, opening: false, side: "right" })).toBe(-256);
   });
 
-  it("continues from a glide still running", () => {
+  it("continues from a slide still running", () => {
     expect(glideStartOffset({ current: 100, width: 256, opening: false, side: "left" })).toBe(356);
     expect(glideStartOffset({ current: 100, width: 256, opening: true, side: "left" })).toBe(-156);
   });
@@ -46,5 +46,18 @@ describe("glideDurationMs", () => {
 
   it("never runs longer than the full duration", () => {
     expect(glideDurationMs(450, 300, 256)).toBe(450);
+  });
+});
+
+describe("gapStartWidth", () => {
+  it("starts an opening gap shut and a closing one at full width", () => {
+    expect(gapStartWidth({ from: -256, width: 256, opening: true })).toBe(0);
+    expect(gapStartWidth({ from: 256, width: 256, opening: false })).toBe(256);
+  });
+
+  it("matches the part of the sidebar on screen when a slide turns around", () => {
+    // Closing turned back 100 px into the slide: 156 px of the sidebar still show.
+    expect(gapStartWidth({ from: -100, width: 256, opening: true })).toBe(156);
+    expect(gapStartWidth({ from: 156, width: 256, opening: false })).toBe(156);
   });
 });

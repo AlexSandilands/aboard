@@ -441,7 +441,7 @@ rule editor take `?project=`; without it the page shows the project the board wa
 ### Keyboard shortcuts
 
 The app-wide shortcuts are a registry in `packages/contracts/src/keybindings.ts`: each command (`palette.open`,
-`idea.new`, `settings.open`, `back`, `task.reveal`) has a title, a group, a default key and a default `when`. Shaped like T3
+`idea.new`, `settings.open`, `back`, `task.reveal`, `sidebar.toggle`, `panel.toggle`) has a title, a group, a default key and a default `when`. Shaped like T3
 Code's keybindings: a command, a key and a `when`, and when several match a key event the later one wins.
 
 - **Keys.** `mod+k`, `shift+n`, `escape`: lowercase modifiers (`mod` is Cmd on macOS and Ctrl elsewhere, plus
@@ -458,7 +458,7 @@ Code's keybindings: a command, a key and a `when`, and when several match a key 
   reaches everyone who didn't customise it. `PATCH /api/settings` replaces the whole map; loading drops entries for
   commands that no longer exist or values that no longer parse. They are in `EXPORTED_SETTINGS`, so backups carry them.
 - **Dispatch.** `resolveKeybindings` merges defaults and overrides into `ResolvedKeybinding`s (a `when` that doesn't
-  parse falls back to the default); `resolveCommand` picks the command. `palette.open` is `immediate`, and so is any
+  parse falls back to the default); `resolveCommand` picks the command. `palette.open`, `sidebar.toggle` and `panel.toggle` are `immediate`, and so is any
   command the user moved to a key with Ctrl/Cmd or Alt (browsers keep print, find and save there): it runs in the
   keydown and prevents its default. The rest wait to see whether something nearer the focus claimed the key
   (see the comment on `useGlobalKeybindings`). Keys are stored normalized (each modifier once, in the order mod,
