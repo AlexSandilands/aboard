@@ -143,14 +143,20 @@ desktop/
   doesn't change it: a board restored onto a new machine is a new machine. The folder's `manifest.json` records
   the `instanceId` and `machineName` that wrote it, which is how a folder's owner is known.
 - **The name** is the `machineName` setting, machine-only like the rest of the backup settings. Unset, it is the
-  host name made folder-safe (`machineNameFrom`); set, it must be letters, digits, `.`, `_` or `-`, starting with
-  a letter or digit, and not `tasks`, `events` or `attachments` (`MachineName` in contracts).
+  host name made folder-safe (`machineNameFrom`), and the first backup saves it as the setting, because some host
+  names change with the network (macOS) and each change would move the folder. It must be letters, digits, `.`,
+  `_` or `-`, starting with a letter or digit; not `tasks`, `events`, `attachments`, `backup.json` or
+  `manifest.json`; and not a name Windows can't use as a folder (`con`, `nul`, `com1`, ..., or a trailing dot), so
+  every machine can check the repo out (`MachineName` in contracts).
 - **Name clash.** After the pull, a folder of the same name (ignoring case, as Windows and macOS do) whose
   manifest names another `instanceId` fails the run with "choose another machine name in Settings"; so does a
-  same-named folder that isn't a backup. A folder whose manifest has no `instanceId` (moved in from a flat backup
+  same-named folder that isn't a backup. When this machine committed its own folder of that name before it saw
+  the remote (backed up with no remote set, or offline), the pull itself stops on a conflict; the run then
+  checks the upstream's folder of that name and fails with the same message instead of git's. A folder whose manifest has no `instanceId` (moved in from a flat backup
   by hand) is taken over.
 - **Renaming.** When this board's folder (found by `instanceId`) has another name and nothing holds the new one,
-  the run moves it, through a temporary name so a change of case works, and commits
+  the run moves it with `git mv`, through a temporary name so a change of case works (and is recorded where git
+  ignores case), and commits
   `Rename the backup folder laptop/ to work-laptop/`.
 - **Migration.** A repo with a dump at its root (a flat backup, from before machine folders) is moved into this
   machine's folder by the next run: every dump entry (`DUMP_ENTRIES` in `files.ts`) is renamed into it,

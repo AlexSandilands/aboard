@@ -25,7 +25,7 @@ credentials, so no token is stored. Use a private repo: task text, notes and lin
 up in its history for good. The T3 token and the backup settings are never exported.
 
 Several machines can share one backup repo: each writes into a folder of its own, named after the machine
-(the host name unless you set **Machine name** in the same section). Give each machine a different name; a
+(the host name, kept from the first backup, unless you set **Machine name** in the same section). Give each machine a different name; a
 name another machine's folder already has is refused. Renaming a machine moves its folder on the next backup.
 A backup repo made by an earlier version, with the board at its root, is moved into this machine's folder by
 the first backup after you update, and the inbox tells you so. Update every machine that backs up to that

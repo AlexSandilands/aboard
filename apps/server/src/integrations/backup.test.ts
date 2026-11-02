@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRAND } from "@repo/contracts";
+import { BRAND, machineNameFrom } from "@repo/contracts";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
@@ -267,6 +267,37 @@ describe("machine folders", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     expect(status.lastError).toMatch(/already has a folder laptop for another machine.*choose another machine name/);
     expect(status.lastCommit).toBeNull();
     expect(log(a.remote)).toHaveLength(1);
+  });
+
+  it("refuses a taken name even when it committed its own folder of that name before seeing the remote", async () => {
+    const a = setup();
+    const b = setup({ root: a.root, remote: a.remote });
+    b.services.settings.update({ backupRemote: null });
+    expect((await b.backup.run()).lastError).toBeNull();
+    expect((await a.backup.run()).lastError).toBeNull();
+
+    b.services.settings.update({ backupRemote: a.remote });
+    const status = await b.backup.run();
+    expect(status.lastError).toMatch(/already has a folder laptop for another machine.*choose another machine name/);
+    expect(log(a.remote)).toHaveLength(1);
+  });
+
+  it("keeps the host name's default from the first backup on", async () => {
+    const { backup, remote, services } = setup();
+    services.settings.update({ machineName: null });
+    const name = machineNameFrom(hostname());
+    expect((await backup.run()).lastError).toBeNull();
+    expect(services.settings.get()).toMatchObject({ machineName: name, machineNameIsDefault: false });
+    expect(remoteFiles(remote)).toContain(`${name}/manifest.json`);
+  });
+
+  it("renames its folder when only the case of the name changes", async () => {
+    const { backup, remote, services } = setup();
+    await backup.run();
+    services.settings.update({ machineName: "Laptop" });
+    expect((await backup.run()).lastError).toBeNull();
+    const tops = new Set(remoteFiles(remote).map((f) => f.split("/")[0]));
+    expect([...tops].sort((x, y) => x!.localeCompare(y!))).toEqual(["backup.json", "Laptop"]);
   });
 
   it("renames its folder when the machine is renamed, keeping history", async () => {

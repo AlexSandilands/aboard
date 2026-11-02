@@ -165,12 +165,27 @@ export function createBackupIntegration(deps: {
     return true;
   };
 
-  /** Renames through a temporary name, so a change of case alone works on a case-insensitive file system. */
-  const moveFolder = (from: string, to: string) => {
+  /**
+   * Renames a folder in the repo through a temporary name, so a change of case alone works on a case-insensitive
+   * file system. A tracked folder is moved with git mv: with core.ignorecase (Windows, macOS) `git add` alone
+   * wouldn't record a change of case.
+   */
+  const moveFolder = async (dir: string, from: string, to: string) => {
     const via = `${to}.moving-${process.pid}`;
-    renameSync(from, via);
-    renameSync(via, to);
+    if ((await git(dir, "ls-files", "--", from)).trim()) {
+      await git(dir, "mv", "--", from, via);
+      await git(dir, "mv", "--", via, to);
+    } else {
+      renameSync(join(dir, from), join(dir, via));
+      renameSync(join(dir, via), join(dir, to));
+    }
   };
+
+  const takenBy = (folder: string, machineName: string | null) =>
+    new AppError(
+      "CONFLICT",
+      `The backup repo already has a folder ${folder} for another machine${machineName ? ` (${machineName})` : ""}; choose another machine name in Settings`,
+    );
 
   /**
    * A flat backup (a dump at the repo's root, from before machine folders) moves into this machine's folder in a
@@ -201,12 +216,7 @@ export function createBackupIntegration(deps: {
     const folders = machineFolders(dir);
     const same = (f: { folder: string }) => f.folder.toLowerCase() === name.toLowerCase();
     const taken = folders.find((f) => same(f) && f.instanceId !== null && f.instanceId !== deps.instanceId);
-    if (taken) {
-      throw new AppError(
-        "CONFLICT",
-        `The backup repo already has a folder ${taken.folder} for another machine${taken.machineName ? ` (${taken.machineName})` : ""}; choose another machine name in Settings`,
-      );
-    }
+    if (taken) throw takenBy(taken.folder, taken.machineName);
     const target = readdirSync(dir).find((n) => n.toLowerCase() === name.toLowerCase());
     if (target && !folders.some((f) => f.folder === target)) {
       throw new AppError(
@@ -217,20 +227,45 @@ export function createBackupIntegration(deps: {
     const old = folders.find((f) => f.instanceId === deps.instanceId && f.folder !== name);
     // Only when nothing holds the new name: two folders of ours (copied by hand) are left for the user to sort out.
     if (!old || (target && target !== old.folder)) return;
-    moveFolder(join(dir, old.folder), join(dir, name));
+    await moveFolder(dir, old.folder, name);
     await commitAll(dir, `Rename the backup folder ${old.folder}/ to ${name}/`);
   };
 
   /**
-   * Brings in commits the remote has and the clone doesn't (a README edited on GitHub), so the push isn't
-   * rejected. Returns an error message instead of throwing: offline, the run still commits locally.
+   * Brings in commits the remote has and the clone doesn't (another machine's backup, a README edited on GitHub),
+   * so the push isn't rejected. Returns an error message instead of throwing: offline, the run still commits
+   * locally. Throws when the pull failed because another machine's folder has this machine's name.
    */
-  const pull = async (dir: string): Promise<string | null> => {
+  const pull = async (dir: string, name: string): Promise<string | null> => {
     if (!(await upstreamOf(dir)) && !(await adoptRemoteBranch(dir))) return null;
     const result = await runGit([...(await identity(dir)), "pull", "--rebase", "--quiet"], dir);
     if (result.code === 0) return null;
     await runGit(["rebase", "--abort"], dir);
+    await refuseUpstreamClash(dir, name);
     return `git pull: ${(result.stderr || result.stdout).trim()}`;
+  };
+
+  /**
+   * Throws when the upstream has a folder of this name (ignoring case) that another machine owns. claimFolder can't
+   * see it when this machine committed its own folder of that name before it saw the remote (it backed up before a
+   * remote was set, or offline): the pull then stops on a conflict in that folder, every run.
+   */
+  const refuseUpstreamClash = async (dir: string, name: string) => {
+    const tree = await runGit(["ls-tree", "--name-only", "@{u}"], dir);
+    if (tree.code !== 0) return;
+    const folder = tree.stdout.split("\n").find((n) => n.toLowerCase() === name.toLowerCase());
+    if (!folder) return;
+    const shown = await runGit(["show", `@{u}:${folder}/manifest.json`], dir);
+    if (shown.code !== 0) return;
+    let owner: { instanceId?: unknown; machineName?: unknown };
+    try {
+      owner = JSON.parse(shown.stdout) as typeof owner;
+    } catch {
+      return;
+    }
+    if (typeof owner.instanceId === "string" && owner.instanceId !== deps.instanceId) {
+      throw takenBy(folder, typeof owner.machineName === "string" ? owner.machineName : null);
+    }
   };
 
   /** "origin/main", or null when the branch tracks nothing. */
@@ -303,10 +338,13 @@ export function createBackupIntegration(deps: {
     try {
       if (!dir) throw new AppError("VALIDATION", "Choose a backup folder first");
       await prepareRepo(dir, settings.backupRemote);
-      pullError = settings.backupRemote ? await pull(dir) : null;
       const name = settings.machineName;
+      pullError = settings.backupRemote ? await pull(dir, name) : null;
       if (await migrateFlat(dir, name)) notifyMigrated(name);
       await claimFolder(dir, name);
+      // A default name is kept from the first backup on: some host names change with the network (macOS), and
+      // each change would otherwise move the folder.
+      if (settings.machineNameIsDefault) deps.services().settings.update({ machineName: name });
       const dump = deps.services().backup.dump();
       dump.manifest = { ...dump.manifest, instanceId: deps.instanceId, machineName: name };
       writeDumpDir(join(dir, name), dump, deps.attachmentsDir);

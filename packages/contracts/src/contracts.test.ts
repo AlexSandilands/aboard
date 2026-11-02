@@ -566,6 +566,8 @@ describe("machine names", () => {
     expect(machineNameFrom("-desk")).toBe("desk");
     expect(machineNameFrom("")).toBe("machine");
     expect(machineNameFrom("tasks")).toBe("machine");
+    expect(machineNameFrom("laptop.")).toBe("laptop");
+    expect(machineNameFrom("NUL")).toBe("machine");
   });
 
   it("accepts folder-safe names only", () => {
@@ -573,5 +575,10 @@ describe("machine names", () => {
     expect(MachineName.safeParse(".git").success).toBe(false);
     expect(MachineName.safeParse("a/b").success).toBe(false);
     expect(MachineName.safeParse("Events").success).toBe(false);
+    expect(MachineName.safeParse("backup.json").success).toBe(false);
+    expect(MachineName.safeParse("con").success).toBe(false);
+    expect(MachineName.safeParse("COM1.local").success).toBe(false);
+    expect(MachineName.safeParse("laptop.").success).toBe(false);
+    expect(MachineName.safeParse("console").success).toBe(true);
   });
 });
