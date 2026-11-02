@@ -292,6 +292,7 @@ describe("machine folders", { timeout: PROCESS_TEST_TIMEOUT }, () => {
   });
 
   it("renames its folder when only the case of the name changes", async () => {
+    // Only the outcome: on a case-sensitive file system `git add` sees the change of case either way.
     const { backup, remote, services } = setup();
     await backup.run();
     services.settings.update({ machineName: "Laptop" });

@@ -576,6 +576,7 @@ describe("machine names", () => {
     expect(MachineName.safeParse("a/b").success).toBe(false);
     expect(MachineName.safeParse("Events").success).toBe(false);
     expect(MachineName.safeParse("backup.json").success).toBe(false);
+    expect(MachineName.safeParse("Settings.JSON").success).toBe(false);
     expect(MachineName.safeParse("con").success).toBe(false);
     expect(MachineName.safeParse("COM1.local").success).toBe(false);
     expect(MachineName.safeParse("laptop.").success).toBe(false);

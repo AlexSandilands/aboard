@@ -33,15 +33,16 @@ export type BackupRepoIndex = z.infer<typeof BackupRepoIndex>;
 /** Longest machine name: it is a folder name in the repo. */
 export const MACHINE_NAME_MAX = 64;
 /**
- * Names a flat dump or the repo uses at its root, so a machine folder can't be mistaken for part of one, plus the
- * device names Windows can't use as a folder name, with or without an extension.
+ * Folders a flat dump has at its root, so a machine folder can't be mistaken for part of one (its files, and
+ * backup.json, all end in ".json", which no name may), plus the device names Windows can't use as a folder name,
+ * with or without an extension.
  */
-const RESERVED_MACHINE_NAMES = new Set(["tasks", "events", "attachments", "backup.json", "manifest.json"]);
+const RESERVED_MACHINE_NAMES = new Set(["tasks", "events", "attachments"]);
 const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
 
 /**
  * A machine's name, which is its folder in the backup repo: letters, digits, ".", "_" and "-", starting with a letter
- * or digit, so it is a valid folder name on every OS and can't be ".git".
+ * or digit (so it can't be ".git"), and none of the names below, so it is a valid folder name on every OS.
  */
 export const MachineName = z
   .string()
@@ -49,7 +50,10 @@ export const MachineName = z
   .min(1, "Give the machine a name")
   .max(MACHINE_NAME_MAX, `At most ${MACHINE_NAME_MAX} characters`)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "Use letters, digits, '.', '_' or '-', starting with a letter or digit")
-  .refine((name) => !RESERVED_MACHINE_NAMES.has(name.toLowerCase()), "That name is used by the backup itself")
+  .refine(
+    (name) => !RESERVED_MACHINE_NAMES.has(name.toLowerCase()) && !/\.json$/i.test(name),
+    "That name is used by the backup itself",
+  )
   // Windows drops a trailing dot, and can't make a folder named after a device: the repo couldn't be checked out.
   .refine((name) => !name.endsWith(".") && !WINDOWS_DEVICE_NAME.test(name), "Windows can't use that as a folder name");
 
