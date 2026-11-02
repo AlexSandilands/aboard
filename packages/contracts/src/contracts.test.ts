@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyLink,
+  MachineName,
+  machineNameFrom,
   deliveryHintApplies,
   formatProjectScope,
   parseProjectScope,
@@ -555,5 +557,21 @@ describe("project scope", () => {
     expect(formatProjectScope([], order)).toBeUndefined();
     expect(formatProjectScope(["c", "b", "a"], order)).toBeUndefined();
     expect(formatProjectScope(["gone"], order)).toBeUndefined();
+  });
+});
+
+describe("machine names", () => {
+  it("makes a folder-safe default from the host name", () => {
+    expect(machineNameFrom("Alex's MacBook Pro.local")).toBe("Alex-s-MacBook-Pro.local");
+    expect(machineNameFrom("-desk")).toBe("desk");
+    expect(machineNameFrom("")).toBe("machine");
+    expect(machineNameFrom("tasks")).toBe("machine");
+  });
+
+  it("accepts folder-safe names only", () => {
+    expect(MachineName.safeParse("work-laptop").success).toBe(true);
+    expect(MachineName.safeParse(".git").success).toBe(false);
+    expect(MachineName.safeParse("a/b").success).toBe(false);
+    expect(MachineName.safeParse("Events").success).toBe(false);
   });
 });

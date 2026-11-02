@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { BRAND, type BackupStatus } from "@repo/contracts";
+import { BRAND, type BackupMachine, type BackupStatus } from "@repo/contracts";
 import { AppError } from "../errors.ts";
-import { isDumpDir, writeDumpDir } from "../services/backup/files.ts";
+import { DUMP_ENTRIES, writeDumpDir } from "../services/backup/files.ts";
+import { isBackupRepo, isFlatDump, machineFolders, writeRepoIndex } from "../services/backup/repo.ts";
 import type { Services } from "../services/types.ts";
 import type { Logger } from "./util.ts";
 
@@ -47,11 +48,11 @@ export const defaultRunGit: RunGit = (args, cwd) =>
     );
   });
 
-/** "Back up board: 2 tasks changed, 1 added" from `git status --porcelain` lines. */
+/** "Back up board: 2 tasks changed, 1 added" from `git status --porcelain` lines (task files sit in a machine folder). */
 export function commitMessage(changes: readonly string[]): string {
   const counts = { added: 0, changed: 0, removed: 0 };
   for (const line of changes) {
-    if (!/ tasks\//.test(line)) continue;
+    if (!/ ([^/ ]+\/)?tasks\//.test(line)) continue;
     const code = line.slice(0, 2);
     if (/[A?]/.test(code)) counts.added += 1;
     else if (/D/.test(code)) counts.removed += 1;
@@ -67,6 +68,8 @@ export function commitMessage(changes: readonly string[]): string {
 
 export interface BackupIntegration {
   status(): BackupStatus;
+  /** The machines backed up to the repo in the backup folder, as of its last pull. */
+  machines(): Promise<BackupMachine[]>;
   /** Backs up now (joining a run in progress). Failures are recorded in the status, not thrown. */
   run(): Promise<BackupStatus>;
   start(): void;
@@ -81,6 +84,8 @@ export function createBackupIntegration(deps: {
   services: () => Services;
   /** Where pasted images are stored; the dump copies them next to its JSON. */
   attachmentsDir: string;
+  /** This board's id, which owns its machine folder in the repo. */
+  instanceId: string;
   runGit?: RunGit;
   log?: Logger;
   now?: () => Date;
@@ -105,14 +110,6 @@ export function createBackupIntegration(deps: {
     return result.stdout;
   };
 
-  /** Whether `dir` holds our dump; throws if it holds another app's. */
-  const isOurDump = (dir: string) => {
-    if (!isDumpDir(dir)) return false;
-    const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as { app?: unknown };
-    if (manifest.app !== BRAND.id) throw new AppError("VALIDATION", `${dir} holds a backup of ${String(manifest.app)}`);
-    return true;
-  };
-
   /** Clones or initialises the repo in `dir` when it's empty, refuses a folder that isn't a backup. */
   const prepareRepo = async (dir: string, remote: string | null) => {
     mkdirSync(dir, { recursive: true });
@@ -121,15 +118,15 @@ export function createBackupIntegration(deps: {
       else await git(dir, "init");
     }
     if (!existsSync(join(dir, ".git"))) {
-      if (!isOurDump(dir)) {
+      if (!isBackupRepo(dir)) {
         throw new AppError("VALIDATION", `${dir} is not empty and holds no backup; choose an empty folder or a clone`);
       }
       await git(dir, "init");
     }
     // A repo created on GitHub with a README or licence is still an empty backup repo; anything else tracked
-    // without our manifest is someone else's repo.
+    // without a backup of ours (backup.json, a flat dump, or a machine folder) is someone else's repo.
     const tracked = (await git(dir, "ls-files")).split("\n").filter(Boolean);
-    if (tracked.some((path) => !REPO_BOILERPLATE.test(path)) && !isOurDump(dir)) {
+    if (tracked.some((path) => !REPO_BOILERPLATE.test(path)) && !isBackupRepo(dir)) {
       throw new AppError(
         "VALIDATION",
         `${dir} is a git repo with other content; choose an empty folder or a backup clone`,
@@ -158,6 +155,70 @@ export function createBackupIntegration(deps: {
     await git(dir, ...(await identity(dir)), "commit", "--quiet", "-m", message);
     status.lastCommit = (await git(dir, "rev-parse", "--short", "HEAD")).trim();
     status.lastCommitAt = now().toISOString();
+  };
+
+  /** Stages everything and commits when anything changed. Returns whether it committed. */
+  const commitAll = async (dir: string, message: string): Promise<boolean> => {
+    await git(dir, "add", "-A");
+    if (!(await git(dir, "status", "--porcelain")).trim()) return false;
+    await commit(dir, message);
+    return true;
+  };
+
+  /** Renames through a temporary name, so a change of case alone works on a case-insensitive file system. */
+  const moveFolder = (from: string, to: string) => {
+    const via = `${to}.moving-${process.pid}`;
+    renameSync(from, via);
+    renameSync(via, to);
+  };
+
+  /**
+   * A flat backup (a dump at the repo's root, from before machine folders) moves into this machine's folder in a
+   * commit of its own, so git follows each file's history across the move. Returns whether it moved.
+   */
+  const migrateFlat = async (dir: string, name: string): Promise<boolean> => {
+    if (!isFlatDump(dir)) return false;
+    const target = join(dir, name);
+    if (existsSync(target)) {
+      throw new AppError("CONFLICT", `${dir} holds a backup at its root and a ${name} folder; move one of them away`);
+    }
+    mkdirSync(target);
+    for (const entry of DUMP_ENTRIES) {
+      if (existsSync(join(dir, entry))) renameSync(join(dir, entry), join(target, entry));
+    }
+    // Temp files a crash left at the root would otherwise be committed with the move.
+    for (const leftover of readdirSync(dir).filter((n) => n.endsWith(".json.tmp"))) rmSync(join(dir, leftover));
+    writeRepoIndex(dir);
+    await commitAll(dir, `Move the backup into ${name}/`);
+    return true;
+  };
+
+  /**
+   * Makes `name` this machine's folder: refuses a folder of that name (ignoring case, as Windows and macOS do) that
+   * another machine owns, and renames this machine's folder when its name changed in Settings.
+   */
+  const claimFolder = async (dir: string, name: string) => {
+    const folders = machineFolders(dir);
+    const same = (f: { folder: string }) => f.folder.toLowerCase() === name.toLowerCase();
+    const taken = folders.find((f) => same(f) && f.instanceId !== null && f.instanceId !== deps.instanceId);
+    if (taken) {
+      throw new AppError(
+        "CONFLICT",
+        `The backup repo already has a folder ${taken.folder} for another machine${taken.machineName ? ` (${taken.machineName})` : ""}; choose another machine name in Settings`,
+      );
+    }
+    const target = readdirSync(dir).find((n) => n.toLowerCase() === name.toLowerCase());
+    if (target && !folders.some((f) => f.folder === target)) {
+      throw new AppError(
+        "CONFLICT",
+        `The backup repo already has a ${target} that isn't a backup; choose another machine name in Settings`,
+      );
+    }
+    const old = folders.find((f) => f.instanceId === deps.instanceId && f.folder !== name);
+    // Only when nothing holds the new name: two folders of ours (copied by hand) are left for the user to sort out.
+    if (!old || (target && target !== old.folder)) return;
+    moveFolder(join(dir, old.folder), join(dir, name));
+    await commitAll(dir, `Rename the backup folder ${old.folder}/ to ${name}/`);
   };
 
   /**
@@ -205,6 +266,36 @@ export function createBackupIntegration(deps: {
     status.lastPushAt = now().toISOString();
   };
 
+  const notifyMigrated = (name: string) => {
+    deps.services().notifications.notify({
+      kind: "backup_notice",
+      title: `Backup moved into ${name}/`,
+      body:
+        `The backup repo now keeps this board in a folder of its own, ${name}/, so other machines can back up to ` +
+        "the same repo. Older versions of the board can't back up to it any more: update them first.",
+      dedupeKey: `backup_notice:migrated:${deps.instanceId}`,
+    });
+  };
+
+  /** Each machine folder in the repo, with when a commit last touched it. */
+  const machines = async (): Promise<BackupMachine[]> => {
+    const dir = deps.services().settings.get().backupDir;
+    if (!dir || !existsSync(join(dir, ".git"))) return [];
+    return Promise.all(
+      machineFolders(dir).map(async (f) => {
+        const last = await runGit(["log", "-1", "--format=%cI", "--", f.folder], dir);
+        const at = last.code === 0 ? last.stdout.trim() : "";
+        return {
+          folder: f.folder,
+          instanceId: f.instanceId,
+          machineName: f.machineName,
+          current: f.instanceId === deps.instanceId,
+          lastCommitAt: at ? new Date(at).toISOString() : null,
+        };
+      }),
+    );
+  };
+
   const runOnce = async (): Promise<BackupStatus> => {
     const settings = deps.services().settings.get();
     const dir = settings.backupDir;
@@ -213,7 +304,13 @@ export function createBackupIntegration(deps: {
       if (!dir) throw new AppError("VALIDATION", "Choose a backup folder first");
       await prepareRepo(dir, settings.backupRemote);
       pullError = settings.backupRemote ? await pull(dir) : null;
-      writeDumpDir(dir, deps.services().backup.dump(), deps.attachmentsDir);
+      const name = settings.machineName;
+      if (await migrateFlat(dir, name)) notifyMigrated(name);
+      await claimFolder(dir, name);
+      const dump = deps.services().backup.dump();
+      dump.manifest = { ...dump.manifest, instanceId: deps.instanceId, machineName: name };
+      writeDumpDir(join(dir, name), dump, deps.attachmentsDir);
+      writeRepoIndex(dir);
       await git(dir, "add", "-A");
       const changes = (await git(dir, "status", "--porcelain")).split("\n").filter(Boolean);
       if (changes.length > 0) await commit(dir, commitMessage(changes));
@@ -246,6 +343,7 @@ export function createBackupIntegration(deps: {
 
   return {
     status: () => ({ ...status, running: inFlight !== null }),
+    machines,
     run,
     start() {
       if (timers.length > 0) return;

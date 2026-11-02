@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +7,7 @@ import { BRAND } from "@repo/contracts";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
+import { writeDumpDir } from "../services/backup/files.ts";
 import { commitMessage, createBackupIntegration } from "./backup.ts";
 
 const dirs: string[] = [];
@@ -40,25 +42,37 @@ const git = (cwd: string, ...args: string[]) =>
 const log = (repo: string) => git(repo, "log", "--format=%s", "--all").trim().split("\n").filter(Boolean);
 
 /** A board, an empty bare repo as the remote and an empty folder for the clone. Uses the machine's real git. */
-function setup() {
-  const root = mkdtempSync(join(tmpdir(), `${BRAND.id}-gitbackup-`));
-  dirs.push(root);
-  const remote = join(root, "remote.git");
-  mkdirSync(remote);
-  git(remote, "init", "--quiet", "--bare");
-  const clone = join(root, "clone");
+function setup(opts: { remote?: string; root?: string; machineName?: string } = {}) {
+  const root = opts.root ?? mkdtempSync(join(tmpdir(), `${BRAND.id}-gitbackup-`));
+  if (!opts.root) dirs.push(root);
+  const remote = opts.remote ?? join(root, "remote.git");
+  if (!opts.remote) {
+    mkdirSync(remote);
+    git(remote, "init", "--quiet", "--bare");
+  }
+  const machineName = opts.machineName ?? "laptop";
+  const clone = join(root, `clone-${machineName}-${randomUUID().slice(0, 8)}`);
   const h = createTestHarness();
   const project = h.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
   const task = h.services.tasks.create({ projectId: project.id, title: "Feature" });
-  h.services.settings.update({ backupDir: clone, backupRemote: remote });
+  h.services.settings.update({ backupDir: clone, backupRemote: remote, machineName });
   const warnings: string[] = [];
+  const instanceId = randomUUID();
   const backup = createBackupIntegration({
     services: () => h.services,
     attachmentsDir: join(root, "attachments"),
+    instanceId,
     log: { warn: (m: string) => warnings.push(m) },
   });
-  return { ...h, root, remote, clone, task, backup, warnings };
+  return { ...h, root, remote, clone, task, backup, warnings, instanceId };
 }
+
+/** The files at the tip of the remote's default branch. */
+const remoteFiles = (remote: string) => git(remote, "ls-tree", "-r", "--name-only", "HEAD").trim().split("\n");
+
+/** A commit's subjects that touched `path`, following renames: the file's history. */
+const historyOf = (repo: string, path: string) =>
+  git(repo, "log", "--follow", "--format=%s", "--", path).trim().split("\n").filter(Boolean);
 
 // Real git processes are slow on a loaded Windows machine.
 describe("git backup", { timeout: PROCESS_TEST_TIMEOUT }, () => {
@@ -174,6 +188,110 @@ describe("git backup", { timeout: PROCESS_TEST_TIMEOUT }, () => {
   });
 });
 
+describe("machine folders", { timeout: PROCESS_TEST_TIMEOUT }, () => {
+  it("writes a fresh repo as backup.json and this machine's folder, with its identity in the manifest", async () => {
+    const { backup, remote, task, instanceId } = setup();
+    expect((await backup.run()).lastError).toBeNull();
+    const files = remoteFiles(remote);
+    expect(files).toContain("backup.json");
+    expect(files).toContain("laptop/manifest.json");
+    expect(files.filter((f) => !f.startsWith("laptop/"))).toEqual(["backup.json"]);
+    expect(JSON.parse(git(remote, "show", "HEAD:backup.json"))).toEqual({ app: BRAND.id, repoFormat: 1 });
+    const manifest = JSON.parse(git(remote, "show", "HEAD:laptop/manifest.json")) as Record<string, unknown>;
+    expect(manifest).toMatchObject({ instanceId, machineName: "laptop" });
+    expect(files.some((f) => f.startsWith("laptop/tasks/") && f.endsWith(`task-${task.number}.json`))).toBe(true);
+  });
+
+  it("moves a flat backup into this machine's folder in its own commit, keeping history, and says so once", async () => {
+    const { backup, remote, root, clone, services, task } = setup();
+    // A backup made by a version from before machine folders: the dump at the root of the repo.
+    const old = join(root, "old");
+    mkdirSync(old);
+    git(old, "clone", "--quiet", remote, ".");
+    writeDumpDir(old, services.backup.dump());
+    git(old, "add", "-A");
+    git(old, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "Old backup");
+    git(old, "push", "--quiet", "origin", "HEAD");
+    const taskFile = remoteFiles(remote).find((f) => f.endsWith(`task-${task.number}.json`))!;
+
+    git(root, "clone", "--quiet", remote, clone);
+    const status = await backup.run();
+    expect(status.lastError).toBeNull();
+    expect(log(remote)).toEqual(["Back up board: settings and history", "Move the backup into laptop/", "Old backup"]);
+    const files = remoteFiles(remote);
+    expect(files.filter((f) => !f.startsWith("laptop/"))).toEqual(["backup.json"]);
+    expect(historyOf(clone, `laptop/${taskFile}`)).toEqual(["Move the backup into laptop/", "Old backup"]);
+    const notices = services.notifications.list({ kind: "backup_notice" }).items;
+    expect(notices).toHaveLength(1);
+    expect(notices[0]!.title).toBe("Backup moved into laptop/");
+
+    services.tasks.update(task.id, { title: "Later" }, "user");
+    await backup.run();
+    expect(services.notifications.list({ kind: "backup_notice" }).items).toHaveLength(1);
+  });
+
+  it("lets two machines share one remote, even when one committed while the other pushed", async () => {
+    const a = setup();
+    const b = setup({ root: a.root, remote: a.remote, machineName: "desktop" });
+    // The desktop backs up before it is pointed at the remote, so its first commit (with its own backup.json) is
+    // made before it has seen the laptop's, and has to be rebased onto it.
+    b.services.settings.update({ backupRemote: null });
+    expect((await b.backup.run()).lastError).toBeNull();
+    expect((await a.backup.run()).lastError).toBeNull();
+
+    b.services.settings.update({ backupRemote: a.remote });
+    expect((await b.backup.run()).lastError).toBeNull();
+    a.services.tasks.update(a.task.id, { title: "Laptop edit" }, "user");
+    b.services.tasks.update(b.task.id, { title: "Desktop edit" }, "user");
+    expect((await a.backup.run()).lastError).toBeNull();
+    expect((await b.backup.run()).lastError).toBeNull();
+    expect((await a.backup.run()).lastError).toBeNull();
+
+    const tops = new Set(remoteFiles(a.remote).map((f) => f.split("/")[0]));
+    expect([...tops].sort((x, y) => x!.localeCompare(y!))).toEqual(["backup.json", "desktop", "laptop"]);
+    expect(log(a.remote)).toHaveLength(4);
+
+    const machines = await a.backup.machines();
+    expect(machines.map((m) => [m.folder, m.current, m.instanceId])).toEqual([
+      ["desktop", false, b.instanceId],
+      ["laptop", true, a.instanceId],
+    ]);
+    expect(machines.every((m) => m.lastCommitAt !== null)).toBe(true);
+  });
+
+  it("refuses a machine name another machine's folder already has, ignoring case", async () => {
+    const a = setup();
+    expect((await a.backup.run()).lastError).toBeNull();
+    const b = setup({ root: a.root, remote: a.remote, machineName: "Laptop" });
+    const status = await b.backup.run();
+    expect(status.lastError).toMatch(/already has a folder laptop for another machine.*choose another machine name/);
+    expect(status.lastCommit).toBeNull();
+    expect(log(a.remote)).toHaveLength(1);
+  });
+
+  it("renames its folder when the machine is renamed, keeping history", async () => {
+    const { backup, remote, clone, services, task } = setup();
+    await backup.run();
+    const taskFile = remoteFiles(remote)
+      .find((f) => f.endsWith(`task-${task.number}.json`))!
+      .slice("laptop/".length);
+
+    services.settings.update({ machineName: "work-laptop" });
+    expect((await backup.run()).lastError).toBeNull();
+    const files = remoteFiles(remote);
+    expect(files.some((f) => f.startsWith("laptop/"))).toBe(false);
+    expect(files).toContain(`work-laptop/${taskFile}`);
+    expect(log(remote).slice(0, 2)).toEqual([
+      "Back up board: settings and history",
+      "Rename the backup folder laptop/ to work-laptop/",
+    ]);
+    expect(historyOf(clone, `work-laptop/${taskFile}`)).toEqual([
+      "Rename the backup folder laptop/ to work-laptop/",
+      "Back up board: 1 added",
+    ]);
+  });
+});
+
 describe("commitMessage", () => {
   it("counts task files by change", () => {
     expect(
@@ -181,5 +299,6 @@ describe("commitMessage", () => {
     ).toBe("Back up board: 1 task changed, 1 added");
     expect(commitMessage(["D  tasks/2026-09/task-3.json"])).toBe("Back up board: 1 removed");
     expect(commitMessage(["M  settings.json"])).toBe("Back up board: settings and history");
+    expect(commitMessage(["A  laptop/tasks/2026-10/task-4.json"])).toBe("Back up board: 1 added");
   });
 });

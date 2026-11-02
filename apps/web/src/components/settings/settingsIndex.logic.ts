@@ -208,6 +208,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     ["backup", "push", "origin", "git remote", "private repo"],
   ),
   draft(
+    "board.data.machine-name",
+    "Machine name",
+    "This machine's folder in the backup repo, so several machines can share one repo. Blank uses the host name.",
+    ["backup", "machine", "computer", "host name", "folder", "rename"],
+  ),
+  draft(
     "board.data.backup-interval",
     "Backup interval",
     "How often to check for changes. A run with nothing new makes no commit.",

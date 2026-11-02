@@ -2,10 +2,13 @@
  * `pnpm backup`: export the board to JSON and restore it.
  *
  *   pnpm backup export [--dir <folder> | --file <file>]       default: <data dir>/backup
- *   pnpm backup import <folder|file> [--force]                 replaces the whole board; the server must be stopped
- *   pnpm backup restore-task <folder|file> <number> [--force]  puts one task back; works while the server runs
+ *   pnpm backup import <folder|file> [--machine <name>] [--force]                 replaces the whole board; the server must be stopped
+ *   pnpm backup restore-task <folder|file> <number> [--machine <name>] [--force]  puts one task back; works while the server runs
+ *
+ * A folder is a dump (a machine folder, or a flat backup from before machine folders) or a git backup repo, whose
+ * machine `--machine` picks (not needed when it holds one).
  */
-import { statSync, writeFileSync } from "node:fs";
+import { existsSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { ACTOR_HEADER, BRAND, type BoardDump } from "@repo/contracts";
@@ -15,16 +18,28 @@ import { openDatabase } from "./db/database.ts";
 import { AppError } from "./errors.ts";
 import { dumpBoard } from "./services/backup/dump.ts";
 import { dumpFileJson, readDump, writeDumpDir } from "./services/backup/files.ts";
+import { resolveDumpDir } from "./services/backup/repo.ts";
 import { restoreBoard } from "./services/backup/restore.ts";
 import { runningServerUrl } from "./serverFile.ts";
 
 const USAGE = `Usage:
   pnpm backup export [--dir <folder> | --file <file>]
-  pnpm backup import <folder|file> [--force]
-  pnpm backup restore-task <folder|file> <number> [--force]`;
+  pnpm backup import <folder|file> [--machine <name>] [--force]
+  pnpm backup restore-task <folder|file> <number> [--machine <name>] [--force]
 
-/** The backup folder at `path`; null for a single-file dump, which carries no images. */
-const dumpFolder = (path: string): string | null => (statSync(path).isDirectory() ? path : null);
+A backup repo with several machines needs --machine: the machine's folder or name.`;
+
+/** The dump to read at `path`: the file, or the dump folder it is or holds (one machine's, in a backup repo). */
+function dumpPath(path: string, machine: string | undefined): { path: string; folder: string | null } {
+  if (!existsSync(path)) throw new AppError("NOT_FOUND", `${path} does not exist`);
+  if (!statSync(path).isDirectory()) {
+    if (machine) throw new Error("--machine picks a machine in a backup folder, not a file");
+    // A single-file dump carries no images.
+    return { path, folder: null };
+  }
+  const folder = resolveDumpDir(path, machine);
+  return { path: folder, folder };
+}
 
 // pnpm runs package scripts from the package's folder; INIT_CWD is where the user typed the command.
 const fromCwd = (path: string) => resolve(process.env.INIT_CWD ?? process.cwd(), path);
@@ -49,15 +64,15 @@ function exportBoard(config: Config, options: { dir?: string; file?: string }): 
   console.log(`Exported ${tasks} to ${dir} (${written.length} file(s) written, ${removed.length} removed)`);
 }
 
-async function importBoard(config: Config, path: string, force: boolean): Promise<void> {
+async function importBoard(config: Config, path: string, machine: string | undefined, force: boolean): Promise<void> {
   const running = await runningServerUrl(config.homeDir);
   if (running) {
     throw new AppError("CONFLICT", `A server is running on ${config.homeDir} (${running}). Stop it, then import.`);
   }
-  const from = fromCwd(path);
-  const result = restoreBoard(config.dbPath, readDump(from), {
+  const from = dumpPath(fromCwd(path), machine);
+  const result = restoreBoard(config.dbPath, readDump(from.path), {
     force,
-    attachments: { from: dumpFolder(from), to: config.attachmentsDir },
+    attachments: { from: from.folder, to: config.attachmentsDir },
   });
   console.log(
     `Restored ${result.counts.tasks ?? 0} task(s) into ${config.dbPath} (backup schema ${result.schemaVersion})`,
@@ -70,9 +85,16 @@ async function importBoard(config: Config, path: string, force: boolean): Promis
   if (result.previousDb) console.log(`The previous database was kept as ${result.previousDb}`);
 }
 
-async function restoreTask(config: Config, path: string, number: number, force: boolean): Promise<void> {
-  const dump = readDump(fromCwd(path));
-  const attachmentsFrom = dumpFolder(fromCwd(path));
+async function restoreTask(
+  config: Config,
+  path: string,
+  number: number,
+  machine: string | undefined,
+  force: boolean,
+): Promise<void> {
+  const from = dumpPath(fromCwd(path), machine);
+  const dump = readDump(from.path);
+  const attachmentsFrom = from.folder;
   const running = await runningServerUrl(config.homeDir);
   let result: { taskId: string; number: number };
   if (running) {
@@ -110,6 +132,7 @@ async function main(): Promise<void> {
     options: {
       dir: { type: "string" },
       file: { type: "string" },
+      machine: { type: "string" },
       force: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
@@ -126,11 +149,11 @@ async function main(): Promise<void> {
       return exportBoard(config, values);
     case "import":
       if (!args[0]) throw new Error(USAGE);
-      return importBoard(config, args[0], values.force);
+      return importBoard(config, args[0], values.machine, values.force);
     case "restore-task": {
       const number = Number(args[1]?.replace(/^#/, ""));
       if (!args[0] || !Number.isInteger(number) || number < 1) throw new Error(USAGE);
-      return restoreTask(config, args[0], number, values.force);
+      return restoreTask(config, args[0], number, values.machine, values.force);
     }
     default:
       throw new Error(`Unknown command ${command}\n${USAGE}`);

@@ -4,6 +4,7 @@ import type {
   AgentModels,
   AskSettingsInput,
   AskSettingsResult,
+  BackupMachine,
   BackupStatus,
   EpicDelivery,
   ConnectT3Result,
@@ -136,4 +137,6 @@ export interface Integrations {
   backupStatus(): BackupStatus;
   /** Backs the board up to its git repo now; failures land in the returned status. */
   runBackup(): Promise<BackupStatus>;
+  /** The machine folders in the backup repo, as of its last pull. */
+  backupMachines(): Promise<BackupMachine[]>;
 }

@@ -197,6 +197,7 @@ describe("settings export", () => {
       "backupDir",
       "backupRemote",
       "backupIntervalMinutes",
+      "machineName",
       "terminal",
       "terminalOpenIn",
       // Goes with its posts, which are never backed up.

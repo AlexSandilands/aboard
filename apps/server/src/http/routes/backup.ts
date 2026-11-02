@@ -12,11 +12,15 @@ const RestoreTaskBody = z.object({
   attachmentsFrom: z.string().nullable().optional(),
 });
 
-/** Git backup status, "Back up now", and putting one task back from a backup (the CLI's restore-task). */
+/** Git backup status, the repo's machine folders, "Back up now", and putting one task back from a backup (the CLI's restore-task). */
 export function registerBackupRoutes(app: Hono, { services, integrations }: AppContext): void {
   app.get(
     "/api/backup/status",
     handle((c) => c.json(integrations.backupStatus())),
+  );
+  app.get(
+    "/api/backup/machines",
+    handle(async (c) => c.json(await integrations.backupMachines())),
   );
   app.post(
     "/api/backup/run",

@@ -40,7 +40,10 @@ export interface IntegrationDeps {
     "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir" | "attachmentsDir" | "port" | "webPort"
   > &
     Partial<Pick<Config, "token">> &
-    Partial<Pick<Config, "webDist">>;
+    Partial<Pick<Config, "webDist">> & {
+      /** This board's id (instance.ts), which owns its folder in the backup repo. */
+      instanceId: string;
+    };
   bus: EventBus;
   /** Late-bound: services are created after integrations (they read t3Status). */
   services: () => Services;
@@ -119,6 +122,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   const backup = createBackupIntegration({
     services: deps.services,
     attachmentsDir: deps.config.attachmentsDir,
+    instanceId: deps.config.instanceId,
     ...(overrides.runGit ? { runGit: overrides.runGit } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
@@ -315,6 +319,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     digestsIdle: () => digests.idle(),
     backupStatus: () => backup.status(),
     runBackup: () => backup.run(),
+    backupMachines: () => backup.machines(),
   };
   return integrations;
 }
