@@ -975,6 +975,7 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
         expect(job.cwd).not.toContain("worktrees");
         expect(existsSync(job.cwd)).toBe(false);
         expect(job.prompt).toBe("Do the task");
+        expect(job.args[job.args.indexOf("--name") + 1]).toBe("Autopilot session");
         expect(job.args).toContain("--strict-mcp-config");
         expect(job.args[job.args.indexOf("--permission-mode") + 1]).toBe("dontAsk");
         expect(h.services.tasks.summary(task.id).links.filter((l) => l.kind === "agent_session")).toEqual([]);

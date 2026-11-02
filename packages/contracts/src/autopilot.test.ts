@@ -111,6 +111,9 @@ describe("Autopilot session names", () => {
     expect(autopilotSessionName(undefined, task)).toBe("#72 Better title for autopilot started tasks · Autopilot");
     const long = autopilotSessionName("Review PRs", { number: 5, title: "x".repeat(100) });
     expect(long).toBe(`#5 ${"x".repeat(59)}… · Autopilot: Review PRs`);
+    expect(autopilotSessionName("Review PRs", { number: 5, title: `${"x".repeat(58)}😀😀😀` })).toBe(
+      `#5 ${"x".repeat(58)}😀… · Autopilot: Review PRs`,
+    );
     expect(autopilotSessionName("Review PRs", null)).toBe("Autopilot · Review PRs");
   });
 
@@ -119,6 +122,7 @@ describe("Autopilot session names", () => {
     expect(isAutopilotSessionName(autopilotSessionName("Review #7", task))).toBe(true);
     expect(isAutopilotSessionName(autopilotSessionName(undefined, task))).toBe(true);
     expect(isAutopilotSessionName("#7 Add a cart")).toBe(false);
+    expect(isAutopilotSessionName("Review · Autopilot")).toBe(false);
     expect(isAutopilotSessionName(autopilotSessionName("Review #7"))).toBe(true);
     expect(isAutopilotSessionName(autopilotSessionName(undefined))).toBe(true);
     expect(isAutopilotSessionName("Implementing the cart")).toBe(false);

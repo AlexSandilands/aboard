@@ -98,11 +98,19 @@ const AUTOPILOT_LABELLED_PREFIX = "Autopilot · ";
 const AUTOPILOT_TASK_MARKER = " · Autopilot: ";
 const AUTOPILOT_UNLABELLED_NAME = "Autopilot session";
 const AUTOPILOT_TITLE_MAX = 60;
+// The shape `autopilotSessionName` gives a run on a task, with or without a label.
+const AUTOPILOT_TASK_NAME = /^#\d+ .* · Autopilot(: .+)?$/s;
 
 /** A task title cut to about 60 characters, ending in "…" when it was cut, so the automation behind it survives. */
 const shortTaskTitle = (title: string): string => {
-  const trimmed = title.trim();
-  return trimmed.length <= AUTOPILOT_TITLE_MAX ? trimmed : `${trimmed.slice(0, AUTOPILOT_TITLE_MAX - 1).trimEnd()}…`;
+  // By code point, so the cut never leaves half of an emoji.
+  const chars = Array.from(title.trim());
+  return chars.length <= AUTOPILOT_TITLE_MAX
+    ? chars.join("")
+    : `${chars
+        .slice(0, AUTOPILOT_TITLE_MAX - 1)
+        .join("")
+        .trimEnd()}…`;
 };
 
 /**
@@ -122,10 +130,7 @@ export const autopilotSessionName = (
 /** Whether a name is one `autopilotSessionName` made (now or before it put the task first): how the panel tells a session Autopilot is still running. */
 export const isAutopilotSessionName = (name: string | null | undefined): boolean =>
   !!name &&
-  (name === AUTOPILOT_UNLABELLED_NAME ||
-    name.startsWith(AUTOPILOT_LABELLED_PREFIX) ||
-    name.includes(AUTOPILOT_TASK_MARKER) ||
-    name.endsWith(" · Autopilot"));
+  (name === AUTOPILOT_UNLABELLED_NAME || name.startsWith(AUTOPILOT_LABELLED_PREFIX) || AUTOPILOT_TASK_NAME.test(name));
 
 /** "Inherit (On from board)": how the UI labels an inherit switch. */
 export function describeInherited(resolved: Pick<ResolvedAutopilot, "enabled" | "source">): string {
