@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
 import { writeDumpDir } from "../services/backup/files.ts";
-import { commitMessage, createBackupIntegration } from "./backup.ts";
+import { commitMessage, createBackupIntegration, defaultRunGit, type RunGit } from "./backup.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -42,7 +42,7 @@ const git = (cwd: string, ...args: string[]) =>
 const log = (repo: string) => git(repo, "log", "--format=%s", "--all").trim().split("\n").filter(Boolean);
 
 /** A board, an empty bare repo as the remote and an empty folder for the clone. Uses the machine's real git. */
-function setup(opts: { remote?: string; root?: string; machineName?: string } = {}) {
+function setup(opts: { remote?: string; root?: string; machineName?: string; runGit?: RunGit } = {}) {
   const root = opts.root ?? mkdtempSync(join(tmpdir(), `${BRAND.id}-gitbackup-`));
   if (!opts.root) dirs.push(root);
   const remote = opts.remote ?? join(root, "remote.git");
@@ -62,6 +62,7 @@ function setup(opts: { remote?: string; root?: string; machineName?: string } = 
     services: () => h.services,
     attachmentsDir: join(root, "attachments"),
     instanceId,
+    ...(opts.runGit ? { runGit: opts.runGit } : {}),
     log: { warn: (m: string) => warnings.push(m) },
   });
   return { ...h, root, remote, clone, task, backup, warnings, instanceId };
@@ -293,6 +294,33 @@ describe("machine folders", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       instanceId: b.instanceId,
     });
     expect((await a.backup.run()).lastError).toBeNull();
+  });
+
+  it("sets aside unpushed commits whose folder differs only in case from another machine's", async () => {
+    const a = setup({ machineName: "Laptop" });
+    // On Windows and macOS the rebase of laptop/ onto another machine's Laptop/ fails; Linux tells the two apart, so
+    // the first pull after joining the remote is made to fail the same way.
+    let failPull = true;
+    const runGit: RunGit = (args, cwd) => {
+      if (failPull && args.includes("pull")) {
+        failPull = false;
+        return Promise.resolve({ code: 1, stdout: "", stderr: "CONFLICT (add/add): laptop/manifest.json" });
+      }
+      return defaultRunGit(args, cwd);
+    };
+    const b = setup({ root: a.root, remote: a.remote, runGit });
+    b.services.settings.update({ backupRemote: null });
+    expect((await b.backup.run()).lastError).toBeNull();
+    const localHead = git(b.clone, "rev-parse", "HEAD").trim();
+    expect((await a.backup.run()).lastError).toBeNull();
+
+    // Already renamed, as the clash error would have asked.
+    b.services.settings.update({ backupRemote: a.remote, machineName: "desktop" });
+    expect((await b.backup.run()).lastError).toBeNull();
+    const kept = git(b.clone, "branch", "--list", "--format=%(refname:short)", "unpushed-backups-*").trim();
+    expect(git(b.clone, "rev-parse", kept).trim()).toBe(localHead);
+    const tops = new Set(remoteFiles(a.remote).map((f) => f.split("/")[0]));
+    expect([...tops].sort((x, y) => x!.localeCompare(y!))).toEqual(["backup.json", "desktop", "Laptop"]);
   });
 
   it("keeps the host name's default from the first backup on", async () => {

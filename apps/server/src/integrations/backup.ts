@@ -283,8 +283,10 @@ export function createBackupIntegration(deps: {
     if (taken) throw takenBy(taken.folder, taken.machineName);
     if (foreign.length === 0) return false;
     // The unpushed commits' files in those folders; `log` rather than a diff, as the histories may share no base.
+    // Matched ignoring case like the clash itself: on Windows and macOS this machine's `laptop/` clashes with an
+    // upstream `Laptop/`, and pathspecs match case exactly whatever core.ignorecase says.
     const touched = await runGit(
-      ["log", "--name-only", "--format=", "@{u}..HEAD", "--", ...foreign.map((f) => f.folder)],
+      ["log", "--name-only", "--format=", "@{u}..HEAD", "--", ...foreign.map((f) => `:(icase)${f.folder}`)],
       dir,
     );
     if (touched.code !== 0 || !touched.stdout.trim()) return false;
