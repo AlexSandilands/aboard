@@ -112,7 +112,7 @@ is attached to the task:
   the board skill say the step is required. The agent opens the surface in a real browser in each state the change
   introduced, saves JPEG or WebP screenshots, looks at every one, fixes what is wrong and captures again, then
   calls `update_step(step, status: "done", images: [...])`. The images show as thumbnails under the step.
-- **Checking:** moving a `ui` task to Review with no images attached warns but moves; the reviewer (agent or the
+- **Checking:** moving a `ui` task to Review with no capture attached to a step warns but moves; the reviewer (agent or the
   board reviewer) opens the images and records a finding when they are missing, miss a state or show a bug
   ([local-review.md](local-review.md#the-board-reviewer)).
 

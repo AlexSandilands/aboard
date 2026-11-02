@@ -141,16 +141,18 @@ text when both are present.
     that is already Done never nags.
   - _Stale plan_: the task is In Progress with a step in progress, but no step has changed for
     `STALE_PLAN_MS` (30 minutes).
-  - _Missing screen capture step_ (`captureStepHint`): in `set_plan` and `update_plan` results, for an open task
-    labelled `ui` whose plan has no step mentioning a screen capture or screenshot (title or notes); names the
-    `add_steps` call and what the step must do ([plans.md](plans.md#screen-captures)).
+  - _Missing screen capture step_ (`captureStepHint`): in `set_plan`, `update_plan` and (when labels were passed)
+    `update_task` results, for an open task labelled `ui` whose plan has no step mentioning a screen capture or
+    screenshot (title or notes); names the `add_steps` call, moving the step ahead of a review or PR step, and
+    what the step must do ([plans.md](plans.md#screen-captures)).
   - _Batched completion_ is not a section: an `update_plan` result on an In Progress task that moved two or
     more steps straight to done without ever starting them (`startedAt` still null) says so after the headline
     (`batchedCompletionHint`), and tells the agent to use `update_step` as it goes. It stays quiet at Review
     and Done, where the open-steps hint asks for exactly that catch-up.
 
-  A `ui` task moved to Review with no images attached gets a warning after the `move_task` headline
-  (`missingScreenshotsWarning`); the move still happens.
+  A `ui` task moved to Review with no image in any plan step's notes gets a warning after the `move_task`
+  headline (`missingScreenshotsWarning`); the move still happens. An image pasted into the description doesn't
+  count: it is usually the bug report's own picture.
 
   Renderings that aren't for the implementing agent (the reviewer's `taskText`) leave it out: it is opt-in
   through `renderTaskDetail`'s `progress` option.
