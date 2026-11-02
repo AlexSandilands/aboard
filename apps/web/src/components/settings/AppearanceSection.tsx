@@ -130,7 +130,7 @@ function PanelAnimationsRow() {
     <SettingsRow
       id="board.appearance.panel-animations"
       title="Panel animations"
-      description="Set how fast the sidebar opens and closes and the task panel opens. 0 ms turns it off."
+      description="Set how fast the sidebar and the task panel slide in and out; the slide takes three times this. 0 ms turns it off."
       resetAction={
         durationMs !== PANEL_ANIMATION_MS.default ? (
           <SettingResetButton

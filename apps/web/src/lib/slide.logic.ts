@@ -1,6 +1,6 @@
 /*
- * How the desktop sidebar and the task panel slide: the space beside them changes width every frame, so the main area
- * moves with them, while the sidebar or panel itself moves with a transform.
+ * The pure part of how the desktop sidebar and the task panel slide (the DOM part is `slide.ts`): the space beside them
+ * changes width every frame, so the main area moves with them, while the sidebar or panel itself moves with a transform.
  */
 
 /**
@@ -23,7 +23,7 @@ export function slideDurationMs(panelAnimationMs: number): number {
  * `current` is the offset of a slide still running (0 when none), which the new one continues from so a fast second
  * toggle doesn't jump.
  */
-export function glideStartOffset(input: {
+export function slideStartOffset(input: {
   current: number;
   width: number;
   opening: boolean;
@@ -33,9 +33,9 @@ export function glideStartOffset(input: {
   return input.current + (input.opening ? towardSidebar : -towardSidebar) * input.width;
 }
 
-/** How long a slide that starts `from` px from rest runs: the share of the full duration for the distance left. */
-export function glideDurationMs(durationMs: number, from: number, width: number): number {
-  return width > 0 ? durationMs * Math.min(1, Math.abs(from) / width) : durationMs;
+/** How long a slide over `distance` px runs: the full duration's share for that part of `width`, as on a turn back. */
+export function slideDurationForDistance(durationMs: number, distance: number, width: number): number {
+  return width > 0 ? durationMs * Math.min(1, Math.abs(distance) / width) : durationMs;
 }
 
 /** How wide the gap beside the sidebar is when a slide starts `from` px from rest: the part of the sidebar on screen. */

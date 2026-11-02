@@ -213,11 +213,19 @@ export function useArchivedTasks(enabled: boolean) {
   });
 }
 
+/** The query for a task's full detail; the panel, the card's prefetch and the card menus share its cache entry. */
+function taskDetailQuery(taskId: string) {
+  return {
+    queryKey: queryKeys.task(taskId),
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      api<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`, { signal }),
+  };
+}
+
 /** Full task detail (plan, events). Invalidated by task.detail_changed for that task. */
 export function useTaskDetail(taskId: string | null | undefined) {
   return useQuery({
-    queryKey: queryKeys.task(taskId ?? ""),
-    queryFn: ({ signal }) => api<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId!)}`, { signal }),
+    ...taskDetailQuery(taskId ?? ""),
     enabled: !!taskId,
   });
 }
@@ -230,12 +238,7 @@ export function useTaskDetail(taskId: string | null | undefined) {
 export function usePrefetchTaskDetail() {
   const queryClient = useQueryClient();
   return useCallback(
-    (taskId: string) =>
-      void queryClient.prefetchQuery({
-        queryKey: queryKeys.task(taskId),
-        queryFn: ({ signal }) => api<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`, { signal }),
-        staleTime: 5_000,
-      }),
+    (taskId: string) => void queryClient.prefetchQuery({ ...taskDetailQuery(taskId), staleTime: 5_000 }),
     [queryClient],
   );
 }
@@ -243,8 +246,7 @@ export function usePrefetchTaskDetail() {
 /** The task's detail from the cache, or fetched when it isn't there: for menus that act on a card, which has none. */
 export function fetchTaskDetail(queryClient: QueryClient, taskId: string) {
   return queryClient.fetchQuery({
-    queryKey: queryKeys.task(taskId),
-    queryFn: ({ signal }) => api<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`, { signal }),
+    ...taskDetailQuery(taskId),
     staleTime: 30_000,
   });
 }

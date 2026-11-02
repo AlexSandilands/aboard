@@ -12,9 +12,8 @@ function panelAnimationsOn(): boolean {
 }
 
 /**
- * The board renders hundreds of components, so it doesn't follow this layout's re-renders (the panel opening, closing
- * or marking its notifications read): those would land in the middle of the panel's slide. It has no props, and its
- * own hooks pick up what it shows.
+ * The board renders hundreds of components, so it doesn't follow this layout's re-renders (the panel opening or
+ * closing): those would land in the panel's slide. It has no props, and its own hooks pick up what it shows.
  */
 const MemoBoard = memo(Board);
 

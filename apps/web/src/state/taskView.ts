@@ -5,8 +5,8 @@ import { queryKeys } from "./queries";
 
 /** How often an open panel tells the server it's still open; the server polls the task's PRs every 20 s meanwhile. */
 export const TASK_VIEW_INTERVAL_MS = 20_000;
-/** Past the panel's slide (450 ms by default, at most 1.2 s), so the first ping's refetch doesn't land in it. */
-const FIRST_PING_DELAY_MS = 1_000;
+/** Past the panel's slide (450 ms by default, 1.2 s at the slowest setting), so the first ping's refetch doesn't land in it. */
+const FIRST_PING_DELAY_MS = 1_250;
 
 /**
  * While a task's panel is open and visible, and the task has a PR that GitHub is polled for: tells the server about a second after

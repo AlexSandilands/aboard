@@ -147,8 +147,8 @@ card with no previous place fades in. It is a board-level FLIP:
   (`planCardMotion` in `cardMotion.logic.ts`, tested) and animates transform (or opacity, for a fade-in) with
   `element.animate`. A card with no new rect (collapsed column, filtered out), or off screen before and after, is
   skipped. Scrolling in between is compensated; if the scroll box itself resized (the task panel or sidebar sliding)
-  nothing animates, since every card moved (the sidebar's slide moves the whole main area with one transform instead,
-  see [appearance.md](appearance.md#contrast-glass-panel-animations-and-fonts)). A card drawn twice (say an epic's child row beside its own card) has no
+  nothing animates, since every card moved (the slide itself moves them, see
+  [appearance.md](appearance.md#contrast-glass-panel-animations-and-fonts)). A card drawn twice (say an epic's child row beside its own card) has no
   single place to slide from and is left alone.
 - It is off while a card is lifted: the drag overlay's drop animation lands the dropped card, and the drag preview has
   already put the neighbours in their final places. It is also off in a hidden tab and when `data-panel-animations`
@@ -446,7 +446,8 @@ Code's keybindings: a command, a key and a `when`, and when several match a key 
 
 - **Keys.** `mod+k`, `shift+n`, `escape`: lowercase modifiers (`mod` is Cmd on macOS and Ctrl elsewhere, plus
   `shift` and `alt`), then one key. The space and plus keys are `space` and `plus`. The match is exact: extra
-  modifiers don't match (`matchesShortcut` in `layout/keyboard.logic.ts`).
+  modifiers don't match (`matchesShortcut` in `layout/keyboard.logic.ts`). With Alt held, a letter or digit is read
+  from the physical key (`event.code`), since macOS's Option turns `b` into `∫`.
 - **`when`.** An expression over the context flags with `!`, `&&`, `||` and parentheses (`!` binds tightest, `||`
   loosest); empty means always. The flags (`KEYBINDING_CONTEXT_KEYS`) are `editableFocus`, `popupFocus`,
   `overlayOpen`, `paletteOpen`, `dialogOpen`, `settingsOpen`, `panelOpen` and `canGoBack`; `AppShell` builds them per
@@ -461,7 +462,7 @@ Code's keybindings: a command, a key and a `when`, and when several match a key 
   parse falls back to the default); `resolveCommand` picks the command. `palette.open`, `sidebar.toggle` and `panel.toggle` are `immediate`, and so is any
   command the user moved to a key with Ctrl/Cmd or Alt (browsers keep print, find and save there): it runs in the
   keydown and prevents its default. The rest wait to see whether something nearer the focus claimed the key
-  (see the comment on `useGlobalKeybindings`). Keys are stored normalized (each modifier once, in the order mod,
+  (see the comment on `GlobalKeybindings` in `AppShell`). Keys are stored normalized (each modifier once, in the order mod,
   shift, alt). The control recording a new key carries `data-recording-shortcut`,
   and the shortcuts stand down for it.
 - **Conflicts.** `keybindingConflicts` flags two commands on the same key whose `when`s can both be true
@@ -482,10 +483,10 @@ Code's keybindings: a command, a key and a `when`, and when several match a key 
   rewind it), so edits in a row don't lose each other). Sub-sections have ids `keybindings.<group>` and rows
   `keybindings.<group>.<command>`, which the settings index generates from the registry.
 - **Showing them.** `useShortcutLabel(command)` gives the current key as text (`Ctrl+K`, `⌘K`) for the board
-  header's search button, the close-panel and new-task tooltips, and the palette rows for New task and Settings:
+  header's search button, the close-panel, new-task and hide-sidebar tooltips, and the palette rows for New task and Settings:
   Board (`PaletteItem.shortcut`). The desktop app has no menu accelerator for these, so there is nothing to keep in sync.
 
-To add a command: add it to `KeybindingCommand` and `DEFAULT_KEYBINDINGS`, run it in `useGlobalKeybindings`'s `run`
+To add a command: add it to `KeybindingCommand` and `DEFAULT_KEYBINDINGS`, run it in `GlobalKeybindings`'s `run`
 (the `never` check fails until you do), and give it a test.
 
 ### Persistence

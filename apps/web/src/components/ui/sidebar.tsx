@@ -12,7 +12,8 @@ import { Sheet, SheetDescription, SheetHeader, SheetPopup, SheetTitle } from "~/
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useResizeDrag } from "~/hooks/useResizeDrag";
 import { useIsMobile } from "~/hooks/useMediaQuery";
-import { gapStartWidth, glideDurationMs, glideStartOffset, SLIDE_EASING } from "~/lib/sidebarSlide.logic";
+import { finishSlides, slideDuration, slideOffset, slidesOn, startSlide } from "~/lib/slide";
+import { gapStartWidth, slideStartOffset } from "~/lib/slide.logic";
 import { readStoredNumber, writeStoredNumber } from "~/lib/storage";
 import { resolveSidebarState, type ResponsiveSidebarState } from "./sidebarState";
 
@@ -85,26 +86,16 @@ function useSidebarVisibility() {
   return isMobile ? openMobile : open;
 }
 
-const SLIDE_ID = "sidebar-slide";
-
-/** The panel animations are on and the slide has a length, in ms; 0 when it should be instant. */
-function slideDuration(): number {
-  const root = document.documentElement;
-  if (root.dataset.panelAnimations !== "true") return 0;
-  return Number.parseFloat(root.style.getPropertyValue("--sidebar-slide-duration")) || 0;
-}
-
 /**
- * Slides the sidebar in or out with the main area making room at the same time, as the task panel does
- * (`usePanelSlide`). Two animations share one clock and curve: the gap's width, which the main area lays out around
- * on every frame, and the sidebar container's transform, which the compositor runs, so a busy main thread holds up
- * the board for a frame but not the sidebar. The container keeps its width, so its contents never re-wrap.
- *
- * From rest the slide holds its first frame and starts its clock two frames later: the first rAF runs at the end of
- * the frame that did React's work, and its timestamp is when that frame began. A toggle mid-slide turns around from
- * where the sidebar is.
+ * Slides the sidebar in or out with the main area making room at the same time (see `lib/slide.ts`): the gap beside
+ * it is the room, the container the mover. The container keeps its width, so its contents never re-wrap. Only the
+ * offcanvas sidebar slides; the others change at once.
  */
-function useSidebarSlide(sidebarRef: React.RefObject<HTMLElement | null>, side: "left" | "right") {
+function useSidebarSlide(
+  sidebarRef: React.RefObject<HTMLElement | null>,
+  side: "left" | "right",
+  collapsible: "offcanvas" | "icon" | "none",
+) {
   const { open } = useSidebar();
   const previousOpen = React.useRef(open);
   React.useLayoutEffect(() => {
@@ -112,52 +103,25 @@ function useSidebarSlide(sidebarRef: React.RefObject<HTMLElement | null>, side: 
     previousOpen.current = open;
     const sidebar = sidebarRef.current;
     const duration = slideDuration();
-    if (!sidebar || duration === 0) return;
+    if (!sidebar || duration === 0 || collapsible !== "offcanvas") return;
     const container = sidebar.querySelector<HTMLElement>("[data-slot='sidebar-container']");
     const gap = sidebar.querySelector<HTMLElement>("[data-slot='sidebar-gap']");
     if (!container || !gap) return;
-    const running = [container, gap].flatMap((element) =>
-      element.getAnimations().filter((animation) => animation.id === SLIDE_ID),
-    );
-    const moving = running.some((animation) => animation.playState === "running");
-    const current = running.length > 0 ? new DOMMatrix(getComputedStyle(container).transform).m41 : 0;
-    for (const animation of running) animation.cancel();
+    // The container's class has already moved it to its new place; the slide starts it from where it was.
+    const current = slidesOn(container, gap).length > 0 ? slideOffset(container) : 0;
     const width = container.offsetWidth;
-    const from = glideStartOffset({ current, width, opening: open, side });
-    const timing: KeyframeAnimationOptions = {
-      duration: glideDurationMs(duration, from, width),
-      easing: SLIDE_EASING,
-      id: SLIDE_ID,
-    };
-    container.style.willChange = "transform";
-    const slide = container.animate([{ transform: `translateX(${from}px)` }, { transform: "none" }], timing);
-    const room = gap.animate(
-      [{ width: `${gapStartWidth({ from, width, opening: open })}px` }, { width: `${open ? width : 0}px` }],
-      timing,
-    );
-    slide.addEventListener("finish", () => {
-      container.style.willChange = "";
+    const from = slideStartOffset({ current, width, opening: open, side });
+    startSlide({
+      mover: container,
+      room: gap,
+      from,
+      to: 0,
+      roomFrom: gapStartWidth({ from, width, opening: open }),
+      roomTo: open ? width : 0,
+      width,
+      duration,
     });
-    const start = () => {
-      // One start time, so the main area and the sidebar can't drift apart by a frame.
-      const now = document.timeline.currentTime;
-      for (const animation of [slide, room]) {
-        animation.play();
-        animation.startTime = now;
-      }
-    };
-    if (moving) {
-      start();
-      return;
-    }
-    slide.pause();
-    room.pause();
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        if (slide.playState === "paused") start();
-      }),
-    );
-  }, [open, side, sidebarRef]);
+  }, [open, side, collapsible, sidebarRef]);
 }
 
 function SidebarProvider({
@@ -258,7 +222,7 @@ function Sidebar({
 }) {
   const { isMobile, state, openMobile, setOpenMobile, setMobileSheetElement } = useSidebar();
   const sidebarRef = React.useRef<HTMLDivElement>(null);
-  useSidebarSlide(sidebarRef, side);
+  useSidebarSlide(sidebarRef, side, collapsible);
   const resolvedResizable = React.useMemo<SidebarResolvedResizableOptions | null>(() => {
     if (isMobile || collapsible === "none" || !resizable) {
       return null;
@@ -450,9 +414,8 @@ function SidebarRail({
         element.style.setProperty("width", `${value}px`);
       });
     };
-    widthTargets.forEach((element) => {
-      element.style.setProperty("transition-duration", "0ms");
-    });
+    // A slide still running would hold the gap's width against the drag.
+    finishSlides();
     setTargetWidth(width);
 
     return {
@@ -487,7 +450,6 @@ function SidebarRail({
       cleanup() {
         widthTargets.forEach((element) => {
           element.style.removeProperty("width");
-          element.style.removeProperty("transition-duration");
         });
       },
     };

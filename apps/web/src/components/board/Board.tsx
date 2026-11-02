@@ -28,6 +28,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Skeleton } from "~/components/ui/skeleton";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { finishSlides } from "~/lib/slide";
 import { cn } from "~/lib/utils";
 import { isPlanRequired, useMoveTask, useUpdateProject, useUpdateTask } from "~/state/mutations";
 import { queryKeys, useArchivedTasks, useBoard, useSettings } from "~/state/queries";
@@ -368,6 +369,8 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   };
 
   const handleDragStart = (event: DragStartEvent) => {
+    // dnd-kit measures the columns now; a slide still resizing the board would leave those rects stale.
+    finishSlides();
     setActiveId(String(event.active.id));
     // A card lifted out of the stuck lane is one line, so the lifted copy is too.
     const node = document.querySelector(`[data-task-card="${CSS.escape(String(event.active.id))}"]`);

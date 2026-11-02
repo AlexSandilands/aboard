@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gapStartWidth, glideDurationMs, glideStartOffset, slideDurationMs } from "./sidebarSlide.logic";
+import { gapStartWidth, slideDurationForDistance, slideDurationMs, slideStartOffset } from "./slide.logic";
 
 describe("slideDurationMs", () => {
   it("scales the panel animation setting, so the default is 450 ms", () => {
@@ -12,40 +12,40 @@ describe("slideDurationMs", () => {
   });
 });
 
-describe("glideStartOffset", () => {
+describe("slideStartOffset", () => {
   const base = { current: 0, width: 256 };
 
   it("starts an opening left sidebar a width to the left of where it rests", () => {
-    expect(glideStartOffset({ ...base, opening: true, side: "left" })).toBe(-256);
+    expect(slideStartOffset({ ...base, opening: true, side: "left" })).toBe(-256);
   });
 
   it("starts a closing left sidebar a width to the right of its hidden place", () => {
-    expect(glideStartOffset({ ...base, opening: false, side: "left" })).toBe(256);
+    expect(slideStartOffset({ ...base, opening: false, side: "left" })).toBe(256);
   });
 
   it("mirrors both for a right sidebar", () => {
-    expect(glideStartOffset({ ...base, opening: true, side: "right" })).toBe(256);
-    expect(glideStartOffset({ ...base, opening: false, side: "right" })).toBe(-256);
+    expect(slideStartOffset({ ...base, opening: true, side: "right" })).toBe(256);
+    expect(slideStartOffset({ ...base, opening: false, side: "right" })).toBe(-256);
   });
 
   it("continues from a slide still running", () => {
-    expect(glideStartOffset({ current: 100, width: 256, opening: false, side: "left" })).toBe(356);
-    expect(glideStartOffset({ current: 100, width: 256, opening: true, side: "left" })).toBe(-156);
+    expect(slideStartOffset({ current: 100, width: 256, opening: false, side: "left" })).toBe(356);
+    expect(slideStartOffset({ current: 100, width: 256, opening: true, side: "left" })).toBe(-156);
   });
 });
 
-describe("glideDurationMs", () => {
+describe("slideDurationForDistance", () => {
   it("runs the full duration from a standing start", () => {
-    expect(glideDurationMs(450, 256, 256)).toBe(450);
-    expect(glideDurationMs(450, -256, 256)).toBe(450);
+    expect(slideDurationForDistance(450, 256, 256)).toBe(450);
+    expect(slideDurationForDistance(450, -256, 256)).toBe(450);
   });
 
   it("shortens a reversal in proportion to the distance left", () => {
-    expect(glideDurationMs(450, -64, 256)).toBe(112.5);
+    expect(slideDurationForDistance(450, -64, 256)).toBe(112.5);
   });
 
   it("never runs longer than the full duration", () => {
-    expect(glideDurationMs(450, 300, 256)).toBe(450);
+    expect(slideDurationForDistance(450, 300, 256)).toBe(450);
   });
 });
 

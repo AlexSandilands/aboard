@@ -17,7 +17,7 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { Skeleton } from "~/components/ui/skeleton";
 import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth, type ResizableWidthHandlers } from "~/hooks/useResizableWidth";
 import { ApiError } from "~/lib/api";
-import { SLIDE_EASING } from "~/lib/sidebarSlide.logic";
+import { slideDuration, slideOffset, slidesOn, startSlide } from "~/lib/slide";
 import { useBoard, useTaskDetail } from "~/state/queries";
 import { useTaskView } from "~/state/taskView";
 import { usePanel } from "~/state/ui";
@@ -109,24 +109,10 @@ export function TaskPanel({
   );
 }
 
-const PANEL_SLIDE_ID = "task-panel-slide";
-
-/** The slide's length in ms, from the Panel animations setting; 0 when it is off or motion is reduced. */
-function panelSlideDuration(): number {
-  const root = document.documentElement;
-  if (root.dataset.panelAnimations !== "true") return 0;
-  return Number.parseFloat(root.style.getPropertyValue("--sidebar-slide-duration")) || 0;
-}
-
 /**
  * Slides the panel in from the window's right edge when it mounts and out again when `closing`, then calls
- * `onClosed`, with the board making room at the same time. Two animations share one clock and curve: the aside's
- * width, which the board lays out around on every frame, and the contents' transform, pinned to the right edge,
- * which the compositor runs. If React holds up the main thread (mounting the contents, say), the board pauses for
- * that frame but the panel keeps moving, rather than both freezing.
- *
- * Opening from rest starts its clock a frame later, so the fast start of the curve isn't spent on React's
- * mount work. A toggle mid-slide turns around from where the panel is.
+ * `onClosed`, with the board making room at the same time (see `lib/slide.ts`): the aside is the room and the
+ * contents, pinned to its right edge, the mover. A toggle mid-slide turns around from where the panel is.
  */
 function usePanelSlide(
   asideRef: RefObject<HTMLElement | null>,
@@ -139,59 +125,28 @@ function usePanelSlide(
     const aside = asideRef.current;
     const contents = contentsRef.current;
     if (!aside || !contents) return;
-    const duration = panelSlideDuration();
+    const duration = slideDuration();
     if (duration === 0) {
       if (closing) closed();
       return;
     }
     const width = contents.offsetWidth;
-    const running = [aside, contents].flatMap((element) =>
-      element.getAnimations().filter((animation) => animation.id === PANEL_SLIDE_ID),
-    );
     // How far the contents sit right of where they rest; the aside is that much narrower.
-    const from = running.length > 0 ? new DOMMatrix(getComputedStyle(contents).transform).m41 : closing ? 0 : width;
-    // Held ones (StrictMode runs this twice in development) are still at rest: hold again rather than start at once.
-    const moving = running.some((animation) => animation.playState === "running");
-    for (const animation of running) animation.cancel();
+    const from = slidesOn(contents, aside).length > 0 ? slideOffset(contents) : closing ? 0 : width;
     const to = closing ? width : 0;
-    const timing: KeyframeAnimationOptions = {
-      duration: width > 0 ? duration * Math.min(1, Math.abs(to - from) / width) : duration,
-      easing: SLIDE_EASING,
-      fill: closing ? "forwards" : "none",
-      id: PANEL_SLIDE_ID,
-    };
-    contents.style.willChange = "transform";
-    const slide = contents.animate(
-      [{ transform: `translateX(${from}px)` }, { transform: `translateX(${to}px)` }],
-      timing,
-    );
-    const room = aside.animate([{ width: `${width - from}px` }, { width: `${width - to}px` }], timing);
-    slide.addEventListener("finish", () => {
-      if (closing) closed();
-      else contents.style.willChange = "";
+    const { slide } = startSlide({
+      mover: contents,
+      room: aside,
+      from,
+      to,
+      roomFrom: width - from,
+      roomTo: width - to,
+      width,
+      duration,
+      // Closed, it stays out of view until AppLayout unmounts it.
+      fill: closing,
     });
-    const start = () => {
-      // One start time, so the board and the panel can't drift apart by a frame.
-      const now = document.timeline.currentTime;
-      for (const animation of [slide, room]) {
-        animation.play();
-        animation.startTime = now;
-      }
-    };
-    if (moving) {
-      start();
-      return;
-    }
-    // Held for a frame, so the clock starts after React's mount work rather than during it. Two rAFs: the first runs
-    // at the end of the frame that did that work, and its timestamp (the timeline's time) is when that frame began,
-    // so a start time taken there would put the slide as far along as the work took.
-    slide.pause();
-    room.pause();
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        if (slide.playState === "paused") start();
-      }),
-    );
+    if (closing) slide.addEventListener("finish", () => closed());
   }, [asideRef, contentsRef, closing]);
 }
 
