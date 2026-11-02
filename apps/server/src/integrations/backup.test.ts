@@ -280,6 +280,15 @@ describe("machine folders", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     const status = await b.backup.run();
     expect(status.lastError).toMatch(/already has a folder laptop for another machine.*choose another machine name/);
     expect(log(a.remote)).toHaveLength(1);
+
+    // Choosing another name, as the error says, recovers: the local commit that wrote into laptop/ is dropped.
+    b.services.settings.update({ machineName: "desktop" });
+    expect((await b.backup.run()).lastError).toBeNull();
+    expect(JSON.parse(git(a.remote, "show", "HEAD:laptop/manifest.json"))).toMatchObject({ instanceId: a.instanceId });
+    expect(JSON.parse(git(a.remote, "show", "HEAD:desktop/manifest.json"))).toMatchObject({
+      instanceId: b.instanceId,
+    });
+    expect((await a.backup.run()).lastError).toBeNull();
   });
 
   it("keeps the host name's default from the first backup on", async () => {

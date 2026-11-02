@@ -234,38 +234,63 @@ export function createBackupIntegration(deps: {
   /**
    * Brings in commits the remote has and the clone doesn't (another machine's backup, a README edited on GitHub),
    * so the push isn't rejected. Returns an error message instead of throwing: offline, the run still commits
-   * locally. Throws when the pull failed because another machine's folder has this machine's name.
+   * locally. A pull that fails because of another machine's folder is handled by settleForeignConflict.
    */
   const pull = async (dir: string, name: string): Promise<string | null> => {
     if (!(await upstreamOf(dir)) && !(await adoptRemoteBranch(dir))) return null;
     const result = await runGit([...(await identity(dir)), "pull", "--rebase", "--quiet"], dir);
     if (result.code === 0) return null;
     await runGit(["rebase", "--abort"], dir);
-    await refuseUpstreamClash(dir, name);
+    if (await settleForeignConflict(dir, name)) return null;
     return `git pull: ${(result.stderr || result.stdout).trim()}`;
   };
 
+  /** The upstream's machine folders that another board owns, read from its tree (the pull didn't bring them in). */
+  const foreignUpstreamFolders = async (dir: string) => {
+    const tree = await runGit(["ls-tree", "-d", "--name-only", "@{u}"], dir);
+    if (tree.code !== 0) return [];
+    const folders = await Promise.all(
+      tree.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map(async (folder) => {
+          const shown = await runGit(["show", `@{u}:${folder}/manifest.json`], dir);
+          if (shown.code !== 0) return [];
+          try {
+            const owner = JSON.parse(shown.stdout) as { instanceId?: unknown; machineName?: unknown };
+            return typeof owner.instanceId === "string" && owner.instanceId !== deps.instanceId
+              ? [{ folder, machineName: typeof owner.machineName === "string" ? owner.machineName : null }]
+              : [];
+          } catch {
+            return [];
+          }
+        }),
+    );
+    return folders.flat();
+  };
+
   /**
-   * Throws when the upstream has a folder of this name (ignoring case) that another machine owns. claimFolder can't
-   * see it when this machine committed its own folder of that name before it saw the remote (it backed up before a
-   * remote was set, or offline): the pull then stops on a conflict in that folder, every run.
+   * When this machine committed a folder before it saw the remote (it backed up with no remote set, or offline)
+   * and another machine's folder of that name is upstream, the rebase stops on a conflict, every run, which
+   * claimFolder can't see in the working tree. With the name still taken, throws "choose another machine name".
+   * Once it has been renamed, the unpushed commits that wrote into the other machine's folder are dropped by
+   * resetting to the upstream: nothing is lost, as this run writes the whole dump again from the database into
+   * this machine's folder. Returns whether it reset.
    */
-  const refuseUpstreamClash = async (dir: string, name: string) => {
-    const tree = await runGit(["ls-tree", "--name-only", "@{u}"], dir);
-    if (tree.code !== 0) return;
-    const folder = tree.stdout.split("\n").find((n) => n.toLowerCase() === name.toLowerCase());
-    if (!folder) return;
-    const shown = await runGit(["show", `@{u}:${folder}/manifest.json`], dir);
-    if (shown.code !== 0) return;
-    let owner: { instanceId?: unknown; machineName?: unknown };
-    try {
-      owner = JSON.parse(shown.stdout) as typeof owner;
-    } catch {
-      return;
-    }
-    if (typeof owner.instanceId === "string" && owner.instanceId !== deps.instanceId) {
-      throw takenBy(folder, typeof owner.machineName === "string" ? owner.machineName : null);
-    }
+  const settleForeignConflict = async (dir: string, name: string): Promise<boolean> => {
+    const foreign = await foreignUpstreamFolders(dir);
+    const taken = foreign.find((f) => f.folder.toLowerCase() === name.toLowerCase());
+    if (taken) throw takenBy(taken.folder, taken.machineName);
+    if (foreign.length === 0) return false;
+    // The unpushed commits' files in those folders; `log` rather than a diff, as the histories may share no base.
+    const touched = await runGit(
+      ["log", "--name-only", "--format=", "@{u}..HEAD", "--", ...foreign.map((f) => f.folder)],
+      dir,
+    );
+    if (touched.code !== 0 || !touched.stdout.trim()) return false;
+    await git(dir, "reset", "--hard", "--quiet", "@{u}");
+    log.warn(`[backup] dropped local backup commits that wrote into another machine's folder in ${dir}`);
+    return true;
   };
 
   /** "origin/main", or null when the branch tracks nothing. */
