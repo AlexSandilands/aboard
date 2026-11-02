@@ -229,7 +229,7 @@ export const startPlanned = defineAutomation({
     try {
       started = await runner.start({
         run,
-        label: `Start planned · #${task.number}`,
+        label: "Start planned",
         prompt,
         // A wait for T3 can take minutes: the task may have been started by hand, moved or archived meanwhile.
         stillWanted: () => {

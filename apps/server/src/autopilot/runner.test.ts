@@ -195,7 +195,7 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     expect(job.args[job.args.indexOf("--max-budget-usd") + 1]).toBe("2");
     expect(job.args[job.args.indexOf("--session-id") + 1]).toBe(SESSION);
     expect(job.args[job.args.indexOf("--model") + 1]).toBe("haiku");
-    expect(job.args[job.args.indexOf("--name") + 1]).toBe("Autopilot · Fix PRs · PR #7");
+    expect(job.args[job.args.indexOf("--name") + 1]).toBe("#1 Add exports · Autopilot: Fix PRs · PR #7");
     expect(job.args[job.args.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
     expect(job.prompt).toContain("Do the task");
     expect(job.prompt).toContain("already linked this session to the task, so don't link it yourself");
@@ -206,7 +206,7 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     const links = h.services.tasks.summary(task.id).links.filter((l) => l.kind === "agent_session");
     expect(links).toHaveLength(1);
     expect(links[0]).toMatchObject({
-      label: "Autopilot · Fix PRs · PR #7",
+      label: "#1 Add exports · Autopilot: Fix PRs · PR #7",
       ref: { harness: "claude-code", sessionId: SESSION },
     });
     // So the board reads its state at once, not at the next poll.
@@ -576,7 +576,7 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     it("Auto starts a T3 thread when T3 is connected, with a stable command id and lowered access", async () => {
       const { run, jobs, launches, start, patches } = setup({ t3: T3_UP });
       const out = await start({
-        label: "Start planned · #7",
+        label: "Start planned",
         options: { runner: "auto", t3Access: "auto-accept-edits" },
       });
       expect(jobs).toHaveLength(0);
@@ -587,7 +587,7 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
         commandId: `autopilot-${run.id}`,
         work: true,
         maxRuntimeMode: "auto-accept-edits",
-        title: "Autopilot · Start planned · #7",
+        title: "#1 Add exports · Autopilot: Start planned",
       });
       expect(launches[0]!.prompt).toContain("Do the task");
       expect(launches[0]).not.toHaveProperty("baseRef");

@@ -185,8 +185,10 @@ export interface RunnerRequest {
   /** The prompt the agent starts with (or, for a nudge, the message posted). */
   prompt: string;
   /**
-   * What the run is, short, for the session's name: "Review PRs · PR #73 round 1". The runner prefixes it with
-   * "Autopilot · " and uses it as the session link's label, the `claude --name` and the T3 thread's title.
+   * What the run is, short, for the session's name: "Review PRs · PR #73 round 1". The runner names the session with it
+   * (`autopilotSessionName`: "#7 Task title · Autopilot: Review PRs · PR #73 round 1", or "Autopilot · Digest" with
+   * no task), so leave the task's number out. That name is the session link's label, the `claude --name` and the
+   * T3 thread's title.
    */
   label?: string;
   /**

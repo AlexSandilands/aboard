@@ -357,7 +357,7 @@ export function createAutopilotRunner(deps: {
         {
           prompt: `${request.prompt}\n\n${t3WorkspaceNote(branch, defaultBranch, prBase)}`,
           commandId: runCommandId(request.run.id),
-          ...(request.label ? { title: autopilotSessionName(request.label) } : {}),
+          ...(request.label ? { title: autopilotSessionName(request.label, task) } : {}),
           work: true,
           // The task's labels and tier are read again where the launch resolves its model; only a choice is passed.
           ...(model.source === "automation" && model.profile
@@ -416,6 +416,7 @@ export function createAutopilotRunner(deps: {
    */
   const runOnDriver = async (
     request: RunnerRequest,
+    task: TaskSummary | null,
     model: RunModel,
     options: RunnerOptions,
     settings: AppSettings,
@@ -474,7 +475,7 @@ export function createAutopilotRunner(deps: {
         sessionId: preset ?? "",
         model: plan.model,
         effort: plan.effort,
-        name: autopilotSessionName(request.label),
+        name: autopilotSessionName(request.label, task),
         defaultBranch: where.defaultBranch,
         ...(request.tools ? { tools: request.tools } : {}),
         ...(request.deniedTools ? { deniedTools: request.deniedTools } : {}),
@@ -528,6 +529,7 @@ export function createAutopilotRunner(deps: {
     const readOnly = request.access === "read-only" || request.access === "none";
     const { outcome, sessionId } = await runOnDriver(
       request,
+      task,
       runModel(request, options, task, settings),
       options,
       settings,
@@ -546,7 +548,7 @@ export function createAutopilotRunner(deps: {
             task.id,
             {
               agentSession: { harness, sessionId: id, cwd: worktree.path },
-              label: autopilotSessionName(request.label),
+              label: autopilotSessionName(request.label, task),
             },
             AUTOPILOT_ACTOR,
           );
@@ -601,6 +603,7 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
       // No task to link the session to.
       const { outcome, sessionId } = await runOnDriver(
         request,
+        null,
         runModel(request, options, null, settings),
         options,
         settings,
