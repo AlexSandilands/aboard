@@ -15,6 +15,13 @@ A finished epic has no band: it is one card in the lane's Done cell, so it count
 counts and the collapsed preview below. Bands and that card share a frame that tells epics from task cards, and
 the task card's thread and session chips and start button ([epics.md](epics.md#on-the-board)).
 
+### Card title height
+
+Full task cards reserve two lines for their titles (`min-h-[2lh]` alongside `line-clamp-2`).
+Titles can re-wrap as the panel or sidebar slides or the window narrows without changing the card
+height and shifting the lanes below it. One-line titles keep the same reserved space. The header
+has a fixed height and labels clip rather than wrap. Compact cards keep a single truncated title line.
+
 ### The priority lane
 
 A task can be marked **priority** (`tasks.priority`, 0 or 1; epics can't be). The board gathers the priority tasks of
