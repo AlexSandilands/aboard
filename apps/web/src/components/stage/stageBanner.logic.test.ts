@@ -9,6 +9,7 @@ describe("isStageBannerChoice", () => {
 
   it("rejects anything else", () => {
     expect(isStageBannerChoice("sunrise")).toBe(false);
+    expect(isStageBannerChoice("wires")).toBe(false);
     expect(isStageBannerChoice(undefined)).toBe(false);
     expect(isStageBannerChoice(3)).toBe(false);
   });
@@ -21,6 +22,7 @@ describe("resolveStageBanner", () => {
 
   it("falls back to the default for unknown stored values", () => {
     expect(resolveStageBanner("retired-banner")).toBe(DEFAULT_STAGE_BANNER);
+    expect(resolveStageBanner("wires")).toBe(DEFAULT_STAGE_BANNER);
     expect(resolveStageBanner(null)).toBe(DEFAULT_STAGE_BANNER);
   });
 

@@ -11,7 +11,6 @@ export const STAGE_BANNERS = [
   { id: "cards", label: "Cards", tone: "dark", rotates: true },
   { id: "hex", label: "Hex", tone: "dark", rotates: true },
   { id: "hex-mono", label: "Hex mono", tone: "theme", rotates: true },
-  { id: "wires", label: "Wires", tone: "theme", rotates: true },
   { id: "black", label: "Black", tone: "dark", rotates: false },
   // No art at all: the brand row shows the plain sidebar background.
   { id: "none", label: "None", tone: "theme", rotates: false },

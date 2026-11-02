@@ -19,7 +19,11 @@ import {
   migrateBoardView,
   type PinnedLaneHeight,
 } from "./boardView.logic";
-import { DEFAULT_STAGE_BANNER, type StageBannerChoice } from "~/components/stage/stageBanner.logic";
+import {
+  DEFAULT_STAGE_BANNER,
+  isStageBannerChoice,
+  type StageBannerChoice,
+} from "~/components/stage/stageBanner.logic";
 import {
   moveSection,
   normalizeSectionLayout,
@@ -134,7 +138,7 @@ export type PlanTarget = { kind: "t3" } | { kind: "session"; harness: AgentHarne
  * animation and font prefs are applied to the page by theme/appearance.ts; the theme itself is in hooks/useTheme.ts.
  */
 interface AppearanceState extends AppearancePrefs {
-  /** Art behind the sidebar brand row. Stored values are re-validated by resolveStageBanner. */
+  /** Art behind the sidebar brand row. Stored values are re-validated on hydration. */
   banner: StageBannerChoice;
   setBanner: (banner: StageBannerChoice) => void;
   /** Opening a task from outside the board (search, a link, a notification) scrolls the board to its card. */
@@ -169,7 +173,12 @@ export const useAppearance = create<AppearanceState>()(
       // Saves from before these prefs have none; a hand-edited one may be out of range.
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<AppearanceState>;
-        return { ...current, ...saved, ...normalizeAppearancePrefs({ ...prefsOf(current), ...saved }) };
+        return {
+          ...current,
+          ...saved,
+          ...normalizeAppearancePrefs({ ...prefsOf(current), ...saved }),
+          banner: isStageBannerChoice(saved.banner) ? saved.banner : DEFAULT_STAGE_BANNER,
+        };
       },
     },
   ),
