@@ -236,7 +236,10 @@ describe("repositoryRootOf", () => {
 
 describe("git worktrees", () => {
   /** A checkout with `apps/web` and a linked worktree of it, both by their real paths (git writes those). */
-  const withWorktree = (fn: (paths: { main: string; worktree: string }) => void) => {
+  const withWorktree = (
+    fn: (paths: { main: string; worktree: string }) => void,
+    opts: { insideMain?: boolean } = {},
+  ) => {
     const fx = createGitFixture();
     try {
       const main = realpathSync.native(fx.checkout);
@@ -244,19 +247,25 @@ describe("git worktrees", () => {
       writeFileSync(join(main, "apps", "web", "keep"), "");
       git(main, "add", ".");
       git(main, "commit", "--quiet", "-m", "web");
-      const worktree = join(realpathSync.native(fx.root), "wt");
+      // Claude Code puts its worktrees inside the repo, under .claude/worktrees.
+      const worktree = opts.insideMain
+        ? join(main, ".claude", "worktrees", "wt")
+        : join(realpathSync.native(fx.root), "wt");
       git(main, "worktree", "add", "--quiet", "-b", "wt", worktree);
       fn({ main, worktree });
     } finally {
       fx.cleanup();
     }
   };
-  const key = (path: string | null) => (path ? normalizeWorkspaceKey(path) : null);
+  const key = (path: string | null | undefined) => (path ? normalizeWorkspaceKey(path) : null);
 
   it("maps a path in a linked worktree to the same path in the main checkout", () => {
     withWorktree(({ main, worktree }) => {
-      expect(key(mainCheckoutOf(worktree))).toBe(key(main));
-      expect(key(mainCheckoutOf(join(worktree, "apps", "web")))).toBe(key(join(main, "apps", "web")));
+      expect(key(mainCheckoutOf(worktree)?.path)).toBe(key(main));
+      const nested = mainCheckoutOf(join(worktree, "apps", "web"));
+      expect(key(nested?.path)).toBe(key(join(main, "apps", "web")));
+      expect(key(nested?.worktree)).toBe(key(worktree));
+      expect(key(nested?.main)).toBe(key(main));
       // The main checkout itself, a non-repo folder and a missing path aren't worktrees.
       expect(mainCheckoutOf(main)).toBeNull();
       expect(mainCheckoutOf(mkdtempSync(join(tmpdir(), "tb-plain-")))).toBeNull();
@@ -293,6 +302,20 @@ describe("git worktrees", () => {
     });
   });
 
+  it("finds the deepest main-checkout project for a worktree inside the main repo", () => {
+    withWorktree(
+      ({ main, worktree }) => {
+        const { services: s } = createTestHarness();
+        const repo = s.projects.create({ workspaceRoot: main });
+        const web = s.projects.create({ workspaceRoot: join(main, "apps", "web") });
+        // The worktree path lies inside the repo's own project, but the mapped path is deeper.
+        expect(s.projects.resolve({ workspacePath: join(worktree, "apps", "web") }).id).toBe(web.id);
+        expect(s.projects.resolve({ workspacePath: worktree }).id).toBe(repo.id);
+      },
+      { insideMain: true },
+    );
+  });
+
   it("prefers a project bound to the worktree itself", () => {
     withWorktree(({ main, worktree }) => {
       const { services: s } = createTestHarness();
@@ -309,9 +332,29 @@ describe("git worktrees", () => {
       expect(created).toBe(true);
       expect(key(project.workspaceRoot)).toBe(key(main));
       expect(project.title).toBe("app");
+      expect(s.projects.list()).toHaveLength(1);
       // A path outside any repo is still created as given.
       const plain = mkdtempSync(join(tmpdir(), "tb-plain-"));
       expect(s.projects.resolveOrCreate({ workspacePath: plain }).project.workspaceRoot).toBe(plain);
     });
+  });
+});
+
+describe("git worktrees on another branch", () => {
+  it("creates the project at the main checkout's root for a folder only the worktree's branch has", () => {
+    const fx = createGitFixture();
+    try {
+      const main = realpathSync.native(fx.checkout);
+      const worktree = join(realpathSync.native(fx.root), "wt");
+      git(main, "worktree", "add", "--quiet", "-b", "wt", worktree);
+      const fresh = join(worktree, "packages", "new");
+      mkdirSync(fresh, { recursive: true });
+      const { services: s } = createTestHarness();
+      const { project, created } = s.projects.resolveOrCreate({ workspacePath: fresh });
+      expect(created).toBe(true);
+      expect(normalizeWorkspaceKey(project.workspaceRoot!)).toBe(normalizeWorkspaceKey(main));
+    } finally {
+      fx.cleanup();
+    }
   });
 });

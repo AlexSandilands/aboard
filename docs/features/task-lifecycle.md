@@ -38,14 +38,15 @@ default branch), it can't be closed, and it can't be archived while any of its t
   its key alone, and removes the `auto` links whose key left the title. Links added on request are never removed
   automatically; agents take a wrong one off with `unlink`.
 - MCP tools find the project by `projectId` or by `workspacePath`: the project whose folder contains the
-  path, deepest first. When nothing contains it and the path is inside a linked git worktree (T3 Code's,
-  Claude Code's, `git worktree add`), the same path in the main checkout is tried instead, so
-  `<worktree>/apps/web` finds a project at `<main>/apps/web` or `<main>`. A project bound to the worktree
-  itself still wins. `mainCheckoutOf` reads git's files rather than running git: a `.git` file whose
+  path, deepest first. For a path inside a linked git worktree (T3 Code's, Claude Code's, `git worktree
+  add`) the same path in the main checkout is matched instead, so `<worktree>/apps/web` finds a project at
+  `<main>/apps/web` or `<main>`. A project bound to the worktree itself (or a folder in it) still wins; any
+  other match of the literal path doesn't, since Claude Code's worktrees sit inside the repo and would
+  otherwise always land in its root project. `mainCheckoutOf` reads git's files rather than running git: a `.git` file whose
   `gitdir` has a `commondir` pointing at a `.git` folder. Submodules (no `commondir`) and worktrees of bare
   repositories are left alone. `add_to_backlog`, `create_task` and `create_epic` create a project for an
   unknown path (at the nearest folder with a `.git`, else the path itself; for a worktree, the main
-  checkout, never the worktree) and unarchive an archived match. Their result then starts with "Created a
+  checkout's root, never the worktree) and unarchive an archived match. Their result then starts with "Created a
   NEW project …" and how to move the task, so an agent sees a stray lane in the same turn. Other write
   tools return `NOT_FOUND` for an unknown path; read tools treat it as an empty project. Adding a project
   from the UI takes the folder as given.

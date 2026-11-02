@@ -30,13 +30,20 @@ export function repositoryRootOf(path: string): string {
   }
 }
 
+/** Where a path inside a linked git worktree sits: the worktree's root, the main checkout's, and the same path there. */
+export interface WorktreeLocation {
+  worktree: string;
+  main: string;
+  path: string;
+}
+
 /**
- * When `path` lies inside a linked git worktree (`git worktree add`, T3 Code, Claude Code), the same relative
- * path in the repository's main checkout; otherwise null. Reads git's files rather than running git, so it stays
- * synchronous and needs no git on PATH. Submodules (no `commondir`), worktrees of bare repositories and anything
- * unreadable are not mapped.
+ * When `path` lies inside a linked git worktree (`git worktree add`, T3 Code, Claude Code), where it is and the
+ * same relative path in the repository's main checkout; otherwise null. Reads git's files rather than running
+ * git, so it stays synchronous and needs no git on PATH. Submodules (no `commondir`), worktrees of bare
+ * repositories and anything unreadable are not mapped.
  */
-export function mainCheckoutOf(path: string): string | null {
+export function mainCheckoutOf(path: string): WorktreeLocation | null {
   try {
     const start = resolve(path);
     if (!existsSync(start)) return null;
@@ -55,7 +62,7 @@ export function mainCheckoutOf(path: string): string | null {
         if (basename(commonDir) !== ".git") return null;
         const main = dirname(commonDir);
         if (main === root || !existsSync(main)) return null;
-        return join(main, relative(root, start));
+        return { worktree: root, main, path: join(main, relative(root, start)) };
       }
       const parent = dirname(root);
       if (parent === root) return null;
@@ -124,8 +131,10 @@ export function createProjectsService(
 
   /**
    * The project `ref` names, or null for an unknown path when `writing` (the caller creates it); a read throws
-   * NOT_FOUND instead. The literal path wins, so a project bound to a worktree on purpose keeps matching; only
-   * when nothing matches is a worktree path tried as the same path in its main checkout.
+   * NOT_FOUND instead. Inside a linked worktree the same path in the main checkout is matched, unless a project is
+   * bound to the worktree itself (or a folder in it). A plain match of the worktree path isn't enough: a worktree
+   * inside the main repo (Claude Code's `.claude/worktrees/`) lies in the repo's root project, which would hide
+   * a deeper project such as `<main>/apps/web`.
    */
   function find(ref: ProjectRef, writing: true): Project | null;
   function find(ref: ProjectRef, writing: false): Project;
@@ -135,8 +144,11 @@ export function createProjectsService(
       throw new AppError("VALIDATION", "Provide projectId or workspacePath to identify the project");
     }
     const path = ref.workspacePath.trim();
-    const main = mainCheckoutOf(path);
-    const match = matchWorkspace(path) ?? (main ? matchWorkspace(main) : undefined);
+    const literal = matchWorkspace(path);
+    const location = mainCheckoutOf(path);
+    const boundToWorktree =
+      literal && location && isWithinWorkspace(literal.workspaceKey!, normalizeWorkspaceKey(location.worktree));
+    const match = location && !boundToWorktree ? (matchWorkspace(location.path) ?? literal) : literal;
     if (match) {
       // Writing tools bring an archived lane back rather than silently filing into a hidden one.
       if (writing && match.archivedAt) return service.update(match.id, { archived: false });
@@ -181,7 +193,8 @@ export function createProjectsService(
       if (found) return { project: found, created: false };
       const path = ref.workspacePath!.trim();
       // Never a lane named after a worktree: the project is the main repo's, however the agent got here.
-      const project = service.create({ workspaceRoot: repositoryRootOf(mainCheckoutOf(path) ?? path) });
+      // The main checkout's root, not the mapped path: a folder that exists only on the worktree's branch isn't there.
+      const project = service.create({ workspaceRoot: mainCheckoutOf(path)?.main ?? repositoryRootOf(path) });
       return { project, created: true };
     },
 
