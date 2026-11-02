@@ -137,7 +137,9 @@ export const TaskCardContent = memo(function TaskCardContent({
         {archivable && task.kind !== "epic" && !task.archivedAt ? <PriorityButton task={task} /> : null}
         {archivable && task.status === "done" && !task.archivedAt ? <ArchiveButton task={task} /> : null}
       </div>
-      <p className="line-clamp-2 text-sm font-medium text-foreground/90 [overflow-wrap:anywhere]">{task.title}</p>
+      <p className="line-clamp-2 min-h-[2lh] text-sm font-medium text-foreground/90 [overflow-wrap:anywhere]">
+        {task.title}
+      </p>
       {task.labels.length ? <CardLabels labels={task.labels} /> : null}
       <TaskProgressLine task={task} />
       {hasCardLinks(task.links) || handoff ? (
