@@ -1,4 +1,5 @@
 import { BOARD_REVIEWER, type HeadlessModel, type T3ThreadSnapshot } from "@repo/contracts";
+import { dirname } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import type { HeadlessJob, HeadlessReview } from "./headlessReview.ts";
@@ -243,6 +244,31 @@ describe("review fallbacks", () => {
     await fallbacks.tick();
     expect(sent).toEqual([]);
     expect(round()?.status).toBe("pending");
+  });
+
+  it("lets the board reviewer read the task's screenshots and points it at them", async () => {
+    const { s, task, fallbacks, advance, jobs } = setup({ headless: true });
+    s.attachments.upload({
+      taskId: task.id,
+      filename: "menu.png",
+      mime: "image/png",
+      bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]),
+    });
+    const [image] = s.attachments.forTask(task.id);
+    s.tasks.move(task.id, { status: "review" }, "user");
+    advance(PAST_GRACE);
+    await fallbacks.tick();
+    expect(jobs[0]!.addDirs).toEqual([dirname(image!.path)]);
+    expect(jobs[0]!.prompt).toContain(image!.path);
+    expect(jobs[0]!.prompt).toContain("Open each one with the Read tool");
+  });
+
+  it("adds no folders for a task without images", async () => {
+    const { s, task, fallbacks, advance, jobs } = setup({ headless: true });
+    s.tasks.move(task.id, { status: "review" }, "user");
+    advance(PAST_GRACE);
+    await fallbacks.tick();
+    expect(jobs[0]!.addDirs).toBeUndefined();
   });
 
   it("records why a headless review failed", async () => {

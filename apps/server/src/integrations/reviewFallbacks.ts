@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import {
   BOARD_REVIEWER,
   REVIEW_DONE_NEXT,
@@ -106,21 +107,26 @@ export function createReviewFallbacks(deps: {
       if (!cwd) throw new Error(`${project.title} has no workspace folder to review in`);
       const settings = s.settings.get();
       const reviewModel = s.reviews.modelFor(task.id);
+      // The task's screenshots live in the data dir, outside the checkout: the reviewer may read that folder.
+      const images = s.attachments.forTask(task.id);
       const result = await runHeadless({
         cli: settings.headlessReviewCli,
         cwd,
         budgetUsd: settings.headlessReviewBudgetUsd,
         model: resolveHeadlessModel(settings.modelTiers, reviewModel),
         effort: resolveHeadlessEffort(settings.modelTiers, reviewModel),
+        ...(images.length ? { addDirs: [...new Set(images.map((i) => dirname(i.path)))] } : {}),
         prompt: headlessPrompt({
           taskNumber: task.number,
           round: round.round,
           taskText: renderTaskDetail(s.tasks.detail(task.id), project, {
             events: 0,
             ticketSystems: s.settings.get().ticketSystems,
+            images,
           }),
           skill: s.reviews.skillFor(task.id),
           baseRef: null,
+          hasImages: images.length > 0,
         }),
       });
       const cost = result.costUsd === null ? "" : ` (board review, $${result.costUsd.toFixed(2)})`;

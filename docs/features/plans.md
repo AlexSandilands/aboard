@@ -97,6 +97,28 @@ wrote.
 - Steps before any heading go into a phase called "Plan". Fenced code blocks are never parsed. Phases
   with no steps are dropped, and a plan with no steps at all is rejected.
 
+### Screen captures
+
+A UI change can pass lint, types and tests and still look wrong (a menu away from its button, text running out of
+a popover), and only a screenshot shows it. So plans for UI work carry a **Screen capture** step, and the capture
+is attached to the task:
+
+- **Planning** adds the step: the planning skill (`BUILTIN_PLAN_SKILL_BODY`, which `planTasksPrompt` embeds) tells
+  the agent to put it before any review or PR step for a task that changes what the user sees (components,
+  styles, layout, or the `ui` label), with the states to capture in its notes. The agent judges what is UI work;
+  the board only has the label to go on. `set_plan` and `update_plan` results hint when a `ui` task's plan has no
+  such step.
+- **Implementing** does it: the work prompt (`taskHandoffPrompt`, also what Autopilot and subagents are sent) and
+  the board skill say the step is required. The agent opens the surface in a real browser in each state the change
+  introduced, saves JPEG or WebP screenshots, looks at every one, fixes what is wrong and captures again, then
+  calls `update_step(step, status: "done", images: [...])`. The images show as thumbnails under the step.
+- **Checking:** moving a `ui` task to Review with no images attached warns but moves; the reviewer (agent or the
+  board reviewer) opens the images and records a finding when they are missing, miss a state or show a bug
+  ([local-review.md](local-review.md#the-board-reviewer)).
+
+Nothing here is a hard gate: a manual task, an epic and a task without the `ui` label are left alone, and the
+step can be skipped like any other.
+
 ### As text for agents
 
 `formatPlanText` renders the plan for MCP results, with ids so agents can update steps:

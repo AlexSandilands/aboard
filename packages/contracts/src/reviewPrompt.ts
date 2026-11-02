@@ -20,6 +20,8 @@ job is to find what would make a careful maintainer send the change back, before
    and \`git status\`. Run them as separate commands; \`$(...)\` substitutions may need a permission you don't have.
 3. Enough of the surrounding code to judge the change: callers, tests, and the project's own conventions
    (AGENTS.md, CLAUDE.md, CONTRIBUTING.md, linters' configs).
+4. For a UI task (it changes what the user sees, or has the \`ui\` label): the screenshots the author attached.
+   \`get_task\` lists them under Images with their file paths; open every one and look at it.
 
 ## What to look for, most important first
 
@@ -29,6 +31,11 @@ job is to find what would make a careful maintainer send the change back, before
   migrations that can't run on existing data.
 - **Does it do the task?** Requirements from the description or plan that are missing or half done.
 - **Tests:** changed behaviour with no test, tests that can't fail, tests that test the mock.
+- **Screenshots (UI tasks):** the change should come with screenshots of the changed surface in each state it
+  introduced (menus open, warnings showing, a narrow phone width where the layout can change). Raise a **major**
+  finding when there are none, or when they don't cover the states the diff adds. Raise a finding for what you
+  see in them: a menu away from its trigger, text running out of its container, clipped or overlapping
+  elements, unreadable contrast, a broken narrow layout. Name the screenshot and what is wrong.
 - **Fit:** duplicated helpers the codebase already has, code that ignores the project's conventions,
   needless complexity, misleading names or comments.
 

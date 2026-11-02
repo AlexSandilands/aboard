@@ -410,6 +410,39 @@ export function labelHint(task: TaskDetail, labelsInUse: ReadonlyArray<LabelUsag
   );
 }
 
+/** A step title or note that already asks for a screen capture. */
+const CAPTURE_WORDS = /screen[ -]?(?:capture|shot)|screenshot/i;
+
+/** Tasks the board treats as UI work for the screen capture nudges: the planning agent judges, the label is ours. */
+const isUiTask = (task: Pick<TaskDetail, "labels">): boolean => task.labels.some((l) => l.toLowerCase() === "ui");
+
+/** A nudge to add a screen capture step to the plan of an open task labelled ui that has none. */
+export function captureStepHint(task: TaskDetail): string | null {
+  if (!isUiTask(task) || task.kind === "epic" || task.manual || task.progress.total === 0) return null;
+  if (task.resolution || task.archivedAt || task.status === "review" || task.status === "done") return null;
+  const mentioned = task.phases.some((p) =>
+    p.steps.some((s) => CAPTURE_WORDS.test(s.title) || CAPTURE_WORDS.test(s.notes ?? "")),
+  );
+  if (mentioned) return null;
+  return (
+    "This task is labelled ui, but no plan step asks for a screen capture. Add one before the review step with " +
+    `add_steps(task: "#${task.number}", steps: [{title: "Screen capture: ...", notes: "<the states to capture>"}]): ` +
+    "open the changed surface in a real browser in each state the change introduced (menus open, warnings showing, " +
+    "narrow width where relevant), look at every screenshot, fix what is wrong, then attach them with " +
+    'update_step(step, status: "done", images: [absolute paths]).'
+  );
+}
+
+/** The warning, when a ui task moves to Review without any image attached. The move still happens. */
+export function missingScreenshotsWarning(task: TaskDetail, imageCount: number): string | null {
+  if (!isUiTask(task) || task.kind === "epic" || task.manual || task.resolution || imageCount > 0) return null;
+  return (
+    "Warning: this task is labelled ui and has no screenshots attached. Open the changed surface in a real browser " +
+    "in each state you introduced, look at your screenshots and fix anything wrong, then attach them with " +
+    `update_step(task: "#${task.number}", step, images: [absolute paths]) before you open the PR.`
+  );
+}
+
 /** A nudge, at planning moments, to suggest a model tier for a planned open task that has none. */
 export function suggestedModelHint(task: TaskDetail): string | null {
   if (task.suggestedModel || task.manual || task.progress.total === 0 || task.resolution || task.status === "done") {
@@ -704,6 +737,8 @@ export function renderTaskDetail(
     events?: number;
     labelsInUse?: ReadonlyArray<LabelUsage>;
     modelHint?: boolean;
+    /** Asks for a screen capture step when a ui task's plan has none (captureStepHint). */
+    captureHint?: boolean;
     /** The harness calling, when it is one that can link its own session; the Missing links hint asks for it. */
     sessionHarness?: AgentHarness | null;
     /** Whether Start planned tasks is on for the task's scope, which makes the Autopilot flag worth asking about. */
@@ -827,6 +862,8 @@ export function renderTaskDetail(
   if (labels) lines.push("", "Missing labels:", `- ${labels}`);
   const model = opts.modelHint ? suggestedModelHint(task) : null;
   if (model) lines.push("", "Missing suggested model:", `- ${model}`);
+  const capture = opts.captureHint ? captureStepHint(task) : null;
+  if (capture) lines.push("", "Missing screen capture step:", `- ${capture}`);
   const autopilot = opts.autopilotHint ? autopilotFlagHint(task) : null;
   if (autopilot) lines.push("", "Autopilot flag not set:", `- ${autopilot}`);
   if (opts.deliveryHint) lines.push("", "Epic delivery not chosen:", `- ${opts.deliveryHint}`);
@@ -847,6 +884,7 @@ export function renderTaskShort(
   opts: {
     labelsInUse?: ReadonlyArray<LabelUsage>;
     modelHint?: boolean;
+    captureHint?: boolean;
     autopilotHint?: boolean;
     deliveryHint?: string | null;
     progress?: { now: number; closing?: boolean };

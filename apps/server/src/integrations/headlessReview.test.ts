@@ -30,6 +30,27 @@ describe("headless review", () => {
     expect(headlessArgs(1.5, null, null)).not.toContain("--effort");
   });
 
+  it("may read the folders it is given, and none otherwise", () => {
+    const args = headlessArgs(1.5, null, null, ["/data/attachments/t1"]);
+    expect(args.slice(args.indexOf("--add-dir"), args.indexOf("--add-dir") + 2)).toEqual([
+      "--add-dir",
+      "/data/attachments/t1",
+    ]);
+    expect(headlessArgs(1.5)).not.toContain("--add-dir");
+  });
+
+  it("tells the reviewer to open the screenshots only when the task has some", () => {
+    const input = {
+      taskNumber: 7,
+      round: 1,
+      taskText: "#7",
+      skill: { source: "global" as const, name: "review-loop", path: "/h/SKILL.md" },
+      baseRef: null,
+    };
+    expect(headlessPrompt({ ...input, hasImages: true })).toContain("Open each one with the Read tool");
+    expect(headlessPrompt(input)).not.toContain("screenshots");
+  });
+
   it("puts the task inline and diffs against the base branch", () => {
     const prompt = headlessPrompt({
       taskNumber: 7,

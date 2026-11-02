@@ -130,6 +130,34 @@ describe("attachment files", () => {
     expect(() => services.attachments.claimIds(other.id, [first.id])).toThrow(/another task/);
   });
 
+  it("are stored from files on disk, the type read from the bytes, all or none", () => {
+    const { task, services } = setup();
+    const dir = tempDir();
+    const shot = join(dir, "state.png");
+    const jpg = join(dir, "narrow.dat");
+    const text = join(dir, "notes.png");
+    const big = join(dir, "big.png");
+    writeFileSync(shot, png());
+    writeFileSync(jpg, Uint8Array.from([0xff, 0xd8, 0xff, 1, 2, 3]));
+    writeFileSync(text, "not an image");
+    writeFileSync(big, png(MAX_ATTACHMENT_BYTES + 1));
+
+    const stored = services.attachments.uploadFromPaths(task.id, [shot, jpg]);
+    expect(stored.map((a) => [a.filename, a.mime, a.taskId])).toEqual([
+      ["state.png", "image/png", task.id],
+      ["narrow.dat", "image/jpeg", task.id],
+    ]);
+    expect(services.attachments.forTask(task.id)).toHaveLength(2);
+
+    // One bad path anywhere in the list stores nothing.
+    expect(() => services.attachments.uploadFromPaths(task.id, [shot, text])).toThrow(/not a PNG, JPEG/);
+    expect(() => services.attachments.uploadFromPaths(task.id, [shot, big])).toThrow(/JPEG or WebP/);
+    expect(() => services.attachments.uploadFromPaths(task.id, [shot, join(dir, "gone.png")])).toThrow(/no such file/);
+    expect(() => services.attachments.uploadFromPaths(task.id, ["shot.png"])).toThrow(/absolute/);
+    expect(() => services.attachments.uploadFromPaths(task.id, [dir])).toThrow(/Not a file/);
+    expect(services.attachments.forTask(task.id)).toHaveLength(2);
+  });
+
   it("refuse a launch with an image that is gone", () => {
     const { services } = setup();
     expect(() => services.attachments.forLaunch(["0b6c1f0e-3a4d-4c1e-9d7a-2f5b8c9e1a11"], null)).toThrow(

@@ -119,6 +119,9 @@ text when both are present.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
   review round is waiting. It also lists the task's pasted **Images** with their absolute file paths, so an agent
   can open a screenshot as a file ([attachments.md](attachments.md)).
+- `update_step` takes `images`, absolute paths of screenshots on the board's machine (up to 10): they are stored
+  with the task and appended to the step's notes as image tokens, all or none
+  ([attachments.md](attachments.md#how-it-works)). The result says how many were attached.
 - `get_session_transcript` returns a header with the session's totals, then one page of up to 20,000 characters of
   one-line entries and the `offset` to call again with when more follows (`renderTranscript`). Credential-shaped text
   is redacted first ([agent-sessions.md](agent-sessions.md#transcripts)).
@@ -138,10 +141,16 @@ text when both are present.
     that is already Done never nags.
   - _Stale plan_: the task is In Progress with a step in progress, but no step has changed for
     `STALE_PLAN_MS` (30 minutes).
+  - _Missing screen capture step_ (`captureStepHint`): in `set_plan` and `update_plan` results, for an open task
+    labelled `ui` whose plan has no step mentioning a screen capture or screenshot (title or notes); names the
+    `add_steps` call and what the step must do ([plans.md](plans.md#screen-captures)).
   - _Batched completion_ is not a section: an `update_plan` result on an In Progress task that moved two or
     more steps straight to done without ever starting them (`startedAt` still null) says so after the headline
     (`batchedCompletionHint`), and tells the agent to use `update_step` as it goes. It stays quiet at Review
     and Done, where the open-steps hint asks for exactly that catch-up.
+
+  A `ui` task moved to Review with no images attached gets a warning after the `move_task` headline
+  (`missingScreenshotsWarning`); the move still happens.
 
   Renderings that aren't for the implementing agent (the reviewer's `taskText`) leave it out: it is opt-in
   through `renderTaskDetail`'s `progress` option.
