@@ -281,9 +281,13 @@ describe("machine folders", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     expect(status.lastError).toMatch(/already has a folder laptop for another machine.*choose another machine name/);
     expect(log(a.remote)).toHaveLength(1);
 
-    // Choosing another name, as the error says, recovers: the local commit that wrote into laptop/ is dropped.
+    // Choosing another name, as the error says, recovers: the local commit that wrote into laptop/ is set aside.
+    const localHead = git(b.clone, "rev-parse", "HEAD").trim();
     b.services.settings.update({ machineName: "desktop" });
     expect((await b.backup.run()).lastError).toBeNull();
+    const kept = git(b.clone, "branch", "--list", "--format=%(refname:short)", "unpushed-backups-*").trim();
+    expect(git(b.clone, "rev-parse", kept).trim()).toBe(localHead);
+    expect(b.services.notifications.list({ kind: "backup_notice" }).items[0]!.body).toContain(kept);
     expect(JSON.parse(git(a.remote, "show", "HEAD:laptop/manifest.json"))).toMatchObject({ instanceId: a.instanceId });
     expect(JSON.parse(git(a.remote, "show", "HEAD:desktop/manifest.json"))).toMatchObject({
       instanceId: b.instanceId,

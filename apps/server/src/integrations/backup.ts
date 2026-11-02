@@ -273,8 +273,8 @@ export function createBackupIntegration(deps: {
    * When this machine committed a folder before it saw the remote (it backed up with no remote set, or offline)
    * and another machine's folder of that name is upstream, the rebase stops on a conflict, every run, which
    * claimFolder can't see in the working tree. With the name still taken, throws "choose another machine name".
-   * Once it has been renamed, the unpushed commits that wrote into the other machine's folder are dropped by
-   * resetting to the upstream: nothing is lost, as this run writes the whole dump again from the database into
+   * Once it has been renamed, the unpushed commits that wrote into the other machine's folder are set aside on a
+   * local branch and the clone resets to the upstream; this run writes the whole dump again from the database into
    * this machine's folder. Returns whether it reset.
    */
   const settleForeignConflict = async (dir: string, name: string): Promise<boolean> => {
@@ -288,8 +288,21 @@ export function createBackupIntegration(deps: {
       dir,
     );
     if (touched.code !== 0 || !touched.stdout.trim()) return false;
+    // Those commits may be the only copy of this machine's older snapshots (it backed up with no remote), so they
+    // stay on a local branch rather than going for good.
+    const head = (await git(dir, "rev-parse", "--short", "HEAD")).trim();
+    const kept = `unpushed-backups-${head}`;
+    await git(dir, "branch", "--force", kept, "HEAD");
     await git(dir, "reset", "--hard", "--quiet", "@{u}");
-    log.warn(`[backup] dropped local backup commits that wrote into another machine's folder in ${dir}`);
+    log.warn(`[backup] moved local backup commits that wrote into another machine's folder to the branch ${kept}`);
+    deps.services().notifications.notify({
+      kind: "backup_notice",
+      title: "Older local backups set aside",
+      body:
+        `This machine's backups made before it joined the shared repo wrote into another machine's folder, so they ` +
+        `couldn't be pushed. They are kept on the branch ${kept} in ${dir}; backups go on from now.`,
+      dedupeKey: `backup_notice:set-aside:${head}`,
+    });
     return true;
   };
 

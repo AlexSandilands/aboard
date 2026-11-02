@@ -153,9 +153,10 @@ desktop/
   same-named folder that isn't a backup. When this machine committed its own folder of that name before it saw
   the remote (backed up with no remote set, or offline), the pull itself stops on a conflict; the run then
   checks the upstream's folder of that name and fails with the same message instead of git's. Once the machine is
-  renamed, the next failed pull finds unpushed commits that wrote into another machine's folder and resets to the
-  upstream, dropping them: the run writes the whole dump again from the database, so only those local snapshots
-  are lost (and any other unpushed commit in the clone, such as a hand edit). A folder whose manifest has no `instanceId` (moved in from a flat backup
+  renamed, the next failed pull finds unpushed commits that wrote into another machine's folder, keeps them on a
+  local branch `unpushed-backups-<sha>` (they may be the only copy of that machine's older snapshots), resets to
+  the upstream and sends a `backup_notice` naming the branch; the run then writes the whole dump again from the
+  database. A folder whose manifest has no `instanceId` (moved in from a flat backup
   by hand) is taken over.
 - **Renaming.** When this board's folder (found by `instanceId`) has another name and nothing holds the new one,
   the run moves it with `git mv`, through a temporary name so a change of case works (and is recorded where git

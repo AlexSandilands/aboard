@@ -27,7 +27,7 @@ write that made the change, so the change and its notification commit together.
 | `autopilot_notice`     | Anything else an automation sends through `notify()`: Unblock dependents, and a new digest (task-less, with the counts) | the caller's (`digest:<id>`) |
 | `suggestion`           | An agent suggests a change to a prompt or skill ([suggestions](suggestions.md)); task-less, opens Settings › Suggestions from the inbox | `suggestion:<id>` |
 | `automation_draft`     | An agent drafts a custom automation (`draft_automation`, [autopilot](autopilot.md#drafts)); task-less, opens Settings › Custom automations, which lists the drafts | `automation_draft:<id>` |
-| `backup_notice`        | The git backup moved a flat backup repo into this machine's folder ([backup](backup.md#machine-folders)); task-less, opens Settings › Data | `backup_notice:migrated:<instanceId>` |
+| `backup_notice`        | The git backup moved a flat backup repo into this machine's folder, or set unpushed backups that clashed with another machine's folder aside on a branch ([backup](backup.md#machine-folders)); task-less, opens Settings › Data | `backup_notice:migrated:<instanceId>`, `backup_notice:set-aside:<sha>` |
 
 The thread and PR producers sit in `links.setSnapshot`, the call both pollers make, and compare the new
 snapshot with the stored one. **A link seen for the first time never notifies**: whatever state it was linked
