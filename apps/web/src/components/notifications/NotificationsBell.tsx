@@ -79,7 +79,7 @@ function Inbox({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="flex max-h-[min(32rem,var(--available-height))] flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-1.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-3 py-1.5">
         <h2 className="text-sm font-medium">Notifications</h2>
         <Button
           variant="ghost-muted"
@@ -92,7 +92,8 @@ function Inbox({ onClose }: { onClose: () => void }) {
       </div>
       {present.length > 1 ? (
         <div
-          className="flex gap-1 overflow-x-auto border-b border-border/60 px-3 py-2"
+          // shrink-0: overflow-x makes overflow-y auto too, so without it the list squeezes this row into a scrollbar.
+          className="flex shrink-0 gap-1 overflow-x-auto border-b border-border/60 px-3 py-2"
           role="group"
           aria-label="Filter by type"
         >
