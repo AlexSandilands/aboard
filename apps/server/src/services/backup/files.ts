@@ -43,6 +43,9 @@ const EVENTS_DIR = "events";
 /** Pasted images, as `attachments/<task id>/<id>.<ext>`: the same layout as the data dir's `attachments/`. */
 const ATTACHMENTS_DIR = "attachments";
 
+/** The names a dump puts at the top of its folder, so moving a flat dump into a machine folder takes all of it. */
+export const DUMP_ENTRIES: readonly string[] = [...Object.values(ROOT_FILES), TASKS_DIR, EVENTS_DIR, ATTACHMENTS_DIR];
+
 /** "2026-10" from an ISO timestamp; rows with no usable date share one folder. */
 const monthOf = (iso: unknown): string => {
   const match = typeof iso === "string" ? /^\d{4}-\d{2}/.exec(iso) : null;

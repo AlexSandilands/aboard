@@ -1,8 +1,10 @@
+import { hostname } from "node:os";
 import {
   DEFAULT_HANDOFF_MENUS,
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_REVIEW_MAX_ROUNDS,
   EMPTY_MODEL_TIERS,
+  machineNameFrom,
   TICKET_SYSTEM_PRESETS,
   type AppSettings,
   type TicketSystem,
@@ -49,4 +51,7 @@ export const defaultSettings: AppSettings = {
   backupDir: null,
   backupRemote: null,
   backupIntervalMinutes: 60,
+  // The host name's default, as on whatever machine runs the tests.
+  machineName: machineNameFrom(hostname()),
+  machineNameIsDefault: true,
 };

@@ -94,6 +94,23 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
         }
       />
       <SettingsRow
+        id="board.data.machine-name"
+        title="Machine name"
+        description="This machine's folder in the backup repo, so several machines can share one repo."
+        info="Leave it blank to use the host name. Renaming moves the folder on the next backup; a name another machine already has is refused."
+        control={
+          <BlurInput
+            aria-label="Machine name"
+            size="sm"
+            className="sm:w-64"
+            // Blank while it follows the host name, which shows as the placeholder.
+            placeholder={settings.machineName}
+            value={settings.machineNameIsDefault ? "" : settings.machineName}
+            onSave={(next) => updateSettings.mutate({ machineName: next.trim() || null })}
+          />
+        }
+      />
+      <SettingsRow
         id="board.data.backup-interval"
         title="Every"
         description="How often to check for changes."

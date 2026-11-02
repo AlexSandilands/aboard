@@ -46,6 +46,7 @@ function setup(opts: { runGh?: RunGh; fetch?: FetchFn; githubFetch?: FetchFn; wi
         sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
         worktreesDir: "/nonexistent/worktrees",
         attachmentsDir: "/nonexistent/attachments",
+        instanceId: "00000000-0000-4000-8000-000000000000",
         port: 4317,
         webPort: 5317,
       },

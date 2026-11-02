@@ -7,6 +7,66 @@ import { z } from "zod";
 /** Bumped when the layout of the dump (files, keys) changes, not when the schema does. */
 export const BACKUP_FORMAT_VERSION = 1;
 
+// The git backup repo holds one folder per machine, so several machines can share one repo:
+//
+//   backup.json        BackupRepoIndex: marks the repo as ours and versions this layout
+//   laptop/            one machine's dump, in the folder layout above (manifest.json, tasks/, ...)
+//   desktop/
+//
+// Each machine writes only its own folder, and backup.json holds nothing per machine, so two machines pushing to
+// the same repo never conflict. Whose folder is whose is in each folder's manifest (instanceId). A dump's own
+// layout didn't change, so it keeps BACKUP_FORMAT_VERSION; the repo layout has a version of its own. A flat repo
+// (a dump at the root, from before machine folders) is moved into this machine's folder by the next backup run.
+
+/** Bumped when the repo layout (backup.json, the machine folders) changes. */
+export const BACKUP_REPO_FORMAT_VERSION = 1;
+
+/** `backup.json` at the root of a git backup repo. Nothing in it is per machine: see the layout above. */
+export const BackupRepoIndex = z.object({
+  /** The product id, so the board never writes into another app's repo. */
+  app: z.string(),
+  /** BACKUP_REPO_FORMAT_VERSION of the version that wrote the layout. */
+  repoFormat: z.number().int(),
+});
+export type BackupRepoIndex = z.infer<typeof BackupRepoIndex>;
+
+/** Longest machine name: it is a folder name in the repo. */
+export const MACHINE_NAME_MAX = 64;
+/**
+ * Folders a flat dump has at its root, so a machine folder can't be mistaken for part of one (its files, and
+ * backup.json, all end in ".json", which no name may), plus the device names Windows can't use as a folder name,
+ * with or without an extension.
+ */
+const RESERVED_MACHINE_NAMES = new Set(["tasks", "events", "attachments"]);
+const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
+
+/**
+ * A machine's name, which is its folder in the backup repo: letters, digits, ".", "_" and "-", starting with a letter
+ * or digit (so it can't be ".git"), and none of the names below, so it is a valid folder name on every OS.
+ */
+export const MachineName = z
+  .string()
+  .trim()
+  .min(1, "Give the machine a name")
+  .max(MACHINE_NAME_MAX, `At most ${MACHINE_NAME_MAX} characters`)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "Use letters, digits, '.', '_' or '-', starting with a letter or digit")
+  .refine(
+    (name) => !RESERVED_MACHINE_NAMES.has(name.toLowerCase()) && !/\.json$/i.test(name),
+    "That name is used by the backup itself",
+  )
+  // Windows drops a trailing dot, and can't make a folder named after a device: the repo couldn't be checked out.
+  .refine((name) => !name.endsWith(".") && !WINDOWS_DEVICE_NAME.test(name), "Windows can't use that as a folder name");
+
+/** The default machine name from a host name: invalid characters become "-", and an unusable name "machine". */
+export function machineNameFrom(hostname: string): string {
+  const name = hostname
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^[^A-Za-z0-9]+/, "")
+    .slice(0, MACHINE_NAME_MAX)
+    .replace(/\.+$/, "");
+  return MachineName.safeParse(name).success ? name : "machine";
+}
+
 /** One table row as stored: column name to value. */
 export const BackupRow = z.record(z.string(), z.union([z.string(), z.number(), z.null()]));
 export type BackupRow = z.infer<typeof BackupRow>;
@@ -20,6 +80,13 @@ export const BackupManifest = z.object({
   schemaVersion: z.string(),
   /** Rows per table, checked after a restore. */
   counts: z.record(z.string(), z.number().int().min(0)),
+  /**
+   * The board that wrote this dump into a backup repo, which owns its machine folder. Absent from dumps taken by
+   * hand and from backups made before machine folders.
+   */
+  instanceId: z.string().optional(),
+  /** That machine's name when it wrote the dump. Absent like instanceId. */
+  machineName: z.string().optional(),
 });
 export type BackupManifest = z.infer<typeof BackupManifest>;
 
@@ -83,6 +150,10 @@ export const BackupSettings = z.object({
   /** Remote to push to (and clone from when backupDir is empty); null keeps commits local. */
   backupRemote: z.string().nullable(),
   backupIntervalMinutes: z.number().int().min(BACKUP_INTERVAL_MIN).max(BACKUP_INTERVAL_MAX),
+  /** This machine's folder in the backup repo: the name set in Settings, else one made from the host name. */
+  machineName: z.string(),
+  /** Whether machineName is the host name's default (nothing set). */
+  machineNameIsDefault: z.boolean(),
 });
 export type BackupSettings = z.infer<typeof BackupSettings>;
 
@@ -98,3 +169,16 @@ export const BackupStatus = z.object({
   lastError: z.string().nullable(),
 });
 export type BackupStatus = z.infer<typeof BackupStatus>;
+
+/** A machine folder in the backup repo (`GET /api/backup/machines`). */
+export const BackupMachine = z.object({
+  folder: z.string(),
+  /** The board that owns the folder; null for a backup made before machine folders. */
+  instanceId: z.string().nullable(),
+  machineName: z.string().nullable(),
+  /** Whether it is this board's folder. */
+  current: z.boolean(),
+  /** When a commit last touched the folder, as of the clone's last pull; null before its first commit. */
+  lastCommitAt: z.string().nullable(),
+});
+export type BackupMachine = z.infer<typeof BackupMachine>;

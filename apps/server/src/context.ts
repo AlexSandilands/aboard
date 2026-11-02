@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { EventBus } from "./bus.ts";
 import type { Config } from "./config.ts";
 import { openDatabase, type Db } from "./db/database.ts";
+import { instanceIdOf } from "./instance.ts";
 import { createIntegrations, type IntegrationOverrides } from "./integrations/index.ts";
 import { createServices } from "./services/index.ts";
 import type { Services } from "./services/types.ts";
@@ -11,7 +13,10 @@ import type { AppContext } from "./app.ts";
 /** Wires db → bus → integrations → services. Used by main.ts and tests. */
 export function createContext(
   config: Pick<Config, "dbPath" | "port" | "webPort" | "token" | "t3Home" | "pollers" | "userHome" | "sessionDirs"> &
-    Partial<Pick<Config, "webDist" | "worktreesDir" | "attachmentsDir" | "harnessHomes" | "demo">>,
+    Partial<Pick<Config, "webDist" | "worktreesDir" | "attachmentsDir" | "harnessHomes" | "demo">> & {
+      /** This board's id (instance.ts); read from the data dir unless set. An in-memory database gets a new one. */
+      instanceId?: string;
+    },
   overrides: IntegrationOverrides = {},
 ): AppContext & { db: Db } {
   const db = openDatabase(config.dbPath);
@@ -19,6 +24,8 @@ export function createContext(
   const attachmentsDir =
     config.attachmentsDir ??
     (config.dbPath === ":memory:" ? join(tmpdir(), "attachments-test") : join(dirname(config.dbPath), "attachments"));
+  const instanceId =
+    config.instanceId ?? (config.dbPath === ":memory:" ? randomUUID() : instanceIdOf(dirname(config.dbPath)));
   const bus = new EventBus();
   let services: Services | null = null;
   const integrations = createIntegrations(
@@ -28,6 +35,7 @@ export function createContext(
         ...config,
         worktreesDir: config.worktreesDir ?? join(dirname(config.dbPath), "worktrees"),
         attachmentsDir,
+        instanceId,
       },
       bus,
       services: () => {

@@ -1,6 +1,6 @@
 # Backup and restore
 
-Board task: #65.
+Board tasks: #65; machine folders #69 (epic #68).
 
 The board lives in one SQLite file. If that file is deleted or corrupted, nothing else holds the board. Backup
 writes the whole board out as JSON: on demand from the CLI, or on a schedule into a git repo the server commits
@@ -13,6 +13,8 @@ single deleted task back on a live board.
 
 `dumpBoard` reads every table in one transaction and returns a `BoardDump` (`packages/contracts/src/backup.ts`).
 Rows keep the database's column names, and the manifest records the schema version: the last migration applied.
+A dump the git backup writes also records the machine that wrote it (`instanceId`, `machineName`; see
+[Machine folders](#machine-folders)); both are optional, so dumps from before them still parse.
 
 The folder form is laid out for git:
 
@@ -97,19 +99,22 @@ Pasted images are copied next to the JSON and copied back by a restore; see [att
 
 ### Scheduled git backup
 
-Settings → Board → Data sets a folder, an optional remote and an interval. `apps/server/src/integrations/backup.ts`
-checks every minute whether a run is due (and once shortly after startup). A run:
+Settings → Board → Data sets a folder, an optional remote, an interval and the machine's name.
+`apps/server/src/integrations/backup.ts` checks every minute whether a run is due (and once shortly after startup).
+A run:
 
 1. Prepares the folder: an empty folder is cloned from the remote (or `git init`ed without one). A folder
-   with no `.git` is accepted only if it already holds a dump. A repo with tracked files but no manifest of
-   ours is refused, so the board never commits into someone else's repo; a README, licence, `.gitignore` or
-   `.gitattributes` (what a host adds to a new repo) doesn't count.
-2. Pulls with `--rebase` when the branch has an upstream, so commits made on the remote (a README edited on
-   GitHub) don't get every push rejected. A failed pull (offline) is aborted and recorded; the run still
-   commits locally. Leftover `*.json.tmp` files from a crash are removed before writing.
-3. Writes the dump, `git add -A`, and commits only if `git status` shows changes. The message counts task
-   files: `Back up board: 2 tasks changed, 1 added`.
-4. Pushes when the branch is ahead of its upstream (or has none yet).
+   with no `.git` is accepted only if it already holds a backup. A repo with tracked files but no backup of ours
+   (a `backup.json`, a flat dump, or a machine folder) is refused, so the board never commits into someone else's
+   repo; a README, licence, `.gitignore` or `.gitattributes` (what a host adds to a new repo) doesn't count.
+2. Pulls with `--rebase` when the branch has an upstream, so commits made on the remote (another machine's
+   backup, a README edited on GitHub) don't get every push rejected. A failed pull (offline) is aborted and
+   recorded; the run still commits locally. Leftover `*.json.tmp` files from a crash are removed before writing.
+3. Moves a flat backup into this machine's folder, or renames this machine's folder, each in a commit of its
+   own, and refuses a name another machine's folder has (see [Machine folders](#machine-folders)).
+4. Writes the dump into `<machine name>/` and `backup.json` at the root, `git add -A`, and commits only if
+   `git status` shows changes. The message counts task files: `Back up board: 2 tasks changed, 1 added`.
+5. Pushes when the branch is ahead of its upstream (or has none yet).
 
 The machine's own `git` does the work, so pushing uses the credentials it already has (Git Credential
 Manager, SSH keys) and the board stores no token. `GIT_TERMINAL_PROMPT=0` makes a missing credential fail
@@ -118,7 +123,57 @@ recorded as `lastError` in the status and retried next run; commits made while o
 out with the next push.
 
 The status (last run, last commit, last push, last error) is held in memory and served at
-`GET /api/backup/status`; "Back up now" calls `POST /api/backup/run`.
+`GET /api/backup/status`; "Back up now" calls `POST /api/backup/run`. `GET /api/backup/machines` lists the
+repo's machine folders (folder, owner, whether it is this board's, when a commit last touched it, as of the
+clone's last pull).
+
+### Machine folders
+
+Several machines can back up to one repo. The repo holds `backup.json` and one folder per machine:
+
+```
+backup.json      {"app": ..., "repoFormat": 1}: marks the repo as ours and versions this layout
+laptop/          one machine's dump, laid out as above (manifest.json, tasks/, events/, ...)
+desktop/
+```
+
+- **Identity.** Each board has an `instanceId`: a random uuid in `<data dir>/instance-id`
+  (`apps/server/src/instance.ts`), made on first start by writing a temp file and hard-linking it into place, so
+  two processes starting at once agree on one id. It is not a setting, so it is never part of a dump and a restore
+  doesn't change it: a board restored onto a new machine is a new machine. The folder's `manifest.json` records
+  the `instanceId` and `machineName` that wrote it, which is how a folder's owner is known.
+- **The name** is the `machineName` setting, machine-only like the rest of the backup settings. Unset, it is the
+  host name made folder-safe (`machineNameFrom`), and the first backup saves it as the setting, because some host
+  names change with the network (macOS) and each change would move the folder. It must be letters, digits, `.`,
+  `_` or `-`, starting with a letter or digit; not `tasks`, `events`, `attachments`, `backup.json` or
+  `manifest.json`; and not a name Windows can't use as a folder (`con`, `nul`, `com1`, ..., or a trailing dot), so
+  every machine can check the repo out (`MachineName` in contracts).
+- **Name clash.** After the pull, a folder of the same name (ignoring case, as Windows and macOS do) whose
+  manifest names another `instanceId` fails the run with "choose another machine name in Settings"; so does a
+  same-named folder that isn't a backup. When this machine committed its own folder of that name before it saw
+  the remote (backed up with no remote set, or offline), the pull itself stops on a conflict; the run then
+  checks the upstream's folder of that name and fails with the same message instead of git's. Once the machine is
+  renamed, the next failed pull finds unpushed commits that wrote into another machine's folder, keeps them on a
+  local branch `unpushed-backups-<sha>` (they may be the only copy of that machine's older snapshots), resets to
+  the upstream and sends a `backup_notice` naming the branch; the run then writes the whole dump again from the
+  database. A folder whose manifest has no `instanceId` (moved in from a flat backup
+  by hand) is taken over.
+- **Renaming.** When this board's folder (found by `instanceId`) has another name and nothing holds the new one,
+  the run moves it with `git mv`, through a temporary name so a change of case works (and is recorded where git
+  ignores case), and commits
+  `Rename the backup folder laptop/ to work-laptop/`.
+- **Migration.** A repo with a dump at its root (a flat backup, from before machine folders) is moved into this
+  machine's folder by the next run: every dump entry (`DUMP_ENTRIES` in `files.ts`) is renamed into it,
+  `backup.json` is written, and the move is committed on its own as `Move the backup into laptop/`, so
+  `git log --follow` keeps each file's history. The run then sends a one-time `backup_notice`
+  ([notifications](notifications.md)). An older version pointed at a migrated repo finds no root `manifest.json`
+  and refuses it as "other content" instead of writing over it.
+- **No conflicts.** Each machine writes only inside its own folder, and `backup.json` holds nothing per machine,
+  so every machine writes the same bytes. Two machines that both add it before seeing each other's rebase
+  cleanly.
+
+The CLI's `import` and `restore-task` take a backup repo with `--machine <folder or name>` (not needed when it
+has one machine), one machine's folder, or a flat backup (`resolveDumpDir` in `repo.ts`).
 
 ## Decisions
 
@@ -134,6 +189,16 @@ The status (last run, last commit, last push, last error) is held in memory and 
   code. The migrations already know how to move data forward, including the data fixes some of them make.
 - **Allow-list for settings.** "Everything except secrets" leaks the next secret someone adds.
 - **Use the system git.** No credentials to store, and it works with whatever git sign-in you already use.
+- **One repo, a folder per machine** rather than a repo per machine or one shared dump. Machines don't share a
+  board (each has its own database), so their dumps can't be merged; folders keep them side by side, and each
+  machine only ever writing its own folder means the existing `pull --rebase` never meets a conflict.
+- **No machine list in `backup.json`.** A list every machine edits would conflict when two machines add
+  themselves between each other's pull and push. Each folder's manifest says whose it is instead.
+- **The dump format stays at 1.** A machine folder holds the same dump as before; the manifest's new keys are
+  optional and older versions ignore them, so bumping `BACKUP_FORMAT_VERSION` would only make older versions
+  refuse dumps they read correctly. The repo layout has its own `repoFormat` in `backup.json`.
+- **The instance id is a file, not a setting.** Settings travel in backups and restores; an identity that
+  did would let a restored board claim the folder of the machine it came from.
 - **Point it at a private repo.** Anything an agent pastes into a note stays in git history for good. The
   settings row says so.
 
@@ -153,9 +218,11 @@ The status (last run, last commit, last push, last error) is held in memory and 
 | `packages/contracts/src/backup.ts`                | Dump, manifest, backup settings and status schemas; format version   |
 | `apps/server/src/services/backup/dump.ts`         | `dumpBoard`: the board as a `BoardDump`, minus the link cache        |
 | `apps/server/src/services/backup/files.ts`        | Folder layout, deterministic formatting, writing and reading dumps   |
+| `apps/server/src/services/backup/repo.ts`         | The backup repo: `backup.json`, machine folders, picking a dump to read |
+| `apps/server/src/instance.ts`                     | `instanceIdOf`: this board's id in the data dir                      |
 | `apps/server/src/services/backup/restore.ts`      | `restoreBoard`, `upgradeDump`, manifest checks                       |
 | `apps/server/src/services/backup/index.ts`        | The backup service: `dump` and `restoreTask`                         |
-| `apps/server/src/integrations/backup.ts`          | Scheduled git backup: prepare the repo, commit, push, status         |
+| `apps/server/src/integrations/backup.ts`          | Scheduled git backup: prepare the repo, migrate, claim the folder, commit, push, status, machines |
 | `apps/server/src/backupCli.ts`                    | `pnpm backup export / import / restore-task`                         |
 | `apps/server/src/serverFile.ts`                   | `server.json` in the data dir, so the CLI can tell a server is up    |
 | `apps/server/src/db/database.ts`                  | `migrate(db, upTo)` and `schemaVersion`                              |

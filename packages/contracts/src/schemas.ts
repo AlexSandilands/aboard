@@ -5,7 +5,7 @@ import { LabelHue } from "./labels.ts";
 import type { AgentHarness } from "./agentSessions.ts";
 import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
 import { AutomationVariables } from "./automationVariables.ts";
-import { BackupSettings } from "./backup.ts";
+import { BackupSettings, MachineName } from "./backup.ts";
 import { HeadlessModel } from "./headlessModel.ts";
 import { ModelProfiles } from "./modelProfiles.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
@@ -962,6 +962,8 @@ export const UpdateSettingsInput = z.object({
   backupDir: z.string().trim().nullable().optional(),
   backupRemote: z.string().trim().nullable().optional(),
   backupIntervalMinutes: BackupSettings.shape.backupIntervalMinutes.optional(),
+  /** null goes back to the host name. */
+  machineName: MachineName.nullable().optional(),
   /** null clears the token. */
   t3Token: z.string().trim().nullable().optional(),
 });

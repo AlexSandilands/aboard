@@ -13,6 +13,7 @@ export const NotificationKind = z.enum([
   "suggestion",
   "agent_request",
   "automation_draft",
+  "backup_notice",
 ]);
 export type NotificationKind = z.infer<typeof NotificationKind>;
 
@@ -38,10 +39,11 @@ export const NOTIFICATION_KINDS: ReadonlyArray<{ kind: NotificationKind; label: 
     label: "Automation drafts",
     description: "An agent drafted an automation for you to review and import",
   },
+  { kind: "backup_notice", label: "Backup changes", description: "A change the git backup made to the backup repo" },
 ];
 
 /** The inbox filter's chips: related kinds share one, so the row stays short however many kinds there are. */
-export const NOTIFICATION_GROUPS = ["agents", "prs", "reviews", "autopilot", "suggestions"] as const;
+export const NOTIFICATION_GROUPS = ["agents", "prs", "reviews", "autopilot", "suggestions", "backup"] as const;
 export type NotificationGroup = (typeof NOTIFICATION_GROUPS)[number];
 
 export const NOTIFICATION_GROUP_LABELS: Record<NotificationGroup, string> = {
@@ -50,6 +52,7 @@ export const NOTIFICATION_GROUP_LABELS: Record<NotificationGroup, string> = {
   reviews: "Reviews",
   autopilot: "Autopilot",
   suggestions: "Suggestions",
+  backup: "Backup",
 };
 
 /** Exhaustive on purpose: a new kind has to pick its group. */
@@ -63,6 +66,7 @@ export const NOTIFICATION_KIND_GROUP: Record<NotificationKind, NotificationGroup
   autopilot_notice: "autopilot",
   automation_draft: "autopilot",
   suggestion: "suggestions",
+  backup_notice: "backup",
 };
 
 export const InboxNotification = z.object({
@@ -112,6 +116,7 @@ export const DEFAULT_NOTIFICATION_KINDS: Record<NotificationKind, boolean> = {
   suggestion: true,
   agent_request: true,
   automation_draft: true,
+  backup_notice: true,
 };
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
