@@ -136,8 +136,8 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    task reaches Review with steps still open; follow them.
 
    **UI work needs a screen capture.** When a task changes what the user sees (components, styles, layout, or
-   the `ui` label), its plan has a **Screen capture** step; if it doesn't, `add_steps` one before the review
-   step. Do it for real: open the changed surface in a browser, in each state you introduced (menus open,
+   the `ui` label), its plan has a **Screen capture** step; if it doesn't, `add_steps` one (and move it ahead of any
+   review or PR step with `update_plan`). Do it for real: open the changed surface in a browser, in each state you introduced (menus open,
    warnings showing, a narrow phone width where the layout can change), save the screenshots as JPEG or WebP at
    a sensible width (each must be under 5 MB), and look at every one. Fix whatever looks wrong and capture
    again before moving to Review. Attach them in the same call that finishes the step:

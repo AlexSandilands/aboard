@@ -39,6 +39,8 @@ export interface AttachmentsService {
    * leading bytes. Every file is checked before any is stored, so one bad path attaches nothing.
    */
   uploadFromPaths(taskId: string, paths: readonly string[]): TaskAttachment[];
+  /** Deletes images and their files, for undoing an upload whose follow-up failed. */
+  discard(ids: readonly string[]): void;
   /** The task's images with their absolute paths on disk, for agents that can open files. */
   forTask(taskId: string): Array<TaskAttachment & { path: string }>;
   /** Gives the unclaimed images that `text` refers to to the task. */
@@ -172,7 +174,28 @@ export function createAttachmentsService(core: Core, dir: string): AttachmentsSe
 
     uploadFromPaths(taskId, paths) {
       const files = paths.map(readImageFile);
-      return files.map((file) => this.upload({ taskId, ...file }));
+      const stored: TaskAttachment[] = [];
+      try {
+        for (const file of files) stored.push(this.upload({ taskId, ...file }));
+      } catch (error) {
+        // One failed write (disk, database) must not leave the earlier ones attached to nothing.
+        this.discard(stored.map((a) => a.id));
+        throw error;
+      }
+      return stored;
+    },
+
+    discard(ids) {
+      core.write((fx) => {
+        for (const id of ids) {
+          const attachment = repos.attachments.get(id);
+          if (!attachment) continue;
+          const path = pathOf(attachment);
+          if (path) rmSync(path, { force: true });
+          repos.attachments.delete(id);
+          if (attachment.taskId) fx.detail(attachment.taskId);
+        }
+      });
     },
 
     get,

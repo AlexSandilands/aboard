@@ -252,9 +252,82 @@ describe("MCP endpoint", () => {
       client.callTool({ name: "move_task", arguments: { task: `#${ref}`, status: "review" } });
     const moved = text(await toReview(task.number));
     expect(moved).toContain("Moved #");
-    expect(moved).toContain("labelled ui and has no screenshots attached");
+    expect(moved).toContain("labelled ui and no plan step has a screenshot attached");
     expect(h.services.tasks.summary(task.id).status).toBe("review");
     expect(text(await toReview(other.number))).not.toContain("screenshots");
+  });
+
+  it("counts only captures attached to steps, not a screenshot pasted into the description", async () => {
+    const project = h.services.projects.create({ workspaceRoot: "C:\\Fake\\proj" });
+    const dir = mkdtempSync(join(tmpdir(), "mcp-shots-"));
+    try {
+      const shot = join(dir, "menu.png");
+      writeFileSync(shot, Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]));
+      const plan = { phases: [{ title: "Build", steps: [{ title: "Screen capture" }] }] };
+      const pasted = h.services.attachments.upload({
+        taskId: null,
+        filename: "bug.png",
+        mime: "image/png",
+        bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 9, 9, 9]),
+      });
+      const bug = h.services.tasks.create({
+        projectId: project.id,
+        title: "Fix the menu",
+        labels: ["ui"],
+        description: `Looks like this ${attachmentToken(pasted.id)}`,
+        plan,
+      });
+      const done = h.services.tasks.create({ projectId: project.id, title: "Add a tray", labels: ["ui"], plan });
+      const toReview = (n: number) =>
+        client.callTool({ name: "move_task", arguments: { task: `#${n}`, status: "review" } });
+
+      // The bug report's own picture isn't a capture.
+      expect(h.services.attachments.forTask(bug.id)).toHaveLength(1);
+      expect(text(await toReview(bug.number))).toContain("no plan step has a screenshot attached");
+
+      const attached = await client.callTool({
+        name: "update_step",
+        arguments: { task: `#${done.number}`, step: "1.1", status: "done", images: [shot] },
+      });
+      expect(attached.isError).toBeFalsy();
+      expect(text(await toReview(done.number))).not.toContain("screenshot attached");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("asks for the capture step from update_plan and when the ui label arrives, not once the task is in Review", async () => {
+    const project = h.services.projects.create({ workspaceRoot: "C:\\Fake\\proj" });
+    const task = h.services.tasks.create({
+      projectId: project.id,
+      title: "Add a menu",
+      plan: { phases: [{ title: "Build", steps: [{ title: "Build the menu" }] }] },
+    });
+    const ref = `#${task.number}`;
+    const hint = "Missing screen capture step:";
+
+    expect(
+      text(await client.callTool({ name: "update_task", arguments: { task: ref, labels: ["backend"] } })),
+    ).not.toContain(hint);
+    expect(text(await client.callTool({ name: "update_task", arguments: { task: ref, labels: ["ui"] } }))).toContain(
+      hint,
+    );
+    expect(
+      text(
+        await client.callTool({ name: "update_plan", arguments: { task: ref, steps: [{ step: "1.1", notes: "n" }] } }),
+      ),
+    ).toContain(hint);
+    // A plain status or title change doesn't nag.
+    expect(
+      text(await client.callTool({ name: "update_task", arguments: { task: ref, title: "Add a colour menu" } })),
+    ).not.toContain(hint);
+
+    h.services.tasks.move(task.id, { status: "review" }, "test");
+    expect(
+      text(
+        await client.callTool({ name: "update_plan", arguments: { task: ref, steps: [{ step: "1.1", notes: "m" }] } }),
+      ),
+    ).not.toContain(hint);
   });
 
   it("puts the full detail in the text and sends no structuredContent", async () => {

@@ -254,16 +254,22 @@ Deleted ${deleted.length} step(s): ${shown.join(", ")}${more > 0 ? `, and ${more
         const appendNotes = [args.appendNotes, ...images.map((a) => attachmentToken(a.id, a.filename))]
           .filter(Boolean)
           .join("\n\n");
-        services.plans.updateStep(
-          stepId,
-          {
-            ...(args.status ? { status: args.status } : {}),
-            ...(args.title ? { title: args.title } : {}),
-            ...(args.notes !== undefined ? { notes: args.notes === "" ? null : args.notes } : {}),
-            ...(appendNotes ? { appendNotes } : {}),
-          },
-          actor(args.actor),
-        );
+        try {
+          services.plans.updateStep(
+            stepId,
+            {
+              ...(args.status ? { status: args.status } : {}),
+              ...(args.title ? { title: args.title } : {}),
+              ...(args.notes !== undefined ? { notes: args.notes === "" ? null : args.notes } : {}),
+              ...(appendNotes ? { appendNotes } : {}),
+            },
+            actor(args.actor),
+          );
+        } catch (error) {
+          // The images were stored ahead of the step: without a token in any notes they would be orphans.
+          services.attachments.discard(images.map((a) => a.id));
+          throw error;
+        }
         const attached = images.length ? ` Attached ${images.length} image(s) to the task.` : "";
         return taskResult(
           services,

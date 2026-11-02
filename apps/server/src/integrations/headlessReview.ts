@@ -110,7 +110,7 @@ export function headlessPrompt({
     `Find where the branch forked with \`git merge-base HEAD ${base}\`, then read the changes with \`git diff <that commit>\` and \`git status\` for uncommitted work. Run each git command on its own. Don't edit any files.`,
     ...(hasImages
       ? [
-          "The task has screenshots, listed under Images in the task text with their file paths. Open each one with the Read tool and look at it: record a finding for any that shows a visual bug, or when the states the change introduced aren't covered.",
+          "The task has images, listed under Images in the task text with their file paths. Some may be the bug report's own picture; the author's captures are the ones written into the plan steps' notes. Open each one with the Read tool and look at it: record a finding for any that shows a visual bug, or when the states the change introduced aren't covered, and a major one for a ui task with no capture in its steps.",
         ]
       : []),
     "Return your result as the structured output: a summary and one finding per problem (an empty list when the change is clean).",

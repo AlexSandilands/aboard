@@ -1,6 +1,7 @@
 import {
   AGENT_HARNESSES,
   type AgentHarness,
+  attachmentIdsIn,
   TASK_STATUSES,
   autopilotRunEventText,
   awaitingBranchMerge,
@@ -425,19 +426,29 @@ export function captureStepHint(task: TaskDetail): string | null {
   );
   if (mentioned) return null;
   return (
-    "This task is labelled ui, but no plan step asks for a screen capture. Add one before the review step with " +
-    `add_steps(task: "#${task.number}", steps: [{title: "Screen capture: ...", notes: "<the states to capture>"}]): ` +
+    "This task is labelled ui, but no plan step asks for a screen capture. Add one with " +
+    `add_steps(task: "#${task.number}", steps: [{title: "Screen capture: ...", notes: "<the states to capture>"}]), ` +
+    "and if the plan has a review or PR step, move it ahead of that with update_plan (move: {before}): " +
     "open the changed surface in a real browser in each state the change introduced (menus open, warnings showing, " +
     "narrow width where relevant), look at every screenshot, fix what is wrong, then attach them with " +
     'update_step(step, status: "done", images: [absolute paths]).'
   );
 }
 
-/** The warning, when a ui task moves to Review without any image attached. The move still happens. */
-export function missingScreenshotsWarning(task: TaskDetail, imageCount: number): string | null {
-  if (!isUiTask(task) || task.kind === "epic" || task.manual || task.resolution || imageCount > 0) return null;
+/**
+ * How many images the plan's steps carry: the captures an agent attached with update_step. An image pasted into the
+ * description (the bug report's screenshot) doesn't count, or a UI bug fix would never be asked for its own capture.
+ */
+export const stepImageCount = (task: Pick<TaskDetail, "phases">): number =>
+  new Set(task.phases.flatMap((p) => p.steps.flatMap((s) => attachmentIdsIn(s.notes)))).size;
+
+/** The warning, when a ui task moves to Review with no capture attached to a step. The move still happens. */
+export function missingScreenshotsWarning(task: TaskDetail): string | null {
+  if (!isUiTask(task) || task.kind === "epic" || task.manual || task.resolution || stepImageCount(task) > 0) {
+    return null;
+  }
   return (
-    "Warning: this task is labelled ui and has no screenshots attached. Open the changed surface in a real browser " +
+    "Warning: this task is labelled ui and no plan step has a screenshot attached. Open the changed surface in a real browser " +
     "in each state you introduced, look at your screenshots and fix anything wrong, then attach them with " +
     `update_step(task: "#${task.number}", step, images: [absolute paths]) before you open the PR.`
   );

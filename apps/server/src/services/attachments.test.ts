@@ -158,6 +158,19 @@ describe("attachment files", () => {
     expect(services.attachments.forTask(task.id)).toHaveLength(2);
   });
 
+  it("are discarded with their files when the work that followed an upload fails", () => {
+    const { task, services } = setup();
+    const dir = tempDir();
+    const shot = join(dir, "a.png");
+    writeFileSync(shot, png());
+    const [stored] = services.attachments.uploadFromPaths(task.id, [shot]);
+    const path = services.attachments.forTask(task.id)[0]!.path;
+    expect(existsSync(path)).toBe(true);
+    services.attachments.discard([stored!.id, "no-such-id"]);
+    expect(services.attachments.forTask(task.id)).toEqual([]);
+    expect(existsSync(path)).toBe(false);
+  });
+
   it("refuse a launch with an image that is gone", () => {
     const { services } = setup();
     expect(() => services.attachments.forLaunch(["0b6c1f0e-3a4d-4c1e-9d7a-2f5b8c9e1a11"], null)).toThrow(
