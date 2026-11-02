@@ -1,11 +1,12 @@
-import type { PrSnapshot } from "@repo/contracts";
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { normalizeWorkspaceKey, type PrSnapshot } from "@repo/contracts";
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
 import { createTestHarness } from "../test/harness.ts";
-import { repositoryRootOf } from "./projects.ts";
+import { createGitFixture, git } from "../test/gitRepo.ts";
+import { mainCheckoutOf, repositoryRootOf } from "./projects.ts";
 import { defaultSettings, TEST_JIRA } from "../test/fixtures.ts";
 
 const codeOf = (fn: () => unknown): string | undefined => {
@@ -230,5 +231,87 @@ describe("repositoryRootOf", () => {
     mkdirSync(join(root, "apps", "web"), { recursive: true });
     expect(repositoryRootOf(join(root, "apps", "web"))).toBe(root);
     expect(repositoryRootOf("Z:/does/not/exist")).toBe("Z:/does/not/exist");
+  });
+});
+
+describe("git worktrees", () => {
+  /** A checkout with `apps/web` and a linked worktree of it, both by their real paths (git writes those). */
+  const withWorktree = (fn: (paths: { main: string; worktree: string }) => void) => {
+    const fx = createGitFixture();
+    try {
+      const main = realpathSync.native(fx.checkout);
+      mkdirSync(join(main, "apps", "web"), { recursive: true });
+      writeFileSync(join(main, "apps", "web", "keep"), "");
+      git(main, "add", ".");
+      git(main, "commit", "--quiet", "-m", "web");
+      const worktree = join(realpathSync.native(fx.root), "wt");
+      git(main, "worktree", "add", "--quiet", "-b", "wt", worktree);
+      fn({ main, worktree });
+    } finally {
+      fx.cleanup();
+    }
+  };
+  const key = (path: string | null) => (path ? normalizeWorkspaceKey(path) : null);
+
+  it("maps a path in a linked worktree to the same path in the main checkout", () => {
+    withWorktree(({ main, worktree }) => {
+      expect(key(mainCheckoutOf(worktree))).toBe(key(main));
+      expect(key(mainCheckoutOf(join(worktree, "apps", "web")))).toBe(key(join(main, "apps", "web")));
+      // The main checkout itself, a non-repo folder and a missing path aren't worktrees.
+      expect(mainCheckoutOf(main)).toBeNull();
+      expect(mainCheckoutOf(mkdtempSync(join(tmpdir(), "tb-plain-")))).toBeNull();
+      expect(mainCheckoutOf("Z:/does/not/exist")).toBeNull();
+    });
+  });
+
+  it("doesn't map submodules or worktrees of a bare repository", () => {
+    const fx = createGitFixture();
+    try {
+      // A submodule's .git file points at its gitdir, which has no commondir.
+      const sub = join(fx.root, "sub");
+      mkdirSync(join(fx.root, "modules", "sub"), { recursive: true });
+      mkdirSync(sub);
+      writeFileSync(join(sub, ".git"), `gitdir: ${join(fx.root, "modules", "sub")}\n`);
+      expect(mainCheckoutOf(sub)).toBeNull();
+      const bareWorktree = join(fx.root, "bare-wt");
+      git(fx.origin, "worktree", "add", "--quiet", bareWorktree, "main");
+      expect(mainCheckoutOf(bareWorktree)).toBeNull();
+    } finally {
+      fx.cleanup();
+    }
+  });
+
+  it("resolves a worktree path to the main checkout's project, deepest first", () => {
+    withWorktree(({ main, worktree }) => {
+      const { services: s } = createTestHarness();
+      const repo = s.projects.create({ workspaceRoot: main });
+      const web = s.projects.create({ workspaceRoot: join(main, "apps", "web") });
+      expect(s.projects.resolve({ workspacePath: worktree }).id).toBe(repo.id);
+      expect(s.projects.resolve({ workspacePath: join(worktree, "apps", "web") }).id).toBe(web.id);
+      expect(s.projects.resolveOrCreate({ workspacePath: worktree })).toEqual({ project: repo, created: false });
+      expect(s.projects.list()).toHaveLength(2);
+    });
+  });
+
+  it("prefers a project bound to the worktree itself", () => {
+    withWorktree(({ main, worktree }) => {
+      const { services: s } = createTestHarness();
+      s.projects.create({ workspaceRoot: main });
+      const bound = s.projects.create({ workspaceRoot: worktree });
+      expect(s.projects.resolve({ workspacePath: join(worktree, "apps") }).id).toBe(bound.id);
+    });
+  });
+
+  it("creates an unknown worktree's project at the main checkout", () => {
+    withWorktree(({ main, worktree }) => {
+      const { services: s } = createTestHarness();
+      const { project, created } = s.projects.resolveOrCreate({ workspacePath: join(worktree, "apps", "web") });
+      expect(created).toBe(true);
+      expect(key(project.workspaceRoot)).toBe(key(main));
+      expect(project.title).toBe("app");
+      // A path outside any repo is still created as given.
+      const plain = mkdtempSync(join(tmpdir(), "tb-plain-"));
+      expect(s.projects.resolveOrCreate({ workspacePath: plain }).project.workspaceRoot).toBe(plain);
+    });
   });
 });
