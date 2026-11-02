@@ -161,6 +161,14 @@ describe("shortcutFromEvent", () => {
     expect(shortcutFromEvent(key("k", { ctrlKey: true }), true)).toBeNull();
   });
 
+  it("reads a letter under Alt from the physical key, which macOS's Option turns into another character", () => {
+    const optionB = key("∫", { metaKey: true, altKey: true, code: "KeyB" });
+    expect(shortcutFromEvent(optionB, true)).toBe("mod+alt+b");
+    expect(matchesShortcut(optionB, "mod+alt+b", true)).toBe(true);
+    // Without Alt the character typed wins, so layouts that move letters keep their own.
+    expect(matchesShortcut(key("z", { ctrlKey: true, code: "KeyY" }), "mod+z", false)).toBe(true);
+  });
+
   it("round-trips through matchesShortcut", () => {
     const events = [key(",", { ctrlKey: true }), key("+", { ctrlKey: true }), key(" "), key("F5", { altKey: true })];
     for (const event of events) {

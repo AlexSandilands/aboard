@@ -28,6 +28,7 @@ import { HandoffMenu } from "~/components/handoff/HandoffActions";
 import { LabelChip } from "~/components/labels/LabelChip";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { ReviewBadge } from "~/components/review/ReviewBadge";
+import { usePrefetchTaskDetail } from "~/state/queries";
 import type { DragData } from "./dnd.logic";
 import { TaskProgressLine } from "./TaskProgress";
 
@@ -337,6 +338,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({
   compact?: boolean;
 }) {
   const { openTask, suppressClickRef } = useBoardContext();
+  const prefetchDetail = usePrefetchTaskDetail();
   const data: DragData = { type: "task", rowId, status: task.status };
   // Archived cards (Show archived) open in the panel but can't be dragged; unarchive first.
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -375,7 +377,9 @@ export const SortableTaskCard = memo(function SortableTaskCard({
         {...listeners}
         // A Ctrl/⌘-press picks the card, so it never starts a drag.
         onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
-          if (!isPickClick(event)) listeners?.onPointerDown?.(event);
+          if (isPickClick(event)) return;
+          listeners?.onPointerDown?.(event);
+          prefetchDetail(task.id);
         }}
         // Restates dnd-kit's defaults so the card's semantics are visible statically.
         role="button"

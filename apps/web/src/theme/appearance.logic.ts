@@ -2,6 +2,8 @@
 // variables they drive are T3 Code's (packages/contracts/src/settings.ts, apps/web/src/appearanceContrast.ts,
 // appearanceFonts.ts, routes/__root.tsx), MIT — see NOTICE.
 
+import { slideDurationMs } from "~/lib/slide.logic";
+
 export const CONTRAST = { min: 50, max: 200, step: 5, default: 100 } as const;
 export const GLASS_OPACITY = { min: 40, max: 100, step: 5, default: 80 } as const;
 export const PANEL_ANIMATION_MS = { min: 0, max: 400, step: 25, default: 150 } as const;
@@ -97,6 +99,7 @@ export function appearancePaint(prefs: AppearancePrefs, reducedMotion: boolean):
   // The interface size is the root font size, so every rem-based dimension scales with it (as in T3 Code).
   if (prefs.fontSize !== INTERFACE_FONT_SIZE.default) style["font-size"] = `${prefs.fontSize}px`;
   style["--panel-animation-duration"] = `${prefs.panelAnimationMs}ms`;
+  style["--slide-duration"] = `${slideDurationMs(prefs.panelAnimationMs)}ms`;
   const animate = prefs.panelAnimationMs > 0 && !reducedMotion;
   return { style, data: { "panel-animations": animate ? "true" : "false" } };
 }
@@ -112,4 +115,5 @@ export const APPEARANCE_STYLE_PROPERTIES = [
   "--font-mono",
   "font-size",
   "--panel-animation-duration",
+  "--slide-duration",
 ] as const;

@@ -60,7 +60,7 @@ describe("cssFontFamilies", () => {
 describe("appearancePaint", () => {
   it("leaves the stylesheet's defaults alone for default prefs", () => {
     expect(appearancePaint(DEFAULT_APPEARANCE_PREFS, false)).toEqual({
-      style: { "--panel-animation-duration": "150ms" },
+      style: { "--panel-animation-duration": "150ms", "--slide-duration": "450ms" },
       data: { "panel-animations": "true" },
     });
   });
@@ -93,7 +93,7 @@ describe("appearancePaint", () => {
 
   it("animates panels only with a duration and without reduced motion", () => {
     expect(appearancePaint(prefs({ panelAnimationMs: 200 }), false)).toMatchObject({
-      style: { "--panel-animation-duration": "200ms" },
+      style: { "--panel-animation-duration": "200ms", "--slide-duration": "600ms" },
       data: { "panel-animations": "true" },
     });
     expect(appearancePaint(prefs({ panelAnimationMs: 200 }), true).data["panel-animations"]).toBe("false");

@@ -12,6 +12,8 @@ import { Sheet, SheetDescription, SheetHeader, SheetPopup, SheetTitle } from "~/
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useResizeDrag } from "~/hooks/useResizeDrag";
 import { useIsMobile } from "~/hooks/useMediaQuery";
+import { finishSlides, slideDuration, slideOffset, slidesOn, startSlide } from "~/lib/slide";
+import { gapStartWidth, slideStartOffset } from "~/lib/slide.logic";
 import { readStoredNumber, writeStoredNumber } from "~/lib/storage";
 import { resolveSidebarState, type ResponsiveSidebarState } from "./sidebarState";
 
@@ -82,6 +84,44 @@ function useSidebar() {
 function useSidebarVisibility() {
   const { isMobile, open, openMobile } = useSidebar();
   return isMobile ? openMobile : open;
+}
+
+/**
+ * Slides the sidebar in or out with the main area making room at the same time (see `lib/slide.ts`): the gap beside
+ * it is the room, the container the mover. The container keeps its width, so its contents never re-wrap. Only the
+ * offcanvas sidebar slides; the others change at once.
+ */
+function useSidebarSlide(
+  sidebarRef: React.RefObject<HTMLElement | null>,
+  side: "left" | "right",
+  collapsible: "offcanvas" | "icon" | "none",
+) {
+  const { open } = useSidebar();
+  const previousOpen = React.useRef(open);
+  React.useLayoutEffect(() => {
+    if (previousOpen.current === open) return;
+    previousOpen.current = open;
+    const sidebar = sidebarRef.current;
+    const duration = slideDuration();
+    if (!sidebar || duration === 0 || collapsible !== "offcanvas") return;
+    const container = sidebar.querySelector<HTMLElement>("[data-slot='sidebar-container']");
+    const gap = sidebar.querySelector<HTMLElement>("[data-slot='sidebar-gap']");
+    if (!container || !gap) return;
+    // The container's class has already moved it to its new place; the slide starts it from where it was.
+    const current = slidesOn(container, gap).length > 0 ? slideOffset(container) : 0;
+    const width = container.offsetWidth;
+    const from = slideStartOffset({ current, width, opening: open, side });
+    startSlide({
+      mover: container,
+      room: gap,
+      from,
+      to: 0,
+      roomFrom: gapStartWidth({ from, width, opening: open }),
+      roomTo: open ? width : 0,
+      width,
+      duration,
+    });
+  }, [open, side, collapsible, sidebarRef]);
 }
 
 function SidebarProvider({
@@ -181,6 +221,8 @@ function Sidebar({
   resizable?: boolean | SidebarResizableOptions;
 }) {
   const { isMobile, state, openMobile, setOpenMobile, setMobileSheetElement } = useSidebar();
+  const sidebarRef = React.useRef<HTMLDivElement>(null);
+  useSidebarSlide(sidebarRef, side, collapsible);
   const resolvedResizable = React.useMemo<SidebarResolvedResizableOptions | null>(() => {
     if (isMobile || collapsible === "none" || !resizable) {
       return null;
@@ -255,6 +297,7 @@ function Sidebar({
     <SidebarInstanceContext value={instanceContextValue}>
       <div
         className="group peer hidden text-sidebar-foreground md:block"
+        ref={sidebarRef}
         data-collapsible={state === "collapsed" ? collapsible : ""}
         data-side={side}
         data-slot="sidebar"
@@ -264,8 +307,8 @@ function Sidebar({
         {/* This is what handles the sidebar gap on desktop */}
         <div
           className={cn(
+            // useSidebarSlide animates the width, in step with the container's slide.
             "relative w-(--sidebar-width) bg-transparent",
-            "[[data-panel-animations=true]_&]:transition-[width] [[data-panel-animations=true]_&]:[transition-duration:var(--panel-animation-duration)] [[data-panel-animations=true]_&]:ease-out",
             "group-data-[collapsible=offcanvas]:w-0",
             "group-data-[side=right]:rotate-180",
             variant === "floating" || variant === "inset"
@@ -277,10 +320,10 @@ function Sidebar({
         <div
           className={cn(
             "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) md:flex",
-            "[[data-panel-animations=true]_&]:transition-[left,right,width] [[data-panel-animations=true]_&]:[transition-duration:var(--panel-animation-duration)] [[data-panel-animations=true]_&]:ease-out",
+            // Moves with a translate, so its contents keep their full width; useSidebarSlide animates the move.
             side === "left"
-              ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
-              : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
+              ? "left-0 group-data-[collapsible=offcanvas]:-translate-x-full"
+              : "right-0 group-data-[collapsible=offcanvas]:translate-x-full",
             // Adjust the padding for floating and inset variants.
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
@@ -371,9 +414,8 @@ function SidebarRail({
         element.style.setProperty("width", `${value}px`);
       });
     };
-    widthTargets.forEach((element) => {
-      element.style.setProperty("transition-duration", "0ms");
-    });
+    // A slide still running would hold the gap's width against the drag.
+    finishSlides();
     setTargetWidth(width);
 
     return {
@@ -408,7 +450,6 @@ function SidebarRail({
       cleanup() {
         widthTargets.forEach((element) => {
           element.style.removeProperty("width");
-          element.style.removeProperty("transition-duration");
         });
       },
     };
@@ -465,7 +506,6 @@ function SidebarRail({
             className={cn(
               /* disable pointer events only when offcanvas sidebar is collapsed, that's when the rail sits over the native scrollbar on windows and linux. icon mode stays fully clickable. */
               "-translate-x-1/2 group-data-[side=left]:-right-4 absolute inset-y-0 z-20 hidden w-4 after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=right]:left-0 sm:flex [[data-collapsible=offcanvas][data-state=collapsed]_&]:pointer-events-none",
-              "[[data-panel-animations=true]_&]:transition-all [[data-panel-animations=true]_&]:[transition-duration:var(--panel-animation-duration)] [[data-panel-animations=true]_&]:ease-out",
               "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",
               "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
               "group-data-[collapsible=offcanvas]:translate-x-0 hover:group-data-[collapsible=offcanvas]:bg-sidebar group-data-[collapsible=offcanvas]:after:left-full",

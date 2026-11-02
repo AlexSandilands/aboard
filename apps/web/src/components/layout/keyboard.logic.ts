@@ -13,6 +13,8 @@ export interface KeyEventLike {
   metaKey: boolean;
   altKey: boolean;
   shiftKey: boolean;
+  /** The physical key (`KeyB`), for Alt combinations, whose `key` macOS turns into another character. */
+  code?: string;
 }
 
 interface ParsedShortcut {
@@ -29,16 +31,20 @@ export function parseShortcut(shortcut: string): ParsedShortcut {
   return { key, mod: parts.includes("mod"), shift: parts.includes("shift"), alt: parts.includes("alt") };
 }
 
-/** An event's key as shortcuts name it: lowercase, with the two keys that would break `mod+k` syntax spelled out. */
-function shortcutKey(eventKey: string): string {
-  const key = eventKey.toLowerCase();
+/**
+ * An event's key as shortcuts name it: lowercase, with the two keys that would break `mod+k` syntax spelled out. With
+ * Alt held a letter or digit comes from the physical key, since macOS's Option turns `b` into `∫`.
+ */
+function shortcutKey(event: KeyEventLike): string {
+  const physical = event.altKey ? /^(?:Key|Digit)(\w)$/.exec(event.code ?? "")?.[1] : undefined;
+  const key = (physical ?? event.key).toLowerCase();
   return key === " " ? "space" : key === "+" ? "plus" : key;
 }
 
 /** True when the event is exactly this shortcut: the key (any case) and no extra modifiers. */
 export function matchesShortcut(event: KeyEventLike, shortcut: string, isMac: boolean): boolean {
   const parsed = parseShortcut(shortcut);
-  if (shortcutKey(event.key) !== parsed.key) return false;
+  if (shortcutKey(event) !== parsed.key) return false;
   const modPressed = isMac ? event.metaKey : event.ctrlKey;
   const otherPressed = isMac ? event.ctrlKey : event.metaKey;
   return modPressed === parsed.mod && !otherPressed && event.shiftKey === parsed.shift && event.altKey === parsed.alt;
@@ -51,7 +57,7 @@ const MODIFIER_KEYS = new Set(["control", "meta", "shift", "alt", "altgraph", "o
  * or Cmd elsewhere, which `matchesShortcut` never accepts.
  */
 export function shortcutFromEvent(event: KeyEventLike, isMac: boolean): string | null {
-  const key = shortcutKey(event.key);
+  const key = shortcutKey(event);
   if (MODIFIER_KEYS.has(key)) return null;
   if (isMac ? event.ctrlKey : event.metaKey) return null;
   const mod = isMac ? event.metaKey : event.ctrlKey;

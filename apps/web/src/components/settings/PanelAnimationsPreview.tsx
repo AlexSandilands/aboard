@@ -1,12 +1,14 @@
-// Copied from T3 Code (apps/web/src/components/settings/PanelAnimationsPreview.tsx), MIT — see NOTICE.
+// Adapted from T3 Code (apps/web/src/components/settings/PanelAnimationsPreview.tsx), MIT — see NOTICE.
 import { type CSSProperties, useState } from "react";
 
+import { SLIDE_EASING, slideDurationMs } from "~/lib/slide.logic";
 import { cn } from "~/lib/utils";
 
+/** Plays the sidebar and task panel slide at the length and curve the setting gives them. */
 export function PanelAnimationsPreview({ durationMs }: { durationMs: number }) {
   const [panelsOpen, setPanelsOpen] = useState(true);
   const transitionClass =
-    "transition-[width,height,border-width] duration-(--preview-duration) ease-out motion-reduce:transition-none";
+    "transition-[width,height,border-width] duration-(--preview-duration) ease-(--preview-easing) motion-reduce:transition-none";
 
   return (
     <button
@@ -14,7 +16,9 @@ export function PanelAnimationsPreview({ durationMs }: { durationMs: number }) {
       aria-label="Replay panel animation preview"
       className="flex h-10 w-full cursor-pointer overflow-hidden rounded-lg border border-border bg-background p-1 shadow-xs/5 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
       onClick={() => setPanelsOpen((open) => !open)}
-      style={{ "--preview-duration": `${durationMs}ms` } as CSSProperties}
+      style={
+        { "--preview-duration": `${slideDurationMs(durationMs)}ms`, "--preview-easing": SLIDE_EASING } as CSSProperties
+      }
     >
       <span
         aria-hidden

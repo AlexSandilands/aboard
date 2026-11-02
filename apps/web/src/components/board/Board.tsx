@@ -22,12 +22,13 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { TASK_STATUSES, type BoardSnapshot, type Project, type TaskStatus, type TaskSummary } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsDownUpIcon, ChevronsUpDownIcon, LayoutGridIcon, RefreshCwIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { Skeleton } from "~/components/ui/skeleton";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { finishSlides } from "~/lib/slide";
 import { cn } from "~/lib/utils";
 import { isPlanRequired, useMoveTask, useUpdateProject, useUpdateTask } from "~/state/mutations";
 import { queryKeys, useArchivedTasks, useBoard, useSettings } from "~/state/queries";
@@ -255,7 +256,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const collapsedColumns = useBoardView((s) => s.collapsedColumns);
   const cellOverrides = useBoardView((s) => s.cellOverrides);
   const toggleColumnCollapsed = useBoardView((s) => s.toggleColumnCollapsed);
-  const selectedTaskId = useSelectedTaskId();
+  // Deferred: opening or closing a task re-renders the whole board for the highlight alone, and an urgent render
+  // would block the task panel's slide for its length; deferred, React renders it in slices between frames.
+  const selectedTaskId = useDeferredValue(useSelectedTaskId());
   const openTask = useOpenTask();
   const settings = useSettings().data;
   const moveTask = useMoveTask();
@@ -366,6 +369,8 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   };
 
   const handleDragStart = (event: DragStartEvent) => {
+    // dnd-kit measures the columns now; a slide still resizing the board would leave those rects stale.
+    finishSlides();
     setActiveId(String(event.active.id));
     // A card lifted out of the stuck lane is one line, so the lifted copy is too.
     const node = document.querySelector(`[data-task-card="${CSS.escape(String(event.active.id))}"]`);

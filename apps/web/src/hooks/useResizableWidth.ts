@@ -1,6 +1,7 @@
 // Adapted from T3 Code (MIT) — see NOTICE.
 import { type PointerEvent as ReactPointerEvent, useCallback, useLayoutEffect, useRef, useState } from "react";
 
+import { finishSlides } from "~/lib/slide";
 import { readStoredNumber, writeStoredNumber } from "~/lib/storage";
 import { useResizeDrag } from "./useResizeDrag";
 
@@ -75,9 +76,8 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
 
   const { refresh, ...handlers } = useResizeDrag<HTMLElement>((event) => {
     const host = event.currentTarget.parentElement;
-    // A collapsible host animates width; live drag writes must not. The host
-    // renders its own transition-duration, so override a property it leaves alone.
-    host?.style.setProperty("transition-property", "none");
+    // A slide still running (the task panel's) would hold the host's width against the drag.
+    finishSlides();
     return {
       width: clampedWidth,
       edge,
@@ -92,7 +92,6 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
         writeStoredNumber(latestOptions.current.storageKey, finalWidth);
       },
       cleanup(committed) {
-        host?.style.removeProperty("transition-property");
         // React skips the write when the rendered width did not change.
         if (!committed) {
           host?.style.setProperty(RESIZABLE_WIDTH_PROPERTY, `${latestOptions.current.width}px`);

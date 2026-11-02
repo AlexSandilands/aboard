@@ -119,21 +119,27 @@ describe("resolveKeybindings", () => {
     expect(ideaNew.when).toBe(DEFAULT_KEYBINDINGS["idea.new"].when);
   });
 
-  it("runs only the palette immediately by default, and a key the user gave a command with Ctrl/Cmd or Alt", () => {
+  it("runs the palette and the layout toggles immediately by default, and a key the user gave a command with Ctrl/Cmd or Alt", () => {
     const immediate = (overrides: KeybindingOverrides) =>
       resolveKeybindings(overrides)
         .filter((b) => b.immediate)
         .map((b) => b.command);
-    expect(immediate({})).toEqual(["palette.open"]);
+    expect(immediate({})).toEqual(["palette.open", "sidebar.toggle", "panel.toggle"]);
     // The browser's print, save and find would otherwise run as well.
     expect(immediate({ "settings.open": { key: "mod+p" }, "idea.new": { key: "alt+n" } })).toEqual([
       "palette.open",
       "idea.new",
       "settings.open",
+      "sidebar.toggle",
+      "panel.toggle",
     ]);
-    expect(immediate({ "idea.new": { key: "c" }, back: { key: "shift+q" } })).toEqual(["palette.open"]);
+    expect(immediate({ "idea.new": { key: "c" }, back: { key: "shift+q" } })).toEqual([
+      "palette.open",
+      "sidebar.toggle",
+      "panel.toggle",
+    ]);
     // Only a key the user chose: the default mod+, keeps waiting for a nearer claim.
-    expect(immediate({ "settings.open": { when: "" } })).toEqual(["palette.open"]);
+    expect(immediate({ "settings.open": { when: "" } })).toEqual(["palette.open", "sidebar.toggle", "panel.toggle"]);
   });
 
   it("leaves a command the user didn't change on the current default", () => {

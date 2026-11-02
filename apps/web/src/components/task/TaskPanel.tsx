@@ -1,6 +1,15 @@
 import { storageKey, type Project, type TaskDetail } from "@repo/contracts";
 import { FileQuestionIcon, XIcon } from "lucide-react";
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 import { Button } from "~/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
@@ -8,6 +17,7 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { Skeleton } from "~/components/ui/skeleton";
 import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth, type ResizableWidthHandlers } from "~/hooks/useResizableWidth";
 import { ApiError } from "~/lib/api";
+import { slideDuration, slideOffset, slidesOn, startSlide } from "~/lib/slide";
 import { useBoard, useTaskDetail } from "~/state/queries";
 import { useTaskView } from "~/state/taskView";
 import { usePanel } from "~/state/ui";
@@ -72,28 +82,72 @@ export function TaskPanel({
     edge: "left",
   });
 
+  const asideRef = useRef<HTMLElement>(null);
+  const contentsRef = useRef<HTMLDivElement>(null);
+  usePanelSlide(asideRef, contentsRef, closing, onClosed);
+
   return (
     <aside
+      ref={asideRef}
       aria-label="Task details"
       aria-hidden={closing || undefined}
       inert={closing}
-      onAnimationEnd={(event) => {
-        if (closing && event.target === event.currentTarget) onClosed?.();
-      }}
-      className={`${closing ? "panel-exit" : "panel-enter"} relative flex h-full min-h-0 max-w-[70vw] shrink-0`}
+      className="relative flex h-full min-h-0 max-w-[70vw] shrink-0"
       style={{ [RESIZABLE_WIDTH_PROPERTY]: `${width}px`, width: `var(${RESIZABLE_WIDTH_PROPERTY})` } as CSSProperties}
     >
       <ResizeHandle handlers={handlers} />
-      {/* The aside animates its width; this keeps the contents at the panel's full width (anchored left, clipped
-          by the aside) so they slide in and out instead of reflowing, and is the container the @ queries see. */}
+      {/* Keeps the contents at the panel's full width (at least MIN_WIDTH) and is the container the @ queries see.
+          Pinned to the right edge, so it slides on its own transform while the aside's width opens the board up. */}
       <div
-        className="@container flex h-full min-h-0 max-w-[70vw] shrink-0 flex-col border-l border-border bg-background"
+        ref={contentsRef}
+        className="@container absolute inset-y-0 right-0 flex min-h-0 max-w-[70vw] flex-col border-l border-border bg-background"
         style={{ width: `var(${RESIZABLE_WIDTH_PROPERTY})`, minWidth: MIN_WIDTH }}
       >
         <TaskPanelContent key={taskId} taskId={taskId} onClose={onClose} />
       </div>
     </aside>
   );
+}
+
+/**
+ * Slides the panel in from the window's right edge when it mounts and out again when `closing`, then calls
+ * `onClosed`, with the board making room at the same time (see `lib/slide.ts`): the aside is the room and the
+ * contents, pinned to its right edge, the mover. A toggle mid-slide turns around from where the panel is.
+ */
+function usePanelSlide(
+  asideRef: RefObject<HTMLElement | null>,
+  contentsRef: RefObject<HTMLElement | null>,
+  closing: boolean,
+  onClosed?: () => void,
+) {
+  const closed = useEffectEvent(() => onClosed?.());
+  useLayoutEffect(() => {
+    const aside = asideRef.current;
+    const contents = contentsRef.current;
+    if (!aside || !contents) return;
+    const duration = slideDuration();
+    if (duration === 0) {
+      if (closing) closed();
+      return;
+    }
+    const width = contents.offsetWidth;
+    // How far the contents sit right of where they rest; the aside is that much narrower.
+    const from = slidesOn(contents, aside).length > 0 ? slideOffset(contents) : closing ? 0 : width;
+    const to = closing ? width : 0;
+    const { slide } = startSlide({
+      mover: contents,
+      room: aside,
+      from,
+      to,
+      roomFrom: width - from,
+      roomTo: width - to,
+      width,
+      duration,
+      // Closed, it stays out of view until AppLayout unmounts it.
+      fill: closing,
+    });
+    if (closing) slide.addEventListener("finish", () => closed());
+  }, [asideRef, contentsRef, closing]);
 }
 
 // Adapted from T3 Code (preview/RightPanelResizeHandle.tsx), MIT — see NOTICE.
