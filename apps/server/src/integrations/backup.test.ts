@@ -430,8 +430,9 @@ describe("restoring from the backup repo", { timeout: PROCESS_TEST_TIMEOUT }, ()
     expect(fresh.services.tasks.detail(old.task.id).title).toBe("Feature");
     expect(fresh.services.settings.get().machineName).toBe("old-pc");
 
-    // The run it started writes the folder as this board's, so later runs don't refuse the name.
-    await vi.waitFor(() => expect(fresh.backup.status().running).toBe(false));
+    // The run it started writes the folder as this board's, so later runs don't refuse the name. It runs git, which
+    // takes far longer than waitFor's default second on a Windows runner.
+    await vi.waitFor(() => expect(fresh.backup.status().running).toBe(false), { timeout: PROCESS_TEST_TIMEOUT });
     const status = await fresh.backup.run();
     expect(status.lastError).toBeNull();
     const machines = await fresh.backup.machines();
