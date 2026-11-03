@@ -39,7 +39,7 @@
   "devDependencies": {
     "@commitlint/cli": "^21.2.3",
     "@commitlint/config-conventional": "^21.2.3",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.6",
     "concurrently": "^10.0.6",
     "knip": "^6.41.0",
     "lefthook": "^2.2.1",
