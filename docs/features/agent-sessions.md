@@ -20,12 +20,11 @@ var the agent reads with its shell:
 | Harness | `harness` | Id from | Resume | Fork |
 | --- | --- | --- | --- | --- |
 | Claude Code | `claude-code` | `$CLAUDE_CODE_SESSION_ID` | `claude --resume <id>` | `claude --resume <id> --fork-session` |
-| Codex | `codex` | `$CODEX_THREAD_ID` (unverified, #252) | `codex resume <id>` | none |
+| Codex | `codex` | `$CODEX_THREAD_ID` (checked on codex-cli 0.166.0: the same id as `thread.started`) | `codex resume <id>` | none |
 | Copilot CLI | `copilot-cli` | `$COPILOT_AGENT_SESSION_ID` | `copilot --resume=<id>` | none |
 
 Codex sessions are linked by Autopilot's headless runs ([autopilot](autopilot.md#headless-drivers)), which read
-the id from `codex exec`'s first event. Agents aren't asked to link their own Codex session yet: the env var is
-unverified. Codex picks its own session id, so the board can't start a Codex session in a terminal
+the id from `codex exec`'s first event. Agents aren't asked to link their own Codex session yet (the shipped skill doesn't say so). Codex picks its own session id, so the board can't start a Codex session in a terminal
 (`AGENT_HARNESSES.codex.presetSessionId` is false, and the hand-off menus leave it out); it can only resume one.
 
 The link is an `agent_session` link stored under `agent-session://<harness>/<id>`, so linking the same

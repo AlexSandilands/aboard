@@ -488,6 +488,26 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       expect(session).toMatchObject({ ref: { harness: "codex", sessionId: CODEX_ID } });
     });
 
+    it("passes the model's Codex effort on, and none for a typed model or a profile without one", async () => {
+      const effortOf = async (profile: object, typed?: string) => {
+        const { h, task, jobs, start } = setup({ agent: async () => codexOutput.join("\n") });
+        h.services.settings.update({
+          modelProfiles: [profile as ReturnType<typeof codexProfile>],
+          providers: [{ id: "codex", enabled: true, cliPath: "/opt/codex" }],
+        });
+        h.services.tasks.update(task.id, { labels: ["other"] }, "test");
+        await start({ options: { runner: "headless", ...(typed ? { model: typed } : {}) } });
+        const args = jobs[0]!.args;
+        return args.includes("-c") ? args[args.indexOf("-c") + 1] : undefined;
+      };
+      expect(await effortOf({ ...codexProfile("codex"), cliEffort: { codex: "high" } })).toBe(
+        "model_reasoning_effort=high",
+      );
+      expect(await effortOf(codexProfile("codex"))).toBeUndefined();
+      // A model typed in the automation isn't the one the effort was set for.
+      expect(await effortOf({ ...codexProfile("codex"), cliEffort: { codex: "high" } }, "gpt-5.4")).toBeUndefined();
+    });
+
     it("runs Copilot CLI with a session id given up front", async () => {
       const { h, task, jobs, start, patches } = setup({
         agent: async () =>

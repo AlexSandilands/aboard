@@ -1265,12 +1265,25 @@ for the others): the argv, a parser that turns its output into an outcome, and w
   Claude Code instead, and the run's detail says why (`headlessDriverFor`) and which model ran: a typed override that
   is a Claude model, else the model's Claude Code model (`profileHeadlessModel`), else the CLI's default. So in practice only edit and plain read-only runs (Start planned, Fix PRs, Unstick, custom
   agent actions without tool rules) run on Codex or Copilot.
-- **Codex:** `codex exec --json --skip-git-repo-check --sandbox danger-full-access [--model <m>] -` (read-only runs
-  use `--sandbox read-only`), prompt on stdin. Edit runs leave Codex's sandbox off because its `workspace-write`
-  keeps git's folders read-only, and a worktree's git dir lies outside it anyway, so the agent couldn't commit or
-  push. That is the access a Claude Code edit run has (Bash allowed outright); the push guard still applies. The parser reads `thread.started` (the session id), the last completed `agent_message` item (the answer)
-  and `turn.failed` or `error`; a run with no `turn.completed` failed. Written from Codex's docs and source, not
-  checked against a real Codex yet (#252).
+- **Codex:** `codex exec --json --skip-git-repo-check --sandbox danger-full-access [--model <m>] [-c
+  model_reasoning_effort=<effort>] -` (read-only runs use `--sandbox read-only`), prompt on stdin. Checked against
+  codex-cli 0.166.0 (recorded output is in `integrations/fixtures/codex/`). Edit runs leave Codex's sandbox off. Its
+  `workspace-write` sandbox does work for git when both the worktree's git dir and the repository's common git dir are
+  added as writable roots (`-c sandbox_workspace_write.writable_roots=[…]`, with `-c
+  sandbox_workspace_write.network_access=true`): `add`, `commit` (the repository's hooks run) and an HTTPS `push` to
+  GitHub all succeeded. Without the roots `git add` fails (`Unable to create '…/index.lock': Read-only file system`).
+  But only the worktree, those roots and temp folders are writable then; `mkdir ~/.cache/x` and
+  `mkdir ~/.local/share/x` fail with `Read-only file system`, which is where a package manager keeps its store and
+  caches, so an edit run that installs or tests would fail. SSH pushes weren't tried. So the access is the one a Claude
+  Code edit run has (Bash allowed outright); the push guard still applies, and the guard refused a force-push, a branch
+  delete and a push to the default branch from a real Codex run. The effort is the config key (`codex exec` has no
+  flag for it): the model's Codex effort (`low`, `medium`, `high`, `xhigh`) goes through when the profile sets one;
+  Codex's own session file confirmed the model, effort and sandbox of a run. A bad value isn't refused by the CLI but by
+  the API (the run ends with `error` and `turn.failed`). The parser reads `thread.started` (the session id), the last
+  completed `agent_message` item (the answer) and `turn.failed` or `error`; a run with no `turn.completed` failed. A
+  refusal from the API arrives as its response body in `message`, and the parser shows the error inside it. Items of
+  type `error` are warnings (an unknown model's metadata) and are ignored. The agent's shell has `CODEX_THREAD_ID`,
+  the same id as `thread.started`'s.
 - **Copilot CLI:** `copilot --output-format json --no-ask-user --session-id <id> --allow-tool write --allow-tool shell
   --allow-tool <board> --deny-tool 'shell(gh pr merge)' [--model <m>] [--name <name>]`, prompt on stdin. Read-only
   runs allow only `git status`, `log`, `diff`, `show` and `rev-parse` and deny `write`. The parser takes the last
@@ -1288,7 +1301,7 @@ Codex and Copilot can't be given Claude Code's deny rules, so git refuses the pu
 `core.hooksPath` in `GIT_CONFIG_PARAMETERS` (how `git -c` passes config on, `pushGuardEnv`), so every git the agent
 runs uses it and no config file changes: not the repository's (turning on `extensions.worktreeConfig` would break
 a bare repository's worktrees), not the user's. `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0` would be the documented way,
-but Codex drops variables with `KEY` in their name from its shell, and git then fails outright. Its `pre-push`
+but a Codex shell was only seen keeping them in a read-only run, and a tool that drops variables with `KEY` in their name would break git outright; `GIT_CONFIG_PARAMETERS` has no such risk. Its `pre-push`
 refuses a delete, a push to `refs/heads/<default branch>`, and a push whose remote commit isn't an ancestor of the
 local one (a force-push; a remote commit the worktree hasn't fetched is refused too, as it can't be told apart). It
 then runs the repository's own `pre-push`; every other hook just runs the repository's own (where git would look:
@@ -1321,8 +1334,7 @@ A **headless** run runs on the chosen model's **Headless runs** harness (Claude 
 override**, the chosen model's model for that harness (for Claude Code also its T3 model when that is a Claude model
 `claude` accepts, `profileHeadlessModel`), else the CLI's default. A model with none for its harness falls back to the
 CLI's default, and the run's detail says so; otherwise the detail names the model, what picked it and, off Claude
-Code, the harness. The model's effort for that harness (`cliEffort`, `--effort` or `--reasoning-effort`; Codex has
-none) goes with its model: a typed override, or a T3 model standing in for the Claude Code one, runs at the CLI's
+Code, the harness. The model's effort for that harness (`cliEffort`, `--effort`, `--reasoning-effort` or `-c model_reasoning_effort=`) goes with its model: a typed override, or a T3 model standing in for the Claude Code one, runs at the CLI's
 default effort. A **T3** launch passes an automation's choice on to
 `launchTaskThread` (`modelChoice`), which resolves it with the task's labels and tier against T3's providers
 (`resolveSuggestion`). A choice naming a custom model that was since deleted is passed over with a note, and the
