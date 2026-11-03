@@ -1,6 +1,6 @@
 # Backup and restore
 
-Board tasks: #65; machine folders #69 (epic #68).
+Board tasks: #65; machine folders #69, restore from Settings #70 (epic #68).
 
 The board lives in one SQLite file. If that file is deleted or corrupted, nothing else holds the board. Backup
 writes the whole board out as JSON: on demand from the CLI, or on a schedule into a git repo the server commits
@@ -96,6 +96,36 @@ sends it to the running server (`POST /api/backup/restore-task`) so open boards 
 database directly when no server is running.
 
 Pasted images are copied next to the JSON and copied back by a restore; see [attachments.md](attachments.md).
+
+### Restoring from Settings
+
+Settings → Board → Data → **Restore…** (`RestoreDialog.tsx`) restores from the git backup while the server runs.
+
+- **Reading a commit.** `GET /api/backup/history?machine=` lists the last 100 commits that touched a machine's
+  folder (this board's by default). The other routes take `commit` (a hash or `HEAD`, nothing git could read as
+  an option) and `machine`; they check the commit out with `git worktree add --detach` into a temporary folder
+  outside the clone, read the folder's dump (or the flat dump at the root, for commits from before machine
+  folders) and remove the worktree. The clone's own branch and working tree are never touched, so a scheduled run
+  can go on beside it.
+- **Tasks.** `GET /api/backup/diff` compares the backup's task bundles with the board's, by task id, and lists
+  the ones missing from the board and the ones whose contents differ (events don't count).
+  `POST /api/backup/restore-tasks` (`numbers`, `force`) runs `restoreTask` for each, with the images copied from
+  the worktree, and reports each one: one failing (its project is gone) doesn't stop the rest. The dialog always
+  forces, since picking a changed task asks for the backup's version.
+- **Whole board.** `POST /api/backup/restore-board` needs `confirm: "RESTORE"`. `restoreBoardLive` (`restore.ts`)
+  upgrades the dump, copies the open database to `<db>.before-restore-<time>` with `VACUUM INTO`, then wipes and
+  loads every table the dump holds in one transaction, with the checks `restoreBoard` makes, and keeps the
+  machine-only settings. Foreign keys are off around that transaction, so wiping a task doesn't cascade into
+  tables the dump doesn't hold: a task that comes back keeps its notifications and Autopilot runs, and rows left
+  pointing at nothing are deleted, as the cascade would have. The service then publishes `board.reset`, and open
+  boards refetch everything ([live-sync](live-sync.md)). The restore is synchronous from the VACUUM to the
+  commit, so no scheduler tick or request writes in between; an agent run already going carries on against the
+  restored board.
+- **Another machine's folder.** A whole-board restore from a folder another board owns needs `otherMachine`:
+  `take-over` (new hardware, same board) sets this machine's name to that folder and marks it adopted, so the
+  next run, started straight away, writes it with this board's `instanceId` instead of refusing the name;
+  `new-board` keeps backing up to this machine's own folder, so the old machine and this one don't write into
+  one folder. The adoption is held in memory until that run writes the folder.
 
 ### Scheduled git backup
 
@@ -220,10 +250,11 @@ has one machine), one machine's folder, or a flat backup (`resolveDumpDir` in `r
 | `apps/server/src/services/backup/files.ts`        | Folder layout, deterministic formatting, writing and reading dumps   |
 | `apps/server/src/services/backup/repo.ts`         | The backup repo: `backup.json`, machine folders, picking a dump to read |
 | `apps/server/src/instance.ts`                     | `instanceIdOf`: this board's id in the data dir                      |
-| `apps/server/src/services/backup/restore.ts`      | `restoreBoard`, `upgradeDump`, manifest checks                       |
-| `apps/server/src/services/backup/index.ts`        | The backup service: `dump` and `restoreTask`                         |
-| `apps/server/src/integrations/backup.ts`          | Scheduled git backup: prepare the repo, migrate, claim the folder, commit, push, status, machines |
+| `apps/server/src/services/backup/restore.ts`      | `restoreBoard`, `restoreBoardLive`, `upgradeDump`, manifest checks   |
+| `apps/server/src/services/backup/index.ts`        | The backup service: `dump`, `restoreTask`, `diff`, `restoreBoard`    |
+| `apps/server/src/integrations/backup.ts`          | Scheduled git backup: prepare the repo, migrate, claim the folder, commit, push, status, machines; reading commits for restore |
 | `apps/server/src/backupCli.ts`                    | `pnpm backup export / import / restore-task`                         |
 | `apps/server/src/serverFile.ts`                   | `server.json` in the data dir, so the CLI can tell a server is up    |
 | `apps/server/src/db/database.ts`                  | `migrate(db, upTo)` and `schemaVersion`                              |
 | `apps/web/src/components/settings/BackupSection.tsx` | The Settings → Board → Data section                                     |
+| `apps/web/src/components/settings/RestoreDialog.tsx` | The Restore dialog: machine and commit, tasks or the whole board        |
