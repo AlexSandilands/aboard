@@ -146,10 +146,13 @@ the slot is Fix in → instead, and Merge is in the row's menu ([below](#fixing-
 - Then `mergePullRequest` with `expectedHeadOid`, or `enablePullRequestAutoMerge` when a merge queue
   is on or auto-merge was asked for and the PR can't merge right away (anything but `CLEAN`,
   `HAS_HOOKS`, `UNSTABLE`). `disable_auto` calls `disablePullRequestAutoMerge`.
-- GitHub's error is shown as is. The branch is never deleted.
+- GitHub's error is shown as is. The branch is never deleted by the board; the repo may delete it on merge.
 - Then the link is refreshed. A merged PR then finishes the task the usual way (below).
 
 Merging is UI only, with one exception for agents: [`merge_task_pr`](#merge_task_pr).
+
+This repo's own `main` requires green checks but no approval ([GitHub setup](github-setup.md)), so a green PR is
+`CLEAN` and the board can merge it. A required review would leave it `BLOCKED` until someone else approves.
 
 ### merge_task_pr
 
