@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"01a1a0ab-0000-7000-8000-000000000003"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Model metadata for `not-a-real-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."}}
+{"type":"turn.started"}
+{"type":"error","message":"The 'not-a-real-model' model is not supported when using Codex with a ChatGPT account."}
+{"type":"turn.failed","error":{"message":"The 'not-a-real-model' model is not supported when using Codex with a ChatGPT account."}}

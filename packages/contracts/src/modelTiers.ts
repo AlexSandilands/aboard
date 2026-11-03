@@ -43,7 +43,7 @@ export const SuggestedModelInput = z.object({
 });
 export type SuggestedModelInput = z.infer<typeof SuggestedModelInput>;
 
-/** An effort level as `--effort` (Claude Code) or `--reasoning-effort` (Copilot CLI) takes it: the union of both. */
+/** An effort level as `--effort` (Claude Code), `--reasoning-effort` (Copilot CLI) or `model_reasoning_effort` (Codex) takes it: the union of them. */
 export const CliEffort = z.enum(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
 export type CliEffort = z.infer<typeof CliEffort>;
 
@@ -53,8 +53,8 @@ export type CliEffort = z.infer<typeof CliEffort>;
  */
 export const CLI_EFFORTS: Record<AgentHarness, readonly CliEffort[]> = {
   "claude-code": ["low", "medium", "high", "xhigh", "max"],
-  // Codex has no effort of its own here: `codex exec` takes none on its command line.
-  codex: [],
+  // `model_reasoning_effort` in Codex's config (`-c model_reasoning_effort=<level>`): the levels every Codex model takes.
+  codex: ["low", "medium", "high", "xhigh"],
   "copilot-cli": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
 };
 

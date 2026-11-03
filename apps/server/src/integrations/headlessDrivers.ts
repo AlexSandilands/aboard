@@ -49,10 +49,14 @@ const LIMITED: Omit<DriverCapabilities, "presetSessionId"> = {
 
 /**
  * `codex exec` arguments. Edit access runs without Codex's sandbox: its workspace-write sandbox keeps git's own
- * folders read-only (and a worktree's live outside it), so the agent couldn't commit or push. That is the access a
- * Claude Code edit run has too (Bash allowed outright); the push guard still refuses force, delete and default-branch
- * pushes, and only the prompt says not to run `gh pr merge`. Read-only runs keep the read-only sandbox. `-` reads the
- * prompt from stdin. Written from Codex's docs and source, not against a real Codex (#252).
+ * folders read-only (and a worktree's live outside it), so the agent couldn't commit or push. With both git dirs added
+ * as writable roots it does commit and push (checked on codex-cli 0.166.0, against a local remote), but it would also confine an edit run's other
+ * writes (package stores, caches) to those folders and temp, and a push to a real remote wasn't checked, so the sandbox
+ * stays off.
+ * That is the access a Claude Code edit run has too (Bash allowed outright); the push guard still refuses force, delete
+ * and default-branch pushes, and only the prompt says not to run `gh pr merge`. Read-only runs keep the read-only
+ * sandbox. The effort is the config key `model_reasoning_effort` (`codex exec` has no flag for it). `-` reads the
+ * prompt from stdin. Checked against codex-cli 0.166.0 (docs/features/autopilot.md#headless-drivers).
  */
 export function codexArgs(input: AgentArgsInput): string[] {
   return [
@@ -63,8 +67,23 @@ export function codexArgs(input: AgentArgsInput): string[] {
     "--sandbox",
     input.access === "edit" ? "danger-full-access" : "read-only",
     ...(input.model ? ["--model", input.model] : []),
+    ...(input.effort ? ["-c", `model_reasoning_effort=${input.effort}`] : []),
     "-",
   ];
+}
+
+/**
+ * An error's text. A refusal from the API arrives as the response body in a string
+ * (`{"type":"error","error":{"message":"…"},"status":400}`): its own message is what the board shows.
+ */
+function codexErrorText(message: unknown): string | null {
+  const raw = text(message);
+  if (!raw?.trimStart().startsWith("{")) return raw;
+  try {
+    return text(field(field(JSON.parse(raw), "error"), "message")) ?? raw;
+  } catch {
+    return raw;
+  }
 }
 
 /**
@@ -82,8 +101,9 @@ export function parseCodexOutput(stdout: string): AgentOutcome {
     if (e.type === "thread.started") sessionId ??= codexSessionId(line);
     else if (e.type === "item.completed" && field(e.item, "type") === "agent_message") {
       result = text(field(e.item, "text")) ?? result;
-    } else if (e.type === "turn.failed") failure = text(field(e.error, "message")) ?? "the turn failed";
-    else if (e.type === "error") failure ??= text(e.message) ?? "Codex reported an error";
+    } else if (e.type === "turn.failed") {
+      failure = codexErrorText(field(e.error, "message")) ?? "the turn failed";
+    } else if (e.type === "error") failure ??= codexErrorText(e.message) ?? "Codex reported an error";
     else if (e.type === "turn.completed") completed = true;
   }
   const failed = failure !== null || !completed;
