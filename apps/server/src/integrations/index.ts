@@ -335,6 +335,8 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     backupDiff: (source) => backup.diff(source),
     restoreBackupTasks: (input, actor) => backup.restoreTasks(input, actor),
     restoreBackupBoard: (input) => backup.restoreBoard(input),
+    backupMachineTasks: (machine) => backup.machineTasks(machine),
+    importBackupTasks: (input, actor) => backup.importTasks(input, actor),
     backupSetupInfo: () => backupSetup.info(),
     createBackupRepo: (name) => backupSetup.createRepo(name),
     checkBackupRemote: (remote) => backupSetup.checkRemote(remote),

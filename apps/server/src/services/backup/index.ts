@@ -10,7 +10,9 @@ import type { Core } from "../core.ts";
 import { syncEpicStatus } from "../tasks.ts";
 import { dumpBoard } from "./dump.ts";
 import { copyAttachmentFiles } from "./files.ts";
+import type { NotificationsService } from "../notifications.ts";
 import { insertRows, restoreBoardLive, upgradeDump, type LiveRestoreResult } from "./restore.ts";
+import { createTransferService, type TransferService } from "./transfers.ts";
 
 export interface RestoreTaskResult {
   taskId: string;
@@ -29,7 +31,7 @@ const sortedRow = (row: BackupRow) =>
 const bundleKey = (bundle: TaskBundle) =>
   [sortedRow(bundle.task), ...TASK_BUNDLE_TABLES.map((table) => bundle[table].map(sortedRow).join("\n"))].join("\n\n");
 
-export interface BackupService {
+export interface BackupService extends TransferService {
   /** The whole board as a dump (see files.ts for writing it out). */
   dump(): BoardDump;
   /**
@@ -55,9 +57,14 @@ export interface BackupService {
   restoreBoard(dump: BoardDump, options: { attachmentsFrom: string | null }): LiveRestoreResult;
 }
 
-export function createBackupService(core: Core, attachmentsDir: string): BackupService {
+export function createBackupService(
+  core: Core,
+  attachmentsDir: string,
+  deps: { instanceId: string; notifications: () => NotificationsService },
+): BackupService {
   const { db, repos } = core;
   return {
+    ...createTransferService(core, { attachmentsDir, ...deps }),
     dump: () => dumpBoard(db),
     diff(dump) {
       const backup = upgradeDump(dump);

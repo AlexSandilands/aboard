@@ -23,6 +23,8 @@ const TABLES = [
   // After autopilot_settings, so clearing it (whose trigger deletes its switches) comes first.
   "autopilot_custom",
   "suggestions",
+  "task_transfers",
+  "applied_transfers",
   ...TASK_BUNDLE_TABLES,
   "task_events",
 ] as const;
@@ -42,6 +44,8 @@ const rowsByTable = (dump: BoardDump): Record<Table, BackupRow[]> => ({
   autopilot_recurring: dump.autopilot_recurring,
   autopilot_custom: dump.autopilot_custom,
   suggestions: dump.suggestions,
+  task_transfers: dump.task_transfers,
+  applied_transfers: dump.applied_transfers,
   plan_phases: dump.tasks.flatMap((b) => b.plan_phases),
   plan_steps: dump.tasks.flatMap((b) => b.plan_steps),
   task_links: dump.tasks.flatMap((b) => b.task_links),

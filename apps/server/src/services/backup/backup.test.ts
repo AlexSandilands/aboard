@@ -497,6 +497,8 @@ describe("restore", () => {
       autopilot_custom: _cu,
       suggestions: _sg,
       task_relations: _rel,
+      task_transfers: _tt,
+      applied_transfers: _at2,
       ...counts
     } = dump.manifest.counts;
     const old: BoardDump = {
@@ -508,6 +510,8 @@ describe("restore", () => {
       autopilot_recurring: [],
       autopilot_custom: [],
       suggestions: [],
+      task_transfers: [],
+      applied_transfers: [],
       projects: dump.projects.map(
         ({ plan_skill_json: _ps, variables_json: _v, review_model_json: _rm, ...project }) => project,
       ),
@@ -527,6 +531,7 @@ describe("restore", () => {
           delivery: _d,
           integration_branch: _b,
           integration_merged_at: _im,
+          moved_to_json: _mt,
           attention_message: _atm,
           attention_actor: _aa,
           attention_requested_at: _at,

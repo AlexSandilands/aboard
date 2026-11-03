@@ -37,7 +37,11 @@ const ROOT_FILES = {
   autopilot_recurring: "recurring.json",
   autopilot_custom: "custom-automations.json",
   suggestions: "suggestions.json",
+  task_transfers: "transfers.json",
+  applied_transfers: "applied-transfers.json",
 } as const;
+/** What the backup run says about the machine beside its dump (MachineInfo); not part of the board's dump. */
+export const MACHINE_INFO_FILE = "machine.json";
 const TASKS_DIR = "tasks";
 const EVENTS_DIR = "events";
 /** Pasted images, as `attachments/<task id>/<id>.<ext>`: the same layout as the data dir's `attachments/`. */
@@ -91,6 +95,8 @@ export function dumpFiles(dump: BoardDump): Map<string, string> {
   add(ROOT_FILES.autopilot_recurring, rowsJson(dump.autopilot_recurring));
   add(ROOT_FILES.autopilot_custom, rowsJson(dump.autopilot_custom));
   add(ROOT_FILES.suggestions, rowsJson(dump.suggestions));
+  add(ROOT_FILES.task_transfers, rowsJson(dump.task_transfers));
+  add(ROOT_FILES.applied_transfers, rowsJson(dump.applied_transfers));
   for (const bundle of dump.tasks) add(taskFilePath(bundle.task), taskJson(bundle));
   const months = new Map<string, BackupRow[]>();
   for (const event of dump.task_events) {
@@ -199,6 +205,14 @@ const readJson = (path: string): unknown => {
 /** Whether `dir` holds a folder dump (has a manifest). */
 export const isDumpDir = (dir: string): boolean => existsSync(join(dir, ROOT_FILES.manifest));
 
+/** Just a folder's transfers.json rows (another machine's moves), without reading its whole dump; [] when absent. */
+export function readTransferRows(dir: string): BackupRow[] {
+  const path = join(dir, ROOT_FILES.task_transfers);
+  if (!existsSync(path)) return [];
+  const rows = readJson(path);
+  return Array.isArray(rows) ? (rows as BackupRow[]) : [];
+}
+
 /** Reads a folder dump back into one BoardDump. */
 export function readDumpDir(dir: string): BoardDump {
   if (!isDumpDir(dir)) throw new AppError("VALIDATION", `${dir} is not a backup: it has no ${ROOT_FILES.manifest}`);
@@ -226,6 +240,11 @@ export function readDumpDir(dir: string): BoardDump {
       ? { autopilot_custom: root(ROOT_FILES.autopilot_custom) }
       : {}),
     ...(existsSync(join(dir, ROOT_FILES.suggestions)) ? { suggestions: root(ROOT_FILES.suggestions) } : {}),
+    // Absent before moving tasks between machines.
+    ...(existsSync(join(dir, ROOT_FILES.task_transfers)) ? { task_transfers: root(ROOT_FILES.task_transfers) } : {}),
+    ...(existsSync(join(dir, ROOT_FILES.applied_transfers))
+      ? { applied_transfers: root(ROOT_FILES.applied_transfers) }
+      : {}),
     tasks: tasks.sort((a, b) => Number(a.task?.number) - Number(b.task?.number)),
     task_events: events.sort((a, b) => Number(a.id) - Number(b.id)),
   });

@@ -426,6 +426,7 @@ export function createTasksService(
           delivery: null,
           integrationBranch: null,
           integrationMergedAt: null,
+          movedTo: null,
         };
         repos.tasks.insert(task);
         fx.log(task.id, actor, "created", {

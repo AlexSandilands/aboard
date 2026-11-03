@@ -52,12 +52,12 @@ function setup(opts: { remote?: string; root?: string; machineName?: string; run
   }
   const machineName = opts.machineName ?? "laptop";
   const clone = join(root, `clone-${machineName}-${randomUUID().slice(0, 8)}`);
-  const h = createTestHarness();
+  const instanceId = randomUUID();
+  const h = createTestHarness({ instanceId });
   const project = h.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
   const task = h.services.tasks.create({ projectId: project.id, title: "Feature" });
   h.services.settings.update({ backupDir: clone, backupRemote: remote, machineName });
   const warnings: string[] = [];
-  const instanceId = randomUUID();
   const backup = createBackupIntegration({
     services: () => h.services,
     attachmentsDir: join(root, "attachments"),
@@ -523,5 +523,105 @@ describe("commitMessage", () => {
     expect(commitMessage(["D  tasks/2026-09/task-3.json"])).toBe("Back up board: 1 removed");
     expect(commitMessage(["M  settings.json"])).toBe("Back up board: settings and history");
     expect(commitMessage(["A  laptop/tasks/2026-10/task-4.json"])).toBe("Back up board: 1 added");
+  });
+});
+
+describe("moving tasks between machines", { timeout: PROCESS_TEST_TIMEOUT }, () => {
+  /** Two boards backing up to one remote, each having seen the other's folder. */
+  async function twoMachines() {
+    const a = setup();
+    const b = setup({ root: a.root, remote: a.remote, machineName: "desktop" });
+    expect((await a.backup.run()).lastError).toBeNull();
+    expect((await b.backup.run()).lastError).toBeNull();
+    expect((await a.backup.run()).lastError).toBeNull();
+    return { a, b };
+  }
+
+  it("moves a task: the other machine archives its copy on its next run, once", async () => {
+    const { a, b } = await twoMachines();
+    const offered = await b.backup.machineTasks("laptop");
+    expect(offered).toMatchObject({ folder: "laptop", machineName: "laptop" });
+    expect(offered.lastCommitAt).not.toBeNull();
+    expect(offered.projects).toEqual([
+      expect.objectContaining({ id: a.project.id, matchId: b.project.id, matchedBy: "name" }),
+    ]);
+    expect(offered.tasks).toEqual([
+      expect.objectContaining({ taskId: a.task.id, number: a.task.number, onBoard: "no", busy: false }),
+    ]);
+
+    const moved = await b.backup.importTasks({ machine: "laptop", taskIds: [a.task.id], mode: "move" }, "user");
+    expect(moved.results).toEqual([
+      expect.objectContaining({ taskId: a.task.id, ok: true, boardNumber: b.task.number + 1, error: null }),
+    ]);
+    const here = b.services.tasks.detail(a.task.id);
+    expect(here).toMatchObject({ projectId: b.project.id, archivedAt: null, number: b.task.number + 1 });
+    expect(here.events.some((e) => e.type === "imported")).toBe(true);
+    // The import started a run, which pushes desktop/transfers.json.
+    expect((await b.backup.run()).lastError).toBeNull();
+    expect(JSON.parse(git(a.remote, "show", "HEAD:desktop/transfers.json"))).toEqual([
+      expect.objectContaining({ task_id: a.task.id, from_machine: "laptop", to_machine: "desktop" }),
+    ]);
+
+    expect((await a.backup.run()).lastError).toBeNull();
+    const left = a.services.tasks.detail(a.task.id);
+    expect(left.archivedAt).not.toBeNull();
+    expect(left.movedTo).toMatchObject({ machine: "desktop", number: b.task.number + 1 });
+    expect(left.events.filter((e) => e.type === "moved_away")).toHaveLength(1);
+    // Unchanged since the backup it was taken from: nothing for the inbox.
+    expect(a.services.notifications.list().items.filter((n) => n.taskId === a.task.id)).toEqual([]);
+    // The archive is in the laptop's backup; another run applies nothing again.
+    expect((await a.backup.run()).lastError).toBeNull();
+    expect(a.services.tasks.detail(a.task.id).events.filter((e) => e.type === "moved_away")).toHaveLength(1);
+
+    // Already here: offered as such, and refused.
+    expect((await b.backup.machineTasks("laptop")).tasks[0]).toMatchObject({ onBoard: "here" });
+    const again = await b.backup.importTasks({ machine: "laptop", taskIds: [a.task.id], mode: "copy" }, "user");
+    expect(again.results[0]).toMatchObject({ ok: false, error: expect.stringMatching(/Already on this board/) });
+  });
+
+  it("copies a task without touching the other machine's", async () => {
+    const { a, b } = await twoMachines();
+    const copied = await b.backup.importTasks({ machine: "laptop", taskIds: [a.task.id], mode: "copy" }, "user");
+    expect(copied.results[0]).toMatchObject({ ok: true });
+    expect((await b.backup.run()).lastError).toBeNull();
+    expect(JSON.parse(git(a.remote, "show", "HEAD:desktop/transfers.json"))).toEqual([]);
+    expect((await a.backup.run()).lastError).toBeNull();
+    expect(a.services.tasks.detail(a.task.id).archivedAt).toBeNull();
+    expect(b.services.tasks.detail(a.task.id).archivedAt).toBeNull();
+  });
+
+  it("moves a task back, replacing and unarchiving the copy left behind under its old number", async () => {
+    const { a, b } = await twoMachines();
+    await b.backup.importTasks({ machine: "laptop", taskIds: [a.task.id], mode: "move" }, "user");
+    expect((await b.backup.run()).lastError).toBeNull();
+    expect((await a.backup.run()).lastError).toBeNull();
+    b.services.tasks.update(a.task.id, { title: "Worked on at the desk" }, "user");
+    expect((await b.backup.run()).lastError).toBeNull();
+    expect((await a.backup.run()).lastError).toBeNull();
+
+    expect((await a.backup.machineTasks("desktop")).tasks.find((t) => t.taskId === a.task.id)).toMatchObject({
+      onBoard: "archived",
+    });
+    const back = await a.backup.importTasks({ machine: "desktop", taskIds: [a.task.id], mode: "move" }, "user");
+    expect(back.results[0]).toMatchObject({ ok: true, boardNumber: a.task.number });
+    expect(a.services.tasks.detail(a.task.id)).toMatchObject({
+      title: "Worked on at the desk",
+      archivedAt: null,
+      movedTo: null,
+      projectId: a.project.id,
+    });
+
+    expect((await a.backup.run()).lastError).toBeNull();
+    expect((await b.backup.run()).lastError).toBeNull();
+    expect(b.services.tasks.detail(a.task.id)).toMatchObject({ movedTo: { machine: "laptop" } });
+    expect(b.services.tasks.detail(a.task.id).archivedAt).not.toBeNull();
+    // The first move is long applied, so the laptop's copy stays.
+    expect((await a.backup.run()).lastError).toBeNull();
+    expect(a.services.tasks.detail(a.task.id).archivedAt).toBeNull();
+  });
+
+  it("refuses this machine's own folder", async () => {
+    const { a } = await twoMachines();
+    await expect(a.backup.machineTasks("laptop")).rejects.toMatchObject({ code: "VALIDATION" });
   });
 });
