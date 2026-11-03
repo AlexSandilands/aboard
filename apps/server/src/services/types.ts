@@ -107,6 +107,12 @@ export interface ProjectsService {
    */
   resolve(ref: ProjectRef, opts?: { autoCreate?: boolean }): Project;
   /**
+   * resolve with autoCreate, also saying whether the project was just made, so MCP results can flag it. A path
+   * inside a linked git worktree matches (or creates, at its root) the main checkout's project, unless a project
+   * is bound to the worktree itself or a folder in it.
+   */
+  resolveOrCreate(ref: ProjectRef): { project: Project; created: boolean };
+  /**
    * Throws CONFLICT if an active project with the same workspace key exists; an archived one is unarchived and
    * returned instead. Appends to the end of the lane order.
    */

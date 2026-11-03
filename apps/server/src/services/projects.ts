@@ -1,12 +1,12 @@
 import { normalizeWorkspaceKey, workspaceBasename, type Project } from "@repo/contracts";
 import { generateKeyBetween, generateNKeysBetween } from "fractional-indexing";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { nowIso } from "../db/database.ts";
 import { AppError, notFound } from "../errors.ts";
 import type { Core } from "./core.ts";
-import type { ProjectsService } from "./types.ts";
+import type { ProjectRef, ProjectsService } from "./types.ts";
 
 /** True when `key` is `root` or lies inside it (segment-boundary aware). */
 export function isWithinWorkspace(key: string, root: string): boolean {
@@ -27,6 +27,49 @@ export function repositoryRootOf(path: string): string {
     const parent = dirname(dir);
     if (parent === dir) return path;
     dir = parent;
+  }
+}
+
+/** Where a path inside a linked git worktree sits: the worktree's root, the main checkout's, and the same path there. */
+export interface WorktreeLocation {
+  worktree: string;
+  main: string;
+  path: string;
+}
+
+/**
+ * When `path` lies inside a linked git worktree (`git worktree add`, T3 Code, Claude Code), where it is and the
+ * same relative path in the repository's main checkout; otherwise null. Reads git's files rather than running
+ * git, so it stays synchronous and needs no git on PATH. Submodules (no `commondir`), worktrees of bare
+ * repositories and anything unreadable are not mapped.
+ */
+export function mainCheckoutOf(path: string): WorktreeLocation | null {
+  try {
+    const start = resolve(path);
+    if (!existsSync(start)) return null;
+    let root = start;
+    for (;;) {
+      const dotGit = resolve(root, ".git");
+      if (existsSync(dotGit)) {
+        // A directory is a main checkout (or a plain repo): nothing to map.
+        if (!statSync(dotGit).isFile()) return null;
+        const gitdir = /^gitdir:\s*(.+?)\s*$/m.exec(readFileSync(dotGit, "utf8"))?.[1];
+        if (!gitdir) return null;
+        const adminDir = resolve(root, gitdir);
+        const commondirFile = resolve(adminDir, "commondir");
+        if (!existsSync(commondirFile)) return null;
+        const commonDir = resolve(adminDir, readFileSync(commondirFile, "utf8").trim());
+        if (basename(commonDir) !== ".git") return null;
+        const main = dirname(commonDir);
+        if (main === root || !existsSync(main)) return null;
+        return { worktree: root, main, path: join(main, relative(root, start)) };
+      }
+      const parent = dirname(root);
+      if (parent === root) return null;
+      root = parent;
+    }
+  } catch {
+    return null;
   }
 }
 
@@ -78,6 +121,43 @@ export function createProjectsService(
     return generateKeyBetween(last, null);
   };
 
+  const matchWorkspace = (path: string): Project | undefined => {
+    const key = normalizeWorkspaceKey(path);
+    return repos.projects
+      .withWorkspace()
+      .filter((p) => isWithinWorkspace(key, p.workspaceKey!))
+      .sort((a, b) => b.workspaceKey!.length - a.workspaceKey!.length)[0];
+  };
+
+  /**
+   * The project `ref` names, or null for an unknown path when `writing` (the caller creates it); a read throws
+   * NOT_FOUND instead. Inside a linked worktree the same path in the main checkout is matched, unless a project is
+   * bound to the worktree itself (or a folder in it). A plain match of the worktree path isn't enough: a worktree
+   * inside the main repo (Claude Code's `.claude/worktrees/`) lies in the repo's root project, which would hide
+   * a deeper project such as `<main>/apps/web`.
+   */
+  function find(ref: ProjectRef, writing: true): Project | null;
+  function find(ref: ProjectRef, writing: false): Project;
+  function find(ref: ProjectRef, writing: boolean): Project | null {
+    if (ref.projectId) return get(ref.projectId);
+    if (!ref.workspacePath?.trim()) {
+      throw new AppError("VALIDATION", "Provide projectId or workspacePath to identify the project");
+    }
+    const path = ref.workspacePath.trim();
+    const literal = matchWorkspace(path);
+    const location = mainCheckoutOf(path);
+    const boundToWorktree =
+      literal && location && isWithinWorkspace(literal.workspaceKey!, normalizeWorkspaceKey(location.worktree));
+    const match = location && !boundToWorktree ? (matchWorkspace(location.path) ?? literal) : literal;
+    if (match) {
+      // Writing tools bring an archived lane back rather than silently filing into a hidden one.
+      if (writing && match.archivedAt) return service.update(match.id, { archived: false });
+      return match;
+    }
+    if (!writing) throw notFound("Project for workspace", ref.workspacePath);
+    return null;
+  }
+
   const service: ProjectsService = {
     list: (opts) => repos.projects.list(opts?.includeArchived ?? false),
     get,
@@ -105,22 +185,17 @@ export function createProjectsService(
     },
 
     resolve(ref, opts) {
-      if (ref.projectId) return get(ref.projectId);
-      if (!ref.workspacePath?.trim()) {
-        throw new AppError("VALIDATION", "Provide projectId or workspacePath to identify the project");
-      }
-      const key = normalizeWorkspaceKey(ref.workspacePath);
-      const match = repos.projects
-        .withWorkspace()
-        .filter((p) => isWithinWorkspace(key, p.workspaceKey!))
-        .sort((a, b) => b.workspaceKey!.length - a.workspaceKey!.length)[0];
-      if (match) {
-        // Writing tools bring an archived lane back rather than silently filing into a hidden one.
-        if (opts?.autoCreate && match.archivedAt) return service.update(match.id, { archived: false });
-        return match;
-      }
-      if (!opts?.autoCreate) throw notFound("Project for workspace", ref.workspacePath);
-      return service.create({ workspaceRoot: repositoryRootOf(ref.workspacePath.trim()) });
+      return opts?.autoCreate ? service.resolveOrCreate(ref).project : find(ref, false);
+    },
+
+    resolveOrCreate(ref) {
+      const found = find(ref, true);
+      if (found) return { project: found, created: false };
+      const path = ref.workspacePath!.trim();
+      // Never a lane named after a worktree: the project is the main repo's, however the agent got here.
+      // The main checkout's root, not the mapped path: a folder that exists only on the worktree's branch isn't there.
+      const project = service.create({ workspaceRoot: mainCheckoutOf(path)?.main ?? repositoryRootOf(path) });
+      return { project, created: true };
     },
 
     create(input) {

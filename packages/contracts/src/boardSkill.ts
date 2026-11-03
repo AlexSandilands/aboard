@@ -12,7 +12,9 @@ export const BOARD_SKILL_BODY = `# ${BRAND.name} (task board)
 The user keeps a local kanban board of their work across projects. Columns: **Backlog → Planned → In
 Progress → Review → Done**, one swimlane per project. You read and update it through the \`${BRAND.id}\`
 MCP server; the board updates live in the user's browser. Identify the project by passing
-\`workspacePath\` = your current working directory. Unknown paths create the project automatically.
+\`workspacePath\` = your current working directory; from a git worktree the board finds the main repo's
+project. Unknown paths create the project automatically, and the result then starts with "Created a NEW
+project": if the task belongs to a project the board already has, move it with \`update_task(moveToProjectId)\`.
 Work that belongs to no code project (a document to update, something to review) goes in the **General**
 project: pass \`general: true\` to \`add_to_backlog\` / \`create_task\` instead of \`workspacePath\`. Leaving the
 path out never defaults to it, and work in a repo belongs in the repo's project.
@@ -819,7 +821,7 @@ ${AUTOMATIONS_SKILL_BODY}`;
 /** The snippet users paste into their own AGENTS.md; `skills/aboard/AGENTS-snippet.md` ships the same text. */
 export const BOARD_AGENTS_SNIPPET = `## ${BRAND.name} (task board)
 
-Track work on the user's local task board via the \`${BRAND.id}\` MCP server (Backlog → Planned → In Progress → Review → Done). Pass \`workspacePath\` = your cwd to identify the project, or \`general: true\` on \`add_to_backlog\` / \`create_task\` for work that belongs to no code project (it goes in the General project; never for work in a repo). Tasks are \`#42\`, steps \`"2.3"\`.
+Track work on the user's local task board via the \`${BRAND.id}\` MCP server (Backlog → Planned → In Progress → Review → Done). Pass \`workspacePath\` = your cwd to identify the project (a git worktree finds its main repo's project), or \`general: true\` on \`add_to_backlog\` / \`create_task\` for work that belongs to no code project (it goes in the General project; never for work in a repo). Tasks are \`#42\`, steps \`"2.3"\`.
 
 - **Orient:** \`board_overview\` / \`list_tasks\` at the start of meaningful work. \`board_activity(since: "7d")\` looks back over a period: tasks finished, review findings, Autopilot failures, stalls, notes.
 - **Resume:** always \`get_task\` before continuing an existing task; it has the plan, current step and handover notes. Add any **Missing links** it lists, and open any **Images** it lists (absolute file paths; often a screenshot of the bug).
