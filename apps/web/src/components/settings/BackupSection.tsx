@@ -11,6 +11,7 @@ import { useUpdateSettings } from "~/state/mutations";
 import { queryKeys, useBackupStatus } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
 import { FolderPicker } from "./FolderPicker";
+import { RestoreDialog } from "./RestoreDialog";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 
 const INTERVALS = [
@@ -26,6 +27,7 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
   const queryClient = useQueryClient();
   const status = useBackupStatus();
   const [browsing, setBrowsing] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const run = useMutation({
     mutationFn: () => api<BackupStatus>("/api/backup/run", { method: "POST", body: {} }),
     onSuccess: (next) => queryClient.setQueryData(queryKeys.backupStatus, next),
@@ -40,7 +42,7 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
         id="board.data.backup-enabled"
         title="Back up to git"
         description="Writes the board as JSON into a git repo and commits when it changes."
-        info="Restore with pnpm backup import."
+        info="Restore below, or from the command line with pnpm backup import."
         control={
           <Switch
             aria-label="Back up to git"
@@ -152,6 +154,18 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
       >
         {run.error ? <p className="mt-2 text-xs text-destructive-foreground">{run.error.message}</p> : null}
       </SettingsRow>
+      <SettingsRow
+        id="board.data.backup-restore"
+        title="Restore"
+        description="Bring back tasks, or the whole board, from any backup commit."
+        info="Reads the commit beside the backup clone, which stays as it is. Replacing the whole board keeps a copy of it first."
+        control={
+          <Button size="sm" variant="outline" disabled={!settings.backupDir} onClick={() => setRestoring(true)}>
+            Restore…
+          </Button>
+        }
+      />
+      <RestoreDialog open={restoring} onClose={() => setRestoring(false)} />
     </SettingsSection>
   );
 }
