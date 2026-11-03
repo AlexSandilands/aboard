@@ -43,6 +43,17 @@ A backup repo made by an earlier version, with the board at its root, is moved i
 the first backup after you update, and the inbox tells you so. Update every machine that backs up to that
 repo: older versions refuse a repo laid out this way rather than write over it.
 
+**Restore…** in the same section brings things back from any backup commit, while the board keeps running. Pick a
+machine's folder (this machine's by default) and a commit, then either:
+
+- **Tasks**: the tasks missing from the board or changed since that backup. Tick the ones you want back; a
+  changed task is replaced by the backup's version.
+- **Whole board**: replaces the board with the backup, after you type RESTORE. The board as it was is copied
+  beside the database first (`data.sqlite.before-restore-<time>`). This machine's own setup (the backup folder,
+  the T3 token, Autopilot's pause) stays. Restoring another machine's folder asks whether this is the same board
+  on new hardware, in which case this machine takes that folder over and backs up into it, or a new board, which
+  keeps backing up to this machine's own folder.
+
 From the command line:
 
 ```sh

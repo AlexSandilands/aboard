@@ -1,8 +1,15 @@
-import { BoardDump, CheckBackupRemoteInput, CreateBackupRepoInput } from "@repo/contracts";
+import {
+  BackupSource,
+  BoardDump,
+  CheckBackupRemoteInput,
+  CreateBackupRepoInput,
+  RestoreBoardInput,
+  RestoreTasksInput,
+} from "@repo/contracts";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
-import { actorOf, handle, parseBody } from "../respond.ts";
+import { actorOf, handle, parseBody, parseQuery } from "../respond.ts";
 
 const RestoreTaskBody = z.object({
   dump: BoardDump,
@@ -12,7 +19,10 @@ const RestoreTaskBody = z.object({
   attachmentsFrom: z.string().nullable().optional(),
 });
 
-/** Git backup status, the repo's machine folders, "Back up now", the guided setup, and putting one task back from a backup (the CLI's restore-task). */
+/**
+ * Git backup status, the repo's machine folders, "Back up now", the guided setup, putting one task back from a backup
+ * (the CLI's restore-task), and restoring from the backup repo's commits (Settings → Board → Data → Restore).
+ */
 export function registerBackupRoutes(app: Hono, { services, integrations }: AppContext): void {
   app.get(
     "/api/backup/status",
@@ -25,6 +35,24 @@ export function registerBackupRoutes(app: Hono, { services, integrations }: AppC
   app.post(
     "/api/backup/run",
     handle(async (c) => c.json(await integrations.runBackup())),
+  );
+  app.get(
+    "/api/backup/history",
+    handle(async (c) => c.json(await integrations.backupHistory(c.req.query("machine") || undefined))),
+  );
+  app.get(
+    "/api/backup/diff",
+    handle(async (c) => c.json(await integrations.backupDiff(parseQuery(c, BackupSource)))),
+  );
+  app.post(
+    "/api/backup/restore-tasks",
+    handle(async (c) =>
+      c.json(await integrations.restoreBackupTasks(await parseBody(c, RestoreTasksInput), actorOf(c))),
+    ),
+  );
+  app.post(
+    "/api/backup/restore-board",
+    handle(async (c) => c.json(await integrations.restoreBackupBoard(await parseBody(c, RestoreBoardInput)))),
   );
   app.get(
     "/api/backup/setup-info",

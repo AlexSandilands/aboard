@@ -4,7 +4,10 @@ import type {
   AgentModels,
   AskSettingsInput,
   AskSettingsResult,
+  BackupCommit,
+  BackupDiff,
   BackupMachine,
+  BackupSource,
   BackupRemoteCheck,
   BackupSetupInfo,
   BackupStatus,
@@ -20,6 +23,10 @@ import type {
   ResumeMode,
   ResumeResult,
   ResumeSessionInput,
+  RestoreBoardInput,
+  RestoreBoardResult,
+  RestoreTasksInput,
+  RestoreTasksResult,
   SessionLaunchOptions,
   StartPlanningSessionInput,
   StartPlanningThreadInput,
@@ -142,6 +149,14 @@ export interface Integrations {
   runBackup(): Promise<BackupStatus>;
   /** The machine folders in the backup repo, as of its last pull. */
   backupMachines(): Promise<BackupMachine[]>;
+  /** The latest backup commits that touched a machine's folder (this machine's by default). */
+  backupHistory(machine?: string): Promise<BackupCommit[]>;
+  /** The tasks in the backup at a commit that the board lacks or has with other contents. */
+  backupDiff(source: BackupSource): Promise<BackupDiff>;
+  /** Puts tasks from the backup at a commit back on the board. */
+  restoreBackupTasks(input: RestoreTasksInput, actor: string): Promise<RestoreTasksResult>;
+  /** Replaces the whole board with the backup at a commit (publishes board.reset). */
+  restoreBackupBoard(input: RestoreBoardInput): Promise<RestoreBoardResult>;
   /** What the backup setup dialog starts from: gh's sign-in, the default folder and the current setup. */
   backupSetupInfo(): Promise<BackupSetupInfo>;
   /** Creates a private GitHub repo for backups with gh. Throws CONFLICT when the account has one of that name. */

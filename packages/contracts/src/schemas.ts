@@ -648,6 +648,8 @@ export const BoardEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("notifications.changed"), unread: z.number() }),
   /** A suggested change was made, accepted, rejected or went stale; Settings refetches. `open` counts the open ones. */
   z.object({ type: z.literal("suggestions.changed"), open: z.number() }),
+  /** The whole board was replaced (restored from a backup); clients refetch everything. */
+  z.object({ type: z.literal("board.reset") }),
 ]);
 export type BoardEvent = z.infer<typeof BoardEvent>;
 

@@ -599,6 +599,8 @@ export function useBoardEvents() {
       if (event.type === "suggestions.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.suggestions });
       }
+      // Restored from a backup: every cached task, setting and list may be another board's now.
+      if (event.type === "board.reset") void queryClient.invalidateQueries();
     };
     // EventSource retries a dropped connection itself, but an error response (e.g. Vite's proxy while
     // the dev server restarts) closes it for good, leaving the board silently stale. Reopen it then.

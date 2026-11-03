@@ -236,6 +236,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "status",
     "failed",
   ]),
+  draft("board.data.backup-restore", "Restore", "Bring back tasks, or the whole board, from any backup commit.", [
+    "backup",
+    "restore",
+    "undo",
+    "deleted",
+  ]),
   draft(
     "board.data.archived-projects",
     "Archived projects",
