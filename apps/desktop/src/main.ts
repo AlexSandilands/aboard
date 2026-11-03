@@ -144,15 +144,23 @@ function createWindow(show: boolean): BrowserWindow {
     });
   }
   win.once("ready-to-show", () => applyWindowBadge(win));
-  // Without throttling the page can't tell it is hidden from document.hidden, so say so.
-  const sendHidden = () => {
-    if (!win.isDestroyed()) win.webContents.send(WINDOW_HIDDEN_CHANNEL, !win.isVisible() || win.isMinimized());
+  // Without throttling the page can't tell it is hidden from document.hidden, so say so. Only changes are sent, since
+  // the page pings the server on each message; a reloaded page starts from "visible", so dom-ready always sends.
+  let sentHidden: boolean | null = null;
+  const sendHidden = (hidden = !win.isVisible() || win.isMinimized(), always = false) => {
+    if (win.isDestroyed() || (!always && hidden === sentHidden)) return;
+    sentHidden = hidden;
+    win.webContents.send(WINDOW_HIDDEN_CHANNEL, hidden);
   };
-  win.on("show", sendHidden);
-  win.on("hide", sendHidden);
-  win.on("minimize", sendHidden);
-  win.on("restore", sendHidden);
-  win.webContents.on("dom-ready", sendHidden);
+  win.on("show", () => sendHidden());
+  win.on("hide", () => sendHidden());
+  win.on("minimize", () => sendHidden());
+  win.on("restore", () => sendHidden());
+  // Some Linux window managers don't fire restore when a minimised window comes back, and isMinimized can lag, which
+  // would leave a visible page paused. A focused window is on screen, so focus clears the flag whatever they report.
+  win.on("focus", () => sendHidden(false));
+  win.on("blur", () => sendHidden());
+  win.webContents.on("dom-ready", () => sendHidden(undefined, true));
   // Closing hides to the tray so the MCP endpoint stays up for agents.
   win.on("close", (event) => {
     if (quitting) return;

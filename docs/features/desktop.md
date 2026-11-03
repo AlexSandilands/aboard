@@ -41,7 +41,8 @@ An unexpected exit after startup shows an error and quits the app.
 - Background throttling is off (`backgroundThrottling: false`). With it on, a window back from the tray or a
   minimise dropped frames on its first panel slide while Chromium warmed the page up again. A hidden window draws no
   frames either way, so CSS animations cost nothing there, but `document.hidden` stays false. The shell sends the
-  window's hidden state instead (on show, hide, minimise, restore and page load), the bridge's optional
+  window's hidden state instead (when it changes on show, hide, minimise, restore, focus and blur, and always on page
+  load; focus counts as visible, since some Linux window managers skip restore), the bridge's optional
   `onWindowHidden` passes it on, and the page reads it through `pageHidden()` / `onPageHiddenChange()`
   (`apps/web/src/lib/pageHidden.ts`): the task-view ping and the card FLIPs stop while the window is hidden, and
   `main.tsx` feeds it to TanStack Query's `focusManager`, so query intervals pause in the tray and the
