@@ -1,6 +1,6 @@
 # Backup and restore
 
-Board tasks: #65; machine folders #69 (epic #68).
+Board tasks: #65; machine folders #69 and guided setup #13 (epic #68).
 
 The board lives in one SQLite file. If that file is deleted or corrupted, nothing else holds the board. Backup
 writes the whole board out as JSON: on demand from the CLI, or on a schedule into a git repo the server commits
@@ -127,6 +127,28 @@ The status (last run, last commit, last push, last error) is held in memory and 
 repo's machine folders (folder, owner, whether it is this board's, when a commit last touched it, as of the
 clone's last pull).
 
+### Guided setup
+
+Settings → Board → Data shows **Set up backup** while no folder is set, and a **Local only: commits aren't
+pushed** row with **Connect GitHub** while no remote is (`backupState` in `backupSetup.logic.ts`); runs without a
+remote only ever committed locally, and nothing used to say so. Both open `BackupSetupDialog`: folder → remote →
+first backup. The server side is `apps/server/src/integrations/backupSetup.ts`:
+
+- `GET /api/backup/setup-info`: gh installed and signed in to github.com (re-checked on each call, so a
+  `gh auth login` made with the dialog open shows up after "Check gh again"), the default folder
+  `<data dir>/backup`, the current folder, remote and machine name, and the repo name to offer
+  (`<product id>-backup`).
+- `POST /api/backup/github-repo` runs `gh repo create <name> --private` and returns the clone URL: SSH when gh's
+  `git_protocol` is `ssh`, else HTTPS, which `gh auth setup-git` signs git in for. A name the account already has
+  is a `CONFLICT` that says to use it as an existing repo.
+- `POST /api/backup/check-remote` runs `git ls-remote` in a scratch folder: reachable, `auth_failed`, `not_found`
+  (GitHub's answer for a private repo the account can't see, too) or `error`. A repo with branches is cloned with
+  `--depth 1` to say whether it is empty (only a README and the like), a backup (with its machine folders, so the
+  dialog can refuse a name another machine has) or something else, which the run would refuse.
+
+The last step saves the folder, remote and machine name, turns backup on and calls `POST /api/backup/run`,
+showing the commit, the push or the error. gh and git keep the credentials; the board stores none.
+
 ### Machine folders
 
 Several machines can back up to one repo. The repo holds `backup.json` and one folder per machine:
@@ -226,4 +248,6 @@ has one machine), one machine's folder, or a flat backup (`resolveDumpDir` in `r
 | `apps/server/src/backupCli.ts`                    | `pnpm backup export / import / restore-task`                         |
 | `apps/server/src/serverFile.ts`                   | `server.json` in the data dir, so the CLI can tell a server is up    |
 | `apps/server/src/db/database.ts`                  | `migrate(db, upTo)` and `schemaVersion`                              |
+| `apps/server/src/integrations/backupSetup.ts`     | Guided setup: setup info, `gh repo create`, checking a remote        |
 | `apps/web/src/components/settings/BackupSection.tsx` | The Settings → Board → Data section                                     |
+| `apps/web/src/components/settings/BackupSetupDialog.tsx` | The setup dialog; its wording and checks are in `backupSetup.logic.ts` |
