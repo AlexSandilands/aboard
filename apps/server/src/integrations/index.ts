@@ -16,7 +16,8 @@ import { createAgentIntegrations, type AgentIntegrationProbes } from "./agentInt
 import { createAgentModels, type AgentModelProbes } from "./agentModels.ts";
 import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
 import { createBackupIntegration, defaultRunGit, type RunGit } from "./backup.ts";
-import type { RunGh } from "./gh.ts";
+import { defaultRunGh, type RunGh } from "./gh.ts";
+import { createBackupSetup } from "./backupSetup.ts";
 import { createGithubIntegration, messageOf } from "./github.ts";
 import { mergeTaskPr } from "./mergeTaskPr.ts";
 import type { RunAgent } from "./headlessAgent.ts";
@@ -43,6 +44,8 @@ export interface IntegrationDeps {
     Partial<Pick<Config, "webDist">> & {
       /** This board's id (instance.ts), which owns its folder in the backup repo. */
       instanceId: string;
+      /** Where the backup setup offers to keep the backup clone: `<data dir>/backup`. */
+      backupDefaultDir: string;
     };
   bus: EventBus;
   /** Late-bound: services are created after integrations (they read t3Status). */
@@ -125,6 +128,14 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     instanceId: deps.config.instanceId,
     ...(overrides.runGit ? { runGit: overrides.runGit } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  const backupSetup = createBackupSetup({
+    services: deps.services,
+    ghStatus: () => github.checkStatus(),
+    runGh: overrides.runGh ?? defaultRunGh,
+    runGit: overrides.runGit ?? defaultRunGit,
+    defaultDir: deps.config.backupDefaultDir,
+    instanceId: deps.config.instanceId,
   });
   const sessions = createAgentSessionsIntegration({
     services: deps.services,
@@ -324,6 +335,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     backupDiff: (source) => backup.diff(source),
     restoreBackupTasks: (input, actor) => backup.restoreTasks(input, actor),
     restoreBackupBoard: (input) => backup.restoreBoard(input),
+    backupSetupInfo: () => backupSetup.info(),
+    createBackupRepo: (name) => backupSetup.createRepo(name),
+    checkBackupRemote: (remote) => backupSetup.checkRemote(remote),
   };
   return integrations;
 }

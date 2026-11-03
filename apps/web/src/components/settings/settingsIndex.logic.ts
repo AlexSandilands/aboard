@@ -189,6 +189,18 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "import",
   ]),
   draft(
+    "board.data.backup-setup",
+    "Set up backup",
+    "Pick a folder, connect a private GitHub repo and take the first backup.",
+    ["backup", "github", "setup", "wizard", "repo"],
+  ),
+  draft(
+    "board.data.backup-local-only",
+    "Connect GitHub",
+    "Shown when backups only commit locally: push them to a private GitHub repo.",
+    ["backup", "github", "push", "local only", "remote"],
+  ),
+  draft(
     "board.data.backup-enabled",
     "Back up to git",
     "Writes the board as JSON into a git repo and commits when it changes. Restore with pnpm backup import.",

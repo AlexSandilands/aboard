@@ -268,3 +268,70 @@ export const RestoreBoardResult = z.object({
   tookOver: z.string().nullable(),
 });
 export type RestoreBoardResult = z.infer<typeof RestoreBoardResult>;
+/** What the backup setup dialog starts from (`GET /api/backup/setup-info`). */
+export const BackupSetupInfo = z.object({
+  gh: z.object({
+    /** Whether the `gh` CLI is installed. */
+    available: z.boolean(),
+    /** Signed in to github.com, so it can create a repo. */
+    signedIn: z.boolean(),
+    /** The github.com account it is signed in as; null when signed out or when gh is too old to say. */
+    login: z.string().nullable(),
+  }),
+  /** `<data dir>/backup`, offered when no folder is set. */
+  defaultDir: z.string(),
+  backupDir: z.string().nullable(),
+  backupRemote: z.string().nullable(),
+  machineName: z.string(),
+  machineNameIsDefault: z.boolean(),
+  /** The repo name the dialog offers to create: `<product id>-backup`. */
+  suggestedRepoName: z.string(),
+});
+export type BackupSetupInfo = z.infer<typeof BackupSetupInfo>;
+
+/** A GitHub repository name: what `gh repo create` accepts without changing it. */
+export const GithubRepoName = z
+  .string()
+  .trim()
+  .min(1, "Give the repo a name")
+  .max(100, "At most 100 characters")
+  .regex(/^[A-Za-z0-9._-]+$/, "Use letters, digits, '.', '_' or '-'")
+  .refine((name) => name !== "." && name !== "..", "Choose another name");
+
+/** `POST /api/backup/github-repo`: a new private repo on the account gh is signed in as. */
+export const CreateBackupRepoInput = z.object({ name: GithubRepoName });
+export type CreateBackupRepoInput = z.infer<typeof CreateBackupRepoInput>;
+
+export const CreateBackupRepoResult = z.object({
+  /** What to clone and push to: `https://github.com/<owner>/<name>.git`. */
+  remote: z.string(),
+  /** The repo's page. */
+  url: z.string(),
+});
+export type CreateBackupRepoResult = z.infer<typeof CreateBackupRepoResult>;
+
+/** `POST /api/backup/check-remote`: whether this machine's git can reach a remote, and what it holds. */
+export const CheckBackupRemoteInput = z.object({
+  remote: z
+    .string()
+    .trim()
+    .min(1, "Paste the repo's URL")
+    // git would read it as an option.
+    .refine((remote) => !remote.startsWith("-"), "That isn't a repo URL"),
+});
+export type CheckBackupRemoteInput = z.infer<typeof CheckBackupRemoteInput>;
+
+export const BackupRemoteCheck = z.object({
+  /**
+   * reachable: git can read it. auth_failed: git has no working sign-in for it. not_found: no such repo (GitHub also
+   * says this for a private repo the signed-in account can't see). error: anything else, such as being offline.
+   */
+  status: z.enum(["reachable", "auth_failed", "not_found", "error"]),
+  /** git's own message when it isn't reachable. */
+  message: z.string().nullable(),
+  /** What a reachable repo holds: nothing yet, a backup of ours, or something else the board won't write into. */
+  content: z.enum(["empty", "backup", "other"]).nullable(),
+  /** The machine folders already in a backup repo (their lastCommitAt is null: only the latest commit is read). */
+  machines: z.array(BackupMachine),
+});
+export type BackupRemoteCheck = z.infer<typeof BackupRemoteCheck>;

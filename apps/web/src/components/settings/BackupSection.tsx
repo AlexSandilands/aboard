@@ -9,6 +9,8 @@ import { api } from "~/lib/api";
 import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { useUpdateSettings } from "~/state/mutations";
 import { queryKeys, useBackupStatus } from "~/state/queries";
+import { BackupSetupDialog } from "./BackupSetupDialog";
+import { backupState } from "./backupSetup.logic";
 import { BlurInput } from "./BlurInput";
 import { FolderPicker } from "./FolderPicker";
 import { RestoreDialog } from "./RestoreDialog";
@@ -28,6 +30,8 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
   const status = useBackupStatus();
   const [browsing, setBrowsing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [setup, setSetup] = useState<"folder" | "github" | null>(null);
+  const state = backupState(settings);
   const run = useMutation({
     mutationFn: () => api<BackupStatus>("/api/backup/run", { method: "POST", body: {} }),
     onSuccess: (next) => queryClient.setQueryData(queryKeys.backupStatus, next),
@@ -38,6 +42,31 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
 
   return (
     <SettingsSection id="board.data.backup" title="Backup">
+      {state === "unconfigured" ? (
+        <SettingsRow
+          id="board.data.backup-setup"
+          title="Set up backup"
+          description="Pick a folder, connect a private GitHub repo and take the first backup."
+          control={
+            <Button size="sm" onClick={() => setSetup("folder")}>
+              Set up backup
+            </Button>
+          }
+        />
+      ) : null}
+      {state === "local_only" ? (
+        <SettingsRow
+          id="board.data.backup-local-only"
+          title={<span className="text-warning-foreground">Local only: commits aren't pushed</span>}
+          description="Backups stay in the folder below and nowhere else, so a lost disk loses them too."
+          control={
+            <Button size="sm" variant="outline" onClick={() => setSetup("github")}>
+              Connect GitHub
+            </Button>
+          }
+        />
+      ) : null}
+      {setup ? <BackupSetupDialog open startAt={setup} onOpenChange={(open) => !open && setSetup(null)} /> : null}
       <SettingsRow
         id="board.data.backup-enabled"
         title="Back up to git"
@@ -140,7 +169,7 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="board.data.backup-last"
         title="Last backup"
-        description={<BackupStatusLine status={status.data} />}
+        description={<BackupStatusLine status={status.data} remote={settings.backupRemote} />}
         control={
           <Button
             size="sm"
@@ -170,14 +199,14 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
   );
 }
 
-function BackupStatusLine({ status }: { status: BackupStatus | undefined }) {
+function BackupStatusLine({ status, remote }: { status: BackupStatus | undefined; remote: string | null }) {
   if (!status?.lastRunAt) return "Not backed up since the server started.";
   const parts = [
     `Ran ${formatRelativeTimeLabel(status.lastRunAt)}`,
     status.lastCommit && status.lastCommitAt
       ? `committed ${status.lastCommit} ${formatRelativeTimeLabel(status.lastCommitAt)}`
       : null,
-    status.lastPushAt ? `pushed ${formatRelativeTimeLabel(status.lastPushAt)}` : null,
+    pushPart(status, remote),
   ].filter(Boolean);
   return (
     <span className="flex flex-col gap-1">
@@ -185,4 +214,12 @@ function BackupStatusLine({ status }: { status: BackupStatus | undefined }) {
       {status.lastError ? <span className="break-words text-destructive-foreground">{status.lastError}</span> : null}
     </span>
   );
+}
+
+/** Where the last push stands: "pushed 5 min ago", "not pushed yet", or "not pushed: local only" without a remote. */
+function pushPart(status: BackupStatus, remote: string | null): string {
+  if (!remote) return "not pushed: local only";
+  return status.lastPushAt
+    ? `pushed ${formatRelativeTimeLabel(status.lastPushAt)}`
+    : "not pushed since the server started";
 }

@@ -47,6 +47,7 @@ function setup(opts: { runGh?: RunGh; fetch?: FetchFn; githubFetch?: FetchFn; wi
         worktreesDir: "/nonexistent/worktrees",
         attachmentsDir: "/nonexistent/attachments",
         instanceId: "00000000-0000-4000-8000-000000000000",
+        backupDefaultDir: "/nonexistent/backup",
         port: 4317,
         webPort: 5317,
       },

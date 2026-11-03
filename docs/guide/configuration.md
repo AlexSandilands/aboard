@@ -18,11 +18,23 @@ Set `ABOARD_TOKEN` to require a bearer token on the API and the MCP endpoint. Wi
 
 ## Backup and restore
 
-The board is one SQLite file in the data dir. To keep a copy off the machine, open **Settings → Board → Data**,
-choose an empty folder and, optionally, a remote, and turn it on. The server writes the board as JSON into
-that folder (one file per task), commits when anything changed, and pushes using your machine's git
-credentials, so no token is stored. Use a private repo: task text, notes and links end
+The board is one SQLite file in the data dir. To keep a copy off the machine, open **Settings → Board → Data**
+and click **Set up backup**. It asks for a folder (`<data dir>/backup` unless you pick another), then where to
+push:
+
+- **Create a private GitHub repo**, with the [GitHub CLI](https://cli.github.com/) (`gh`) signed in as you
+  (`gh auth login`).
+- **Use an existing repo**: paste its URL and click **Check**. The board checks your git can read it and lists
+  the machines already backing up to it.
+- **Keep backups on this machine**: commits stay in the folder only.
+
+It then turns backup on and takes the first backup, showing whether it was committed and pushed. The server writes
+the board as JSON into that folder (one file per task), commits when anything changed, and pushes using your
+machine's git credentials, so no token is stored. Use a private repo: task text, notes and links end
 up in its history for good. The T3 token and the backup settings are never exported.
+
+While backups have no remote, the section says **Local only: commits aren't pushed**, with a **Connect GitHub**
+button that opens the same steps. The rows below it change the folder, remote, machine name and interval later.
 
 Several machines can share one backup repo: each writes into a folder of its own, named after the machine
 (the host name, kept from the first backup, unless you set **Machine name** in the same section). Give each machine a different name; a

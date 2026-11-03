@@ -33,7 +33,7 @@ export const BACKUP_TICK_MS = 60_000;
 const STARTUP_DELAY_MS = 15_000;
 const GIT_TIMEOUT_MS = 2 * 60_000;
 /** Files a host adds to a new repo (GitHub's "Add a README"), which don't make it someone else's repo. */
-const REPO_BOILERPLATE = /^(readme|license|licence)(\.[\w.]+)?$|^\.git(ignore|attributes)$/i;
+export const REPO_BOILERPLATE = /^(readme|license|licence)(\.[\w.]+)?$|^\.git(ignore|attributes)$/i;
 /** How many commits the restore dialog offers. */
 const HISTORY_LIMIT = 100;
 /** A commit as the restore dialog sends it: a hash or HEAD, never something git would read as an option. */

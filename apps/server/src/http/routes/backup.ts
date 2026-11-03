@@ -1,4 +1,11 @@
-import { BackupSource, BoardDump, RestoreBoardInput, RestoreTasksInput } from "@repo/contracts";
+import {
+  BackupSource,
+  BoardDump,
+  CheckBackupRemoteInput,
+  CreateBackupRepoInput,
+  RestoreBoardInput,
+  RestoreTasksInput,
+} from "@repo/contracts";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
@@ -13,8 +20,8 @@ const RestoreTaskBody = z.object({
 });
 
 /**
- * Git backup status, the repo's machine folders, "Back up now", putting one task back from a backup (the CLI's
- * restore-task), and restoring from the backup repo's commits (Settings → Board → Data → Restore).
+ * Git backup status, the repo's machine folders, "Back up now", the guided setup, putting one task back from a backup
+ * (the CLI's restore-task), and restoring from the backup repo's commits (Settings → Board → Data → Restore).
  */
 export function registerBackupRoutes(app: Hono, { services, integrations }: AppContext): void {
   app.get(
@@ -46,6 +53,24 @@ export function registerBackupRoutes(app: Hono, { services, integrations }: AppC
   app.post(
     "/api/backup/restore-board",
     handle(async (c) => c.json(await integrations.restoreBackupBoard(await parseBody(c, RestoreBoardInput)))),
+  );
+  app.get(
+    "/api/backup/setup-info",
+    handle(async (c) => c.json(await integrations.backupSetupInfo())),
+  );
+  app.post(
+    "/api/backup/github-repo",
+    handle(async (c) => {
+      const { name } = await parseBody(c, CreateBackupRepoInput);
+      return c.json(await integrations.createBackupRepo(name));
+    }),
+  );
+  app.post(
+    "/api/backup/check-remote",
+    handle(async (c) => {
+      const { remote } = await parseBody(c, CheckBackupRemoteInput);
+      return c.json(await integrations.checkBackupRemote(remote));
+    }),
   );
   app.post(
     "/api/backup/restore-task",
