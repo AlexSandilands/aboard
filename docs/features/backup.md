@@ -1,6 +1,7 @@
 # Backup and restore
 
-Board tasks: #65; machine folders #69, guided setup #13 and restore from Settings #70 (epic #68).
+Board tasks: #65; machine folders #69, guided setup #13, restore from Settings #70 and moving tasks between
+machines #71 (epic #68).
 
 The board lives in one SQLite file. If that file is deleted or corrupted, nothing else holds the board. Backup
 writes the whole board out as JSON: on demand from the CLI, or on a schedule into a git repo the server commits
@@ -30,6 +31,8 @@ autopilot.json       Autopilot switches and config per scope (optional: older du
 recurring.json       recurring-task rules (optional: absent before Recurring tasks)
 custom-automations.json  custom Autopilot automations (optional: absent before them)
 suggestions.json     suggested changes to prompts and skills, open and decided (optional: absent before them)
+transfers.json       tasks this board moved in from other machines (optional: absent before moving tasks)
+applied-transfers.json  other boards' moves of this board's tasks that it has acted on (optional, likewise)
 tasks/2026-10/task-42.json   one task with its phases, steps, links, attachment rows, labels, reviews and findings
 attachments/<task id>/<id>.png   the task's pasted images (see attachments.md)
 events/2026-10.json          the activity log for the month the events happened
@@ -146,9 +149,11 @@ A run:
    recorded; the run still commits locally. Leftover `*.json.tmp` files from a crash are removed before writing.
 3. Moves a flat backup into this machine's folder, or renames this machine's folder, each in a commit of its
    own, and refuses a name another machine's folder has (see [Machine folders](#machine-folders)).
-4. Writes the dump into `<machine name>/` and `backup.json` at the root, `git add -A`, and commits only if
-   `git status` shows changes. The message counts task files: `Back up board: 2 tasks changed, 1 added`.
-5. Pushes when the branch is ahead of its upstream (or has none yet).
+4. Acts on other boards' moves of this board's tasks, read from every machine folder's `transfers.json`
+   ([Moving tasks between machines](#moving-tasks-between-machines)), so the dump has them archived.
+5. Writes the dump into `<machine name>/`, `machine.json` beside it and `backup.json` at the root, `git add -A`,
+   and commits only if `git status` shows changes. The message counts task files: `Back up board: 2 tasks changed, 1 added`.
+6. Pushes when the branch is ahead of its upstream (or has none yet).
 
 The machine's own `git` does the work, so pushing uses the credentials it already has (Git Credential
 Manager, SSH keys) and the board stores no token. `GIT_TERMINAL_PROMPT=0` makes a missing credential fail
@@ -231,7 +236,39 @@ desktop/
 The CLI's `import` and `restore-task` take a backup repo with `--machine <folder or name>` (not needed when it
 has one machine), one machine's folder, or a flat backup (`resolveDumpDir` in `repo.ts`).
 
-## Decisions
+### Moving tasks between machines
+
+Settings → Board → Data → **Move tasks…** (`MoveTasksDialog.tsx`) brings tasks from another machine's latest backup
+(HEAD of the clone, as of its last pull) onto this board, moved or copied. It is for switching which board you work
+from; running tasks on another machine is #12.
+
+- **Offer.** `GET /api/backup/machines/:name/tasks` reads the folder's dump (`withDumpAt`, refusing this machine's own
+  folder: that is Restore) and its `machine.json`, and returns its tasks (`onBoard`: `no`, `here`, or `archived` for
+  an archived copy here) and its projects, each matched to one here (`matchProjects`): the same project id (a board
+  restored from this one shares them), then the same repo, then the same title. `machine.json` is written by each
+  run beside the dump: its projects' origins (`git remote get-url origin` in each `workspaceRoot` that exists,
+  `normalizeRemote`d so SSH and HTTPS forms match) and `busyTaskIds`, tasks with a queued or running Autopilot run
+  or a running agent session. Neither is in the dump (runs and link snapshots aren't backed up), which is why the
+  file exists; it is not part of `BoardDump`.
+- **Import.** `POST /api/backup/import-tasks` (`machine`, `taskIds`, `mode`, `projectMap`) runs
+  `backup.importTasks`, each task in its own write (epics first, so a task picked with its epic goes back into it):
+  the task keeps its uuid, gets a new number (an archived copy here is replaced and its number reused), goes into
+  the mapped project, keeps its epic, blocks and "closed by" only where they exist here, and leaves `t3_thread` and
+  `agent_session` links behind, since those run on the other machine. It logs `imported` (mode, source folder and
+  number, dropped links). A live copy here is refused, and so is moving a busy task (copying one warns).
+- **Transfers.** A move also records a `task_transfers` row (`TaskTransfer` in contracts: transfer id, task, source
+  folder and instance id, its number and `updated_at` there, this machine's name, instance id and number for it,
+  time). The table is dumped as this machine's `transfers.json`, and the import starts a backup run so it is pushed.
+- **Applying.** Each run, after the pull, reads every folder's `transfers.json` (`transfersIn`: deduplicated, oldest
+  first) and calls `backup.applyTransfer` on each, the one way a transfer is acted on, so one that also arrives
+  another way later (a live link between boards, #12) is applied once. It ignores transfers this board didn't
+  originate (by instance id; a folder no board had claimed counts by name) and ones it made, and records every other
+  id in `applied_transfers` before acting. It archives the task, sets `movedTo` (the card's "Moved to desktop #57"),
+  logs `moved_away`, and takes an epic's open tasks out of it. A task gone since, or moved back here after the
+  transfer (this board's own later `task_transfers` row for it), is recorded as `skipped`. A task whose `updated_at`
+  is later than the transfer's `sourceUpdatedAt` (it changed after the backup it was taken from), or that is busy, is
+  still archived, with a `backup_notice` on it ([notifications](notifications.md)).
+
 
 - **JSON in git, not a copy of the `.db`.** The database runs in WAL mode; sync tools copy the `.db`,
   `-wal` and `-shm` files independently and can capture an inconsistent set, and a binary file in git stores
@@ -258,6 +295,17 @@ has one machine), one machine's folder, or a flat backup (`resolveDumpDir` in `r
 - **Point it at a private repo.** Anything an agent pastes into a note stays in git history for good. The
   settings row says so.
 
+- **Moves are applied by the machine that loses the task.** Each machine only writes its own folder, so the
+  importing machine can't archive anything on the source; it records the move where the source reads it. A move
+  lands on the next run of each side, not at once: live two-way sync would need the boards to merge, which they
+  can't (see "one repo, a folder per machine").
+- **Archive, never delete, the moved-away copy.** The task may have changed there after the backup it was taken
+  from; the archived copy keeps that work, and the inbox points at it.
+- **Keep the uuid.** It is how a board knows a task is already here, and how moving one back finds the copy it
+  left. Numbers are per board, so a task gets a new one (or its old one, coming back).
+- **Applied transfers are dumped too.** Restoring a backup from before a move brings back the task and forgets the
+  transfer, so the next run archives it again, as the board then expects.
+
 ## Alternatives considered
 
 | Option                                      | Why not chosen                                                                         |
@@ -278,6 +326,7 @@ has one machine), one machine's folder, or a flat backup (`resolveDumpDir` in `r
 | `apps/server/src/instance.ts`                     | `instanceIdOf`: this board's id in the data dir                      |
 | `apps/server/src/services/backup/restore.ts`      | `restoreBoard`, `restoreBoardLive`, `upgradeDump`, manifest checks   |
 | `apps/server/src/services/backup/index.ts`        | The backup service: `dump`, `restoreTask`, `diff`, `restoreBoard`    |
+| `apps/server/src/services/backup/transfers.ts`    | Moving tasks: `matchProjects`, `offer`, `importTasks`, `applyTransfer`, `busyTaskIds` |
 | `apps/server/src/integrations/backup.ts`          | Scheduled git backup: prepare the repo, migrate, claim the folder, commit, push, status, machines; reading commits for restore |
 | `apps/server/src/backupCli.ts`                    | `pnpm backup export / import / restore-task`                         |
 | `apps/server/src/serverFile.ts`                   | `server.json` in the data dir, so the CLI can tell a server is up    |
@@ -285,4 +334,5 @@ has one machine), one machine's folder, or a flat backup (`resolveDumpDir` in `r
 | `apps/server/src/integrations/backupSetup.ts`     | Guided setup: setup info, `gh repo create`, checking a remote        |
 | `apps/web/src/components/settings/BackupSection.tsx` | The Settings → Board → Data section                                     |
 | `apps/web/src/components/settings/RestoreDialog.tsx` | The Restore dialog: machine and commit, tasks or the whole board        |
+| `apps/web/src/components/settings/MoveTasksDialog.tsx` | Moving or copying tasks from another machine; its rules in `moveTasks.logic.ts` |
 | `apps/web/src/components/settings/BackupSetupDialog.tsx` | The setup dialog; its wording and checks are in `backupSetup.logic.ts` |

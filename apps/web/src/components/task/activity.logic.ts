@@ -136,6 +136,29 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
         from !== null ? `restored this from a backup (as #${from})` : "restored this from a backup",
       );
     }
+    case "imported": {
+      const from = str(p.from) ?? "another machine";
+      const number = num(p.fromNumber);
+      const dropped = num(p.droppedLinks);
+      return line(
+        "created",
+        `${p.mode === "copy" ? "copied" : "moved"} this from ${from}${number !== null ? ` (#${number} there)` : ""}`,
+        dropped ? `${plural(dropped, "T3 thread or agent session link")} stayed on ${from}.` : null,
+      );
+    }
+    case "moved_away": {
+      const machine = str(p.machine) ?? "another machine";
+      const number = num(p.number);
+      const notes = [
+        p.changedSince ? "It changed here after the backup it was moved from; those changes didn't go with it." : null,
+        p.busy ? "Work was still going on it here." : null,
+      ].filter(Boolean);
+      return line(
+        "archive",
+        `moved this to ${machine}${number !== null ? ` as #${number}` : ""} and archived it here`,
+        notes.length ? notes.join(" ") : null,
+      );
+    }
     case "archived":
     case "unarchived": {
       const withEpic = num(p.withEpic);
