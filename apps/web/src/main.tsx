@@ -19,8 +19,9 @@ initAppearance();
 
 // Query pauses its intervals while the page is hidden and refetches the refetchOnWindowFocus queries when it shows
 // again, judged by document visibility alone. The desktop shell keeps a page in the tray visible, so use its state too.
+// Set at once, before any query exists, so the shell's first "visible" message on load changes nothing.
 focusManager.setEventListener((setFocused) => {
-  if (pageHidden()) setFocused(false);
+  setFocused(!pageHidden());
   return onPageHiddenChange(() => setFocused(!pageHidden()));
 });
 
