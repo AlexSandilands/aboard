@@ -43,7 +43,9 @@ An unexpected exit after startup shows an error and quits the app.
   frames either way, so CSS animations cost nothing there, but `document.hidden` stays false. The shell sends the
   window's hidden state instead (on show, hide, minimise, restore and page load), the bridge's optional
   `onWindowHidden` passes it on, and the page reads it through `pageHidden()` / `onPageHiddenChange()`
-  (`apps/web/src/lib/pageHidden.ts`): the task-view ping and the card FLIPs stop while the window is hidden.
+  (`apps/web/src/lib/pageHidden.ts`): the task-view ping and the card FLIPs stop while the window is hidden, and
+  `main.tsx` feeds it to TanStack Query's `focusManager`, so query intervals pause in the tray and the
+  `refetchOnWindowFocus` queries refetch when the window comes back.
 - The tray menu: Open, **Copy MCP URL** (with `?token=` when set), **Tray icon**, **Start at login**
   (packaged only; starts hidden), **Restart server**, Quit. Every item has an icon. On Linux Start at login is a
   plain item whose icon is a ticked or empty square, because Qt menus put a real checkbox in a column left of the
