@@ -36,6 +36,8 @@ export function createContext(
         worktreesDir: config.worktreesDir ?? join(dirname(config.dbPath), "worktrees"),
         attachmentsDir,
         instanceId,
+        backupDefaultDir:
+          config.dbPath === ":memory:" ? join(tmpdir(), "backup-test") : join(dirname(config.dbPath), "backup"),
       },
       bus,
       services: () => {

@@ -5,9 +5,12 @@ import type {
   AskSettingsInput,
   AskSettingsResult,
   BackupMachine,
+  BackupRemoteCheck,
+  BackupSetupInfo,
   BackupStatus,
   EpicDelivery,
   ConnectT3Result,
+  CreateBackupRepoResult,
   GithubStatus,
   LinkInput,
   MergeMethod,
@@ -139,4 +142,10 @@ export interface Integrations {
   runBackup(): Promise<BackupStatus>;
   /** The machine folders in the backup repo, as of its last pull. */
   backupMachines(): Promise<BackupMachine[]>;
+  /** What the backup setup dialog starts from: gh's sign-in, the default folder and the current setup. */
+  backupSetupInfo(): Promise<BackupSetupInfo>;
+  /** Creates a private GitHub repo for backups with gh. Throws CONFLICT when the account has one of that name. */
+  createBackupRepo(name: string): Promise<CreateBackupRepoResult>;
+  /** Whether this machine's git can read a remote, and the machine folders already in it. */
+  checkBackupRemote(remote: string): Promise<BackupRemoteCheck>;
 }
