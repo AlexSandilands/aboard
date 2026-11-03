@@ -24,6 +24,7 @@ import {
   SET_BACKGROUND_CHANNEL,
   SET_BADGE_CHANNEL,
   SET_THEME_CHANNEL,
+  WINDOW_HIDDEN_CHANNEL,
 } from "./ipc.ts";
 import { loginItem } from "./loginItem.ts";
 import { ServerStartError, connectServer, type BoardServer, type ServerOptions } from "./server.ts";
@@ -120,6 +121,10 @@ function createWindow(show: boolean): BrowserWindow {
     ...titleBarOptions(nativeTheme.shouldUseDarkColors, pageBackground),
     // The preload (and its desktopBridge) runs in the top frame only; sub-frames are agents' sandboxed art.
     webPreferences: {
+      // A throttled page goes cold in the tray, and the first panel slide after showing the window dropped frames
+      // while it warmed up. Hidden, the window draws no frames either way; the page pauses its own background work
+      // on WINDOW_HIDDEN_CHANNEL instead (docs/features/desktop.md).
+      backgroundThrottling: false,
       sandbox: true,
       contextIsolation: true,
       nodeIntegrationInSubFrames: false,
@@ -139,6 +144,15 @@ function createWindow(show: boolean): BrowserWindow {
     });
   }
   win.once("ready-to-show", () => applyWindowBadge(win));
+  // Without throttling the page can't tell it is hidden from document.hidden, so say so.
+  const sendHidden = () => {
+    if (!win.isDestroyed()) win.webContents.send(WINDOW_HIDDEN_CHANNEL, !win.isVisible() || win.isMinimized());
+  };
+  win.on("show", sendHidden);
+  win.on("hide", sendHidden);
+  win.on("minimize", sendHidden);
+  win.on("restore", sendHidden);
+  win.webContents.on("dom-ready", sendHidden);
   // Closing hides to the tray so the MCP endpoint stays up for agents.
   win.on("close", (event) => {
     if (quitting) return;

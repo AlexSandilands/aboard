@@ -88,10 +88,14 @@ function workflowCheckNames(workflow: Record<string, Json>): string[] | null {
   const events = typeof on === "string" ? [on] : Array.isArray(on) ? on : Object.keys(on ?? {});
   if (!events.includes("pull_request")) return null;
   const trigger = !on || typeof on !== "object" || Array.isArray(on) ? null : on.pull_request;
-  // Path or branch filters would leave some PRs without the check.
+  // Path or branch filters would leave some PRs without the check, and `types` without GitHub's defaults would
+  // leave a new push (synchronize) or a reopened PR without it.
   if (trigger && typeof trigger === "object" && !Array.isArray(trigger)) {
     const filters = ["paths", "paths-ignore", "branches", "branches-ignore"];
     if (filters.some((key) => key in trigger)) return null;
+    const types = trigger.types;
+    const defaults = ["opened", "synchronize", "reopened"];
+    if (Array.isArray(types) && !defaults.every((type) => types.includes(type))) return null;
   }
 
   const jobs = (workflow.jobs ?? {}) as Record<string, Record<string, Json>>;
@@ -191,7 +195,9 @@ function apply(dryRun: boolean): void {
   let alerts = true;
   try {
     gh([`repos/${repo}/vulnerability-alerts`, "--silent"], undefined, true);
-  } catch {
+  } catch (error) {
+    const { stderr = "" } = error as { stderr?: string };
+    if (!stderr.includes("HTTP 404")) throw error;
     alerts = false;
   }
   if (!alerts) {
@@ -233,7 +239,14 @@ function apply(dryRun: boolean): void {
 }
 
 if (import.meta.main) {
-  const args = new Set(process.argv.slice(2));
-  if (args.has("--check")) check();
-  else apply(args.has("--dry-run"));
+  // pnpm may pass its `--` separator through. Anything unknown stops here rather than applying to the live repo.
+  const args = process.argv.slice(2).filter((arg) => arg !== "--");
+  const [mode, ...rest] = args;
+  if (args.length === 0) apply(false);
+  else if (rest.length === 0 && mode === "--dry-run") apply(true);
+  else if (rest.length === 0 && mode === "--check") check();
+  else {
+    console.error("Usage: node scripts/github-setup.ts [--dry-run | --check]");
+    process.exit(1);
+  }
 }
