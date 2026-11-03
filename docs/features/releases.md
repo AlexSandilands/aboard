@@ -35,7 +35,9 @@ in that form and writes the version into the root `package.json` on the runner o
 names and the Arch package all agree.
 
 A tag that isn't a date (`v1.2`, `v2026.10.05`, `v2026.2.30`) fails the build before anything is packaged. Delete
-the release and its tag, and publish again with a valid one.
+the release and publish again with a valid tag. Release tags can't be deleted or moved while the release tags
+ruleset is on ([GitHub setup](github-setup.md#the-release-tags-ruleset)), so the bad tag stays unless you switch it
+off first.
 
 ### The workflow
 
@@ -70,7 +72,9 @@ tarball, signs the package and a fresh database with `repo-add --sign`, and chec
 creates the `pacman` release if it doesn't exist, uploads the package before the database that lists it, and
 deletes the previous version's files.
 
-Everything is signed with a key that exists only for this repo, held in the `PACMAN_GPG_PRIVATE_KEY` secret.
+Everything is signed with a key that exists only for this repo, held in the `PACMAN_GPG_PRIVATE_KEY` secret of
+the `release` environment, which only `main` and `v*` tags can deploy to
+([GitHub setup](github-setup.md#ci-that-the-rules-rely-on)).
 Its public half is `packaging/pacman-signing-key.asc`, fingerprint
 `FB7D A6AA C8D1 5679 BE55 1C58 71CE 5664 96A2 6F6B`. With the key trusted, pacman refuses a package or database
 that the key didn't sign, so the files in the release can't be swapped without the secret.

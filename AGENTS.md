@@ -84,6 +84,7 @@ and to this table.
 | Agent session links, their status, the terminal launcher       | [docs/features/agent-sessions.md](docs/features/agent-sessions.md), ADRs 0009, 0010 |
 | Local review rounds, findings, the board reviewer              | [docs/features/local-review.md](docs/features/local-review.md)                      |
 | The Electron shell                                             | [docs/features/desktop.md](docs/features/desktop.md)                                |
+| Rulesets, required checks, CI job names, Dependabot            | [docs/features/github-setup.md](docs/features/github-setup.md)                      |
 | Notifications: the inbox, pop-ups, badges, their producers     | [docs/features/notifications.md](docs/features/notifications.md)                    |
 | Backup, restore, the dump format, the git backup               | [docs/features/backup.md](docs/features/backup.md)                                  |
 | Pasted images: upload, storage, the pill, backups              | [docs/features/attachments.md](docs/features/attachments.md)                        |
