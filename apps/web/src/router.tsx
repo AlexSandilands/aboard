@@ -20,7 +20,7 @@ import {
 } from "./components/settings/pages/EditorPages.tsx";
 import { SettingsGroupPage } from "./components/settings/pages/SettingsGroupPage.tsx";
 import { SettingsShell } from "./components/settings/SettingsShell.tsx";
-import { isSettingsGroup } from "./components/settings/settingsNav.logic.ts";
+import { isSettingsGroup, providerOfTarget, redirectSettingsTarget } from "./components/settings/settingsNav.logic.ts";
 import { SocialFeedPage } from "./components/social/SocialFeedPage.tsx";
 import { StatsPage } from "./components/stats/StatsPage.tsx";
 import { parseStatsPeriod } from "./components/stats/stats.logic.ts";
@@ -48,6 +48,8 @@ export const boardRoute = createRoute({
 
 /** `?project=` on the project settings page and its rule editor: the project shown. */
 const SettingsProjectSearch = z.object({ project: z.string().optional() });
+/** The settings pages' search: the project page's project, or the provider the Providers page edits. */
+const SettingsGroupSearch = SettingsProjectSearch.extend({ provider: z.string().optional() });
 /** `draft` opens an automation an agent drafted (docs/features/autopilot.md#drafts). */
 const ImportSearch = z.object({ draft: z.string().optional() });
 
@@ -68,10 +70,23 @@ const settingsIndexRoute = createRoute({
 export const settingsGroupRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "$group",
-  validateSearch: (search) => SettingsProjectSearch.parse(search),
-  beforeLoad: ({ params }) => {
+  validateSearch: (search) => SettingsGroupSearch.parse(search),
+  beforeLoad: ({ params, location }) => {
     if (!isSettingsGroup(params.group)) {
       throw redirect({ to: "/settings/$group", params: { group: "board" }, replace: true });
+    }
+    // An old link into Integrations (`#integrations.claude-code.cli-path`) goes to where that setting is now.
+    const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
+    const moved = hash ? redirectSettingsTarget(hash) : hash;
+    if (moved !== hash) {
+      const provider = providerOfTarget(moved);
+      throw redirect({
+        to: "/settings/$group",
+        params: { group: moved.split(".")[0]! },
+        search: provider ? { provider } : {},
+        hash: moved,
+        replace: true,
+      });
     }
   },
   component: SettingsGroupPage,

@@ -1,7 +1,10 @@
 import {
+  AgentHarness,
   classifyLink,
   CustomToolRule,
   JIRA_PRESET_INSTRUCTIONS,
+  ProviderId,
+  type ProviderSetting,
   TICKET_SYSTEM_PRESETS,
   type TicketSystem,
 } from "@repo/contracts";
@@ -14,7 +17,14 @@ import type { Db } from "./database.ts";
 export const CODE_MIGRATIONS: Readonly<Record<string, (db: Db) => void>> = {
   "008_enterprise_pr_links": reclassifyPrLinks,
   "036_ticket_systems_settings": jiraSettingsToTicketSystem,
+  "040_providers_settings": seedProviders,
 };
+
+/**
+ * Set on an install that had data before providers were opt-in: once the server is up, detection adds the providers
+ * whose MCP server is registered or whose hand-off entry it showed (services/providerSeed.ts), then removes it.
+ */
+export const PROVIDERS_DETECT_SEED_KEY = "providersDetectSeed";
 
 /**
  * PR URLs on any host now parse as GitHub-style PRs (GitHub Enterprise), so links stored as plain
@@ -79,4 +89,70 @@ function jiraSettingsToTicketSystem(db: Db): void {
   db.prepare(
     "INSERT INTO settings (key, value_json) VALUES ('ticketSystems', ?) ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json",
   ).run(JSON.stringify([system, ...systems]));
+}
+
+/**
+ * Providers became opt-in: the list is seeded with every provider the stored settings and links show in use, so
+ * nothing the user relies on disappears, and the three CLI paths move into it. What only the machine can tell (an
+ * MCP registration, a CLI the hand-off menus offered) is left to a detection pass after start-up.
+ */
+function seedProviders(db: Db): void {
+  const rows = db.prepare("SELECT key, value_json FROM settings").all() as Array<{ key: string; value_json: string }>;
+  const stored = new Map(rows.map((r) => [r.key, JSON.parse(r.value_json) as unknown]));
+  const text = (key: string): string | null => {
+    const value = stored.get(key);
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  };
+  const cliPaths: Partial<Record<ProviderId, string | null>> = {
+    "claude-code": text("headlessReviewCli"),
+    codex: text("codexCli"),
+    "copilot-cli": text("copilotCli"),
+  };
+  const used = new Set<ProviderId>();
+  for (const [id, path] of Object.entries(cliPaths)) if (path) used.add(id as ProviderId);
+  if (text("t3Token")) used.add("t3-code");
+  if (stored.get("headlessReviewEnabled") === true) used.add("claude-code");
+
+  // A tier or custom model with a model for a provider, or headless runs on it.
+  const tiers = stored.get("modelTiers");
+  const models = [
+    ...(tiers && typeof tiers === "object" ? Object.values(tiers as Record<string, unknown>) : []),
+    ...(Array.isArray(stored.get("modelProfiles")) ? (stored.get("modelProfiles") as unknown[]) : []),
+  ];
+  for (const model of models) {
+    if (!model || typeof model !== "object") continue;
+    const { t3, cli, headless } = model as { t3?: unknown; cli?: unknown; headless?: unknown };
+    if (t3) used.add("t3-code");
+    if (cli && typeof cli === "object") {
+      for (const [harness, value] of Object.entries(cli as Record<string, unknown>)) {
+        if (typeof value === "string" && value.trim() && AgentHarness.safeParse(harness).success) {
+          used.add(harness as ProviderId);
+        }
+      }
+    }
+    if (AgentHarness.safeParse(headless).success) used.add(headless as ProviderId);
+  }
+
+  // Sessions and threads already linked to tasks: reopening them goes through their provider.
+  const linked = db
+    .prepare(
+      `SELECT DISTINCT CASE kind WHEN 'agent_session' THEN COALESCE(json_extract(ref_json, '$.harness'), 'claude-code')
+              ELSE 't3-code' END AS id
+         FROM task_links WHERE kind IN ('agent_session', 't3_thread')`,
+    )
+    .all() as Array<{ id: string }>;
+  for (const { id } of linked) if (ProviderId.safeParse(id).success) used.add(id as ProviderId);
+
+  const existing = stored.has("providers");
+  const providers: ProviderSetting[] = ProviderId.options
+    .filter((id) => used.has(id))
+    .map((id) => ({ id, enabled: true, cliPath: cliPaths[id] ?? null }));
+  const upsert = db.prepare(
+    "INSERT INTO settings (key, value_json) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json",
+  );
+  if (!existing) upsert.run("providers", JSON.stringify(providers));
+  db.prepare("DELETE FROM settings WHERE key IN ('headlessReviewCli', 'codexCli', 'copilotCli')").run();
+  // A new install has nothing to keep; one with projects or settings may rely on what only detection can see.
+  const upgraded = rows.length > 0 || db.prepare("SELECT 1 FROM projects LIMIT 1").get() !== undefined;
+  if (upgraded && !existing) upsert.run(PROVIDERS_DETECT_SEED_KEY, "true");
 }

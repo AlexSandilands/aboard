@@ -1,6 +1,5 @@
 import type {
   AddLinkResult,
-  AgentIntegrations,
   AgentModels,
   AppSettings,
   AskSettingsInput,
@@ -49,6 +48,7 @@ import type {
   UpdateSettingsInput,
   UpdateTaskInput,
   UpdateTemplateInput,
+  ProvidersStatus,
 } from "@repo/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
@@ -339,19 +339,16 @@ export function useRescanAgentModels() {
   });
 }
 
-/** Runs the CLIs and the MCP checks again, past the server's cache, and shows the answer. */
-export function useRecheckAgentIntegrations() {
+/** Runs every provider check again, past the server's cache, and shows the answer. */
+export function useRecheckProviders() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => api<AgentIntegrations>("/api/agent-integrations?refresh=1"),
-    onSuccess: (result) => {
-      queryClient.setQueryData(queryKeys.agentIntegrations, result);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.agentClis });
-    },
+    mutationFn: () => api<ProvidersStatus>("/api/providers?refresh=1"),
+    onSuccess: (result) => queryClient.setQueryData(queryKeys.providers, result),
     onError: (error) =>
       toastManager.add({
         type: "error",
-        title: "Couldn't check the integrations",
+        title: "Couldn't check the providers",
         description: error instanceof Error ? error.message : String(error),
       }),
   });

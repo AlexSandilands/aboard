@@ -317,6 +317,9 @@ export interface SettingsService {
   update(input: UpdateSettingsInput): AppSettings;
   /** The stored T3 token (server-side only). */
   t3Token(): string | null;
+  /** Whether an upgraded install still has providers to add from detection (providers.ts seedFromDetection). */
+  providersSeedPending(): boolean;
+  clearProvidersSeed(): void;
 }
 
 export interface OpenRoundOptions {

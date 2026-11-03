@@ -7,15 +7,16 @@ import { Button } from "~/components/ui/button";
 import { SidebarContent, SidebarHeader, SidebarInput, useSidebar } from "~/components/ui/sidebar";
 import { cn } from "~/lib/utils";
 import { useAskSettings } from "~/state/mutations";
-import { useSettings, useSettingsAskStatus } from "~/state/queries";
+import { useProviders, useSettings } from "~/state/queries";
 import { usePalette } from "~/state/ui";
 import { settingsIndex, settingsLocation, type SettingsIndexEntry } from "./settingsIndex.logic";
 import { SettingsAskRow, type AskState } from "./SettingsAskRow";
+import { askUnavailableReason } from "./providers.logic";
 import { askEntries, initialActive, isSearchShortcut, moveResult, searchSettings } from "./settingsSearch.logic";
 
 const ENTRIES = settingsIndex();
 const ASK_ENTRIES = askEntries(ENTRIES);
-const CLI_SETTING = ENTRIES.find((entry) => entry.id === "integrations.claude-code.cli-path");
+const CLI_SETTING = ENTRIES.find((entry) => entry.id === "providers.claude-code.cli-path");
 
 /**
  * The settings list with a search box above it. While something is typed the results take the list's place: the
@@ -42,7 +43,7 @@ export function SettingsSearch({
   // The options are the Ask row, then the results: `active` counts both.
   const optionCount = results.length + 1;
   const settings = useSettings();
-  const askStatus = useSettingsAskStatus(settings.data?.headlessReviewCli ?? null);
+  const claude = useProviders().data?.providers.find((p) => p.id === "claude-code");
   const askMutation = useAskSettings();
   const askState: AskState = askMutation.isPending
     ? { kind: "pending" }
@@ -54,7 +55,7 @@ export function SettingsSearch({
   const answered = askMutation.data?.ok ? askMutation.data : null;
   const askTarget = answered?.settingId ? (ENTRIES.find((entry) => entry.id === answered.settingId) ?? null) : null;
   // Until the check comes back the row is shown as available: a miss only shows when the question is asked.
-  const askUnavailable = askStatus.data && !askStatus.data.available ? askStatus.data.reason : null;
+  const askUnavailable = askUnavailableReason(settings.data, claude);
 
   const onShortcut = useEffectEvent((event: KeyboardEvent) => {
     if (event.isComposing || !isSearchShortcut(event)) return;

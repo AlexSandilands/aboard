@@ -1,8 +1,8 @@
-import type { AskSettingsInput, AskSettingsResult, SettingsAskStatus } from "@repo/contracts";
+import type { AskSettingsInput, AskSettingsResult } from "@repo/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import type { AgentJob, RunAgent } from "./headlessAgent.ts";
-import { askPrompt, askStatus } from "./settingsAsk.ts";
+import { askPrompt } from "./settingsAsk.ts";
 
 const ENTRIES: AskSettingsInput["entries"] = [
   {
@@ -130,21 +130,10 @@ describe("settings Ask", () => {
     expect(none.status).toBe(400);
   });
 
-  it("says why it can't run when the CLI isn't found", async () => {
-    const h = setup(() => Promise.reject(new Error("not run")));
-    h.services.settings.update({ headlessReviewCli: "/nonexistent/claude" });
-    const res = await h.request("/api/settings/ask");
-    expect((await res.json()) as SettingsAskStatus).toEqual({
-      available: false,
-      reason: "The Claude Code CLI wasn't found at /nonexistent/claude.",
-    });
-    expect(askStatus(null).available).toBeTypeOf("boolean");
-  });
-
   it("answers with the reason, without spawning anything, when the CLI isn't found", async () => {
     // No fake runner: the real one would spawn, so reaching it would throw instead of returning the reason.
     const h = createTestHarness({ integrations: { runAgent: undefined as unknown as RunAgent } });
-    h.services.settings.update({ headlessReviewCli: "/nonexistent/claude" });
+    h.services.settings.update({ providers: [{ id: "claude-code", enabled: true, cliPath: "/nonexistent/claude" }] });
     expect(await ask(h)).toEqual({ ok: false, error: "The Claude Code CLI wasn't found at /nonexistent/claude." });
   });
 

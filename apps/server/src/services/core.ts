@@ -6,6 +6,7 @@ import type { Repos } from "../db/repos/index.ts";
 import { AppError } from "../errors.ts";
 import { loadAutopilotStatus } from "./autopilot.ts";
 import { unreadNotifications } from "./notifications.ts";
+import { storedProviderList } from "./settings.ts";
 import { assembleSummaries } from "./summaries.ts";
 
 /** Change notes collected during a write; turned into BoardEvents after commit. */
@@ -27,6 +28,8 @@ export interface Effects {
   notificationsChanged(): void;
   /** A suggested change was made or decided (publishes suggestions.changed). */
   suggestions(): void;
+  /** The added providers changed (publishes providers.changed). */
+  providers(): void;
   /** Appends a task_events row and marks the task's card changed. */
   log(taskId: string, actor: string, type: string, payload?: Record<string, unknown>): void;
 }
@@ -47,6 +50,7 @@ interface Pending {
   notified: Array<{ notification: InboxNotification; popup: boolean }>;
   notificationsChanged: boolean;
   suggestions: boolean;
+  providers: boolean;
 }
 
 export interface Core {
@@ -97,6 +101,9 @@ export function createCore(deps: {
     },
     suggestions: () => {
       p.suggestions = true;
+    },
+    providers: () => {
+      p.providers = true;
     },
     log: (taskId, actor, type, payload) => {
       repos.events.append(taskId, nowIso(), actor, type, payload);
@@ -176,6 +183,9 @@ export function createCore(deps: {
     if (p.labelColors) events.push({ type: "labels.colors_changed", labelColors: repos.labels.colors() });
     if (p.autopilot) events.push({ type: "autopilot.changed", autopilot: loadAutopilotStatus(repos) });
     if (p.suggestions) events.push({ type: "suggestions.changed", open: repos.suggestions.openCount() });
+    if (p.providers) {
+      events.push({ type: "providers.changed", providers: storedProviderList(repos.settings.all().get("providers")) });
+    }
     // A deleted task takes its notifications with it, which only matters when some of them were unread.
     if (p.notified.length > 0 || p.notificationsChanged || p.deletedTasks.size > 0) {
       const unread = unreadNotifications(repos, now());
@@ -210,6 +220,7 @@ export function createCore(deps: {
         notified: [],
         notificationsChanged: false,
         suggestions: false,
+        providers: false,
       };
       pending = p;
       let result: T;

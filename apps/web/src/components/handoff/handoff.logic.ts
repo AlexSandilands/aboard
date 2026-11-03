@@ -6,6 +6,8 @@ import {
   type AgentHarness,
   type AppSettings,
   type PlanSkillRef,
+  providerActive,
+  providerOfHarness,
   type Project,
   type T3IntegrationStatus,
   type T3LaunchModel,
@@ -49,8 +51,8 @@ export const planSkillOf = (
 ): PlanSkillRef => project.planSkill ?? settings?.planSkill ?? { source: "builtin" };
 
 /**
- * A thread about a project as a whole (Suggest epics) needs the same: a running T3, a token, a folder. Either way the
- * user can hide T3 from the menus in settings.
+ * A thread about a project as a whole (Suggest epics) needs the same: T3 Code added and on in Settings → Providers, a
+ * running T3, a token, a folder. Either way the user can hide T3 from the menus in settings.
  */
 export function canStartProjectT3Thread(
   project: Pick<Project, "t3ProjectId" | "workspaceRoot"> | undefined,
@@ -60,24 +62,31 @@ export function canStartProjectT3Thread(
   return (
     t3.detected &&
     settings?.t3TokenSet === true &&
+    providerActive(settings, "t3-code") &&
     settings.handoffMenus?.["t3-code"] !== false &&
     !!(project?.t3ProjectId || project?.workspaceRoot)
   );
 }
 
-type HandoffSettings = Pick<AppSettings, "t3TokenSet"> & Partial<Pick<AppSettings, "handoffMenus">>;
+type HandoffSettings = Pick<AppSettings, "t3TokenSet" | "providers"> & Partial<Pick<AppSettings, "handoffMenus">>;
 
 /**
- * The CLIs the menus offer a new session in: the ones that run here and the board can start (not Codex), less those
- * the user hid in settings.
+ * The CLIs the menus offer a new session in: the providers added and on that run here and the board can start (not
+ * Codex), less those the user hid from the menus.
  */
 export const handoffClis = (
   clis: readonly AgentCliStatus[] | undefined,
-  settings: Partial<Pick<AppSettings, "handoffMenus">> | undefined,
+  settings: (Pick<AppSettings, "providers"> & Partial<Pick<AppSettings, "handoffMenus">>) | undefined,
 ): AgentHarness[] => {
   const menus: Partial<Record<AgentHarness, boolean>> | undefined = settings?.handoffMenus;
   return (clis ?? [])
-    .filter((cli) => cli.available && AGENT_HARNESSES[cli.harness].presetSessionId && menus?.[cli.harness] !== false)
+    .filter(
+      (cli) =>
+        cli.available &&
+        AGENT_HARNESSES[cli.harness].presetSessionId &&
+        providerActive(settings, providerOfHarness(cli.harness)) &&
+        menus?.[cli.harness] !== false,
+    )
     .map((cli) => cli.harness);
 };
 

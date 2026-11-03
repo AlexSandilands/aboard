@@ -1,10 +1,13 @@
-// Pure helpers for the settings page: its groups and sub-sections, scroll-spy and the project it shows.
+// Pure helpers for the settings page: its groups and sub-sections, scroll-spy, the project it shows and the provider
+// its Providers page edits.
+import { ProviderId } from "@repo/contracts";
 import { keybindingGroups } from "./keybindings.logic";
 
 export const SETTINGS_GROUP_IDS = [
   "board",
   "keybindings",
   "tasks",
+  "providers",
   "models",
   "autopilot",
   "integrations",
@@ -62,6 +65,17 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     ],
   },
   {
+    id: "providers",
+    label: "Providers",
+    // One sub-section per provider, which selects it on the page; the list only shows those the user added.
+    sections: [
+      section("providers.t3-code", "T3 Code", ["pairing", "threads", "connection", "t3"]),
+      section("providers.claude-code", "Claude Code", ["mcp", "skill", "cli", "session", "claude"]),
+      section("providers.codex", "Codex", ["mcp", "openai", "cli", "headless"]),
+      section("providers.copilot-cli", "GitHub Copilot", ["mcp", "vs code", "cli", "session", "copilot"]),
+    ],
+  },
+  {
     id: "models",
     label: "Model tiers",
     sections: [
@@ -92,10 +106,6 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     id: "integrations",
     label: "Integrations",
     sections: [
-      section("integrations.t3-code", "T3 Code", ["pairing", "threads", "connection"]),
-      section("integrations.claude-code", "Claude Code", ["mcp", "skill", "cli", "session"]),
-      section("integrations.copilot", "GitHub Copilot", ["mcp", "vs code", "cli", "session"]),
-      section("integrations.codex", "Codex", ["mcp"]),
       section("integrations.github", "GitHub", ["gh", "pull requests", "enterprise"]),
       section("integrations.tickets", "Ticket systems", ["jira", "linear", "issue keys", "presets"]),
       section("integrations.terminal", "Terminal", ["open in terminal", "windows terminal", "sessions"]),
@@ -123,15 +133,62 @@ export function settingsGroup(id: SettingsGroupId): SettingsGroupDef {
   return SETTINGS_GROUPS.find((group) => group.id === id)!;
 }
 
+/** The provider sections that moved out of Integrations, by their old id. */
+const MOVED_PROVIDER_SECTIONS: Record<string, ProviderId> = {
+  "integrations.t3-code": "t3-code",
+  "integrations.claude-code": "claude-code",
+  "integrations.copilot": "copilot-cli",
+  "integrations.codex": "codex",
+};
+
+/** Rows that were renamed when they moved, by their old id after the section. */
+const MOVED_PROVIDER_ROWS: Record<string, string> = {
+  "providers.t3-code.connection": "providers.t3-code.status",
+  "providers.copilot-cli.cli": "providers.copilot-cli.mcp",
+};
+
+/**
+ * A target from before providers had their own page (`integrations.claude-code.cli-path`, a bookmark or an old link)
+ * as it is now (`providers.claude-code.cli-path`); any other target as it is.
+ */
+export function redirectSettingsTarget(target: string): string {
+  for (const [old, provider] of Object.entries(MOVED_PROVIDER_SECTIONS)) {
+    if (target !== old && !target.startsWith(`${old}.`)) continue;
+    const moved = `providers.${provider}${target.slice(old.length)}`;
+    return MOVED_PROVIDER_ROWS[moved] ?? moved;
+  }
+  return target;
+}
+
 /**
  * Where a settings target lives: a group (`"tasks"`), a section (`"tasks.review"`) or a row
- * (`"integrations.claude-code.cli-path"`). The group is the first segment; anything longer is the anchor to scroll
- * to. Null when the first segment isn't a group.
+ * (`"providers.claude-code.cli-path"`). The group is the first segment; anything longer is the anchor to scroll
+ * to. Null when the first segment isn't a group. An old target is read as the one it moved to.
  */
 export function parseSettingsTarget(target: string): { group: SettingsGroupId; anchor: string | null } | null {
-  const group = target.split(".")[0];
+  const current = redirectSettingsTarget(target);
+  const group = current.split(".")[0];
   if (!isSettingsGroup(group)) return null;
-  return { group, anchor: target === group ? null : target };
+  return { group, anchor: current === group ? null : current };
+}
+
+/** The provider a Providers target is about (`providers.codex.cli-path` → codex), or null. */
+export function providerOfTarget(target: string | null | undefined): ProviderId | null {
+  const [group, id] = (target ?? "").split(".");
+  const parsed = ProviderId.safeParse(id);
+  return group === "providers" && parsed.success ? parsed.data : null;
+}
+
+/**
+ * The sub-sections the list shows for a group: on Providers only the providers the user added, so one that wasn't
+ * appears nowhere but the Add provider dialog.
+ */
+export function visibleSections(
+  group: SettingsGroupDef,
+  added: ReadonlyArray<{ id: ProviderId }> | undefined,
+): ReadonlyArray<SettingsSectionDef> {
+  if (group.id !== "providers") return group.sections;
+  return group.sections.filter((entry) => added?.some((p) => providerOfTarget(entry.id) === p.id));
 }
 
 /** The sidebar section that holds an anchor (a section id, or a row id under one). */

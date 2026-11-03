@@ -12,7 +12,6 @@ import type { EventBus } from "../bus.ts";
 import { boardUrlOf, type Config } from "../config.ts";
 import { tasksToPlan } from "../services/planning.ts";
 import type { Services } from "../services/types.ts";
-import { createAgentIntegrations, type AgentIntegrationProbes } from "./agentIntegrations.ts";
 import { createAgentModels, type AgentModelProbes } from "./agentModels.ts";
 import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
 import { createBackupIntegration, defaultRunGit, type RunGit } from "./backup.ts";
@@ -23,6 +22,7 @@ import type { RunAgent } from "./headlessAgent.ts";
 import type { RunImport } from "./headlessImport.ts";
 import type { RunHeadless } from "./headlessReview.ts";
 import { createIssueImporter } from "./issueImport.ts";
+import { createProviders, type ProviderProbes } from "./providers.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
 import { createSessionLaunch } from "./sessionLaunch.ts";
 import { createSessionTranscriptReader } from "./sessionTranscript.ts";
@@ -58,8 +58,8 @@ export interface IntegrationOverrides {
   listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
   /** Git for reading project folders: session launch, and the stats' commits (read by the services, see createContext). */
   runGit?: RunGit;
-  /** What the agent integration checks run: the CLIs and the MCP config files. */
-  agentIntegrationProbes?: Partial<AgentIntegrationProbes>;
+  /** What provider detection runs: the CLIs and the MCP config files. */
+  providerProbes?: Partial<ProviderProbes>;
   agentModelProbes?: Partial<AgentModelProbes>;
   /** Process checks for agent sessions' status. */
   processProbe?: ProcessProbe;
@@ -149,17 +149,19 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     },
     ...(overrides.log ? { log: overrides.log } : {}),
   });
-  const agentIntegrations = createAgentIntegrations({
-    services: deps.services,
-    mcpUrl: () => `http://127.0.0.1:${deps.config.port}/mcp`,
-    host: overrides.terminalHost ?? systemTerminalHost,
-    userHome: deps.config.userHome,
-    ...(overrides.agentIntegrationProbes ? { probes: overrides.agentIntegrationProbes } : {}),
-  });
   const agentModels = createAgentModels({
     services: deps.services,
     host: overrides.terminalHost ?? systemTerminalHost,
     ...(overrides.agentModelProbes ? { probes: overrides.agentModelProbes } : {}),
+  });
+  const providers = createProviders({
+    services: deps.services,
+    mcpUrl: () => `http://127.0.0.1:${deps.config.port}/mcp`,
+    host: overrides.terminalHost ?? systemTerminalHost,
+    userHome: deps.config.userHome,
+    t3Status: () => t3.status(),
+    models: (harness, refresh) => agentModels.harness(harness, refresh),
+    ...(overrides.providerProbes ? { probes: overrides.providerProbes } : {}),
   });
   // An Autopilot session's state comes from its run, which changes without the harness's files changing.
   const refreshSession = (sessionId: string) => {
@@ -216,6 +218,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       sessions.start();
       autopilot.start();
       worktrees.start();
+      providers.seedFromDetection().catch((error: unknown) => {
+        (overrides.log ?? console).warn(`[providers] couldn't add the providers detection found: ${messageOf(error)}`);
+      });
     },
     stop() {
       started = false;
@@ -228,7 +233,6 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       worktrees.stop();
     },
     sessionTranscript: (taskId, input) => transcripts.read(taskId, input),
-    settingsAskStatus: () => settingsAsker.status(),
     askSettings: (input) => settingsAsker.ask(input),
     startImport: (taskId) => importer.start(taskId),
     resumeImports: () => importer.resume(),
@@ -302,8 +306,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     resumeCommand: (linkId, mode) => sessions.resumeCommand(linkId, mode),
     resumeSession: (linkId, input) => sessions.resume(linkId, input),
     terminalInfo: () => sessions.terminalInfo(),
-    agentClis: () => sessionLaunch.clis(),
-    agentIntegrations: (refresh) => agentIntegrations.status(refresh),
+    providers: (refresh) => providers.status(refresh),
     agentModels: (refresh) => agentModels.status(refresh),
     sessionLaunchOptions: (taskId) => sessionLaunch.options(taskId),
     startSession: (taskId, input, actor) => sessionLaunch.start(taskId, input, actor),

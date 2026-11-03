@@ -15,10 +15,12 @@ import {
   type NotificationKind,
   type NotificationSettings,
   parseHeadlessModel,
+  ProviderSetting,
   type SavedViews,
   sanitizeKeybindingOverrides,
   TicketSystem,
 } from "@repo/contracts";
+import { PROVIDERS_DETECT_SEED_KEY } from "../db/codeMigrations.ts";
 import type { Repos } from "../db/repos/index.ts";
 import { AppError } from "../errors.ts";
 import { AUTOPILOT_ENGINE_KEY } from "./autopilot.ts";
@@ -39,9 +41,7 @@ const DEFAULTS: StoredSettings = {
   planSkill: { source: "builtin" },
   reviewMaxRounds: DEFAULT_REVIEW_MAX_ROUNDS,
   headlessReviewEnabled: false,
-  headlessReviewCli: null,
-  copilotCli: null,
-  codexCli: null,
+  providers: [],
   handoffMenus: DEFAULT_HANDOFF_MENUS,
   headlessReviewBudgetUsd: 2,
   reviewModel: null,
@@ -84,9 +84,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "planSkill",
     "reviewMaxRounds",
     "headlessReviewEnabled",
-    "headlessReviewCli",
-    "copilotCli",
-    "codexCli",
+    "providers",
     "handoffMenus",
     "headlessReviewBudgetUsd",
     "reviewModel",
@@ -104,13 +102,17 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
 
 /**
  * Settings older versions exported that a migration since converted (036_ticket_systems_settings turns the Jira ones
- * into a ticket system, 039_review_model renames headlessReviewModel). A restore loads them with an old backup so that migration sees them; they never reach a
+ * into a ticket system, 039_review_model renames headlessReviewModel, 040_providers_settings moves the CLI paths into
+ * providers). A restore loads them with an old backup so that migration sees them; they never reach a
  * database at the current schema.
  */
 export const RETIRED_EXPORTED_SETTINGS: ReadonlySet<string> = new Set([
   "jiraBaseUrl",
   "issueImportJiraTools",
   "headlessReviewModel",
+  "headlessReviewCli",
+  "copilotCli",
+  "codexCli",
 ]);
 
 /**
@@ -194,6 +196,27 @@ export function storedProfileList(stored: unknown): ModelProfile[] {
   return profiles.slice(0, MODEL_PROFILES_MAX);
 }
 
+/** A provider as stored: a blank CLI path is none, so the CLI is looked up on PATH. */
+const normalizeProvider = (provider: ProviderSetting): ProviderSetting => ({
+  id: provider.id,
+  enabled: provider.enabled,
+  cliPath: provider.cliPath?.trim() || null,
+});
+
+/**
+ * The stored providers, each read on its own like custom models: one that no longer parses (a hand edit, a provider
+ * since dropped) is skipped rather than the whole list, and a repeated id keeps its first.
+ */
+export function storedProviderList(stored: unknown): ProviderSetting[] {
+  const providers: ProviderSetting[] = [];
+  for (const entry of Array.isArray(stored) ? stored : []) {
+    const parsed = ProviderSetting.safeParse(entry);
+    if (parsed.success && !providers.some((p) => p.id === parsed.data.id))
+      providers.push(normalizeProvider(parsed.data));
+  }
+  return providers;
+}
+
 /** Notification settings as stored: only what the user set. */
 interface StoredNotificationSettings {
   muteInQuietHours?: boolean;
@@ -244,6 +267,7 @@ export function loadSettings(repos: Repos): StoredSettings {
     reviewModel: parseHeadlessModel(stored.get("reviewModel")),
     issueImportModel: parseHeadlessModel(stored.get("issueImportModel")) ?? DEFAULTS.issueImportModel,
     modelProfiles: storedProfileList(stored.get("modelProfiles")),
+    providers: storedProviderList(stored.get("providers")),
     notifications: mergeNotificationSettings(stored.get("notifications") as StoredNotificationSettings | undefined),
     keybindings: sanitizeKeybindingOverrides(stored.get("keybindings")),
     handoffMenus: { ...DEFAULT_HANDOFF_MENUS, ...(stored.get("handoffMenus") as StoredSettings["handoffMenus"]) },
@@ -298,11 +322,10 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.headlessReviewEnabled !== undefined) {
           repos.settings.set("headlessReviewEnabled", input.headlessReviewEnabled);
         }
-        if (input.headlessReviewCli !== undefined) {
-          repos.settings.set("headlessReviewCli", blankToNull(input.headlessReviewCli));
+        if (input.providers !== undefined) {
+          repos.settings.set("providers", input.providers.map(normalizeProvider));
+          fx.providers();
         }
-        if (input.copilotCli !== undefined) repos.settings.set("copilotCli", blankToNull(input.copilotCli));
-        if (input.codexCli !== undefined) repos.settings.set("codexCli", blankToNull(input.codexCli));
         if (input.handoffMenus !== undefined) {
           repos.settings.set("handoffMenus", { ...load().handoffMenus, ...input.handoffMenus });
         }
@@ -352,5 +375,7 @@ export function createSettingsService(core: Core): SettingsService {
       return get();
     },
     t3Token: () => load().t3Token,
+    providersSeedPending: () => repos.settings.all().get(PROVIDERS_DETECT_SEED_KEY) === true,
+    clearProvidersSeed: () => core.write(() => repos.settings.delete(PROVIDERS_DETECT_SEED_KEY)),
   };
 }

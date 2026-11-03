@@ -136,3 +136,58 @@ describe("hidden hand-off targets", () => {
     expect((await patch({ handoffMenus: { codex: false } })).status).toBe(400);
   });
 });
+
+describe("providers", () => {
+  it("starts with none added, and saves the list with blank CLI paths as none", async () => {
+    const h = createTestHarness();
+    expect(h.services.settings.get().providers).toEqual([]);
+    const patch = (json: unknown) => h.request("/api/settings", { method: "PATCH", json });
+    const res = await patch({
+      providers: [
+        { id: "claude-code", enabled: true, cliPath: "  /opt/claude  " },
+        { id: "t3-code", enabled: false, cliPath: "  " },
+        { id: "codex", enabled: true },
+      ],
+    });
+    expect(res.status).toBe(200);
+    expect(h.services.settings.get().providers).toEqual([
+      { id: "claude-code", enabled: true, cliPath: "/opt/claude" },
+      { id: "t3-code", enabled: false, cliPath: null },
+      { id: "codex", enabled: true, cliPath: null },
+    ]);
+  });
+
+  it("refuses a provider it doesn't know or one listed twice", async () => {
+    const h = createTestHarness();
+    const patch = (json: unknown) => h.request("/api/settings", { method: "PATCH", json });
+    expect((await patch({ providers: [{ id: "gemini", enabled: true }] })).status).toBe(400);
+    const twice = [
+      { id: "codex", enabled: true },
+      { id: "codex", enabled: false },
+    ];
+    expect((await patch({ providers: twice })).status).toBe(400);
+  });
+
+  it("skips stored entries that no longer parse, keeping the first of a repeated id", () => {
+    const h = createTestHarness();
+    createRepos(h.db).settings.set("providers", [
+      { id: "codex", enabled: true, cliPath: "/opt/codex" },
+      { id: "gemini", enabled: true },
+      { id: "codex", enabled: false },
+      "junk",
+    ]);
+    expect(h.services.settings.get().providers).toEqual([{ id: "codex", enabled: true, cliPath: "/opt/codex" }]);
+  });
+
+  it("publishes the new list, so open pages follow", () => {
+    const h = createTestHarness();
+    h.services.settings.update({ providers: [{ id: "copilot-cli", enabled: true }] });
+    expect(h.events).toContainEqual({
+      type: "providers.changed",
+      providers: [{ id: "copilot-cli", enabled: true, cliPath: null }],
+    });
+    h.events.length = 0;
+    h.services.settings.update({ githubPolling: false });
+    expect(h.events.some((e) => e.type === "providers.changed")).toBe(false);
+  });
+});

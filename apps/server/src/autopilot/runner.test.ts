@@ -460,7 +460,10 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
           return codexOutput.join("\n");
         },
       });
-      h.services.settings.update({ modelProfiles: [codexProfile("codex")], codexCli: "/opt/codex" });
+      h.services.settings.update({
+        modelProfiles: [codexProfile("codex")],
+        providers: [{ id: "codex", enabled: true, cliPath: "/opt/codex" }],
+      });
       h.services.tasks.update(task.id, { labels: ["other"] }, "test");
       const out = await start({ options: { runner: "headless" } });
 

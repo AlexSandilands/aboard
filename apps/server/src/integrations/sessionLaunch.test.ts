@@ -172,7 +172,7 @@ describe("starting a session from the board", () => {
   it("starts the CLI set in Settings rather than the one on PATH", async () => {
     const app = appWith({ host: { platform: "linux", which: () => "/usr/bin/xterm", readFile: () => null } });
     const own = join(app.root, "bin", "claude");
-    app.services.settings.update({ headlessReviewCli: own });
+    app.services.settings.update({ providers: [{ id: "claude-code", enabled: true, cliPath: own }] });
     await app.start({});
     expect(app.spawned[0]!.args.at(-1)).toContain(`${shQuote(own)} --session-id`);
   });
@@ -312,16 +312,6 @@ describe("starting a session from the board", () => {
     const links = app.services.tasks.summary(epic.id).links;
     expect(links).toMatchObject([{ kind: "agent_session", label: `Orchestrating #${epic.number}` }]);
     expect(app.spawned).toHaveLength(1);
-  });
-
-  it("lists which CLIs are installed", async () => {
-    const app = appWith({ copilot: false });
-    const res = await app.request("/api/agent-clis");
-    expect(await res.json()).toEqual([
-      { harness: "claude-code", available: true, path: join(app.root, "bin", "claude") },
-      { harness: "codex", available: false, path: null },
-      { harness: "copilot-cli", available: false, path: null },
-    ]);
   });
 
   it("refuses to start a Codex session, which picks its own id", async () => {

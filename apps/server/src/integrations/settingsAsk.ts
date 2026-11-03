@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRAND, type AskSettingsInput, type AskSettingsResult, type SettingsAskStatus } from "@repo/contracts";
+import { BRAND, harnessCliSetting, type AskSettingsInput, type AskSettingsResult } from "@repo/contracts";
 import { z } from "zod";
 import type { Services } from "../services/types.ts";
 import { resolveExecutable } from "./claudeCli.ts";
@@ -63,36 +63,27 @@ export function askPrompt(input: AskSettingsInput, fence: string = randomBytes(8
 }
 
 export interface SettingsAsker {
-  status(): SettingsAskStatus;
   ask(input: AskSettingsInput): Promise<AskSettingsResult>;
-}
-
-/** Whether `cli` (the Claude Code CLI setting; null means `claude` on PATH) is there to run. */
-export function askStatus(cli: string | null): SettingsAskStatus {
-  const configured = cli?.trim() || null;
-  if (resolveExecutable(configured ?? "claude")) return { available: true, reason: null };
-  return {
-    available: false,
-    reason: configured
-      ? `The Claude Code CLI wasn't found at ${configured}.`
-      : "The Claude Code CLI (claude) wasn't found on your PATH.",
-  };
 }
 
 export function createSettingsAsker(deps: { services: () => Services; runAgent?: RunAgent }): SettingsAsker {
   const runAgent = deps.runAgent ?? runHeadlessAgent;
-  const cliOf = () => deps.services().settings.get().headlessReviewCli;
+  const cliOf = () => harnessCliSetting(deps.services().settings.get(), "claude-code");
   // One run at a time: a question edited while it is pending is discarded by the page, not stopped, so without this
   // a few Enters would pile up paid runs.
   let running = false;
   return {
-    status: () => askStatus(cliOf()),
     async ask(input) {
       const cli = cliOf();
-      const status = askStatus(cli);
       // A fake runner (tests) stands in for the CLI, so only a real run needs it to exist.
-      if (!status.available && !deps.runAgent)
-        return { ok: false, error: status.reason ?? "Claude Code isn't available" };
+      if (!deps.runAgent && !resolveExecutable(cli ?? "claude")) {
+        return {
+          ok: false,
+          error: cli
+            ? `The Claude Code CLI wasn't found at ${cli}.`
+            : "The Claude Code CLI (claude) wasn't found on your PATH.",
+        };
+      }
       if (running) return { ok: false, error: "Another question is still being answered. Try again in a moment." };
       running = true;
       let cwd: string | null = null;

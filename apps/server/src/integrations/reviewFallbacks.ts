@@ -5,6 +5,7 @@ import {
   reviewIsDone,
   reviewLoopInstructions,
   resolveHeadlessEffort,
+  harnessCliSetting,
   resolveHeadlessModel,
   type TaskLink,
   type TaskSummary,
@@ -107,7 +108,7 @@ export function createReviewFallbacks(deps: {
       const settings = s.settings.get();
       const reviewModel = s.reviews.modelFor(task.id);
       const result = await runHeadless({
-        cli: settings.headlessReviewCli,
+        cli: harnessCliSetting(settings, "claude-code"),
         cwd,
         budgetUsd: settings.headlessReviewBudgetUsd,
         model: resolveHeadlessModel(settings.modelTiers, reviewModel),

@@ -4,12 +4,15 @@ import {
   editorListSection,
   isSettingsGroup,
   parseSettingsTarget,
+  providerOfTarget,
+  redirectSettingsTarget,
   resolveSettingsProject,
   sectionOf,
   SETTINGS_GROUPS,
   settingsCrumbs,
   settingsGroup,
   settingsPaletteEntries,
+  visibleSections,
 } from "./settingsNav.logic";
 
 describe("SETTINGS_GROUPS", () => {
@@ -36,10 +39,25 @@ describe("parseSettingsTarget", () => {
   it("splits a target into its group and the anchor to scroll to", () => {
     expect(parseSettingsTarget("tasks")).toEqual({ group: "tasks", anchor: null });
     expect(parseSettingsTarget("tasks.review")).toEqual({ group: "tasks", anchor: "tasks.review" });
-    expect(parseSettingsTarget("integrations.claude-code.cli-path")).toEqual({
-      group: "integrations",
-      anchor: "integrations.claude-code.cli-path",
+    expect(parseSettingsTarget("providers.claude-code.cli-path")).toEqual({
+      group: "providers",
+      anchor: "providers.claude-code.cli-path",
     });
+  });
+
+  it("reads a target from before Providers had its own page as the one it moved to", () => {
+    expect(parseSettingsTarget("integrations.claude-code.cli-path")).toEqual({
+      group: "providers",
+      anchor: "providers.claude-code.cli-path",
+    });
+    expect(redirectSettingsTarget("integrations.copilot")).toBe("providers.copilot-cli");
+    expect(redirectSettingsTarget("integrations.copilot.cli")).toBe("providers.copilot-cli.mcp");
+    expect(redirectSettingsTarget("integrations.copilot.cli-path")).toBe("providers.copilot-cli.cli-path");
+    expect(redirectSettingsTarget("integrations.t3-code.connection")).toBe("providers.t3-code.status");
+    expect(redirectSettingsTarget("integrations.codex.status")).toBe("providers.codex.status");
+    // What stayed in Integrations stays put, and a lookalike prefix isn't moved.
+    expect(redirectSettingsTarget("integrations.github.poll-prs")).toBe("integrations.github.poll-prs");
+    expect(redirectSettingsTarget("integrations.codexes")).toBe("integrations.codexes");
   });
 
   it("rejects a target outside the groups", () => {
@@ -53,12 +71,33 @@ describe("sectionOf", () => {
   it("maps a section or a row inside it to the section", () => {
     expect(sectionOf("autopilot.engine")?.label).toBe("Autopilot");
     expect(sectionOf("autopilot.engine.quiet-hours")?.id).toBe("autopilot.engine");
-    expect(sectionOf("integrations.claude-code.cli-path")?.id).toBe("integrations.claude-code");
+    expect(sectionOf("providers.claude-code.cli-path")?.id).toBe("providers.claude-code");
   });
 
   it("doesn't match a section whose id is only a prefix of another word", () => {
     expect(sectionOf("tasks.reviewer")).toBeNull();
     expect(sectionOf("unknown")).toBeNull();
+  });
+});
+
+describe("providers in the list", () => {
+  it("reads the provider a target is about", () => {
+    expect(providerOfTarget("providers.codex.cli-path")).toBe("codex");
+    expect(providerOfTarget("providers.copilot-cli")).toBe("copilot-cli");
+    expect(providerOfTarget("providers")).toBeNull();
+    expect(providerOfTarget("providers.gemini")).toBeNull();
+    expect(providerOfTarget("tasks.codex")).toBeNull();
+    expect(providerOfTarget(null)).toBeNull();
+  });
+
+  it("lists only the providers the user added, and every other group's sections", () => {
+    const providers = settingsGroup("providers");
+    expect(visibleSections(providers, []).map((s) => s.id)).toEqual([]);
+    expect(visibleSections(providers, [{ id: "copilot-cli" }, { id: "t3-code" }]).map((s) => s.id)).toEqual([
+      "providers.t3-code",
+      "providers.copilot-cli",
+    ]);
+    expect(visibleSections(settingsGroup("tasks"), undefined)).toBe(settingsGroup("tasks").sections);
   });
 });
 
@@ -130,6 +169,7 @@ describe("settingsPaletteEntries", () => {
       "Settings: Board",
       "Settings: Keybindings",
       "Settings: Tasks",
+      "Settings: Providers",
       "Settings: Model tiers",
       "Settings: Autopilot",
       "Settings: Integrations",

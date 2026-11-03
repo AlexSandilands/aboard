@@ -76,16 +76,13 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
     "/api/terminal",
     handle((c) => c.json(integrations.terminalInfo())),
   );
+  // Every provider as detected here: CLI, MCP registration, T3 Code and the models scan. `?refresh=1` skips the
+  // minute's cache.
   app.get(
-    "/api/agent-clis",
-    handle((c) => c.json(integrations.agentClis())),
-  );
-  // Runs each CLI and asks it about the board's MCP server; `?refresh=1` skips the minute's cache.
-  app.get(
-    "/api/agent-integrations",
+    "/api/providers",
     handle(async (c) => {
       const { refresh } = parseQuery(c, z.object({ refresh: z.string().optional() }));
-      return c.json(await integrations.agentIntegrations(refresh === "1"));
+      return c.json(await integrations.providers(refresh === "1"));
     }),
   );
 
@@ -107,10 +104,6 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
     handle(async (c) => c.json(services.settings.update(await parseBody(c, UpdateSettingsInput)))),
   );
 
-  app.get(
-    "/api/settings/ask",
-    handle((c) => c.json(integrations.settingsAskStatus())),
-  );
   app.post(
     "/api/settings/ask",
     handle(async (c) => c.json(await integrations.askSettings(await parseBody(c, AskSettingsInput)))),
