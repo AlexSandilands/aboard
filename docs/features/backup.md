@@ -102,7 +102,9 @@ Pasted images are copied next to the JSON and copied back by a restore; see [att
 Settings → Board → Data → **Restore…** (`RestoreDialog.tsx`) restores from the git backup while the server runs.
 
 - **Reading a commit.** `GET /api/backup/history?machine=` lists the last 100 commits that touched a machine's
-  folder (this board's by default). The other routes take `commit` (a hash or `HEAD`, nothing git could read as
+  folder (this machine's by default: the folder of its name, else one this board owns), wherever that backup was
+  then: `git log --follow` on its manifest finds the names it had before a rename and the flat dump at the root it
+  was moved from, and those commits are listed and read under the name of the time. The other routes take `commit` (a hash or `HEAD`, nothing git could read as
   an option) and `machine`; they check the commit out with `git worktree add --detach` into a temporary folder
   outside the clone, read the folder's dump (or the flat dump at the root, for commits from before machine
   folders) and remove the worktree. The clone's own branch and working tree are never touched, so a scheduled run
@@ -125,7 +127,9 @@ Settings → Board → Data → **Restore…** (`RestoreDialog.tsx`) restores fr
   `take-over` (new hardware, same board) sets this machine's name to that folder and marks it adopted, so the
   next run, started straight away, writes it with this board's `instanceId` instead of refusing the name;
   `new-board` keeps backing up to this machine's own folder, so the old machine and this one don't write into
-  one folder. The adoption is held in memory until that run writes the folder.
+  one folder. The adoption is kept in a file in the clone's `.git` (it belongs to this machine and survives a
+  restart) and removed only after a run has pushed the folder: until then the remote's copy still names the old
+  board, and a failed first push (new hardware with no git sign-in) must not turn into "choose another name".
 
 ### Scheduled git backup
 

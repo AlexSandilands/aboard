@@ -1,5 +1,14 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -136,10 +145,19 @@ export function createBackupIntegration(deps: {
   const timers: NodeJS.Timeout[] = [];
   /**
    * Another machine's folder this machine was told to take over (a whole-board restore from it onto new hardware).
-   * The next run writes it with this board's instanceId, which makes it ours; until then it isn't "taken".
+   * Until the remote holds it with this board's instanceId it isn't "taken": the first push can fail (new hardware
+   * with no git sign-in yet, offline) and the server can restart before it lands. So it is kept in the clone's .git,
+   * which belongs to this machine and goes with the clone, and cleared once a push carried the folder.
    */
-  let adopting: string | null = null;
-  const adopted = (folder: string) => adopting !== null && adopting.toLowerCase() === folder.toLowerCase();
+  const adoptionFile = (dir: string) => join(dir, ".git", `${BRAND.id}-adopting`);
+  const adopting = (dir: string): string | null => {
+    try {
+      return readFileSync(adoptionFile(dir), "utf8").trim() || null;
+    } catch {
+      return null;
+    }
+  };
+  const adopted = (dir: string, folder: string) => adopting(dir)?.toLowerCase() === folder.toLowerCase();
 
   const git = async (dir: string, ...args: string[]): Promise<string> => {
     const result = await runGit(args, dir);
@@ -253,7 +271,7 @@ export function createBackupIntegration(deps: {
     const folders = machineFolders(dir);
     const same = (f: { folder: string }) => f.folder.toLowerCase() === name.toLowerCase();
     const taken = folders.find(
-      (f) => same(f) && f.instanceId !== null && f.instanceId !== deps.instanceId && !adopted(f.folder),
+      (f) => same(f) && f.instanceId !== null && f.instanceId !== deps.instanceId && !adopted(dir, f.folder),
     );
     if (taken) throw takenBy(taken.folder, taken.machineName);
     const target = readdirSync(dir).find((n) => n.toLowerCase() === name.toLowerCase());
@@ -297,7 +315,7 @@ export function createBackupIntegration(deps: {
           if (shown.code !== 0) return [];
           try {
             const owner = JSON.parse(shown.stdout) as { instanceId?: unknown; machineName?: unknown };
-            return typeof owner.instanceId === "string" && owner.instanceId !== deps.instanceId && !adopted(folder)
+            return typeof owner.instanceId === "string" && owner.instanceId !== deps.instanceId && !adopted(dir, folder)
               ? [{ folder, machineName: typeof owner.machineName === "string" ? owner.machineName : null }]
               : [];
           } catch {
@@ -391,23 +409,53 @@ export function createBackupIntegration(deps: {
     });
   };
 
+  /**
+   * This machine's folder among `folders`: the one of its name, unless another board owns it, else this board's.
+   * After a take-over this board owns two (the old machine's, and its own earlier one); the name says which is used.
+   */
+  const ownFolder = (dir: string, folders: MachineFolder[]): MachineFolder | undefined => {
+    const name = deps.services().settings.get().machineName.toLowerCase();
+    return (
+      folders.find(
+        (f) =>
+          f.folder.toLowerCase() === name &&
+          (f.instanceId === null || f.instanceId === deps.instanceId || adopted(dir, f.folder)),
+      ) ?? folders.find((f) => f.instanceId === deps.instanceId)
+    );
+  };
+
   /** Each machine folder in the repo, with when a commit last touched it. */
   const machines = async (): Promise<BackupMachine[]> => {
     const dir = deps.services().settings.get().backupDir;
     if (!dir || !existsSync(join(dir, ".git"))) return [];
+    const folders = machineFolders(dir);
+    const own = ownFolder(dir, folders);
     return Promise.all(
-      machineFolders(dir).map(async (f) => {
+      folders.map(async (f) => {
         const last = await runGit(["log", "-1", "--format=%cI", "--", f.folder], dir);
         const at = last.code === 0 ? last.stdout.trim() : "";
         return {
           folder: f.folder,
           instanceId: f.instanceId,
           machineName: f.machineName,
-          current: f.instanceId === deps.instanceId,
+          current: f === own,
           lastCommitAt: at ? new Date(at).toISOString() : null,
         };
       }),
     );
+  };
+
+  /**
+   * Every place a machine folder's backup has been: its name, the names it had before a rename in Settings, and ""
+   * for the repo's root before machine folders. Found by following its manifest across the commits that moved it.
+   */
+  const folderPlaces = async (dir: string, folder: string): Promise<Set<string>> => {
+    const moved = await runGit(["log", "--follow", "--name-only", "--format=", "--", `${folder}/manifest.json`], dir);
+    const places = new Set([folder]);
+    for (const path of moved.code === 0 ? moved.stdout.split("\n").filter(Boolean) : []) {
+      places.add(path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
+    }
+    return places;
   };
 
   /** The backup clone, which must exist: restoring reads its commits. */
@@ -420,24 +468,30 @@ export function createBackupIntegration(deps: {
   };
 
   /**
-   * The folder to read in a tree: the one named (a folder or a machine name), else this board's, else the one for
-   * this machine's name. A tree from before machine folders holds a flat dump at its root, which stands for any.
+   * The folder to read in a tree of the clone `dir`: the one named (a folder or a machine name), else this machine's.
+   * In an older commit, `formerNames` (the folder's names before a rename, from folderPlaces) find it under the name
+   * it had then. A tree from before machine folders holds a flat dump at its root, which stands for any.
    */
-  const pickFolder = (tree: string, machine: string | undefined): MachineFolder | null => {
+  const pickFolder = (
+    dir: string,
+    tree: string,
+    machine: string | undefined,
+    formerNames: ReadonlySet<string> = new Set(),
+  ): MachineFolder | null => {
     const folders = machineFolders(tree);
     const lower = (s: string) => s.toLowerCase();
-    const found = machine
-      ? (folders.find((f) => f.folder === machine) ??
-        folders.find((f) => lower(f.folder) === lower(machine) || f.machineName === machine))
-      : (folders.find((f) => f.instanceId === deps.instanceId) ??
-        folders.find((f) => lower(f.folder) === lower(deps.services().settings.get().machineName)));
+    const found =
+      (machine
+        ? (folders.find((f) => f.folder === machine) ??
+          folders.find((f) => lower(f.folder) === lower(machine) || f.machineName === machine))
+        : ownFolder(dir, folders)) ?? folders.find((f) => formerNames.has(f.folder));
     if (found) return found;
     return isFlatDump(tree) ? { folder: "", instanceId: null, machineName: null } : null;
   };
 
   /** The machine folder `machine` names in the clone as it is now, for its history. */
   const currentFolder = (dir: string, machine: string | undefined): string => {
-    const folder = pickFolder(dir, machine);
+    const folder = pickFolder(dir, dir, machine);
     if (!folder)
       throw new AppError(
         "NOT_FOUND",
@@ -461,10 +515,12 @@ export function createBackupIntegration(deps: {
     const resolved = await runGit(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], dir);
     if (resolved.code !== 0) throw new AppError("NOT_FOUND", `The backup repo has no commit ${ref}`);
     const sha = resolved.stdout.trim();
+    const current = pickFolder(dir, dir, source.machine)?.folder;
+    const formerNames = current ? await folderPlaces(dir, current) : new Set<string>();
     const tree = mkdtempSync(join(tmpdir(), `${BRAND.id}-restore-`));
     try {
       await git(dir, "worktree", "add", "--detach", "--quiet", tree, sha);
-      const folder = pickFolder(tree, source.machine);
+      const folder = pickFolder(dir, tree, source.machine, formerNames);
       if (!folder) {
         throw new AppError(
           "NOT_FOUND",
@@ -490,7 +546,8 @@ export function createBackupIntegration(deps: {
       "log",
       `-n${HISTORY_LIMIT}`,
       "--format=%H%x1f%h%x1f%cI%x1f%s",
-      ...(folder ? ["--", folder] : []),
+      // The root's dump entries stand for the flat dump that was moved into this folder.
+      ...(folder ? ["--", ...[...(await folderPlaces(dir, folder))].flatMap((p) => (p ? [p] : DUMP_ENTRIES))] : []),
     );
     return lines
       .split("\n")
@@ -548,7 +605,7 @@ export function createBackupIntegration(deps: {
       // New hardware, same board: back up into the old machine's folder from now on, rather than forking the board
       // into a folder of its own. The machine-only settings survived the restore, so the name is set after it.
       services.settings.update({ machineName: folder.folder });
-      adopting = folder.folder;
+      writeFileSync(adoptionFile(backupClone()), folder.folder);
       void (inFlight ?? Promise.resolve()).then(() => run());
       return { ...result, tookOver: folder.folder };
     });
@@ -570,12 +627,13 @@ export function createBackupIntegration(deps: {
       const dump = deps.services().backup.dump();
       dump.manifest = { ...dump.manifest, instanceId: deps.instanceId, machineName: name };
       writeDumpDir(join(dir, name), dump, deps.attachmentsDir);
-      if (adopted(name)) adopting = null;
       writeRepoIndex(dir);
       await git(dir, "add", "-A");
       const changes = (await git(dir, "status", "--porcelain")).split("\n").filter(Boolean);
       if (changes.length > 0) await commit(dir, commitMessage(changes));
       if (settings.backupRemote) await push(dir);
+      // Pushed (a failed push throws), or there is no remote holding the old owner's manifest: the folder is ours.
+      rmSync(adoptionFile(dir), { force: true });
       status.lastError = pullError;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

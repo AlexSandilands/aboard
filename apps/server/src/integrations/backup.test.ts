@@ -437,6 +437,75 @@ describe("restoring from the backup repo", { timeout: PROCESS_TEST_TIMEOUT }, ()
     expect(status.lastError).toBeNull();
     const machines = await fresh.backup.machines();
     expect(machines.find((m) => m.folder === "old-pc")).toMatchObject({ instanceId: fresh.instanceId, current: true });
+    // Its earlier folder is the same board's too, but no longer the one it backs up to.
+    expect(machines.filter((m) => m.current).map((m) => m.folder)).toEqual(["old-pc"]);
+    expect((await fresh.backup.diff({})).folder).toBe("old-pc");
+  });
+
+  it("keeps a take-over through failed pushes and a restart, until a push carries the folder", async () => {
+    const root = mkdtempSync(join(tmpdir(), `${BRAND.id}-gitbackup-`));
+    dirs.push(root);
+    const old = setup({ root, machineName: "old-pc" });
+    await old.backup.run();
+    // New hardware with no git sign-in yet: fetching, pulling and pushing all fail.
+    let offline = false;
+    const runGit: RunGit = (args, cwd) =>
+      offline && ["fetch", "pull", "push"].some((a) => args.includes(a))
+        ? Promise.resolve({ code: 128, stdout: "", stderr: "fatal: Authentication failed" })
+        : defaultRunGit(args, cwd);
+    const fresh = setup({ root, remote: old.remote, machineName: "new-pc", runGit });
+    await fresh.backup.run();
+
+    offline = true;
+    await fresh.backup.restoreBoard({ machine: "old-pc", confirm: "RESTORE", otherMachine: "take-over" });
+    await vi.waitFor(() => expect(fresh.backup.status().running).toBe(false), { timeout: PROCESS_TEST_TIMEOUT });
+    const failed = await fresh.backup.run();
+    expect(failed.lastError).toMatch(/Authentication failed/);
+    expect(failed.lastError).not.toMatch(/another machine/);
+
+    // A restart forgets nothing: the take-over is kept with the clone.
+    const restarted = createBackupIntegration({
+      services: () => fresh.services,
+      attachmentsDir: join(root, "attachments"),
+      instanceId: fresh.instanceId,
+      runGit,
+      log: { warn: () => {} },
+    });
+    expect((await restarted.run()).lastError).not.toMatch(/another machine/);
+
+    offline = false;
+    expect((await restarted.run()).lastError).toBeNull();
+    expect(JSON.parse(git(old.remote, "show", "HEAD:old-pc/manifest.json"))).toMatchObject({
+      instanceId: fresh.instanceId,
+    });
+  });
+
+  it("lists and reads commits from before machine folders and from before a rename", async () => {
+    const { backup, remote, root, clone, services, task } = setup();
+    // A backup made by a version from before machine folders: the dump at the root of the repo.
+    const old = join(root, "old");
+    mkdirSync(old);
+    git(old, "clone", "--quiet", remote, ".");
+    writeDumpDir(old, services.backup.dump());
+    git(old, "add", "-A");
+    git(old, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "Old backup");
+    git(old, "push", "--quiet", "origin", "HEAD");
+    git(root, "clone", "--quiet", remote, clone);
+    await backup.run();
+    services.settings.update({ machineName: "work-laptop" });
+    services.tasks.update(task.id, { title: "Renamed" }, "user");
+    expect((await backup.run()).lastError).toBeNull();
+
+    const history = await backup.history();
+    expect(history.map((c) => c.subject)).toEqual(
+      expect.arrayContaining(["Old backup", "Move the backup into laptop/"]),
+    );
+    expect(await backup.history("work-laptop")).toEqual(history);
+    // Every older commit it lists can be read, under whatever name the folder had then, with the task as it was.
+    for (const { commit } of history.slice(1)) {
+      const diff = await backup.diff({ commit, machine: "work-laptop" });
+      expect(diff.tasks).toEqual([expect.objectContaining({ number: task.number, title: "Feature" })]);
+    }
   });
 });
 
