@@ -22,7 +22,7 @@ import { Button } from "~/components/ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Spinner } from "~/components/ui/spinner";
 import { useRescanAgentModels, useUpdateSettings } from "~/state/mutations";
-import { useAgentIntegrations, useAgentModels, useT3ModelCatalog } from "~/state/queries";
+import { useAgentModels, useT3ModelCatalog } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
 import { findSuggestion } from "./cliModelPicker.logic";
 import { CliEffortMenu, CliModelPicker } from "./CliModelPicker";
@@ -37,6 +37,8 @@ import {
   createTierEdits,
   saveTierChange,
   TIER_PROVIDERS,
+  headlessHarnesses,
+  tierProviderState,
   visibleTierProviders,
   type TierChange,
   type TierProvider,
@@ -54,15 +56,9 @@ const CLI_LABELS: Record<AgentHarness, string> = Object.fromEntries(
  */
 export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3: T3IntegrationStatus | undefined }) {
   const updateSettings = useUpdateSettings();
-  const agents = useAgentIntegrations();
   const t3Ready = settings.t3TokenSet && t3?.detected === true;
-  const catalog = useT3ModelCatalog(t3Ready);
-  const cliFound: Partial<Record<AgentHarness, boolean>> = {};
-  for (const harness of agents.data?.harnesses ?? []) cliFound[harness.harness] = harness.cli.found;
-  // A provider set on a custom model shows too, so its value can be seen and cleared.
-  const shown = new Set<TierProvider>(
-    visibleTierProviders(settings.modelTiers, { t3Ready, cliFound }, settings.modelProfiles),
-  );
+  const shown = new Set<TierProvider>(visibleTierProviders(tierProviderState(settings.providers)));
+  const catalog = useT3ModelCatalog(t3Ready && shown.has("t3"));
   // Asked only once a CLI's field is on the page: scanning starts the CLI.
   const anyCli = shown.has("claude-code") || shown.has("copilot-cli");
   const scanned = useAgentModels(anyCli);
@@ -142,6 +138,7 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
                 <HeadlessHarness
                   name={`${label} tier`}
                   value={setting.headless}
+                  shown={shown}
                   onChange={(value) => save(tier, { field: "headless", value })}
                 />
               </div>
@@ -156,11 +153,9 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
             </SettingsNote>
           ) : null;
         })}
-        {/* Not while the CLI check is still answering: the fields would appear and the hint go. */}
-        {shown.size < TIER_PROVIDERS.length && !agents.isPending ? (
+        {shown.size < TIER_PROVIDERS.length ? (
           <p className="px-3 py-3 text-xs text-muted-foreground/80 sm:px-4">
-            A provider's model shows here once it is set up. See{" "}
-            <SettingsLink to="integrations">Integrations</SettingsLink>.
+            A provider's model shows here once you add it in <SettingsLink to="providers">Providers</SettingsLink>.
           </p>
         ) : null}
       </SettingsSection>
@@ -319,6 +314,7 @@ function CustomModelsSection({
             <HeadlessHarness
               name={profile.name}
               value={profile.headless}
+              shown={shown}
               onChange={(value) => change(profile.id, { field: "headless", value })}
             />
           </div>
@@ -399,10 +395,6 @@ function CliModelField({
 }
 
 /** One line of a tier row: the provider's name, then its field. */
-const HEADLESS_ITEMS = AgentHarness.options.map((harness) => ({
-  value: harness,
-  label: AGENT_HARNESSES[harness].label,
-}));
 
 /**
  * The harness headless Autopilot runs on this model use, with the model set for it above. Runs that need what only
@@ -411,16 +403,22 @@ const HEADLESS_ITEMS = AgentHarness.options.map((harness) => ({
 function HeadlessHarness({
   name,
   value,
+  shown,
   onChange,
 }: {
   name: string;
   value: AgentHarness | undefined;
+  shown: ReadonlySet<TierProvider>;
   onChange: (value: AgentHarness) => void;
 }) {
+  const items = headlessHarnesses(shown, value).map((harness) => ({
+    value: harness,
+    label: AGENT_HARNESSES[harness].label,
+  }));
   return (
     <TierField label="Headless runs">
       <Select
-        items={HEADLESS_ITEMS}
+        items={items}
         value={value ?? "claude-code"}
         onValueChange={(next) => {
           const parsed = AgentHarness.safeParse(next);
@@ -431,7 +429,7 @@ function HeadlessHarness({
           <SelectValue />
         </SelectTrigger>
         <SelectPopup>
-          {HEADLESS_ITEMS.map((item) => (
+          {items.map((item) => (
             <SelectItem key={item.value} value={item.value}>
               {item.label}
             </SelectItem>

@@ -43,7 +43,7 @@ describe("searchSettings", () => {
   });
 
   it("finds a setting by an alternative name", () => {
-    expect(ids("copilot")).toContain("integrations.copilot");
+    expect(ids("copilot")).toContain("providers.copilot-cli");
     expect(ids("dark mode")).toContain("board.appearance.theme");
     expect(ids("do not disturb")).toContain("board.notifications.mute-quiet-hours");
   });

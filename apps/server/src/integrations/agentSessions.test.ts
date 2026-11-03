@@ -341,7 +341,9 @@ describe("resuming a session", () => {
 
   it("resumes with the CLI path set in Settings, in the command and the launch", async () => {
     const app = appWith();
-    app.services.settings.update({ headlessReviewCli: "/opt/claude/bin/claude" });
+    app.services.settings.update({
+      providers: [{ id: "claude-code", enabled: true, cliPath: "/opt/claude/bin/claude" }],
+    });
     const l = app.link(claude(A, app.home.root));
     const res = await app.post(l.id, {});
     expect((await res.json()) as { command: string }).toMatchObject({
@@ -356,7 +358,7 @@ describe("resuming a session", () => {
     const app = appWith();
     app.services.settings.update({
       terminal: { kind: "cmd" },
-      headlessReviewCli: "C:\\Program Files\\Claude\\claude.exe",
+      providers: [{ id: "claude-code", enabled: true, cliPath: "C:\\Program Files\\Claude\\claude.exe" }],
     });
     const l = app.link(claude(A, app.home.root));
     const body = (await (await app.post(l.id, {})).json()) as { launched: boolean; error: string };

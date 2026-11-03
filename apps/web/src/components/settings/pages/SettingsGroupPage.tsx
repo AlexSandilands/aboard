@@ -10,11 +10,12 @@ import { useIntegrationsStatus, useSettings } from "~/state/queries";
 import { AppearanceSection } from "../AppearanceSection";
 import { ArchivedProjectsSection } from "../ArchivedProjectsSection";
 import { BackupSection } from "../BackupSection";
-import { ClaudeCodeSection, CodexSection, CopilotSection, GithubSection, T3Section } from "../IntegrationsSections";
+import { GithubSection } from "../IntegrationsSections";
 import { IssueImportSection } from "../IssueImportSection";
 import { KeybindingsSection } from "../KeybindingsSection";
 import { ModelTiersSection } from "../ModelTiersSection";
 import { PlanSkillSection } from "../PlanSkillSection";
+import { ProvidersPage } from "../ProvidersPage";
 import { ReviewSettingsSection } from "../ReviewSettingsSection";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
 import { SettingsSubsection } from "../settingsLayout";
@@ -82,6 +83,8 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
           </SettingsSubsection>
         </>
       );
+    case "providers":
+      return <WithSettings>{(settings) => <ProvidersPage settings={settings} />}</WithSettings>;
     case "integrations":
       return <IntegrationsContent />;
   }
@@ -120,18 +123,6 @@ function IntegrationsContent() {
   const integrations = useIntegrationsStatus();
   return (
     <>
-      <SettingsSubsection id="integrations.t3-code">
-        <WithSettings>{(settings) => <T3Section settings={settings} status={integrations.data?.t3} />}</WithSettings>
-      </SettingsSubsection>
-      <SettingsSubsection id="integrations.claude-code">
-        <WithSettings>{(settings) => <ClaudeCodeSection settings={settings} />}</WithSettings>
-      </SettingsSubsection>
-      <SettingsSubsection id="integrations.copilot">
-        <WithSettings>{(settings) => <CopilotSection settings={settings} />}</WithSettings>
-      </SettingsSubsection>
-      <SettingsSubsection id="integrations.codex">
-        <WithSettings>{(settings) => <CodexSection settings={settings} />}</WithSettings>
-      </SettingsSubsection>
       <SettingsSubsection id="integrations.github">
         <WithSettings>
           {(settings) => <GithubSection settings={settings} status={integrations.data?.github} />}

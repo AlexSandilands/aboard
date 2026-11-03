@@ -43,6 +43,7 @@ export function applyBoardEvent(board: BoardSnapshot, event: BoardEvent): BoardS
     case "notification.created":
     case "notifications.changed":
     case "suggestions.changed":
+    case "providers.changed":
       return board;
   }
 }

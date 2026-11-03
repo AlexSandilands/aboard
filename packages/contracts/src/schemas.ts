@@ -2,7 +2,6 @@ import { z } from "zod";
 import { AutopilotStatus } from "./autopilot.ts";
 import { KeybindingOverrides } from "./keybindings.ts";
 import { LabelHue } from "./labels.ts";
-import type { AgentHarness } from "./agentSessions.ts";
 import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
 import { AutomationVariables } from "./automationVariables.ts";
 import { BackupSettings } from "./backup.ts";
@@ -10,6 +9,7 @@ import { HeadlessModel } from "./headlessModel.ts";
 import { ModelProfiles } from "./modelProfiles.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
+import { ProviderSettings } from "./providers.ts";
 import { PlanSkillRef, ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
 import { SavedViews } from "./savedViews.ts";
 import { TicketRef, TicketSystem, TicketSystems } from "./ticketSystems.ts";
@@ -648,6 +648,8 @@ export const BoardEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("notifications.changed"), unread: z.number() }),
   /** A suggested change was made, accepted, rejected or went stale; Settings refetches. `open` counts the open ones. */
   z.object({ type: z.literal("suggestions.changed"), open: z.number() }),
+  /** Providers were added, removed, switched or given a new CLI path. Sent whole: the list is short. */
+  z.object({ type: z.literal("providers.changed"), providers: ProviderSettings }),
 ]);
 export type BoardEvent = z.infer<typeof BoardEvent>;
 
@@ -867,12 +869,11 @@ export const AppSettings = z
     reviewMaxRounds: z.number().int().min(1).max(10),
     /** Let the board run a headless reviewer when no agent picks a round up. */
     headlessReviewEnabled: z.boolean(),
-    /** The Claude Code CLI to run; null looks up `claude` on PATH. New Claude Code sessions start it too. */
-    headlessReviewCli: z.string().nullable(),
-    /** The Copilot CLI new Copilot sessions start; null looks up `copilot` on PATH. */
-    copilotCli: z.string().nullable(),
-    /** The Codex CLI headless runs and resumed Codex sessions start; null looks up `codex` on PATH. */
-    codexCli: z.string().nullable(),
+    /**
+     * The providers the user added (Settings → Providers), each with its switch and CLI path. One that isn't here is
+     * offered nowhere but the Add provider dialog.
+     */
+    providers: ProviderSettings,
     /**
      * Whether the hand-off menus offer each target when it can start here; false hides it. Existing sessions still
      * reopen, and agents can still start threads (agentT3Threads).
@@ -912,15 +913,6 @@ export const AppSettings = z
 
 export type AppSettings = z.infer<typeof AppSettings>;
 
-/** The CLI path set in Settings for a harness, or null to look its name up on PATH. */
-export const harnessCliSetting = (
-  settings: Pick<AppSettings, "headlessReviewCli" | "copilotCli" | "codexCli">,
-  harness: AgentHarness,
-): string | null =>
-  ({ "claude-code": settings.headlessReviewCli, codex: settings.codexCli, "copilot-cli": settings.copilotCli })[
-    harness
-  ]?.trim() || null;
-
 export const UpdateSettingsInput = z.object({
   /** Replaces the whole list. */
   ticketSystems: TicketSystems.optional(),
@@ -932,9 +924,8 @@ export const UpdateSettingsInput = z.object({
   planSkill: PlanSkillRef.optional(),
   reviewMaxRounds: z.number().int().min(1).max(10).optional(),
   headlessReviewEnabled: z.boolean().optional(),
-  headlessReviewCli: z.string().trim().nullable().optional(),
-  copilotCli: z.string().trim().nullable().optional(),
-  codexCli: z.string().trim().nullable().optional(),
+  /** Replaces the whole list of added providers. */
+  providers: ProviderSettings.optional(),
   /** Merges into the switches: targets left out keep theirs. */
   handoffMenus: z.partialRecord(HandoffTarget, z.boolean()).optional(),
   headlessReviewBudgetUsd: z.number().positive().max(100).optional(),

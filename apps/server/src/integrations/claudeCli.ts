@@ -266,9 +266,3 @@ export async function executableVersion(exe: string, label?: string): Promise<st
   if (result.code !== 0) throw new Error(result.stderr.trim() || `exited with code ${result.code}`);
   return result.stdout.trim().split(/\r?\n/)[0] ?? "";
 }
-
-/** `claude --version`: the resolved path and the version. Throws when it isn't found or won't run. */
-export async function claudeCliVersion(cli: string | null): Promise<{ path: string; version: string }> {
-  const path = cliPath(cli);
-  return { path, version: await executableVersion(path) };
-}

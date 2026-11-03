@@ -175,8 +175,8 @@ Git commands in the instructions are plain commands, one per step. `dontAsk` den
 substitutions, and an early version that used `git diff $(git merge-base …)` reviewed the files without
 the diff.
 
-Settings → Integrations → Claude Code shows the result of running `claude --version` with the configured path
-(empty means `claude` on PATH), next to **Re-check** ([agent sessions](agent-sessions.md#integration-status)).
+Settings → Providers → Claude Code shows the result of running `claude --version` with the configured path
+(empty means `claude` on PATH), next to **Re-check** ([agent sessions](agent-sessions.md#providers-and-detection)).
 
 ## Decisions
 

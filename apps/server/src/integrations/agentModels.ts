@@ -7,6 +7,7 @@ import {
   type AgentModelsStatus,
   type AppSettings,
   CliEffort,
+  harnessCliSetting,
 } from "@repo/contracts";
 import type { Services } from "../services/types.ts";
 import { claudeOutput, executableVersion, resolveExecutable, runClaude } from "./claudeCli.ts";
@@ -122,6 +123,8 @@ export interface AgentModelProbes {
 export interface AgentModelsService {
   /** Each harness's models, reused for ten minutes unless `refresh` is set; a refresh joins a scan still running. */
   status(refresh?: boolean): Promise<AgentModels>;
+  /** One harness's models, with the same cache. */
+  harness(harness: AgentHarness, refresh?: boolean): Promise<AgentModelsStatus>;
 }
 
 export function createAgentModels(deps: {
@@ -187,7 +190,7 @@ export function createAgentModels(deps: {
   const cache = new Map<AgentHarness, Entry>();
 
   const statusOf = (harness: AgentHarness, settings: AppSettings, refresh: boolean): Promise<AgentModelsStatus> => {
-    const configured = harness === "claude-code" ? settings.headlessReviewCli : settings.copilotCli;
+    const configured = harnessCliSetting(settings, harness);
     const key = JSON.stringify([harness, probes.resolve(configured ?? AGENT_HARNESSES[harness].cli)]);
     const hit = cache.get(harness);
     if (hit?.key === key && (hit.pending || (!refresh && hit.ok && now() - hit.at < CACHE_MS))) return hit.result;
@@ -211,5 +214,6 @@ export function createAgentModels(deps: {
       );
       return { harnesses };
     },
+    harness: (harness, refresh = false) => statusOf(harness, deps.services().settings.get(), refresh),
   };
 }

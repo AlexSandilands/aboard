@@ -373,14 +373,14 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Values custom automations read as {{vars.name}}, an environment variable or vars on stdin. An automation that needs one doesn't run in a project where it has no value. Not for secrets.",
     ["vars", "parameters", "environment variable", "stdin", "{{vars"],
   ),
-  // Integrations › T3 Code
+  // Providers › T3 Code
   draft(
-    "integrations.t3-code.connection",
+    "providers.t3-code.status",
     "T3 Code connection",
     "Whether the board can reach the T3 Code app on this machine.",
     ["status", "detected", "running"],
   ),
-  draft("integrations.t3-code.models", "T3 Code models per tier", MODELS_PER_TIER, [
+  draft("providers.t3-code.models", "T3 Code models per tier", MODELS_PER_TIER, [
     "model tier",
     "light",
     "standard",
@@ -389,55 +389,55 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "effort",
   ]),
   draft(
-    "integrations.t3-code.open-links-in",
+    "providers.t3-code.open-links-in",
     "Open thread links in",
     "Where “Open in T3 Code” goes. The other target stays in the link's menu.",
     ["desktop app", "browser", "deep link"],
   ),
   draft(
-    "integrations.t3-code.pairing",
-    "T3 connection",
+    "providers.t3-code.pairing",
+    "T3 Code pairing",
     "Optional. Live thread status and starting threads from a task.",
     ["pairing code", "token", "connect", "credentials", "link"],
   ),
   draft(
-    "integrations.t3-code.agent-threads",
+    "providers.t3-code.agent-threads",
     "Let agents start threads",
     "An agent orchestrating an epic may start its tasks in new T3 threads and message them in your name.",
     ["epic", "orchestrator", "subagent", "worktree", "permission"],
   ),
   draft(
-    "integrations.t3-code.handoff-menus",
+    "providers.t3-code.handoff-menus",
     "Show T3 Code in hand-off menus",
     "Offer “New T3 Code thread…” on tasks and lanes. Off hides it from the board's menus.",
     ["hide", "show", "menu", "hand off", "handoff", "new thread", "new session", "disable", "start"],
   ),
-  // Integrations › Claude Code
-  draft("integrations.claude-code.mcp", "Claude Code MCP server", MCP, [
+  // Providers › Claude Code
+  draft("providers.claude-code.mcp", "Claude Code MCP server", MCP, [
     "add mcp",
     "claude mcp add",
     "register",
     "command",
   ]),
   draft(
-    "integrations.claude-code.skill",
+    "providers.claude-code.skill",
     "Claude Code board skills",
     `${BOARD_SKILL} In ~/.claude/skills.`,
     BOARD_SKILL_KEYWORDS,
   ),
   draft(
-    "integrations.claude-code.cli-path",
-    "Claude Code CLI",
-    "What the board runs headless for the board reviewer and issue import, and opens for a new Claude Code session. Leave empty to use claude from your PATH.",
+    "providers.claude-code.cli-path",
+    "Claude Code CLI path",
+    "What the board runs headless for the board reviewer, issue import and the settings Ask, and opens for a new Claude Code session. Leave empty to use claude from your PATH.",
     ["claude path", "executable", "binary", "headless", "session"],
   ),
   draft(
-    "integrations.claude-code.handoff-menus",
+    "providers.claude-code.handoff-menus",
     "Show Claude Code in hand-off menus",
     "Offer “New Claude Code session…” on tasks and lanes. Off hides it from the board's menus.",
     ["hide", "show", "menu", "hand off", "handoff", "new thread", "new session", "disable", "start"],
   ),
-  draft("integrations.claude-code.models", "Claude Code models per tier", MODELS_PER_TIER, [
+  draft("providers.claude-code.models", "Claude Code models per tier", MODELS_PER_TIER, [
     "model tier",
     "light",
     "standard",
@@ -446,36 +446,36 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "session model",
     "new session",
   ]),
-  // Integrations › GitHub Copilot, Codex
-  draft("integrations.copilot.cli", "Copilot CLI", `${MCP} In ~/.copilot/mcp-config.json.`, [
+  // Providers › GitHub Copilot, Codex
+  draft("providers.copilot-cli.mcp", "Copilot CLI MCP server", `${MCP} In ~/.copilot/mcp-config.json.`, [
     "add mcp",
     "github copilot",
     "register",
     "mcp-config",
   ]),
   draft(
-    "integrations.copilot.vscode",
+    "providers.copilot-cli.vscode",
     "Copilot in VS Code",
     "Add the MCP server to your VS Code user profile, or to .vscode/mcp.json.",
     ["github copilot", "mcp.json", "editor", "servers"],
   ),
-  draft("integrations.copilot.skill", "Copilot board skills", `${BOARD_SKILL} In ~/.copilot/skills.`, [
+  draft("providers.copilot-cli.skill", "Copilot board skills", `${BOARD_SKILL} In ~/.copilot/skills.`, [
     "github copilot",
     ...BOARD_SKILL_KEYWORDS,
   ]),
   draft(
-    "integrations.copilot.cli-path",
+    "providers.copilot-cli.cli-path",
     "Copilot CLI path",
     "What the board opens for a new Copilot CLI session. Leave empty to use copilot from your PATH.",
     ["github copilot", "executable", "binary", "session"],
   ),
   draft(
-    "integrations.copilot.handoff-menus",
+    "providers.copilot-cli.handoff-menus",
     "Show Copilot CLI in hand-off menus",
     "Offer “New Copilot CLI session…” on tasks and lanes. Off hides it from the board's menus.",
     ["github copilot", "hide", "show", "menu", "hand off", "handoff", "new thread", "new session", "disable", "start"],
   ),
-  draft("integrations.copilot.models", "Copilot models per tier", MODELS_PER_TIER, [
+  draft("providers.copilot-cli.models", "Copilot models per tier", MODELS_PER_TIER, [
     "github copilot",
     "model tier",
     "light",
@@ -485,19 +485,28 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "session model",
     "new session",
   ]),
-  draft("integrations.codex.mcp", "Codex MCP server", MCP, ["openai", "add mcp", "register", "command"]),
+  draft("providers.codex.mcp", "Codex MCP server", MCP, ["openai", "add mcp", "register", "command"]),
+  draft("providers.codex.models", "Codex models per tier", MODELS_PER_TIER, [
+    "openai",
+    "model tier",
+    "light",
+    "standard",
+    "deep",
+    "--model",
+    "headless",
+  ]),
   draft(
-    "integrations.codex.cli-path",
+    "providers.codex.cli-path",
     "Codex CLI path",
     "What headless Autopilot runs start for a model that runs on Codex. Leave empty to use codex from your PATH.",
     ["openai", "executable", "binary", "headless", "autopilot"],
   ),
-  draft("integrations.codex.skill", "Codex board skills", `${BOARD_SKILL} In ~/.codex/skills.`, [
+  draft("providers.codex.skill", "Codex board skills", `${BOARD_SKILL} In ~/.codex/skills.`, [
     "openai",
     ...BOARD_SKILL_KEYWORDS,
   ]),
   draft(
-    "integrations.codex.snippet",
+    "providers.codex.snippet",
     "AGENTS.md snippet",
     "Copy the board's instructions for your AGENTS.md, for agents that don't read skills. Says when it changed since you copied it.",
     ["agents.md", "instructions", "copy", "other agents", "workflow"],

@@ -1240,8 +1240,8 @@ the Copilot CLI when the run's model says so ([Headless drivers](#headless-drive
    also block `gh pr merge` and `gh api …merge…`. They match the command as written, so they are a guard rail,
    not a sandbox; the prompt states the same rules.
 5. The cost (`total_cost_usd`) is recorded even when the run stopped early (budget, turn limit). An early stop or
-   a timeout fails the run. The CLI is the one set for the board's reviewer (`headlessReviewCli`); Codex's is
-   `codexCli` and Copilot's `copilotCli` (Settings → Integrations).
+   a timeout fails the run. The CLI is each provider's path (`harnessCliSetting`, Settings → Providers), else
+   its name on PATH.
 
 #### Headless drivers
 

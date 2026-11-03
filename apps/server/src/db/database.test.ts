@@ -201,4 +201,75 @@ describe("migrations", () => {
       unused.close();
     });
   });
+  describe("providers (040)", () => {
+    const before = (setup: string): DatabaseSync => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const path = join(dir, "board.db");
+      const old = openDatabase(path, { migrateTo: "039_review_model.sql" });
+      old.exec(`
+        INSERT INTO projects (id, title, position, created_at, updated_at) VALUES ('p', 'P', 'a0', '', '');
+        INSERT INTO tasks (id, number, project_id, title, status, position, created_by, created_at, updated_at, status_changed_at)
+          VALUES ('t', 1, 'p', 'T', 'backlog', 'a0', 'user', '', '', '');
+        ${setup}
+      `);
+      old.close();
+      return openDatabase(path);
+    };
+    const setting = (db: DatabaseSync, key: string): unknown => {
+      const row = db.prepare("SELECT value_json FROM settings WHERE key = ?").get(key) as
+        | { value_json: string }
+        | undefined;
+      return row ? JSON.parse(row.value_json) : undefined;
+    };
+
+    it("adds nothing to a new install, and leaves it no detection to run", () => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const db = openDatabase(join(dir, "board.db"));
+      expect(setting(db, "providers")).toEqual([]);
+      expect(setting(db, "providersDetectSeed")).toBeUndefined();
+      db.close();
+    });
+
+    it("adds nothing for an install that set nothing, but leaves detection to look", () => {
+      const db = before("");
+      expect(setting(db, "providers")).toEqual([]);
+      expect(setting(db, "providersDetectSeed")).toBe(true);
+      db.close();
+    });
+
+    it("adds Claude Code alone with its CLI path when that is all that was used", () => {
+      const db = before(
+        `INSERT INTO settings (key, value_json) VALUES ('headlessReviewCli', '"/opt/claude"'), ('codexCli', 'null');`,
+      );
+      expect(setting(db, "providers")).toEqual([{ id: "claude-code", enabled: true, cliPath: "/opt/claude" }]);
+      expect(setting(db, "headlessReviewCli")).toBeUndefined();
+      expect(setting(db, "codexCli")).toBeUndefined();
+      db.close();
+    });
+
+    it("adds all four from paths, the token, models and linked sessions", () => {
+      const tiers = JSON.stringify({
+        light: { description: null, t3: { selection: { instanceId: "codex", model: "gpt-5" }, label: "GPT-5" } },
+        standard: { description: null, t3: null, cli: { "copilot-cli": "gpt-5.4" } },
+        deep: { description: null, t3: null },
+      });
+      const profiles = JSON.stringify([
+        { id: "fast", name: "Fast", labels: [], description: null, t3: null, headless: "codex" },
+      ]);
+      const db = before(`
+        INSERT INTO settings (key, value_json) VALUES
+          ('copilotCli', '"  /opt/copilot "'), ('t3Token', '"secret"'), ('modelTiers', '${tiers}'), ('modelProfiles', '${profiles}');
+        INSERT INTO task_links (id, task_id, kind, url, ref_json, created_at)
+          VALUES ('s', 't', 'agent_session', 'session://x', '{"harness":"claude-code","sessionId":"x","cwd":"/w"}', '');
+      `);
+      expect(setting(db, "providers")).toEqual([
+        { id: "t3-code", enabled: true, cliPath: null },
+        { id: "claude-code", enabled: true, cliPath: null },
+        { id: "codex", enabled: true, cliPath: null },
+        { id: "copilot-cli", enabled: true, cliPath: "/opt/copilot" },
+      ]);
+      expect(setting(db, "copilotCli")).toBeUndefined();
+      db.close();
+    });
+  });
 });

@@ -1,4 +1,4 @@
-import type { AgentModels } from "@repo/contracts";
+import type { AgentModels, ProviderSetting } from "@repo/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import {
@@ -133,7 +133,7 @@ describe("parseCopilotModels", () => {
 const host = (): TerminalHost => ({ platform: "linux", env: {}, readFile: () => null, which: () => null });
 
 function service(probes: Partial<AgentModelProbes>, opts: { now?: () => number } = {}) {
-  const settings = { headlessReviewCli: null as string | null, copilotCli: null as string | null };
+  const settings = { providers: [] as ProviderSetting[] };
   const svc = createAgentModels({
     services: () => ({ settings: { get: () => settings } }) as never,
     host,
@@ -184,7 +184,7 @@ describe("agent models", () => {
       cliVersion: "2.0.0",
       error: "Claude Code didn't finish within 45 seconds",
     });
-    settings.copilotCli = "/opt/copilot";
+    settings.providers = [{ id: "copilot-cli", enabled: true, cliPath: "/opt/copilot" }];
     expect(of(await svc.status(), "copilot-cli").error).toBe("Not found at /opt/copilot");
   });
 
@@ -205,7 +205,7 @@ describe("agent models", () => {
     await svc.status(true);
     expect(claudeInit).toHaveBeenCalledTimes(3);
     expect(copilotHelp).toHaveBeenCalledTimes(3);
-    settings.headlessReviewCli = "/opt/claude";
+    settings.providers = [{ id: "claude-code", enabled: true, cliPath: "/opt/claude" }];
     await svc.status();
     expect(claudeInit).toHaveBeenCalledTimes(4);
     expect(copilotHelp).toHaveBeenCalledTimes(3);

@@ -369,10 +369,17 @@ and end in one summary toast ("Moved 2 tasks to Review, 1 skipped (no plan)"). T
 
 ### The settings page
 
-Settings is a route, `/settings/<group>` with group `board`, `tasks`, `models`, `autopilot`, `integrations` or `project`
-(`/settings` and unknown groups redirect to `board`). `models` is the Model tiers page: one row per tier
-(`models.tiers.<tier>`) with its description and each set-up provider's model; the integration sections link to it
-with a **Models per tier** row (`integrations.<section>.models`). The editors are sub-routes: `tasks/templates/<id>`,
+Settings is a route, `/settings/<group>` with group `board`, `keybindings`, `tasks`, `providers`, `models`,
+`autopilot`, `integrations` or `project` (`/settings` and unknown groups redirect to `board`). `providers` is the
+Providers page (`ProvidersPage.tsx`, after T3 Code's provider settings): one card with the added providers on the left
+(a dot, the version, an on/off switch and **Add provider**) and the selected one's editor on the right
+(`ProviderEditors.tsx`: Status, Connection, MCP & skill, Hand-off menu, Models), side by side from a 48rem container
+and stacked below it. The selected provider is `?provider=`; the list's sidebar entries are only the providers added
+(`visibleSections`), and a `providers.<id>.<row>` target selects `<id>`. `integrations` keeps GitHub, Ticket systems
+and Terminal; an old `integrations.<provider>…` target or URL hash is read as `providers.<provider>…`
+(`redirectSettingsTarget`, applied by `parseSettingsTarget` and the route's `beforeLoad`). `models` is the Model tiers
+page: one row per tier (`models.tiers.<tier>`) with its description and each added provider's model; each provider's
+editor links to it with a **Models per tier** row (`providers.<provider>.models`). The editors are sub-routes: `tasks/templates/<id>`,
 `autopilot/custom/<id>` and `project/recurring/<id>`, with `new` for one not saved yet. The project page and the
 rule editor take `?project=`; without it the page shows the project the board was scoped to, else the first.
 
@@ -383,7 +390,7 @@ rule editor take `?project=`; without it the page shows the project the board wa
   page and a page for the board; Back and Esc restore the board's search as it was (`boardReturn`).
 - **Ids.** `SETTINGS_GROUPS` (`settingsNav.logic.ts`) lists the groups and their sections. A section's id is
   `<group>.<section>` (`tasks.review`); the groups and rows inside carry `<group>.<section>.<row>` ids
-  (`integrations.claude-code.cli-path`). The ids are element ids and URL hashes, and are stable: settings search
+  (`providers.claude-code.cli-path`). The ids are element ids and URL hashes, and are stable: settings search
   targets them.
 - **Rows.** The column is `max-w-4xl` (as T3's readable page width). A `SettingsRow` (`settingsLayout.tsx`) is a
   title, at most one short line of description (or none when the title says it), and the control on the right.
@@ -423,16 +430,17 @@ rule editor take `?project=`; without it the page shows the project the board wa
   question to Claude Code. It starts highlighted when `looksLikeQuestion` says the text is one (a `?`, or a question
   word and at least four words), else the best result is. `POST /api/settings/ask` (`integrations/settingsAsk.ts`)
   takes the question and the index as `askEntries` sends it, since the web app owns the index. It runs `claude -p`
-  through the shared headless runner (`agentArgs` with `access: "none"`, the CLI from `headlessReviewCli`) on
+  through the shared headless runner (`agentArgs` with `access: "none"`, the Claude Code provider's CLI path, `harnessCliSetting`) on
   `haiku`, with a $0.05 budget and a 60 s timeout, in an empty temp folder, and asks for `{ settingId | null,
   answer }`. The question and the index are fenced as data with a random fence. A `settingId` that isn't one of the
   request's ids becomes null (the answer stays). Only one question runs at a time (the page discards an edited pending question but can't stop its run), so a second
   one meanwhile gets "Another question is still being answered". A failed run, a timeout or an answer of the wrong shape comes back
-  as `{ ok: false, error }` with status 200, like the CLI test, so the row can show the message. The row holds the
+  as `{ ok: false, error }` with status 200, so the row can show the message. The row holds the
   whole exchange: thinking, then the answer with **Go there** (the same jump and highlight as a result), or the
-  error with "Click to try again". `GET /api/settings/ask` says whether the CLI resolves (not whether it is signed
-  in; that shows as the run's error); when it doesn't, the row is disabled with the reason and **Set up Claude
-  Code**, which opens `integrations.claude-code.cli-path`. Copilot as a second engine isn't built.
+  error with "Click to try again". `askUnavailableReason` says whether it can run, from the
+  providers list and `GET /api/providers` (Claude Code added, on, and its CLI found; not whether it is signed in, which
+  shows as the run's error); when it can't, the row is disabled with the reason and **Set up Claude Code**, which
+  opens `providers.claude-code.cli-path`. Copilot as a second engine isn't built.
 - **Scroll-spy.** `SettingsScroller` reads the tops of the `SettingsSubsection` anchors on scroll and resize, and
   `activeSectionId` picks the last whose top has passed a line near the top (the last one when scrolled to the
   bottom). The list highlights that section.
@@ -557,4 +565,5 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/settings/SettingsAskRow.tsx`, `apps/server/src/integrations/settingsAsk.ts` | The settings Ask: its row in the results, and the endpoint that asks Claude Code (server tested) |
 | `apps/web/src/components/settings/settingsNavigation.ts` | `useOpenSettings`, `useLeaveSettings`                            |
 | `apps/web/src/components/settings/pages/`              | The group pages, the project page and the editor sub-pages      |
-| `apps/web/src/components/settings/integrations.logic.ts` | The integrations' status dots (tested)                          |
+| `apps/web/src/components/settings/integrations.logic.ts` | GitHub's and the terminal's status dots (tested)                |
+| `apps/web/src/components/settings/ProvidersPage.tsx`, `ProviderEditors.tsx`, `providers.logic.ts` | Settings → Providers: the list, Add provider dialog, editors, dots and selection (logic tested) |

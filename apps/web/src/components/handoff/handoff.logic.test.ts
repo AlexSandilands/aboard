@@ -134,7 +134,12 @@ describe("visibility", () => {
   const task = { status: "backlog" as const, archivedAt: null };
   const project = { t3ProjectId: null, workspaceRoot: ROOT };
   const t3 = { detected: true };
-  const settings = { t3TokenSet: true };
+  const added = (["t3-code", "claude-code", "copilot-cli"] as const).map((id) => ({
+    id,
+    enabled: true,
+    cliPath: null,
+  }));
+  const settings = { t3TokenSet: true, providers: added };
 
   it("hides hand-off actions on finished or archived tasks", () => {
     expect(showHandoffActions(task)).toBe(true);
@@ -162,7 +167,7 @@ describe("visibility", () => {
   it("offers a new T3 Code thread whenever T3 can take it, even with threads linked", () => {
     expect(canStartT3Thread(task, project, t3, settings)).toBe(true);
     expect(canStartT3Thread(task, project, { detected: false }, settings)).toBe(false);
-    expect(canStartT3Thread(task, project, t3, { t3TokenSet: false })).toBe(false);
+    expect(canStartT3Thread(task, project, t3, { ...settings, t3TokenSet: false })).toBe(false);
     expect(canStartT3Thread(task, { t3ProjectId: null, workspaceRoot: null }, t3, settings)).toBe(false);
     expect(canStartT3Thread(task, { t3ProjectId: "t3-p1", workspaceRoot: null }, t3, settings)).toBe(true);
   });
@@ -181,11 +186,24 @@ describe("visibility", () => {
       { harness: "claude-code" as const, available: true, path: null },
       { harness: "copilot-cli" as const, available: true, path: null },
     ];
-    expect(handoffClis(clis, { handoffMenus: { ...hidden.handoffMenus, "copilot-cli": false } })).toEqual([
+    expect(handoffClis(clis, { ...hidden, handoffMenus: { ...hidden.handoffMenus, "copilot-cli": false } })).toEqual([
       "claude-code",
     ]);
     expect(handoffClis(clis, hidden)).toEqual(["claude-code", "copilot-cli"]);
     expect(handoffClis([{ harness: "claude-code", available: false, path: null }], undefined)).toEqual([]);
+  });
+
+  it("leaves out a provider that isn't added or is switched off", () => {
+    const clis = [
+      { harness: "claude-code" as const, available: true, path: null },
+      { harness: "copilot-cli" as const, available: true, path: null },
+    ];
+    const onlyClaude = { ...settings, providers: [{ id: "claude-code" as const, enabled: true, cliPath: null }] };
+    expect(handoffClis(clis, onlyClaude)).toEqual(["claude-code"]);
+    expect(canStartT3Thread(task, project, t3, onlyClaude)).toBe(false);
+    const off = { ...settings, providers: added.map((p) => ({ ...p, enabled: p.id !== "t3-code" })) };
+    expect(canStartProjectT3Thread(project, t3, off)).toBe(false);
+    expect(handoffClis(clis, off)).toEqual(["claude-code", "copilot-cli"]);
   });
 });
 

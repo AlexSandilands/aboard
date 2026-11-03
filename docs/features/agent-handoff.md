@@ -162,7 +162,7 @@ The board needs a T3 session token with two scopes:
 t3 auth session issue --scope orchestration:read --scope orchestration:operate --token-only
 ```
 
-Paste it in Settings → Integrations → T3 Code. `orchestration:read` powers live thread status and the launch dialog's
+Paste it in Settings → Providers → T3 Code. `orchestration:read` powers live thread status and the launch dialog's
 options. `orchestration:operate` allows starting threads. The token is stored in the board's local
 database and never sent to the browser.
 
@@ -177,14 +177,16 @@ header. It only shows on open work: not on Done or archived tasks.
 It offers "Copy prompt" and "Copy planning prompt", with the one that suits the task marked _Suggested_. An epic
 offers only "Copy prompt to start its tasks" (its orchestrating prompt), and its T3 dialog has no
 **Plan with me**. **New Claude Code session…** and **New Copilot CLI session…** follow T3's entry on any task but
-an epic, when `GET /api/agent-clis` finds the CLI ([agent sessions](agent-sessions.md#starting-a-session)).
+an epic, when the provider is added and on in Settings → Providers and `GET /api/providers` finds its CLI
+([agent sessions](agent-sessions.md#starting-a-session)).
 **New T3 Code thread…** is added at the top when all of these hold (`canStartT3Thread`):
 
+- T3 Code is added and on in Settings → Providers;
 - T3 Code is running (auto-detected from `~/.t3/userdata/server-runtime.json`);
 - a token is set;
 - the project has a T3 project id or a workspace folder T3 could know.
 
-Each of these entries also has a **Show in hand-off menus** switch in Settings → Integrations (T3 Code, Claude Code,
+Each of these entries also has a **Show in hand-off menus** switch in Settings → Providers (T3 Code, Claude Code,
 Copilot), stored as `handoffMenus` (each switch merges in, like notification kinds). Turning one off takes it out of the hand-off, Plan tasks, Suggest epics
 and Fix PR menus (`canStartProjectT3Thread`, `handoffClis`), for someone who has the tool but doesn't want it offered.
 Sessions and threads already linked still open, and agents can still start threads (`agentT3Threads`).

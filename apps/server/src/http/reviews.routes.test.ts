@@ -60,12 +60,6 @@ describe("review REST routes", () => {
     expect(((await res.json()) as { prompt: string }).prompt).toContain("found blocking or major issues");
   });
 
-  it("reports a missing CLI instead of failing the request", async () => {
-    const h = setup();
-    const res = await h.request("/api/review/test-cli", { method: "POST", json: { cli: "/nonexistent/claude" } });
-    expect(await res.json()).toEqual({ ok: false, error: "Claude Code CLI not found at /nonexistent/claude" });
-  });
-
   it("lists skills without reading the real home folder", async () => {
     const h = setup();
     const res = await h.request(`/api/skills?projectId=${h.project.id}`);

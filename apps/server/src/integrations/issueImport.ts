@@ -1,4 +1,10 @@
-import { parseImportSource, resolveHeadlessEffort, resolveHeadlessModel, type TaskLink } from "@repo/contracts";
+import {
+  harnessCliSetting,
+  parseImportSource,
+  resolveHeadlessEffort,
+  resolveHeadlessModel,
+  type TaskLink,
+} from "@repo/contracts";
 import { tmpdir } from "node:os";
 import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ImportResult, Services } from "../services/types.ts";
@@ -87,7 +93,7 @@ export function createIssueImporter(deps: {
     if (!settings.issueImportEnabled) return raw();
     try {
       const outcome = await runImport({
-        cli: settings.headlessReviewCli,
+        cli: harnessCliSetting(settings, "claude-code"),
         cwd: tmpdir(),
         model: resolveHeadlessModel(settings.modelTiers, settings.issueImportModel),
         effort: resolveHeadlessEffort(settings.modelTiers, settings.issueImportModel),
@@ -152,9 +158,9 @@ export function createIssueImporter(deps: {
     if (system.importTools.length === 0) {
       throw new Error(`Add import tools to ${system.name} in Settings → Integrations → Ticket systems`);
     }
-    const servers = await connectedServers(settings.headlessReviewCli);
+    const servers = await connectedServers(harnessCliSetting(settings, "claude-code"));
     const outcome = await runImport({
-      cli: settings.headlessReviewCli,
+      cli: harnessCliSetting(settings, "claude-code"),
       // Not the project's folder: its .mcp.json and settings are the repo's, and a run in it reads its CLAUDE.md.
       cwd: tmpdir(),
       model: resolveHeadlessModel(settings.modelTiers, settings.issueImportModel),

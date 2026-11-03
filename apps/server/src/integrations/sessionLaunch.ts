@@ -3,7 +3,7 @@ import { statSync } from "node:fs";
 import { join } from "node:path";
 import {
   AGENT_HARNESSES,
-  AgentHarness,
+  type AgentHarness,
   BRAND,
   harnessCliSetting,
   LAUNCHABLE_HARNESSES,
@@ -59,8 +59,6 @@ import type { Logger } from "./util.ts";
 const SESSION_BRANCH_PREFIX = `${BRAND.id}/`;
 
 export interface SessionLaunchIntegration {
-  /** Whether each harness's CLI can be started here. */
-  clis(): AgentCliStatus[];
   /** What the launch dialog offers for a task: CLIs, branches, the tier's models. */
   options(taskId: string): Promise<SessionLaunchOptions>;
   /**
@@ -167,12 +165,6 @@ export function createSessionLaunch(deps: {
   const cliStatus = (settings: AppSettings, harness: AgentHarness, h: TerminalHost): AgentCliStatus => {
     const path = resolveExecutable(configuredCli(settings, harness), h.env, h.platform);
     return { harness, available: path !== null, path };
-  };
-
-  const clis = (): AgentCliStatus[] => {
-    const settings = deps.services().settings.get();
-    const h = deps.host();
-    return AgentHarness.options.map((harness) => cliStatus(settings, harness, h));
   };
 
   const terminal = (settings: AppSettings, h: TerminalHost): ResolvedTerminal | { error: string } => {
@@ -342,8 +334,6 @@ export function createSessionLaunch(deps: {
   };
 
   return {
-    clis,
-
     async options(taskId) {
       const { task, root } = subject(taskId);
       const settings = deps.services().settings.get();

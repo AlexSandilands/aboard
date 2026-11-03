@@ -2,19 +2,30 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   AGENT_HARNESSES,
-  type AgentHarness,
-  type AgentIntegrationStatus,
-  type AgentIntegrations,
+  AgentHarness,
+  type AgentModelsStatus,
   type AppSettings,
+  harnessCliSetting,
+  PROVIDERS,
+  ProviderId,
+  type ProviderCliStatus,
+  type ProviderMcpStatus,
+  type ProviderSetting,
+  type ProviderStatus,
+  type ProvidersStatus,
+  providerActive,
+  type T3IntegrationStatus,
+  t3ProviderStatus,
 } from "@repo/contracts";
 import type { Services } from "../services/types.ts";
 import { claudeOutput, executableVersion, resolveExecutable } from "./claudeCli.ts";
 import { messageOf } from "./github.ts";
 import type { TerminalHost } from "./terminal.ts";
 
-// Whether Claude Code, Codex and Copilot CLI run here and have the board's MCP server registered, for Settings →
-// Integrations. The MCP entry is found by its URL, not its name: it is the user's to name. Config files are read for
-// server names and URLs only; headers and tokens in them are never looked at. See docs/features/agent-sessions.md.
+// The one place the board detects its providers, for Settings → Providers and everything that offers one: whether
+// each CLI runs here, whether it has the board's MCP server registered, T3 Code's status, and what the models scan
+// found. The MCP entry is found by its URL, not its name: it is the user's to name. Config files are read for server
+// names and URLs only; headers and tokens in them are never looked at. See docs/features/agent-sessions.md.
 
 /** How long an answer is reused. `claude mcp list` health-checks every server the user has, which can take a while. */
 const CACHE_MS = 60_000;
@@ -173,7 +184,7 @@ const claudeConfigMatch = (
   return local ? { entry: local, scope: "local" } : null;
 };
 
-const NOT_REGISTERED = (detail: string): AgentIntegrationStatus["mcp"] => ({
+const NOT_REGISTERED = (detail: string): ProviderMcpStatus => ({
   registered: false,
   connected: null,
   scope: null,
@@ -182,7 +193,7 @@ const NOT_REGISTERED = (detail: string): AgentIntegrationStatus["mcp"] => ({
 });
 
 /** What the checks run: replaced in tests so no CLI is started and no file is read. */
-export interface AgentIntegrationProbes {
+export interface ProviderProbes {
   /** The CLI's executable on this machine, or null. */
   resolve: (command: string) => string | null;
   version: (exe: string, label: string) => Promise<string>;
@@ -199,22 +210,36 @@ const readText = (path: string): string | null => {
   }
 };
 
-export interface AgentIntegrationsService {
-  /** Each harness's CLI and MCP state, reused for a minute unless `refresh` is set. */
-  status(refresh?: boolean): Promise<AgentIntegrations>;
+/** Every check, or only the CLIs (resolved, with their version) and T3 Code: what the board's menus need, quickly. */
+export type ProviderParts = "all" | "cli";
+
+export interface ProvidersService {
+  /**
+   * Every provider as detected here; the checks are reused for a minute unless `refresh` is set. `parts: "cli"` leaves
+   * out the MCP checks and model scans, which can take many seconds.
+   */
+  status(refresh?: boolean, parts?: ProviderParts): Promise<ProvidersStatus>;
+  /**
+   * On an install upgraded to opt-in providers, adds those detection finds in use (the MCP server registered, or a
+   * hand-off entry the menus showed), once. Resolves to the ids it added.
+   */
+  seedFromDetection(): Promise<ProviderId[]>;
 }
 
-export function createAgentIntegrations(deps: {
+export function createProviders(deps: {
   services: () => Pick<Services, "settings">;
   /** The board's MCP endpoint as agents reach it. */
   mcpUrl: () => string;
   host: () => TerminalHost;
   userHome: string;
-  probes?: Partial<AgentIntegrationProbes>;
+  t3Status: () => T3IntegrationStatus;
+  /** A harness's models scan (agentModels.ts), which keeps its own longer cache. */
+  models?: (harness: AgentHarness, refresh: boolean) => Promise<AgentModelsStatus>;
+  probes?: Partial<ProviderProbes>;
   now?: () => number;
-}): AgentIntegrationsService {
+}): ProvidersService {
   const now = deps.now ?? Date.now;
-  const probes: AgentIntegrationProbes = {
+  const probes: ProviderProbes = {
     resolve: (command) => {
       const h = deps.host();
       return resolveExecutable(command, h.env, h.platform);
@@ -225,7 +250,7 @@ export function createAgentIntegrations(deps: {
     ...deps.probes,
   };
 
-  const cliOf = async (harness: AgentHarness, configured: string | null) => {
+  const cliOf = async (harness: AgentHarness, configured: string | null): Promise<ProviderCliStatus> => {
     const command = configured ?? AGENT_HARNESSES[harness].cli;
     const path = probes.resolve(command);
     const base = { found: false, path, version: null, error: null };
@@ -242,7 +267,7 @@ export function createAgentIntegrations(deps: {
     }
   };
 
-  const claudeMcp = async (exe: string | null, boardUrl: string): Promise<AgentIntegrationStatus["mcp"]> => {
+  const claudeMcp = async (exe: string | null, boardUrl: string): Promise<ProviderMcpStatus> => {
     // The CLI knows every scope and whether the server answers. When it can't be asked (missing, or too slow with a
     // server that hangs), the user-scope config file still says whether the entry exists.
     let askError: string | null = exe ? null : "Claude Code isn't available to ask";
@@ -290,7 +315,7 @@ export function createAgentIntegrations(deps: {
       : NOT_REGISTERED(`${askError}; not in the user config either`);
   };
 
-  const copilotMcp = (boardUrl: string): AgentIntegrationStatus["mcp"] => {
+  const copilotMcp = (boardUrl: string): ProviderMcpStatus => {
     const home = deps.host().env.COPILOT_HOME ?? join(deps.userHome, ".copilot");
     const path = join(home, "mcp-config.json");
     if (probes.readFile(path) === null) return NOT_REGISTERED("No MCP config for Copilot CLI yet");
@@ -306,7 +331,7 @@ export function createAgentIntegrations(deps: {
       : NOT_REGISTERED("No MCP server in Copilot CLI's config points at the board");
   };
 
-  const codexMcp = (boardUrl: string): AgentIntegrationStatus["mcp"] => {
+  const codexMcp = (boardUrl: string): ProviderMcpStatus => {
     const home = deps.host().env.CODEX_HOME ?? join(deps.userHome, ".codex");
     const text = probes.readFile(join(home, "config.toml"));
     if (text === null) return NOT_REGISTERED("No Codex config yet");
@@ -316,52 +341,133 @@ export function createAgentIntegrations(deps: {
       : NOT_REGISTERED("No MCP server in Codex's config.toml points at the board");
   };
 
-  const compute = async (settings: AppSettings, boardUrl: string): Promise<AgentIntegrations> => {
-    const [claudeCli, codexCli, copilotCli] = await Promise.all([
-      cliOf("claude-code", settings.headlessReviewCli),
-      cliOf("codex", settings.codexCli),
-      cliOf("copilot-cli", settings.copilotCli),
-    ]);
-    return {
-      mcpUrl: boardUrl,
-      harnesses: [
-        {
-          harness: "claude-code",
-          cli: claudeCli,
-          mcp: await claudeMcp(claudeCli.found ? claudeCli.path : null, boardUrl),
-        },
-        { harness: "codex", cli: codexCli, mcp: codexMcp(boardUrl) },
-        { harness: "copilot-cli", cli: copilotCli, mcp: copilotMcp(boardUrl) },
-      ],
-    };
+  const modelsOf = async (
+    settings: AppSettings,
+    harness: AgentHarness,
+    refresh: boolean,
+  ): Promise<ProviderStatus["models"]> => {
+    // Scanning starts the CLI (Claude Code runs its hooks first), so only for providers the user added.
+    if (!deps.models || !PROVIDERS[harness].scansModels || !providerActive(settings, harness)) return null;
+    try {
+      const scan = await deps.models(harness, refresh);
+      return { count: scan.models.length, scannedAt: scan.scannedAt, error: scan.error };
+    } catch (error) {
+      return { count: 0, scannedAt: null, error: messageOf(error).slice(0, 200) };
+    }
   };
 
-  let cached: {
-    key: string;
-    at: number;
-    result: Promise<AgentIntegrations>;
-    /** Still running: a refresh joins it rather than starting another `claude mcp list`. */
-    pending: boolean;
-  } | null = null;
-
-  return {
-    status(refresh = false) {
-      const settings = deps.services().settings.get();
-      const boardUrl = deps.mcpUrl();
-      const key = JSON.stringify([settings.headlessReviewCli, settings.codexCli, settings.copilotCli, boardUrl]);
+  /**
+   * One answer kept for a minute under a key; a refresh skips it, and joins a check still running rather than starting
+   * another (`claude mcp list` health-checks every server the user has). A check that threw isn't kept.
+   */
+  const cacheOf = <T>() => {
+    let cached: { key: string; at: number; result: Promise<T>; pending: boolean } | null = null;
+    return (key: string, refresh: boolean, run: () => Promise<T>): Promise<T> => {
       if (cached?.key === key && (cached.pending || (!refresh && now() - cached.at < CACHE_MS))) return cached.result;
-      const result = compute(settings, boardUrl);
+      const result = run();
       const entry = { key, at: now(), result, pending: true };
       cached = entry;
       const settle = () => {
         entry.pending = false;
       };
       result.then(settle, settle);
-      // A check that threw isn't worth keeping for a minute.
       result.catch(() => {
         if (cached?.result === result) cached = null;
       });
       return result;
+    };
+  };
+  const cliCache = cacheOf<Record<AgentHarness, ProviderCliStatus>>();
+  const fullCache = cacheOf<ProviderStatus[]>();
+
+  /** Each CLI resolved and its `--version`: quick, so the menus wait on nothing else. Keyed by the configured paths. */
+  const clis = (settings: AppSettings, refresh: boolean) => {
+    const paths = AgentHarness.options.map((harness) => harnessCliSetting(settings, harness));
+    return cliCache(JSON.stringify(paths), refresh, async () => {
+      const found = await Promise.all(AgentHarness.options.map((harness, i) => cliOf(harness, paths[i] ?? null)));
+      return Object.fromEntries(AgentHarness.options.map((harness, i) => [harness, found[i]!])) as Record<
+        AgentHarness,
+        ProviderCliStatus
+      >;
+    });
+  };
+
+  /** Everything but T3 Code, whose status is live and cheap, so it is never cached. */
+  const compute = async (settings: AppSettings, boardUrl: string, refresh: boolean): Promise<ProviderStatus[]> => {
+    const [cli, claudeModels, copilotModels] = await Promise.all([
+      clis(settings, refresh),
+      modelsOf(settings, "claude-code", refresh),
+      modelsOf(settings, "copilot-cli", refresh),
+    ]);
+    const claudeCli = cli["claude-code"];
+    return [
+      {
+        id: "claude-code",
+        cli: claudeCli,
+        mcp: await claudeMcp(claudeCli.found ? claudeCli.path : null, boardUrl),
+        t3: null,
+        models: claudeModels,
+      },
+      { id: "codex", cli: cli.codex, mcp: codexMcp(boardUrl), t3: null, models: null },
+      { id: "copilot-cli", cli: cli["copilot-cli"], mcp: copilotMcp(boardUrl), t3: null, models: copilotModels },
+    ];
+  };
+
+  const detect = (refresh: boolean, parts: ProviderParts): Promise<ProviderStatus[]> => {
+    const settings = deps.services().settings.get();
+    if (parts === "cli") {
+      return clis(settings, refresh).then((cli) =>
+        AgentHarness.options.map((harness) => ({ id: harness, cli: cli[harness], mcp: null, t3: null, models: null })),
+      );
+    }
+    const boardUrl = deps.mcpUrl();
+    // A new CLI path, or a provider added or switched (which decides whether its models are scanned), asks again.
+    const key = JSON.stringify([settings.providers.filter((p) => p.enabled), boardUrl]);
+    return fullCache(key, refresh, () => compute(settings, boardUrl, refresh));
+  };
+
+  const status = async (refresh = false, parts: ProviderParts = "all"): Promise<ProvidersStatus> => {
+    const detected = await detect(refresh, parts);
+    const t3: ProviderStatus = {
+      id: "t3-code",
+      cli: null,
+      mcp: null,
+      t3: t3ProviderStatus(deps.t3Status(), deps.services().settings.get().t3TokenSet),
+      models: null,
+    };
+    const byId = new Map([t3, ...detected].map((p) => [p.id, p]));
+    return {
+      mcpUrl: deps.mcpUrl(),
+      checkedAt: new Date(now()).toISOString(),
+      providers: ProviderId.options.map((id) => byId.get(id)!),
+    };
+  };
+
+  return {
+    status,
+    async seedFromDetection() {
+      if (!deps.services().settings.providersSeedPending()) return [];
+      const found = await status(true);
+      const settings = deps.services().settings.get();
+      const added = found.providers.flatMap((provider) => {
+        if (settings.providers.some((p) => p.id === provider.id)) return [];
+        const handoff = PROVIDERS[provider.id].handoff;
+        // What the hand-off menus offered before providers were opt-in: the entry on, and the CLI or T3 there.
+        const offered =
+          handoff !== null &&
+          settings.handoffMenus[handoff] &&
+          (provider.cli?.found || (provider.t3?.detected && provider.t3.tokenSet));
+        return provider.mcp?.registered || offered ? [provider.id] : [];
+      });
+      if (added.length > 0) {
+        const next: ProviderSetting[] = [
+          ...settings.providers,
+          ...added.map((id) => ({ id, enabled: true, cliPath: null })),
+        ];
+        deps.services().settings.update({ providers: next });
+      }
+      deps.services().settings.clearProvidersSeed();
+      return added;
     },
   };
 }

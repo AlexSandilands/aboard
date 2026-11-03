@@ -2,14 +2,15 @@ import { AUTOPILOT_ALL_RUNS, AUTOPILOT_ORCHESTRATE } from "@repo/contracts";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { useSettingsNav } from "~/state/ui";
-import { editorListSection, parseSettingsTarget, type SettingsGroupId } from "./settingsNav.logic";
+import { editorListSection, parseSettingsTarget, providerOfTarget, type SettingsGroupId } from "./settingsNav.logic";
 
 /** History state for opening an editor sub-page from its list, so leaving it can step back instead. */
 export const FROM_SETTINGS_LIST = { settingsEditorFromList: true } as const;
 
 /**
  * Opens Settings at a target: a group (`"autopilot"`), a section (`"project.recurring"`) or a row
- * (`"autopilot.engine.quiet-hours"`). `project` picks the project page's project. The anchor goes in the URL hash
+ * (`"autopilot.engine.quiet-hours"`). `project` picks the project page's project; a Providers target
+ * (`"providers.codex.cli-path"`) picks the provider. The anchor goes in the URL hash
  * and is scrolled to once it renders, which the router can't do for content still loading. `highlight` flashes it
  * once it is in view.
  */
@@ -19,10 +20,13 @@ export function useOpenSettings() {
     (target = "board", options: { project?: string; replace?: boolean; highlight?: boolean } = {}) => {
       const parsed = parseSettingsTarget(target) ?? { group: "board" as const, anchor: null };
       useSettingsNav.getState().requestScroll(parsed.anchor ?? parsed.group, options.highlight);
+      // A provider's section or row selects that provider on the Providers page.
+      const provider = providerOfTarget(parsed.anchor);
       void navigate({
         to: "/settings/$group",
         params: { group: parsed.group },
-        search: parsed.group === "project" && options.project ? { project: options.project } : {},
+        search:
+          parsed.group === "project" && options.project ? { project: options.project } : provider ? { provider } : {},
         hash: parsed.anchor ?? "",
         hashScrollIntoView: false,
         replace: options.replace,

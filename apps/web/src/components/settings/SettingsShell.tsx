@@ -9,6 +9,7 @@ import {
   KeyboardIcon,
   ListTodoIcon,
   type LucideIcon,
+  PlugIcon,
   SquareKanbanIcon,
   ZapIcon,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import {
   useSidebar,
 } from "~/components/ui/sidebar";
 import { cn } from "~/lib/utils";
+import { useSettings } from "~/state/queries";
 import { useSuggestions } from "~/state/suggestions";
 import { useSettingsNav } from "~/state/ui";
 import { SettingsSearch } from "./SettingsSearch";
@@ -39,6 +41,7 @@ import {
   SETTINGS_GROUPS,
   settingsCrumbs,
   type SettingsGroupId,
+  visibleSections,
 } from "./settingsNav.logic";
 import { useLeaveEditor, useLeaveSettings, useOpenSettings } from "./settingsNavigation";
 
@@ -46,6 +49,7 @@ const GROUP_ICONS: Record<SettingsGroupId, LucideIcon> = {
   board: SquareKanbanIcon,
   keybindings: KeyboardIcon,
   tasks: ListTodoIcon,
+  providers: PlugIcon,
   models: CpuIcon,
   autopilot: ZapIcon,
   integrations: BlocksIcon,
@@ -98,6 +102,7 @@ export function SettingsSidebar() {
   const { isMobile, setOpenMobile } = useSidebar();
   // Open suggestions wait on the user, so their section shows how many.
   const openSuggestions = useSuggestions().data?.open ?? 0;
+  const settings = useSettings();
   const countOf = (sectionId: string) => (sectionId === "tasks.suggestions" ? openSuggestions : 0);
 
   const go = (target: string, group: SettingsGroupId) => {
@@ -143,7 +148,7 @@ export function SettingsSidebar() {
                       <span className="truncate">{group.label}</span>
                     </SidebarMenuButton>
                     <SidebarMenuSub className="mt-0.5 mb-1.5">
-                      {group.sections.map((section) => (
+                      {visibleSections(group, settings.data?.providers).map((section) => (
                         <SidebarMenuSubItem key={section.id}>
                           <SidebarMenuSubButton
                             // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- the label is the children useRender merges in

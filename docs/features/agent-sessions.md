@@ -125,36 +125,64 @@ example session.
 The rules for starting processes are in [ADR 0009](../decisions/0009-board-starts-local-processes.md) and, for new
 sessions, [ADR 0010](../decisions/0010-board-starts-new-sessions.md).
 
-### Integration status
+### Providers and detection
 
-Settings → Integrations → Claude Code and GitHub Copilot show whether the harness is usable, from
-`GET /api/agent-integrations` (`createAgentIntegrations` in `integrations/agentIntegrations.ts`, `?refresh=1` skips
-its one-minute cache; Re-check sends it). Per harness it returns:
+A provider (T3 Code, Claude Code, Codex, GitHub Copilot: `PROVIDERS` in `packages/contracts/src/providers.ts`) is
+opt-in. The user adds it in **Settings → Providers**, and the `providers` setting keeps `{ id, enabled, cliPath }` for
+each one added. A provider that isn't added, or is switched off, shows nowhere else: not in the hand-off menus
+(`handoffClis`, `canStartProjectT3Thread`), the launch and plan dialogs opened from them, the model tier and custom-model
+fields, or the Headless runs select. Agents can't start T3 threads without T3 Code added (`t3LaunchBlocker`). Sessions
+and threads already linked to tasks still open whatever the list says. `harnessCliSetting` reads a CLI provider's
+path from the list (none looks the CLI's name up on PATH); the board reviewer, issue import, the settings Ask, new
+sessions, resumes and headless runs all use it. See [ADR 0011](../decisions/0011-opt-in-providers.md).
 
-- `cli`: the configured path (else the name on PATH) resolved, and whether `--version` ran.
+`GET /api/providers` (`createProviders` in `integrations/providers.ts`) is the one place the board detects them, for
+every provider whether added or not (the Add provider dialog shows what this machine has). Per provider it returns:
+
+- `cli`: the configured path (else the name on PATH) resolved, its version, or why it isn't usable. Null for T3 Code.
 - `mcp`: whether an entry with the board's MCP URL exists, its name and scope, and whether the harness says it
-  connects (`connected` is null when it can't tell).
+  connects (`connected` is null when it can't tell). Null for T3 Code.
+- `t3`: T3 Code's live status (detected, origin, label, `liveStatus`) and whether a token is saved.
+- `models`: what the models scan (`agentModels.ts`) found, only for Claude Code and Copilot CLI while added and on,
+  since scanning starts the CLI.
 
-The entry is found by URL, not name: `sameMcpUrl` treats `localhost`, `127.0.0.1` and `[::1]` as one host, compares
+`?parts=cli` answers with the CLI checks and T3 Code only. The board's menus and session rows read that
+(`useAgentClis`), so they never wait on `claude mcp list` or a model scan; only Settings → Providers asks for the
+rest. The CLI checks are kept for a minute by their paths and shared by both answers; the MCP and model checks are
+kept for a minute, keyed by the enabled providers and the board's URL, so a new CLI path or a provider switched on
+asks again; `?refresh=1` (Re-check) skips the cache and a refresh while a check is
+running joins it. T3 Code's part is read fresh every time. A change to the list publishes `providers.changed`, which
+updates the settings cache in every window and refetches the detection.
+
+The MCP entry is found by URL, not name: `sameMcpUrl` treats `localhost`, `127.0.0.1` and `[::1]` as one host, compares
 the port and path, and ignores a trailing slash and the query (which may carry a token). Claude Code is asked with
 `claude mcp list` (and `mcp get` for the scope), run from the home folder, which doesn't list servers added to one
 project (local scope), so `~/.claude.json` is also read for those (reported as local scope, with a hint to use
 `--scope user`); if the CLI fails or times out, that file is all there is. Copilot CLI has no such command, so `~/.copilot/mcp-config.json` (or
 `$COPILOT_HOME/mcp-config.json`) is read, and for Codex `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`):
-`codexMcpEntries` reads only its `[mcp_servers.<name>]` headers and their `url` lines. Settings shows the Codex dot
-only once its CLI is found, as many use Codex only through T3 Code. Config files are only read for server names and `url` strings, never
-headers or env, and no URL or token is put in the result.
+`codexMcpEntries` reads only its `[mcp_servers.<name>]` headers and their `url` lines. Config files are only read for
+server names and `url` strings, never headers or env, and no URL or token is put in the result.
 
-The dot is green when the CLI runs and the MCP entry exists (a project-only entry, local scope that the CLI can't
-confirm, is amber: it is missing in other folders; a refresh while a check is running joins it); `connected: false` only adds a note, because a harness
-can report a server as down while it would connect when a session starts. `GET /api/agent-clis` is separate and only
-says whether the executable exists; the hand-off menus and a session's open and fork items use it.
+A provider's dot (`providerDot` in `settings/providers.logic.ts`) is grey while switched off, green when the CLI runs
+and the MCP entry exists (a project-only entry that the CLI can't confirm is amber: it is missing in other folders),
+and for T3 Code green once a saved token connects; `connected: false` only adds a note, because a harness can report
+a server as down while it would connect when a session starts.
+
+The page saves the list with `useUpdateProviders`: each change is a function applied to the latest cached list, and
+the calls share a mutation scope so they reach the server in order, so two quick switches can't undo each other.
+
+**Upgrading.** Migration `040_providers_settings` seeds the list from what an install already uses: a CLI path set, the
+T3 token, the board reviewer on, a tier or custom model with a model (or headless runs) for a provider, and sessions or
+T3 threads linked to tasks. It moves `headlessReviewCli`, `codexCli` and `copilotCli` into `cliPath`. What only the
+machine can tell is left to `seedFromDetection`, which runs once after start-up on an install that had data (the
+migration leaves a `providersDetectSeed` marker): it adds providers whose MCP entry is registered, and those whose
+hand-off entry the menus showed (the entry on and the CLI found).
 
 ### Starting a session
 
 The hand-off menu on a card and in the panel offers **New Claude Code session…** and **New Copilot CLI session…**
-on any open task, and on an epic (finished ones too), for each CLI `GET /api/agent-clis` finds: the path in Settings (the Claude Code CLI
-path the reviewer uses, or **Copilot CLI path**), else the name on PATH. The dialog (`SessionLaunchDialog`) reads
+on any open task, and on an epic (finished ones too), for each CLI provider that is added, on, and found by
+`GET /api/providers`: the path set for it in Settings → Providers, else the name on PATH. The dialog (`SessionLaunchDialog`) reads
 `GET /api/tasks/:id/session-launch-options` (CLIs, the project folder, its branches and default branch, each CLI's
 model for the task's model, which model that is and what picked it (a label's custom model, else the tier:
 `resolveTaskModel`), and whether sessions get a named window) and offers:
@@ -290,7 +318,7 @@ behind kills a session whose messages contain a credential-shaped string.
 ### On the card and in the panel
 
 A card shows each session as a chip with the harness's mark and a status dot; its menu opens, forks or copies
-the command. Open and fork are left out (and the panel row's click is disabled) when `GET /api/agent-clis` doesn't
+the command. Open and fork are left out (and the panel row's click is disabled) when `GET /api/providers` doesn't
 find that harness's CLI; the copy commands stay. Resuming or forking runs the CLI path set in Settings, as a new
 session does, and the copied command carries it too. A task with a T3 thread shows no session chips, since the thread runs a Claude session
 underneath and would show twice. The task panel lists every session by name, with its folder (secondary) and status, in the panel's
@@ -328,8 +356,8 @@ used as typed (`claude-opus-5-5`, `sonnet[1m]`; checked as a `CliModel`). A save
 shows. Beside it are the effort menu (`CliEffortMenu`) and a button that clears the model, which means the CLI's
 default. A model is saved as soon as it is picked.
 
-`GET /api/agent-models` (`integrations/agentModels.ts`, kept apart from `/api/agent-integrations` so that check stays
-fast) asks each CLI, and only the Model tiers page does, once a CLI's field is shown (`useAgentModels`):
+`GET /api/agent-models` (`integrations/agentModels.ts`) asks each CLI, and only the Model tiers page does, once a CLI's
+field is shown (`useAgentModels`); `GET /api/providers` reuses the same cache for its model counts:
 
 - **Claude Code:** `claude -p --input-format stream-json --output-format stream-json --verbose` is given one
   `initialize` control request on stdin, then stdin closes. The CLI answers with `models[]` (`value`, `displayName`,
@@ -363,11 +391,14 @@ drops an effort for a harness with no model. The effort goes everywhere the mode
 | `packages/contracts/src/sessionLaunch.ts` | `CliModel`, launch options and input, `newSessionArgv`, `taskWindowName`, `sessionLabel` |
 | `packages/contracts/src/agentModels.ts`, `modelTiers.ts` | The scan's shape (`AgentModels`); `CliEffort`, `CLI_EFFORTS` and `cliEffort` on a tier |
 | `apps/server/src/integrations/agentModels.ts` | The model scans, their parsers and the cache (tested on recorded output) |
-| `apps/server/src/integrations/sessionLaunch.ts` | Which CLIs are installed, the launch options, starting and linking a session (`start`, and `startPlanning` for several tasks) |
-| `apps/server/src/integrations/agentIntegrations.ts` | The CLI and MCP checks behind the settings dots (tested) |
+| `apps/server/src/integrations/sessionLaunch.ts` | The launch options, starting and linking a session (`start`, and `startPlanning` for several tasks) |
+| `packages/contracts/src/providers.ts` | `ProviderId`, `PROVIDERS`, the `providers` setting, `ProvidersStatus`, `harnessCliSetting`, `providerActive` |
+| `apps/server/src/integrations/providers.ts` | `GET /api/providers`: CLI, MCP, T3 and models checks, their cache, and the seed from detection (tested) |
+| `apps/server/src/db/codeMigrations.ts` | `040_providers_settings`: seeds the list and moves the CLI paths (tested in `database.test.ts`) |
+| `apps/web/src/components/settings/ProvidersPage.tsx`, `ProviderEditors.tsx` | Settings → Providers: the list, the Add provider dialog and each provider's editor (`providers.logic.ts` is tested) |
 | `apps/web/src/components/settings/CliModelPicker.tsx` | The model picker and effort menu of the Model tiers page and the new-session and planning dialogs (`cliModelPicker.logic.ts` is tested) |
 | `apps/server/src/db/migrations/015_agent_session_links.sql` | Adds the `agent_session` link kind |
-| `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/agent-clis`, `/api/agent-integrations`, `/api/agent-models` |
+| `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/providers`, `/api/agent-models` |
 | `apps/server/src/http/routes/tasks.ts` | `/api/tasks/:id/session-launch-options`, `/api/tasks/:id/sessions` |
 | `apps/server/src/http/routes/projects.ts` | `/api/projects/:id/plan-session` and `/api/projects/:id/plan-thread` |
 | `apps/server/src/mcp/tools/links.ts` | `link` with `agentSession` |

@@ -1,6 +1,5 @@
 import type {
-  AgentClis,
-  AgentIntegrations,
+  AgentCliStatus,
   AgentModels,
   AppSettings,
   AutopilotOverview,
@@ -16,7 +15,6 @@ import type {
   IconCandidate,
   IntegrationsStatus,
   PrFixInfo,
-  SettingsAskStatus,
   NotificationList,
   SkillInfo,
   SkillSyncStatus,
@@ -31,6 +29,7 @@ import type {
   TaskSummary,
   TerminalInfo,
   TaskTemplate,
+  ProvidersStatus,
 } from "@repo/contracts";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
@@ -38,6 +37,7 @@ import { taskActiveRun } from "~/components/autopilot/autopilot.logic";
 import { projectHasOrchestrateWork } from "~/components/autopilot/orchestrate.logic";
 import { deliverNotification } from "~/components/notifications/delivery";
 import { withCreated } from "~/components/notifications/notifications.logic";
+import { agentClisOf } from "~/components/settings/providers.logic";
 import { ApiError, api, eventsUrl } from "~/lib/api";
 import { snapshotCardRects } from "~/components/board/cardMotion";
 import { applyBoardEvent, eventMovesCards } from "./boardReducer";
@@ -48,8 +48,6 @@ export const queryKeys = {
   task: (id: string) => ["task", id] as const,
   settings: ["settings"] as const,
   integrations: ["integrations"] as const,
-  /** Whether the settings Ask can run, per Claude Code CLI setting: changing the path asks again. */
-  settingsAsk: (cli: string | null) => ["settingsAsk", cli] as const,
   backupStatus: ["backupStatus"] as const,
   skillSync: ["skillSync"] as const,
   notifications: ["notifications"] as const,
@@ -75,8 +73,9 @@ export const queryKeys = {
   autopilotOrchestrate: (projectId: string) => ["autopilotOrchestrate", projectId] as const,
   autopilotRuns: (scope: AutopilotRunsScope) => ["autopilotRuns", scope] as const,
   terminal: ["terminal"] as const,
-  agentClis: ["agentClis"] as const,
-  agentIntegrations: ["agentIntegrations"] as const,
+  /** The full detection; also the prefix of the CLI-only one, so invalidating it refreshes both. */
+  providers: ["providers"] as const,
+  providerClis: ["providers", "cli"] as const,
   agentModels: ["agentModels"] as const,
   sessionLaunchOptions: (taskId: string) => ["sessionLaunchOptions", taskId] as const,
   prFix: (linkId: string) => ["prFix", linkId] as const,
@@ -285,18 +284,6 @@ export function useIntegrationsStatus(enabled = true) {
   });
 }
 
-/** Whether the settings Ask can run: the Claude Code CLI is found. `cli` is the setting, so a new path is checked again. */
-export function useSettingsAskStatus(cli: string | null) {
-  return useQuery({
-    queryKey: queryKeys.settingsAsk(cli),
-    queryFn: ({ signal }) => api<SettingsAskStatus>("/api/settings/ask", { signal }),
-    // A cheap local check, and the answer changes when the user installs the CLI: look again when the page opens.
-    staleTime: 0,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true,
-  });
-}
-
 /** What "Open in terminal" runs here. Read again whenever settings change it, as its preview follows the setting. */
 export function useTerminalInfo(enabled = true) {
   return useQuery({
@@ -307,27 +294,31 @@ export function useTerminalInfo(enabled = true) {
 }
 
 /**
- * Whether the board can start Claude Code and Copilot CLI here, for the hand-off menu's "New … session" entries.
- * Shared by every card; looked up again after a minute, or when a CLI's path changes in settings.
+ * Every provider as detected here: its CLI, MCP registration, T3 Code's status and the models scan. The one detection
+ * source, shared by Settings → Providers and every menu that offers a provider. The server caches the CLI checks for
+ * a minute; Re-check asks past it, and a provider change (providers.changed) asks again.
  */
-export function useAgentClis() {
+export function useProviders(enabled = true) {
   return useQuery({
-    queryKey: queryKeys.agentClis,
-    queryFn: ({ signal }) => api<AgentClis>("/api/agent-clis", { signal }),
+    queryKey: queryKeys.providers,
+    queryFn: ({ signal }) => api<ProvidersStatus>("/api/providers", { signal }),
     staleTime: 60_000,
+    enabled,
   });
 }
 
 /**
- * Whether each harness's CLI runs and has the board's MCP registered, for the settings pills. The server runs the CLIs
- * and caches the answer for a minute; Re-check asks it again.
+ * Whether the board can start each CLI here: the providers' CLI checks. The hand-off menus also leave out providers
+ * the user didn't add (handoffClis). Shared by every card.
  */
-export function useAgentIntegrations() {
-  return useQuery({
-    queryKey: queryKeys.agentIntegrations,
-    queryFn: ({ signal }) => api<AgentIntegrations>("/api/agent-integrations", { signal }),
+export function useAgentClis(): { data: AgentCliStatus[] | undefined } {
+  const clis = useQuery({
+    queryKey: queryKeys.providerClis,
+    // Only the CLI checks: the menus mustn't wait on `claude mcp list` or the model scans.
+    queryFn: ({ signal }) => api<ProvidersStatus>("/api/providers?parts=cli", { signal }),
     staleTime: 60_000,
   });
+  return { data: agentClisOf(clis.data) };
 }
 
 /**
@@ -597,6 +588,15 @@ export function useBoardEvents() {
       }
       if (event.type === "suggestions.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.suggestions });
+      }
+      // Added, removed or switched elsewhere (another window, the migration's detection pass): the list follows, and
+      // detection runs again since a new CLI path or provider changes what it checks.
+      if (event.type === "providers.changed") {
+        queryClient.setQueryData<AppSettings>(queryKeys.settings, (settings) =>
+          settings ? { ...settings, providers: event.providers } : settings,
+        );
+        void queryClient.invalidateQueries({ queryKey: queryKeys.providers });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.agentModels });
       }
     };
     // EventSource retries a dropped connection itself, but an error response (e.g. Vite's proxy while

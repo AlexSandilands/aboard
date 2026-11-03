@@ -55,8 +55,8 @@ Both runs use `--permission-mode dontAsk`, `--tools ""` (no built-in tools, so n
 don't apply; the user's do, because sign-in can live there) and `--max-budget-usd`, with the result as
 structured output (`{found, reason?, title, description, labels, isEpic?, children?, childTotal?}`; the last three
 only for a ticket epic, see [Epics](#epics)).
-`found: false` is how the model reports an issue it couldn't read. The CLI path is the board reviewer's
-(`headlessReviewCli`).
+`found: false` is how the model reports an issue it couldn't read. The CLI path is the Claude Code
+provider's (`harnessCliSetting`, Settings → Providers).
 
 The result is applied by `ImportsService.complete`: the title is replaced only while it is still the
 placeholder and the description only while it is empty, so anything the user typed in the meantime stands.

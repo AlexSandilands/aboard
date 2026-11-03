@@ -362,7 +362,7 @@ and you get a notification and a link to the import page, where the draft opens 
 saying an agent wrote it and the agent's note to you. Read it with the same care, fill in its inputs and tools, and
 import it; it comes in off, like any import.
 
-With **Settings → Integrations → Board skills** on, the agent also has the `aboard-automations` skill, which tells it
+With **Settings → Providers → Board skills** on, the agent also has the `aboard-automations` skill, which tells it
 how to pick a trigger and action, use your variables, inputs and tool slots, write a script that fails loudly and
 treats what it reads as data, and test it before handing it over. Without it the agent still has the tool, just
 less guidance.

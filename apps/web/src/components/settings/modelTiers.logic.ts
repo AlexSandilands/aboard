@@ -1,15 +1,17 @@
 // Pure helpers for the Model tiers page: which providers' fields a tier row shows, and the tier one edit sends.
-import type { AgentHarness, CliEffort, ModelProfile, ModelTier, ModelTierSetting, ModelTiers } from "@repo/contracts";
+import {
+  AgentHarness,
+  type CliEffort,
+  type ModelTier,
+  type ModelTierSetting,
+  type ModelTiers,
+  type ProviderSetting,
+} from "@repo/contracts";
 
 export type TierProvider = "t3" | AgentHarness;
 
-/** What the page knows about each provider: whether it is connected or found right now. */
-export interface TierProviderState {
-  /** T3 Code: a token is saved and the app is detected, so its model catalog can be read. */
-  t3Ready: boolean;
-  /** Whether each CLI check found a working CLI; undefined until the check has answered. */
-  cliFound: Partial<Record<AgentHarness, boolean>>;
-}
+/** Which providers the user added and switched on in Settings → Providers. */
+export type TierProviderState = Partial<Record<TierProvider, boolean>>;
 
 export const TIER_PROVIDERS: ReadonlyArray<{ provider: TierProvider; label: string }> = [
   { provider: "t3", label: "T3 Code" },
@@ -18,31 +20,26 @@ export const TIER_PROVIDERS: ReadonlyArray<{ provider: TierProvider; label: stri
   { provider: "copilot-cli", label: "Copilot CLI" },
 ];
 
-/** Whether any tier (or custom model) already has a value saved for the provider. */
-export function hasSavedTierValue(
-  tiers: ModelTiers,
-  provider: TierProvider,
-  profiles: readonly ModelProfile[] = [],
-): boolean {
-  return [...Object.values(tiers), ...profiles].some((tier) =>
-    provider === "t3" ? tier.t3 !== null : !!tier.cli?.[provider],
-  );
+/**
+ * The providers whose fields the page shows: those added and switched on. A provider that isn't shows nowhere but
+ * Settings → Providers, where adding it back brings its saved values back into view.
+ */
+export function visibleTierProviders(active: TierProviderState): TierProvider[] {
+  return TIER_PROVIDERS.map(({ provider }) => provider).filter((provider) => active[provider] === true);
 }
 
 /**
- * The providers whose fields the page shows: those that are set up or detected (T3 Code connected, a CLI found), and
- * any with a value already saved, so a value can still be seen and cleared when its integration has gone away.
+ * What the Headless runs select offers: the harnesses added and on, plus the one saved (Claude Code when none is), so
+ * the select never shows a value it doesn't list.
  */
-export function visibleTierProviders(
-  tiers: ModelTiers,
-  state: TierProviderState,
-  profiles: readonly ModelProfile[] = [],
-): TierProvider[] {
-  return TIER_PROVIDERS.map(({ provider }) => provider).filter((provider) => {
-    const ready = provider === "t3" ? state.t3Ready : state.cliFound[provider] === true;
-    return ready || hasSavedTierValue(tiers, provider, profiles);
-  });
+export function headlessHarnesses(shown: ReadonlySet<TierProvider>, value: AgentHarness | undefined): AgentHarness[] {
+  const current = value ?? "claude-code";
+  return AgentHarness.options.filter((harness) => shown.has(harness) || harness === current);
 }
+
+/** Settings' providers as the page's state: T3 Code's id is "t3" here. */
+export const tierProviderState = (providers: readonly ProviderSetting[]): TierProviderState =>
+  Object.fromEntries(providers.filter((p) => p.enabled).map((p) => [p.id === "t3-code" ? "t3" : p.id, true]));
 
 /** One edit to a tier: the description, T3 Code's model, the `--model` or effort of one CLI, or its headless harness. */
 export type TierChange =

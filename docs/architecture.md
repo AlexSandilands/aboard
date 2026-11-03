@@ -98,7 +98,7 @@ Errors are `AppError`s (`errors.ts`) with a code: `NOT_FOUND` 404, `VALIDATION` 
 
 `BoardEvent` (`packages/contracts/src/schemas.ts`) is `project.upserted`, `project.deleted`,
 `task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`,
-`labels.colors_changed`, `autopilot.changed`, `notification.created`, `notifications.changed` and `suggestions.changed`. Every `task.upserted` comes with a `task.detail_changed`.
+`labels.colors_changed`, `autopilot.changed`, `notification.created`, `notifications.changed`, `suggestions.changed` and `providers.changed`. Every `task.upserted` comes with a `task.detail_changed`.
 
 ## Data model
 
