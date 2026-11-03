@@ -356,7 +356,6 @@ export function createProviders(deps: {
     }
   };
 
-  /** Everything but T3 Code, whose status is live and cheap, so it is never cached. */
   /**
    * One answer kept for a minute under a key; a refresh skips it, and joins a check still running rather than starting
    * another (`claude mcp list` health-checks every server the user has). A check that threw isn't kept.
