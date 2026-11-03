@@ -11,7 +11,7 @@ import {
 } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import type { Services } from "../../services/types.ts";
-import { resolutionText, socialBreakHint, statusLabel } from "../format.ts";
+import { missingScreenshotsWarning, resolutionText, socialBreakHint, statusLabel } from "../format.ts";
 import { openRoundInstructions } from "./reviews.ts";
 import {
   actorField,
@@ -398,7 +398,12 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
             review && summary.links.some((l) => l.kind === "pr")
               ? "A pull request is already linked. Finish the local review loop below first, and push every fix to that PR; don't open another. Until the loop ends, Autopilot holds off its own review of the PR."
               : null;
-          return taskResult(services, id, review ? [moved, early, review].filter(Boolean).join("\n\n") : moved, {
+          // Only the move into Review: the capture is checked before the PR, not on every later move.
+          const screenshots =
+            summary.status === "review" && args.status === "review"
+              ? missingScreenshotsWarning(services.tasks.detail(id))
+              : null;
+          return taskResult(services, id, [moved, screenshots, early, review].filter(Boolean).join("\n\n"), {
             closing: summary.kind !== "epic" && summary.status === "done" && !wasDone,
           });
         },
@@ -533,7 +538,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         );
         // After the other fields, so a refused switch (git, or tasks already started) leaves them saved and says why.
         if (args.delivery !== undefined) await ctx.integrations.setEpicDelivery(id, args.delivery, actor(args.actor));
-        return taskResult(services, task.id, `Updated #${task.number}.`);
+        // Labels usually arrive after the plan is saved, so this is when a new ui label can ask for the capture step.
+        return taskResult(services, task.id, `Updated #${task.number}.`, { captureHint: args.labels !== undefined });
       }),
   );
 

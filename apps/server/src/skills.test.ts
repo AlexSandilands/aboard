@@ -71,6 +71,14 @@ describe("skills", () => {
     expect(shipped("aboard", "AGENTS-snippet.md")).toBe(BOARD_AGENTS_SNIPPET);
   });
 
+  it("tells agents to capture, look at and attach screenshots of UI changes", () => {
+    for (const text of [boardSkillFile(), BOARD_AGENTS_SNIPPET]) {
+      expect(text).toContain("screen capture");
+      expect(text).toContain("images: [");
+      expect(text).toContain("JPEG");
+    }
+  });
+
   it("keeps skills/aboard-automations/SKILL.md identical to the embedded text", () => {
     expect(shipped("aboard-automations", "SKILL.md")).toBe(automationsSkillFile());
   });

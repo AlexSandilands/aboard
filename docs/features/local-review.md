@@ -160,6 +160,11 @@ else the project folder. One review runs at a time.
   disallowed outright.
 - **No MCP servers** (`--strict-mcp-config`). Your global config may register this board, and the reviewer
   must not record the round itself as well. The task's text is included in the prompt instead.
+- **Screenshots:** when the task has images attached (the screen capture of a UI change, see
+  [plans.md](plans.md#screen-captures)), the task text lists them under **Images**, `--add-dir` gives the reviewer
+  read access to their folder in the data dir, and its prompt tells it to open each one with Read and record a
+  finding for a visual bug or for states the change introduced that are not covered. The review skill tells an
+  agent's reviewer the same, including a major finding when a UI task has no screenshots at all.
 - **Structured output:** `--json-schema` makes Claude Code return the summary and findings as JSON, which
   the board records under the actor "board reviewer". The round's summary shows what the review cost.
 - **Windows shims:** a `claude.cmd` (npm install) runs through cmd.exe with its arguments escaped twice,

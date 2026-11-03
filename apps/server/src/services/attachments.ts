@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import {
+  ATTACHMENT_EXTENSIONS,
   attachmentExtension,
   attachmentIdsIn,
   isAttachmentPathId,
@@ -33,6 +34,13 @@ export interface AttachmentsService {
   get(id: string): TaskAttachment;
   /** The image's bytes. */
   read(id: string): { attachment: TaskAttachment; bytes: Buffer };
+  /**
+   * Stores image files from disk (an agent's screenshots) for the task, like pasted ones. The type comes from the
+   * leading bytes. Every file is checked before any is stored, so one bad path attaches nothing.
+   */
+  uploadFromPaths(taskId: string, paths: readonly string[]): TaskAttachment[];
+  /** Deletes images and their files, for undoing an upload whose follow-up failed. */
+  discard(ids: readonly string[]): void;
   /** The task's images with their absolute paths on disk, for agents that can open files. */
   forTask(taskId: string): Array<TaskAttachment & { path: string }>;
   /** Gives the unclaimed images that `text` refers to to the task. */
@@ -65,6 +73,35 @@ export function matchesMime(mime: string, b: Uint8Array): boolean {
     default:
       return false;
   }
+}
+
+/** The image type the leading bytes belong to, or undefined when they are none of the accepted ones. */
+export function sniffMime(b: Uint8Array): string | undefined {
+  return Object.keys(ATTACHMENT_EXTENSIONS).find((mime) => matchesMime(mime, b));
+}
+
+/** Reads an image file for upload; refuses a path that isn't a readable image of an accepted type within the size cap. */
+function readImageFile(path: string): Omit<UploadInput, "taskId"> {
+  if (!isAbsolute(path)) throw new AppError("VALIDATION", `Image paths must be absolute: ${path}`);
+  let size: number;
+  try {
+    const stat = statSync(path);
+    if (!stat.isFile()) throw new AppError("VALIDATION", `Not a file: ${path}`);
+    size = stat.size;
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError("VALIDATION", `Can't read ${path}: no such file on the board's machine`);
+  }
+  if (size > MAX_ATTACHMENT_BYTES) {
+    throw new AppError(
+      "VALIDATION",
+      `${path} is over ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB. Save it as JPEG or WebP, or shrink it, and try again.`,
+    );
+  }
+  const bytes = new Uint8Array(readFileSync(path));
+  const mime = sniffMime(bytes);
+  if (!mime) throw new AppError("VALIDATION", `${path} is not a PNG, JPEG, GIF or WebP image`);
+  return { filename: basename(path), mime, bytes };
 }
 
 export function createAttachmentsService(core: Core, dir: string): AttachmentsService {
@@ -132,6 +169,32 @@ export function createAttachmentsService(core: Core, dir: string): AttachmentsSe
         }
         if (taskId) fx.detail(taskId);
         return attachment;
+      });
+    },
+
+    uploadFromPaths(taskId, paths) {
+      const files = paths.map(readImageFile);
+      const stored: TaskAttachment[] = [];
+      try {
+        for (const file of files) stored.push(this.upload({ taskId, ...file }));
+      } catch (error) {
+        // One failed write (disk, database) must not leave the earlier ones attached to nothing.
+        this.discard(stored.map((a) => a.id));
+        throw error;
+      }
+      return stored;
+    },
+
+    discard(ids) {
+      core.write((fx) => {
+        for (const id of ids) {
+          const attachment = repos.attachments.get(id);
+          if (!attachment) continue;
+          const path = pathOf(attachment);
+          if (path) rmSync(path, { force: true });
+          repos.attachments.delete(id);
+          if (attachment.taskId) fx.detail(attachment.taskId);
+        }
       });
     },
 

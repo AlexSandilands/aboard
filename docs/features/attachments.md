@@ -32,6 +32,14 @@ stored on the board and written into the text as a pill; agents get its file pat
   folders of tasks that no longer exist are swept.
 - **Agents:** `get_task` lists the task's images under **Images** with absolute paths, so Claude Code can open
   a screenshot as a file. Nothing else shows them to agents.
+- **Agents attach images too:** `update_step(step, images: [absolute paths])` stores image files from the
+  board's machine for the task (the screen capture step of a UI task, see [plans.md](plans.md#screen-captures)).
+  `AttachmentsService.uploadFromPaths` reads each file, takes the type from its leading bytes (the file name is
+  not trusted) and applies the same rules as an upload: PNG, JPEG, GIF or WebP, up to 5 MB, signature checked.
+  Every path is checked before any is stored, so one bad path attaches nothing. Each image's token is appended
+  to the step's notes, which is what shows its thumbnail under the step. The server doesn't shrink images, so a
+  file over 5 MB is refused with a message to save it as JPEG or WebP or scale it down; agents are told to do that
+  up front.
 
 ## In the launch dialogs
 
@@ -64,7 +72,8 @@ A row whose ids aren't ids is never turned into a path. See [backup.md](backup.m
 
 - **Files on disk, not in SQLite.** The database stays small and fast to dump, and agents need a path to open.
 - **Shrink in the browser, not on the server.** No image library or ffmpeg to install; the server only checks
-  type, size and signature.
+  type, size and signature. Agents that attach screenshots shrink them themselves (JPEG or WebP at a sensible
+  width); the server refuses what is over the cap rather than re-encoding it.
 - **A token in the text, not a column.** The text stays the one source of what is shown where, and it travels
   through copy, templates and backups unchanged.
 - **Launch images beside the prompt, not in it.** The prompt goes to an agent as written, and a token there would
@@ -77,7 +86,7 @@ A row whose ids aren't ids is never turned into a path. See [backup.md](backup.m
 | File                                                 | What it does                                                  |
 | ---------------------------------------------------- | ------------------------------------------------------------- |
 | `packages/contracts/src/attachments.ts`              | Token helpers, accepted types, limits                         |
-| `apps/server/src/services/attachments.ts`            | Upload, read, claim, resolve and claim a launch's images, delete files, sweep |
+| `apps/server/src/services/attachments.ts`            | Upload (also from file paths), read, claim, resolve and claim a launch's images, delete files, sweep |
 | `apps/server/src/http/routes/attachments.ts`         | `POST /api/attachments`, `GET /api/attachments/:id`           |
 | `apps/server/src/db/migrations/024_task_attachments.sql` | The table                                                 |
 | `apps/server/src/services/backup/files.ts`           | Copying images into and out of a backup folder                |

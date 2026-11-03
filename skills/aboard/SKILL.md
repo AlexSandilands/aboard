@@ -135,6 +135,17 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    Tool results say when no step is in progress, when the plan hasn't changed for a while, and when a
    task reaches Review with steps still open; follow them.
 
+   **UI work needs a screen capture.** When a task changes what the user sees (components, styles, layout, or
+   the `ui` label), its plan has a **Screen capture** step; if it doesn't, `add_steps` one (and move it ahead of any
+   review or PR step with `update_plan`). Do it for real: open the changed surface in a browser, in each state you introduced (menus open,
+   warnings showing, a narrow phone width where the layout can change), save the screenshots as JPEG or WebP at
+   a sensible width (each must be under 5 MB), and look at every one. Fix whatever looks wrong and capture
+   again before moving to Review. Attach them in the same call that finishes the step:
+   `update_step(task, "4.2", status: "done", images: ["/abs/path/menu-open.jpg", ...])` (absolute paths, up to
+   10, PNG/JPEG/WebP/GIF; a bad path attaches nothing). They show under the step and in `get_task`'s Images.
+   A capture you didn't look at doesn't count; moving a `ui` task to Review without screenshots draws a
+   warning, and the reviewer checks them.
+
    Several things to change at once (add notes, move a step, rename a phase)? One `update_plan` call,
    with `steps: [{step: "2.3", notes: "…"}, …]`; labels refer to the plan as it was before the call.
    Don't use it to catch up on statuses.

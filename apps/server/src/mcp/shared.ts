@@ -353,7 +353,7 @@ export function epicDeliveryHint(services: Services, epicId: string | null): str
 
 /**
  * Mutating tools answer with a one-line confirmation plus the task's new state. `planningHints` adds the
- * "Missing labels", "Suggested model" and (when Start planned tasks is on) "Autopilot flag" nudges; only the planning
+ * "Missing labels", "Suggested model", "Missing screen capture step" and (when Start planned tasks is on) "Autopilot flag" nudges; only the planning
  * moments (set_plan, create_task) ask for them, so they aren't noise elsewhere. Every result carries the "Plan progress"
  * nudges; `closing` (the move to Done) adds the open-steps one, which get_task never shows for a task that is already
  * Done.
@@ -362,7 +362,7 @@ export function taskResult(
   services: Services,
   taskId: string,
   headline: string,
-  opts: { planningHints?: boolean; closing?: boolean; deliveryHint?: boolean } = {},
+  opts: { planningHints?: boolean; closing?: boolean; deliveryHint?: boolean; captureHint?: boolean } = {},
 ): CallToolResult {
   const task = services.tasks.detail(taskId);
   const project = safeProject(services, task.projectId);
@@ -377,12 +377,18 @@ export function taskResult(
     ? renderTaskShort(task, project, {
         labelsInUse: services.labels.usage(),
         modelHint: true,
+        captureHint: true,
         autopilotHint: startPlannedOn(services, task.projectId, task.parent?.id ?? null),
         deliveryHint: delivery,
         progress,
         ticketSystems,
       })
-    : renderTaskShort(task, project, { progress, deliveryHint: delivery, ticketSystems });
+    : renderTaskShort(task, project, {
+        progress,
+        deliveryHint: delivery,
+        ticketSystems,
+        ...(opts.captureHint ? { captureHint: true } : {}),
+      });
   return textResult(`${headline}\n\n${body}`);
 }
 
