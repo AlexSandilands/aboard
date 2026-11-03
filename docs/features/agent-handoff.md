@@ -267,6 +267,20 @@ own web client uses:
    a `t3_thread` link to it. The card shows the thread straight away, and the 20-second live status poll takes over
    from there. A Suggest epics or Plan tasks thread has no one task, so its images stay unclaimed.
 
+### Follow-up threads
+
+Messages the board sends by itself (the review nudge, Fix PRs, Unstick, `message_task_thread`) go to the thread
+that did the work, not to one the user opened afterwards to ask about it. A thread started from the card's launch
+dialog (`POST /api/tasks/:id/t3-thread`) while the task is in Review or Done is saved with `role: "followup"` on its
+link (stored in `ref_json` next to the ref, like an agent session's `window`, so there is no migration). Only the
+board sets it: `start_task_thread`, Fix PRs sessions, planning threads, threads started earlier in the task's life
+and threads an agent links itself have no role, and agents can't pass one.
+
+`implementingThread(task)` (`packages/contracts/src/runThreads.ts`) picks the target for every sender. It ignores
+archived threads and follow-ups, then takes the newest thread on an open PR's branch, else the newest busy one, else
+the newest. It returns null when none is left: `message_task_thread` refuses and points at `start_task_thread`, which
+a follow-up never blocks, and Fix PRs starts its own session. The role can't be changed in the UI yet.
+
 The browser only talks to the board's REST API (`GET /api/tasks/:id/t3-launch-options`,
 `POST /api/tasks/:id/t3-thread`, and `GET /api/integrations/t3/models` for settings). Each request opens one WebSocket session and closes it when done.
 Loading the launch options does not wait for the shell snapshot: the ticket, the WebSocket and `server.getConfig` start

@@ -48,13 +48,14 @@ export function classifyLinkInput(input: LinkInput, ticketSystems: readonly Tick
   throw new AppError("VALIDATION", `"${value}" does not look like a ${input.kind} link`);
 }
 
-/** A session's window is stored beside its ref (see toLink), so relinking it keeps the window. */
-const refJson = (c: ClassifiedLink, window?: string | null): string | null => {
+/** A session's window and a thread's role are stored beside the ref (see toLink); relinking a session keeps its window. */
+const refJson = (c: ClassifiedLink, window?: string | null, role?: "followup"): string | null => {
   switch (c.kind) {
     case "pr":
       return c.ref ? JSON.stringify(c.ref) : null;
-    case "ticket":
     case "t3_thread":
+      return JSON.stringify(role ? { ...c.ref, role } : c.ref);
+    case "ticket":
     case "issue":
       return JSON.stringify(c.ref);
     case "agent_session":
@@ -307,7 +308,7 @@ export function createLinksService(
           kind: classified.kind,
           url: classified.url,
           label: input.label ?? null,
-          ref_json: refJson(classified, opts.window),
+          ref_json: refJson(classified, opts.window, opts.role),
           snapshot_json: null,
           synced_at: null,
           created_at: nowIso(),

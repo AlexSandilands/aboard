@@ -267,6 +267,8 @@ export type LinkSnapshot = PrSnapshot | T3ThreadSnapshot | IssueSnapshot | Agent
 export interface AddLinkOptions {
   /** A session the board started in a named Windows Terminal window (see taskWindowName). */
   window?: string;
+  /** A T3 thread the user opened to ask about finished work: the board never messages it (see implementingThread). */
+  role?: "followup";
   /** Classify a ticket with this system only, for a key the board knows belongs to it (an import's child). */
   ticketSystem?: string;
   /** The board adds this link by itself (a key in the title), so a rename may take it away again. */

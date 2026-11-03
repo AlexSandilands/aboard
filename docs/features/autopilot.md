@@ -476,7 +476,8 @@ to fix a pull request linked to a task.
   handed to a T3 thread (a nudge, or a new thread) is still working on it (`t3RunWorking` in `packages/contracts/src/runThreads.ts`,
   shared with Start planned): those runs end as soon as the message is sent, so without this, comments arriving
   while the agent works would use up the attempts and give up before it pushed.
-- **Action.** When the task's latest T3 thread is there, not settled, and seen by the live poll in the last ten
+- **Action.** When the task's [implementing thread](agent-handoff.md#follow-up-threads) (never a follow-up the user
+  opened to ask about the work) is there, not settled, and seen by the live poll in the last ten
   minutes (so T3 Code is up to take it), and the runner isn't set to headless, the fix prompt is a nudge into it.
   Otherwise the runner starts a session (T3 or headless, from the runner setting) with `workspace: { branch:
   headRef }` and `expectHead`: a branch that moved on skips the run, and one at an unrelated commit fails unless
@@ -1168,7 +1169,8 @@ with that error.
   one name is the session link's label, `claude --name` and the T3 thread's title (`TaskThreadInput.title`, default
   the task's number and title). `isAutopilotSessionName` still recognises the old `Autopilot · ` prefix, so session
   links named before the change stay marked as Autopilot sessions.
-- **`kind: "nudge"`** posts the prompt into the task's latest live T3 thread (`sendToThread`). It never starts a
+- **`kind: "nudge"`** posts the prompt into the task's implementing T3 thread (`implementingThread`, see
+  [agent-handoff.md](agent-handoff.md#follow-up-threads); `sendToThread`). It never starts a
   session, and fails when the task has no live thread.
 - **`workspace.prBase`**: the branch the agent's PR goes to when it isn't the default branch (an integration
   epic's). The session starts from origin's copy of it (T3: `baseRef` with `startFromOrigin`; headless:

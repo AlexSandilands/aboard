@@ -1,13 +1,13 @@
 import { dirname } from "node:path";
 import {
   BOARD_REVIEWER,
+  implementingThread,
   REVIEW_DONE_NEXT,
   reviewFixInstructions,
   reviewIsDone,
   reviewLoopInstructions,
   resolveHeadlessEffort,
   resolveHeadlessModel,
-  type TaskLink,
   type TaskSummary,
 } from "@repo/contracts";
 import type { ReviewRecord } from "../db/repos/reviews.ts";
@@ -35,14 +35,6 @@ export interface ReviewFallbacks {
   idle(): Promise<void>;
   start(): void;
   stop(): void;
-}
-
-/** The task's most recently linked T3 thread that isn't archived. */
-export function latestThread(task: TaskSummary): ThreadLink | null {
-  const threads = task.links.filter(
-    (l): l is Extract<TaskLink, { kind: "t3_thread" }> => l.kind === "t3_thread" && !l.snapshot?.archived,
-  );
-  return threads.at(-1) ?? null;
 }
 
 /**
@@ -178,7 +170,7 @@ export function createReviewFallbacks(deps: {
     const task = s.tasks.summary(round.taskId);
     // A task turned manual while a round was pending has no change, and no agent, to chase.
     if (task.status !== "review" || task.archivedAt || task.manual) return;
-    const thread = latestThread(task);
+    const thread = implementingThread(task);
     if (thread?.snapshot && BUSY.has(thread.snapshot.status)) return;
     const userAsked = round.openedBy === "user" && !round.nudgedAt;
     if (!userAsked) {

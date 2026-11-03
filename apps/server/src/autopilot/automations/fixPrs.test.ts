@@ -203,6 +203,11 @@ function setup() {
     s.links.add(task.id, { value: "t3code://threads/env/thread-1" }, "agent");
     threadIs(status, settled);
   };
+  /** A thread the user opened on the finished task to ask about it, busy now. */
+  const withFollowUp = () => {
+    const link = s.links.add(task.id, { value: "t3code://threads/env/thread-ask" }, "user", { role: "followup" });
+    s.links.setSnapshot(link.id, { title: "Questions", status: "working", settled: false });
+  };
   /** What T3's live poll reports for the task's thread now. */
   const threadIs = (status: "idle" | "working", settled = false) =>
     s.links.setSnapshot(threadLink()!.id, { title: "T", status, settled });
@@ -220,6 +225,7 @@ function setup() {
     runs,
     reviewed,
     withThread,
+    withFollowUp,
     threadIs,
     failRunner: (error: Error | null) => (runnerError = error),
     holdRunner: (promise: Promise<void> | null) => {
@@ -477,6 +483,28 @@ describe("fix PRs: nudge or new session", () => {
     threadIs("idle");
     await pass();
     expect(requests).toHaveLength(2);
+  });
+
+  it("nudges the thread that did the work, not a newer follow-up the user opened", async () => {
+    const { requests, setPr, pass, turnOn, withThread, withFollowUp, runs } = setup();
+    turnOn();
+    withThread("working");
+    withFollowUp();
+    setPr({ checks: "failing" });
+    await pass();
+    expect(requests[0]!.kind).toBe("nudge");
+    expect(runs()[0]!.threadUrl).toContain("thread-1");
+  });
+
+  it("starts a session instead of nudging when only a follow-up thread is left", async () => {
+    const { requests, setPr, pass, turnOn, withThread, withFollowUp } = setup();
+    turnOn();
+    withThread("idle", true);
+    withFollowUp();
+    setPr({ checks: "failing" });
+    await pass();
+    expect(requests[0]!.kind).toBeUndefined();
+    expect(requests[0]!.workspace).toEqual({ branch: "feat/thing" });
   });
 
   it("doesn't nudge when the automation runs headless", async () => {

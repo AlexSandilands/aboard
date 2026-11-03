@@ -77,8 +77,12 @@ describe("T3 threads for a task over MCP", () => {
     return { launches, messages, state };
   }
 
-  function linkThread(threadId: string, snapshot: Partial<T3ThreadSnapshot> | null): TaskLink {
-    const link = h.services.links.add(taskId, { t3Thread: { environmentId: ENV, threadId } }, "user");
+  function linkThread(
+    threadId: string,
+    snapshot: Partial<T3ThreadSnapshot> | null,
+    opts: { role?: "followup" } = {},
+  ): TaskLink {
+    const link = h.services.links.add(taskId, { t3Thread: { environmentId: ENV, threadId } }, "user", opts);
     if (snapshot) {
       h.services.links.setSnapshot(link.id, {
         title: "#2 Address form",
@@ -230,7 +234,8 @@ describe("T3 threads for a task over MCP", () => {
   it("messages the thread busy on the task, else its newest, marked as from the orchestrator", async () => {
     const { messages } = fakeT3();
     const none = await call(agent, "message_task_thread", { task: "#2", text: "Use the v2 API" });
-    expect(none.text).toContain("has no T3 thread linked. Leave the session an add_note");
+    expect(none.text).toContain("has no T3 thread to message");
+    expect(none.text).toContain('start_task_thread("#2")');
 
     linkThread("th-busy", { status: "input" });
     linkThread("th-done", { status: "done" });
@@ -241,5 +246,25 @@ describe("T3 threads for a task over MCP", () => {
         text: "From an orchestrating agent (sent through the board):\n\nUse the v2 API",
       },
     ]);
+  });
+
+  it("never messages a follow-up thread the user opened, even a newer busy one", async () => {
+    const { messages } = fakeT3();
+    linkThread("th-impl", { status: "done" });
+    linkThread("th-ask", { status: "working" }, { role: "followup" });
+    await call(agent, "message_task_thread", { task: "#2", text: "Address the review" });
+    expect(messages.map((m) => m.threadId)).toEqual(["th-impl"]);
+  });
+
+  it("refuses to message when only follow-up threads are linked, and lets a new thread start beside them", async () => {
+    const { messages, launches } = fakeT3();
+    linkThread("th-ask", { status: "working" }, { role: "followup" });
+    const refused = await call(agent, "message_task_thread", { task: "#2", text: "Address the review" });
+    expect(refused.text).toContain("opened to ask about the finished work");
+    expect(refused.text).toContain('start_task_thread("#2")');
+    expect(messages).toEqual([]);
+
+    expect((await call(agent, "start_task_thread", { task: "#2" })).isError).toBe(false);
+    expect(launches).toHaveLength(1);
   });
 });

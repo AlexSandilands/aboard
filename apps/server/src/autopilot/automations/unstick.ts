@@ -3,10 +3,10 @@ import {
   AUTOPILOT_UNSTICK,
   UNSTICK_STALE_PREFIX,
   UNSTICK_WAITING_PREFIX,
+  implementingThread,
   type TaskSummary,
 } from "@repo/contracts";
 import { z } from "zod";
-import { latestThread } from "../../integrations/reviewFallbacks.ts";
 import { defineAutomation, type Candidate } from "../types.ts";
 
 export { AUTOPILOT_UNSTICK };
@@ -73,7 +73,7 @@ export const unstick = defineAutomation({
               data: { kind: "stale", ms: quiet } satisfies UnstickData,
             });
           }
-          const thread = latestThread(t);
+          const thread = implementingThread(t);
           const snapshot = thread?.snapshot;
           if (thread && snapshot && ["input", "approval"].includes(snapshot.status) && snapshot.lastActivityAt) {
             const waiting = now.getTime() - Date.parse(snapshot.lastActivityAt);
