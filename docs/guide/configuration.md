@@ -64,7 +64,8 @@ and choose:
 - **Move** (the default): the tasks come onto this board, and the other machine archives its copies at its next
   backup run. Their cards there say where they went ("Moved to laptop #57"). If one changed there after the backup
   you took it from, it's still archived and the inbox says so, so you can carry the change over by hand. A task an
-  agent session or Autopilot run was working on at that backup can't be moved, only copied.
+  agent session or Autopilot run was working on at that backup can't be moved, only copied, and neither can one
+  that machine already moved somewhere else: move it from there.
 - **Copy**: the tasks come onto this board and stay on the other one too; the two copies then go their own ways.
 
 Each task gets a number on this board and goes into the matching project: the same repo (by its `origin`), else

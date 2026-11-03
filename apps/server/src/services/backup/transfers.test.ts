@@ -176,6 +176,31 @@ describe("applyTransfer", () => {
     expect(from.services.backup.applyTransfer(move, { actor: "backup", folder: "Laptop" })).toBe("archived");
   });
 
+  it("won't move a task again from a copy that already moved away, and flags two moves that crossed", () => {
+    const { from, task } = boards();
+    from.services.backup.applyTransfer(transfer(task.id), { actor: "backup" });
+    const dump = from.services.backup.dump();
+    const third = createTestHarness();
+    third.services.projects.create({ title: "Alpha" });
+    expect(third.services.backup.offer(dump, NO_INFO)[0]).toMatchObject({
+      movedTo: { machine: "desktop", number: 57 },
+    });
+    const [moved] = third.services.backup.importTasks(dump, [task.id], options());
+    expect(moved).toMatchObject({
+      ok: false,
+      error: "laptop already moved it to desktop as #57; move it from desktop",
+    });
+    const [copied] = third.services.backup.importTasks(dump, [task.id], options({ mode: "copy" }));
+    expect(copied).toMatchObject({ ok: true, warning: expect.stringMatching(/from before that/) });
+
+    // A second board took it from an older backup before this one had applied the first move.
+    const crossed = transfer(task.id, { toMachine: "work", toNumber: 3 });
+    expect(from.services.backup.applyTransfer(crossed, { actor: "backup" })).toBe("archived");
+    expect(from.services.notifications.list().items).toEqual([
+      expect.objectContaining({ title: `#${task.number} was moved to both desktop and work` }),
+    ]);
+  });
+
   it("forgets where a task went once it is unarchived here", () => {
     const { from, task } = boards();
     from.services.backup.applyTransfer(transfer(task.id), { actor: "backup" });

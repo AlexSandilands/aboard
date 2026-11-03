@@ -426,6 +426,8 @@ export const ImportTask = z.object({
   onBoard: z.enum(["no", "here", "archived"]),
   /** An agent session or Autopilot run was going on it at that machine's backup: it can be copied, not moved. */
   busy: z.boolean(),
+  /** Where it went when it was already moved off that machine: move it from there instead. Null otherwise. */
+  movedTo: z.object({ machine: z.string(), number: z.number() }).nullable(),
 });
 export type ImportTask = z.infer<typeof ImportTask>;
 

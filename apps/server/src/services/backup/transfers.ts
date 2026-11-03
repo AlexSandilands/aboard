@@ -24,6 +24,18 @@ import { insertRows, upgradeDump } from "./restore.ts";
 // the board it came from reads that transfer from the repo and archives its copy through applyTransfer, the one way
 // a transfer is acted on, so one that arrives twice (by git, later by a live link) is applied once.
 
+/** Where a dumped task row says it went, when that board moved it away. */
+const movedToOf = (row: BackupRow): { machine: string; number: number } | null => {
+  try {
+    const parsed = JSON.parse(String(row.moved_to_json ?? "null")) as { machine?: unknown; number?: unknown } | null;
+    return parsed && typeof parsed.machine === "string" && typeof parsed.number === "number"
+      ? { machine: parsed.machine, number: parsed.number }
+      : null;
+  } catch {
+    return null;
+  }
+};
+
 /** Links that only mean something on the machine that made them: a T3 thread or an agent session runs there. */
 const MACHINE_LINK_KINDS = new Set(["t3_thread", "agent_session"]);
 
@@ -132,6 +144,7 @@ export function createTransferService(
         archived: task.archived_at !== null && task.archived_at !== undefined,
         onBoard: !onBoard ? "no" : onBoard.archivedAt === null ? "here" : "archived",
         busy: busy.has(id),
+        movedTo: movedToOf(task),
       };
     });
   };
@@ -267,6 +280,14 @@ export function createTransferService(
       };
       try {
         if (!bundle) throw new AppError("NOT_FOUND", `${machine}'s backup has no such task`);
+        const gone = movedToOf(bundle.task);
+        // Moving it again from a copy that already moved away would leave it open on two other boards.
+        if (options.mode === "move" && gone) {
+          throw new AppError(
+            "CONFLICT",
+            `${machine} already moved it to ${gone.machine} as #${gone.number}; move it from ${gone.machine}`,
+          );
+        }
         if (options.mode === "move" && busy.has(taskId)) {
           throw new AppError(
             "CONFLICT",
@@ -281,6 +302,7 @@ export function createTransferService(
         }
         const { number, dropped } = importOne(dump, bundle, target, options);
         const warnings = [
+          gone ? `${machine} had moved it to ${gone.machine}; this copy is from before that.` : null,
           options.mode === "copy" && busy.has(taskId)
             ? `Work was going on it at ${machine}'s last backup; that copy carries on there.`
             : null,
@@ -340,7 +362,9 @@ export function createTransferService(
         },
       ]);
       if (!task || outcome === "skipped") return outcome;
-      const changed = task.updatedAt > transfer.sourceUpdatedAt;
+      // Moved away already by another transfer: two boards each took it before this one heard of either move.
+      const twice = task.movedTo !== null;
+      const changed = !twice && task.updatedAt > transfer.sourceUpdatedAt;
       const busy = busyTaskIds().includes(task.id);
       // Its open tasks stay here, loose: an archived epic would hide them while they still claim it.
       if (task.kind === "epic") {
@@ -369,19 +393,25 @@ export function createTransferService(
         transferId: transfer.transferId,
         ...(changed ? { changedSince: true } : {}),
         ...(busy ? { busy: true } : {}),
+        ...(twice ? { alsoMovedTo: task.movedTo!.machine } : {}),
       });
       if (task.parentId) syncEpicStatus(repos, task.parentId, actor, fx);
-      if (changed || busy) {
+      if (changed || busy || twice) {
         deps.notifications().notify({
           kind: "backup_notice",
           taskId: task.id,
-          title: `#${task.number} moved to ${transfer.toMachine} with changes left here`,
+          title: twice
+            ? `#${task.number} was moved to both ${task.movedTo!.machine} and ${transfer.toMachine}`
+            : `#${task.number} moved to ${transfer.toMachine} with changes left here`,
           body:
             `#${task.number} "${task.title}" was moved to ${transfer.toMachine} as #${transfer.toNumber}, and archived ` +
             "here. " +
             [
               changed ? "It changed here after the backup it was moved from, so those changes didn't go with it." : "",
               busy ? "An agent session or Autopilot run was still going on it here." : "",
+              twice
+                ? `It had already been moved to ${task.movedTo!.machine} as #${task.movedTo!.number}, so it is open on both; archive one.`
+                : "",
             ]
               .filter(Boolean)
               .join(" ") +

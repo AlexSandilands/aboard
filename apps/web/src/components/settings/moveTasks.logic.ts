@@ -3,6 +3,8 @@ import type { ImportProject, ImportTask, TransferMode } from "@repo/contracts";
 /** Why a task can't be picked for this mode, or null when it can. */
 export function blockedReason(task: ImportTask, mode: TransferMode): string | null {
   if (task.onBoard === "here") return "Already on this board";
+  if (mode === "move" && task.movedTo)
+    return `Moved to ${task.movedTo.machine} #${task.movedTo.number}: move it from there`;
   if (mode === "move" && task.busy) return "Work was going on it there: copy it, or move it once that's done";
   return null;
 }

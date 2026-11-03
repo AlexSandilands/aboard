@@ -12,6 +12,7 @@ const task = (overrides: Partial<ImportTask> = {}): ImportTask => ({
   archived: false,
   onBoard: "no",
   busy: false,
+  movedTo: null,
   ...overrides,
 });
 const project = (overrides: Partial<ImportProject> = {}): ImportProject => ({
@@ -30,6 +31,9 @@ describe("moving tasks from another machine", () => {
     expect(blockedReason(task({ busy: true }), "copy")).toBeNull();
     expect(blockedReason(task({ busy: true }), "move")).toMatch(/copy it/);
     expect(blockedReason(task({ onBoard: "archived" }), "move")).toBeNull();
+    const gone = task({ archived: true, movedTo: { machine: "desktop", number: 9 } });
+    expect(blockedReason(gone, "move")).toBe("Moved to desktop #9: move it from there");
+    expect(blockedReason(gone, "copy")).toBeNull();
   });
 
   it("describes a task", () => {

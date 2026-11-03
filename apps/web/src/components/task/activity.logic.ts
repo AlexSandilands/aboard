@@ -152,6 +152,7 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       const notes = [
         p.changedSince ? "It changed here after the backup it was moved from; those changes didn't go with it." : null,
         p.busy ? "Work was still going on it here." : null,
+        str(p.alsoMovedTo) ? `It had also been moved to ${str(p.alsoMovedTo)}, so it is open on both.` : null,
       ].filter(Boolean);
       return line(
         "archive",

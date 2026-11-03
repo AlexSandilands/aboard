@@ -255,7 +255,8 @@ from; running tasks on another machine is #12.
   the task keeps its uuid, gets a new number (an archived copy here is replaced and its number reused), goes into
   the mapped project, keeps its epic, blocks and "closed by" only where they exist here, and leaves `t3_thread` and
   `agent_session` links behind, since those run on the other machine. It logs `imported` (mode, source folder and
-  number, dropped links). A live copy here is refused, and so is moving a busy task (copying one warns).
+  number, dropped links). A live copy here is refused, and so is moving a busy task (copying one warns) or one that board already moved
+  away (its `moved_to_json` is set: it is open elsewhere, so it is moved from there; copying it warns).
 - **Transfers.** A move also records a `task_transfers` row (`TaskTransfer` in contracts: transfer id, task, source
   folder and instance id, its number and `updated_at` there, this machine's name, instance id and number for it,
   time). The table is dumped as this machine's `transfers.json`, and the import starts a backup run so it is pushed.
@@ -268,8 +269,9 @@ from; running tasks on another machine is #12.
   id in `applied_transfers` before acting. It archives the task, sets `movedTo` (the card's "Moved to desktop #57"),
   logs `moved_away`, and takes an epic's open tasks out of it. A task gone since, or moved back here after the
   transfer (this board's own later `task_transfers` row for it), is recorded as `skipped`. A task whose `updated_at`
-  is later than the transfer's `sourceUpdatedAt` (it changed after the backup it was taken from), or that is busy, is
-  still archived, with a `backup_notice` on it ([notifications](notifications.md)).
+  is later than the transfer's `sourceUpdatedAt` (it changed after the backup it was taken from), that is busy, or
+  that another transfer already moved away (two boards took it from backups made before either move was applied, so
+  it is open on both), is still archived, with a `backup_notice` on it ([notifications](notifications.md)).
 
 
 - **JSON in git, not a copy of the `.db`.** The database runs in WAL mode; sync tools copy the `.db`,
