@@ -13,6 +13,7 @@ import { BackupSetupDialog } from "./BackupSetupDialog";
 import { backupState } from "./backupSetup.logic";
 import { BlurInput } from "./BlurInput";
 import { FolderPicker } from "./FolderPicker";
+import { MoveTasksDialog } from "./MoveTasksDialog";
 import { RestoreDialog } from "./RestoreDialog";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 
@@ -30,6 +31,7 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
   const status = useBackupStatus();
   const [browsing, setBrowsing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [moving, setMoving] = useState(false);
   const [setup, setSetup] = useState<"folder" | "github" | null>(null);
   const state = backupState(settings);
   const run = useMutation({
@@ -195,6 +197,18 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
         }
       />
       <RestoreDialog open={restoring} onClose={() => setRestoring(false)} />
+      <SettingsRow
+        id="board.data.backup-move-tasks"
+        title="Tasks from another machine"
+        description="Move or copy tasks from another machine that backs up to the same repo."
+        info="Reads that machine's latest pushed backup. A moved task is archived there at its next backup run."
+        control={
+          <Button size="sm" variant="outline" disabled={!settings.backupDir} onClick={() => setMoving(true)}>
+            Move tasks…
+          </Button>
+        }
+      />
+      {moving ? <MoveTasksDialog open onClose={() => setMoving(false)} /> : null}
     </SettingsSection>
   );
 }

@@ -1,4 +1,4 @@
-import { parseHeadlessModel, type HeadlessModel } from "@repo/contracts";
+import { MovedTo, parseHeadlessModel, type HeadlessModel } from "@repo/contracts";
 import type {
   AttentionRequest,
   EpicDelivery,
@@ -10,6 +10,11 @@ import type {
 } from "@repo/contracts";
 import { parseJson } from "../database.ts";
 import { jsonList, type Sql } from "./sql.ts";
+
+const parseMovedTo = (json: string | null): MovedTo | null => {
+  const parsed = MovedTo.safeParse(parseJson(json));
+  return parsed.success ? parsed.data : null;
+};
 
 /** A tasks row in domain shape. */
 export interface TaskRecord {
@@ -56,6 +61,8 @@ export interface TaskRecord {
   integrationBranch: string | null;
   /** When an integration epic was marked merged into the default branch by hand; null when not. */
   integrationMergedAt: string | null;
+  /** Where the task was moved to on another machine, while this copy stays archived; null otherwise. */
+  movedTo: MovedTo | null;
 }
 
 interface TaskRow {
@@ -92,6 +99,7 @@ interface TaskRow {
   delivery: EpicDelivery | null;
   integration_branch: string | null;
   integration_merged_at: string | null;
+  moved_to_json: string | null;
 }
 
 const toRecord = (r: TaskRow): TaskRecord => ({
@@ -128,6 +136,7 @@ const toRecord = (r: TaskRow): TaskRecord => ({
   delivery: r.delivery,
   integrationBranch: r.integration_branch,
   integrationMergedAt: r.integration_merged_at,
+  movedTo: parseMovedTo(r.moved_to_json),
 });
 
 const toRow = (t: TaskRecord): TaskRow => ({
@@ -164,6 +173,7 @@ const toRow = (t: TaskRecord): TaskRow => ({
   delivery: t.delivery,
   integration_branch: t.integrationBranch,
   integration_merged_at: t.integrationMergedAt,
+  moved_to_json: t.movedTo ? JSON.stringify(t.movedTo) : null,
 });
 
 export interface TaskFilter {

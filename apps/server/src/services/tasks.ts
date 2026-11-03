@@ -223,7 +223,7 @@ export function createTasksService(
   /** Unarchives the tasks that were archived with `epic` (see archiveWithEpic) as it comes back. */
   const unarchiveWithEpic = (epic: TaskRecord, archivedAt: string, actor: string, fx: Effects): void => {
     for (const task of repos.tasks.childrenOf([epic.id]).filter((c) => c.archivedAt === archivedAt)) {
-      const restored = { ...task, archivedAt: null, updatedAt: epic.updatedAt };
+      const restored = { ...task, archivedAt: null, movedTo: null, updatedAt: epic.updatedAt };
       repos.tasks.update({ ...restored, position: endOfLane(restored) });
       fx.log(task.id, actor, "unarchived", { withEpic: epic.number });
       fx.task(task.id);
@@ -239,7 +239,7 @@ export function createTasksService(
   const unarchiveEpicFor = (task: TaskRecord, reopened: boolean, actor: string, fx: Effects): void => {
     const epic = task.parentId ? repos.tasks.get(task.parentId) : undefined;
     if (!epic || epic.archivedAt === null) return;
-    const restored = { ...epic, archivedAt: null, updatedAt: nowIso() };
+    const restored = { ...epic, archivedAt: null, movedTo: null, updatedAt: nowIso() };
     repos.tasks.update({ ...restored, position: endOfLane(restored) });
     fx.log(epic.id, actor, "unarchived", { becauseTask: task.number, reopened });
   };
@@ -426,6 +426,7 @@ export function createTasksService(
           delivery: null,
           integrationBranch: null,
           integrationMergedAt: null,
+          movedTo: null,
         };
         repos.tasks.insert(task);
         fx.log(task.id, actor, "created", {
@@ -628,6 +629,8 @@ export function createTasksService(
             }
           }
           next.archivedAt = input.archived ? now : null;
+          // Back in use here, so it no longer stands for a task that moved away.
+          if (!input.archived) next.movedTo = null;
           if (!input.archived) next.position = endOfLane(next);
           fx.log(id, actor, input.archived ? "archived" : "unarchived");
         }

@@ -243,6 +243,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "deleted",
   ]),
   draft(
+    "board.data.backup-move-tasks",
+    "Tasks from another machine",
+    "Move or copy tasks from another machine that backs up to the same repo.",
+    ["move", "copy", "transfer", "machine", "laptop", "desktop", "import"],
+  ),
+  draft(
     "board.data.archived-projects",
     "Archived projects",
     "Archiving a project hides its lane; it can be restored here.",

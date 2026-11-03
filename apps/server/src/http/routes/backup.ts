@@ -3,6 +3,7 @@ import {
   BoardDump,
   CheckBackupRemoteInput,
   CreateBackupRepoInput,
+  ImportTasksInput,
   RestoreBoardInput,
   RestoreTasksInput,
 } from "@repo/contracts";
@@ -53,6 +54,14 @@ export function registerBackupRoutes(app: Hono, { services, integrations }: AppC
   app.post(
     "/api/backup/restore-board",
     handle(async (c) => c.json(await integrations.restoreBackupBoard(await parseBody(c, RestoreBoardInput)))),
+  );
+  app.get(
+    "/api/backup/machines/:name/tasks",
+    handle(async (c) => c.json(await integrations.backupMachineTasks(c.req.param("name") ?? ""))),
+  );
+  app.post(
+    "/api/backup/import-tasks",
+    handle(async (c) => c.json(await integrations.importBackupTasks(await parseBody(c, ImportTasksInput), actorOf(c)))),
   );
   app.get(
     "/api/backup/setup-info",

@@ -52,6 +52,7 @@ export function createContext(
     bus,
     t3Status: () => integrations.t3Status(),
     attachmentsDir,
+    instanceId,
     userHome: config.userHome,
     ...(config.harnessHomes ? { harnessHomes: config.harnessHomes } : {}),
     prHostHoldsTasks: (host) => integrations.prHostHoldsTasks(host),

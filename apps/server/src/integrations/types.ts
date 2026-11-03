@@ -25,6 +25,9 @@ import type {
   ResumeSessionInput,
   RestoreBoardInput,
   RestoreBoardResult,
+  ImportTasksInput,
+  ImportTasksResult,
+  MachineTasks,
   RestoreTasksInput,
   RestoreTasksResult,
   SessionLaunchOptions,
@@ -157,6 +160,10 @@ export interface Integrations {
   restoreBackupTasks(input: RestoreTasksInput, actor: string): Promise<RestoreTasksResult>;
   /** Replaces the whole board with the backup at a commit (publishes board.reset). */
   restoreBackupBoard(input: RestoreBoardInput): Promise<RestoreBoardResult>;
+  /** Another machine's latest backup, offered for moving or copying its tasks here. */
+  backupMachineTasks(machine: string): Promise<MachineTasks>;
+  /** Moves or copies tasks from another machine's latest backup onto this board. */
+  importBackupTasks(input: ImportTasksInput, actor: string): Promise<ImportTasksResult>;
   /** What the backup setup dialog starts from: gh's sign-in, the default folder and the current setup. */
   backupSetupInfo(): Promise<BackupSetupInfo>;
   /** Creates a private GitHub repo for backups with gh. Throws CONFLICT when the account has one of that name. */

@@ -54,6 +54,25 @@ machine's folder (this machine's by default) and a commit, then either:
   on new hardware, in which case this machine takes that folder over and backs up into it, or a new board, which
   keeps backing up to this machine's own folder.
 
+### Working across machines
+
+To carry on with tasks on another machine (the desktop at home, the laptop on the road), back both machines up to
+the same repo, then on the machine you're switching to open **Settings → Board → Data → Move tasks…**. Pick the
+other machine (the list says how old its last backup is: anything done there since isn't in it), tick the tasks
+and choose:
+
+- **Move** (the default): the tasks come onto this board, and the other machine archives its copies at its next
+  backup run. Their cards there say where they went ("Moved to laptop #57"). If one changed there after the backup
+  you took it from, it's still archived and the inbox says so, so you can carry the change over by hand. A task an
+  agent session or Autopilot run was working on at that backup can't be moved, only copied, and neither can one
+  that machine already moved somewhere else: move it from there.
+- **Copy**: the tasks come onto this board and stay on the other one too; the two copies then go their own ways.
+
+Each task gets a number on this board and goes into the matching project: the same repo (by its `origin`), else
+the same name, else the one you pick. Pull request and ticket links come along; T3 thread and agent session links
+stay behind, since those sessions run on the other machine. A task already on this board can't come in again,
+but moving one back to the machine it came from puts it back where it was, under its old number.
+
 From the command line:
 
 ```sh

@@ -514,6 +514,14 @@ export const DueDate = z
     return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
   }, "Not a real date");
 
+/** Where a task moved to on another machine (backup.md#moving-tasks-between-machines), on the copy it left here. */
+export const MovedTo = z.object({
+  machine: z.string(),
+  number: z.number().int(),
+  at: IsoDate,
+});
+export type MovedTo = z.infer<typeof MovedTo>;
+
 export const TaskSummary = z.object({
   id: z.string(),
   number: z.number().int(),
@@ -586,6 +594,8 @@ export const TaskSummary = z.object({
   suggestedModel: SuggestedModel.nullable(),
   /** Set when the task was created from an issue URL; null otherwise. */
   import: TaskImport.nullable(),
+  /** Set on the archived copy of a task that was moved to another machine; null otherwise. */
+  movedTo: MovedTo.nullable(),
 });
 export type TaskSummary = z.infer<typeof TaskSummary>;
 

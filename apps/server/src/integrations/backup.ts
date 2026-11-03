@@ -19,13 +19,24 @@ import {
   type BackupSource,
   type BackupStatus,
   type BoardDump,
+  type ImportTasksInput,
+  type ImportTasksResult,
+  type MachineTasks,
+  MachineInfo,
+  normalizeRemote,
   type RestoreBoardInput,
   type RestoreBoardResult,
   type RestoreTasksInput,
   type RestoreTasksResult,
 } from "@repo/contracts";
 import { AppError } from "../errors.ts";
-import { DUMP_ENTRIES, readDumpDir, writeDumpDir } from "../services/backup/files.ts";
+import {
+  DUMP_ENTRIES,
+  MACHINE_INFO_FILE,
+  readDumpDir,
+  readTransferRows,
+  writeDumpDir,
+} from "../services/backup/files.ts";
 import {
   isBackupRepo,
   isFlatDump,
@@ -33,6 +44,7 @@ import {
   writeRepoIndex,
   type MachineFolder,
 } from "../services/backup/repo.ts";
+import { movedAwayIn, transfersIn } from "../services/backup/transfers.ts";
 import type { Services } from "../services/types.ts";
 import type { Logger } from "./util.ts";
 
@@ -112,6 +124,10 @@ export interface BackupIntegration {
   restoreTasks(input: RestoreTasksInput, actor: string): Promise<RestoreTasksResult>;
   /** Replaces the whole board with the backup at a commit; from another machine's folder, may take it over. */
   restoreBoard(input: RestoreBoardInput): Promise<RestoreBoardResult>;
+  /** Another machine's latest backup, as offered for moving or copying its tasks here. */
+  machineTasks(machine: string): Promise<MachineTasks>;
+  /** Moves or copies tasks from another machine's latest backup onto this board; a move backs up straight after. */
+  importTasks(input: ImportTasksInput, actor: string): Promise<ImportTasksResult>;
   start(): void;
   stop(): void;
 }
@@ -619,6 +635,120 @@ export function createBackupIntegration(deps: {
       return { ...result, tookOver: folder.folder };
     });
 
+  /** This board's projects' repo origins (normalizeRemote) by project id, read from their checkouts on this machine. */
+  const projectRemotes = async (): Promise<Map<string, string>> => {
+    const remotes = new Map<string, string>();
+    for (const project of deps.services().projects.list({ includeArchived: true })) {
+      // git can't start in a folder that isn't there (a project from another machine, a checkout moved away).
+      if (!project.workspaceRoot || !existsSync(project.workspaceRoot)) continue;
+      const result = await runGit(["remote", "get-url", "origin"], project.workspaceRoot).catch(() => null);
+      const url = result?.code === 0 ? result.stdout.trim() : "";
+      if (url) remotes.set(project.id, normalizeRemote(url));
+    }
+    return remotes;
+  };
+
+  /** Writes machine.json into this machine's folder: its projects' remotes and its tasks with work going on. */
+  const writeMachineInfo = async (folder: string) => {
+    const remotes = await projectRemotes();
+    const info: MachineInfo = {
+      remotes: Object.fromEntries([...remotes].sort(([a], [b]) => a.localeCompare(b))),
+      busyTaskIds: deps.services().backup.busyTaskIds(),
+    };
+    const path = join(folder, MACHINE_INFO_FILE);
+    const contents = `${JSON.stringify(info, null, 2)}\n`;
+    if (existsSync(path) && readFileSync(path, "utf8") === contents) return;
+    writeFileSync(`${path}.tmp`, contents);
+    renameSync(`${path}.tmp`, path);
+  };
+
+  const readMachineInfo = (folder: string): MachineInfo => {
+    try {
+      const parsed = MachineInfo.safeParse(JSON.parse(readFileSync(join(folder, MACHINE_INFO_FILE), "utf8")));
+      if (parsed.success) return parsed.data;
+    } catch {
+      // Older backups have none.
+    }
+    return { remotes: {}, busyTaskIds: [] };
+  };
+
+  /**
+   * Acts on the moves other boards made of this board's tasks, read from every machine folder's transfers.json after
+   * the pull: applyTransfer archives the copies here once each, and ignores the rest.
+   */
+  const applyTransfers = (dir: string, name: string) => {
+    const { backup } = deps.services();
+    const transfers = transfersIn(machineFolders(dir).map((f) => readTransferRows(join(dir, f.folder))));
+    for (const transfer of transfers) {
+      try {
+        backup.applyTransfer(transfer, { actor: "backup", folder: name });
+      } catch (error) {
+        log.warn(`[backup] could not apply the move of task ${transfer.taskId}: ${(error as Error).message}`);
+      }
+    }
+  };
+
+  /**
+   * Tasks of `folder` that another board has moved away, as every folder's transfers.json in the clone says, before
+   * that machine has acted on it: they are open elsewhere, so they can't be moved again from here.
+   */
+  const pendingMoves = (folder: string) => {
+    const dir = backupClone();
+    return movedAwayIn(transfersIn(machineFolders(dir).map((f) => readTransferRows(join(dir, f.folder)))), folder);
+  };
+
+  /** Reads another machine's latest backup; refuses this machine's own folder, which Restore is for. */
+  const withOtherMachine = <T>(
+    machine: string,
+    fn: (dump: BoardDump, dumpDir: string, folder: MachineFolder, sha: string) => T | Promise<T>,
+  ): Promise<T> =>
+    withDumpAt({ machine }, (dump, dumpDir, folder, sha) => {
+      const dir = backupClone();
+      if (
+        folder.folder === "" ||
+        folder.instanceId === deps.instanceId ||
+        ownFolder(dir, machineFolders(dir))?.folder === folder.folder
+      ) {
+        throw new AppError("VALIDATION", `${folder.folder || "That"} is this machine's own backup: use Restore for it`);
+      }
+      return fn(dump, dumpDir, folder, sha);
+    });
+
+  const machineTasks = (machine: string): Promise<MachineTasks> =>
+    withOtherMachine(machine, async (dump, dumpDir, folder, sha) => {
+      const info = readMachineInfo(dumpDir);
+      const { backup } = deps.services();
+      const last = await runGit(["log", "-1", "--format=%cI", "--", folder.folder], backupClone());
+      const at = last.code === 0 ? last.stdout.trim() : "";
+      return {
+        folder: folder.folder,
+        machineName: folder.machineName,
+        lastCommitAt: at ? new Date(at).toISOString() : null,
+        commit: sha,
+        projects: backup.matchProjects(dump, info, await projectRemotes()),
+        tasks: backup.offer(dump, info, pendingMoves(folder.folder)),
+      };
+    });
+
+  const importTasks = (input: ImportTasksInput, actor: string): Promise<ImportTasksResult> =>
+    withOtherMachine(input.machine, async (dump, dumpDir, folder) => {
+      const services = deps.services();
+      const results = services.backup.importTasks(dump, input.taskIds, {
+        mode: input.mode,
+        projectMap: input.projectMap ?? {},
+        source: { folder: folder.folder, instanceId: folder.instanceId },
+        machineName: services.settings.get().machineName,
+        info: readMachineInfo(dumpDir),
+        movedAway: pendingMoves(folder.folder),
+        remotes: await projectRemotes(),
+        attachmentsFrom: dumpDir,
+        actor,
+      });
+      // The other machine learns of a move from this machine's transfers.json, so back up straight away.
+      if (input.mode === "move" && results.some((r) => r.ok)) void (inFlight ?? Promise.resolve()).then(() => run());
+      return { mode: input.mode, results };
+    });
+
   const runOnce = async (): Promise<BackupStatus> => {
     const settings = deps.services().settings.get();
     const dir = settings.backupDir;
@@ -633,9 +763,12 @@ export function createBackupIntegration(deps: {
       // A default name is kept from the first backup on: some host names change with the network (macOS), and
       // each change would otherwise move the folder.
       if (settings.machineNameIsDefault) deps.services().settings.update({ machineName: name });
+      // Before the dump, so tasks moved to other machines are archived in this backup.
+      applyTransfers(dir, name);
       const dump = deps.services().backup.dump();
       dump.manifest = { ...dump.manifest, instanceId: deps.instanceId, machineName: name };
       writeDumpDir(join(dir, name), dump, deps.attachmentsDir);
+      await writeMachineInfo(join(dir, name));
       writeRepoIndex(dir);
       await git(dir, "add", "-A");
       const changes = (await git(dir, "status", "--porcelain")).split("\n").filter(Boolean);
@@ -677,6 +810,8 @@ export function createBackupIntegration(deps: {
     diff,
     restoreTasks,
     restoreBoard,
+    machineTasks,
+    importTasks,
     start() {
       if (timers.length > 0) return;
       timers.push(setTimeout(tick, STARTUP_DELAY_MS).unref(), setInterval(tick, BACKUP_TICK_MS).unref());
