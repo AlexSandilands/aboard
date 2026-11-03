@@ -24,8 +24,14 @@ import { insertRows, upgradeDump } from "./restore.ts";
 // the board it came from reads that transfer from the repo and archives its copy through applyTransfer, the one way
 // a transfer is acted on, so one that arrives twice (by git, later by a live link) is applied once.
 
+/** Where a task went when it was moved off a board. */
+export interface MovedAway {
+  machine: string;
+  number: number;
+}
+
 /** Where a dumped task row says it went, when that board moved it away. */
-const movedToOf = (row: BackupRow): { machine: string; number: number } | null => {
+const movedToOf = (row: BackupRow): MovedAway | null => {
   try {
     const parsed = JSON.parse(String(row.moved_to_json ?? "null")) as { machine?: unknown; number?: unknown } | null;
     return parsed && typeof parsed.machine === "string" && typeof parsed.number === "number"
@@ -58,6 +64,8 @@ export interface ImportOptions {
   remotes: ReadonlyMap<string, string>;
   /** The folder the dump was read from, for the tasks' pasted images. */
   attachmentsFrom: string | null;
+  /** Moves of the source's tasks other boards recorded that it hasn't acted on yet (movedAwayIn). */
+  movedAway?: ReadonlyMap<string, MovedAway>;
   actor: string;
 }
 
@@ -67,7 +75,7 @@ export interface TransferService {
   /** The projects of another machine's backup and the project here each one goes into, if any matched. */
   matchProjects(dump: BoardDump, info: MachineInfo, remotes: ReadonlyMap<string, string>): ImportProject[];
   /** Another machine's tasks as offered for moving or copying here. */
-  offer(dump: BoardDump, info: MachineInfo): ImportTask[];
+  offer(dump: BoardDump, info: MachineInfo, movedAway?: ReadonlyMap<string, MovedAway>): ImportTask[];
   /**
    * Brings tasks from another machine's backup onto this board, each on its own (one failing doesn't stop the rest).
    * A move records a transfer, which that machine's next backup run acts on.
@@ -129,7 +137,11 @@ export function createTransferService(
     });
   };
 
-  const offer = (dump: BoardDump, info: MachineInfo): ImportTask[] => {
+  const offer = (
+    dump: BoardDump,
+    info: MachineInfo,
+    movedAway: ReadonlyMap<string, MovedAway> = new Map(),
+  ): ImportTask[] => {
     const busy = new Set(info.busyTaskIds);
     return dump.tasks.map(({ task }) => {
       const id = String(task.id);
@@ -144,7 +156,7 @@ export function createTransferService(
         archived: task.archived_at !== null && task.archived_at !== undefined,
         onBoard: !onBoard ? "no" : onBoard.archivedAt === null ? "here" : "archived",
         busy: busy.has(id),
-        movedTo: movedToOf(task),
+        movedTo: movedToOf(task) ?? movedAway.get(id) ?? null,
       };
     });
   };
@@ -280,7 +292,7 @@ export function createTransferService(
       };
       try {
         if (!bundle) throw new AppError("NOT_FOUND", `${machine}'s backup has no such task`);
-        const gone = movedToOf(bundle.task);
+        const gone = movedToOf(bundle.task) ?? options.movedAway?.get(taskId) ?? null;
         // Moving it again from a copy that already moved away would leave it open on two other boards.
         if (options.mode === "move" && gone) {
           throw new AppError(
@@ -447,4 +459,20 @@ export function transfersIn(rowsByFolder: ReadonlyArray<readonly BackupRow[]>): 
   return [...byId.values()].sort((a, b) =>
     a.at === b.at ? a.transferId.localeCompare(b.transferId) : a.at.localeCompare(b.at),
   );
+}
+
+/**
+ * The tasks of the machine folder `folder` whose latest move, among `transfers`, took them off it: moved away even if
+ * that machine hasn't acted on it yet. A later move back to it wins.
+ */
+export function movedAwayIn(transfers: readonly TaskTransfer[], folder: string): Map<string, MovedAway> {
+  const latest = new Map<string, TaskTransfer>();
+  for (const transfer of transfers) latest.set(transfer.taskId, transfer);
+  const moved = new Map<string, MovedAway>();
+  for (const [taskId, transfer] of latest) {
+    if (transfer.from.toLowerCase() === folder.toLowerCase()) {
+      moved.set(taskId, { machine: transfer.toMachine, number: transfer.toNumber });
+    }
+  }
+  return moved;
 }

@@ -562,6 +562,15 @@ describe("moving tasks between machines", { timeout: PROCESS_TEST_TIMEOUT }, () 
       expect.objectContaining({ task_id: a.task.id, from_machine: "laptop", to_machine: "desktop" }),
     ]);
 
+    // A third machine sees the move before the laptop has acted on it, and won't move the task again.
+    const c = setup({ root: a.root, remote: a.remote, machineName: "work" });
+    expect((await c.backup.run()).lastError).toBeNull();
+    expect((await c.backup.machineTasks("laptop")).tasks[0]).toMatchObject({
+      movedTo: { machine: "desktop", number: b.task.number + 1 },
+    });
+    const twice = await c.backup.importTasks({ machine: "laptop", taskIds: [a.task.id], mode: "move" }, "user");
+    expect(twice.results[0]).toMatchObject({ ok: false, error: expect.stringMatching(/already moved it to desktop/) });
+
     expect((await a.backup.run()).lastError).toBeNull();
     const left = a.services.tasks.detail(a.task.id);
     expect(left.archivedAt).not.toBeNull();

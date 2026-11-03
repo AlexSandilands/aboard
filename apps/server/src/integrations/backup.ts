@@ -44,7 +44,7 @@ import {
   writeRepoIndex,
   type MachineFolder,
 } from "../services/backup/repo.ts";
-import { transfersIn } from "../services/backup/transfers.ts";
+import { movedAwayIn, transfersIn } from "../services/backup/transfers.ts";
 import type { Services } from "../services/types.ts";
 import type { Logger } from "./util.ts";
 
@@ -688,6 +688,15 @@ export function createBackupIntegration(deps: {
     }
   };
 
+  /**
+   * Tasks of `folder` that another board has moved away, as every folder's transfers.json in the clone says, before
+   * that machine has acted on it: they are open elsewhere, so they can't be moved again from here.
+   */
+  const pendingMoves = (folder: string) => {
+    const dir = backupClone();
+    return movedAwayIn(transfersIn(machineFolders(dir).map((f) => readTransferRows(join(dir, f.folder)))), folder);
+  };
+
   /** Reads another machine's latest backup; refuses this machine's own folder, which Restore is for. */
   const withOtherMachine = <T>(
     machine: string,
@@ -717,7 +726,7 @@ export function createBackupIntegration(deps: {
         lastCommitAt: at ? new Date(at).toISOString() : null,
         commit: sha,
         projects: backup.matchProjects(dump, info, await projectRemotes()),
-        tasks: backup.offer(dump, info),
+        tasks: backup.offer(dump, info, pendingMoves(folder.folder)),
       };
     });
 
@@ -730,6 +739,7 @@ export function createBackupIntegration(deps: {
         source: { folder: folder.folder, instanceId: folder.instanceId },
         machineName: services.settings.get().machineName,
         info: readMachineInfo(dumpDir),
+        movedAway: pendingMoves(folder.folder),
         remotes: await projectRemotes(),
         attachmentsFrom: dumpDir,
         actor,

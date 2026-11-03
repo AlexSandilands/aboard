@@ -255,8 +255,10 @@ from; running tasks on another machine is #12.
   the task keeps its uuid, gets a new number (an archived copy here is replaced and its number reused), goes into
   the mapped project, keeps its epic, blocks and "closed by" only where they exist here, and leaves `t3_thread` and
   `agent_session` links behind, since those run on the other machine. It logs `imported` (mode, source folder and
-  number, dropped links). A live copy here is refused, and so is moving a busy task (copying one warns) or one that board already moved
-  away (its `moved_to_json` is set: it is open elsewhere, so it is moved from there; copying it warns).
+  number, dropped links). A live copy here is refused, and so is moving a busy task (copying one warns) or one already moved away from
+  that board: its `moved_to_json` is set, or the latest transfer of it in any folder's `transfers.json` took it off
+  that folder before it has acted on it (`movedAwayIn`). It is open elsewhere, so it is moved from there; copying it
+  warns.
 - **Transfers.** A move also records a `task_transfers` row (`TaskTransfer` in contracts: transfer id, task, source
   folder and instance id, its number and `updated_at` there, this machine's name, instance id and number for it,
   time). The table is dumped as this machine's `transfers.json`, and the import starts a backup run so it is pushed.

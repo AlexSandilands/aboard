@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { MachineInfo, TaskTransfer } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
-import { transfersIn } from "./transfers.ts";
+import { movedAwayIn, transfersIn } from "./transfers.ts";
 
 const NO_INFO: MachineInfo = { remotes: {}, busyTaskIds: [] };
 const SOURCE = { folder: "laptop", instanceId: "laptop-id" };
@@ -240,6 +240,17 @@ describe("applyTransfer", () => {
     expect(returned).toMatchObject({ ok: true, boardNumber: task.number });
     expect(from.services.backup.applyTransfer(away, { actor: "backup" })).toBe("skipped");
     expect(from.services.tasks.detail(task.id).archivedAt).toBeNull();
+  });
+
+  it("knows which of a folder's tasks another board moved away, a move back winning", () => {
+    const away = transfer("t1", { at: "2026-01-01", from: "laptop", toMachine: "desktop", toNumber: 5 });
+    const other = transfer("t2", { at: "2026-01-02", from: "Laptop", toMachine: "work", toNumber: 8 });
+    const back = transfer("t1", { at: "2026-01-03", from: "desktop", toMachine: "laptop", toNumber: 1 });
+    expect([...movedAwayIn([away, other], "laptop")]).toEqual([
+      ["t1", { machine: "desktop", number: 5 }],
+      ["t2", { machine: "work", number: 8 }],
+    ]);
+    expect([...movedAwayIn([away, other, back], "laptop").keys()]).toEqual(["t2"]);
   });
 
   it("reads transfers from every folder once, oldest first", () => {
