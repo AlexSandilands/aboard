@@ -1,6 +1,6 @@
 import { BRAND } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { agentArgs, boardMcpConfig, parseAgentOutput, pushDenyRules } from "./headlessAgent.ts";
+import { agentArgs, boardMcpConfig, mcpWaitEnv, parseAgentOutput, pushDenyRules } from "./headlessAgent.ts";
 
 const SESSION = "11111111-2222-4333-8444-555555555555";
 const after = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
@@ -200,6 +200,20 @@ describe("headless agent", () => {
     expect(pushDenyRules(null).some((r) => r.includes("main"))).toBe(false);
     const args = agentArgs({ access: "edit", budgetUsd: 1, sessionId: SESSION, model: null, defaultBranch: "main" });
     expect(args.slice(args.indexOf("--disallowedTools") + 1)).toEqual(expect.arrayContaining(rules));
+  });
+
+  it("waits for the user's MCP servers only when its tools name one and it gets them", () => {
+    const jira = ["mcp__jira-mcp__get_jira_issue"];
+    const wait = { MCP_CONNECTION_NONBLOCKING: "false" };
+    expect(mcpWaitEnv({ access: "edit", tools: jira })).toEqual(wait);
+    expect(mcpWaitEnv({ access: "read-only", tools: ["Bash(gh pr view *)", ...jira] })).toEqual(wait);
+    // The board's own server, or no MCP tools at all, needs no wait.
+    expect(mcpWaitEnv({ access: "edit", tools: [`mcp__${BRAND.id}`, `mcp__${BRAND.id}__move_task`] })).toEqual({});
+    expect(mcpWaitEnv({ access: "edit", tools: ["Bash(gh pr review *)"] })).toEqual({});
+    expect(mcpWaitEnv({ access: "edit" })).toEqual({});
+    // These runs get no user servers (--strict-mcp-config), so there is nothing to wait for.
+    expect(mcpWaitEnv({ access: "none", tools: jira })).toEqual({});
+    expect(mcpWaitEnv({ access: "read-only", untrusted: true, tools: jira })).toEqual({});
   });
 
   it("reads the outcome, with the cost even when the run stopped", () => {

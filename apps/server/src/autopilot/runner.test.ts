@@ -241,6 +241,18 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     expect(jobs[0]!.prompt).toContain("Don't edit files");
   });
 
+  it("makes an agent whose tools name a user MCP server connect it before starting, alongside the push guard", async () => {
+    const { jobs, start } = setup();
+    await start({ options: { runner: "headless" }, tools: ["mcp__jira-mcp__get_jira_issue"] });
+    const env = jobs[0]!.env;
+    expect(env?.MCP_CONNECTION_NONBLOCKING).toBe("false");
+    expect(env?.GIT_CONFIG_PARAMETERS).toMatch(/^'core.hooksPath=.*autopilot-hooks'$/);
+    // Without one, it doesn't wait for every server the user has.
+    const plain = setup();
+    await plain.start({ options: { runner: "headless" } });
+    expect(plain.jobs[0]!.env).not.toHaveProperty("MCP_CONNECTION_NONBLOCKING");
+  });
+
   it("keeps a read-only agent that reads untrusted text away from MCP servers and other files", async () => {
     const { jobs, start } = setup({ agent: async () => result({ result: "ok" }) });
     await start({ options: { runner: "headless" }, access: "read-only", untrustedInput: true });

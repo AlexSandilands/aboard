@@ -879,6 +879,13 @@ empty by default, so rows saved before them still parse (#238 added inputs to sh
 - **Slots** are `{name, label, description, tools}`; `tools` follow the `allowedTools` rules. `customAllowedTools` is
   the allowed tools and every slot's tools together, which is what `act` passes as `RunnerRequest.tools` and what the
   dry-run note lists. `customAgentPrompt` adds a "Tools to use for this" line per *filled* slot after the prompt.
+- **Waiting for the slot's server.** `claude -p` connects MCP servers in the background, so a slow server's tools may not
+  be there on the agent's first turn. When `RunnerRequest.tools` name an `mcp__<server>` other than the board's, and the
+  run gets the user's servers (not `access: "none"`, nor read-only and untrusted, which use `--strict-mcp-config`), the
+  runner adds `MCP_CONNECTION_NONBLOCKING=false` to the agent's environment beside the push guard's (`mcpWaitEnv`), so
+  Claude Code connects them first. Such a run waits for every user server, up to Claude Code's MCP timeout, within the
+  run's own timeout; runs that need only the board's server don't wait. Same cause as ticket imports
+  ([issue-import.md](issue-import.md#the-job)).
 - **Blocked.** While a slot has no tools, `customBlockedReason` gives "Won't work until you fill in: Jira tools". The
   catalogue entry carries it as `Automation.blocked` (`AutopilotAutomation.blocked` in the API): `setScope` refuses
   `mode: "on"` with that message (`VALIDATION`), the UI shows it in orange and disables On, and the automation's `check`

@@ -25,6 +25,7 @@ import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
 import { messageOf } from "../integrations/github.ts";
 import {
   boardMcpConfig,
+  mcpWaitEnv,
   runHeadlessAgent,
   type AgentArgsInput,
   type AgentOutcome,
@@ -452,6 +453,10 @@ export function createAutopilotRunner(deps: {
       update({ sessionId: id });
       link(driver.harness, id);
     };
+    const env = {
+      ...(where.hooksPath ? pushGuardEnv(where.hooksPath, process.env.GIT_CONFIG_PARAMETERS) : {}),
+      ...mcpWaitEnv({ access, untrusted: request.untrustedInput, tools: request.tools }),
+    };
     const stdout = await runAgent({
       cli: harnessCliSetting(settings, driver.harness),
       command: driver.command,
@@ -459,7 +464,7 @@ export function createAutopilotRunner(deps: {
       cwd: where.cwd,
       prompt: where.prompt,
       timeoutMs: options.timeoutMinutes * 60_000,
-      ...(where.hooksPath ? { env: pushGuardEnv(where.hooksPath, process.env.GIT_CONFIG_PARAMETERS) } : {}),
+      ...(Object.keys(env).length > 0 ? { env } : {}),
       ...(driver.sessionIdOf
         ? {
             onStdoutLine: (line: string) => {
