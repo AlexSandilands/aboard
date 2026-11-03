@@ -108,7 +108,8 @@ export function linkText(link: TaskLink, ticketSystems: readonly TicketSystem[] 
     }
     case "t3_thread": {
       const s = link.snapshot ? ` (${link.snapshot.title}, ${link.snapshot.status})` : "";
-      return `T3 thread${s}${label} ${link.url}`;
+      // Marked so an orchestrator can tell which thread message_task_thread will not reach.
+      return `T3 thread${link.role === "followup" ? " (follow-up, never messaged by the board)" : ""}${s}${label} ${link.url}`;
     }
     case "issue": {
       const s = link.snapshot ? ` (${link.snapshot.state})` : "";

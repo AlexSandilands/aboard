@@ -254,6 +254,7 @@ describe("T3 threads for a task over MCP", () => {
     linkThread("th-ask", { status: "working" }, { role: "followup" });
     await call(agent, "message_task_thread", { task: "#2", text: "Address the review" });
     expect(messages.map((m) => m.threadId)).toEqual(["th-impl"]);
+    expect((await call(agent, "get_task", { task: "#2" })).text).toContain("T3 thread (follow-up, never messaged");
   });
 
   it("refuses to message when only follow-up threads are linked, and lets a new thread start beside them", async () => {
