@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   AUTOPILOT_ACTOR,
+  implementingThread,
   autopilotSessionName,
   BRAND,
   AGENT_HARNESSES,
@@ -33,7 +34,6 @@ import {
   type RunAgent,
 } from "../integrations/headlessAgent.ts";
 import { headlessDriverFor, type DriverNeeds } from "../integrations/headlessDrivers.ts";
-import { latestThread } from "../integrations/reviewFallbacks.ts";
 import {
   isT3Unavailable,
   t3Unavailable,
@@ -253,7 +253,7 @@ export function createAutopilotRunner(deps: {
   };
 
   const nudge = async (request: RunnerRequest, task: TaskSummary, update: (patch: RunPatch) => void) => {
-    const thread = latestThread(task);
+    const thread = implementingThread(task);
     if (!thread) throw new Error(`#${task.number} has no live T3 Code thread to nudge`);
     update({ runner: "t3", threadUrl: thread.url });
     await whileUnavailable(
