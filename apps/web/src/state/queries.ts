@@ -51,6 +51,7 @@ export const queryKeys = {
   /** Whether the settings Ask can run, per Claude Code CLI setting: changing the path asks again. */
   settingsAsk: (cli: string | null) => ["settingsAsk", cli] as const,
   backupStatus: ["backupStatus"] as const,
+  backupSetupInfo: ["backupSetupInfo"] as const,
   skillSync: ["skillSync"] as const,
   notifications: ["notifications"] as const,
   socialFeed: ["socialFeed"] as const,
