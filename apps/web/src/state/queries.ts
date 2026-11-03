@@ -73,7 +73,9 @@ export const queryKeys = {
   autopilotOrchestrate: (projectId: string) => ["autopilotOrchestrate", projectId] as const,
   autopilotRuns: (scope: AutopilotRunsScope) => ["autopilotRuns", scope] as const,
   terminal: ["terminal"] as const,
+  /** The full detection; also the prefix of the CLI-only one, so invalidating it refreshes both. */
   providers: ["providers"] as const,
+  providerClis: ["providers", "cli"] as const,
   agentModels: ["agentModels"] as const,
   sessionLaunchOptions: (taskId: string) => ["sessionLaunchOptions", taskId] as const,
   prFix: (linkId: string) => ["prFix", linkId] as const,
@@ -310,7 +312,13 @@ export function useProviders(enabled = true) {
  * the user didn't add (handoffClis). Shared by every card.
  */
 export function useAgentClis(): { data: AgentCliStatus[] | undefined } {
-  return { data: agentClisOf(useProviders().data) };
+  const clis = useQuery({
+    queryKey: queryKeys.providerClis,
+    // Only the CLI checks: the menus mustn't wait on `claude mcp list` or the model scans.
+    queryFn: ({ signal }) => api<ProvidersStatus>("/api/providers?parts=cli", { signal }),
+    staleTime: 60_000,
+  });
+  return { data: agentClisOf(clis.data) };
 }
 
 /**

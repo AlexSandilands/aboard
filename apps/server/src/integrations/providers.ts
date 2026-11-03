@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   AGENT_HARNESSES,
-  type AgentHarness,
+  AgentHarness,
   type AgentModelsStatus,
   type AppSettings,
   harnessCliSetting,
@@ -210,9 +210,15 @@ const readText = (path: string): string | null => {
   }
 };
 
+/** Every check, or only the CLIs (resolved, with their version) and T3 Code: what the board's menus need, quickly. */
+export type ProviderParts = "all" | "cli";
+
 export interface ProvidersService {
-  /** Every provider as detected here; the CLI and MCP checks are reused for a minute unless `refresh` is set. */
-  status(refresh?: boolean): Promise<ProvidersStatus>;
+  /**
+   * Every provider as detected here; the checks are reused for a minute unless `refresh` is set. `parts: "cli"` leaves
+   * out the MCP checks and model scans, which can take many seconds.
+   */
+  status(refresh?: boolean, parts?: ProviderParts): Promise<ProvidersStatus>;
   /**
    * On an install upgraded to opt-in providers, adds those detection finds in use (the MCP server registered, or a
    * hand-off entry the menus showed), once. Resolves to the ids it added.
@@ -351,14 +357,50 @@ export function createProviders(deps: {
   };
 
   /** Everything but T3 Code, whose status is live and cheap, so it is never cached. */
+  /**
+   * One answer kept for a minute under a key; a refresh skips it, and joins a check still running rather than starting
+   * another (`claude mcp list` health-checks every server the user has). A check that threw isn't kept.
+   */
+  const cacheOf = <T>() => {
+    let cached: { key: string; at: number; result: Promise<T>; pending: boolean } | null = null;
+    return (key: string, refresh: boolean, run: () => Promise<T>): Promise<T> => {
+      if (cached?.key === key && (cached.pending || (!refresh && now() - cached.at < CACHE_MS))) return cached.result;
+      const result = run();
+      const entry = { key, at: now(), result, pending: true };
+      cached = entry;
+      const settle = () => {
+        entry.pending = false;
+      };
+      result.then(settle, settle);
+      result.catch(() => {
+        if (cached?.result === result) cached = null;
+      });
+      return result;
+    };
+  };
+  const cliCache = cacheOf<Record<AgentHarness, ProviderCliStatus>>();
+  const fullCache = cacheOf<ProviderStatus[]>();
+
+  /** Each CLI resolved and its `--version`: quick, so the menus wait on nothing else. Keyed by the configured paths. */
+  const clis = (settings: AppSettings, refresh: boolean) => {
+    const paths = AgentHarness.options.map((harness) => harnessCliSetting(settings, harness));
+    return cliCache(JSON.stringify(paths), refresh, async () => {
+      const found = await Promise.all(AgentHarness.options.map((harness, i) => cliOf(harness, paths[i] ?? null)));
+      return Object.fromEntries(AgentHarness.options.map((harness, i) => [harness, found[i]!])) as Record<
+        AgentHarness,
+        ProviderCliStatus
+      >;
+    });
+  };
+
+  /** Everything but T3 Code, whose status is live and cheap, so it is never cached. */
   const compute = async (settings: AppSettings, boardUrl: string, refresh: boolean): Promise<ProviderStatus[]> => {
-    const [claudeCli, codexCli, copilotCli, claudeModels, copilotModels] = await Promise.all([
-      cliOf("claude-code", harnessCliSetting(settings, "claude-code")),
-      cliOf("codex", harnessCliSetting(settings, "codex")),
-      cliOf("copilot-cli", harnessCliSetting(settings, "copilot-cli")),
+    const [cli, claudeModels, copilotModels] = await Promise.all([
+      clis(settings, refresh),
       modelsOf(settings, "claude-code", refresh),
       modelsOf(settings, "copilot-cli", refresh),
     ]);
+    const claudeCli = cli["claude-code"];
     return [
       {
         id: "claude-code",
@@ -367,41 +409,26 @@ export function createProviders(deps: {
         t3: null,
         models: claudeModels,
       },
-      { id: "codex", cli: codexCli, mcp: codexMcp(boardUrl), t3: null, models: null },
-      { id: "copilot-cli", cli: copilotCli, mcp: copilotMcp(boardUrl), t3: null, models: copilotModels },
+      { id: "codex", cli: cli.codex, mcp: codexMcp(boardUrl), t3: null, models: null },
+      { id: "copilot-cli", cli: cli["copilot-cli"], mcp: copilotMcp(boardUrl), t3: null, models: copilotModels },
     ];
   };
 
-  let cached: {
-    key: string;
-    at: number;
-    result: Promise<ProviderStatus[]>;
-    /** Still running: a refresh joins it rather than starting another `claude mcp list`. */
-    pending: boolean;
-  } | null = null;
-
-  const detect = (refresh: boolean): Promise<ProviderStatus[]> => {
+  const detect = (refresh: boolean, parts: ProviderParts): Promise<ProviderStatus[]> => {
     const settings = deps.services().settings.get();
+    if (parts === "cli") {
+      return clis(settings, refresh).then((cli) =>
+        AgentHarness.options.map((harness) => ({ id: harness, cli: cli[harness], mcp: null, t3: null, models: null })),
+      );
+    }
     const boardUrl = deps.mcpUrl();
     // A new CLI path, or a provider added or switched (which decides whether its models are scanned), asks again.
     const key = JSON.stringify([settings.providers.filter((p) => p.enabled), boardUrl]);
-    if (cached?.key === key && (cached.pending || (!refresh && now() - cached.at < CACHE_MS))) return cached.result;
-    const result = compute(settings, boardUrl, refresh);
-    const entry = { key, at: now(), result, pending: true };
-    cached = entry;
-    const settle = () => {
-      entry.pending = false;
-    };
-    result.then(settle, settle);
-    // A check that threw isn't worth keeping for a minute.
-    result.catch(() => {
-      if (cached?.result === result) cached = null;
-    });
-    return result;
+    return fullCache(key, refresh, () => compute(settings, boardUrl, refresh));
   };
 
-  const status = async (refresh = false): Promise<ProvidersStatus> => {
-    const detected = await detect(refresh);
+  const status = async (refresh = false, parts: ProviderParts = "all"): Promise<ProvidersStatus> => {
+    const detected = await detect(refresh, parts);
     const t3: ProviderStatus = {
       id: "t3-code",
       cli: null,

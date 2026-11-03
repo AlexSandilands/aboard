@@ -77,12 +77,15 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
     handle((c) => c.json(integrations.terminalInfo())),
   );
   // Every provider as detected here: CLI, MCP registration, T3 Code and the models scan. `?refresh=1` skips the
-  // minute's cache.
+  // minute's cache; `?parts=cli` answers with the CLIs and T3 Code only, without the slow MCP checks and scans.
   app.get(
     "/api/providers",
     handle(async (c) => {
-      const { refresh } = parseQuery(c, z.object({ refresh: z.string().optional() }));
-      return c.json(await integrations.providers(refresh === "1"));
+      const { refresh, parts } = parseQuery(
+        c,
+        z.object({ refresh: z.string().optional(), parts: z.enum(["all", "cli"]).optional() }),
+      );
+      return c.json(await integrations.providers(refresh === "1", parts));
     }),
   );
 

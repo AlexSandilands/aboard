@@ -511,3 +511,25 @@ describe("GET /api/providers", () => {
     expect(version.mock.calls.length).toBe(calls + 3);
   });
 });
+
+describe("providers: the CLI-only answer", () => {
+  it("runs no MCP check or model scan, and shares the CLI checks with the full answer", async () => {
+    const claudeMcp = vi.fn<ProviderProbes["claudeMcp"]>(() => Promise.resolve(LIST));
+    const models = vi.fn<(harness: string) => Promise<AgentModelsStatus>>(() =>
+      Promise.reject(new Error("not scanned")),
+    );
+    const version = vi.fn<(exe: string) => Promise<string>>(() => Promise.resolve("2.0.0"));
+    const { svc, settings } = service({ claudeMcp, version }, { models });
+    settings.providers = [{ id: "claude-code", enabled: true, cliPath: null }];
+    const quick = await svc.status(false, "cli");
+    expect(claudeOf(quick)).toMatchObject({ cli: { found: true, version: "2.0.0" }, mcp: null, models: null });
+    expect(quick.providers.map((p) => p.id)).toEqual(["t3-code", "claude-code", "codex", "copilot-cli"]);
+    expect(claudeMcp).not.toHaveBeenCalled();
+    expect(models).not.toHaveBeenCalled();
+    expect(version).toHaveBeenCalledTimes(3);
+    // The full answer reuses the minute's CLI checks.
+    await svc.status();
+    expect(version).toHaveBeenCalledTimes(3);
+    expect(claudeMcp).toHaveBeenCalled();
+  });
+});

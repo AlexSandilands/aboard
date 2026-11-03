@@ -22,7 +22,7 @@ export const CODE_MIGRATIONS: Readonly<Record<string, (db: Db) => void>> = {
 
 /**
  * Set on an install that had data before providers were opt-in: once the server is up, detection adds the providers
- * whose MCP server is registered or whose hand-off entry it showed (services/providerSeed.ts), then removes it.
+ * whose MCP server is registered or whose hand-off entry it showed (`seedFromDetection` in integrations/providers.ts), then removes it.
  */
 export const PROVIDERS_DETECT_SEED_KEY = "providersDetectSeed";
 

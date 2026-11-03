@@ -17,7 +17,7 @@ import { Input } from "~/components/ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { api } from "~/lib/api";
-import { useUpdateSettings } from "~/state/mutations";
+import { useUpdateProviders, useUpdateSettings } from "~/state/mutations";
 import { queryKeys } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
 import { patchProvider } from "./providers.logic";
@@ -361,9 +361,9 @@ function CliPathRow({
   info: string;
   settings: AppSettings;
 }) {
-  const updateSettings = useUpdateSettings();
+  const updateProviders = useUpdateProviders();
   const cli = PROVIDERS[id].cli ?? "";
-  const current = settings.providers.find((p) => p.id === id)?.cliPath ?? "";
+  const path = settings.providers.find((p) => p.id === id)?.cliPath ?? "";
   return (
     <SettingsRow
       id={rowId}
@@ -376,12 +376,8 @@ function CliPathRow({
           size="sm"
           className="sm:w-56"
           placeholder={cli}
-          value={current}
-          onSave={(next) =>
-            updateSettings.mutate({
-              providers: patchProvider(settings.providers, id, { cliPath: next.trim() || null }),
-            })
-          }
+          value={path}
+          onSave={(next) => updateProviders.mutate((list) => patchProvider(list, id, { cliPath: next.trim() || null }))}
         />
       }
     />

@@ -306,7 +306,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     resumeCommand: (linkId, mode) => sessions.resumeCommand(linkId, mode),
     resumeSession: (linkId, input) => sessions.resume(linkId, input),
     terminalInfo: () => sessions.terminalInfo(),
-    providers: (refresh) => providers.status(refresh),
+    providers: (refresh, parts) => providers.status(refresh, parts),
     agentModels: (refresh) => agentModels.status(refresh),
     sessionLaunchOptions: (taskId) => sessionLaunch.options(taskId),
     startSession: (taskId, input, actor) => sessionLaunch.start(taskId, input, actor),

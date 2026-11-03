@@ -18,7 +18,7 @@ import {
 } from "~/components/ui/dialog";
 import { Switch } from "~/components/ui/switch";
 import { cn } from "~/lib/utils";
-import { useRecheckProviders, useUpdateSettings } from "~/state/mutations";
+import { useRecheckProviders, useUpdateProviders } from "~/state/mutations";
 import { useIntegrationsStatus, useProviders } from "~/state/queries";
 import { ProviderEditor } from "./ProviderEditors";
 import {
@@ -49,7 +49,7 @@ export function ProvidersPage({ settings }: { settings: AppSettings }) {
   const providers = useProviders();
   const recheck = useRecheckProviders();
   const t3 = useIntegrationsStatus().data?.t3;
-  const updateSettings = useUpdateSettings();
+  const updateProviders = useUpdateProviders();
   const navigate = useNavigate();
   const requested = useSearch({ strict: false, select: (search) => search.provider });
   const [adding, setAdding] = useState(false);
@@ -60,22 +60,25 @@ export function ProvidersPage({ settings }: { settings: AppSettings }) {
   const statusOf = (id: ProviderId) => providers.data?.providers.find((p) => p.id === id);
   const select = (id: ProviderId) =>
     void navigate({ to: "/settings/$group", params: { group: "providers" }, search: { provider: id }, replace: true });
-  const save = (next: AppSettings["providers"]) => updateSettings.mutate({ providers: next });
+  // Each change is applied to the latest list when it runs (useUpdateProviders), not to the one this render saw.
+  const save = (change: (current: AppSettings["providers"]) => AppSettings["providers"]) =>
+    updateProviders.mutate(change);
 
   const add = (id: ProviderId) => {
-    save(withProvider(added, id));
+    save((current) => withProvider(current, id));
     setAdding(false);
     select(id);
   };
   const setEnabled = (id: ProviderId, enabled: boolean) => {
     // Switching off says what stops working first; switching on needs no confirm.
-    if (enabled) save(patchProvider(added, id, { enabled }));
+    if (enabled) save((current) => patchProvider(current, id, { enabled }));
     else setConfirm({ id, action: "disable" });
   };
   const confirmed = () => {
     if (!confirm) return;
-    if (confirm.action === "disable") save(patchProvider(added, confirm.id, { enabled: false }));
-    else save(withoutProvider(added, confirm.id));
+    const { id, action } = confirm;
+    if (action === "disable") save((current) => patchProvider(current, id, { enabled: false }));
+    else save((current) => withoutProvider(current, id));
     setConfirm(null);
   };
 

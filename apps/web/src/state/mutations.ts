@@ -48,6 +48,7 @@ import type {
   UpdateSettingsInput,
   UpdateTaskInput,
   UpdateTemplateInput,
+  ProviderSetting,
   ProvidersStatus,
 } from "@repo/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -344,7 +345,11 @@ export function useRecheckProviders() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => api<ProvidersStatus>("/api/providers?refresh=1"),
-    onSuccess: (result) => queryClient.setQueryData(queryKeys.providers, result),
+    onSuccess: (result) => {
+      queryClient.setQueryData(queryKeys.providers, result);
+      // The CLI-only answer the menus read was refreshed with it.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.providerClis });
+    },
     onError: (error) =>
       toastManager.add({
         type: "error",
@@ -494,6 +499,36 @@ export function useUpdateSettings() {
         title: "Couldn't save settings",
         description: error instanceof Error ? error.message : String(error),
       }),
+  });
+}
+
+/**
+ * Changes the added providers. The server replaces the whole list, so `change` is a function from the latest cached
+ * list to the new one: calls share a scope so they reach the server in order, and each is built when it runs, after
+ * the one before has updated the cache. Building it from what the page last rendered would let a quick second edit
+ * (switching two providers on in a row) undo the first. Other windows' changes arrive as providers.changed.
+ */
+export function useUpdateProviders() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (change: (current: ProviderSetting[]) => ProviderSetting[]) => {
+      const current = queryClient.getQueryData<AppSettings>(queryKeys.settings)?.providers ?? [];
+      return api<AppSettings>("/api/settings", { method: "PATCH", body: { providers: change(current) } });
+    },
+    scope: { id: "providers" },
+    onSuccess: (settings) => {
+      queryClient.setQueryData(queryKeys.settings, settings);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.providers });
+    },
+    // Here rather than in mutate()'s options: those only run for the latest call, and a save can be queued behind.
+    onError: (error) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+      toastManager.add({
+        type: "error",
+        title: "Couldn't save the providers",
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
   });
 }
 

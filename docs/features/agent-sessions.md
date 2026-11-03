@@ -146,8 +146,11 @@ every provider whether added or not (the Add provider dialog shows what this mac
 - `models`: what the models scan (`agentModels.ts`) found, only for Claude Code and Copilot CLI while added and on,
   since scanning starts the CLI.
 
-The CLI, MCP and model checks are kept for a minute, keyed by the enabled providers and the board's URL, so a new CLI
-path or a provider switched on asks again; `?refresh=1` (Re-check) skips the cache and a refresh while a check is
+`?parts=cli` answers with the CLI checks and T3 Code only. The board's menus and session rows read that
+(`useAgentClis`), so they never wait on `claude mcp list` or a model scan; only Settings → Providers asks for the
+rest. The CLI checks are kept for a minute by their paths and shared by both answers; the MCP and model checks are
+kept for a minute, keyed by the enabled providers and the board's URL, so a new CLI path or a provider switched on
+asks again; `?refresh=1` (Re-check) skips the cache and a refresh while a check is
 running joins it. T3 Code's part is read fresh every time. A change to the list publishes `providers.changed`, which
 updates the settings cache in every window and refetches the detection.
 
@@ -163,8 +166,10 @@ server names and `url` strings, never headers or env, and no URL or token is put
 A provider's dot (`providerDot` in `settings/providers.logic.ts`) is grey while switched off, green when the CLI runs
 and the MCP entry exists (a project-only entry that the CLI can't confirm is amber: it is missing in other folders),
 and for T3 Code green once a saved token connects; `connected: false` only adds a note, because a harness can report
-a server as down while it would connect when a session starts. The web app derives each harness's CLI check
-(`useAgentClis`, `agentClisOf`) from the same answer for the session rows' open and fork items.
+a server as down while it would connect when a session starts.
+
+The page saves the list with `useUpdateProviders`: each change is a function applied to the latest cached list, and
+the calls share a mutation scope so they reach the server in order, so two quick switches can't undo each other.
 
 **Upgrading.** Migration `040_providers_settings` seeds the list from what an install already uses: a CLI path set, the
 T3 token, the board reviewer on, a tier or custom model with a model (or headless runs) for a provider, and sessions or
