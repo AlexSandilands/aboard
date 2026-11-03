@@ -132,8 +132,8 @@ models** from Settings → Model tiers. From the task means a custom model one o
 
 A headless run runs on the model's **Headless runs** harness (Settings → Model tiers, on each tier and custom model):
 Claude Code by default, or **Codex** (`codex exec`) or **Copilot CLI**, with the model you set for that harness. So a
-`codex61` label can mean Codex in T3 Code and headless alike. Set the CLI's path in Settings → Integrations if it
-isn't on your PATH, and register the board's MCP server with it ([connecting agents](connect-agents.md)) so the agent
+`codex61` label can mean Codex in T3 Code and headless alike. Add the provider in Settings → Providers (with its CLI path
+if it isn't on your PATH), and register the board's MCP server with it ([connecting agents](connect-agents.md)) so the agent
 can move its task. Some things only Claude Code can do: a reviewer's verdict, reading untrusted text locked down, a
 digest with no tools. Those runs stay on Claude Code, on the model's Claude Code model (or the CLI's default when it has none), and
 the run says why. Codex and Copilot

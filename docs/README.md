@@ -94,6 +94,7 @@ files under each app.
 - [0008 Autopilot is a deterministic rule engine inside the server](decisions/0008-autopilot-engine.md)
 - [0009 The board may start a terminal, from a stored link only](decisions/0009-board-starts-local-processes.md)
 - [0010 The board may start a new agent session with the user's prompt](decisions/0010-board-starts-new-sessions.md)
+- [0011 Providers are opt-in, with one detection source](decisions/0011-opt-in-providers.md)
 
 ### Reference
 

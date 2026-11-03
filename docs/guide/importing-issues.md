@@ -43,7 +43,7 @@ it a plan, put it in an epic, flagged it for Autopilot or marked it a priority.
 - The system's **import instructions** tell the run how to read its tickets and how to find an epic's children. The
   presets fill them in; edit them if your tracker differs (a custom field for epics, say).
 
-Both run the Claude Code CLI, the one named under **Settings → Integrations → Claude Code** (it's `claude` from your PATH
+Both run the Claude Code CLI, the one named under **Settings → Providers → Claude Code** (it's `claude` from your PATH
 unless you set another), on a small model (Haiku by default). The model can be one of your **Model tiers**
 instead: set it once there and pick the tier here.
 

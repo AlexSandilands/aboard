@@ -26,6 +26,7 @@ to its TanStack Query cache.
 | `autopilot.changed`    | Autopilot's pause and runs in flight | Replaces the board's `autopilot`, refetches recurring rules, custom automations and project Autopilot switches ([autopilot](autopilot.md)) |
 | `notification.created` | the notification, `unread`, `popup` | Adds it to the inbox query, shows an OS pop-up where one belongs ([notifications](notifications.md)) |
 | `notifications.changed` | `unread`                    | Invalidates the inbox query                         |
+| `providers.changed`    | the whole `providers` list    | Patches the settings query's `providers`, refetches `/api/providers` and the model scans ([agent sessions](agent-sessions.md#providers-and-detection)) |
 
 `task.upserted` is always followed by `task.detail_changed`. Changes that only affect a task's detail send
 `task.detail_changed` alone.

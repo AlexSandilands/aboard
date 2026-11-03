@@ -22,15 +22,15 @@ To share it with a single repo instead, VS Code also reads `.vscode/mcp.json` (n
 If you've set an [access token](configuration.md#access-token), the agent must send it as a bearer
 token.
 
-**Settings → Integrations** shows whether Claude Code and Copilot CLI have the server: a green dot means the CLI
+**Settings → Providers** shows whether each agent you added has the server (add it first with **Add provider**): a green dot means the CLI
 runs and an entry with the board's address is registered, under any name.
 
 ## Teach it the workflow
 
 The server explains the basics when an agent connects. For the full workflow:
 
-- **Claude Code, Copilot, Codex:** in **Settings → Integrations**, turn on **Board skills** in the agent's
-  section. The board installs two skills into its global skills folder (`~/.claude/skills`, `~/.copilot/skills` or
+- **Claude Code, Copilot, Codex:** in **Settings → Providers**, add the agent and turn on **Board skills** in its
+  **MCP & skill** part. The board installs two skills into its global skills folder (`~/.claude/skills`, `~/.copilot/skills` or
   `~/.codex/skills`, or under the folder `CLAUDE_CONFIG_DIR`, `COPILOT_HOME` or `CODEX_HOME` names when you set
   one): [`skills/aboard`](../../skills/aboard), the workflow, and
   [`skills/aboard-automations`](../../skills/aboard-automations), which teaches the agent how to write a good

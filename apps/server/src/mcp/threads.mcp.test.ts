@@ -45,7 +45,11 @@ describe("T3 threads for a task over MCP", () => {
     const launches: Array<{ taskId: string; input: TaskThreadInput; actor: string }> = [];
     const messages: Array<{ threadId: string; text: string }> = [];
     const state: { fail: AppError | null } = { fail: null };
-    h.services.settings.update({ t3Token: "tok", agentT3Threads: opts.allowed ?? true });
+    h.services.settings.update({
+      t3Token: "tok",
+      agentT3Threads: opts.allowed ?? true,
+      providers: [{ id: "t3-code", enabled: true }],
+    });
     h.integrations.t3Status = () => ({
       detected: true,
       origin: "http://127.0.0.1:3773",

@@ -215,7 +215,7 @@ A task of an epic delivered through an integration branch (the branch button in 
 [Merge into epic branch](autopilot.md#merge-into-epic-branch)) is handed off to start from that branch: the prompt
 says to open its pull request against it, and the T3 dialog opens on a new worktree from it.
 
-When Claude Code or Copilot CLI is installed (on your PATH, or at the path set in **Settings → Integrations**),
+When Claude Code or Copilot CLI is installed and added in **Settings → Providers** (on your PATH, or at the path set there),
 **New Claude Code session…** and **New Copilot CLI session…** open the CLI in a terminal with the task's prompt
 already typed in. The dialog lets you edit the prompt, switch to planning, pick a model (filled in from the task's
 suggested tier, set in **Settings → Model tiers**) and choose where it runs: a new git worktree

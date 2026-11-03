@@ -10,6 +10,7 @@ import {
   ModelTier,
   PlanInput,
   parsePlanMarkdown,
+  providerActive,
   SUGGESTED_MODEL_REASON_MAX,
   type Project,
   type TaskDetail,
@@ -317,9 +318,10 @@ export function boardUrl(ctx: AppContext): string {
 export function t3LaunchBlocker(ctx: AppContext, project: Project): string | null {
   if (!ctx.integrations.t3Status().detected) return "T3 Code isn't running";
   const settings = ctx.services.settings.get();
-  if (!settings.t3TokenSet) return "No T3 Code token is set (Settings, Integrations, T3 Code)";
+  if (!providerActive(settings, "t3-code")) return "T3 Code isn't added as a provider (Settings, Providers)";
+  if (!settings.t3TokenSet) return "No T3 Code token is set (Settings, Providers, T3 Code)";
   if (!settings.agentT3Threads) {
-    return "The user hasn't let agents start T3 threads (Settings, Integrations, T3 Code, Let agents start threads)";
+    return "The user hasn't let agents start T3 threads (Settings, Providers, T3 Code, Let agents start threads)";
   }
   if (!project.t3ProjectId && !project.workspaceRoot) return `${project.title} has no folder for T3 Code to use`;
   return null;
