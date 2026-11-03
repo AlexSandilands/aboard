@@ -520,7 +520,8 @@ export function createBackupIntegration(deps: {
     const tree = mkdtempSync(join(tmpdir(), `${BRAND.id}-restore-`));
     try {
       await git(dir, "worktree", "add", "--detach", "--quiet", tree, sha);
-      const folder = pickFolder(dir, tree, source.machine, formerNames);
+      // With no machine named, the folder this machine has now, as history lists it, under its name of the time.
+      const folder = pickFolder(dir, tree, source.machine ?? current, formerNames);
       if (!folder) {
         throw new AppError(
           "NOT_FOUND",
@@ -536,7 +537,15 @@ export function createBackupIntegration(deps: {
     }
   };
 
-  const otherMachine = (folder: MachineFolder) => folder.instanceId !== null && folder.instanceId !== deps.instanceId;
+  /**
+   * Whether a folder read from a commit is another board's. Not one this machine backs up to now (taken over, or
+   * whose older commits still name the board it was taken from): restoring those asks nothing.
+   */
+  const otherMachine = (folder: MachineFolder) => {
+    if (folder.instanceId === null || folder.instanceId === deps.instanceId) return false;
+    const dir = backupClone();
+    return !adopted(dir, folder.folder) && ownFolder(dir, machineFolders(dir))?.folder !== folder.folder;
+  };
 
   const history = async (machine?: string): Promise<BackupCommit[]> => {
     const dir = backupClone();

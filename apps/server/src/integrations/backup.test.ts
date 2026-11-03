@@ -440,6 +440,12 @@ describe("restoring from the backup repo", { timeout: PROCESS_TEST_TIMEOUT }, ()
     // Its earlier folder is the same board's too, but no longer the one it backs up to.
     expect(machines.filter((m) => m.current).map((m) => m.folder)).toEqual(["old-pc"]);
     expect((await fresh.backup.diff({})).folder).toBe("old-pc");
+    // Its commits from before the take-over still name the old board, but the folder is this machine's now.
+    const before = git(old.clone, "rev-parse", "HEAD").trim();
+    expect(await fresh.backup.diff({ commit: before })).toMatchObject({ folder: "old-pc", otherMachine: false });
+    await expect(
+      fresh.backup.restoreBoard({ machine: "old-pc", commit: before, confirm: "RESTORE" }),
+    ).resolves.toMatchObject({ tookOver: null });
   });
 
   it("keeps a take-over through failed pushes and a restart, until a push carries the folder", async () => {
