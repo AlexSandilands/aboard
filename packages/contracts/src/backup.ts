@@ -182,3 +182,89 @@ export const BackupMachine = z.object({
   lastCommitAt: z.string().nullable(),
 });
 export type BackupMachine = z.infer<typeof BackupMachine>;
+
+/** A commit of the backup repo that touched a machine's folder (`GET /api/backup/history`). */
+export const BackupCommit = z.object({
+  commit: z.string(),
+  shortCommit: z.string(),
+  committedAt: z.string(),
+  subject: z.string(),
+});
+export type BackupCommit = z.infer<typeof BackupCommit>;
+
+/** A task in a backup that the board doesn't have (`missing`), or has with other contents (`changed`). */
+export const BackupDiffTask = z.object({
+  /** Its number in the backup, which a restore takes unless another task holds it by now. */
+  number: z.number(),
+  taskId: z.string(),
+  title: z.string(),
+  status: z.string(),
+  kind: z.string(),
+  projectName: z.string().nullable(),
+  /** A task can only come back into a project that is on the board. */
+  projectOnBoard: z.boolean(),
+  change: z.enum(["missing", "changed"]),
+});
+export type BackupDiffTask = z.infer<typeof BackupDiffTask>;
+
+/** How a commit's backup of a machine differs from the board (`GET /api/backup/diff`). */
+export const BackupDiff = z.object({
+  commit: z.string(),
+  folder: z.string(),
+  /** Whether the folder is another machine's, so restoring the whole board asks whether to take it over. */
+  otherMachine: z.boolean(),
+  /** Tasks in the backup and on the board, missing ones and changed ones. */
+  counts: z.object({ backup: z.number(), board: z.number(), missing: z.number(), changed: z.number() }),
+  tasks: z.array(BackupDiffTask),
+});
+export type BackupDiff = z.infer<typeof BackupDiff>;
+
+/** Which backup to restore from: a commit of the backup repo (default HEAD) and a machine's folder (default ours). */
+export const BackupSource = z.object({
+  commit: z.string().min(1).optional(),
+  machine: z.string().min(1).optional(),
+});
+export type BackupSource = z.infer<typeof BackupSource>;
+
+export const RestoreTasksInput = BackupSource.extend({
+  numbers: z.array(z.number().int().positive()).min(1),
+  /** Replace tasks that are still on the board. */
+  force: z.boolean().optional(),
+});
+export type RestoreTasksInput = z.infer<typeof RestoreTasksInput>;
+
+export const RestoreTasksResult = z.object({
+  results: z.array(
+    z.object({
+      /** The task's number in the backup. */
+      number: z.number(),
+      ok: z.boolean(),
+      /** Its number on the board, when it restored. */
+      boardNumber: z.number().nullable(),
+      error: z.string().nullable(),
+    }),
+  ),
+});
+export type RestoreTasksResult = z.infer<typeof RestoreTasksResult>;
+
+/** The word typed to confirm replacing the whole board. */
+export const RESTORE_CONFIRM_WORD = "RESTORE";
+
+export const RestoreBoardInput = BackupSource.extend({
+  confirm: z.literal(RESTORE_CONFIRM_WORD),
+  /**
+   * Needed when the folder is another machine's: `take-over` makes it this machine's folder (new hardware, same
+   * board); `new-board` keeps backing up to this machine's own folder.
+   */
+  otherMachine: z.enum(["take-over", "new-board"]).optional(),
+});
+export type RestoreBoardInput = z.infer<typeof RestoreBoardInput>;
+
+export const RestoreBoardResult = z.object({
+  counts: z.record(z.string(), z.number()),
+  /** The copy of the board as it was before the restore, beside the database; null for an in-memory one. */
+  safetyCopy: z.string().nullable(),
+  /** The machine folder this machine backs up to from now on, when it took one over. */
+  tookOver: z.string().nullable(),
+});
+export type RestoreBoardResult = z.infer<typeof RestoreBoardResult>;

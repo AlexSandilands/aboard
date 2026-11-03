@@ -1,10 +1,29 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRAND, type BackupMachine, type BackupStatus } from "@repo/contracts";
+import {
+  BRAND,
+  type BackupCommit,
+  type BackupDiff,
+  type BackupMachine,
+  type BackupSource,
+  type BackupStatus,
+  type BoardDump,
+  type RestoreBoardInput,
+  type RestoreBoardResult,
+  type RestoreTasksInput,
+  type RestoreTasksResult,
+} from "@repo/contracts";
 import { AppError } from "../errors.ts";
-import { DUMP_ENTRIES, writeDumpDir } from "../services/backup/files.ts";
-import { isBackupRepo, isFlatDump, machineFolders, writeRepoIndex } from "../services/backup/repo.ts";
+import { DUMP_ENTRIES, readDumpDir, writeDumpDir } from "../services/backup/files.ts";
+import {
+  isBackupRepo,
+  isFlatDump,
+  machineFolders,
+  writeRepoIndex,
+  type MachineFolder,
+} from "../services/backup/repo.ts";
 import type { Services } from "../services/types.ts";
 import type { Logger } from "./util.ts";
 
@@ -15,6 +34,10 @@ const STARTUP_DELAY_MS = 15_000;
 const GIT_TIMEOUT_MS = 2 * 60_000;
 /** Files a host adds to a new repo (GitHub's "Add a README"), which don't make it someone else's repo. */
 const REPO_BOILERPLATE = /^(readme|license|licence)(\.[\w.]+)?$|^\.git(ignore|attributes)$/i;
+/** How many commits the restore dialog offers. */
+const HISTORY_LIMIT = 100;
+/** A commit as the restore dialog sends it: a hash or HEAD, never something git would read as an option. */
+const COMMIT_REF = /^(HEAD|[0-9a-f]{4,64})$/i;
 
 export interface GitResult {
   code: number;
@@ -72,6 +95,14 @@ export interface BackupIntegration {
   machines(): Promise<BackupMachine[]>;
   /** Backs up now (joining a run in progress). Failures are recorded in the status, not thrown. */
   run(): Promise<BackupStatus>;
+  /** The latest commits that touched a machine's folder (this machine's by default), newest first. */
+  history(machine?: string): Promise<BackupCommit[]>;
+  /** How the backup at a commit differs from the board. */
+  diff(source: BackupSource): Promise<BackupDiff>;
+  /** Puts tasks from the backup at a commit back on the board, each on its own; one failing doesn't stop the rest. */
+  restoreTasks(input: RestoreTasksInput, actor: string): Promise<RestoreTasksResult>;
+  /** Replaces the whole board with the backup at a commit; from another machine's folder, may take it over. */
+  restoreBoard(input: RestoreBoardInput): Promise<RestoreBoardResult>;
   start(): void;
   stop(): void;
 }
@@ -103,6 +134,12 @@ export function createBackupIntegration(deps: {
   };
   let inFlight: Promise<BackupStatus> | null = null;
   const timers: NodeJS.Timeout[] = [];
+  /**
+   * Another machine's folder this machine was told to take over (a whole-board restore from it onto new hardware).
+   * The next run writes it with this board's instanceId, which makes it ours; until then it isn't "taken".
+   */
+  let adopting: string | null = null;
+  const adopted = (folder: string) => adopting !== null && adopting.toLowerCase() === folder.toLowerCase();
 
   const git = async (dir: string, ...args: string[]): Promise<string> => {
     const result = await runGit(args, dir);
@@ -215,7 +252,9 @@ export function createBackupIntegration(deps: {
   const claimFolder = async (dir: string, name: string) => {
     const folders = machineFolders(dir);
     const same = (f: { folder: string }) => f.folder.toLowerCase() === name.toLowerCase();
-    const taken = folders.find((f) => same(f) && f.instanceId !== null && f.instanceId !== deps.instanceId);
+    const taken = folders.find(
+      (f) => same(f) && f.instanceId !== null && f.instanceId !== deps.instanceId && !adopted(f.folder),
+    );
     if (taken) throw takenBy(taken.folder, taken.machineName);
     const target = readdirSync(dir).find((n) => n.toLowerCase() === name.toLowerCase());
     if (target && !folders.some((f) => f.folder === target)) {
@@ -258,7 +297,7 @@ export function createBackupIntegration(deps: {
           if (shown.code !== 0) return [];
           try {
             const owner = JSON.parse(shown.stdout) as { instanceId?: unknown; machineName?: unknown };
-            return typeof owner.instanceId === "string" && owner.instanceId !== deps.instanceId
+            return typeof owner.instanceId === "string" && owner.instanceId !== deps.instanceId && !adopted(folder)
               ? [{ folder, machineName: typeof owner.machineName === "string" ? owner.machineName : null }]
               : [];
           } catch {
@@ -371,6 +410,149 @@ export function createBackupIntegration(deps: {
     );
   };
 
+  /** The backup clone, which must exist: restoring reads its commits. */
+  const backupClone = (): string => {
+    const dir = deps.services().settings.get().backupDir;
+    if (!dir || !existsSync(join(dir, ".git"))) {
+      throw new AppError("VALIDATION", "Set up the git backup first: there is no backup repo to restore from");
+    }
+    return dir;
+  };
+
+  /**
+   * The folder to read in a tree: the one named (a folder or a machine name), else this board's, else the one for
+   * this machine's name. A tree from before machine folders holds a flat dump at its root, which stands for any.
+   */
+  const pickFolder = (tree: string, machine: string | undefined): MachineFolder | null => {
+    const folders = machineFolders(tree);
+    const lower = (s: string) => s.toLowerCase();
+    const found = machine
+      ? (folders.find((f) => f.folder === machine) ??
+        folders.find((f) => lower(f.folder) === lower(machine) || f.machineName === machine))
+      : (folders.find((f) => f.instanceId === deps.instanceId) ??
+        folders.find((f) => lower(f.folder) === lower(deps.services().settings.get().machineName)));
+    if (found) return found;
+    return isFlatDump(tree) ? { folder: "", instanceId: null, machineName: null } : null;
+  };
+
+  /** The machine folder `machine` names in the clone as it is now, for its history. */
+  const currentFolder = (dir: string, machine: string | undefined): string => {
+    const folder = pickFolder(dir, machine);
+    if (!folder)
+      throw new AppError(
+        "NOT_FOUND",
+        machine ? `The backup has no machine ${machine}` : "This machine has no backup yet",
+      );
+    return folder.folder;
+  };
+
+  /**
+   * Checks the commit out into a temporary worktree outside the clone, reads the machine's dump from it and hands
+   * it to `fn` with the folder it came from (for its pasted images), then removes the worktree. The clone's own
+   * working tree and branch are never touched, so a scheduled run can go on beside it.
+   */
+  const withDumpAt = async <T>(
+    source: BackupSource,
+    fn: (dump: BoardDump, dumpDir: string, folder: MachineFolder, sha: string) => T | Promise<T>,
+  ): Promise<T> => {
+    const dir = backupClone();
+    const ref = source.commit ?? "HEAD";
+    if (!COMMIT_REF.test(ref)) throw new AppError("VALIDATION", `Not a commit: ${ref}`);
+    const resolved = await runGit(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], dir);
+    if (resolved.code !== 0) throw new AppError("NOT_FOUND", `The backup repo has no commit ${ref}`);
+    const sha = resolved.stdout.trim();
+    const tree = mkdtempSync(join(tmpdir(), `${BRAND.id}-restore-`));
+    try {
+      await git(dir, "worktree", "add", "--detach", "--quiet", tree, sha);
+      const folder = pickFolder(tree, source.machine);
+      if (!folder) {
+        throw new AppError(
+          "NOT_FOUND",
+          `Commit ${sha.slice(0, 7)} has no backup of ${source.machine ?? "this machine"}`,
+        );
+      }
+      const dumpDir = join(tree, folder.folder);
+      return await fn(readDumpDir(dumpDir), dumpDir, folder, sha);
+    } finally {
+      await runGit(["worktree", "remove", "--force", tree], dir);
+      rmSync(tree, { recursive: true, force: true });
+      await runGit(["worktree", "prune"], dir);
+    }
+  };
+
+  const otherMachine = (folder: MachineFolder) => folder.instanceId !== null && folder.instanceId !== deps.instanceId;
+
+  const history = async (machine?: string): Promise<BackupCommit[]> => {
+    const dir = backupClone();
+    const folder = currentFolder(dir, machine);
+    const lines = await git(
+      dir,
+      "log",
+      `-n${HISTORY_LIMIT}`,
+      "--format=%H%x1f%h%x1f%cI%x1f%s",
+      ...(folder ? ["--", folder] : []),
+    );
+    return lines
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [sha = "", shortCommit = "", at = "", subject = ""] = line.split("\x1f");
+        return { commit: sha, shortCommit, committedAt: new Date(at).toISOString(), subject };
+      });
+  };
+
+  const diff = (source: BackupSource): Promise<BackupDiff> =>
+    withDumpAt(source, (dump, _dumpDir, folder, sha) => ({
+      commit: sha,
+      folder: folder.folder,
+      otherMachine: otherMachine(folder),
+      ...deps.services().backup.diff(dump),
+    }));
+
+  const restoreTasks = (input: RestoreTasksInput, actor: string): Promise<RestoreTasksResult> =>
+    withDumpAt(input, (dump, dumpDir) => {
+      const { backup } = deps.services();
+      return {
+        results: input.numbers.map((number) => {
+          try {
+            const restored = backup.restoreTask(dump, number, {
+              force: input.force ?? false,
+              actor,
+              attachmentsFrom: dumpDir,
+            });
+            return { number, ok: true, boardNumber: restored.number, error: null };
+          } catch (error) {
+            return {
+              number,
+              ok: false,
+              boardNumber: null,
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+        }),
+      };
+    });
+
+  const restoreBoard = (input: RestoreBoardInput): Promise<RestoreBoardResult> =>
+    withDumpAt(input, (dump, dumpDir, folder) => {
+      const foreign = otherMachine(folder);
+      if (foreign && !input.otherMachine) {
+        throw new AppError(
+          "VALIDATION",
+          `${folder.folder}/ is another machine's backup: choose whether this machine takes it over or starts a new board`,
+        );
+      }
+      const services = deps.services();
+      const result = services.backup.restoreBoard(dump, { attachmentsFrom: dumpDir });
+      if (!foreign || input.otherMachine !== "take-over") return { ...result, tookOver: null };
+      // New hardware, same board: back up into the old machine's folder from now on, rather than forking the board
+      // into a folder of its own. The machine-only settings survived the restore, so the name is set after it.
+      services.settings.update({ machineName: folder.folder });
+      adopting = folder.folder;
+      void (inFlight ?? Promise.resolve()).then(() => run());
+      return { ...result, tookOver: folder.folder };
+    });
+
   const runOnce = async (): Promise<BackupStatus> => {
     const settings = deps.services().settings.get();
     const dir = settings.backupDir;
@@ -388,6 +570,7 @@ export function createBackupIntegration(deps: {
       const dump = deps.services().backup.dump();
       dump.manifest = { ...dump.manifest, instanceId: deps.instanceId, machineName: name };
       writeDumpDir(join(dir, name), dump, deps.attachmentsDir);
+      if (adopted(name)) adopting = null;
       writeRepoIndex(dir);
       await git(dir, "add", "-A");
       const changes = (await git(dir, "status", "--porcelain")).split("\n").filter(Boolean);
@@ -423,6 +606,10 @@ export function createBackupIntegration(deps: {
     status: () => ({ ...status, running: inFlight !== null }),
     machines,
     run,
+    history,
+    diff,
+    restoreTasks,
+    restoreBoard,
     start() {
       if (timers.length > 0) return;
       timers.push(setTimeout(tick, STARTUP_DELAY_MS).unref(), setInterval(tick, BACKUP_TICK_MS).unref());

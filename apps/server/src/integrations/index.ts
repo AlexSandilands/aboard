@@ -320,6 +320,10 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     backupStatus: () => backup.status(),
     runBackup: () => backup.run(),
     backupMachines: () => backup.machines(),
+    backupHistory: (machine) => backup.history(machine),
+    backupDiff: (source) => backup.diff(source),
+    restoreBackupTasks: (input, actor) => backup.restoreTasks(input, actor),
+    restoreBackupBoard: (input) => backup.restoreBoard(input),
   };
   return integrations;
 }

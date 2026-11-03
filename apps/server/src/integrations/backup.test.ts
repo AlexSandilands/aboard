@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { BRAND, machineNameFrom } from "@repo/contracts";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
 import { writeDumpDir } from "../services/backup/files.ts";
@@ -65,7 +65,7 @@ function setup(opts: { remote?: string; root?: string; machineName?: string; run
     ...(opts.runGit ? { runGit: opts.runGit } : {}),
     log: { warn: (m: string) => warnings.push(m) },
   });
-  return { ...h, root, remote, clone, task, backup, warnings, instanceId };
+  return { ...h, root, remote, clone, project, task, backup, warnings, instanceId };
 }
 
 /** The files at the tip of the remote's default branch. */
@@ -362,6 +362,80 @@ describe("machine folders", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       "Rename the backup folder laptop/ to work-laptop/",
       "Back up board: 1 added",
     ]);
+  });
+});
+
+describe("restoring from the backup repo", { timeout: PROCESS_TEST_TIMEOUT }, () => {
+  it("lists this machine's commits and reads an older one without touching the clone", async () => {
+    const { backup, clone, services, task } = setup();
+    await backup.run();
+    services.tasks.update(task.id, { title: "Renamed" }, "user");
+    await backup.run();
+    const history = await backup.history();
+    expect(history.map((c) => c.subject)).toEqual(["Back up board: 1 task changed", "Back up board: 1 added"]);
+    const head = git(clone, "rev-parse", "HEAD").trim();
+
+    const diff = await backup.diff({ commit: history[1]!.commit });
+    expect(diff).toMatchObject({ folder: "laptop", otherMachine: false, counts: { missing: 0, changed: 1 } });
+    expect(diff.tasks).toEqual([expect.objectContaining({ number: task.number, title: "Feature", change: "changed" })]);
+    // The clone is where it was, with no worktree left behind.
+    expect(git(clone, "rev-parse", "HEAD").trim()).toBe(head);
+    expect(git(clone, "status", "--porcelain")).toBe("");
+    expect(git(clone, "worktree", "list").trim().split("\n")).toHaveLength(1);
+
+    await expect(backup.diff({ commit: "--output=x" })).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(backup.diff({ commit: "deadbeef" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("puts deleted and changed tasks back, reporting each one", async () => {
+    const { backup, services, task, project } = setup();
+    const other = services.tasks.create({ projectId: project.id, title: "Other" });
+    await backup.run();
+    services.tasks.update(task.id, { title: "Renamed" }, "user");
+    services.tasks.update(other.id, { archived: true }, "user");
+    services.tasks.delete(other.id, "user");
+
+    const first = await backup.restoreTasks({ numbers: [other.number, task.number] }, "user");
+    expect(first.results).toEqual([
+      { number: other.number, ok: true, boardNumber: other.number, error: null },
+      { number: task.number, ok: false, boardNumber: null, error: expect.stringMatching(/still on the board/) },
+    ]);
+    const forced = await backup.restoreTasks({ numbers: [task.number], force: true }, "user");
+    expect(forced.results[0]).toMatchObject({ ok: true });
+    expect(services.tasks.detail(task.id).title).toBe("Feature");
+  });
+
+  it("restores the whole board from another machine's folder, taking the folder over when asked", async () => {
+    const root = mkdtempSync(join(tmpdir(), `${BRAND.id}-gitbackup-`));
+    dirs.push(root);
+    const old = setup({ root, machineName: "old-pc" });
+    await old.backup.run();
+    const fresh = setup({ root, remote: old.remote, machineName: "new-pc" });
+    fresh.services.tasks.update(fresh.task.id, { title: "Only on the new PC" }, "user");
+    await fresh.backup.run();
+
+    const diff = await fresh.backup.diff({ machine: "old-pc" });
+    expect(diff.otherMachine).toBe(true);
+    await expect(fresh.backup.restoreBoard({ machine: "old-pc", confirm: "RESTORE" })).rejects.toMatchObject({
+      code: "VALIDATION",
+    });
+    fresh.events.length = 0;
+    const result = await fresh.backup.restoreBoard({
+      machine: "old-pc",
+      confirm: "RESTORE",
+      otherMachine: "take-over",
+    });
+    expect(result).toMatchObject({ tookOver: "old-pc", safetyCopy: null });
+    expect(fresh.events).toContainEqual({ type: "board.reset" });
+    expect(fresh.services.tasks.detail(old.task.id).title).toBe("Feature");
+    expect(fresh.services.settings.get().machineName).toBe("old-pc");
+
+    // The run it started writes the folder as this board's, so later runs don't refuse the name.
+    await vi.waitFor(() => expect(fresh.backup.status().running).toBe(false));
+    const status = await fresh.backup.run();
+    expect(status.lastError).toBeNull();
+    const machines = await fresh.backup.machines();
+    expect(machines.find((m) => m.folder === "old-pc")).toMatchObject({ instanceId: fresh.instanceId, current: true });
   });
 });
 
