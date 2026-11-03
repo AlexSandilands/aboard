@@ -66,13 +66,22 @@ describe("implementingThread", () => {
     expect(idOf([])).toBeNull();
   });
 
-  it("prefers the thread on an open PR's branch over a newer one", () => {
+  it("prefers the thread on an open PR's branch over a newer idle one", () => {
     const links = [
-      thread("impl", { snapshot: { branch: "feat/x" } }),
-      thread("later", { snapshot: { branch: "other", status: "working" } }),
+      thread("impl", { snapshot: { branch: "feat/x", status: "done" } }),
+      thread("later", { snapshot: { branch: "other", status: "idle" } }),
       pr("feat/x"),
     ];
     expect(idOf(links)).toBe("impl");
+  });
+
+  it("prefers a newer busy thread on another branch over an idle one on the PR's branch", () => {
+    const links = [
+      thread("old", { snapshot: { branch: "feat/x", status: "done" } }),
+      thread("working", { snapshot: { branch: "other", status: "working" } }),
+      pr("feat/x"),
+    ];
+    expect(idOf(links)).toBe("working");
   });
 
   it("ignores the branch of a merged PR", () => {

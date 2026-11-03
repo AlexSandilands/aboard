@@ -893,7 +893,7 @@ describe("T3 thread launch", () => {
     expect(link.kind).toBe("t3_thread");
   });
 
-  it("marks a thread the card opens on a task in Review or Done as a follow-up", async () => {
+  it("marks a follow-up launch from the card on a task in Review or Done as a follow-up", async () => {
     for (const status of ["review", "done"] as const) {
       const { t3, added } = setup(
         (frame) => success(frame.id, { threadId: "th-new", resumed: false }),
@@ -902,13 +902,18 @@ describe("T3 thread launch", () => {
         [],
         status,
       );
-      await t3.startThread("task-1", LAUNCH, "user");
+      await t3.startThread("task-1", { ...LAUNCH, followUp: true }, "user");
       expect(added.map((a) => a.role)).toEqual(["followup"]);
     }
   });
 
-  it("leaves the role off a thread the card opens before the work is in Review", async () => {
-    for (const status of ["planned", "in_progress"] as const) {
+  it("leaves the role off a launch that isn't a follow-up, or one before the work is in Review", async () => {
+    const cases = [
+      { status: "review", followUp: undefined }, // a PR fix does work on the task
+      { status: "planned", followUp: true },
+      { status: "in_progress", followUp: true },
+    ] as const;
+    for (const { status, followUp } of cases) {
       const { t3, added } = setup(
         (frame) => success(frame.id, { threadId: "th-new", resumed: false }),
         "tok",
@@ -916,7 +921,7 @@ describe("T3 thread launch", () => {
         [],
         status,
       );
-      await t3.startThread("task-1", LAUNCH, "user");
+      await t3.startThread("task-1", { ...LAUNCH, ...(followUp ? { followUp } : {}) }, "user");
       expect(added.map((a) => a.role)).toEqual([undefined]);
     }
   });

@@ -12,7 +12,13 @@ const PAST_AGENT_GRACE = AGENT_REVIEW_GRACE_MS + 60_000;
 const snapshot = (status: T3ThreadSnapshot["status"]): T3ThreadSnapshot => ({ title: "Thread", status });
 
 function setup(
-  opts: { headless?: boolean; thread?: T3ThreadSnapshot["status"]; review?: () => Promise<HeadlessReview> } = {},
+  opts: {
+    headless?: boolean;
+    thread?: T3ThreadSnapshot["status"];
+    /** A thread the user opened on the finished task, linked after the implementing one. */
+    followUp?: T3ThreadSnapshot["status"];
+    review?: () => Promise<HeadlessReview>;
+  } = {},
 ) {
   const h = createTestHarness();
   const s = h.services;
@@ -27,12 +33,18 @@ function setup(
     const link = s.links.add(task.id, { t3Thread: { environmentId: "env", threadId: "th-1" } }, "agent");
     s.links.setSnapshot(link.id, snapshot(opts.thread));
   }
+  if (opts.followUp) {
+    const link = s.links.add(task.id, { t3Thread: { environmentId: "env", threadId: "th-ask" } }, "user", {
+      role: "followup",
+    });
+    s.links.setSnapshot(link.id, snapshot(opts.followUp));
+  }
   let clock = Date.now();
-  const sent: Array<{ text: string; commandId: string }> = [];
+  const sent: Array<{ text: string; commandId: string; threadId: string }> = [];
   const jobs: HeadlessJob[] = [];
   const t3 = {
-    sendToThread: (_link: unknown, text: string, commandId: string) => {
-      sent.push({ text, commandId });
+    sendToThread: (link: { ref: { threadId: string } }, text: string, commandId: string) => {
+      sent.push({ text, commandId, threadId: link.ref.threadId });
       return Promise.resolve();
     },
     threadWorkspace: () =>
@@ -235,6 +247,23 @@ describe("review fallbacks", () => {
     advance(PAST_AGENT_GRACE);
     await fallbacks.tick();
     expect(round()).toMatchObject({ round: 2, status: "stalled", error: "No agent ran the review" });
+  });
+
+  it("nudges the thread that did the work, and isn't held back by a busy follow-up", async () => {
+    const { s, task, fallbacks, sent } = setup({ thread: "done", followUp: "working" });
+    s.tasks.move(task.id, { status: "review" }, "user");
+    await fallbacks.tick();
+    expect(sent.map((m) => m.threadId)).toEqual(["th-1"]);
+  });
+
+  it("doesn't nudge a follow-up when it is the only thread: the round stalls", async () => {
+    const { s, task, fallbacks, advance, sent, round } = setup({ followUp: "idle" });
+    s.tasks.move(task.id, { status: "review" }, "user");
+    await fallbacks.tick();
+    advance(PAST_GRACE);
+    await fallbacks.tick();
+    expect(sent).toEqual([]);
+    expect(round()?.status).toBe("stalled");
   });
 
   it("waits while the T3 thread is busy", async () => {

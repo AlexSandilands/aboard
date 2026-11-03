@@ -42,8 +42,9 @@ const JUST_STARTED_MS = 2 * 60_000;
 /**
  * The T3 thread the board sends a task's messages to (review nudges, Fix PRs, Unstick, message_task_thread): the one
  * that did the work. Archived threads and follow-ups (what the user opened to ask about finished work) never count,
- * so a question asked in one isn't interrupted. Of the rest it takes the newest on an open PR's branch, else the
- * newest that is busy, else the newest. Null when there is none: start a new thread.
+ * so a question asked in one isn't interrupted. Of the rest it takes the newest that is busy (a thread started since
+ * then is the one working), else the newest on an open PR's branch, else the newest. Null when there is none: start
+ * a new thread.
  */
 export function implementingThread(task: Pick<TaskSummary, "links">, now = Date.now()): ThreadLink | null {
   const threads = task.links.filter(
@@ -60,8 +61,8 @@ export function implementingThread(task: Pick<TaskSummary, "links">, now = Date.
       ? !l.snapshot.settled && BUSY_THREAD.has(l.snapshot.status)
       : now - Date.parse(l.createdAt) < JUST_STARTED_MS;
   return (
-    threads.findLast((l) => l.snapshot?.branch && branches.has(l.snapshot.branch)) ??
     threads.findLast(busy) ??
+    threads.findLast((l) => l.snapshot?.branch && branches.has(l.snapshot.branch)) ??
     threads.at(-1) ??
     null
   );

@@ -1077,7 +1077,7 @@ export function createT3Integration(deps: {
     projectLaunchOptions: async (projectId) => (await loadLaunchOptions({ projectId })).options,
     modelCatalog,
     // The public one is the card's launch dialog; launchTaskThread (MCP, Autopilot) starts threads internally.
-    startThread: (taskId, input, actor) => startThread(taskId, input, actor, undefined, true),
+    startThread: (taskId, input, actor) => startThread(taskId, input, actor, undefined, input.followUp === true),
     startProjectThread,
     launchTaskThread,
     sendToThread,
