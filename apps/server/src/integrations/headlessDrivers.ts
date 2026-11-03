@@ -50,9 +50,9 @@ const LIMITED: Omit<DriverCapabilities, "presetSessionId"> = {
 /**
  * `codex exec` arguments. Edit access runs without Codex's sandbox: its workspace-write sandbox keeps git's own
  * folders read-only (and a worktree's live outside it), so the agent couldn't commit or push. With both git dirs added
- * as writable roots it does commit and push (checked on codex-cli 0.166.0, against a local remote), but it would also confine an edit run's other
- * writes (package stores, caches) to those folders and temp, and a push to a real remote wasn't checked, so the sandbox
- * stays off.
+ * as writable roots it does commit and push over HTTPS (checked on codex-cli 0.166.0), but then only the worktree,
+ * those roots and temp are writable: `~/.cache` and `~/.local/share` are read-only, where package managers keep their
+ * stores, so an edit run that installs or tests would fail. Hence the sandbox stays off.
  * That is the access a Claude Code edit run has too (Bash allowed outright); the push guard still refuses force, delete
  * and default-branch pushes, and only the prompt says not to run `gh pr merge`. Read-only runs keep the read-only
  * sandbox. The effort is the config key `model_reasoning_effort` (`codex exec` has no flag for it). `-` reads the
