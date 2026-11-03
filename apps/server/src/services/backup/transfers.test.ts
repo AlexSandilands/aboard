@@ -52,6 +52,20 @@ describe("importing tasks from another machine", () => {
     });
   });
 
+  it("matches the same project only while it is live here", () => {
+    const { from, fromProject } = boards();
+    const dump = from.services.backup.dump();
+    expect(from.services.backup.matchProjects(dump, NO_INFO, new Map())[0]).toMatchObject({
+      matchId: fromProject.id,
+      matchedBy: "id",
+    });
+    from.services.projects.update(fromProject.id, { archived: true });
+    expect(from.services.backup.matchProjects(dump, NO_INFO, new Map())[0]).toMatchObject({
+      matchId: null,
+      matchedBy: null,
+    });
+  });
+
   it("needs a project for tasks whose project didn't match, and takes the one picked", () => {
     const { from, to, fromProject, toProject, task } = boards();
     const dump = from.services.backup.dump();
@@ -152,6 +166,21 @@ describe("applyTransfer", () => {
     expect(from.services.backup.dump().applied_transfers).toEqual([
       expect.objectContaining({ transfer_id: move.transferId, outcome: "archived" }),
     ]);
+  });
+
+  it("acts on moves recorded against the folder it backs up to, whichever board owned it then", () => {
+    const { from, task } = boards();
+    // This board took the laptop's folder over: the move names the board that backed up to it before.
+    const move = transfer(task.id, { fromInstanceId: "old-laptop-board" });
+    expect(from.services.backup.applyTransfer(move, { actor: "backup", folder: "work" })).toBe("not_ours");
+    expect(from.services.backup.applyTransfer(move, { actor: "backup", folder: "Laptop" })).toBe("archived");
+  });
+
+  it("forgets where a task went once it is unarchived here", () => {
+    const { from, task } = boards();
+    from.services.backup.applyTransfer(transfer(task.id), { actor: "backup" });
+    from.services.tasks.update(task.id, { archived: false }, "user");
+    expect(from.services.tasks.detail(task.id).movedTo).toBeNull();
   });
 
   it("still archives a task that changed after the backup it was taken from, and tells the inbox", () => {

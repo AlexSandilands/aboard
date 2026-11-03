@@ -262,7 +262,9 @@ from; running tasks on another machine is #12.
 - **Applying.** Each run, after the pull, reads every folder's `transfers.json` (`transfersIn`: deduplicated, oldest
   first) and calls `backup.applyTransfer` on each, the one way a transfer is acted on, so one that also arrives
   another way later (a live link between boards, #12) is applied once. It ignores transfers this board didn't
-  originate (by instance id; a folder no board had claimed counts by name) and ones it made, and records every other
+  originate and ones it made. A transfer is this board's when it names its instance id, or the folder it backs up
+  to now: a board that took over another machine's folder carries on that board's tasks, moves recorded against the
+  old owner included, and records every other
   id in `applied_transfers` before acting. It archives the task, sets `movedTo` (the card's "Moved to desktop #57"),
   logs `moved_away`, and takes an epic's open tasks out of it. A task gone since, or moved back here after the
   transfer (this board's own later `task_transfers` row for it), is recorded as `skipped`. A task whose `updated_at`

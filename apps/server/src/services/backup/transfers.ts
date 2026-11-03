@@ -63,8 +63,9 @@ export interface TransferService {
   importTasks(dump: BoardDump, taskIds: readonly string[], options: ImportOptions): ImportTaskResult[];
   /**
    * Acts on another board's move of one of this board's tasks: archives its copy, says where it went, and tells the
-   * inbox when it changed here after the backup it was taken from. Idempotent by transferId. Not ours (another board
-   * moved it), or already applied: does nothing.
+   * inbox when it changed here after the backup it was taken from. Idempotent by transferId. Ours means from this
+   * board's id, or from `folder`, the machine folder it backs up to (it may have taken the folder over). Not ours, or
+   * already applied: does nothing.
    */
   applyTransfer(transfer: TaskTransfer, options: { actor: string; folder?: string }): ApplyOutcome;
   /** Tasks with an agent session or Autopilot run going, which another machine may copy but not move. */
@@ -95,14 +96,14 @@ export function createTransferService(
     ).map((r) => r.id);
 
   const matchProjects = (dump: BoardDump, info: MachineInfo, remotes: ReadonlyMap<string, string>): ImportProject[] => {
-    const here = repos.projects.list(true);
-    const live = here.filter((p) => p.archivedAt === null);
+    const live = repos.projects.list();
     return dump.projects.map((row) => {
       const id = String(row.id);
       const title = String(row.title);
       const remote = info.remotes[id] ?? null;
       // The same project (a board restored from this one shares its ids), then the same repo, then the same name.
-      const byId = here.find((p) => p.id === id);
+      // Live projects only: a task sent into an archived one would vanish from the board.
+      const byId = live.find((p) => p.id === id);
       const byRemote = remote ? live.find((p) => remotes.get(p.id) === remote) : undefined;
       const byName = live.find((p) => p.title.trim().toLowerCase() === title.trim().toLowerCase());
       const [match, by] = byId
@@ -317,12 +318,12 @@ export function createTransferService(
   };
 
   const applyTransfer = (transfer: TaskTransfer, { actor, folder }: { actor: string; folder?: string }) => {
-    // From this board: by its id, or for a folder no board had claimed when it was read, by the folder it backs up to.
+    // From this board: by its id, or by the folder it backs up to now, whoever owned it when the move was made. A
+    // board that took over another machine's folder (new hardware, same board) carries on that board's tasks, so it
+    // acts on moves recorded against the old owner's id too; another board's tasks aren't here, so those skip.
     const ours =
       transfer.fromInstanceId === deps.instanceId ||
-      (transfer.fromInstanceId === null &&
-        folder !== undefined &&
-        folder.toLowerCase() === transfer.from.toLowerCase());
+      (folder !== undefined && folder.toLowerCase() === transfer.from.toLowerCase());
     if (!ours || transfer.toInstanceId === deps.instanceId) return "not_ours";
     return core.write((fx): ApplyOutcome => {
       if (applied(transfer.transferId)) return "already_applied";

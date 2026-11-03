@@ -35,7 +35,7 @@ export function projectTargets(
     .map((project) => ({ project, target: choices[project.id] ?? project.matchId }));
 }
 
-/** Only the choices the user made: matched projects go where the server matched them. */
+/** The project here for each backup project the picked tasks come from, as sent with the import. */
 export function projectMap(
   targets: ReadonlyArray<{ project: ImportProject; target: string | null }>,
 ): Record<string, string> {
