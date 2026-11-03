@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   importArgs,
+  importEnv,
   importSettings,
   importPrompt,
   importOutcome,
@@ -78,6 +79,18 @@ describe("import arguments", () => {
     ).toEqual({
       permissions: { allow: ["mcp__jira__get_jira_issue"], deny: ["mcp__jira__create*"] },
     });
+  });
+});
+
+describe("import environment", () => {
+  it("makes a ticket run connect the user's MCP servers before its first turn, keeping the rest", () => {
+    const env = importEnv("ticket");
+    expect(env?.MCP_CONNECTION_NONBLOCKING).toBe("false");
+    expect(env?.PATH).toBe(process.env.PATH);
+  });
+
+  it("leaves a GitHub issue run on the server's environment", () => {
+    expect(importEnv("issue")).toBeUndefined();
   });
 });
 

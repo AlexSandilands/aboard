@@ -119,6 +119,21 @@ export function boardMcpConfig(url: string, token: string | null): string {
   return JSON.stringify({ mcpServers: { [BRAND.id]: server } });
 }
 
+/**
+ * Environment for a run whose extra tools name one of the user's MCP servers (a filled tool slot, say). `claude -p`
+ * connects MCP servers in the background, so a slow one's tools may not be there on the first turn; this makes it
+ * connect them first. Not for a run that gets no user servers (`none`, or read-only and untrusted), nor for one that
+ * only needs the board's, so those aren't held up by every other server the user has.
+ */
+export function mcpWaitEnv(input: Pick<AgentArgsInput, "access" | "untrusted" | "tools">): Record<string, string> {
+  if (input.access === "none" || (input.access === "read-only" && input.untrusted)) return {};
+  const board = `mcp__${BRAND.id}`;
+  const userServer = (input.tools ?? []).some(
+    (tool) => tool.startsWith("mcp__") && tool !== board && !tool.startsWith(`${board}__`),
+  );
+  return userServer ? { MCP_CONNECTION_NONBLOCKING: "false" } : {};
+}
+
 /** `claude -p` arguments for an Autopilot agent run. The prompt goes over stdin. */
 export function agentArgs(input: AgentArgsInput): string[] {
   const readOnly = input.access === "read-only";
