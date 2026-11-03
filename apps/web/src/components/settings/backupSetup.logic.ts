@@ -85,9 +85,17 @@ export function remoteVerdict(check: BackupRemoteCheck, machineName: string): Re
 
 /** How the first backup went, for the last step. */
 export function firstBackupOutcome(status: BackupStatus, remote: string | null): RemoteVerdict {
-  if (status.lastError) return { ok: false, tone: "error", message: status.lastError };
+  if (status.lastError) {
+    // HTTPS pushes to GitHub only sign in through gh once `gh auth setup-git` has run, which `gh auth login` may skip.
+    const auth = /could not read username|authentication failed|terminal prompts disabled/i.test(status.lastError);
+    const hint = auth
+      ? " git has no sign-in for the repo: run gh auth setup-git (or set up an SSH key), then try again."
+      : "";
+    return { ok: false, tone: "error", message: `${status.lastError}${hint}` };
+  }
   if (remote && !status.lastPushAt) {
-    return { ok: false, tone: "warning", message: "Committed, but nothing was pushed yet." };
+    // A scheduled run already going when the settings were saved is the one awaited, and it had the old ones.
+    return { ok: false, tone: "warning", message: "Committed, but nothing was pushed yet. Try again to push." };
   }
   const what = status.lastCommit ? `committed ${status.lastCommit}` : "nothing new to commit";
   return {

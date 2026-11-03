@@ -121,5 +121,7 @@ describe("firstBackupOutcome", () => {
       message: "git push: denied",
     });
     expect(firstBackupOutcome(status({ lastPushAt: null }), "r")).toMatchObject({ ok: false, tone: "warning" });
+    const auth = status({ lastError: "git push: fatal: could not read Username for 'https://github.com'" });
+    expect(firstBackupOutcome(auth, "r").message).toMatch(/gh auth setup-git/);
   });
 });
