@@ -100,7 +100,29 @@ describe("Autopilot session names", () => {
     expect(autopilotSessionName(undefined)).toBe("Autopilot session");
   });
 
+  it("puts the task first when the run has one, and cuts a long title but never the automation", () => {
+    const task = { number: 72, title: "Better title for autopilot started tasks" };
+    expect(autopilotSessionName("Start planned", task)).toBe(
+      "#72 Better title for autopilot started tasks · Autopilot: Start planned",
+    );
+    expect(autopilotSessionName("Fix PRs · PR #73", task)).toBe(
+      "#72 Better title for autopilot started tasks · Autopilot: Fix PRs · PR #73",
+    );
+    expect(autopilotSessionName(undefined, task)).toBe("#72 Better title for autopilot started tasks · Autopilot");
+    const long = autopilotSessionName("Review PRs", { number: 5, title: "x".repeat(100) });
+    expect(long).toBe(`#5 ${"x".repeat(59)}… · Autopilot: Review PRs`);
+    expect(autopilotSessionName("Review PRs", { number: 5, title: `${"x".repeat(58)}😀😀😀` })).toBe(
+      `#5 ${"x".repeat(58)}😀… · Autopilot: Review PRs`,
+    );
+    expect(autopilotSessionName("Review PRs", null)).toBe("Autopilot · Review PRs");
+  });
+
   it("recognises the names it makes, and nothing a person would give a session", () => {
+    const task = { number: 7, title: "Add a cart" };
+    expect(isAutopilotSessionName(autopilotSessionName("Review #7", task))).toBe(true);
+    expect(isAutopilotSessionName(autopilotSessionName(undefined, task))).toBe(true);
+    expect(isAutopilotSessionName("#7 Add a cart")).toBe(false);
+    expect(isAutopilotSessionName("Review · Autopilot")).toBe(false);
     expect(isAutopilotSessionName(autopilotSessionName("Review #7"))).toBe(true);
     expect(isAutopilotSessionName(autopilotSessionName(undefined))).toBe(true);
     expect(isAutopilotSessionName("Implementing the cart")).toBe(false);

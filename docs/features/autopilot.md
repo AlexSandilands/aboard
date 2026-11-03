@@ -1159,10 +1159,15 @@ with that error.
   else fails at once (no model ready, no token, project not in T3, a changed protocol), and so does a T3 that is
   still unreachable when the ten minutes end. A board restart during the wait fails the run like any run a restart
   strands.
-- **`label`** is what the run is, short: "Review PRs · PR #73 round 1", "Fix PRs · PR #73", "Start planned · #107",
-  "<custom name> · #42", "Digest". Each automation supplies it, and the runner (`sessionName`) prefixes it with
-  "Autopilot · " and uses it as the session link's label, `claude --name` and the T3 thread's title
-  (`TaskThreadInput.title`, default the task's number and title). Without one the name is "Autopilot session".
+- **`label`** is what the run is, short, and leaves the task's number out: "Review PRs · PR #73 round 1",
+  "Fix PRs · PR #73", "Start planned", "<custom name>", "Digest". Each automation supplies it, and the runner
+  names the session with `autopilotSessionName(label, task)`. A run on a task is `#<n> <task title> · Autopilot:
+  <label>` (the title cut to about 60 characters with `…`, the automation part never cut), the task first like a
+  thread started by hand, so the useful part survives a truncated sidebar. A run with no task (a digest, Orchestrate,
+  a scheduled or item-driven custom agent) is `Autopilot · <label>`, and `Autopilot session` without a label. That
+  one name is the session link's label, `claude --name` and the T3 thread's title (`TaskThreadInput.title`, default
+  the task's number and title). `isAutopilotSessionName` still recognises the old `Autopilot · ` prefix, so session
+  links named before the change stay marked as Autopilot sessions.
 - **`kind: "nudge"`** posts the prompt into the task's latest live T3 thread (`sendToThread`). It never starts a
   session, and fails when the task has no live thread.
 - **`workspace.prBase`**: the branch the agent's PR goes to when it isn't the default branch (an integration
