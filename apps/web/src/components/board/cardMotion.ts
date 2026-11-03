@@ -1,6 +1,5 @@
 import { defaultDropAnimationSideEffects, type DropAnimation } from "@dnd-kit/core";
 import { useLayoutEffect } from "react";
-import { pageHidden } from "~/lib/pageHidden";
 import {
   canReuseSnapshot,
   flipDurationMs,
@@ -106,7 +105,7 @@ export function snapshotCardRects(rolledBackId?: string) {
   const overlay = rolledBackId ? document.querySelector<HTMLElement>(".is-dropping") : null;
   if (overlay) overlay.style.visibility = "hidden";
   const scroller = boardScroller();
-  if (!scroller || pageHidden() || flipDuration() === 0 || (!rolledBackId && isDragging())) return;
+  if (!scroller || document.hidden || flipDuration() === 0 || (!rolledBackId && isDragging())) return;
   const now = performance.now();
   const snapshot = canReuseSnapshot(pending, now)
     ? pending

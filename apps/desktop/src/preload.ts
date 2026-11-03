@@ -7,15 +7,7 @@ import {
   SET_BACKGROUND_CHANNEL,
   SET_BADGE_CHANNEL,
   SET_THEME_CHANNEL,
-  WINDOW_HIDDEN_CHANNEL,
 } from "./ipc.ts";
-
-let windowHidden = false;
-const hiddenListeners = new Set<(hidden: boolean) => void>();
-ipcRenderer.on(WINDOW_HIDDEN_CHANNEL, (_event, hidden: boolean) => {
-  windowHidden = hidden;
-  for (const listener of hiddenListeners) listener(hidden);
-});
 
 const bridge: DesktopBridge = {
   setTheme: (theme) => ipcRenderer.send(SET_THEME_CHANNEL, theme),
@@ -26,11 +18,6 @@ const bridge: DesktopBridge = {
     const handler = (_event: unknown, notification: DesktopNotification) => listener(notification);
     ipcRenderer.on(NOTIFICATION_CLICK_CHANNEL, handler);
     return () => void ipcRenderer.removeListener(NOTIFICATION_CLICK_CHANNEL, handler);
-  },
-  onWindowHidden(listener) {
-    hiddenListeners.add(listener);
-    listener(windowHidden);
-    return () => void hiddenListeners.delete(listener);
   },
 };
 

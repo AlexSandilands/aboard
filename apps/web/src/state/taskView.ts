@@ -1,7 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { api } from "~/lib/api";
-import { onPageHiddenChange, pageHidden } from "~/lib/pageHidden";
 import { queryKeys } from "./queries";
 
 /** How often an open panel tells the server it's still open; the server polls the task's PRs every 20 s meanwhile. */
@@ -18,7 +17,7 @@ export function useTaskView(taskId: string, active: boolean): void {
   useEffect(() => {
     if (!active) return;
     const ping = () => {
-      if (pageHidden()) return;
+      if (document.visibilityState !== "visible") return;
       api<void>(`/api/tasks/${encodeURIComponent(taskId)}/view`, { body: {} })
         // A PR that was read but hasn't changed sends no event; refetch so "checked Ns ago" counts from this read.
         .then(() => queryClient.invalidateQueries({ queryKey: queryKeys.task(taskId) }))
@@ -27,11 +26,11 @@ export function useTaskView(taskId: string, active: boolean): void {
     // Not at once: its refetch re-renders the panel, which would land in the middle of the panel's slide.
     const first = setTimeout(ping, FIRST_PING_DELAY_MS);
     const timer = setInterval(ping, TASK_VIEW_INTERVAL_MS);
-    const unsubscribe = onPageHiddenChange(ping);
+    document.addEventListener("visibilitychange", ping);
     return () => {
       clearTimeout(first);
       clearInterval(timer);
-      unsubscribe();
+      document.removeEventListener("visibilitychange", ping);
     };
   }, [taskId, active, queryClient]);
 }

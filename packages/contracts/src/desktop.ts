@@ -36,12 +36,6 @@ export interface DesktopBridge {
   setBadge(badge: DesktopBadge): void;
   /** Returns the unsubscribe function. */
   onNotificationClick(listener: (notification: DesktopNotification) => void): () => void;
-  /**
-   * Calls `listener` with whether the window is hidden (in the tray or minimised), at once and on every change. The
-   * shell keeps a hidden page running (no background throttling), so `document.hidden` stays false there. Optional:
-   * older shells lack it. Returns the unsubscribe function.
-   */
-  onWindowHidden?(listener: (hidden: boolean) => void): () => void;
 }
 
 /** The ports the user's own board runs on (`pnpm dev`, the desktop app). A sandbox never uses them. */
