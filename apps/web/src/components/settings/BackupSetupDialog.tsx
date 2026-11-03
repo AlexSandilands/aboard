@@ -292,11 +292,9 @@ function SetupSteps({
           <Button onClick={onClose}>Done</Button>
         ) : (
           <>
-            {created ? null : (
-              <Button variant="ghost" onClick={() => setStep("github")}>
-                Back
-              </Button>
-            )}
+            <Button variant="ghost" onClick={() => setStep("github")}>
+              Back
+            </Button>
             <Button disabled={finish.isPending} onClick={() => finish.mutate()}>
               {finish.isPending ? "Backing up…" : outcome ? "Try again" : "Turn on and back up now"}
             </Button>
