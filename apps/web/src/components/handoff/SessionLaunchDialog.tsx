@@ -22,7 +22,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { toastManager } from "~/components/ui/toast";
 import { cn } from "~/lib/utils";
 import { useStartSession } from "~/state/mutations";
-import { useAgentModels, useBoard, usePrFix, useSessionLaunchOptions } from "~/state/queries";
+import { useAgentModels, useBoard, useFollowupEpicBranch, usePrFix, useSessionLaunchOptions } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import { effortAfterModelChange } from "./cliEffort.logic";
 import { copyFixPrompt } from "./FixPrMenu";
@@ -197,22 +197,28 @@ function Composer({
   fix: PrFixInfo | null;
   onDone: () => void;
 }) {
-  // An epic's session orchestrates its tasks, which carry the plans, so it has no "Plan with me".
+  // An epic's session orchestrates its tasks, which carry the plans, so it has no "Plan with me"; nor has a follow-up
+  // on a Done task, whose work is finished.
   const epic = task.kind === "epic";
+  const followup = !fix && defaultHandoffMode(task) === "followup";
+  const epicBranch = useFollowupEpicBranch(task);
+  const mode = fix ? "fix" : epic ? "orchestrate" : followup ? "followup" : null;
   const promptFor = (plan: boolean) =>
     fix
       ? fix.prompt
       : taskHandoffPrompt({
           task,
           boardUrl: window.location.origin,
-          mode: epic ? "orchestrate" : plan ? "plan" : "work",
+          mode: epic ? "orchestrate" : followup ? "followup" : plan ? "plan" : "work",
           linkedSession: true,
+          epicBranch,
         });
   const [plan, setPlan] = useState(!fix && defaultHandoffMode(task) === "plan");
   const [prompt, setPrompt] = useState(() => promptFor(plan));
   // The choices start from the options. The dialog may open on cached ones that a refresh then changes (the task's
   // model, say), so until the user picks something they follow the newest; after that a refresh never moves them.
-  const integrationBranch = task.integrationBranch;
+  // A follow-up starts where the code is: the epic's branch while it's only there, else the default branch.
+  const integrationBranch = followup ? epicBranch : task.integrationBranch;
   const [pickState, setPickState] = useState(() =>
     syncSessionPicks(emptySessionPickState, options, harness, plan, integrationBranch),
   );
@@ -279,7 +285,7 @@ function Composer({
       {
         taskId: task.id,
         harness,
-        mode: fix ? "fix" : epic ? "orchestrate" : plan ? "plan" : "work",
+        mode: mode ?? (plan ? "plan" : "work"),
         prompt,
         ...(images.ids.length > 0 ? { attachmentIds: images.ids } : {}),
         model: ready.model.trim() || null,
@@ -350,7 +356,7 @@ function Composer({
           ) : failure ? null : (
             <ToolbarSkeleton />
           )}
-          {fix || epic ? null : (
+          {fix || epic || followup ? null : (
             <ComposerControl
               aria-pressed={plan}
               onClick={togglePlan}

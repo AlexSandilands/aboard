@@ -767,6 +767,8 @@ export function renderTaskDetail(
     ticketSystems?: readonly TicketSystem[];
     /** The tier and custom model settings, to say when a label picks the task's model ("Runs on"). */
     modelSettings?: ModelSettings;
+    /** For a Done task: its epic's branch while its code is only there (epicBranchOf), so it isn't read as on main. */
+    epicBranch?: string | null;
   } = {},
 ): string {
   const lines: string[] = [];
@@ -775,7 +777,9 @@ export function renderTaskDetail(
   lines.push(`#${task.number} ${task.title} [${status}]${task.archivedAt ? " (archived)" : ""}`);
   lines.push(`Project: ${projectLabel(project)}  ·  task id: ${task.id}`);
   if (task.parent) lines.push(`Epic: #${task.parent.number} ${task.parent.title}`);
-  const delivery = deliveryLine(task);
+  const delivery = opts.epicBranch
+    ? `Delivery: merged into ${opts.epicBranch}, the epic's integration branch; not on the default branch yet (it gets there when the epic merges)`
+    : deliveryLine(task);
   if (delivery) lines.push(delivery);
   if (task.labels.length) lines.push(`Labels: ${task.labels.join(", ")}`);
   if (task.suggestedModel) {

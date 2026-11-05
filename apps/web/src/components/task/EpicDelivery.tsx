@@ -13,7 +13,7 @@ import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { useMarkEpicMerged, useSetEpicDelivery } from "~/state/mutations";
-import { useBoard } from "~/state/queries";
+import { useBoard, useFollowupEpicBranch } from "~/state/queries";
 
 type EpicLike = Pick<
   TaskSummary,
@@ -211,5 +211,32 @@ export function EpicDeliveryButton({ epic, className }: { epic: EpicLike; classN
         <EpicDeliveryControl epic={epic} />
       </PopoverPopup>
     </Popover>
+  );
+}
+
+/**
+ * On a Done task whose work merged into its epic's integration branch while that branch hasn't merged into main yet:
+ * the task's own work is finished (so it stays Done), but its code isn't on main. Gone once the epic merges.
+ */
+export function OnEpicBranchChip({
+  task,
+  className,
+}: {
+  task: Pick<TaskSummary, "kind" | "status" | "resolution" | "integrationBranch" | "parent">;
+  className?: string;
+}) {
+  const branch = useFollowupEpicBranch(task);
+  if (!branch) return null;
+  const label = `Merged into ${branch}, the epic's branch, which isn't on main yet`;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<Badge variant="info" size="sm" aria-label={label} className={cn("shrink-0", className)} />}
+      >
+        <GitBranchIcon aria-hidden />
+        on epic branch
+      </TooltipTrigger>
+      <TooltipPopup>{label}</TooltipPopup>
+    </Tooltip>
   );
 }

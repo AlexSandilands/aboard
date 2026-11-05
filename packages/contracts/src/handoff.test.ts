@@ -170,6 +170,60 @@ describe("orchestrate prompt", () => {
   });
 });
 
+describe("follow-up prompt", () => {
+  const pr = {
+    id: "l1",
+    taskId: "abc-123",
+    kind: "pr" as const,
+    url: "https://github.com/o/r/pull/5",
+    label: null,
+    syncedAt: null,
+    createdAt: "",
+    ref: null,
+    snapshot: null,
+  };
+  const done = { ...task, status: "done" as const, links: [pr] };
+
+  it("asks the user what to do and leaves the task alone", () => {
+    const prompt = taskHandoffPrompt({ task: done, boardUrl: "http://x", mode: "followup" });
+    expect(prompt).toContain(`Let's follow up on #9 "Hand tasks to agents"`);
+    expect(prompt).toContain('get_task("abc-123")');
+    expect(prompt).toContain("Its pull request: https://github.com/o/r/pull/5.");
+    expect(prompt).toContain("on the default branch");
+    expect(prompt).toContain("Don't move the task");
+    expect(prompt).toContain("add_to_backlog");
+    expect(prompt).toContain('label: "Follow-up on #9"');
+    expect(prompt).toContain("Don't link a T3 thread");
+    expect(prompt).not.toContain("set_plan");
+  });
+
+  it("points at the epic's branch while the code is only there", () => {
+    const prompt = taskHandoffPrompt({
+      task: { ...done, parent: { id: "e", number: 3, title: "Epic" } },
+      boardUrl: "http://x",
+      mode: "followup",
+      epicBranch: "epic/3-epic",
+    });
+    expect(prompt).toContain("integration branch `epic/3-epic` of epic #3");
+    expect(prompt).toContain("`origin/epic/3-epic`");
+    expect(prompt).not.toContain("on the default branch,");
+  });
+
+  it("says when the board linked the session or thread", () => {
+    const session = taskHandoffPrompt({ task: done, boardUrl: "http://x", mode: "followup", linkedSession: true });
+    expect(session).toContain("already linked it to the task");
+    expect(session).not.toContain("link(agentSession");
+    const thread = taskHandoffPrompt({ task: done, boardUrl: "http://x", mode: "followup", linkedThread: true });
+    expect(thread).toContain("This thread is already linked");
+  });
+
+  it("says a task in Review may only be on its PR's branch", () => {
+    const prompt = taskHandoffPrompt({ task: { ...done, status: "review" }, boardUrl: "http://x", mode: "followup" });
+    expect(prompt).toContain("Its work is in Review.");
+    expect(prompt).toContain("only on its pull request's branch");
+  });
+});
+
 describe("handoffModeError", () => {
   it("refuses every prompt for a manual task", () => {
     for (const mode of ["work", "plan"] as const) {
@@ -186,6 +240,19 @@ describe("handoffModeError", () => {
     expect(handoffModeError({ number: 9, progress: { done: 0, total: 0 } }, "work", true)).toContain("has no plan yet");
     expect(handoffModeError({ number: 9, progress: { done: 0, total: 0 } }, "work")).toBeNull();
   });
+
+  it("follows up on finished tasks only, never in a subagent or on an epic", () => {
+    expect(handoffModeError({ number: 9, kind: "task", status: "done" }, "followup")).toBeNull();
+    expect(handoffModeError({ number: 9, kind: "task", status: "review" }, "followup")).toBeNull();
+    expect(handoffModeError({ number: 9, kind: "task", status: "in_progress" }, "followup")).toContain(
+      "isn't finished",
+    );
+    expect(handoffModeError({ number: 7, kind: "epic", status: "done" }, "followup")).toContain("is an epic");
+    expect(handoffModeError({ number: 9, status: "done" }, "followup", true)).toContain(
+      "Only work prompts go to subagents",
+    );
+    expect(handoffModeError({ number: 9, status: "done", manual: true }, "followup")).toContain("is a manual task");
+  });
 });
 
 describe("defaultHandoffMode", () => {
@@ -199,6 +266,13 @@ describe("defaultHandoffMode", () => {
     expect(defaultHandoffMode({ status: "backlog", progress: { done: 0, total: 3 } })).toBe("plan");
     expect(defaultHandoffMode({ status: "planned", progress: { done: 0, total: 0 } })).toBe("plan");
     expect(defaultHandoffMode({ status: "in_progress", progress: { done: 1, total: 3 } })).toBe("work");
+    expect(defaultHandoffMode({ status: "review", progress: { done: 3, total: 3 } })).toBe("work");
+  });
+
+  it("follows up on Done tasks, but still orchestrates a Done epic", () => {
+    expect(defaultHandoffMode({ status: "done", progress: { done: 3, total: 3 } })).toBe("followup");
+    expect(defaultHandoffMode({ status: "done", progress: { done: 0, total: 0 } })).toBe("followup");
+    expect(defaultHandoffMode({ kind: "epic", status: "done", progress: { done: 0, total: 0 } })).toBe("orchestrate");
   });
 });
 
