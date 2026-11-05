@@ -1,20 +1,14 @@
-import type { TaskDetail } from "@repo/contracts";
-import { useId, useState, type ReactNode } from "react";
+import { overrideValue, type ModelChoice, type TaskDetail } from "@repo/contracts";
+import { useId, type ReactNode } from "react";
 
 import { autoReviewChoice, autoReviewOptions } from "~/components/review/review.logic";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
-import { BlurInput } from "~/components/settings/BlurInput";
+import { TriangleAlertIcon } from "lucide-react";
+import { inheritDetail, resolvesTo } from "~/components/models/choicePicker.logic";
+import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
 import { Switch } from "~/components/ui/switch";
-import {
-  headlessModelForOption,
-  headlessModelItems,
-  headlessModelOption,
-  typedHeadlessModel,
-  customModelText,
-  type HeadlessModel,
-} from "~/components/settings/headlessModel.logic";
 import { useUpdateTask } from "~/state/mutations";
-import { useSettings } from "~/state/queries";
+import { useBoard, useSettings } from "~/state/queries";
 import { AUTO_MERGE_OPTIONS, AUTOPILOT_OPTIONS, autopilotChoice } from "./autopilot.logic";
 import { automationUpdate, type AutomationChange } from "./automation.logic";
 import { TaskSection } from "./TaskSection";
@@ -61,12 +55,9 @@ export function AutomationSection({ task }: { task: TaskDetail }) {
             {(task.autoReview ?? globalReview) ? (
               <Row
                 label="Reviewer"
-                hint="The model that reviews this task: a tier or a model id. Inherit follows the project, then the board"
+                hint="The model that reviews this task: a tier, a custom model or a provider's model. Inherit follows the project, then the board"
               >
-                <ReviewModelPicker
-                  value={task.reviewModel}
-                  onChange={(model) => change({ setting: "reviewModel", model })}
-                />
+                <ReviewModelPicker task={task} onChange={(model) => change({ setting: "reviewModel", model })} />
               </Row>
             ) : null}
             <Row label="Auto-merge" hint="Whether an agent may merge this task's pull request with merge_task_pr">
@@ -147,52 +138,34 @@ function ChoiceSelect<T extends string>({
   );
 }
 
-/** The task's reviewer model: inherit, a tier, or a typed model, which shows a field to name it. */
-function ReviewModelPicker({
-  value,
-  onChange,
-}: {
-  value: HeadlessModel | null;
-  onChange: (next: HeadlessModel | null) => void;
-}) {
-  // Custom was picked but nothing is typed yet, so there is nothing to save.
-  const [typing, setTyping] = useState(false);
-  // Bumped when typed text is refused, to remount the field with the saved value.
-  const [rejected, setRejected] = useState(0);
-  const option = headlessModelOption(value, typing);
-  const items = headlessModelItems(true, "Inherit");
+/**
+ * The task's reviewer model, for the reviewer subagent and the board reviewer. Inherit follows the project's, then the
+ * board's, and says what that comes down to for this task.
+ */
+function ReviewModelPicker({ task, onChange }: { task: TaskDetail; onChange: (next: ModelChoice | null) => void }) {
+  const settings = useSettings().data;
+  const project = useBoard().data?.projects.find((p) => p.id === task.projectId);
+  if (!settings) return null;
+  const ctx = { task, projectOverride: project?.reviewModel ?? null, taskOverride: task.reviewModel };
+  // The override drives the board reviewer too, which needs more of its provider than the subagent does.
+  const board = resolvesTo("boardReviewer", ctx, settings);
   return (
     <>
-      <ChoiceSelect
+      <ModelChoicePicker
+        op="reviewer"
+        value={task.reviewModel}
+        inherit={{ label: "Inherit", detail: inheritDetail("reviewer", { ...ctx, taskOverride: null }, settings) }}
         ariaLabel="Reviewer model for this task"
-        items={items}
-        value={option}
-        onChange={(next) => {
-          if (next === option) return;
-          const saved = headlessModelForOption(next, value);
-          setTyping(saved === undefined);
-          if (saved !== undefined) onChange(saved);
-        }}
+        size="xs"
+        className="min-w-28"
+        onChange={(next) => onChange(overrideValue(next))}
       />
-      {option === "custom" ? (
-        <BlurInput
-          key={`${customModelText(value) || "typing"}-${rejected}`}
-          size="sm"
-          className="w-28"
-          aria-label="Reviewer model id"
-          placeholder="claude-opus-5-5"
-          value={customModelText(value)}
-          onSave={(next) => {
-            const typed = typedHeadlessModel(next);
-            if (!typed) {
-              setRejected((n) => n + 1);
-              return;
-            }
-            setTyping(false);
-            onChange(typed);
-          }}
-        />
-      ) : null}
+      {board.ok ? null : (
+        <span title={`Board reviewer: ${board.text}`} className="flex text-warning">
+          <TriangleAlertIcon aria-hidden className="size-3.5" />
+          <span className="sr-only">Board reviewer: {board.text}</span>
+        </span>
+      )}
     </>
   );
 }

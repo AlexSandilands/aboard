@@ -1415,7 +1415,7 @@ each with what it needs from the provider and a default that is a tier or inheri
    the task.
 4. The operation's default.
 5. When everything inherits, a task-scoped operation takes the task's own model (`resolveTaskModel`): a custom model
-   one of its labels picks (**Settings → Model tiers → Custom models**, the first in the list when several claim a
+   one of its labels picks (**Settings → Models → Custom models**, the first in the list when several claim a
    label), else its suggested tier, else the light tier. Anything else takes the light tier.
 
 A choice naming a custom model that was since deleted is passed over with a note, and the next level decides.
@@ -1426,7 +1426,7 @@ asks on top: `driverNeeds` in `integrations/headlessDrivers.ts`) count:
 
 - A typed model runs on its own provider, with its effort when that CLI takes it. If that provider isn't on, or can't
   do what the operation needs, the operation refuses.
-- A tier or custom model runs on its preferred provider (`ModelTierSetting.provider`, **Headless runs** in Settings;
+- A tier or custom model runs on its preferred provider (`ModelTierSetting.provider`, the **Preferred** radio on Settings → Models;
   it has no default) when that counts; otherwise on the first provider in the Providers order that counts and has a
   model for it, else on the first that counts, on the CLI's default model. A CLI model comes with its effort; when a
   tier has no CLI model for a provider, its T3 model stands in when T3 files it under that provider

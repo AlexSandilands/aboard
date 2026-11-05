@@ -1,6 +1,11 @@
 import {
+  AGENT_HARNESSES,
+  customAgentNeeds,
+  type OperationNeed,
   INHERIT,
+  MODEL_TIERS,
   type ModelChoice,
+  type ModelProfile,
   checkCustomDefinition,
   CreateCustomAutomationInput,
   customAgentPrompt,
@@ -22,7 +27,6 @@ import {
   type CustomPrEvent,
   type CustomScriptLanguage,
   type CustomTrigger,
-  type ModelTier,
   type Project,
   type TaskStatus,
   type TaskSummary,
@@ -75,13 +79,8 @@ export interface CustomForm {
   actionKind: "agent" | "shell" | "script";
   prompt: string;
   skill: string;
-  /** "" takes the task's tier (a schedule has none, so the default one). */
-  tier: ModelTier | "";
-  /**
-   * The saved model when it isn't a tier (a custom model or a typed one), kept as it is: the form only offers tiers
-   * until the shared model picker (#75). Picking a tier replaces it.
-   */
-  otherModel: ModelChoice | null;
+  /** The model the agent runs on: inherit takes the board's for the operation, then the task's (a schedule has none). */
+  model: ModelChoice;
   onPrBranch: boolean;
   /** One tool or server per line, as typed. */
   allowedTools: string;
@@ -145,8 +144,7 @@ export function emptyCustomForm(): CustomForm {
     actionKind: "agent",
     prompt: "",
     skill: "",
-    tier: "",
-    otherModel: null,
+    model: INHERIT,
     onPrBranch: false,
     allowedTools: "",
     inputs: [],
@@ -198,8 +196,7 @@ export function formFromCustom(custom: CustomAutomation): CustomForm {
     Object.assign(form, {
       prompt: a.prompt,
       skill: a.skill,
-      tier: a.model !== INHERIT && "tier" in a.model ? a.model.tier : "",
-      otherModel: a.model !== INHERIT && !("tier" in a.model) ? a.model : null,
+      model: a.model,
       onPrBranch: a.onPrBranch,
       allowedTools: a.allowedTools.join("\n"),
       slots: a.slots.map(({ name, label, description, tools }) => ({
@@ -295,7 +292,7 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
             kind: "agent",
             prompt: form.prompt,
             skill: form.skill,
-            model: form.tier ? { tier: form.tier } : (form.otherModel ?? INHERIT),
+            model: form.model,
             // The switch is hidden on a schedule, which has no pull request.
             onPrBranch: form.triggerKind === "schedule" ? false : form.onPrBranch,
             allowedTools: parseAllowedTools(form.allowedTools),
@@ -483,3 +480,26 @@ export function previewAction(
   const tools = customAgentToolsNote(def.action);
   return tools ? `${prompt}${NL}${NL}${tools}` : prompt;
 }
+
+/** "Standard tier", "Codex 6.1", "gpt-5.5 on Codex": an action's model as the import form names it. */
+export function actionModelLabel(
+  model: ModelChoice,
+  profiles: readonly Pick<ModelProfile, "id" | "name">[],
+  isSchedule: boolean,
+): string {
+  if (model === INHERIT) return isSchedule ? "the board's for scheduled agents" : "the board's, else the task's own";
+  if ("tier" in model) return `${MODEL_TIERS.find((t) => t.value === model.tier)!.label} tier`;
+  if ("profile" in model)
+    return profiles.find((p) => p.id === model.profile)?.name ?? `${model.profile} (not here yet)`;
+  return `${model.model} on ${AGENT_HARNESSES[model.provider].label}${model.effort ? `, ${model.effort} effort` : ""}`;
+}
+
+/** What the form's agent asks of its provider beyond its operation's needs, as the server will run it. */
+export const formAgentNeeds = (form: CustomForm): OperationNeed[] =>
+  customAgentNeeds(form.triggerKind, {
+    kind: "agent",
+    allowedTools: parseAllowedTools(form.allowedTools),
+    slots: form.slots.map((slot) => ({ tools: parseAllowedTools(slot.tools) })),
+    check: form.checkOn ? true : null,
+    untrustedItems: form.untrustedItems,
+  });

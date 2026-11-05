@@ -80,8 +80,9 @@ The reviewer subagent and the board reviewer are two operations (`reviewer`, `bo
 [Autopilot's Models](autopilot.md#models)), each with a `ModelChoice` (a tier, a custom model, a model typed for one
 provider, or inherit). The nearest level wins: the task (Automation → Reviewer in the task panel, or
 `update_task(reviewModel)`: a tier, a custom model's id, `provider:model`, or `null` to inherit), then the project
-(project settings → Local review), then the board (`operationModels.reviewer` and `.boardReviewer`; Settings → Tasks →
-Review → Reviewer model sets both until the Models page sets them apart), then the operation's default. The task and
+(project settings → Reviewer model, `project.models.reviewer`), then the board (`operationModels.reviewer` and
+`.boardReviewer`, each its own row under Settings → Models › Operations; Tasks → Review shows what they resolve to
+with a link there), then the operation's default. The task and
 project overrides apply to both reviewers.
 
 - **Subagent:** `services.reviews.modelLineFor(taskId)` gives `reviewLoopInstructions` the `reviewerModelLine` as
@@ -243,7 +244,7 @@ The board-run reviewer survives as fallback 3, where it fits: rounds nobody else
 |---|---|
 | `packages/contracts/src/reviews.ts` | Schemas, `deriveReviewSummary` (the badge), severities, inputs |
 | `packages/contracts/src/reviewPrompt.ts` | The built-in skill, reviewer brief, loop and fix instructions |
-| `packages/contracts/src/headlessModel.ts` | `reviewerModelLine`, `claudeAgentAlias` (the model line of the loop) |
+| `packages/contracts/src/operations.ts` | `reviewerModelLine`, `claudeAgentAlias` (the model line of the loop) |
 | `apps/server/src/db/migrations/039_review_model.sql` | `review_model_json` on projects and tasks; renames the settings key |
 | `apps/server/src/db/migrations/004_local_review.sql` | `task_reviews`, `review_findings`, overrides |
 | `apps/server/src/services/reviews.ts` | Rounds, submissions, resolutions, effective settings (`skillFor`, `modelFor`) |

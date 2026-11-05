@@ -187,8 +187,8 @@ The import is the `issueImport` operation ([Autopilot's Models](autopilot.md#mod
 is a `ModelChoice`, the light tier when unset. It needs a provider that can return structured output and follow tool
 rules, which today is only Claude Code: with none added and switched on, a GitHub issue imports as written (the log
 says why) and a ticket import fails with the reason. A tier runs its Claude Code model at its effort; a tier with none
-leaves `--model` off, so the CLI's own default runs. The picker (`HeadlessModelRow`) says which of the two it will be
-and links to the tier. It was `issueImportModel` (default `haiku`) before 041_operation_models, which moved a saved one
+leaves `--model` off, so the CLI's own default runs. It is set under Settings → Models › Operations, whose line says
+which model it resolves to; the Issue import card in Tasks shows that line with a **Change** link. It was `issueImportModel` (default `haiku`) before 041_operation_models, which moved a saved one
 over as that model on Claude Code; an install that never saved one now runs the light tier.
 
 ## Decisions

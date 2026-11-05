@@ -334,7 +334,7 @@ export function useAgentClis(): { data: AgentCliStatus[] | undefined } {
 }
 
 /**
- * The models each CLI lists, for the pickers on the Model tiers page. The server asks the CLIs (a few seconds) and
+ * The models each CLI lists, for the pickers on the Models page. The server asks the CLIs (a few seconds) and
  * keeps the answer for ten minutes, so this runs only where it is `enabled`; Rescan asks again.
  */
 const agentModelsQuery = {

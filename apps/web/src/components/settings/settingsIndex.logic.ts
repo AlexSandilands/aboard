@@ -14,7 +14,9 @@ import {
   KeybindingCommand,
   MODEL_TIERS,
   NOTIFICATION_KINDS,
+  OPERATIONS,
 } from "@repo/contracts";
+import { OPERATION_DESCRIPTIONS, OPERATION_GROUPS, operationTarget } from "~/components/models/operations.logic";
 import { keybindingSectionId } from "./keybindings.logic";
 import { SETTINGS_GROUPS, sectionOf, type SettingsGroupId } from "./settingsNav.logic";
 
@@ -52,7 +54,7 @@ const draft = (id: string, title: string, description: string, keywords: Readonl
  */
 export const DYNAMIC_ROW_PREFIXES: ReadonlyArray<string> = [
   "integrations.github.host-",
-  "models.tiers.custom.",
+  "models.custom.",
   "integrations.tickets.system-",
 ];
 
@@ -101,8 +103,7 @@ export const AUTOMATION_ENTRIES: ReadonlyArray<{
 ];
 
 const MCP = `Register the ${BRAND.id} MCP server.`;
-const MODELS_PER_TIER =
-  "The model and effort each suggested tier starts a new session on are set on the Model tiers page.";
+const MODELS_PER_TIER = "The model and effort each suggested tier starts a new session on are set on the Models page.";
 const BOARD_SKILL =
   "Install the board's skills, which teach agents the workflow and how to write custom automations, and keep them updated with the app. A copy you edited is never overwritten without asking.";
 const BOARD_SKILL_KEYWORDS = ["install", "sync", "update", "agents", "instructions", "workflow", "automations"];
@@ -283,12 +284,6 @@ const WRITTEN: ReadonlyArray<Draft> = [
     ["issue import", "ticket", "github issue", "claude", "autofill"],
   ),
   draft(
-    "tasks.new-tasks.import-model",
-    "Import model",
-    "A model tier, or a model passed to claude --model: an alias such as haiku, or a full model name.",
-    ["model", "issue import", "haiku", "claude model", "tier", "light", "standard", "deep"],
-  ),
-  draft(
     "tasks.new-tasks.import-budget",
     "Budget per import",
     "The most one import may spend, in US dollars (claude --max-budget-usd).",
@@ -319,12 +314,6 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Review rounds",
     "The agent stops after this many rounds; open blocking or major findings then flag the card.",
     ["rounds", "local review", "limit", "findings", "max rounds"],
-  ),
-  draft(
-    "tasks.review.model",
-    "Reviewer model",
-    "The model that reviews, for the reviewer subagent and the board reviewer.",
-    ["reviewer", "board reviewer", "subagent", "opus", "claude model", "tier", "light", "standard", "deep", "--model"],
   ),
   draft(
     "tasks.review.board-reviewer",
@@ -631,10 +620,10 @@ const WRITTEN: ReadonlyArray<Draft> = [
     ["local review", "override", "reviewer"],
   ),
   draft(
-    "project.review-skill.model",
+    "project.models.reviewer",
     "Project reviewer model",
-    "The model that reviews this project's tasks, instead of the board's.",
-    ["local review", "override", "reviewer", "tier", "opus", "subagent"],
+    "The model that reviews this project's tasks, for the reviewer subagent and the board reviewer, instead of the board's.",
+    ["local review", "override", "reviewer", "tier", "opus", "subagent", "board reviewer", "model"],
   ),
   draft(
     "project.autopilot.automations",
@@ -697,12 +686,24 @@ function generated(): Draft[] {
     ),
     draft(
       "models.tiers.list",
-      "Model tiers",
+      "Tiers",
       "What light, standard and deep mean for you: a description, and the model each provider starts a session on.",
-      ["light", "standard", "deep", "suggested model", "claude", "effort", "rescan", "model list", "reasoning effort"],
+      [
+        "model tiers",
+        "light",
+        "standard",
+        "deep",
+        "suggested model",
+        "claude",
+        "effort",
+        "rescan",
+        "model list",
+        "reasoning effort",
+        "preferred provider",
+      ],
     ),
     draft(
-      "models.tiers.custom",
+      "models.custom.list",
       "Custom models",
       "Named models beyond the tiers, each with the task labels that pick it and the models each provider starts on.",
       ["custom model", "profile", "label", "codex", "override", "model per label", "automation model"],
@@ -718,7 +719,31 @@ function generated(): Draft[] {
         "--effort",
         "session model",
         "effort",
+        "preferred",
       ]),
+    ),
+    ...OPERATION_GROUPS.map((group) =>
+      draft(
+        `models.operations.${group.id}`,
+        `${group.title} models`,
+        `The model each of these runs on: ${group.operations.map((op) => OPERATIONS[op].label).join(", ")}.`,
+        ["operation", "model", "inherit", "tier"],
+      ),
+    ),
+    ...OPERATION_GROUPS.flatMap((group) =>
+      group.operations.map((op) =>
+        draft(operationTarget(op), `${OPERATIONS[op].label} model`, OPERATION_DESCRIPTIONS[op], [
+          "model",
+          "operation",
+          "inherit",
+          "tier",
+          "custom model",
+          "provider",
+          "effort",
+          "resolves to",
+          group.title.toLowerCase(),
+        ]),
+      ),
     ),
     ...AUTOMATION_ENTRIES.map(({ key, title, description }) => ({
       ...draft(`autopilot.engine.automation-${key}`, title, description, [
@@ -769,7 +794,8 @@ const CARD_IDS: ReadonlySet<string> = new Set([
   "tasks.new-tasks.templates",
   "tasks.new-tasks.issue-import",
   "models.tiers.list",
-  "models.tiers.custom",
+  "models.custom.list",
+  ...OPERATION_GROUPS.map((group) => `models.operations.${group.id}`),
   "project.autopilot.automations",
   "project.autopilot.variables",
   "autopilot.custom.variables",

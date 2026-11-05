@@ -1,8 +1,8 @@
-import { OPERATIONS, type AppSettings } from "@repo/contracts";
+import type { AppSettings } from "@repo/contracts";
 import { Switch } from "~/components/ui/switch";
 import { useUpdateSettings } from "~/state/mutations";
 import { BlurInput } from "./BlurInput";
-import { HeadlessModelRow } from "./HeadlessModelRow";
+import { OperationModelLink } from "./OperationModelLink";
 import { SettingsLink, SettingsRow, SettingsSection } from "./settingsLayout";
 
 /**
@@ -35,18 +35,7 @@ export function IssueImportSection({ settings }: { settings: AppSettings }) {
       />
       {settings.issueImportEnabled ? (
         <>
-          <HeadlessModelRow
-            id="tasks.new-tasks.import-model"
-            title="Model"
-            description="A model tier (light unless set), or a model passed to claude --model: an alias such as haiku, or a full name."
-            label="Import model"
-            tiers={settings.modelTiers}
-            value={settings.operationModels.issueImport ?? OPERATIONS.issueImport.default}
-            allowDefault={false}
-            onChange={(next) => {
-              if (next) updateSettings.mutate({ operationModels: { issueImport: next } });
-            }}
-          />
+          <OperationModelLink ops={["issueImport"]} settings={settings} />
           <SettingsRow
             id="tasks.new-tasks.import-budget"
             title="Budget per import"

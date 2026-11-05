@@ -59,6 +59,7 @@ export const DIGEST_FIELDS: AutopilotField[] = [
     key: "modelChoice",
     label: "Agent model",
     kind: "model",
+    operation: "digest",
     help: "Inherit: the board's model for the digest, by default the Light tier. It needs a provider that can run with no tools.",
   },
 ];

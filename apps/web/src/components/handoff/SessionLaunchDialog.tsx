@@ -1,9 +1,9 @@
 import {
-  modelEffortLevels,
   taskHandoffPrompt,
   taskWindowName,
   defaultHandoffMode,
   type AgentHarness,
+  type CliEffort,
   type PrFixInfo,
   type SessionLaunchOptions,
   type StartSessionResult,
@@ -12,8 +12,8 @@ import {
 import { ArrowUpIcon, LightbulbIcon } from "lucide-react";
 import { useState } from "react";
 import { HarnessIcon } from "~/components/sessions/SessionParts";
-import { CliEffortMenu, CliModelPicker } from "~/components/settings/CliModelPicker";
-import { findSuggestion } from "~/components/settings/cliModelPicker.logic";
+import { CliModelPicker } from "~/components/models/ModelChoicePicker";
+import { modelLevels } from "~/components/models/choicePicker.logic";
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
@@ -227,7 +227,6 @@ function Composer({
   const ready = options && synced.picks ? { options, ...synced.picks } : null;
   // The models the CLI lists, for the picker; anything else can still be typed while the scan runs or if it fails.
   const scanned = useAgentModels(true);
-  const models = scanned.data?.harnesses.find((h) => h.harness === harness)?.models ?? [];
   const start = useStartSession({ silent: true });
   const images = useLaunchImages();
   const cli = options?.clis.find((c) => c.harness === harness);
@@ -241,7 +240,7 @@ function Composer({
         : null
       : toSessionWorkspace(ready.where);
   const model = ready?.model ?? "";
-  const levels = modelEffortLevels(harness, findSuggestion(models, model));
+  const levels = modelLevels(scanned.data, harness, model.trim() || null);
   const badModel = modelError(model);
   const blocker = !ready
     ? failure
@@ -258,12 +257,12 @@ function Composer({
           : (badModel ?? images.blocker);
 
   const pick = (change: (picks: SessionPicks) => SessionPicks) => setPickState((state) => pickSessionBy(state, change));
-  const pickModel = (next: string) =>
+  const pickModel = (next: string | null, nextLevels: readonly CliEffort[]) =>
     pick((picks) => ({
       ...picks,
-      model: next,
+      model: next ?? "",
       // The effort goes with the model: kept while the new one takes it.
-      effort: effortAfterModelChange(picks.effort, modelEffortLevels(harness, findSuggestion(models, next))),
+      effort: effortAfterModelChange(picks.effort, nextLevels),
     }));
 
   const togglePlan = () => {
@@ -334,24 +333,15 @@ function Composer({
             <>
               <CliModelPicker
                 harness={harness}
-                cliName={harnessLabel(harness)}
-                label="Model"
+                ariaLabel="Model"
                 defaultLabel="Default model"
-                value={ready.model}
-                models={models}
-                loading={scanned.isFetching}
+                model={ready.model}
+                effort={ready.effort}
                 // The one toolbar control that may shrink, so the submit arrow stays inside the composer.
                 className="max-w-80 shrink"
-                onSave={pickModel}
+                onModel={pickModel}
+                onEffort={(effort) => pick((picks) => ({ ...picks, effort }))}
               />
-              {levels.length > 0 ? (
-                <CliEffortMenu
-                  label="Effort"
-                  value={ready.effort}
-                  levels={levels}
-                  onChange={(effort) => pick((picks) => ({ ...picks, effort }))}
-                />
-              ) : null}
             </>
           ) : failure ? null : (
             <ToolbarSkeleton />
@@ -423,7 +413,7 @@ function Composer({
               </span>
               {options.models[harness]
                 ? null
-                : ` · no ${harnessLabel(harness)} model is set for ${options.model.source === "label" ? "it" : "this tier"} in Settings → Model tiers`}
+                : ` · no ${harnessLabel(harness)} model is set for ${options.model.source === "label" ? "it" : "this tier"} in Settings → Models`}
             </span>
           ) : null}
           {options.namedWindow

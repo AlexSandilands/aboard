@@ -1,6 +1,7 @@
 import {
   AUTOPILOT_ORCHESTRATE,
-  parseModelChoiceKey,
+  INHERIT,
+  parseModelChoice,
   ReviewSkillRef,
   type AutopilotConfig,
   type AutopilotAutomation,
@@ -15,6 +16,8 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/c
 import { Switch } from "~/components/ui/switch";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
 import { skillOptions } from "~/components/review/review.logic";
+import { inheritDetail } from "~/components/models/choicePicker.logic";
+import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
 import { ReviewSkillSelect } from "~/components/settings/ReviewSettingsSection";
 import {
   FoldedSettingsSection,
@@ -38,8 +41,6 @@ import {
   entryFor,
   fieldText,
   inheritLabel,
-  modelChoiceFieldKey,
-  modelChoiceItems,
   isClockTime,
   parentEntry,
   parseNumberField,
@@ -400,7 +401,7 @@ function FieldControl({
         />
       );
     case "model":
-      return <ModelField value={value} label={label} onSave={onSave} />;
+      return <ModelField field={field} value={value} label={label} onSave={onSave} />;
     case "skill":
       return (
         <SkillField
@@ -414,28 +415,35 @@ function FieldControl({
   }
 }
 
-/** Which model runs start on: the task's, a tier, or a custom model from Settings → Model tiers, listed live. */
-function ModelField({ value, label, onSave }: { value: unknown; label: string; onSave: (next: unknown) => boolean }) {
-  const items = modelChoiceItems(useSettings().data?.modelProfiles ?? [], value);
+/**
+ * Which model the automation's runs start on: inherit (the board's model for the operation, then the task's), a tier,
+ * a custom model, or a provider's model, in the shared picker that greys out providers the operation can't run on.
+ */
+function ModelField({
+  field,
+  value,
+  label,
+  onSave,
+}: {
+  field: Extract<AutopilotField, { kind: "model" }>;
+  value: unknown;
+  label: string;
+  onSave: (next: unknown) => boolean;
+}) {
+  const settings = useSettings().data;
+  if (!settings) return null;
+  const op = field.operation ?? "customTask";
   return (
-    <Select
-      items={items}
-      value={modelChoiceFieldKey(value)}
-      onValueChange={(next) => {
-        if (next !== null) onSave(parseModelChoiceKey(next));
-      }}
-    >
-      <SelectTrigger size="sm" className={SETTINGS_TEXT_WIDTH} aria-label={label}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectPopup>
-        {items.map((item) => (
-          <SelectItem key={item.value} value={item.value}>
-            {item.label}
-          </SelectItem>
-        ))}
-      </SelectPopup>
-    </Select>
+    <ModelChoicePicker
+      op={op}
+      needs={field.needs}
+      value={parseModelChoice(value)}
+      inherit={{ label: "Inherit", detail: inheritDetail(op, { needs: field.needs }, settings) }}
+      ariaLabel={label}
+      size="sm"
+      className={SETTINGS_TEXT_WIDTH}
+      onChange={(next) => onSave(next ?? INHERIT)}
+    />
   );
 }
 

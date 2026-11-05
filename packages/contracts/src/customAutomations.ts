@@ -2,6 +2,7 @@ import { z } from "zod";
 import { VARIABLE_NAME, variableHasValue } from "./automationVariables.ts";
 import { BRAND, brandEnv } from "./brand.ts";
 import { INHERIT, ModelChoice } from "./modelProfiles.ts";
+import type { OperationNeed } from "./operations.ts";
 import { WeeklySchedule } from "./recurring.ts";
 import { CustomToolRule } from "./toolRules.ts";
 import { TaskStatus, type Project, type TaskLink, type TaskSummary } from "./schemas.ts";
@@ -656,11 +657,32 @@ export function describeMissingVariables(missing: ReadonlyArray<{ project: strin
   return [...byNames].map(([names, projects]) => `Needs ${names} in: ${projects.join(", ")}`).join("; ");
 }
 
+type AgentAction = Extract<CustomAction, { kind: "agent" }>;
+
 /** Every extra tool an agent action may call unattended: its allowed tools and the ones filling its slots. */
 export function customAllowedTools(action: CustomAction): string[] {
   return action.kind === "agent"
     ? [...new Set([...action.allowedTools, ...action.slots.flatMap((slot) => slot.tools)])]
     : [];
+}
+
+/**
+ * What an agent action's runs ask of their provider beyond their operation's own needs, as the runner starts them
+ * (autopilot/custom.ts, driverNeeds): extra tools are tool rules. A scheduled agent runs in a folder of its own with no
+ * pre-push guard, so only tool rules keep it from force-pushing; a run per untrusted check item is also locked down;
+ * and one with no check answers in a schema (its handover).
+ */
+export function customAgentNeeds(
+  triggerKind: CustomTrigger["kind"],
+  action: Pick<AgentAction, "kind" | "allowedTools" | "untrustedItems"> & {
+    slots: ReadonlyArray<{ tools: readonly string[] }>;
+    check: unknown;
+  },
+): OperationNeed[] {
+  const tools = action.allowedTools.length > 0 || action.slots.some((slot) => slot.tools.length > 0);
+  if (triggerKind !== "schedule") return tools ? ["toolRules"] : [];
+  if (!action.check) return ["outputSchema", "toolRules"];
+  return action.untrustedItems ? ["untrusted", "toolRules"] : ["toolRules"];
 }
 
 /** The slots of an agent action nobody has filled with tools yet. */

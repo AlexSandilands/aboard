@@ -1,7 +1,6 @@
 import {
   AGENT_HARNESSES,
   MAX_PLAN_TASKS,
-  modelEffortLevels,
   planningSessionLabel,
   planTasksPrompt,
   type AgentHarness,
@@ -13,8 +12,8 @@ import { ArrowUpIcon } from "lucide-react";
 import { useState } from "react";
 import { pickedAmong, plannableTasks } from "~/components/board/boardSelection.logic";
 import { HarnessIcon } from "~/components/sessions/SessionParts";
-import { CliEffortMenu, CliModelPicker } from "~/components/settings/CliModelPicker";
-import { findSuggestion } from "~/components/settings/cliModelPicker.logic";
+import { CliModelPicker } from "~/components/models/ModelChoicePicker";
+import { modelLevels } from "~/components/models/choicePicker.logic";
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { Button } from "~/components/ui/button";
 import {
@@ -207,8 +206,7 @@ function PlanSession({
   const cli = useAgentClis().data?.find((c) => c.harness === harness);
   // The models the CLI lists, for the picker; anything else can still be typed while the scan runs or if it fails.
   const scanned = useAgentModels(true);
-  const models = scanned.data?.harnesses.find((h) => h.harness === harness)?.models ?? [];
-  const levels = modelEffortLevels(harness, findSuggestion(models, model));
+  const levels = modelLevels(scanned.data, harness, model.trim() || null);
   const start = useStartPlanningSession({ silent: true });
   const images = useLaunchImages();
   const badModel = modelError(model);
@@ -278,25 +276,19 @@ function PlanSession({
           <div className="flex min-w-0 items-center gap-1 px-3 pb-3">
             <CliModelPicker
               harness={harness}
-              cliName={harnessLabel(harness)}
-              label="Model"
+              ariaLabel="Model"
               defaultLabel="Default model"
-              value={model}
-              models={models}
-              loading={scanned.isFetching}
+              model={model}
+              effort={effort}
               // The one toolbar control that may shrink, so the submit arrow stays inside the composer.
               className="max-w-80 shrink"
-              onSave={(next) => {
-                setModel(next);
+              onModel={(next, nextLevels) => {
+                setModel(next ?? "");
                 // The effort goes with the model: kept while the new one takes it.
-                setEffort((current) =>
-                  effortAfterModelChange(current, modelEffortLevels(harness, findSuggestion(models, next))),
-                );
+                setEffort((current) => effortAfterModelChange(current, nextLevels));
               }}
+              onEffort={setEffort}
             />
-            {levels.length > 0 ? (
-              <CliEffortMenu label="Effort" value={effort} levels={levels} onChange={setEffort} />
-            ) : null}
             <div className="ms-auto flex shrink-0 items-center gap-1.5">
               <AddImageControl state={images} />
               <button

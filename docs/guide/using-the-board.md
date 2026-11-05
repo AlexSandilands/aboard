@@ -126,7 +126,7 @@ start a blocked task.
 ## Suggested model
 
 The agent that plans a task suggests a model tier (light, standard or deep) for implementing it. Say what
-each tier means in **Settings → Model tiers**; copied prompts name it, and new T3 Code threads start on it. For
+each tier means in **Settings → Models**; copied prompts name it, and new T3 Code threads start on it. For
 Claude Code and Copilot CLI you choose the model from the list the CLI gives (or type one the list doesn't have) and
 how hard it thinks (its effort); new sessions and Autopilot's headless runs on that tier use both. **Rescan models**
 asks the CLIs again after you update them.
@@ -218,7 +218,7 @@ says to open its pull request against it, and the T3 dialog opens on a new workt
 When Claude Code or Copilot CLI is installed and added in **Settings → Providers** (on your PATH, or at the path set there),
 **New Claude Code session…** and **New Copilot CLI session…** open the CLI in a terminal with the task's prompt
 already typed in. The dialog lets you edit the prompt, switch to planning, pick a model (filled in from the task's
-suggested tier, set in **Settings → Model tiers**) and choose where it runs: a new git worktree
+suggested tier, set in **Settings → Models**) and choose where it runs: a new git worktree
 from a branch you pick (the default), or the project's own folder. The board links the session to the task straight
 away. On Windows Terminal, a task's sessions open as tabs of one window named after the task, and
 opening a session that is still running brings that window back to the front. On Windows a prompt with a `%` in it,

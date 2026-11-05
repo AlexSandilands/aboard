@@ -7,6 +7,7 @@ import {
   CHECK_ITEMS_MAX,
   CHECK_KEY_MAX,
   checkCustomDefinition,
+  customAgentNeeds,
   customAgentPrompt,
   customAgentToolsNote,
   customAllowedTools,
@@ -672,5 +673,24 @@ describe("the SDK reference's text", () => {
       expect(variablesNamedBy(CustomAction.parse({ kind: "shell", command: all }))).toEqual(["jira_key"]);
     }
     expect(AUTOMATION_SDK_SNIPPETS.sh.map((s) => s.code).join("\n")).toContain(`${brandEnv("INPUT_DAYS")}:-7}`);
+  });
+});
+
+describe("customAgentNeeds", () => {
+  const agent = (over: Partial<Extract<CustomAction, { kind: "agent" }>> = {}) =>
+    CustomAction.parse({ kind: "agent", prompt: "Do it", ...over }) as Extract<CustomAction, { kind: "agent" }>;
+
+  it("asks a schema of a scheduled agent, and tool rules of one with tools", () => {
+    // A scheduled agent has no pre-push guard, so it needs tool rules whatever its tools.
+    expect(customAgentNeeds("schedule", agent())).toEqual(["outputSchema", "toolRules"]);
+    expect(customAgentNeeds("schedule", agent({ allowedTools: ["WebFetch"] }))).toEqual(["outputSchema", "toolRules"]);
+    expect(customAgentNeeds("status_change", agent())).toEqual([]);
+    expect(customAgentNeeds("status_change", agent({ allowedTools: ["WebFetch"] }))).toEqual(["toolRules"]);
+  });
+
+  it("locks a check's untrusted items down, and holds trusted ones to tool rules", () => {
+    const check = { language: "node", body: "console.log('[]')", timeoutSeconds: 30 };
+    expect(customAgentNeeds("schedule", agent({ check } as never))).toEqual(["untrusted", "toolRules"]);
+    expect(customAgentNeeds("schedule", agent({ check, untrustedItems: false } as never))).toEqual(["toolRules"]);
   });
 });

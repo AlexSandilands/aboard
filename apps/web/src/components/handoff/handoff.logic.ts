@@ -124,53 +124,9 @@ export function keepsCommandId(details: unknown): boolean {
 
 // ── Models ───────────────────────────────────────────────────────────────
 
-export const FAVORITES = "favorites";
-
 export interface PickerModel {
   provider: T3LaunchProvider;
   model: T3LaunchModel;
-}
-
-/** One entry per (provider, model), favorites first, mirroring T3's picker ordering. */
-function allModels(options: Pick<T3LaunchOptions, "providers">): PickerModel[] {
-  return options.providers.flatMap((provider) => provider.models.map((model) => ({ provider, model })));
-}
-
-const isFavorite = (options: Pick<T3LaunchOptions, "favorites">, entry: PickerModel) =>
-  options.favorites.some((f) => f.instanceId === entry.provider.instanceId && f.model === entry.model.slug);
-
-/**
- * The picker list for a rail tab ("favorites" or a provider id) and a search query. Searching spans every
- * provider. Legacy models of a provider tab are split out into their own collapsible section.
- */
-export function pickerModels(
-  options: Pick<T3LaunchOptions, "providers" | "favorites">,
-  tab: string,
-  query: string,
-): { models: PickerModel[]; legacy: PickerModel[] } {
-  const q = query.trim().toLowerCase();
-  const all = allModels(options);
-  if (q) {
-    const matches = all.filter(
-      (e) =>
-        e.model.name.toLowerCase().includes(q) ||
-        e.model.slug.toLowerCase().includes(q) ||
-        e.provider.displayName.toLowerCase().includes(q),
-    );
-    return { models: matches, legacy: [] };
-  }
-  if (tab === FAVORITES) return { models: all.filter((e) => isFavorite(options, e)), legacy: [] };
-  const own = all.filter((e) => e.provider.instanceId === tab);
-  return { models: own.filter((e) => !e.model.isLegacy), legacy: own.filter((e) => e.model.isLegacy) };
-}
-
-/** The rail tab the picker opens on: favorites when there are any, else the selected model's provider. */
-export function initialPickerTab(
-  options: Pick<T3LaunchOptions, "favorites" | "providers">,
-  selection: T3ModelSelection | null,
-) {
-  if (options.favorites.length > 0) return FAVORITES;
-  return selection?.instanceId ?? options.providers[0]?.instanceId ?? FAVORITES;
 }
 
 export function findModel(

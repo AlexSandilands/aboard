@@ -26,7 +26,7 @@ and keeps to the same pause, dry run, caps and quiet hours.
      `{{task.id}}`, `{{task.status}}`, `{{pr.url}}`, `{{project.name}}`, `{{project.path}}`,
      `{{project.repo_url}}`, `{{automation.name}}`, your [variables](#variables) as `{{vars.name}}` and
      [inputs](#inputs-and-required-tools) as `{{inputs.name}}`; the task's title, labels, PR and description are added after it. Optionally name a
-     skill the agent should use, a model tier, and whether to work on the task's pull request branch. The runner,
+     skill the agent should use, a model (inherit, a tier, a custom model or any provider's model), and whether to work on the task's pull request branch. The runner,
      budget and timeout are the automation's settings in the Autopilot list, like any agent automation's
      ([Autopilot](autopilot.md#runners)). On a schedule the agent has no task: it runs headless in an empty
      temporary folder, not the project's own, and is told the project's name and folder (and not to edit the folder, which is only a request: nothing stops it); it can use the board's

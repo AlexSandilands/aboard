@@ -21,7 +21,7 @@ import { z } from "zod";
 import { AppError } from "../../errors.ts";
 import type { Services } from "../../services/types.ts";
 import { agentHold, dailyCapHold } from "../limits.ts";
-import { RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
+import { RUNNER_OPTION_SHAPE, runnerFields } from "../runnerOptions.ts";
 import { defineAutomation, type ActionResult, type Candidate } from "../types.ts";
 
 export { AUTOPILOT_ORCHESTRATE };
@@ -221,11 +221,13 @@ export const orchestrate = defineAutomation({
       placeholder: "E.g. hold PRs that change the board's layout for me to check.",
       help: "Added to the end of the built-in prompt, and win where they differ.",
     },
-    ...RUNNER_FIELDS.filter((f) => ["modelChoice", "budgetUsd", "timeoutMinutes"].includes(f.key)).map((f) =>
-      f.key === "modelChoice"
-        ? { ...f, help: "Inherit: the board's model for Orchestrate, by default the Standard tier." }
-        : f,
-    ),
+    ...runnerFields("orchestrate")
+      .filter((f) => ["modelChoice", "budgetUsd", "timeoutMinutes"].includes(f.key))
+      .map((f) =>
+        f.key === "modelChoice"
+          ? { ...f, help: "Inherit: the board's model for Orchestrate, by default the Standard tier." }
+          : f,
+      ),
   ],
   defaults,
   check: ({ services, projects, engine, now }) => {

@@ -338,6 +338,7 @@ export const reviewPrs = defineAutomation({
       key: "modelChoice",
       label: "Model",
       kind: "model",
+      operation: "prReview",
       help: "Inherit: the board's model for PR review, by default the Standard tier. It runs on a provider that can lock a run down to read untrusted input.",
     },
     { key: "budgetUsd", label: "Budget", kind: "number", min: 0.5, max: 100, step: 0.5, unit: "USD" },

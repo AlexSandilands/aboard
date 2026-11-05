@@ -30,7 +30,7 @@ import { AppError } from "../../errors.ts";
 import { shQuote } from "../../integrations/terminal.ts";
 import { messageOf } from "../../integrations/github.ts";
 import type { Services } from "../../services/types.ts";
-import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
+import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE, runnerFields } from "../runnerOptions.ts";
 import { threadSeen } from "../threads.ts";
 import {
   RunAbandonedError,
@@ -443,7 +443,7 @@ const FIELDS: AutopilotField[] = [
     builtinLabel: "Fix prompt only",
     help: "What the agent follows on top of the fix prompt.",
   },
-  ...RUNNER_FIELDS,
+  ...runnerFields("prFix"),
 ];
 
 /** What a finished fix attempt leaves on its run. */

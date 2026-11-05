@@ -598,7 +598,7 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       expect(patches).toContainEqual({
         detail: [
           "Other prefers Codex, which can't return structured output, so Claude Code ran it.",
-          "Other has no Claude Code model in Settings → Model tiers, so the CLI's default ran.",
+          "Other has no Claude Code model in Settings → Models, so the CLI's default ran.",
           "Model: Other, from label other: the CLI's default model on Claude Code",
         ].join("\n"),
       });
@@ -653,8 +653,7 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     h.services.tasks.update(task.id, { labels: ["quick"] }, "test");
     await start({ options: { runner: "t3" } });
     expect(patches).toContainEqual({
-      detail:
-        "Model: Fast, from label quick. It has no T3 Code model in Settings → Model tiers. T3 Code's default ran.",
+      detail: "Model: Fast, from label quick. It has no T3 Code model in Settings → Models. T3 Code's default ran.",
     });
     expect(patches).toContainEqual(
       expect.objectContaining({ model: { provider: "t3-code", model: null, effort: null, source: "label" } }),

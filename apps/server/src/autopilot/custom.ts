@@ -4,6 +4,7 @@ import {
   CHECK_FAILED_KEY_PREFIX,
   CHECK_NEW_ITEMS_MAX,
   customAgentPrompt,
+  customAgentNeeds,
   customAllowedTools,
   customBlockedReason,
   customAgentToolsNote,
@@ -51,7 +52,7 @@ import type { Services } from "../services/types.ts";
 import { ORCHESTRATE_BOARD_TOOLS, ORCHESTRATE_DENIED_BOARD_TOOLS } from "./automations/orchestrate.ts";
 import { AUTOPILOT_BACKGROUND_MAX } from "./engine.ts";
 import { agentHold } from "./limits.ts";
-import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "./runnerOptions.ts";
+import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE, runnerFields } from "./runnerOptions.ts";
 import { defineAutomation, type ActionResult, type Automation, type Candidate, type CheckContext } from "./types.ts";
 
 // A custom automation as a catalogue entry (docs/features/autopilot.md#custom-automations): the trigger is the check,
@@ -523,7 +524,12 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
         }
       : {}),
     schema: isAgent ? AgentConfig : z.object({}),
-    fields: isAgent ? RUNNER_FIELDS : [],
+    fields: isAgent
+      ? runnerFields(
+          trigger.kind === "schedule" ? "customDetached" : "customTask",
+          action.kind === "agent" ? customAgentNeeds(trigger.kind, action) : [],
+        )
+      : [],
     defaults: isAgent ? RUNNER_DEFAULTS : {},
     check,
     async act(candidate, ctx): Promise<ActionResult> {

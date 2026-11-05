@@ -92,7 +92,7 @@ describe("settings Ask", () => {
     expect(await ask(failed)).toMatchObject({
       ok: false,
       error: expect.stringContaining(
-        "(the Light tier, unless you chose another) a Claude Code model in Settings → Model tiers",
+        "(the Light tier, unless you chose another) a Claude Code model in Settings → Models",
       ),
     });
 
