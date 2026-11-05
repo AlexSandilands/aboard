@@ -75,6 +75,7 @@ export const BoardCell = memo(function BoardCell({
   return (
     <div
       ref={setNodeRef}
+      data-vt-move
       style={gridRow ? { gridRow } : undefined}
       data-drop-state={dropState ?? undefined}
       className={cn(

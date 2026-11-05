@@ -599,7 +599,13 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
 
   return (
     <BoardContext value={context}>
-      <div ref={scrollRef} data-board-scroll className="min-h-0 flex-1 overflow-auto">
+      {/* Opaque, with the grain scrolling along (bg-local), so Chromium scrolls it on the compositor. Over the main
+          area's background instead it kept subpixel text by repainting the whole screen every scroll frame. */}
+      <div
+        ref={scrollRef}
+        data-board-scroll
+        className="min-h-0 flex-1 overflow-auto bg-background surface-grain bg-local"
+      >
         <div ref={contentRef} className="relative w-full min-w-min pb-10">
           {/* Its height (h-9 and the border) is also the pinned priority lane's sticky `top` in PriorityLane. */}
           <div
@@ -615,6 +621,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
                   <div
                     key={value}
                     role="columnheader"
+                    data-vt-move
                     className="flex items-center gap-2 px-1 text-xs font-medium text-muted-foreground"
                   >
                     {label}
@@ -623,6 +630,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
                       <TooltipTrigger
                         render={
                           <Button
+                            data-vt-move
                             variant="ghost-muted"
                             size="icon-xs"
                             className="relative ms-auto"

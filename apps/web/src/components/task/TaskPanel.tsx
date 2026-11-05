@@ -17,6 +17,7 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { Skeleton } from "~/components/ui/skeleton";
 import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth, type ResizableWidthHandlers } from "~/hooks/useResizableWidth";
 import { ApiError } from "~/lib/api";
+import { boardTransitionRunning } from "~/lib/boardMotion";
 import { slideDuration, slideOffset, slidesOn, startSlide } from "~/lib/slide";
 import { useBoard, useTaskDetail } from "~/state/queries";
 import { useTaskView } from "~/state/taskView";
@@ -90,6 +91,7 @@ export function TaskPanel({
     <aside
       ref={asideRef}
       aria-label="Task details"
+      data-task-panel
       aria-hidden={closing || undefined}
       inert={closing}
       className="relative flex h-full min-h-0 max-w-[70vw] shrink-0"
@@ -125,7 +127,8 @@ function usePanelSlide(
     const aside = asideRef.current;
     const contents = contentsRef.current;
     if (!aside || !contents) return;
-    const duration = slideDuration();
+    // In a board transition the router's View Transition moves the panel and the board (index.css).
+    const duration = boardTransitionRunning() ? 0 : slideDuration();
     if (duration === 0) {
       if (closing) closed();
       return;

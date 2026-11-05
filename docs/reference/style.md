@@ -28,7 +28,7 @@ Copy these blocks (line numbers approximate):
 | `@layer base` | 638–708 | `* { border-border outline-ring/50 }`, body bg `--app-chrome-background` |
 | `:root` color tokens + `@variant dark` | 1087–1196 | The default T3 Code look (it's the *unthemed* set) |
 | `[data-app-sidebar]` scope overrides | 1201–1243 | Dark sidebar is pure `#000` with 8/11/7% row mixes |
-| Grain: `--surface-grain` SVG + `@utility surface-grain` | 1683–1700 | Baked into each surface, not an overlay |
+| Grain: `--surface-grain` + `@utility surface-grain` | 1683–1700 | Baked into each surface, not an overlay. T3 Code's SVG noise, drawn once to PNG tiles ([appearance.md](../features/appearance.md#grain)) |
 | Scrollbars | 1750–1766 | 6px, `rgb(255 255 255 / 8%)` thumb in dark |
 | `.chat-markdown*` prose CSS | 1766–1900 | For description/plan-context/notes markdown |
 | Keyframes `skeleton`, `status-pulse` (stepped), `.no-transitions` | search | No continuous smooth animations |

@@ -61,6 +61,20 @@ describe("seed scenarios", () => {
     expect(finished.every((t) => t.children.length > 0)).toBe(true);
   });
 
+  it("dense has a full project, one with an epic across every column, fifteen spread or in backlog, and one card", () => {
+    const { tasks } = seeded("dense");
+    const byProject = new Map<string, typeof tasks>();
+    for (const t of tasks) byProject.set(t.projectId, [...(byProject.get(t.projectId) ?? []), t]);
+    // Single card, the epic's (5 loose, the epic, 5 children), 15 in backlog, 15 spread, and the full one.
+    expect([...byProject.values()].map((list) => list.length).sort((a, b) => a - b)).toEqual([1, 11, 15, 15, 100]);
+    const full = [...byProject.values()].find((list) => list.length === 100)!;
+    for (const status of ["backlog", "planned", "in_progress", "review", "done"]) {
+      expect(full.filter((t) => t.status === status)).toHaveLength(20);
+    }
+    const epicChildren = tasks.filter((t) => t.parent?.title === "Rework onboarding");
+    expect(new Set(epicChildren.map((t) => t.status)).size).toBe(5);
+  });
+
   it("basic has a dependency chain across projects, with a finished blocker", () => {
     const { tasks } = seeded("basic");
     const blocked = tasks.filter((t) => t.blocked);

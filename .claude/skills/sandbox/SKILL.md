@@ -11,7 +11,7 @@ code. One command does all of it; don't rebuild it by hand.
 
 ## Pick a mode
 
-- **Isolated (default):** `pnpm sandbox [--seed basic|review|threads|showcase|social|stats|none]`. This checkout's server on
+- **Isolated (default):** `pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|none]`. This checkout's server on
   a temp data dir and its own home folder for skills, pollers off, T3 Code integration off, Vite with hot reload. Use it for anything:
   web, server or contracts changes, and anything that writes.
 - **Desktop:** `pnpm sandbox --desktop [--seed ...]`. The isolated sandbox plus the Electron shell attached
@@ -19,6 +19,9 @@ code. One command does all of it; don't rebuild it by hand.
   "Sandbox" and it keeps its profile in the sandbox's data dir, so it can run beside the user's real app.
   Starts the sandbox if needed; on a running one it only opens the shell. `pnpm sandbox stop` closes it.
   Its log is `desktop.log` in the sandbox home. Not combinable with `--live`.
+- **Production build:** add `--prod` to any mode. Builds the web app and serves it with `vite preview` instead of
+  the dev server, so no hot reload (restart to pick up edits). Use it to judge performance: React's development
+  build renders several times slower, which shows up as dropped frames the real app doesn't have.
 - **Live:** `pnpm sandbox --live`. This checkout's Vite on the user's real server and real data. The
   real server rejects writes from the sandbox port (403), so it's for _looking_ at a web-only change
   against real data. Needs the real server running.
@@ -38,6 +41,9 @@ Seeds (`apps/server/src/dev/seeds.ts`):
   `sandbox-probe` post that prints what a hostile piece can and can't do (open it at `/social`).
 - `stats`: the showcase board with twelve weeks of finished tasks and Autopilot runs, for the stats page (`/stats`).
   No PRs, sessions or review rounds are backdated, so those charts stay flat.
+- `dense`: for checking rendering cost. A project with twenty cards in every column, one with an epic whose children
+  span every column, fifteen cards spread across the columns beside the same fifteen in backlog, and a single card.
+  Pair it with `--prod`.
 - `none`: an empty board.
 
 ## Steps

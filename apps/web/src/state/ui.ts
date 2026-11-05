@@ -152,6 +152,7 @@ const prefsOf = (s: AppearancePrefs): AppearancePrefs => ({
   contrast: s.contrast,
   glassOpacity: s.glassOpacity,
   panelAnimationMs: s.panelAnimationMs,
+  boardMotion: s.boardMotion,
   fontSans: s.fontSans,
   fontMono: s.fontMono,
   fontSize: s.fontSize,
