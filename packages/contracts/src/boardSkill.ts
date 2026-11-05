@@ -316,6 +316,8 @@ link(task: "#42", agentSession: { harness: "claude-code", sessionId: "<uuid>", c
 - Claude Code puts the id in \`$CLAUDE_CODE_SESSION_ID\`, Codex in \`$CODEX_THREAD_ID\` (harness \`"codex"\`), Copilot
   CLI in \`$COPILOT_AGENT_SESSION_ID\` (harness \`"copilot-cli"\`). Read it with the shell (\`echo $CLAUDE_CODE_SESSION_ID\`); never guess it.
 - \`cwd\` is the absolute path you are working in.
+- A session the board started from a task's hand-off menu says so in its first message: Claude Code and Copilot CLI
+  sessions are linked already, while a Codex session is asked to link itself (the board can't give Codex an id).
 - Inside T3 Code, link it as well as your thread: it lets the user continue in a terminal.
 - To audit how a task went (what was asked, what ran, where it went wrong), \`get_session_transcript(task)\` reads a
   condensed, redacted transcript of the newest Claude Code session linked to it, a page at a time (pass \`offset\`

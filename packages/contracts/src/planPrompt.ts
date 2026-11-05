@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AgentHarness } from "./agentSessions.ts";
+import { AgentHarness, startedSessionLine } from "./agentSessions.ts";
 import { LaunchAttachmentIds } from "./attachments.ts";
 import { BRAND } from "./brand.ts";
 import type { PlanSkillRef } from "./reviews.ts";
@@ -100,8 +100,13 @@ export interface PlanTasksPromptInput {
   skill: PlanSkillRef;
   /** Board origin, e.g. `http://127.0.0.1:5317`. */
   boardUrl: string;
-  /** The session was started by the board and is already linked to every task. */
+  /**
+   * The board started the session: it is linked to every task already, unless `harness` picks its own session id
+   * (Codex), which is told to link itself.
+   */
   linked?: boolean;
+  /** The CLI the board started the session in, with `linked`. */
+  harness?: AgentHarness;
 }
 
 /** "#3, #4 and #7". */
@@ -123,7 +128,14 @@ const planSkillLines = (skill: PlanSkillRef): string[] =>
  * The bulk planning hand-off: an agent walks the user through writing a plan for each of several tasks. Sent as a
  * T3 thread's first message, copied, or given to a terminal session as its first prompt.
  */
-export function planTasksPrompt({ project, tasks, skill, boardUrl, linked = false }: PlanTasksPromptInput): string {
+export function planTasksPrompt({
+  project,
+  tasks,
+  skill,
+  boardUrl,
+  linked = false,
+  harness,
+}: PlanTasksPromptInput): string {
   const origin = boardUrl.replace(/\/+$/, "");
   const label = planningSessionLabel(tasks);
   return [
@@ -135,7 +147,7 @@ export function planTasksPrompt({ project, tasks, skill, boardUrl, linked = fals
     `Read each with get_task on the ${BRAND.id} MCP server, then shape a plan for each with me and save it. Don't implement anything.`,
     "",
     linked
-      ? "The board started this session and already linked it to every task; don't link it again."
+      ? startedSessionLine(harness ?? null, label, "every task")
       : "If you're running in T3 Code, link this thread to every task with link(task, t3Thread: {environmentId, threadId}) " +
         "from t3_environment_read and t3_thread_configuration. In Claude Code, Codex or Copilot CLI, link your own session to " +
         `every task with link(task, agentSession: {harness, sessionId, cwd}, label: "${label}"), the id from ` +
@@ -149,10 +161,14 @@ export function planTasksPrompt({ project, tasks, skill, boardUrl, linked = fals
  * The first message of a board-started planning session when the full prompt can't go on the command line: it
  * fetches the full prompt over MCP instead. Built from task numbers alone, which every shell can take.
  */
-export const planTasksShortPrompt = (tasks: ReadonlyArray<Pick<TaskSummary, "number">>): string =>
+export const planTasksShortPrompt = (
+  tasks: ReadonlyArray<Pick<TaskSummary, "number">>,
+  /** The CLI the session runs in: one that picks its own session id is told to link itself. */
+  harness: AgentHarness | null = null,
+): string =>
   `Let's plan ${taskNumberList(tasks)} from the ${BRAND.id} task board: call get_handoff_prompt(tasks: ` +
   `[${tasks.map((task) => `"#${task.number}"`).join(", ")}], mode: "plan") on the ${BRAND.id} MCP server first and ` +
-  "follow it. The board started this session and already linked it to every task; don't link it again.";
+  `follow it. ${startedSessionLine(harness, planningSessionLabel(tasks), "every task")}`;
 
 /**
  * Why a task can't go into a bulk planning session, or null when it can: open tasks still in Backlog or without a

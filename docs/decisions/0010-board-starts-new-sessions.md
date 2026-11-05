@@ -19,9 +19,11 @@ expands `%NAME%` even there.
 
 - **Only `POST /api/tasks/:id/sessions` takes request input onto a command line**, behind the guard of
   [ADR 0003](0003-localhost-guard.md), like every REST route. MCP has no tool for it, so an agent can't start one.
-- **The executable is chosen by the board:** the CLI path from Settings (changed over REST only), else `claude` or
-  `copilot` on PATH. Its flags come from the board too: `--session-id` with a UUID the board picks, `--name` with
-  the board's label, `-i` for Copilot.
+- **The executable is chosen by the board:** the CLI path from Settings (changed over REST only), else `claude`,
+  `codex` or `copilot` on PATH. Its flags come from the board too: `--session-id` with a UUID the board picks, `--name`
+  with the board's label, `-i` for Copilot. Codex takes neither an id nor a name, only `--model`, its effort as
+  `-c model_reasoning_effort=<level>` (a level from the board's own list) and the prompt after `--`; its session links
+  itself from the prompt, since the board has no id to link (#96).
 - **The model is a `CliModel`:** letters, digits and `. : @ / [ ] -`, checked on the request and when a tier's
   model is saved. A branch to start a worktree from reaches git as an argument, never a shell, and may not start
   with `-`.
@@ -40,7 +42,7 @@ expands `%NAME%` even there.
 
 ## Consequences
 
-- The user can make the board run `claude` or `copilot` with any prompt they type, in a project folder or a new
+- The user can make the board run `claude`, `codex` or `copilot` with any prompt they type, in a project folder or a new
   worktree. That is no more than they could type into a terminal themselves; a page on another origin still can't
   reach the route.
 - On Windows the CLI receives a prompt that differs from what was typed (no line breaks, `'` for `"`). Agents read it

@@ -13,6 +13,7 @@ import {
   planningSessionLabel,
   planTasksShortPrompt,
   sessionLabel,
+  startedSessionLine,
   StartPlanningSessionInput as StartPlanningSessionInputSchema,
   StartSessionInput as StartSessionInputSchema,
   taskWindowName,
@@ -51,8 +52,9 @@ import {
 } from "./terminal.ts";
 import type { Logger } from "./util.ts";
 
-// Starting a new Claude Code or Copilot CLI session on a task: the CLI opens in a terminal with the hand-off prompt as
-// its first message, in a new worktree or the project's checkout, and the board links the session straight away. See
+// Starting a new Claude Code, Codex or Copilot CLI session on a task: the CLI opens in a terminal with the hand-off
+// prompt as its first message, in a new worktree or the project's checkout, and the board links the session straight
+// away. Codex picks its own session id, so its session is told to link itself instead. See
 // docs/features/agent-sessions.md and ADR 0009.
 
 /** The new worktrees' branches: `<brand>/<task#>-<id>`, apart from Autopilot's. */
@@ -62,8 +64,9 @@ export interface SessionLaunchIntegration {
   /** What the launch dialog offers for a task: CLIs, branches, the tier's models. */
   options(taskId: string): Promise<SessionLaunchOptions>;
   /**
-   * Makes the worktree when asked, opens the CLI in a terminal and links the session. A terminal that won't start
-   * isn't an error: the result carries the command to run by hand, and nothing is linked.
+   * Makes the worktree when asked, opens the CLI in a terminal and links the session (unless the CLI picks its own
+   * session id: then the session links itself). A terminal that won't start isn't an error: the result carries the
+   * command to run by hand.
    */
   start(taskId: string, input: StartSessionInput, actor: string): Promise<StartSessionResult>;
   /** The same for a session that plans several of a project's tasks: in the project's checkout, linked to each. */
@@ -86,6 +89,7 @@ const configuredCli = (settings: AppSettings, harness: AgentHarness): string =>
 export function shortPrompt(
   mode: StartSessionInput["mode"],
   task: { id: string; number: number },
+  harness: AgentHarness,
   platform: NodeJS.Platform,
   /** The pull request's branch, for a fix. */
   branch?: string,
@@ -109,8 +113,8 @@ export function shortPrompt(
     (mode === "fix"
       ? `Let's fix the pull request on branch ${branch ?? "(see the task)"} of #${task.number}`
       : `${verb} #${task.number}`) +
-    ` from the ${BRAND.id} task board: ${first} The board started this session and already ` +
-    "linked it to the task; don't link it again." +
+    ` from the ${BRAND.id} task board: ${first} ` +
+    startedSessionLine(harness, sessionLabel(mode, task.number), mode === "orchestrate" ? "the epic" : "the task") +
     (mode === "fix"
       ? ` Fix its failing checks, merge conflicts or requested changes, and push to that branch. Never force-push, never push to the default branch and never merge.`
       : "");
@@ -221,12 +225,6 @@ export function createSessionLaunch(deps: {
   const prepare = (harnessId: AgentHarness) => {
     const settings = deps.services().settings.get();
     const h = deps.host();
-    if (!AGENT_HARNESSES[harnessId].presetSessionId) {
-      throw new AppError(
-        "VALIDATION",
-        `The board can't start ${AGENT_HARNESSES[harnessId].label} sessions: it picks its own session id`,
-      );
-    }
     const cli = cliStatus(settings, harnessId, h);
     if (!cli.available) {
       throw new AppError(
@@ -251,7 +249,8 @@ export function createSessionLaunch(deps: {
   const launch = async (
     { harness, h, exe, resolved }: ReturnType<typeof prepare>,
     session: {
-      sessionId: string;
+      /** Null for a CLI that picks its own (Codex): the board can't link that session, which links itself. */
+      sessionId: string | null;
       model: string | null;
       effort: CliEffort | null;
       prompt: string;
@@ -309,7 +308,8 @@ export function createSessionLaunch(deps: {
     };
     // Linked whether or not the terminal starts: the prompt tells the agent the board linked it, and the command
     // to run by hand carries the same session id. Only a launched session has a window to bring back.
-    const link = (opened: boolean) => {
+    const link = (opened: boolean): string | null => {
+      if (!sessionId) return null;
       const ids = session.taskIds.map((taskId) => {
         const added = deps
           .services()
@@ -401,7 +401,9 @@ export function createSessionLaunch(deps: {
       // Checked before a worktree is made, so an image that is gone leaves nothing behind.
       deps.services().attachments.forLaunch(imageIds, task.id);
 
-      const sessionId = randomUUID();
+      // Also names the worktree, so a CLI that picks its own session id gets one all the same.
+      const runId = randomUUID();
+      const sessionId = AGENT_HARNESSES[input.harness].presetSessionId ? runId : null;
       let cwd = root;
       let branch: string | null = null;
       const { workspace } = input;
@@ -422,7 +424,7 @@ export function createSessionLaunch(deps: {
             repo: root,
             root: join(deps.worktreesDir, "sessions"),
             taskNumber: task.number,
-            runId: sessionId,
+            runId,
             ...(workspace.mode === "pr_branch" ? { branch: workspace.branch } : { baseRef: workspace.baseRef }),
             branchPrefix: SESSION_BRANCH_PREFIX,
           });
@@ -449,6 +451,7 @@ export function createSessionLaunch(deps: {
           shortPrompt(
             input.mode,
             task,
+            input.harness,
             platform,
             workspace.mode === "pr_branch" ? workspace.branch : undefined,
             images,
@@ -471,7 +474,7 @@ export function createSessionLaunch(deps: {
       const images = deps.services().attachments.forLaunch(input.attachmentIds ?? [], null);
       // Planning writes no code, so it runs in the project's own checkout.
       return launch(ready, {
-        sessionId: randomUUID(),
+        sessionId: AGENT_HARNESSES[input.harness].presetSessionId ? randomUUID() : null,
         model: input.model,
         effort,
         prompt: withAttachedImages(input.prompt, images),
@@ -479,7 +482,7 @@ export function createSessionLaunch(deps: {
         branch: null,
         label: planningSessionLabel(tasks),
         windowTask: tasks[0]!.number,
-        short: (platform) => fitShort(withAttachedImages(planTasksShortPrompt(tasks), images), platform),
+        short: (platform) => fitShort(withAttachedImages(planTasksShortPrompt(tasks, input.harness), images), platform),
         taskIds: tasks.map((task) => task.id),
         actor,
       });

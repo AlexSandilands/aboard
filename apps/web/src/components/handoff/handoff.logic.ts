@@ -1,5 +1,4 @@
 import {
-  AGENT_HARNESSES,
   clampRuntimeMode,
   defaultBaseRef,
   type AgentCliStatus,
@@ -89,8 +88,8 @@ export function canStartProjectT3Thread(
 type HandoffSettings = Pick<AppSettings, "t3TokenSet" | "providers"> & Partial<Pick<AppSettings, "handoffMenus">>;
 
 /**
- * The CLIs the menus offer a new session in: the providers added and on that run here and the board can start (not
- * Codex), less those the user hid from the menus.
+ * The CLIs the menus offer a new session in: the providers added and on that run here, less those the user hid from
+ * the menus. Codex is one: it can't be given a session id, so its session links itself (selfLinkLine).
  */
 export const handoffClis = (
   clis: readonly AgentCliStatus[] | undefined,
@@ -100,10 +99,7 @@ export const handoffClis = (
   return (clis ?? [])
     .filter(
       (cli) =>
-        cli.available &&
-        AGENT_HARNESSES[cli.harness].presetSessionId &&
-        providerActive(settings, providerOfHarness(cli.harness)) &&
-        menus?.[cli.harness] !== false,
+        cli.available && providerActive(settings, providerOfHarness(cli.harness)) && menus?.[cli.harness] !== false,
     )
     .map((cli) => cli.harness);
 };

@@ -452,9 +452,11 @@ export function createProviders(deps: {
       const added = found.providers.flatMap((provider) => {
         if (settings.providers.some((p) => p.id === provider.id)) return [];
         const handoff = PROVIDERS[provider.id].handoff;
-        // What the hand-off menus offered before providers were opt-in: the entry on, and the CLI or T3 there.
+        // What the hand-off menus offered before providers were opt-in: the entry on, and the CLI or T3 there. They
+        // had no Codex entry then.
         const offered =
           handoff !== null &&
+          handoff !== "codex" &&
           settings.handoffMenus[handoff] &&
           (provider.cli?.found || (provider.t3?.detected && provider.t3.tokenSet));
         return provider.mcp?.registered || offered ? [provider.id] : [];

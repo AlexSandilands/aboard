@@ -1340,7 +1340,7 @@ when the user chose it, with a warning ([Warnings](#capability-warnings)).
   caches, so an edit run that installs or tests would fail. SSH pushes weren't tried. So the access is the one a Claude
   Code edit run has (Bash allowed outright); the push guard still applies, and the guard refused a force-push, a branch
   delete and a push to the default branch from a real Codex run. The effort is the config key (`codex exec` has no
-  flag for it): the model's Codex effort (`low`, `medium`, `high`, `xhigh`) goes through when the profile sets one;
+  flag for it): the model's Codex effort (`none` to `ultra`, as Codex's `model/list` names them) goes through when the profile sets one;
   Codex's own session file confirmed the model, effort and sandbox of a run. A bad value isn't refused by the CLI but by
   the API (the run ends with `error` and `turn.failed`). The parser reads `thread.started` (the session id), the last
   completed `agent_message` item (the answer) and `turn.failed` or `error`; a run with no `turn.completed` failed. A

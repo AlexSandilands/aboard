@@ -76,6 +76,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
         "mcp",
         "skill",
         "cli",
+        "session",
         "pairing",
         "threads",
         "openai",

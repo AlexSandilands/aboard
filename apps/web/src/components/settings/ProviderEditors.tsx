@@ -518,7 +518,7 @@ function CodexEditor(props: ProviderEditorProps) {
           id="codex"
           rowId="agents.providers.codex.cli-path"
           title="Codex CLI path"
-          info="What headless Autopilot runs start for a model that runs on Codex, and what Open in terminal resumes a Codex session with."
+          info="What the board opens for a new Codex session, what headless Autopilot runs start for a model that runs on Codex, and what Open in terminal resumes a Codex session with."
           settings={settings}
         />
       </EditorSection>
@@ -532,6 +532,14 @@ function CodexEditor(props: ProviderEditorProps) {
         />
         <BoardSkillRow id="agents.providers.codex.skill" harness="codex" title="Codex" />
         <AgentsSnippetRow id="agents.providers.codex.snippet" />
+      </EditorSection>
+      <EditorSection title="Hand-off menu">
+        <HandoffMenuRow
+          id="agents.providers.codex.handoff-menus"
+          target="codex"
+          what="New Codex session"
+          settings={settings}
+        />
       </EditorSection>
       <EditorSection title="Models">
         <ProviderModelsRow id="agents.providers.codex.models" provider="codex" settings={props.settings} />
@@ -583,6 +591,8 @@ function ProviderModelsRow({ id, provider, settings }: { id: string; provider: T
   const openSettings = useOpenSettings();
   const scanned = useAgentModels(provider !== "t3");
   const listed = provider === "t3" ? [] : (scanned.data?.harnesses.find((h) => h.harness === provider)?.models ?? []);
+  // What a tier with no model runs, when the scan says (Codex's `isDefault`).
+  const fallback = listed.find((model) => model.isDefault);
   return (
     <SettingsRow
       id={id}
@@ -593,7 +603,9 @@ function ProviderModelsRow({ id, provider, settings }: { id: string; provider: T
           {providerTierModels(settings.modelTiers, provider).map((tier) => (
             <span key={tier.tier}>
               {tier.label}:{" "}
-              <span className={tier.model ? "font-mono text-foreground/80" : undefined}>{tier.model ?? "default"}</span>
+              <span className={tier.model ? "font-mono text-foreground/80" : undefined}>
+                {tier.model ?? (fallback ? `default (${fallback.value})` : "default")}
+              </span>
               {tier.effort ? `, ${effortLabel(tier.effort).toLowerCase()}` : null}
               {tier.preferred ? " (preferred)" : null}
             </span>

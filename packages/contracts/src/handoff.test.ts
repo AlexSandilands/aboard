@@ -63,6 +63,50 @@ describe("taskHandoffPrompt", () => {
     }
   });
 
+  it("tells a board-started Codex session to link itself, as Codex picks its own session id", () => {
+    for (const mode of ["work", "plan"] as const) {
+      const prompt = taskHandoffPrompt({
+        task,
+        boardUrl: "http://x",
+        mode,
+        linkedSession: true,
+        sessionHarness: "codex",
+      });
+      expect(prompt).toContain("The board started this Codex session but couldn't link it");
+      expect(prompt).toContain(
+        `harness: "codex", sessionId: $CODEX_THREAD_ID, cwd: your working directory}, label: "${mode === "plan" ? "Planning" : "Implementing"} #${task.number}"`,
+      );
+      expect(prompt).not.toContain("already linked");
+    }
+    const epic = taskHandoffPrompt({
+      task: { ...task, kind: "epic" },
+      boardUrl: "http://x",
+      mode: "orchestrate",
+      linkedSession: true,
+      sessionHarness: "codex",
+    });
+    expect(epic).toContain(`link it to the epic yourself first`);
+    expect(epic).toContain(`label: "Orchestrating #${task.number}"`);
+    const followup = taskHandoffPrompt({
+      task: { ...task, status: "done" },
+      boardUrl: "http://x",
+      mode: "followup",
+      linkedSession: true,
+      sessionHarness: "codex",
+    });
+    expect(followup).toContain(`label: "Follow-up on #${task.number}"`);
+    // A Claude Code session the board started was linked by it.
+    expect(
+      taskHandoffPrompt({
+        task,
+        boardUrl: "http://x",
+        mode: "work",
+        linkedSession: true,
+        sessionHarness: "claude-code",
+      }),
+    ).toContain("already linked it to the task");
+  });
+
   it("tells work and planning sessions to ask before flagging the task for Autopilot", () => {
     for (const mode of ["work", "plan"] as const) {
       const prompt = taskHandoffPrompt({ task, boardUrl: "http://x", mode });

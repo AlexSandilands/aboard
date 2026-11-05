@@ -234,9 +234,61 @@ describe("choiceEffortColumn", () => {
     expect(column.groups[0]!.value).toBe("medium");
   });
 
+  it("names the default model and the effort Default runs at when the scan says (Codex)", () => {
+    const codex: AgentModels = {
+      harnesses: [
+        {
+          harness: "codex",
+          models: [
+            {
+              value: "gpt-6.1-sol",
+              label: "GPT-6.1-Sol",
+              description: null,
+              effortLevels: ["low", "high", "ultra"],
+              isDefault: true,
+              defaultEffort: "low",
+            },
+            { value: "gpt-6-luna", label: "GPT-6-Luna", description: null, effortLevels: ["low"] },
+          ],
+          cliVersion: null,
+          scannedAt: null,
+          error: null,
+        },
+      ],
+    };
+    const model = choicePickerModel(
+      input({
+        scanned: codex,
+        choices: false,
+        inherit: null,
+        op: null,
+        lockedProvider: "codex",
+        defaultLabel: "Default",
+      }),
+    );
+    expect(model.rows[0]).toMatchObject({
+      key: "default:codex",
+      detail: "GPT-6.1-Sol, unless Codex is set to another",
+    });
+    const column = choiceEffortColumn({ kind: "model", provider: "codex", model: "gpt-6.1-sol" }, null, codex, "");
+    expect(column.groups[0]!.options.map((o) => o.label)).toEqual(["Default (Low)", "Low", "High", "Ultra"]);
+    const luna = choiceEffortColumn({ kind: "model", provider: "codex", model: "gpt-6-luna" }, null, codex, "");
+    expect(luna.groups[0]!.options[0]!.label).toBe("Default");
+  });
+
   it("falls back to the CLI's levels for a model the scan doesn't list", () => {
     const column = choiceEffortColumn({ kind: "model", provider: "codex", model: "gpt-x" }, null, scanned, "gpt-x");
-    expect(column.groups[0]!.options.map((o) => o.id)).toEqual([null, "low", "medium", "high", "xhigh"]);
+    expect(column.groups[0]!.options.map((o) => o.id)).toEqual([
+      null,
+      "none",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra",
+    ]);
   });
 
   it("says where the effort comes from for anything that isn't one model", () => {
@@ -273,7 +325,16 @@ describe("resolvesTo", () => {
 describe("modelLevels", () => {
   it("lists a model's levels, and none for the CLI's default model, so an effort can't ride along hidden", () => {
     expect(modelLevels(scanned, "claude-code", "opus")).toEqual(["low", "high", "max"]);
-    expect(modelLevels(scanned, "codex", "gpt-x")).toEqual(["low", "medium", "high", "xhigh"]);
+    expect(modelLevels(scanned, "codex", "gpt-x")).toEqual([
+      "none",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra",
+    ]);
     expect(modelLevels(scanned, "claude-code", null)).toEqual([]);
   });
 });
