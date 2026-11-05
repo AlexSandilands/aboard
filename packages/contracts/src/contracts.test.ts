@@ -8,6 +8,7 @@ import {
   parseProjectScope,
   epicBranchName,
   startedEpicTasks,
+  unmergedEpicBranch,
   deriveAttention,
   describeEpicRollup,
   deriveEpicStatus,
@@ -530,6 +531,17 @@ describe("epic delivery helpers", () => {
       child("5", "review", { archivedAt: "2026-01-01T00:00:00Z" }),
     ]);
     expect(started.map((c) => c.id)).toEqual(["2", "3"]);
+  });
+
+  it("finds a Done task's code on its epic's branch only until that branch merges", () => {
+    const task = { kind: "task" as const, status: "done" as const, resolution: null, integrationBranch: "epic/3-x" };
+    const open = { integrationMerge: { merged: false, by: null, pr: null } };
+    expect(unmergedEpicBranch(task, open)).toBe("epic/3-x");
+    expect(unmergedEpicBranch(task, { integrationMerge: { merged: true, by: "manual", pr: null } })).toBeNull();
+    expect(unmergedEpicBranch(task, undefined)).toBeNull();
+    expect(unmergedEpicBranch({ ...task, status: "review" }, open)).toBeNull();
+    expect(unmergedEpicBranch({ ...task, resolution: "wont_do" }, open)).toBeNull();
+    expect(unmergedEpicBranch({ ...task, integrationBranch: null }, open)).toBeNull();
   });
 });
 

@@ -16,17 +16,35 @@ import {
   type T3Ref,
   type T3RuntimeMode,
   type TaskSummary,
+  unmergedEpicBranch,
 } from "@repo/contracts";
 
 /**
- * Hand-off actions belong to work that's still open. An epic's hand-off orchestrates its tasks, and stays on a
- * finished epic (its card in Done) so its session can be reopened and tasks added to it can be started. A manual task
- * is for a person, so no agent is handed it (the server refuses too).
+ * Hand-off actions are on every card on the board. A Done task's is a follow-up, to test or investigate the finished
+ * work without reopening it. An epic's orchestrates its tasks, and stays on a finished epic (its card in Done) so its
+ * session can be reopened and tasks added to it can be started. A manual task is for a person, so no agent is handed
+ * it (the server refuses too); an archived one is off the board.
  */
 export function showHandoffActions(
   task: Pick<TaskSummary, "status" | "archivedAt"> & Partial<Pick<TaskSummary, "kind" | "manual">>,
 ) {
-  return (task.status !== "done" || task.kind === "epic") && task.archivedAt === null && !task.manual;
+  return task.archivedAt === null && !task.manual;
+}
+
+/**
+ * The epic's integration branch while a Done task's code is only there (see unmergedEpicBranch), looked up among the
+ * board's tasks: a follow-up's prompt points at it and its launch starts a worktree from it.
+ */
+export function followupEpicBranch(
+  task: Pick<TaskSummary, "kind" | "status" | "resolution" | "integrationBranch" | "parent">,
+  tasks: readonly Pick<TaskSummary, "id" | "integrationMerge">[] | undefined,
+): string | null {
+  if (!task.parent) return null;
+  const parentId = task.parent.id;
+  return unmergedEpicBranch(
+    task,
+    tasks?.find((t) => t.id === parentId),
+  );
 }
 
 /**

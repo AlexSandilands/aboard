@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
   defaultHandoffMode,
+  HANDOFF_MODES,
   handoffModeError,
   implementingThread,
   T3_RUNTIME_MODES,
@@ -13,7 +14,16 @@ import {
 import { AppError } from "../../errors.ts";
 import type { TaskThreadLaunch } from "../../integrations/t3.ts";
 import { linkText } from "../format.ts";
-import { actorField, boardUrl, run, t3LaunchBlocker, taskField, textResult, type ToolRegistrar } from "../shared.ts";
+import {
+  actorField,
+  boardUrl,
+  epicBranchOf,
+  run,
+  t3LaunchBlocker,
+  taskField,
+  textResult,
+  type ToolRegistrar,
+} from "../shared.ts";
 
 type ThreadLink = Extract<TaskLink, { kind: "t3_thread" }>;
 
@@ -90,13 +100,18 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
         "branch), so tasks can run side by side. Calling it " +
         "again after a failure returns the same thread rather than starting a second. Refused when the task already " +
         "has a thread working on it (use message_task_thread; a thread the user opened to ask about finished work " +
-        "doesn't count), is blocked by unfinished tasks, or when T3 Code can't take it.",
+        "doesn't count), is blocked by unfinished tasks, or when T3 Code can't take it. Mode followup (a task in " +
+        "Review or Done) starts a thread to ask about finished work, from the epic's branch while the code is only " +
+        "there; the board never messages it.",
       inputSchema: {
         task: taskField,
         mode: z
-          .enum(["work", "plan", "orchestrate"])
+          .enum(HANDOFF_MODES)
           .optional()
-          .describe("Defaults like get_handoff_prompt: plan for tasks in Backlog or without a plan, else work."),
+          .describe(
+            "Defaults like get_handoff_prompt: plan for tasks in Backlog or without a plan, followup for a Done " +
+              "task, else work.",
+          ),
         baseRef: z
           .string()
           .regex(BRANCH, "Not a branch name")
@@ -132,7 +147,8 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
         }
         const blocker = t3LaunchBlocker(ctx, services.projects.get(task.projectId));
         if (blocker) throw new AppError("VALIDATION", `${blocker}. ${fallback(ref)}`);
-        const busy = busyThread(task);
+        // A follow-up only asks about finished work, so it may run beside the thread that did it.
+        const busy = mode === "followup" ? undefined : busyThread(task);
         if (busy) {
           const state = busy.snapshot ? `${busy.snapshot.title} (${busy.snapshot.status})` : "just started";
           throw new AppError(
@@ -141,7 +157,8 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
               `Send it a message with message_task_thread(${ref}, ...) instead.`,
           );
         }
-        const prompt = taskHandoffPrompt({ task, boardUrl: boardUrl(ctx), mode, linkedThread: true });
+        const epicBranch = mode === "followup" ? epicBranchOf(services, task) : null;
+        const prompt = taskHandoffPrompt({ task, boardUrl: boardUrl(ctx), mode, linkedThread: true, epicBranch });
         let launch: TaskThreadLaunch;
         try {
           launch = await ctx.integrations.launchT3TaskThread(
@@ -150,10 +167,15 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
               prompt,
               commandId: launchCommandId(task, services.links.threadsLinked(task.id)),
               work: mode === "work",
+              ...(mode === "followup" ? { followUp: true } : {}),
               ...(args.baseRef ? { baseRef: args.baseRef } : {}),
               ...(args.startFromOrigin !== undefined ? { startFromOrigin: args.startFromOrigin } : {}),
               // An integration epic's task starts from origin's copy of its branch, where the tasks before it merged.
-              ...(!args.baseRef && task.integrationBranch
+              // So does a follow-up, unless the task is Done and its code already reached the default branch with the
+              // epic (a task in Review is still on its way into the epic's branch).
+              ...(!args.baseRef &&
+              task.integrationBranch &&
+              (mode !== "followup" || epicBranch || task.status !== "done")
                 ? { baseRef: task.integrationBranch, startFromOrigin: args.startFromOrigin ?? true }
                 : {}),
             },

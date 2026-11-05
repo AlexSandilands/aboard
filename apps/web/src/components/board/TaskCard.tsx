@@ -12,6 +12,7 @@ import { useBoardPick } from "~/state/ui";
 import { importPendingLabel } from "~/components/task/import.logic";
 import { dueDateLabel, dueStateClassName, dueStateOf, dueStateText } from "~/components/task/dueDate.logic";
 import { resolutionLabel } from "~/components/task/resolution.logic";
+import { OnEpicBranchChip } from "~/components/task/EpicDelivery";
 import { Spinner } from "~/components/ui/spinner";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
@@ -102,6 +103,7 @@ export const TaskCardContent = memo(function TaskCardContent({
           </Badge>
         ) : null}
         <ResolutionChip task={task} />
+        <OnEpicBranchChip task={task} />
         {task.review && !task.resolution ? <ReviewBadge summary={task.review} /> : null}
         <AutopilotBadge taskId={task.id} />
         {task.archivedAt ? (

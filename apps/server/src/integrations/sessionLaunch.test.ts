@@ -190,6 +190,9 @@ describe("starting a session from the board", () => {
     const text = shortPrompt("orchestrate", { id: "epic-1", number: 7 }, "linux");
     expect(text).toContain("Let's run the epic #7");
     expect(text).toContain('get_handoff_prompt(task: "epic-1", mode: "orchestrate")');
+    const followup = shortPrompt("followup", { id: "t-1", number: 8 }, "linux");
+    expect(followup).toContain("Let's follow up on #8");
+    expect(followup).toContain('get_handoff_prompt(task: "t-1", mode: "followup")');
     expect(shortPrompt("work", { id: "t-1", number: 8 }, "linux")).toContain('get_task("t-1")');
   });
 

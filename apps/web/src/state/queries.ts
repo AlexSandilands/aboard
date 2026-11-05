@@ -36,6 +36,7 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 import { useCallback, useEffect } from "react";
 import { taskActiveRun } from "~/components/autopilot/autopilot.logic";
 import { projectHasOrchestrateWork } from "~/components/autopilot/orchestrate.logic";
+import { followupEpicBranch } from "~/components/handoff/handoff.logic";
 import { deliverNotification } from "~/components/notifications/delivery";
 import { withCreated } from "~/components/notifications/notifications.logic";
 import { ApiError, api, eventsUrl } from "~/lib/api";
@@ -194,6 +195,16 @@ export function useProjectHasOrchestrateWork(projectId: string): boolean {
   return (
     useQuery({ ...boardQuery, select: (board) => projectHasOrchestrateWork(board.tasks, projectId) }).data ?? false
   );
+}
+
+/**
+ * The epic's branch while a Done task's code is only there (see followupEpicBranch), for its card chip and its
+ * follow-up hand-off; re-renders only when it changes.
+ */
+export function useFollowupEpicBranch(
+  task: Pick<TaskSummary, "kind" | "status" | "resolution" | "integrationBranch" | "parent">,
+): string | null {
+  return useQuery({ ...boardQuery, select: (board) => followupEpicBranch(task, board.tasks) }).data ?? null;
 }
 
 /** The run in flight on a task, for its card badge. The reducer keeps run objects stable between events. */
