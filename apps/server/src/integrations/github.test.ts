@@ -892,7 +892,7 @@ describe("review threads", () => {
 });
 
 describe("the epic's pull request", () => {
-  const input = { host: "github.com", repo: "o/r", head: "epic/3-checkout", title: "Epic #3: Checkout", body: "Tasks" };
+  const input = { host: "github.com", repo: "o/r", head: "epic/3-checkout", title: "feat: checkout", body: "Tasks" };
 
   it("opens a draft from the epic's branch into the default branch, once", async () => {
     const { gh, github } = setup([]);
@@ -909,7 +909,7 @@ describe("the epic's pull request", () => {
           repositoryId: "R_o/r",
           baseRefName: "main",
           headRefName: "epic/3-checkout",
-          title: "Epic #3: Checkout",
+          title: "feat: checkout",
           body: "Tasks",
           draft: true,
         },
