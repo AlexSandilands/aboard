@@ -318,6 +318,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
           labelsInUse: services.labels.usage(),
           sessionHarness: harnessOfClient(client()),
           progress: { now: Date.now() },
+          autoReview: services.reviews.effectiveAutoReview(task.id),
           images: services.attachments.forTask(task.id),
           ticketSystems: services.settings.get().ticketSystems,
           modelSettings: services.settings.get(),

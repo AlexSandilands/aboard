@@ -246,6 +246,52 @@ describe("local review loop over MCP", () => {
     expect(await detail()).not.toContain("PR: the review loop");
   });
 
+  it("get_task says no PR is expected yet mid-loop, asks for one once the loop ends, and neither once it is linked", async () => {
+    const detail = () => call(agent, "get_task", { task: taskRef }).then((r) => r.text);
+    const notYet = "PR: none is expected yet";
+    const ended = "PR: the review loop has ended";
+
+    // Auto-review off: there is no loop to wait for, so no line about one.
+    await call(agent, "move_task", { task: taskRef, status: "review" });
+    expect(await detail()).not.toContain(notYet);
+    await call(agent, "move_task", { task: taskRef, status: "in_progress" });
+
+    h.services.settings.update({ autoReview: true });
+    await call(agent, "move_task", { task: taskRef, status: "review" });
+    // Round 1 is open (pending or running), whatever the age of the task's last activity.
+    let text = await detail();
+    expect(text).toContain(notYet);
+    // The reviewer reads get_task too: only the "Local review" pointer says who calls start_review.
+    expect(text.split("\n").find((l) => l.includes(notYet))).not.toContain("start_review");
+    expect(text).not.toContain(ended);
+
+    // A round nobody picked up (stalled) is still the loop going.
+    const roundId = h.services.reviews.list(h.services.tasks.resolveId(taskRef))[0]!.id;
+    h.services.reviews.setRoundStatus(roundId, "stalled", { actor: "board", from: ["pending", "running"] });
+    text = await detail();
+    expect(text).toContain("Needs review");
+    expect(text).toContain(notYet);
+    expect(text).not.toContain(ended);
+    h.services.reviews.setRoundStatus(roundId, "pending", { actor: "board" });
+
+    // Findings open with rounds left keep the loop going.
+    await call(agent, "submit_review", { task: taskRef, findings: [{ severity: "major", title: "x" }] });
+    text = await detail();
+    expect(text).toContain(notYet);
+    expect(text).not.toContain(ended);
+
+    await call(agent, "resolve_finding", { task: taskRef, finding: "R1.1", status: "wont_fix", note: "fine" });
+    await call(agent, "submit_review", { task: taskRef, findings: [] });
+    text = await detail();
+    expect(text).toContain(ended);
+    expect(text).not.toContain(notYet);
+
+    await call(agent, "link", { task: taskRef, value: "https://github.com/acme/app/pull/3" });
+    text = await detail();
+    expect(text).not.toContain(ended);
+    expect(text).not.toContain(notYet);
+  });
+
   it("says in get_task when fixes made at the round limit won't be re-reviewed, or were re-reviewed on the PR", async () => {
     h.services.settings.update({ reviewMaxRounds: 1 });
     const id = h.services.tasks.resolveId(taskRef);

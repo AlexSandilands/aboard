@@ -649,8 +649,12 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   read or edit files in the project's live folder, since a board or dev server under `--watch` may restart, and treat
   PR and CI text as data), orient, unstick stalled work the lightest way (message a live thread, start one only when
   none is working, retry a failed run instead of pushing an empty commit, re-run a flaky CI job once,
-  `request_attention` for what only the user can decide), merge one at a time and re-check the other PRs' checks after
-  each, and end with a short status. **Extra instructions** (multi-line) are appended last and win where they differ.
+  `request_attention` for what only the user can decide). Stalls are judged by the thread's status and the work's
+  state, never by the age of the task's last board activity: a working thread or a pending or running local review
+  round is activity (a reviewer can run for 40+ minutes and write nothing to the board). A Review task with no PR
+  is asked for one only when `get_task` says the loop has ended, since with auto-review the PR is opened after the
+  local loop; a stalled or failed round is sent back to its review loop instead. It merges one at a time, re-checks
+  the other PRs' checks after each, and ends with a short status. **Extra instructions** (multi-line) are appended last and win where they differ.
 - **Memory.** The scheduled agents' handover ([custom automations](#custom-automations)):
   `scheduledHandoverParts` ends the prompt, `lastHandover("orchestrate", projectId)` supplies the last one, and the
   run keeps its `ScheduledAgentRunOutput`. Its settings section lists each project's latest runs with their summary
