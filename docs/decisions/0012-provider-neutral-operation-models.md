@@ -42,7 +42,11 @@ the provider and model they ran on, only a line of text.
 
 ## Consequences
 
-- Ask runs on the light tier instead of `haiku` for anyone who never chose its model, and issue import likewise.
+- Ask runs on the light tier instead of `haiku` for anyone who never chose its model, and issue import likewise. The
+  light tier sets no model until the user gives it one, so these run on the CLI's default model meanwhile; Ask's small
+  budget can stop it there, and its error then says to set the tier's model.
+- PR review and the board reviewer default to the Standard tier rather than the task's model. The board's setting for
+  them can be inherit, which on an operation on a task skips the default and takes the task's own model.
 - An install with no capable provider gets refusals where it used to get Claude Code runs: an Ask error, an
   issue-import failure, a failed board review round, a failed Autopilot run. Today only Claude Code meets the needs of
   the board reviewer, PR review, Orchestrate, the digest, issue import and Ask; #76 lets Codex and Copilot take the
