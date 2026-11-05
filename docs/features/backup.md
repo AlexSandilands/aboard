@@ -166,6 +166,11 @@ The status (last run, last commit, last push, last error) is held in memory and 
 repo's machine folders (folder, owner, whether it is this board's, when a commit last touched it, as of the
 clone's last pull).
 
+Text settings saved on blur use `BlurInput`, which replaces its draft immediately when the saved
+value changes, even while focused. Setup, restore and live updates therefore appear without a reload,
+and blurring an unchanged field does not save an older value over them. Ordinary typing is preserved
+until the saved value changes.
+
 ### Guided setup
 
 Settings → Board → Data shows **Set up backup** while no folder is set, and a **Local only: commits aren't
