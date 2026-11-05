@@ -4,6 +4,8 @@ import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
 import { PanelLeftCloseIcon, PanelLeftIcon } from "lucide-react";
 import * as React from "react";
+import { flushSync } from "react-dom";
+import { boardSnapshotMotion, startSidebarTransition } from "~/lib/boardMotion";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
 import { Input, type InputProps } from "~/components/ui/input";
@@ -102,7 +104,8 @@ function useSidebarSlide(
     if (previousOpen.current === open) return;
     previousOpen.current = open;
     const sidebar = sidebarRef.current;
-    const duration = slideDuration();
+    // With snapshot motion a View Transition moves the sidebar and the board (setOpen, index.css).
+    const duration = boardSnapshotMotion() ? 0 : slideDuration();
     if (!sidebar || duration === 0 || collapsible !== "offcanvas") return;
     const container = sidebar.querySelector<HTMLElement>("[data-slot='sidebar-container']");
     const gap = sidebar.querySelector<HTMLElement>("[data-slot='sidebar-gap']");
@@ -151,11 +154,14 @@ function SidebarProvider({
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
       const openState = typeof value === "function" ? value(open) : value;
-      if (setOpenProp) {
-        setOpenProp(openState);
-      } else {
-        _setOpen(openState);
-      }
+      const apply = () => {
+        if (setOpenProp) {
+          setOpenProp(openState);
+        } else {
+          _setOpen(openState);
+        }
+      };
+      if (openState === open || !startSidebarTransition(openState, () => flushSync(apply))) apply();
     },
     [setOpenProp, open],
   );

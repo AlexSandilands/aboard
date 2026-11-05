@@ -132,6 +132,7 @@ These are prefs in the `useAppearance` store (`state/ui.ts`, persisted under `ap
 | Contrast         | 50–200 %    | 100 %   | `--appearance-contrast-base/boost/border-boost`, read by the `--contrast-*` block                 |
 | Glass opacity    | 40–100 %    | 80 %    | `--glass-opacity`; at 100 % also `--glass-blur: 0px`                                              |
 | Panel animations | 0–400 ms    | 150 ms  | `--panel-animation-duration`, `--slide-duration` and `data-panel-animations` (`false` under reduced motion) |
+| Smooth board motion | on / off | on    | `data-board-motion`: `snapshot` or `reflow` ([Snapshot motion](#snapshot-motion))                  |
 | Interface font   | name; 12–20 px | system, 16 px | `--font-sans`; the size is the root font size, so every rem scales                         |
 | Monospace font   | name        | system  | `--font-mono`                                                                                     |
 
@@ -146,7 +147,8 @@ colours read them (`@theme inline`), so every `text-foreground`, `text-muted-for
 `SLIDE_EASING`, `cubic-bezier(0.2, 0.9, 0.25, 1)`, fitted frame by frame from a recording of Antigravity's right-hand
 panel opening: fast start, long soft tail. The settings preview plays the same length and curve.
 
-Both slides are `startSlide` in `lib/slide.ts`, with the board making room as they move. Two Web Animations share one
+With Smooth board motion off (or where the browser can't run it, see [Snapshot motion](#snapshot-motion)), both
+slides are `startSlide` in `lib/slide.ts`, with the board making room as they move. Two Web Animations share one
 start time: the width of the space beside the sidebar or panel (the *room*), which the main area lays out around every
 frame so the board's columns and cards move with it, and a `transform` on the sidebar or panel itself (the *mover*),
 which the compositor runs, so when React holds up the main thread the board waits a frame but the slide keeps going.
@@ -179,6 +181,81 @@ of buttons a compositor layer that every frame re-layered.
 
 **Fonts** are typed by name and applied on Enter or blur, only if the browser can draw the family (and, for
 the monospace font, if it is monospaced): T3 Code's canvas probes in `theme/fonts.ts`.
+
+### Snapshot motion
+
+**Smooth board motion** (`boardMotion: "snapshot"`, the default) moves the board differently when the task panel or the
+sidebar opens or closes. The slide above lays the board out every frame, which tops out around 150 to 180 frames a
+second on a 280 Hz screen however few cards there are. Snapshot motion runs the change as a View Transition instead:
+the board is laid out once at its new width, and the compositor moves snapshots from their old boxes to their new
+ones. The code is `lib/boardMotion.ts` and the View Transition block in `index.css`.
+
+- **Task panel:** the router wraps the navigation (`defaultViewTransition` in `router.tsx`), only for `?task=` appearing
+  or disappearing on the board (`panelTransitionType`), with the types `panel-open` and `panel-close`. Any other
+  navigation returns `false`, which the router takes as no transition. `TaskPanel` skips `startSlide`, and `AppLayout`
+  unmounts a closing panel at once, since its snapshot (`task-panel`) slides out instead.
+- **Sidebar:** `setOpen` (`ui/sidebar.tsx`) starts its own transition (`startSidebarTransition`, types `sidebar-open`
+  and `sidebar-close`, the change applied in `flushSync`) and `useSidebarSlide` stands down. The offcanvas sidebar is
+  there in both states, so its snapshot (`app-sidebar`) slides between its two places by itself.
+- **When:** `boardSnapshotMotion()`: the setting is on, Panel animations are on (so not at 0 ms or under reduced
+  motion), and `snapshotMotionSupported()`, which wants transition types, `match-element` and
+  `document.activeViewTransition`. Without types the router would ignore `types` and animate every navigation, so where
+  they are missing it gets no `defaultViewTransition` at all and both slides fall back to `startSlide`.
+
+`prepareBoardTransition(kind)`, called just before the transition starts, decides what moves on its own. Every name
+costs: Chromium's setup grows with the square of the snapshots (on a full board, 75 took about 90 ms and 140 about
+1.3 s), so it names only what is on screen and what this kind of transition moves:
+
+- **Movers** (cards, cells, column headers and their buttons, the top bar's buttons, an epic header's title and
+  roll-up) get `data-vt`, which `index.css` names with `match-element`. A right-aligned part (a column header's button,
+  the epic roll-up) is named apart from its parent, so it glides with the right edge. Lane titles and the top bar's
+  left side (`data-vt-left`) only move with the board's left edge, so they are named for the sidebar only.
+- **Frames** (an epic band, its header) get a name of their own (`vt-frame-N`) and stretch: their right edge moves
+  while the left stays, and what they hold is named separately, so only a border and a fill stretch.
+- Names live only during the transition: setting them under `html:active-view-transition-type()` restyled the whole
+  page as it started. A transition started over a running one skips it and takes over its names, and the skipped one
+  finishing leaves them alone.
+
+Once the animations exist:
+
+- `compositorOnly` drops width and height from every mover's keyframes. The browser animates both by default, on the
+  main thread, which restyled every snapshot every frame (30 fps on a full board). Movers sit at their new size and
+  clip their snapshots.
+- A card's **new snapshot shows from the start and the old one not at all** (no cross-fade), so its text is at its new
+  wrap as it moves and nothing shows twice. A cross-fade looked the same and took about twice the GPU and compositor
+  work on a full board.
+- `holdFirstFrame` pauses every snapshot and starts their clocks together two frames later, as `startSlide` does. The
+  first frame draws every new snapshot and comes late, and the curve starts fast, so on its own clock the transition
+  was a third of the way there by the first frame that showed: a jump, then a slide.
+- While it runs the page shows snapshots, so input would reach the live board unseen: a scroll did nothing until the
+  end, then jumped. The first wheel, pointer down, key or touch hurries the transition (`hurryToEnd`): every animation
+  speeds up to finish within 120 ms from where it is, and the board takes the input from there. The snapshots let
+  pointer events through to the live page.
+- The page underneath (`root`) doesn't cross-fade. It is the old page while opening and the new one while closing, the
+  wider of the two, so the scrollbar and lane lines reach the window's edge and the panel or sidebar covers them. The
+  panel's and sidebar's groups sit above the board's, since a closing panel is only in the old state, which the
+  browser stacks underneath.
+
+### Grain
+
+The board, sidebar and column headers carry T3 Code's grain: a faint noise tile in each surface's own background
+(`--surface-grain`, the `surface-grain` utility). T3 Code draws it as an SVG `feTurbulence` filter; this app uses PNG
+tiles of that same SVG, rendered once by Chromium at 1x and 2x (`apps/web/src/assets/grain/`, chosen with
+`image-set`), which match it to within two levels per channel. As an SVG background the filter ran again for every
+tile the GPU rastered. The slide and scrolling re-raster most of the screen, so on a 1440p screen it was most of a
+frame's raster cost, and with the GPU at idle clocks the first frames of a slide or a scroll dropped. To change the
+noise, edit the SVG's parameters (in the comment beside `--surface-grain`) and render the tiles again: draw the SVG at
+each size on a canvas in Chromium and save it as PNG.
+
+The board's scroller (`[data-board-scroll]`) paints its own opaque background and grain, scrolling with the content
+(`bg-local`). Chromium only scrolls an element on the compositor when it can keep its subpixel text, which needs an
+opaque background inside the scroller. Over the main area's background it instead repainted and re-rastered the whole
+screen on every scroll frame. That cost grows with the screen's size and the number of cards on it.
+
+`pnpm sandbox --prod --seed dense` has a project with twenty cards in every column, one with an epic across every
+column, fifteen cards spread across the columns beside the same fifteen in backlog, and a single card, for checking
+how the board renders when full. Judge performance on that production build: React's development build renders several
+times slower.
 
 ## Decisions
 

@@ -46,6 +46,7 @@ export function AppearanceSection() {
       </SettingsSection>
       <SettingsSection title="Motion">
         <PanelAnimationsRow />
+        <SnapshotMotionRow />
       </SettingsSection>
       <SettingsSection title="Typography">
         <FontRow
@@ -259,6 +260,25 @@ function FontRow({
             </Select>
           ) : null}
         </div>
+      }
+    />
+  );
+}
+
+function SnapshotMotionRow() {
+  const snapshot = useAppearance((s) => s.boardMotion === "snapshot");
+  const setPrefs = useAppearance((s) => s.setPrefs);
+  return (
+    <SettingsRow
+      id="board.appearance.snapshot-motion"
+      title="Smooth board motion"
+      description="Move the board's cards as snapshots while the sidebar or the task panel slides, laying the board out once instead of every frame, so it keeps up with high refresh rate screens. Off, the board is laid out again every frame as it makes room."
+      control={
+        <Switch
+          checked={snapshot}
+          onCheckedChange={(on) => setPrefs({ boardMotion: on ? "snapshot" : "reflow" })}
+          aria-label="Smooth board motion"
+        />
       }
     />
   );

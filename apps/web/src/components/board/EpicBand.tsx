@@ -102,6 +102,7 @@ export const EpicBand = memo(function EpicBand({
   return (
     <section
       aria-label={`Epic #${epic.number} ${epic.title}`}
+      data-vt-frame
       style={style}
       className={cn(
         "grid grid-cols-subgrid",
@@ -118,6 +119,7 @@ export const EpicBand = memo(function EpicBand({
         <header
           // The marker the dependency lines look for: they end on the header, which stays when the band is collapsed.
           data-task-card={epic.id}
+          data-vt-frame
           className={cn(
             "col-span-full flex min-w-0 cursor-pointer ps-1 pe-2",
             EPIC_HEADER_CLASS,
@@ -132,13 +134,13 @@ export const EpicBand = memo(function EpicBand({
         >
           {narrow ? (
             <>
-              <div className="flex h-6 min-w-0 items-center gap-1.5">
+              <div data-vt-move className="flex h-6 min-w-0 items-center gap-1.5">
                 {chevron}
                 <button type="button" className={cn(TITLE_BUTTON_CLASS, "flex-1")} {...titleProps}>
                   {title}
                 </button>
               </div>
-              <div className="flex h-6 min-w-0 items-center gap-1.5 ps-7.5">
+              <div data-vt-move className="flex h-6 min-w-0 items-center gap-1.5 ps-7.5">
                 {/* No min-w-0: the count always shows, and the bar gives way first when the badge needs the room. */}
                 <span className="flex flex-1 items-center gap-1.5" title={describeEpicRollup(rollup)}>
                   <EpicRollupBar rollup={rollup} className="min-w-0 max-w-16 flex-1" />
@@ -158,8 +160,10 @@ export const EpicBand = memo(function EpicBand({
                 title={describeEpicRollup(rollup)}
                 {...titleProps}
               >
-                <span className="flex min-w-0 flex-1 items-center gap-1.5">{title}</span>
-                <span className="flex shrink-0 items-center gap-1.5">
+                <span data-vt-move className="flex min-w-0 flex-1 items-center gap-1.5">
+                  {title}
+                </span>
+                <span data-vt-move className="flex shrink-0 items-center gap-1.5">
                   <EpicRollupBar rollup={rollup} className="w-16 shrink-0" />
                   {count}
                 </span>
