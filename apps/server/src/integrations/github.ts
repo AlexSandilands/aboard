@@ -35,6 +35,8 @@ import {
   prIsDue,
   WARM_INTERVAL_MS,
 } from "./prPolling.ts";
+import type { GitHost } from "./gitHost.ts";
+import { createGithubHost } from "./githubHost.ts";
 import type { FetchFn } from "./t3.ts";
 import { mapWithConcurrency, type Logger } from "./util.ts";
 
@@ -820,6 +822,8 @@ export interface GithubIntegration {
   reviewThreads(ref: PrRef): Promise<PrThreadState>;
   /** Resolves one review thread as the signed-in account. Throws AppError. */
   resolveReviewThread(host: string, threadId: string): Promise<void>;
+  /** What headless runs read from GitHub (run tools), sharing this integration's gh tokens. */
+  readonly gitHost: GitHost;
   start(): void;
   stop(): void;
 }
@@ -1187,6 +1191,7 @@ ${link.ref.repo.toLowerCase()}`;
   };
 
   return {
+    gitHost: createGithubHost(api),
     status: () => {
       if (checkedAt === 0 && !checking) void checkStatus();
       return status;
