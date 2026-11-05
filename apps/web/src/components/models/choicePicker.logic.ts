@@ -10,6 +10,7 @@ import {
   ModelTier,
   modelEffortLevels,
   modelTierDescription,
+  IMPORT_TICKET_NEEDS,
   missingNeeds,
   NEED_WORDS,
   needsWarning,
@@ -152,7 +153,13 @@ export function providerWarning(
   if (!input.op || providerDisabledReason(harness, input)) return null;
   const needs = [...new Set([...OPERATIONS[input.op].needs, ...(input.needs ?? [])])];
   const warning = needsWarning(harness, needs);
-  return warning ? `${warning} It runs ${OPERATIONS[input.op].label} only when you choose it.` : null;
+  if (!warning) return null;
+  // Picked for issue import, it summarises GitHub issues, but a ticket also needs tool rules it may not follow.
+  const tickets =
+    input.op === "issueImport" && missingNeeds(harness, [...needs, ...IMPORT_TICKET_NEEDS]).length > 0
+      ? ` Ticket imports need tool rules, which ${harnessLabel(harness)} can't follow, so they fail while it is chosen.`
+      : "";
+  return `${warning} It runs ${OPERATIONS[input.op].label} only when you choose it.${tickets}`;
 }
 
 /**

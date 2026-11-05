@@ -343,12 +343,6 @@ describe("choosing a driver", () => {
     // With no worktree there is no push guard: only Claude Code's deny rules hold an editing agent back.
     expect(driverNeeds({ access: "edit", unguarded: true })).toEqual(["edit", "toolRules"]);
     expect(driverNeeds({ access: "read-only", unguarded: true })).toEqual([]);
-    expect(driverNeeds({ access: "read-only", isolated: true, outputSchema: {} })).toEqual([
-      "outputSchema",
-      "readOnly",
-    ]);
-    // The untrusted lockdown already holds a run apart.
-    expect(driverNeeds({ access: "read-only", isolated: true, untrusted: true })).toEqual(["untrusted"]);
     expect(driverNeeds({ access: "read-only", untrusted: true, runTools: true, outputSchema: {} })).toEqual([
       "outputSchema",
       "untrusted",

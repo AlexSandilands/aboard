@@ -38,9 +38,11 @@ Imported tasks land in Backlog like any task created without a plan, and a sourc
   default, see [Settings](#settings)) then turns it into a concise title, a summary and labels. The issue text goes in
   the prompt, so on Claude Code the run has no tools and no MCP servers. On Codex, which has no tool-less run, it runs
   read-only and isolated (`codex exec --sandbox read-only --ignore-user-config --ignore-rules -c web_search="disabled"
-  --disable apps --ephemeral --output-schema <file>`, [Headless drivers](autopilot.md#headless-drivers)); its sandbox
-  can still read local files, so it runs only when the user chose Codex, and the log repeats the
-  [warning](autopilot.md#capability-warnings). If the model can't run (import turned off, no provider that can, CLI missing, a failure), the task gets the
+  --disable apps --ephemeral --output-schema <file>`, [Headless drivers](autopilot.md#headless-drivers)), in an empty
+  folder of its own (Codex reads an `AGENTS.md` from where it runs, so not the shared temp folder). Its sandbox can
+  still read local files, so it runs only when the user chose Codex. The [warning](autopilot.md#capability-warnings)
+  is in the picker, where it also says ticket imports then fail, and in the server log: an import has no run note to
+  carry it. If the model can't run (import turned off, no provider that can, CLI missing, a failure), the task gets the
   issue's own title, its body cut to 4000 characters and its GitHub labels, and the import still succeeds.
 - **Ticket.** Only the model can read it, through the user's own MCP server for its system, so the run keeps the user's
   MCP configuration (no `--strict-mcp-config`). It runs in the temp folder, not the project's: the project's

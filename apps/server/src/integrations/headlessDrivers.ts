@@ -301,8 +301,6 @@ export interface DriverNeeds {
   unguarded?: boolean | undefined;
   /** The run reads through the board's run tools. */
   runTools?: boolean | undefined;
-  /** A read-only run held apart from the user's setup (AgentArgsInput.isolated). */
-  isolated?: boolean | undefined;
 }
 
 /** What a run asks of its driver, as the operation needs the resolver checks providers against. */
@@ -311,7 +309,6 @@ export function driverNeeds(needs: DriverNeeds): OperationNeed[] {
   if (needs.access === "edit") out.push("edit");
   if (needs.access === "none") out.push("noTools");
   if (needs.outputSchema) out.push("outputSchema");
-  if (needs.isolated && !needs.untrusted && needs.access !== "edit") out.push("readOnly");
   if (needs.untrusted) out.push("untrusted");
   if (needs.runTools) out.push("runTools");
   // Only Claude Code's own deny rules keep an editing agent with no push guard from force-pushing or merging.

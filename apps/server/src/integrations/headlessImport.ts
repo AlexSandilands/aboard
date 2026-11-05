@@ -218,12 +218,30 @@ export function importPrompt(
  */
 async function runImportOnDriver(job: ImportJob, provider: AgentHarness, runAgent?: RunAgent): Promise<ImportOutcome> {
   const driver = headlessDriverFor(provider);
-  if (job.source.kind !== "issue") throw new Error(`Importing a ticket needs Claude Code, not ${driver.label}`);
+  const source = job.source;
+  if (source.kind !== "issue") throw new Error(`Importing a ticket needs Claude Code, not ${driver.label}`);
+  // A folder of its own, not the shared temp folder: Codex reads an AGENTS.md from where it runs, and anything local
+  // could put one there for a run that reads untrusted text.
+  const cwd = await mkdtemp(join(tmpdir(), `${BRAND.id}-import-`));
+  try {
+    return await runInFolder(job, source, driver, cwd, runAgent);
+  } finally {
+    await rm(cwd, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function runInFolder(
+  job: ImportJob,
+  source: Extract<IssueSource, { kind: "issue" }>,
+  driver: ReturnType<typeof headlessDriverFor>,
+  cwd: string,
+  runAgent: RunAgent | undefined,
+): Promise<ImportOutcome> {
   const { output, costUsd } = await runStructured({
     driver,
     cli: job.cli,
-    cwd: job.cwd,
-    prompt: importPrompt(job.source, job.boardLabels),
+    cwd,
+    prompt: importPrompt(source, job.boardLabels),
     timeoutMs: GITHUB_TIMEOUT_MS,
     input: {
       access: "read-only",
@@ -241,7 +259,7 @@ async function runImportOnDriver(job: ImportJob, provider: AgentHarness, runAgen
     what: "import",
     ...(runAgent ? { runAgent } : {}),
   });
-  return importOutcome(output, job.source.kind, costUsd, driver.label);
+  return importOutcome(output, source.kind, costUsd, driver.label);
 }
 
 /** The import runner on each provider; `runAgent` stands in for a CLI other than Claude Code's (tests). */

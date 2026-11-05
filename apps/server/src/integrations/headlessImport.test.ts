@@ -286,6 +286,9 @@ describe("finding MCP servers", () => {
       costUsd: null,
     });
     expect(jobs[0]!.command).toBe("codex");
+    // Its own empty folder, not the shared temp folder, where anything could leave an AGENTS.md.
+    expect(jobs[0]!.cwd).not.toBe("/tmp");
+    expect(jobs[0]!.cwd).toContain("-import-");
     expect(jobs[0]!.args).toEqual(
       expect.arrayContaining(["--sandbox", "read-only", "--ignore-user-config", "--ephemeral", "--output-schema"]),
     );

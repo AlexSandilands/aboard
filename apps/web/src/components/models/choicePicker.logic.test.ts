@@ -97,6 +97,10 @@ describe("choicePickerModel", () => {
       "Codex can't confine its file reads, so text anyone can write (a pull request, an issue) could make it leak local files into what it returns. It runs PR review only when you choose it.",
     );
     expect(pr.tabs.find((t) => t.id === "claude-code")!.warning).toBeNull();
+    // Chosen for issue import, Codex can't read tickets, and the warning says so.
+    expect(choicePickerModel(input({ op: "issueImport" })).tabs.find((t) => t.id === "codex")!.warning).toMatch(
+      /Ticket imports need tool rules, which Codex can't follow/,
+    );
     // The deep tier prefers Codex, so choosing it runs there, with the warning.
     expect(pr.rows.find((r) => r.key === "tier:deep")?.detail).toMatch(/^Codex · .*, with a warning$/);
     // The user's own task diff: Codex runs the board reviewer without one.
