@@ -92,9 +92,11 @@ Every tool validates its input with zod and calls a service; none holds rules of
 
 ### Projects
 
-Project-scoped tools take `projectId` or `workspacePath` (the agent's cwd). Write tools need one of them.
-Read tools treat an unknown path as an empty project rather than an error. `add_to_backlog` and
-`create_task` create the project when the path is new. For work that belongs to no code project they take
+Project-scoped tools take `projectId` or `workspacePath` (the agent's cwd; a path in a git worktree finds
+the main checkout's project, see [task-lifecycle](task-lifecycle.md)). Write tools need one of them.
+Read tools treat an unknown path as an empty project rather than an error. `add_to_backlog`,
+`create_task` and `create_epic` create the project when the path is new, and their result then starts with
+"Created a NEW project". For work that belongs to no code project they take
 `general: true` instead, which files the task in the [General project](task-lifecycle.md#creating) (unarchived or
 made again if needed). It is refused together with a path or id, and omitting both still errors. See
 [task-lifecycle.md](task-lifecycle.md#creating).
@@ -119,6 +121,9 @@ text when both are present.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
   review round is waiting. It also lists the task's pasted **Images** with their absolute file paths, so an agent
   can open a screenshot as a file ([attachments.md](attachments.md)).
+- `update_step` takes `images`, absolute paths of screenshots on the board's machine (up to 10): they are stored
+  with the task and appended to the step's notes as image tokens, all or none
+  ([attachments.md](attachments.md#how-it-works)). The result says how many were attached.
 - `get_session_transcript` returns a header with the session's totals, then one page of up to 20,000 characters of
   one-line entries and the `offset` to call again with when more follows (`renderTranscript`). Credential-shaped text
   is redacted first ([agent-sessions.md](agent-sessions.md#transcripts)).
@@ -138,10 +143,18 @@ text when both are present.
     that is already Done never nags.
   - _Stale plan_: the task is In Progress with a step in progress, but no step has changed for
     `STALE_PLAN_MS` (30 minutes).
+  - _Missing screen capture step_ (`captureStepHint`): in `set_plan`, `update_plan` and (when labels were passed)
+    `update_task` results, for an open task labelled `ui` whose plan has no step mentioning a screen capture or
+    screenshot (title or notes); names the `add_steps` call, moving the step ahead of a review or PR step, and
+    what the step must do ([plans.md](plans.md#screen-captures)).
   - _Batched completion_ is not a section: an `update_plan` result on an In Progress task that moved two or
     more steps straight to done without ever starting them (`startedAt` still null) says so after the headline
     (`batchedCompletionHint`), and tells the agent to use `update_step` as it goes. It stays quiet at Review
     and Done, where the open-steps hint asks for exactly that catch-up.
+
+  A `ui` task moved to Review with no image in any plan step's notes gets a warning after the `move_task`
+  headline (`missingScreenshotsWarning`); the move still happens. An image pasted into the description doesn't
+  count: it is usually the bug report's own picture.
 
   Renderings that aren't for the implementing agent (the reviewer's `taskText`) leave it out: it is opt-in
   through `renderTaskDetail`'s `progress` option.

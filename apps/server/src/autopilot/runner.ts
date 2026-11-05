@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   AUTOPILOT_ACTOR,
+  implementingThread,
   autopilotSessionName,
   BRAND,
   AGENT_HARNESSES,
@@ -25,6 +26,7 @@ import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
 import { messageOf } from "../integrations/github.ts";
 import {
   boardMcpConfig,
+  mcpWaitEnv,
   runHeadlessAgent,
   type AgentArgsInput,
   type AgentOutcome,
@@ -32,7 +34,6 @@ import {
   type RunAgent,
 } from "../integrations/headlessAgent.ts";
 import { headlessDriverFor, type DriverNeeds } from "../integrations/headlessDrivers.ts";
-import { latestThread } from "../integrations/reviewFallbacks.ts";
 import {
   isT3Unavailable,
   t3Unavailable,
@@ -252,7 +253,7 @@ export function createAutopilotRunner(deps: {
   };
 
   const nudge = async (request: RunnerRequest, task: TaskSummary, update: (patch: RunPatch) => void) => {
-    const thread = latestThread(task);
+    const thread = implementingThread(task);
     if (!thread) throw new Error(`#${task.number} has no live T3 Code thread to nudge`);
     update({ runner: "t3", threadUrl: thread.url });
     await whileUnavailable(
@@ -357,7 +358,7 @@ export function createAutopilotRunner(deps: {
         {
           prompt: `${request.prompt}\n\n${t3WorkspaceNote(branch, defaultBranch, prBase)}`,
           commandId: runCommandId(request.run.id),
-          ...(request.label ? { title: autopilotSessionName(request.label) } : {}),
+          ...(request.label ? { title: autopilotSessionName(request.label, task) } : {}),
           work: true,
           // The task's labels and tier are read again where the launch resolves its model; only a choice is passed.
           ...(model.source === "automation" && model.profile
@@ -416,6 +417,7 @@ export function createAutopilotRunner(deps: {
    */
   const runOnDriver = async (
     request: RunnerRequest,
+    task: TaskSummary | null,
     model: RunModel,
     options: RunnerOptions,
     settings: AppSettings,
@@ -451,6 +453,10 @@ export function createAutopilotRunner(deps: {
       update({ sessionId: id });
       link(driver.harness, id);
     };
+    const env = {
+      ...(where.hooksPath ? pushGuardEnv(where.hooksPath, process.env.GIT_CONFIG_PARAMETERS) : {}),
+      ...mcpWaitEnv({ access, untrusted: request.untrustedInput, tools: request.tools }),
+    };
     const stdout = await runAgent({
       cli: harnessCliSetting(settings, driver.harness),
       command: driver.command,
@@ -458,7 +464,7 @@ export function createAutopilotRunner(deps: {
       cwd: where.cwd,
       prompt: where.prompt,
       timeoutMs: options.timeoutMinutes * 60_000,
-      ...(where.hooksPath ? { env: pushGuardEnv(where.hooksPath, process.env.GIT_CONFIG_PARAMETERS) } : {}),
+      ...(Object.keys(env).length > 0 ? { env } : {}),
       ...(driver.sessionIdOf
         ? {
             onStdoutLine: (line: string) => {
@@ -474,7 +480,7 @@ export function createAutopilotRunner(deps: {
         sessionId: preset ?? "",
         model: plan.model,
         effort: plan.effort,
-        name: autopilotSessionName(request.label),
+        name: autopilotSessionName(request.label, task),
         defaultBranch: where.defaultBranch,
         ...(request.tools ? { tools: request.tools } : {}),
         ...(request.deniedTools ? { deniedTools: request.deniedTools } : {}),
@@ -528,6 +534,7 @@ export function createAutopilotRunner(deps: {
     const readOnly = request.access === "read-only" || request.access === "none";
     const { outcome, sessionId } = await runOnDriver(
       request,
+      task,
       runModel(request, options, task, settings),
       options,
       settings,
@@ -546,7 +553,7 @@ export function createAutopilotRunner(deps: {
             task.id,
             {
               agentSession: { harness, sessionId: id, cwd: worktree.path },
-              label: autopilotSessionName(request.label),
+              label: autopilotSessionName(request.label, task),
             },
             AUTOPILOT_ACTOR,
           );
@@ -601,6 +608,7 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
       // No task to link the session to.
       const { outcome, sessionId } = await runOnDriver(
         request,
+        null,
         runModel(request, options, null, settings),
         options,
         settings,

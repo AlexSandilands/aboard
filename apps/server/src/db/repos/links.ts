@@ -49,13 +49,20 @@ export function toLink(r: LinkRow): TaskLink {
       };
     case "ticket":
       return { ...base, kind: "ticket", ref: parseJson<TicketRef>(r.ref_json) ?? { system: "", key: r.url } };
-    case "t3_thread":
+    case "t3_thread": {
+      // The role is stored beside the ref, not in it: agents write refs.
+      const { role, ...ref } = parseJson<T3ThreadRef & { role?: "followup" }>(r.ref_json) ?? {
+        environmentId: "",
+        threadId: "",
+      };
       return {
         ...base,
         kind: "t3_thread",
-        ref: parseJson<T3ThreadRef>(r.ref_json) ?? { environmentId: "", threadId: "" },
+        ref,
         snapshot: parseJson<T3ThreadSnapshot>(r.snapshot_json),
+        ...(role === "followup" ? { role } : {}),
       };
+    }
     case "issue":
       return {
         ...base,

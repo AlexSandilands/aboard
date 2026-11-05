@@ -49,6 +49,12 @@ Imported tasks land in Backlog like any task created without a plan, and a sourc
   user and not by anyone who can edit tickets. If the system lists no import tools, the import fails before running
   with "Add import tools to <system> in Settings → Integrations → Ticket systems". If the model has no tool that works,
   or can't read the ticket, it fails and says why.
+  A ticket run also sets `MCP_CONNECTION_NONBLOCKING=false` in the CLI's environment (`importEnv`). `claude -p`
+  connects MCP servers in the background, and `--tools ""` also drops `ToolSearch`, which is what would wait for a
+  server still connecting, so a slow server's tools weren't there on the first turn and the run returned
+  `found: false`. With it, Claude Code connects the servers before the first turn. The cost: the run waits for every
+  user server, up to Claude Code's MCP timeout, so a slow or broken one delays the import (within the 4-minute
+  ticket timeout).
 
 Both runs use `--permission-mode dontAsk`, `--tools ""` (no built-in tools, so no files or shell),
 `--setting-sources user` (the project's and local settings files, with their allow rules, hooks and MCP servers,
@@ -211,6 +217,7 @@ links to the tier. The board reviewer's model (`reviewModel`, see
 | Fetch first, create the task when it arrives   | A paste would block for seconds, and a failure would lose the paste                  |
 | Jira REST with a stored API token              | The board would hold a credential, and Jira Cloud and Server differ in auth          |
 | `mcp__*__get_jira_issue` as one allow rule     | Claude Code skips an allow rule with a glob in the server part                       |
+| `--tools ToolSearch` so the run can wait itself | Relies on the model calling it first, adds a turn, depends on tool-search settings and the CLI version, and `--tools ""` should mean no built-in tools |
 | Guess each tracker's read tools by name        | The board knows no tracker; a wrong guess allows the wrong tool, or none that works  |
 | Poll imported issues' state                    | Out of scope; the snapshot is a record of what was imported                          |
 | One ticket run that also summarises every child | One long run per epic, and a child's failure would fail them all                    |

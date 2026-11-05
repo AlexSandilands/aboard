@@ -407,6 +407,11 @@ export const TaskLink = z.discriminatedUnion("kind", [
     kind: z.literal("t3_thread"),
     ref: T3ThreadRef,
     snapshot: T3ThreadSnapshot.nullable(),
+    /**
+     * "followup" for a thread the user opened from the card after the task reached Review, to ask about the work:
+     * the board never messages it. Absent on every other thread. Only the board sets it, never an agent.
+     */
+    role: z.literal("followup").nullish(),
   }),
   z.object({ ...LinkBase, kind: z.literal("issue"), ref: IssueRef, snapshot: IssueSnapshot.nullable() }),
   z.object({

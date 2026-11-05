@@ -71,4 +71,13 @@ describe("planning helpers", () => {
     expect(BUILTIN_PLAN_SKILL_BODY).toContain("Only then ask");
     expect(BUILTIN_PLAN_SKILL_BODY).toContain("restate what was saved");
   });
+
+  it("adds a screen capture step to UI tasks, with what to capture and how to attach it", () => {
+    expect(BUILTIN_PLAN_SKILL_BODY).toContain("UI tasks need a screen capture step");
+    expect(BUILTIN_PLAN_SKILL_BODY).toContain("before any review or PR step");
+    expect(BUILTIN_PLAN_SKILL_BODY).toContain("narrow (phone) width");
+    expect(BUILTIN_PLAN_SKILL_BODY).toContain("images: [absolute paths]");
+    const prompt = planTasksPrompt({ project, tasks, skill: { source: "builtin" }, boardUrl: "http://x" });
+    expect(prompt).toContain("UI tasks need a screen capture step");
+  });
 });

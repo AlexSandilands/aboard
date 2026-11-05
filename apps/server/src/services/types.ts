@@ -107,6 +107,12 @@ export interface ProjectsService {
    */
   resolve(ref: ProjectRef, opts?: { autoCreate?: boolean }): Project;
   /**
+   * resolve with autoCreate, also saying whether the project was just made, so MCP results can flag it. A path
+   * inside a linked git worktree matches (or creates, at its root) the main checkout's project, unless a project
+   * is bound to the worktree itself or a folder in it.
+   */
+  resolveOrCreate(ref: ProjectRef): { project: Project; created: boolean };
+  /**
    * Throws CONFLICT if an active project with the same workspace key exists; an archived one is unarchived and
    * returned instead. Appends to the end of the lane order.
    */
@@ -261,6 +267,8 @@ export type LinkSnapshot = PrSnapshot | T3ThreadSnapshot | IssueSnapshot | Agent
 export interface AddLinkOptions {
   /** A session the board started in a named Windows Terminal window (see taskWindowName). */
   window?: string;
+  /** A T3 thread the user opened to ask about finished work: the board never messages it (see implementingThread). */
+  role?: "followup";
   /** Classify a ticket with this system only, for a key the board knows belongs to it (an import's child). */
   ticketSystem?: string;
   /** The board adds this link by itself (a key in the title), so a rename may take it away again. */

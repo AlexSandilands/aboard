@@ -32,6 +32,13 @@ export interface HandoffPromptInput {
   subagent?: boolean;
 }
 
+/**
+ * What an implementing agent is told about the plan's Screen capture step (the planning skill adds one to every UI
+ * task). A UI bug that lint, types and tests can't see shows up in one screenshot, but only if someone looks at it.
+ */
+const SCREEN_CAPTURE_LINE =
+  "If the plan has a Screen capture step (UI tasks do), it is required, not optional: open the changed surface in a real browser, in each state you introduced (menus open, warnings showing, a narrow phone width where the layout can change), save the screenshots as JPEG or WebP at a sensible width (each must be under 5 MB), and look at every one. Fix anything that looks wrong and capture again before you move to Review. Then attach them with update_step(step, status: \"done\", images: [absolute paths]). A capture you didn't look at doesn't count.";
+
 /** Epics are orchestrated. Backlog and plan-less tasks still need a plan, so they default to planning together. */
 export function defaultHandoffMode(
   task: Pick<TaskSummary, "status" | "progress"> & Partial<Pick<TaskSummary, "kind">>,
@@ -165,6 +172,7 @@ export function taskHandoffPrompt({
           "",
           `${getTask} first: it has the description, plan, current step and latest handover notes.`,
           `Then follow the ${BRAND.id} skill: write a plan with set_plan if there isn't one, pick up from the current step, keep steps current with update_step (mark each in_progress when you start it and done the moment it finishes, never all at the end of a phase), link any PR you open, and finish with an add_note handover.`,
+          SCREEN_CAPTURE_LINE,
           "If a plan result asks about the Autopilot flag, ask me whether to flag the task and set it with update_task only once I've answered. You can flag tasks but never change Autopilot's settings.",
           ...(task.blocked
             ? [
@@ -214,6 +222,7 @@ function subagentPrompt(task: HandoffPromptInput["task"], boardUrl: string): str
     `Call get_task("${task.id}") on the ${BRAND.id} MCP server first: it has the description, plan, current step and latest handover notes.`,
     `Then follow the ${BRAND.id} skill: pick up from the current step, keep steps current with update_step (mark each in_progress when you start it and done the moment it finishes, never all at the end of a phase) and work in the git worktree or branch you were given.`,
     ...[integrationBranchLine(task)].filter((line): line is string => line !== null),
+    SCREEN_CAPTURE_LINE,
     "You can't ask the user anything. If you need an answer, mark the step blocked with a note saying what you need, then stop and report back. Don't set the task's Autopilot flag: that is the user's call.",
     "When the work is done, move_task to review. If the result says a review round is open, don't run the review loop and don't open a pull request, even though the result describes the loop and a self-review: stop and report back that round's number, as the orchestrator runs the review. If no round opens, open the pull request and link it.",
     "Leave an add_note handover on the task, and end your reply with a short report: what you did, the task's status and anything the orchestrator has to act on.",

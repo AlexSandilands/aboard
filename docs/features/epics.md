@@ -264,11 +264,11 @@ ready, is only found out at launch. If it can:
   doesn't suggest another route.
 - It refuses a task that already has a thread on it: working, waiting, asking for input or approval, or linked
   in the last two minutes and not yet polled. It says to message that thread instead. A thread that is done,
-  failed, idle or settled doesn't block a new one.
+  failed, idle or settled doesn't block a new one, and neither does a follow-up thread.
 - When T3 can't take the task, the error says why and points at `get_handoff_prompt(task, subagent: true)` and the
   pasted-prompt route.
-- `message_task_thread(task, text)` posts into the thread busy on the task, else its newest one that isn't
-  archived. It uses the same `message.dispatch` as the [review nudge](local-review.md), prefixed "From an
+- `message_task_thread(task, text)` posts into the task's [implementing thread](agent-handoff.md#follow-up-threads),
+  never into a follow-up the user opened. With no such thread it is refused and points at `start_task_thread`. It uses the same `message.dispatch` as the [review nudge](local-review.md), prefixed "From an
   orchestrating agent (sent through the board)". Each call is a new message, so a retry can post it twice.
 
 A Jira import run, which reads untrusted issue text, denies tools named with `message`, `dispatch`, `launch` or

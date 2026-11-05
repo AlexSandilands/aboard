@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { reviewFixInstructions, reviewLoopInstructions, reviewerBrief } from "./reviewPrompt.ts";
+import {
+  BUILTIN_REVIEW_SKILL_BODY,
+  reviewFixInstructions,
+  reviewLoopInstructions,
+  reviewerBrief,
+} from "./reviewPrompt.ts";
 
 const task = { number: 7, title: "Add exports" };
 
@@ -51,5 +56,13 @@ describe("review prompts", () => {
     expect(reviewFixInstructions({ task, round: 6, cycleRound: 3, maxRounds: 3 })).toContain(
       "That was the last review round",
     );
+  });
+});
+
+describe("built-in review skill", () => {
+  it("has the reviewer open a UI task's screenshots and flag missing or bad ones", () => {
+    expect(BUILTIN_REVIEW_SKILL_BODY).toContain("open every one and look at it");
+    expect(BUILTIN_REVIEW_SKILL_BODY).toContain("**Screenshots (UI tasks):**");
+    expect(BUILTIN_REVIEW_SKILL_BODY).toContain("Raise a **major**");
   });
 });

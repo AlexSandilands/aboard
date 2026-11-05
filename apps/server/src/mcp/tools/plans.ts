@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { StepStatus } from "@repo/contracts";
+import { attachmentToken, MAX_LAUNCH_IMAGES, StepStatus } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import { batchedCompletionHint } from "../format.ts";
 import {
@@ -153,7 +153,9 @@ Deleted ${deleted.length} step(s): ${shown.join(", ")}${more > 0 ? `, and ${more
         // Only mid-work: at Review or Done the open-steps hint asks for exactly this catch-up.
         const batched =
           after.status === "in_progress" ? batchedCompletionHint(before, after.phases, `"#${after.number}"`) : null;
-        return taskResult(services, id, `Updated ${counts} in the plan.${batched ? `\n\n${batched}` : ""}`);
+        return taskResult(services, id, `Updated ${counts} in the plan.${batched ? `\n\n${batched}` : ""}`, {
+          captureHint: true,
+        });
       }),
   );
 
@@ -223,7 +225,9 @@ Deleted ${deleted.length} step(s): ${shown.join(", ")}${more > 0 ? `, and ${more
         "the end of a phase. If steps can only be verified together, still mark each in_progress as you start it and " +
         "done once it is written, with testing as its own step. `notes` replaces the step's notes; `appendNotes` " +
         "adds a paragraph (findings, commands run, file paths). To change several steps at once use update_plan, " +
-        "never set_plan.",
+        "never set_plan. `images` attaches screenshots: absolute paths of PNG, JPEG, WebP or GIF files on this " +
+        "machine (each up to 5 MB, so save captures as JPEG or WebP at a sensible width). The board stores them " +
+        "with the task and shows them under the step; a bad path attaches nothing.",
       inputSchema: {
         task: taskField,
         step: stepField,
@@ -231,6 +235,13 @@ Deleted ${deleted.length} step(s): ${shown.join(", ")}${more > 0 ? `, and ${more
         title: z.string().min(1).optional(),
         notes: z.string().optional().describe("Replaces the step notes (markdown). Empty string clears them."),
         appendNotes: z.string().optional().describe("Appended to existing notes as a new paragraph."),
+        images: z
+          .array(z.string().min(1))
+          .max(MAX_LAUNCH_IMAGES)
+          .optional()
+          .describe(
+            "Absolute paths of image files (screenshots) to attach to the task and show under this step. Up to 10, each up to 5 MB.",
+          ),
         actor: actorField,
       },
     },
@@ -238,17 +249,33 @@ Deleted ${deleted.length} step(s): ${shown.join(", ")}${more > 0 ? `, and ${more
       run(() => {
         const id = services.tasks.resolveId(args.task);
         const stepId = services.plans.resolveStepId(id, args.step);
-        services.plans.updateStep(
-          stepId,
-          {
-            ...(args.status ? { status: args.status } : {}),
-            ...(args.title ? { title: args.title } : {}),
-            ...(args.notes !== undefined ? { notes: args.notes === "" ? null : args.notes } : {}),
-            ...(args.appendNotes ? { appendNotes: args.appendNotes } : {}),
-          },
-          actor(args.actor),
+        // Stored before the step changes, and all-or-nothing: a bad path fails here and leaves the step as it was.
+        const images = args.images?.length ? services.attachments.uploadFromPaths(id, args.images) : [];
+        const appendNotes = [args.appendNotes, ...images.map((a) => attachmentToken(a.id, a.filename))]
+          .filter(Boolean)
+          .join("\n\n");
+        try {
+          services.plans.updateStep(
+            stepId,
+            {
+              ...(args.status ? { status: args.status } : {}),
+              ...(args.title ? { title: args.title } : {}),
+              ...(args.notes !== undefined ? { notes: args.notes === "" ? null : args.notes } : {}),
+              ...(appendNotes ? { appendNotes } : {}),
+            },
+            actor(args.actor),
+          );
+        } catch (error) {
+          // The images were stored ahead of the step: without a token in any notes they would be orphans.
+          services.attachments.discard(images.map((a) => a.id));
+          throw error;
+        }
+        const attached = images.length ? ` Attached ${images.length} image(s) to the task.` : "";
+        return taskResult(
+          services,
+          id,
+          `Step ${args.step} updated${args.status ? ` to ${args.status}` : ""}.${attached}`,
         );
-        return taskResult(services, id, `Step ${args.step} updated${args.status ? ` to ${args.status}` : ""}.`);
       }),
   );
 };

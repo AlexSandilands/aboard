@@ -8,7 +8,9 @@ description: Track work on the user's local task board (kanban over MCP). Use wh
 The user keeps a local kanban board of their work across projects. Columns: **Backlog → Planned → In
 Progress → Review → Done**, one swimlane per project. You read and update it through the `aboard`
 MCP server; the board updates live in the user's browser. Identify the project by passing
-`workspacePath` = your current working directory. Unknown paths create the project automatically.
+`workspacePath` = your current working directory; from a git worktree the board finds the main repo's
+project. Unknown paths create the project automatically, and the result then starts with "Created a NEW
+project": if the task belongs to a project the board already has, move it with `update_task(moveToProjectId)`.
 Work that belongs to no code project (a document to update, something to review) goes in the **General**
 project: pass `general: true` to `add_to_backlog` / `create_task` instead of `workspacePath`. Leaving the
 path out never defaults to it, and work in a repo belongs in the repo's project.
@@ -134,6 +136,17 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    write it, `update_step(task, "3.1", "done")`, then the same for `3.2`; not one `update_plan` at the end.
    Tool results say when no step is in progress, when the plan hasn't changed for a while, and when a
    task reaches Review with steps still open; follow them.
+
+   **UI work needs a screen capture.** When a task changes what the user sees (components, styles, layout, or
+   the `ui` label), its plan has a **Screen capture** step; if it doesn't, `add_steps` one (and move it ahead of any
+   review or PR step with `update_plan`). Do it for real: open the changed surface in a browser, in each state you introduced (menus open,
+   warnings showing, a narrow phone width where the layout can change), save the screenshots as JPEG or WebP at
+   a sensible width (each must be under 5 MB), and look at every one. Fix whatever looks wrong and capture
+   again before moving to Review. Attach them in the same call that finishes the step:
+   `update_step(task, "4.2", status: "done", images: ["/abs/path/menu-open.jpg", ...])` (absolute paths, up to
+   10, PNG/JPEG/WebP/GIF; a bad path attaches nothing). They show under the step and in `get_task`'s Images.
+   A capture you didn't look at doesn't count; moving a `ui` task to Review without screenshots draws a
+   warning, and the reviewer checks them.
 
    Several things to change at once (add notes, move a step, rename a phase)? One `update_plan` call,
    with `steps: [{step: "2.3", notes: "…"}, …]`; labels refer to the plan as it was before the call.

@@ -11,7 +11,7 @@ import {
 } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import type { Services } from "../../services/types.ts";
-import { resolutionText, socialBreakHint, statusLabel } from "../format.ts";
+import { missingScreenshotsWarning, resolutionText, socialBreakHint, statusLabel } from "../format.ts";
 import { openRoundInstructions } from "./reviews.ts";
 import {
   actorField,
@@ -45,6 +45,7 @@ import {
   textResult,
   type ToolRegistrar,
   type WritingProjectArgs,
+  newProjectNotice,
   writingProject,
 } from "../shared.ts";
 
@@ -135,8 +136,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         "Add a task to the Backlog column with one call: an idea, a known to-do, a ticket or GitHub issue " +
         "to pick up later. Backlog tasks are cheap and need no plan: when something worth doing comes up mid-task " +
         "(a refactor, a bug you noticed, a follow-up), log it here and carry on with your current work instead of " +
-        "getting derailed. Pass workspacePath (your cwd); the project is " +
-        "created automatically if the board doesn't know it yet. For work that belongs to no code project (a " +
+        "getting derailed. Pass workspacePath (your cwd; a git worktree counts as its main repo). If the board " +
+        "doesn't know the repo yet it creates a project for it, and the result starts by saying so. For work that belongs to no code project (a " +
         "document to update, something to review), pass general: true instead: it files the task in the General " +
         "project. Pass the ticket key in links if there is one, " +
         "epic when it is part of a larger feature, blockedBy when other tasks must finish first, and t3Thread when " +
@@ -174,7 +175,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
       run(() => {
         requireWritingProject(args);
         const template = templateFor(services, args);
-        const project = writingProject(services, args);
+        const { project, created } = writingProject(services, args);
         const { links, skipped } = linkInputs(services, args);
         const task = services.tasks.create({
           projectId: project.id,
@@ -195,7 +196,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         const plan = task.progress.total ? ` with its ${task.progress.total}-step plan` : "";
         const from = template ? ` from template ${template.name}${plan}` : "";
         return textResult(
-          `Added #${task.number} "${task.title}" to Backlog in ${project.title}${where}${from}.${skippedText(skipped)}`,
+          `${newProjectNotice(project, created, "this task")}Added #${task.number} "${task.title}" to Backlog in ${project.title}${where}${from}.${skippedText(skipped)}`,
         );
       }),
   );
@@ -245,7 +246,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         requireWritingProject(args);
         const plan = planFromArgs(args);
         const template = templateFor(services, args, { needsPlan: !args.manual, hasPlan: plan !== null });
-        const project = writingProject(services, args);
+        const { project, created } = writingProject(services, args);
         const { links, skipped } = linkInputs(services, args);
         const task = services.tasks.create({
           projectId: project.id,
@@ -267,7 +268,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         return taskResult(
           services,
           task.id,
-          `Created task #${task.number} in ${project.title}.${skippedText(skipped)}`,
+          `${newProjectNotice(project, created, "this task")}Created task #${task.number} in ${project.title}.${skippedText(skipped)}`,
           {
             planningHints: true,
           },
@@ -304,7 +305,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
     (args) =>
       run(async () => {
         requireProjectRef(args);
-        const project = services.projects.resolve(projectRef(args), { autoCreate: true });
+        const { project, created } = services.projects.resolveOrCreate(projectRef(args));
         // Check every task first, so a bad reference doesn't leave a half-filled epic behind.
         const children = (args.tasks ?? []).map((ref) => services.tasks.summary(services.tasks.resolveId(ref)));
         for (const child of children) {
@@ -335,7 +336,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           actor(args.actor),
         );
         const added = children.length ? ` with ${children.map((c) => `#${c.number}`).join(", ")}` : "";
-        const headline = `Created epic #${epic.number} in ${project.title}${added}.${skippedText(skipped)}`;
+        const headline = `${newProjectNotice(project, created, "this epic")}Created epic #${epic.number} in ${project.title}${added}.${skippedText(skipped)}`;
         if (args.delivery) {
           try {
             await ctx.integrations.setEpicDelivery(epic.id, args.delivery, actor(args.actor));
@@ -398,7 +399,12 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
             review && summary.links.some((l) => l.kind === "pr")
               ? "A pull request is already linked. Finish the local review loop below first, and push every fix to that PR; don't open another. Until the loop ends, Autopilot holds off its own review of the PR."
               : null;
-          return taskResult(services, id, review ? [moved, early, review].filter(Boolean).join("\n\n") : moved, {
+          // Only the move into Review: the capture is checked before the PR, not on every later move.
+          const screenshots =
+            summary.status === "review" && args.status === "review"
+              ? missingScreenshotsWarning(services.tasks.detail(id))
+              : null;
+          return taskResult(services, id, [moved, screenshots, early, review].filter(Boolean).join("\n\n"), {
             closing: summary.kind !== "epic" && summary.status === "done" && !wasDone,
           });
         },
@@ -533,7 +539,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         );
         // After the other fields, so a refused switch (git, or tasks already started) leaves them saved and says why.
         if (args.delivery !== undefined) await ctx.integrations.setEpicDelivery(id, args.delivery, actor(args.actor));
-        return taskResult(services, task.id, `Updated #${task.number}.`);
+        // Labels usually arrive after the plan is saved, so this is when a new ui label can ask for the capture step.
+        return taskResult(services, task.id, `Updated #${task.number}.`, { captureHint: args.labels !== undefined });
       }),
   );
 

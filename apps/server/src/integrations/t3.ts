@@ -889,10 +889,21 @@ export function createT3Integration(deps: {
     input: StartT3ThreadInput,
     actor: string,
     title?: string,
+    fromCard = false,
   ): Promise<TaskLink> => {
     const ctx = await launchContext({ taskId });
     const threadId = await launch(ctx, input, title ?? `#${ctx.task!.number} ${ctx.task!.title}`, taskId);
-    const link = deps.services().links.add(taskId, { t3Thread: { environmentId: ctx.environmentId, threadId } }, actor);
+    // A thread the user opens on finished work is to ask about it: the board must not hand it review messages meant
+    // for the thread that did the work (see implementingThread).
+    const followUp = fromCard && (ctx.task!.status === "review" || ctx.task!.status === "done");
+    const link = deps
+      .services()
+      .links.add(
+        taskId,
+        { t3Thread: { environmentId: ctx.environmentId, threadId } },
+        actor,
+        followUp ? { role: "followup" } : {},
+      );
     // The images now belong to the task: backed up and deleted with it, and listed by get_task. After the link, so a
     // failure here can't leave a started thread unlinked; T3 has its own copy either way.
     if (input.attachmentIds?.length) {
@@ -1065,7 +1076,8 @@ export function createT3Integration(deps: {
     launchOptions: async (taskId) => (await loadLaunchOptions({ taskId })).options,
     projectLaunchOptions: async (projectId) => (await loadLaunchOptions({ projectId })).options,
     modelCatalog,
-    startThread,
+    // The public one is the card's launch dialog; launchTaskThread (MCP, Autopilot) starts threads internally.
+    startThread: (taskId, input, actor) => startThread(taskId, input, actor, undefined, input.followUp === true),
     startProjectThread,
     launchTaskThread,
     sendToThread,

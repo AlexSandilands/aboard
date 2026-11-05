@@ -1,5 +1,7 @@
+import { dirname } from "node:path";
 import {
   BOARD_REVIEWER,
+  implementingThread,
   REVIEW_DONE_NEXT,
   reviewFixInstructions,
   reviewIsDone,
@@ -7,7 +9,6 @@ import {
   resolveHeadlessEffort,
   harnessCliSetting,
   resolveHeadlessModel,
-  type TaskLink,
   type TaskSummary,
 } from "@repo/contracts";
 import type { ReviewRecord } from "../db/repos/reviews.ts";
@@ -35,14 +36,6 @@ export interface ReviewFallbacks {
   idle(): Promise<void>;
   start(): void;
   stop(): void;
-}
-
-/** The task's most recently linked T3 thread that isn't archived. */
-export function latestThread(task: TaskSummary): ThreadLink | null {
-  const threads = task.links.filter(
-    (l): l is Extract<TaskLink, { kind: "t3_thread" }> => l.kind === "t3_thread" && !l.snapshot?.archived,
-  );
-  return threads.at(-1) ?? null;
 }
 
 /**
@@ -107,21 +100,26 @@ export function createReviewFallbacks(deps: {
       if (!cwd) throw new Error(`${project.title} has no workspace folder to review in`);
       const settings = s.settings.get();
       const reviewModel = s.reviews.modelFor(task.id);
+      // The task's screenshots live in the data dir, outside the checkout: the reviewer may read that folder.
+      const images = s.attachments.forTask(task.id);
       const result = await runHeadless({
         cli: harnessCliSetting(settings, "claude-code"),
         cwd,
         budgetUsd: settings.headlessReviewBudgetUsd,
         model: resolveHeadlessModel(settings.modelTiers, reviewModel),
         effort: resolveHeadlessEffort(settings.modelTiers, reviewModel),
+        ...(images.length ? { addDirs: [...new Set(images.map((i) => dirname(i.path)))] } : {}),
         prompt: headlessPrompt({
           taskNumber: task.number,
           round: round.round,
           taskText: renderTaskDetail(s.tasks.detail(task.id), project, {
             events: 0,
             ticketSystems: s.settings.get().ticketSystems,
+            images,
           }),
           skill: s.reviews.skillFor(task.id),
           baseRef: null,
+          hasImages: images.length > 0,
         }),
       });
       const cost = result.costUsd === null ? "" : ` (board review, $${result.costUsd.toFixed(2)})`;
@@ -173,7 +171,7 @@ export function createReviewFallbacks(deps: {
     const task = s.tasks.summary(round.taskId);
     // A task turned manual while a round was pending has no change, and no agent, to chase.
     if (task.status !== "review" || task.archivedAt || task.manual) return;
-    const thread = latestThread(task);
+    const thread = implementingThread(task);
     if (thread?.snapshot && BUSY.has(thread.snapshot.status)) return;
     const userAsked = round.openedBy === "user" && !round.nudgedAt;
     if (!userAsked) {

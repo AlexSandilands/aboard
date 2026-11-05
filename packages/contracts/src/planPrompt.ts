@@ -32,6 +32,18 @@ labels. Don't implement anything.
    context. Pick the suggested model tier (light, standard or deep) with a one-line reason, and 1-3 labels,
    preferring ones the board already uses (\`board_overview\` lists them). Note any task it depends on.
 
+## UI tasks need a screen capture step
+
+When a task changes what the user sees (it touches components, styles or layout, or has the \`ui\` label), its
+plan ends with a **Screen capture** step, placed before any review or PR step. Lint, typecheck and tests don't
+show a menu opening in the wrong place or a warning running out of its popover; a screenshot does. Write the
+states to capture into the step's notes: each menu or popover open, each warning or error shown, empty and
+full lists, and a narrow (phone) width where the layout can change. The step says the implementing agent opens
+the surface in a real browser, looks at every screenshot, fixes what is wrong before moving to Review, and
+attaches the captures with \`update_step(step, status: "done", images: [absolute paths])\`, saved as JPEG or
+WebP at a sensible width. A capture nobody looked at doesn't count. Skip the step for work with nothing to
+see (a backend change, docs, a refactor).
+
 ## Simple and complex tasks
 
 Sort the tasks first. A task is **simple** when its approach is obvious and it has no open questions (a copy
