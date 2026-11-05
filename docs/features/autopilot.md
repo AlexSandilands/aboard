@@ -1352,7 +1352,9 @@ each with what it needs from the provider and a default that is a tier or inheri
 1. The task's reviewer override, then the project's (`reviewModel`; the two reviewer operations only).
 2. The automation's **Model** field (kind `model`, config key `modelChoice`, default inherit) at its scope, then a
    custom agent action's own `model` (`RunnerRequest.modelChoice`).
-3. The board's setting for the operation (`AppSettings.operationModels[op]`).
+3. The board's setting for the operation (`AppSettings.operationModels[op]`). Set to inherit on an operation on a
+   task, it skips the default and takes the task's own model (step 5), so PR review or the board reviewer can follow
+   the task.
 4. The operation's default.
 5. When everything inherits, a task-scoped operation takes the task's own model (`resolveTaskModel`): a custom model
    one of its labels picks (**Settings → Model tiers → Custom models**, the first in the list when several claim a
@@ -1378,10 +1380,11 @@ asks on top: `driverNeeds` in `integrations/headlessDrivers.ts`) count:
 Every fallback (another provider, no model for it, a deleted custom model) goes in the run's detail, with a
 `Model: …` line naming the model, what picked it and the provider. The run records what it ran on in
 `AutopilotRun.model` (`autopilot_runs.model_json`: `{provider, model, effort, source}`). A **T3** launch passes the
-choice on to `launchTaskThread` (`modelChoice`) when it came from above the task's own model; there it is resolved
-again with the task's labels and tier against T3's providers (`resolveSuggestion`), and the run records
-`{provider: "t3-code", model}` with the T3 model it asked for (null when T3 couldn't use it, or nothing was chosen:
-then T3's default runs, as it does from the dialog). A model typed for a CLI provider has no T3 model.
+tier or custom model the run's operation resolved to on to `launchTaskThread` (`modelChoice`), whatever picked it, so
+the board's model for new sessions (`launch`) never replaces it; there it is checked against T3's providers
+(`resolveSuggestion`). A model typed for a CLI provider, or the light fallback, has no T3 model: the launch gets
+`defaultModel` and T3's default runs. The run records `{provider: "t3-code", model}` with the T3 model it asked for
+(null when T3 couldn't use it, or there was none).
 
 041_operation_models moved what was saved before into this shape: see [ADR 0012](../decisions/0012-provider-neutral-operation-models.md).
 

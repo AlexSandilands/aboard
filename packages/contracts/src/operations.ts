@@ -240,6 +240,9 @@ export function resolveOperationChoice(
   const notes: string[] = [];
   const note = () => notes.join("\n") || null;
   for (const [source, choice] of levels) {
+    // The board's inherit, set on purpose, on an operation on a task skips its default for the task's own model, so a
+    // tier default (PR review, the board reviewer) can still follow the task.
+    if (choice === INHERIT && source === "board" && info.taskScoped) break;
     if (!choice || choice === INHERIT) continue;
     if ("tier" in choice) {
       return {

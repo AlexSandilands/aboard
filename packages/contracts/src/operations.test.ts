@@ -162,6 +162,13 @@ describe("resolveOperationChoice: precedence", () => {
       want: { source: "default", id: "light" },
     },
     {
+      name: "a board setting of inherit on an operation on a task skips its default for the task's model",
+      op: "prReview",
+      ctx: { task: task("deep") },
+      board: { prReview: "inherit" },
+      want: { source: "tier", id: "deep" },
+    },
+    {
       name: "an operation without a task never takes a task's model",
       op: "customDetached",
       ctx: { task: task("deep", ["codex"]), automation: ["inherit"] },

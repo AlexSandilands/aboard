@@ -86,7 +86,15 @@ describe("settings Ask", () => {
     const failed = setup(() =>
       Promise.resolve(cliResult(undefined, { is_error: true, subtype: "error_max_budget_usd", result: "x" })),
     );
-    expect(await ask(failed)).toEqual({ ok: false, error: "Claude Code stopped: error max budget usd" });
+    expect(await ask(failed)).toEqual({ ok: false, error: "Claude Code stopped: error max budget usd." });
+    // On the CLI's default model (no model for the tier), the error says where to set one.
+    failed.services.settings.update({ modelTiers: { light: { description: null, t3: null } } });
+    expect(await ask(failed)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining(
+        "set a model for its tier (Light, unless you chose another) in Settings → Model tiers",
+      ),
+    });
 
     const slow = setup(() => Promise.reject(new Error("Claude Code didn't finish within 60 seconds")));
     expect(await ask(slow)).toEqual({ ok: false, error: "Claude Code didn't finish within 60 seconds" });
