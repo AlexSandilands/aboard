@@ -29,11 +29,21 @@ export function boardSnapshotMotion(): boolean {
 }
 
 /**
+ * Whether the sidebar moves with snapshot motion now: only over the board, which is what the snapshots are of. On any
+ * other page nothing is named, so a transition would hold the main area at its old layout for the whole slide and then
+ * jump; there the sidebar slides with `startSlide` and the page reflows around it. Both `startSidebarTransition` and
+ * `useSidebarSlide` ask this, so the transition and the slide can't disagree.
+ */
+export function sidebarSnapshotMotion(): boolean {
+  return boardSnapshotMotion() && document.querySelector("[data-board-scroll]") !== null;
+}
+
+/**
  * Opens or closes the sidebar in a View Transition, `update` applying the change. Returns false, doing nothing, when
- * snapshot motion is off.
+ * the sidebar doesn't move with snapshot motion (see sidebarSnapshotMotion).
  */
 export function startSidebarTransition(opening: boolean, update: () => void): boolean {
-  if (!boardSnapshotMotion()) return false;
+  if (!sidebarSnapshotMotion()) return false;
   prepareBoardTransition("sidebar");
   document.startViewTransition({ update, types: [opening ? "sidebar-open" : "sidebar-close"] });
   return true;

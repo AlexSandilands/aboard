@@ -199,7 +199,9 @@ ones. The code is `lib/boardMotion.ts` and the View Transition block in `index.c
 - **Sidebar:** `setOpen` (`ui/sidebar.tsx`) starts its own transition (`startSidebarTransition`, types `sidebar-open`
   and `sidebar-close`, the change applied in `flushSync`) and `useSidebarSlide` stands down. The change applies only
   once the old state is captured, so a second toggle before then starts from the state the first one asked for. The offcanvas sidebar is
-  there in both states, so its snapshot (`app-sidebar`) slides between its two places by itself.
+  there in both states, so its snapshot (`app-sidebar`) slides between its two places by itself. Only over the board
+  (`sidebarSnapshotMotion`, which also wants `[data-board-scroll]` mounted): other pages name nothing, so a transition
+  would hold their main area at its old layout and then jump, and there the sidebar slides with `startSlide` as before.
 - **When:** `boardSnapshotMotion()`: the setting is on, Panel animations are on (so not at 0 ms or under reduced
   motion), and `snapshotMotionSupported()`, which wants transition types, `match-element` and
   `document.activeViewTransition`. Without types the router would ignore `types` and animate every navigation, so where
