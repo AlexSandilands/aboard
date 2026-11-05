@@ -414,15 +414,23 @@ describe("epic PR title", () => {
     expect(epicPrTitle(epic("Sync"), ["feat(web): a", "fix(web)!: b"])).toBe("feat(web)!: sync");
   });
 
-  it("lowercases a sentence-case first word only, and drops a trailing period", () => {
+  it("lowercases the first word, since commitlint's subject-case rejects a capital first character", () => {
     const t = ["feat: a"];
     expect(epicPrTitle(epic("Git backups  across\nmachines."), t)).toBe("feat: git backups across machines");
-    expect(epicPrTitle(epic("GitHub sync"), t)).toBe("feat: GitHub sync");
-    expect(epicPrTitle(epic("API keys"), t)).toBe("feat: API keys");
+    expect(epicPrTitle(epic("GitHub sync"), t)).toBe("feat: github sync");
+    expect(epicPrTitle(epic("API keys"), t)).toBe("feat: api keys");
+    expect(epicPrTitle(epic("iOS app"), t)).toBe("feat: iOS app");
   });
 
-  it("uses an epic title that is already a conventional header as it is", () => {
+  it("keeps the parts of an epic title that is already a header, and cleans its subject", () => {
     expect(epicPrTitle(epic("fix(server): stop leaking"), ["feat: a"])).toBe("fix(server): stop leaking");
+    expect(epicPrTitle(epic("fix(server)!: Stop leaking."), ["feat: a"])).toBe("fix(server)!: stop leaking");
+  });
+
+  it("counts only config-conventional's types as conventional", () => {
+    expect(parseConventionalHeader("release: v1")).toBeNull();
+    expect(epicPrTitle(epic("Sync"), ["release: v1", "wip: x"])).toBe("Epic #7: Sync");
+    expect(epicPrTitle(epic("release: v1"), ["feat: a"])).toBe("feat: release: v1");
   });
 
   it("shortens the header to 100 characters", () => {

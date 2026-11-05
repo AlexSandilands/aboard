@@ -574,9 +574,11 @@ switched on, with no settings. Only epics with integration delivery ([epics](epi
   merge). Its title is set only then, so a rename by hand sticks, and it follows `epicPrTitle`: when any merged task PR
   (the title on its link's snapshot) is a Conventional Commits header, so is the epic's, because the repo's
   commitlint would otherwise fail `Epic #N: …`. The type is `feat` if any is a `feat`, else `fix` if any is a `fix`,
-  else the most common (ties go to the first merged); a scope only when every conventional one shares it; `!` if any
-  has it. The subject is the epic's title, whitespace collapsed, without a trailing period and with a sentence-case
-  first word lowercased (`GitHub` and `API` stay), cut to 100 characters. It carries no `#N`, which a squash commit
+  else the most common (ties go to the first of the epic's tasks); a scope only when every conventional one shares it; `!` if any
+  has it. The subject is the epic's title, whitespace collapsed, without a trailing period and with the first word
+  lowercased (`GitHub sync` becomes `github sync`, because commitlint's `subject-case` rejects a capital first
+  character), cut to 100 characters. Only config-conventional's types count as conventional, and an epic title that is
+  already a header keeps its type and scope. It carries no `#N`, which a squash commit
   would turn into a link to the repo's issue #N; the body names the epic. With no conventional task PR the title
   stays `Epic #N: <title>`. That PR merging is what finishes the epic: the board sees it through the link and the epic goes from Review to
   Done once its tasks are Done too ([epics](epics.md#delivery)). Then it keeps the PR's description, `epicPrBody` (each task with

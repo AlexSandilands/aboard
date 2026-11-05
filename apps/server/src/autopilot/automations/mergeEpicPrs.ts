@@ -142,17 +142,20 @@ export interface ConventionalHeader {
   subject: string;
 }
 
+/** config-conventional's type-enum: a header with any other type fails commitlint, so it doesn't count as conventional. */
+const TYPES = new Set(["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "revert", "style", "test"]);
+
 /** `type(scope)!: subject`, the header shape of config-conventional. Null for anything else. */
 export function parseConventionalHeader(title: string): ConventionalHeader | null {
   const match = /^([a-z]+)(?:\(([^()\s][^()]*)\))?(!)?: (\S.*)$/.exec(title.trim());
-  if (!match) return null;
+  if (!match || !TYPES.has(match[1]!)) return null;
   return { type: match[1]!, scope: match[2] ?? null, breaking: match[3] === "!", subject: match[4]!.trim() };
 }
 
 /** commitlint's header-max-length in config-conventional. */
 const HEADER_MAX = 100;
 
-/** The type that stands for a set of children: feat, else fix, else the most common (ties go to the first merged). */
+/** The type that stands for a set of children: feat, else fix, else the most common (ties go to the first of the epic's tasks). */
 function dominantType(types: readonly string[]): string {
   if (types.includes("feat")) return "feat";
   if (types.includes("fix")) return "fix";
@@ -163,10 +166,21 @@ function dominantType(types: readonly string[]): string {
   return best;
 }
 
-/** Lowercases the first letter unless the first word has more capitals (GitHub, API): subject-case rejects sentence case. */
+/**
+ * Lowercases the first word when it starts with a capital: config-conventional's subject-case rejects a subject whose
+ * first character is upper case, so `GitHub sync` and `API keys` become `github sync` and `api keys`.
+ */
 function lowerFirst(subject: string): string {
-  const word = subject.split(" ")[0]!;
-  return /^[A-Z][^A-Z]*$/.test(word) ? subject.charAt(0).toLowerCase() + subject.slice(1) : subject;
+  const [word = ""] = subject.split(" ");
+  return /^[A-Z]/.test(word) ? word.toLowerCase() + subject.slice(word.length) : subject;
+}
+
+/** The epic's title as a commit subject: whitespace collapsed, no trailing period, first word lowercased. */
+const subjectOf = (title: string) => lowerFirst(title.replace(/\s+/g, " ").trim().replace(/\.+$/, ""));
+
+function header(type: string, scope: string | null, breaking: boolean, subject: string): string {
+  const prefix = `${type}${scope ? `(${scope})` : ""}${breaking ? "!" : ""}: `;
+  return prefix + cut(subject, HEADER_MAX - prefix.length);
 }
 
 function cut(text: string, max: number): string {
@@ -185,16 +199,15 @@ export function epicPrTitle(epic: Pick<TaskSummary, "number" | "title">, childPr
   const children = childPrTitles.flatMap((t) => parseConventionalHeader(t) ?? []);
   if (children.length === 0) return `Epic #${epic.number}: ${epic.title}`;
 
+  // An epic already titled as a header keeps its parts; its subject gets the same clean-up as a built one.
   const own = parseConventionalHeader(epic.title.replace(/\s+/g, " "));
-  if (own) return cut(epic.title.replace(/\s+/g, " ").trim(), HEADER_MAX);
+  if (own) return header(own.type, own.scope, own.breaking, subjectOf(own.subject));
 
   const type = dominantType(children.map((c) => c.type));
   const scopes = new Set(children.map((c) => c.scope));
   const scope = scopes.size === 1 ? [...scopes][0]! : null;
   const breaking = children.some((c) => c.breaking);
-  const prefix = `${type}${scope ? `(${scope})` : ""}${breaking ? "!" : ""}: `;
-  const subject = lowerFirst(epic.title.replace(/\s+/g, " ").trim().replace(/\.+$/, ""));
-  return prefix + cut(subject, HEADER_MAX - prefix.length);
+  return header(type, scope, breaking, subjectOf(epic.title));
 }
 
 const hashOf = (text: string) => createHash("sha1").update(text).digest("hex").slice(0, 12);
