@@ -59,6 +59,8 @@ function setup() {
       if (mergeError) throw mergeError;
       // As the real one: the refreshed snapshot says merged, which moves the task to Done.
       s.links.setSnapshot(link.id, snapshot({ state: "merged", headOid: input.headOid }));
+      // As in a repository that allows only squash merges.
+      return "squash";
     },
     ensureEpicPr: async (input) => {
       opened.push(input);
@@ -152,14 +154,18 @@ function setup() {
 }
 
 describe("merge into epic branch", () => {
-  it("merges a reviewed, green PR into the epic's branch with a merge commit, once per head, and the task goes Done", async () => {
+  it("merges a reviewed, green PR into the epic's branch, once per head, names the method, and the task goes Done", async () => {
     const { s, task, setPr, toReview, pass, turnOn, runs, merges, linkId } = setup();
     turnOn();
     toReview();
     setPr();
     await pass();
     expect(merges).toEqual([{ linkId: linkId(), input: { base: BRANCH, headOid: SHA_A } }]);
-    expect(runs()[0]).toMatchObject({ status: "succeeded", dedupeKey: `merge:${linkId()}:${SHA_A}` });
+    expect(runs()[0]).toMatchObject({
+      status: "succeeded",
+      dedupeKey: `merge:${linkId()}:${SHA_A}`,
+      summary: `Merged PR #7 into ${BRANCH} (squash)`,
+    });
     expect(s.tasks.summary(task.id).status).toBe("done");
     await pass();
     expect(merges).toHaveLength(1);
@@ -244,6 +250,22 @@ describe("merge into epic branch", () => {
       /^Ready to merge into the epic branch: .*approving review/,
     );
     expect(s.notifications.list().items.some((n) => n.kind === "autopilot_failed")).toBe(true);
+  });
+
+  it("asks the user to merge it when the repository allows no merge method", async () => {
+    const { s, task, setPr, toReview, pass, turnOn, runs, merges, failMerge } = setup();
+    turnOn();
+    failMerge(new AppError("VALIDATION", "The repository allows no merge method the board can use"));
+    toReview();
+    setPr();
+    await pass();
+    expect(runs()[0]).toMatchObject({ status: "skipped", needsAttention: true });
+    expect(s.tasks.summary(task.id).attention.find((a) => a.kind === "autopilot")?.message).toMatch(
+      /^Ready to merge into the epic branch: .*allows no merge method.*Merge it yourself\.$/,
+    );
+    // Not a race: no retry at this head.
+    await pass();
+    expect(merges).toHaveLength(1);
   });
 
   it("tries a head again after a failure that may pass, then asks the user", async () => {

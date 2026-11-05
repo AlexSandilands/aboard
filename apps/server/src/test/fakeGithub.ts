@@ -140,10 +140,14 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
       const key = `${owner}/${name}#${number}`;
       const pr = prs.get(key);
       if (!pr) return { data: null, errors: [{ type: "NOT_FOUND", message: "Could not resolve to a PullRequest" }] };
+      const repo = repoOf(owner, name);
       return {
         data: {
           repository: {
             defaultBranchRef: { name: "main" },
+            mergeCommitAllowed: repo?.mergeCommitAllowed ?? null,
+            squashMergeAllowed: repo?.squashMergeAllowed ?? null,
+            rebaseMergeAllowed: repo?.rebaseMergeAllowed ?? null,
             pullRequest: {
               id: `PR_${key}`,
               state: pr.state,

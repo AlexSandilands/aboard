@@ -193,7 +193,8 @@ start means the epic stops every time a task is done. An epic can instead delive
   badge and press **Mark merged into main**.
 - The epic's tasks start from that branch and open their pull requests against it: Start planned tasks, the
   hand-off prompts and **New T3 Code thread…** all default to it.
-- **Merge into epic branch** merges a task's pull request into the epic's branch, with a merge commit, once all of
+- **Merge into epic branch** merges a task's pull request into the epic's branch, with a merge commit when the repository
+  allows one, otherwise a squash or rebase, once all of
   these hold: the task is in Review, its local review has finished with no blocking or major finding open, Review
   PRs (when it's on) found nothing at or above the fix threshold at the current commit, no reviewer asked for
   changes, its checks pass (a repository with no checks waits ten minutes after each push, in case they just

@@ -566,12 +566,16 @@ export class StaleReviewError extends AppError {
 const MERGE_TARGET_QUERY = `query PullRequestMergeTarget($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     defaultBranchRef { name }
+    mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed
     pullRequest(number: $number) { id state headRefOid baseRefName mergeStateStatus }
   }
 }`;
 const MergeTarget = z.object({
   repository: z.object({
     defaultBranchRef: z.object({ name: z.string() }).nullish(),
+    mergeCommitAllowed: z.boolean().nullish(),
+    squashMergeAllowed: z.boolean().nullish(),
+    rebaseMergeAllowed: z.boolean().nullish(),
     pullRequest: z.object({
       id: z.string(),
       state: z.string(),
@@ -581,6 +585,12 @@ const MergeTarget = z.object({
     }),
   }),
 });
+
+/**
+ * The method for a merge into an epic's branch, first the repository allows: a merge commit keeps each task's
+ * commits on the branch. Unlike pickMergeMethod's order for the default branch, which puts squash first.
+ */
+export const EPIC_MERGE_PREFERENCE: readonly MergeMethod[] = ["merge", "squash", "rebase"];
 
 const EPIC_PR_QUERY = `query EpicPullRequest($owner: String!, $name: String!, $head: String!) {
   repository(owner: $owner, name: $name) {
@@ -801,11 +811,12 @@ export interface GithubIntegration {
   /** The PR's head commit on GitHub now. Throws AppError. */
   prHead(ref: PrRef): Promise<string>;
   /**
-   * Autopilot's merge of a task's PR into its epic's integration branch: a merge commit at `headOid`, once
-   * checkAutopilotMergeTarget passes on what GitHub says now. Then refreshes the link, which moves the task to Done.
-   * Throws MergeTargetError for a target it may never merge into, AppError for anything else GitHub refuses.
+   * Autopilot's merge of a task's PR into its epic's integration branch at `headOid`, once checkAutopilotMergeTarget
+   * passes on what GitHub says now, with the first method in EPIC_MERGE_PREFERENCE the repository allows now. Then
+   * refreshes the link, which moves the task to Done, and resolves to the method used. Throws MergeTargetError for a
+   * target it may never merge into, AppError for anything else GitHub refuses (no merge method allowed included).
    */
-  mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<void>;
+  mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<MergeMethod>;
   /**
    * merge_task_pr's merge of a task's PR into the default branch, at `headOid`, once checkAutopilotMergeTarget (into
    * "default") passes on what GitHub says now. Then refreshes the link. Throws MergeTargetError for any other base,
@@ -1130,22 +1141,28 @@ ${link.ref.repo.toLowerCase()}`;
     return found ? { id: found.databaseId ?? null, url: found.url, body: found.body ?? "" } : null;
   };
 
-  /** A board-made merge at the checked head, once checkAutopilotMergeTarget passes on what GitHub says now. */
+  /**
+   * A board-made merge at the checked head, once checkAutopilotMergeTarget passes on what GitHub says now. `method`
+   * is the method, or an order of preference to pick from the methods the repository allows now. Resolves to the
+   * method used.
+   */
   const mergeChecked = async (
     link: TaskLink,
-    input: { into: "epic" | "default"; base: string; headOid: string; method: MergeMethod },
-  ): Promise<void> => {
+    input: { into: "epic" | "default"; base: string; headOid: string; method: MergeMethod | readonly MergeMethod[] },
+  ): Promise<MergeMethod> => {
     const notGithub = () => new AppError("VALIDATION", "Only a GitHub pull request can be merged");
     if (link.kind !== "pr" || !link.ref) throw notGithub();
     if (!isGithubPr(link, await ensureStatus())) throw notGithub();
     await requireGh(link);
     const [owner, name] = splitRepo(link.ref.repo);
     const host = link.ref.host;
+    let method: MergeMethod;
     try {
       const raw = await api.graphql(host, MERGE_TARGET_QUERY, { owner, name, number: link.ref.number });
       const parsed = MergeTarget.safeParse(raw);
       if (!parsed.success) throw new Error("GitHub returned an unexpected PR shape");
-      const { pullRequest: pr, defaultBranchRef } = parsed.data.repository;
+      const repo = parsed.data.repository;
+      const { pullRequest: pr, defaultBranchRef } = repo;
       checkAutopilotMergeTarget({
         base: pr.baseRefName,
         expectedBase: input.base,
@@ -1170,8 +1187,21 @@ ${link.ref.repo.toLowerCase()}`;
               : `GitHub says the PR can't be merged yet (${state}): a branch rule such as a required approval or an up-to-date branch isn't met`,
         );
       }
+      if (typeof input.method === "string") {
+        method = input.method;
+      } else {
+        const allowed = {
+          merge: repo.mergeCommitAllowed,
+          squash: repo.squashMergeAllowed,
+          rebase: repo.rebaseMergeAllowed,
+        };
+        const picked = input.method.find((m) => allowed[m] === true);
+        // Not a race: the automation asks the user to merge it themselves.
+        if (!picked) throw new AppError("VALIDATION", "The repository allows no merge method the board can use");
+        method = picked;
+      }
       await api.graphql(host, MERGE_MUTATION, {
-        input: { pullRequestId: pr.id, mergeMethod: input.method.toUpperCase(), expectedHeadOid: pr.headRefOid },
+        input: { pullRequestId: pr.id, mergeMethod: method.toUpperCase(), expectedHeadOid: pr.headRefOid },
       });
     } catch (error) {
       // Show the new head, or the PR merged or closed by hand, so the next check doesn't try the old head again.
@@ -1184,6 +1214,7 @@ ${link.ref.repo.toLowerCase()}`;
     } catch (error) {
       logOnce(link.id, link.url, messageOf(error));
     }
+    return method;
   };
 
   return {
@@ -1314,11 +1345,16 @@ ${link.ref.repo.toLowerCase()}`;
       }
     },
     mergeIntoEpicBranch(link, input) {
-      // A merge commit, never a squash or rebase: the epic's branch keeps each task's commits.
-      return mergeChecked(link, { into: "epic", base: input.base, headOid: input.headOid, method: "merge" });
+      // A merge commit when the repository allows one, so the epic's branch keeps each task's commits.
+      return mergeChecked(link, {
+        into: "epic",
+        base: input.base,
+        headOid: input.headOid,
+        method: EPIC_MERGE_PREFERENCE,
+      });
     },
-    mergeIntoDefaultBranch(link, input) {
-      return mergeChecked(link, { into: "default", base: input.base, headOid: input.headOid, method: input.method });
+    async mergeIntoDefaultBranch(link, input) {
+      await mergeChecked(link, { into: "default", base: input.base, headOid: input.headOid, method: input.method });
     },
     async ensureEpicPr(input) {
       await requireSignedIn(input.host);

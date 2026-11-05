@@ -6,6 +6,7 @@ import {
   prReviewOutput,
   TASK_STATUSES,
   type AutopilotRun,
+  type MergeMethod,
   type TaskSummary,
 } from "@repo/contracts";
 import { z } from "zod";
@@ -146,8 +147,9 @@ const epicPrLink = (epic: TaskSummary, branch: string): PrLink | "unpolled" | nu
 /**
  * Merge into epic branch (docs/features/autopilot.md#merge-into-epic-branch). For each epic delivered through an
  * integration branch:
- * - merges a task's PR into the branch, with a merge commit, once `notMergeable` finds nothing in the way. Once per PR
- *   and head commit. GitHub refusing (branch rules wanting an approval) puts "Ready to merge into the epic branch" on
+ * - merges a task's PR into the branch once `notMergeable` finds nothing in the way, with a merge commit when the
+ *   repository allows one, otherwise a squash or rebase (EPIC_MERGE_PREFERENCE). Once per PR and head commit. GitHub
+ *   refusing (branch rules wanting an approval, no merge method allowed) puts "Ready to merge into the epic branch" on
  *   the task and notifies. The merge moves the task to Done, which unblocks what waits on it.
  * - opens a draft PR from the branch into the default branch once a task has merged, links it on the epic, and keeps
  *   its description listing the tasks. It never merges that PR, nor anything into the default branch.
@@ -251,8 +253,9 @@ export const mergeEpicPrs = defineAutomation({
       const reason = notMergeable(services, task, link, data.branch, runs, timing);
       // Something changed since the check; the next pass looks again.
       if (reason) return { status: "skipped", summary: `Didn't merge PR #${data.number}: ${reason}`, output: RECHECK };
+      let method: MergeMethod;
       try {
-        await github.mergeIntoEpicBranch(link, { base: data.branch, headOid: data.headOid });
+        method = await github.mergeIntoEpicBranch(link, { base: data.branch, headOid: data.headOid });
       } catch (error) {
         if (error instanceof MergeTargetError) {
           return {
@@ -281,7 +284,7 @@ export const mergeEpicPrs = defineAutomation({
           needsAttention: true,
         };
       }
-      return { summary: `Merged PR #${data.number} into ${data.branch}` };
+      return { summary: `Merged PR #${data.number} into ${data.branch} (${method})` };
     }
 
     const epic = services.tasks.summary(candidate.taskId!);

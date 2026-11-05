@@ -703,7 +703,9 @@ describe("github merge into an epic's branch", () => {
   it("merges with a merge commit at the checked head, then refreshes the snapshot", async () => {
     const { gh, github, snapshots } = setup([link()]);
     gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
-    await github.mergeIntoEpicBranch(link(), { base: "epic/3-checkout", headOid: "head-1" });
+    await expect(github.mergeIntoEpicBranch(link(), { base: "epic/3-checkout", headOid: "head-1" })).resolves.toBe(
+      "merge",
+    );
     expect(gh.mutations).toEqual([
       {
         operation: "MergePullRequest",
@@ -711,6 +713,50 @@ describe("github merge into an epic's branch", () => {
       },
     ]);
     expect(snapshots.get("l1")).toMatchObject({ state: "merged", baseRef: "epic/3-checkout" });
+  });
+
+  const allowing = (merge: boolean, squash: boolean, rebase: boolean) => ({
+    mergeCommitAllowed: merge,
+    squashMergeAllowed: squash,
+    rebaseMergeAllowed: rebase,
+    autoMergeAllowed: true,
+    viewerPermission: "WRITE",
+  });
+
+  it("squashes in a repository that allows only squash merges", async () => {
+    const { gh, github, snapshots } = setup([link()]);
+    gh.repos.set("o/r", allowing(false, true, false));
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
+    await expect(github.mergeIntoEpicBranch(link(), { base: "epic/3-checkout", headOid: "head-1" })).resolves.toBe(
+      "squash",
+    );
+    expect(gh.mutations).toEqual([
+      {
+        operation: "MergePullRequest",
+        input: { pullRequestId: "PR_o/r#7", mergeMethod: "SQUASH", expectedHeadOid: "head-1" },
+      },
+    ]);
+    expect(snapshots.get("l1")).toMatchObject({ state: "merged" });
+  });
+
+  it("rebases in a repository that allows only rebase merges", async () => {
+    const { gh, github } = setup([link()]);
+    gh.repos.set("o/r", allowing(false, false, true));
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
+    await expect(github.mergeIntoEpicBranch(link(), { base: "epic/3-checkout", headOid: "head-1" })).resolves.toBe(
+      "rebase",
+    );
+    expect(gh.mutations).toMatchObject([{ input: { mergeMethod: "REBASE" } }]);
+  });
+
+  it("refuses without merging when the repository allows no merge method", async () => {
+    const { gh, github } = setup([link()]);
+    gh.repos.set("o/r", allowing(false, false, false));
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
+    const merging = github.mergeIntoEpicBranch(link(), { base: "epic/3-checkout", headOid: "head-1" });
+    await expect(merging).rejects.toMatchObject({ code: "VALIDATION", message: /allows no merge method/ });
+    await expect(merging).rejects.not.toBeInstanceOf(MergeTargetError);
+    expect(gh.mutations).toEqual([]);
   });
 
   it("never merges into the default branch, whatever it was asked", async () => {

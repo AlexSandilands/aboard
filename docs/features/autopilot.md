@@ -559,7 +559,14 @@ switched on, with no settings. Only epics with integration delivery ([epics](epi
   GitHub says it merges cleanly and isn't blocked on a check or rule (only a missing review is left to GitHub). The dedupe key is `merge:<linkId>:<headOid>`. The action re-checks all
   of it, then calls `GithubIntegration.mergeIntoEpicBranch`: a fresh read of the PR and the repository's default
   branch, `checkAutopilotMergeTarget` (refuses the default branch, a base that isn't an `epic/` branch, and a PR
-  retargeted since the check, with `MergeTargetError`), and `mergePullRequest` with `MERGE` and `expectedHeadOid`.
+  retargeted since the check, with `MergeTargetError`), and `mergePullRequest` with `expectedHeadOid` and the first
+  method in `EPIC_MERGE_PREFERENCE` (merge commit, squash, rebase) that the repository allows. The allowed methods
+  (`mergeCommitAllowed`, `squashMergeAllowed`, `rebaseMergeAllowed`) come from that same fresh read, so they cost no
+  extra call and can't be stale. A merge commit keeps each task's commits on the epic's branch; a squash-only
+  repository gets a squash. The order is the epic's own: `merge_task_pr` keeps `pickMergeMethod` (squash first). No
+  method allowed is a plain `AppError` (`VALIDATION`), not a `MergeTargetError`, so it ends in the "Merge it
+  yourself" attention below. Rulesets that limit merge methods per branch don't show in these repository flags;
+  GitHub refusing there ends the same way. The run summary names the method: "Merged PR #7 into epic/3-x (squash)".
   The refreshed snapshot says merged, which moves the task to Done (`completeIfPrsDone`), so Unblock dependents
   notifies and Start planned starts what waited on it, from the updated branch.
 - **Refused.** A failure another try may get past (another PR merged into the branch first, a push, GitHub still

@@ -2,6 +2,7 @@ import type {
   AutopilotEngineSettings,
   AutopilotField,
   AutopilotRun,
+  MergeMethod,
   ModelChoice,
   ModelTier,
   PrRef,
@@ -80,7 +81,8 @@ export interface GithubActions {
   postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
   /** The PR's head commit on GitHub now, in full. */
   prHead(ref: PrRef): Promise<string>;
-  mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<void>;
+  /** Resolves to the merge method used: the first in EPIC_MERGE_PREFERENCE the repository allows. */
+  mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<MergeMethod>;
   ensureEpicPr(input: EpicPrInput): Promise<{ number: number; url: string; created: boolean }>;
   setPrBody(ref: PrRef, body: string): Promise<void>;
   /** The PR's unresolved review threads and newest commits, read now. */
