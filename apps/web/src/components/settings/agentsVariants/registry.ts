@@ -1,8 +1,9 @@
+import { aVariant } from "./a";
 import { baselineVariant } from "./baseline";
 import type { AgentsVariant } from "./types";
 
 // One line per variant: its import above and its entry here.
-export const AGENTS_VARIANTS: ReadonlyArray<AgentsVariant> = [baselineVariant];
+export const AGENTS_VARIANTS: ReadonlyArray<AgentsVariant> = [baselineVariant, aVariant];
 
 /** The variant the viewer picked, else the newest one. */
 export function agentsVariant(id: string | null): AgentsVariant {
