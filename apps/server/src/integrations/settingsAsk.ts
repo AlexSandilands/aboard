@@ -115,11 +115,13 @@ export function createSettingsAsker(deps: { services: () => Services; runAgent?:
         });
         const outcome = parseAgentOutput(stdout, true);
         if (!outcome.ok) {
-          // With no model set for its tier the CLI's default runs, which can outspend Ask's small budget.
-          const hint = resolved.model
-            ? ""
-            : " Ask ran on the CLI's default model: set a model for its tier (Light, unless you chose another) in Settings → Model tiers.";
-          return { ok: false, error: `Claude Code stopped: ${outcome.error ?? "unknown error"}.${hint}` };
+          const why = (outcome.error ?? "unknown error").replace(/[.\s]+$/, "");
+          // With no model set for its tier or custom model the CLI's default runs, which can outspend Ask's budget.
+          const hint =
+            !resolved.model && /budget/i.test(why)
+              ? " Ask ran on the CLI's default model: give the model Ask uses (the Light tier, unless you chose another) a Claude Code model in Settings → Model tiers."
+              : "";
+          return { ok: false, error: `Claude Code stopped: ${why}.${hint}` };
         }
         const output = AskOutput.safeParse(outcome.output);
         if (!output.success) return { ok: false, error: "Claude Code's answer wasn't in the expected shape" };
