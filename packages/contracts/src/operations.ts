@@ -407,6 +407,9 @@ function profileModelOn(
 
 const harnessLabel = (harness: AgentHarness) => AGENT_HARNESSES[harness].label;
 
+/** Where a choice was made for the operation itself, so a provider it prefers may run it with a warning. */
+const CHOSEN_SOURCES: ReadonlySet<RunModelSource> = new Set(["task", "project", "automation", "board"]);
+
 /** The headless providers the user added and switched on, in their order. */
 const activeHarnesses = (settings: { providers: readonly ProviderSetting[] }): AgentHarness[] =>
   settings.providers.flatMap((p) => {
@@ -477,8 +480,15 @@ export function resolveOperationModel(
   const profile = choice.profile!;
   const named = describeChoice(choice) ?? profile.name;
   const preferred = profile.setting.provider;
-  // The preferred provider is the user's choice, so it runs even with a warning.
-  const preferredRuns = preferred !== undefined && active.includes(preferred) && meets(preferred);
+  // A preferred provider that meets the needs only with a warning runs only when the tier or custom model was chosen
+  // for this operation (on the task, project, automation or Models page). A tier that is merely the operation's
+  // default, or the task's own model, was picked for other work, so it never moves untrusted text onto that provider.
+  const chosenHere = CHOSEN_SOURCES.has(choice.source);
+  const preferredRuns =
+    preferred !== undefined &&
+    active.includes(preferred) &&
+    meets(preferred) &&
+    (chosenHere || checks.get(preferred)?.warned.length === 0);
 
   if (!preferredRuns && capable.length === 0) {
     const wanted = needs.filter((n) => NEED_CAPABILITY[n] !== null);
@@ -499,9 +509,12 @@ export function resolveOperationModel(
   else {
     provider = capable.find((h) => profileModelOn(profile, h)) ?? capable[0]!;
     if (preferred) {
+      const missing = missingNeeds(preferred, needs);
       const why = !active.includes(preferred)
         ? "isn't added and switched on in Settings → Providers"
-        : `can't ${listWords(missingNeeds(preferred, needs).map((n) => NEED_WORDS[n]))}`;
+        : missing.length > 0
+          ? `can't ${listWords(missing.map((n) => NEED_WORDS[n]))}`
+          : `can't fully ${listWords((checks.get(preferred)?.warned ?? []).map((n) => NEED_WORDS[n]))} and wasn't chosen for ${info.label}`;
       notes.push(`${named} prefers ${harnessLabel(preferred)}, which ${why}, so ${harnessLabel(provider)} ran it.`);
     }
   }

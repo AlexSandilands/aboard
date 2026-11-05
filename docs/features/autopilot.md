@@ -1377,8 +1377,10 @@ board then posts):
 
 - **Never a fallback.** `resolveOperationModel` falls back only to providers with nothing missing and nothing warned.
   With none, it refuses, and says which provider could run it with a warning if the user chose it.
-- **Only when chosen:** a typed model on that provider, at any level, or a tier or custom model whose preferred
-  provider it is.
+- **Only when chosen for the operation:** a typed model on that provider, at any level, or a tier or custom model
+  whose preferred provider it is, set for this operation (on the task, the project, the automation or the Models
+  page). A tier that is only the operation's default, or the task's own model, was chosen for other work: its
+  preferred provider is passed over like any other with a warning, and the note says why.
 - **Said where it runs:** `ResolvedModel.warning`, also appended to `note`, so a run's detail repeats it; an import
   logs it. The [picker](#models) shows the provider with a warning dot and its tooltip, the warning under its list, and
   ", with a warning" on a tier that resolves to it; a provider with a need missing stays greyed out with the reason.
@@ -1484,7 +1486,7 @@ asks on top: `driverNeeds` in `integrations/headlessDrivers.ts`) count:
   tier has no CLI model for a provider, its T3 model stands in when T3 files it under that provider
   (`t3InstanceHarness`), with no effort.
 - A provider that meets the needs only with a [warning](#capability-warnings) counts for a typed model on it and as
-  the preferred provider, never as a fallback.
+  the preferred provider of a tier or custom model chosen for the operation, never as a fallback or through a default.
 - No provider counts: the operation refuses with the reason ("Ask needs a provider that can return structured output
   and run with no tools; add one in Settings → Providers"). It never runs something else quietly. The refusal is the
   Ask error, the issue-import failure, the board review round's error and the Autopilot run's failure.

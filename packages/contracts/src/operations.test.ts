@@ -272,6 +272,43 @@ describe("resolveOperationModel: picking a provider", () => {
       reason:
         "PR review needs a provider that can return structured output, lock a run down to read untrusted input and use the board's run tools; add one in Settings → Providers. Codex can run it with a warning if you choose it for PR review on the Models page.",
     });
+    // A tier that is only the operation's default (or the task's own model) was chosen for other work: its preferred
+    // provider doesn't get untrusted text, and the note says why.
+    const standardCodex = settings({ modelTiers: { ...tiers, standard: { ...tiers.standard, provider: "codex" } } });
+    const byDefault = resolveOperationModel("prReview", {}, standardCodex);
+    expect(byDefault).toMatchObject({ ok: true, provider: "claude-code", source: "default", warning: null });
+    expect(byDefault).toMatchObject({
+      note: expect.stringContaining(
+        "prefers Codex, which can't fully lock a run down to read untrusted input and wasn't chosen for PR review, so Claude Code ran it.",
+      ),
+    });
+    expect(
+      resolveOperationModel("prReview", { task: task("deep") }, settings({ operationModels: { prReview: "inherit" } })),
+    ).toMatchObject({
+      ok: true,
+      provider: "claude-code",
+      source: "tier",
+    });
+    expect(
+      resolveOperationModel(
+        "issueImport",
+        {},
+        settings({ modelTiers: { ...tiers, light: { ...tiers.light, provider: "codex" } } }),
+      ),
+    ).toMatchObject({ ok: true, provider: "claude-code", warning: null });
+    // Chosen on the Models page, the same tier does run there, with the warning.
+    expect(
+      resolveOperationModel("prReview", {}, { ...standardCodex, operationModels: { prReview: { tier: "standard" } } }),
+    ).toMatchObject({
+      ok: true,
+      provider: "codex",
+      source: "board",
+      warning: expect.stringContaining("can't confine"),
+    });
+    // With only Codex on and nothing chosen, it refuses rather than run it there.
+    expect(resolveOperationModel("prReview", {}, { ...standardCodex, providers: on("codex") })).toMatchObject({
+      ok: false,
+    });
     // The preferred provider switched off: no fallback to a warned one either.
     const deepOff = settings({ providers: [{ id: "codex", enabled: false }, ...on("claude-code")] });
     expect(resolveOperationModel("prReview", { automation: [{ tier: "deep" }] }, deepOff)).toMatchObject({
