@@ -4,6 +4,7 @@ import {
   INHERIT,
   MODEL_TIERS,
   type AgentHarness,
+  type AgentModels,
   type ModelChoice,
   type OperationId,
   type OperationNeed,
@@ -76,7 +77,12 @@ export function ModelChoicePicker({
   const model = choicePickerModel(input);
   const pick = parsePickKey(model.selectedKey ?? "");
   const explicit = value && value !== INHERIT && "provider" in value ? value : null;
-  const trigger = choiceTrigger(value, settings, (value ? (inherit ?? unset) : (unset ?? inherit))?.label ?? null);
+  const trigger = choiceTrigger(
+    value,
+    settings,
+    scanned.data,
+    (value ? (inherit ?? unset) : (unset ?? inherit))?.label ?? null,
+  );
   return (
     <ModelPicker
       model={model}
@@ -118,6 +124,7 @@ export function ModelChoicePicker({
 function choiceTrigger(
   value: ModelChoice | null,
   settings: OperationSettings,
+  scanned: AgentModels | undefined,
   inheritLabel: string | null,
 ): { label: string | null; icon: PickerIcon | null } {
   if (!value || value === INHERIT) return { label: inheritLabel, icon: inheritLabel ? { kind: "inherit" } : null };
@@ -128,7 +135,8 @@ function choiceTrigger(
     const profile = settings.modelProfiles.find((p) => p.id === value.profile);
     return { label: profile?.name ?? `${value.profile} (deleted)`, icon: { kind: "custom" } };
   }
-  return { label: value.model, icon: { kind: "harness", harness: value.provider } };
+  const label = findScanned(scanned, value.provider, value.model)?.label ?? value.model;
+  return { label, icon: { kind: "harness", harness: value.provider } };
 }
 
 /**

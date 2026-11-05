@@ -40,26 +40,37 @@ function scoreSubsequenceMatch(value: string, query: string): number | null {
 
 const BOUNDARY_MARKERS = [" ", "-", "_", "/", ".", ":"];
 
-/** One token against one field: exact, prefix, after a word boundary, anywhere, then (3+ letters) in order. */
-function scoreToken(field: string, token: string, base: number): number | null {
+/**
+ * One token against one field: exact, prefix, after a word boundary, anywhere, then (3+ letters, `fuzzy` fields
+ * only) in order.
+ */
+function scoreToken(field: string, token: string, base: number, fuzzy: boolean): number | null {
   if (!field || !token) return null;
   if (field === token) return base;
   if (field.startsWith(token)) return base + 2;
   if (BOUNDARY_MARKERS.some((marker) => field.includes(`${marker}${token}`))) return base + 4;
   if (field.includes(token)) return base + 6;
-  if (token.length >= 3) {
-    const fuzzy = scoreSubsequenceMatch(field, token);
-    if (fuzzy !== null) return base + 100 + fuzzy;
+  if (fuzzy && token.length >= 3) {
+    const inOrder = scoreSubsequenceMatch(field, token);
+    if (inOrder !== null) return base + 100 + inOrder;
   }
   return null;
 }
 
-function searchFields(row: ModelPickerSearchable): string[] {
-  const parts = [row.name, row.value, row.detail, row.providerName].filter(
-    (part): part is string => typeof part === "string" && part.length > 0,
-  );
-  // Earlier fields weigh more: a name match beats a provider match.
-  return [...parts.map(normalizeSearchQuery), normalizeSearchQuery(parts.join(" "))];
+/**
+ * The fields a token is tried against, earlier ones weighing more (a name match beats a provider match). Letters in
+ * order only count in the name and the id: in a description they match almost anything.
+ */
+function searchFields(row: ModelPickerSearchable): Array<{ text: string; fuzzy: boolean }> {
+  const parts: Array<[string | undefined, boolean]> = [
+    [row.name, true],
+    [row.value, true],
+    [row.detail, false],
+    [row.providerName, false],
+  ];
+  return parts
+    .filter((part): part is [string, boolean] => typeof part[0] === "string" && part[0].length > 0)
+    .map(([text, fuzzy]) => ({ text: normalizeSearchQuery(text), fuzzy }));
 }
 
 /**
@@ -80,7 +91,7 @@ export function scoreModelPickerSearch(row: ModelPickerSearchable, query: string
   for (const token of tokens) {
     let best: number | null = null;
     fields.forEach((field, index) => {
-      const fieldScore = scoreToken(field, token, index * 10);
+      const fieldScore = scoreToken(field.text, token, index * 10, field.fuzzy);
       if (fieldScore !== null && (best === null || fieldScore < best)) best = fieldScore;
     });
     if (best === null) return null;

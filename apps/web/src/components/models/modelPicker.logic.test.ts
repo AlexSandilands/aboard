@@ -123,3 +123,11 @@ describe("adjacentTab", () => {
     expect(adjacentTab(tabs, "a", -1)).toBe("c");
   });
 });
+
+describe("modelPickerSearch descriptions", () => {
+  it("matches a description by its words, not by scattered letters", () => {
+    const row = { name: "Haiku", detail: "Fastest for quick answers", providerName: "Claude Code" };
+    expect(scoreModelPickerSearch(row, "son")).toBeNull();
+    expect(scoreModelPickerSearch(row, "quick")).not.toBeNull();
+  });
+});

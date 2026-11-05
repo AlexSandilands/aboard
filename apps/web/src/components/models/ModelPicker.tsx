@@ -90,8 +90,8 @@ export function ModelPicker(props: ModelPickerProps) {
       setOpen(false);
       return;
     }
-    // The column renders the new model's levels on commit.
-    window.requestAnimationFrame(() => focusEffort("levels"));
+    // The column renders the new model's levels once the saved choice comes back, so wait a frame past that.
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => focusEffort("levels")));
   };
 
   const label = props.triggerLabel ?? "Choose a model";

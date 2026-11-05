@@ -94,8 +94,11 @@ const providerLabel = (provider: TierProvider) => TIER_PROVIDERS.find((p) => p.p
 
 /** Header row and every row of a grid share one column template: the name column, then one per provider. */
 const gridTemplate = (columns: number) => ({
-  gridTemplateColumns: `minmax(13rem, 1.2fr) repeat(${columns}, minmax(12rem, 1fr))`,
+  gridTemplateColumns: `minmax(11rem, 1fr) repeat(${columns}, minmax(10rem, 1fr))`,
 });
+
+/** The narrowest the grid gets before it scrolls sideways: every column at its minimum, the gaps and the padding. */
+const gridMinWidth = (columns: number) => `${11 + columns * 10.75 + 2}rem`;
 
 function GridHeader({ shown }: { shown: readonly TierProvider[] }) {
   return (
@@ -200,7 +203,7 @@ function ModelGrid({ shown, children }: { shown: readonly TierProvider[]; childr
   return (
     // Wide enough for every provider's column; scrolls sideways in a narrow window rather than squeezing them.
     <div className="overflow-x-auto">
-      <div className="min-w-max">
+      <div style={{ minWidth: gridMinWidth(shown.length) }}>
         <GridHeader shown={shown} />
         <div className="[&>*+*]:border-t [&>*+*]:border-border/50">{children}</div>
       </div>

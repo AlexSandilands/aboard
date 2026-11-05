@@ -18,7 +18,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
   disabledReason: string | null;
 }) {
   const { row } = props;
-  const showValue = row.value && row.value !== row.name && !row.name.includes(row.value);
+  const showValue = row.value && !row.name.toLowerCase().includes(row.value.toLowerCase());
   const content = (
     <ComboboxItem
       hideIndicator
@@ -33,7 +33,8 @@ export const ModelListRow = memo(function ModelListRow(props: {
       <PickerIcon icon={row.icon} className="text-muted-foreground" />
       <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
         <div
-          className="min-w-0 truncate text-sm font-normal leading-snug"
+          // The name keeps its room; what follows it is cut first.
+          className="min-w-0 max-w-[70%] shrink-0 truncate text-sm font-normal leading-snug"
           // Names the row in full on hover only when it is cut off.
           onPointerEnter={(event) => {
             const name = event.currentTarget;
