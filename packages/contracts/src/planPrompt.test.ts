@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AGENT_HARNESSES } from "./agentSessions.ts";
 import { BRAND } from "./brand.ts";
 import {
   BUILTIN_PLAN_SKILL_BODY,
@@ -25,6 +26,7 @@ describe("planTasksPrompt", () => {
     expect(prompt).toContain("Don't implement anything.");
     expect(prompt).toContain(BUILTIN_PLAN_SKILL_BODY.trim());
     expect(prompt).toContain('label: "Planning #3, #4, #7"');
+    for (const { idEnvVar } of Object.values(AGENT_HARNESSES)) expect(prompt).toContain(`$${idEnvVar}`);
   });
 
   it("points at a chosen skill instead of embedding the built-in one", () => {

@@ -31,7 +31,7 @@ Tasks are referenced as \`#42\`, steps as \`"2.3"\` (phase 2, step 3).
 2. **Resume.** Before continuing an existing task, call \`get_task\`. It shows the plan with statuses,
    the current step, linked PRs/threads and the latest handover notes. Pick up from there. If it lists
    **Missing links**, add them now: the task's ticket, your own T3 thread when you're in T3 Code, and your own
-   session when you're in Claude Code or Copilot CLI. If it lists **Images** (a screenshot the user pasted into the
+   session when you're in Claude Code, Codex or Copilot CLI. If it lists **Images** (a screenshot the user pasted into the
    text, shown there as \`![..](attachment:id)\`), open each file path with your file tools: they are often the bug.
 3. **The backlog is cheap.** When something worth doing comes up mid-task (a bug you noticed, a refactor, a
    follow-up, a ticket for later), call \`add_to_backlog\` once and carry on with your current work.
@@ -298,10 +298,11 @@ T3 Code exposes no environment variable for this, so you must call those tools. 
 the board is already linked; its first message says so (see \`docs/features/agent-handoff.md\` in the
 board's repo).
 
-## Linking your session (Claude Code, Copilot CLI)
+## Linking your session (Claude Code, Codex, Copilot CLI)
 
-In Claude Code or Copilot CLI, link your own session to every task you start or resume, so the user can
-see from the board whether it is still running and reopen it in a terminal later:
+In Claude Code, Codex or Copilot CLI, link your own session to every task you start or resume, so the user
+can reopen it in a terminal later and, for Claude Code and Copilot CLI, see from the board whether it is still
+running:
 
 \`\`\`
 link(task: "#42", agentSession: { harness: "claude-code", sessionId: "<uuid>", cwd: "<your cwd>" }, label: "Implementing #42")
@@ -312,8 +313,8 @@ link(task: "#42", agentSession: { harness: "claude-code", sessionId: "<uuid>", c
   has the same session id as the session that started it: only the main session links, and a subagent must never
   link or relabel it.
 
-- Claude Code puts the id in \`$CLAUDE_CODE_SESSION_ID\`, Copilot CLI in \`$COPILOT_AGENT_SESSION_ID\`
-  (harness \`"copilot-cli"\`). Read it with the shell (\`echo $CLAUDE_CODE_SESSION_ID\`); never guess it.
+- Claude Code puts the id in \`$CLAUDE_CODE_SESSION_ID\`, Codex in \`$CODEX_THREAD_ID\` (harness \`"codex"\`), Copilot
+  CLI in \`$COPILOT_AGENT_SESSION_ID\` (harness \`"copilot-cli"\`). Read it with the shell (\`echo $CLAUDE_CODE_SESSION_ID\`); never guess it.
 - \`cwd\` is the absolute path you are working in.
 - Inside T3 Code, link it as well as your thread: it lets the user continue in a terminal.
 - To audit how a task went (what was asked, what ran, where it went wrong), \`get_session_transcript(task)\` reads a
@@ -326,6 +327,8 @@ The server runs locally on port 4317. Register it once:
 
 \`\`\`sh
 claude mcp add --scope user --transport http ${BRAND.id} http://127.0.0.1:4317/mcp
+# Codex
+codex mcp add ${BRAND.id} --url http://127.0.0.1:4317/mcp
 # GitHub Copilot CLI
 copilot mcp add --transport http ${BRAND.id} http://127.0.0.1:4317/mcp
 # GitHub Copilot in VS Code (or .vscode/mcp.json: servers.${BRAND.id} = {type: http, url})
@@ -849,7 +852,7 @@ Track work on the user's local task board via the \`${BRAND.id}\` MCP server (Ba
 - **Need the user?** \`request_attention(task, message)\` when you're blocked, unsure, or have something ready for them to review: it shows under Needs attention and notifies them. Say exactly what to look at. Not for progress (\`add_note\`); \`clear: true\` removes it once resolved.
 - **Handover:** end every session with \`add_note\`: done, left, gotchas, next action.
 - **T3 Code:** if you have T3 tools, call \`t3_thread_configuration\` (→ threadId) and \`t3_environment_read\` (→ environmentId) once, and pass \`t3Thread: {environmentId, threadId}\` to \`create_task\` / \`add_to_backlog\`, or to \`link\` whenever you start or resume an existing task.
-- **Your session:** in Claude Code or Copilot CLI (inside T3 Code too), when you start or resume a task, \`link(agentSession: {harness: "claude-code" | "copilot-cli", sessionId, cwd}, label)\` with the id from \`$CLAUDE_CODE_SESSION_ID\` or \`$COPILOT_AGENT_SESSION_ID\` and your working directory. The \`label\` says what the session does (\`Implementing #42\`, \`Planning #42\`, \`Orchestrating #42\` for an epic) and is the name the board shows. A subagent shares its parent's session id, so only the main session links; a subagent must not. The board shows whether it is running and can reopen it in a terminal.
+- **Your session:** in Claude Code, Codex or Copilot CLI (inside T3 Code too), when you start or resume a task, \`link(agentSession: {harness: "claude-code" | "codex" | "copilot-cli", sessionId, cwd}, label)\` with the id from \`$CLAUDE_CODE_SESSION_ID\`, \`$CODEX_THREAD_ID\` or \`$COPILOT_AGENT_SESSION_ID\` and your working directory. The \`label\` says what the session does (\`Implementing #42\`, \`Planning #42\`, \`Orchestrating #42\` for an epic) and is the name the board shows. A subagent shares its parent's session id, so only the main session links; a subagent must not. The board can reopen it in a terminal, and shows whether a Claude Code or Copilot CLI session is running.
 - **Transcripts:** to audit how a task went, \`get_session_transcript(task)\` reads a condensed, redacted transcript of a Claude Code session linked to it, a page at a time.
 
 Register the server (it runs on 127.0.0.1:4317):

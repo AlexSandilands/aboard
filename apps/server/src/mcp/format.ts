@@ -39,12 +39,13 @@ import type { SessionTranscript } from "../integrations/sessionTranscript.ts";
 
 /**
  * The harness an MCP client is, when it can link its own session: Claude Code says `claude-code`; Copilot CLI's name
- * has `copilot` in it, which VS Code's ("Visual Studio Code") doesn't.
+ * has `copilot` in it, which VS Code's ("Visual Studio Code") doesn't; Codex says `codex-mcp-client` (codex-cli 0.166.0).
  */
 export function harnessOfClient(client: string | undefined): AgentHarness | null {
   if (!client) return null;
   if (/claude[-_ ]?code/i.test(client)) return "claude-code";
   if (/copilot/i.test(client)) return "copilot-cli";
+  if (/^codex[-_ ]mcp[-_ ]client$/i.test(client)) return "codex";
   return null;
 }
 
@@ -379,10 +380,14 @@ export function missingLinkHints(
   if (needsSession) {
     const { idEnvVar } = AGENT_HARNESSES[sessionHarness];
     const example = task.kind === "epic" ? "Orchestrating" : "Implementing";
+    // The board can't read a Codex session's state, so all it offers there is resuming it.
+    const why =
+      sessionHarness === "codex"
+        ? "so the user can reopen it in a terminal from the board"
+        : "so the user can see it running and reopen it in a terminal from the board";
     hints.push(
       `Your session: if you are the one working on this ${task.kind === "epic" ? "epic" : "task"}, link(task: ${ref}, agentSession: {harness: "${sessionHarness}", sessionId: <$${idEnvVar}>, ` +
-        `cwd: <your working directory>}, label: "<what this session does, e.g. ${example} #N>"), so the user can see it running ` +
-        "and reopen it in a terminal from the board",
+        `cwd: <your working directory>}, label: "<what this session does, e.g. ${example} #N>"), ${why}`,
     );
   }
   // The review loop ended but no PR was raised: the one step agents tend to drop at the very end of it.

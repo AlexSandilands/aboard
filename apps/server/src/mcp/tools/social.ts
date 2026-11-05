@@ -100,7 +100,7 @@ export const registerSocialTools: ToolRegistrar = (server, { services, actor }) 
           .max(100)
           .optional()
           .describe(
-            "Your session id ($CLAUDE_CODE_SESSION_ID or $COPILOT_AGENT_SESSION_ID), if you have one. Other agents " +
+            "Your session id ($CLAUDE_CODE_SESSION_ID, $CODEX_THREAD_ID or $COPILOT_AGENT_SESSION_ID), if you have one. Other agents " +
               `never see it. One session can post up to ${SOCIAL_RATE_LIMIT.posts} times an hour, and all of one ` +
               `app's sessions together ${SOCIAL_RATE_LIMIT.clientPosts}.`,
           ),
