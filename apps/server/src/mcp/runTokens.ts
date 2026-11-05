@@ -1,9 +1,15 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { PrRef } from "@repo/contracts";
+import { BRAND, brandEnv, type PrRef } from "@repo/contracts";
 
 // The credentials of board-served run tools (docs/decisions/0013-board-served-run-tools.md). A headless run gets a
-// random token bound to the run, its tool set and its target; `/mcp/run/<token>` serves that set for that target and
+// random token bound to the run, its tool set and its target; `/mcp/run`, called with it, serves that set for that target and
 // nothing else. Tokens live only in memory, are kept by their hash, and are never logged.
+
+/** The MCP server's name in a run's config: its tools reach the agent as `mcp__<name>__<tool>` in Claude Code. */
+export const RUN_SERVER_NAME = `${BRAND.id}-run`;
+
+/** The environment variable a CLI that reads the run's token from its environment (Codex) is given it in. */
+export const RUN_TOKEN_ENV = brandEnv("RUN_TOKEN");
 
 /** The tool sets a run can be given, one per kind of operation. */
 export type RunToolSet = "prReview";

@@ -6,7 +6,7 @@ import type { PrRef } from "@repo/contracts";
 import { pageDiff, type GitHost, type HostPrFile } from "../integrations/gitHost.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { createRunTokens, RUN_TOKEN_MAX_TTL_MS, type RunToolScope } from "./runTokens.ts";
-import { RUN_TOOL_NAMES, runToolsPath } from "./runTools.ts";
+import { RUN_TOOL_NAMES, RUN_TOOLS_PATH } from "./runTools.ts";
 
 type Harness = ReturnType<typeof createTestHarness>;
 
@@ -103,7 +103,10 @@ const fetchVia = (h: Harness) => (input: string | URL | Request, init?: RequestI
 async function connect(h: Harness, token: string) {
   const client = new Client({ name: "run-agent", version: "1.0.0" });
   await client.connect(
-    new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:4317${runToolsPath(token)}`), { fetch: fetchVia(h) }),
+    new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:4317${RUN_TOOLS_PATH}`), {
+      fetch: fetchVia(h),
+      requestInit: { headers: { authorization: `Bearer ${token}` } },
+    }),
   );
   return client;
 }
@@ -111,10 +114,10 @@ async function connect(h: Harness, token: string) {
 const text = (result: Awaited<ReturnType<Client["callTool"]>>) =>
   (result as CallToolResult).content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
 
-const initialize = (h: Harness, path: string, headers: Record<string, string> = {}) =>
-  h.request(path, {
+const initialize = (h: Harness, token: string | null) =>
+  h.request(RUN_TOOLS_PATH, {
     method: "POST",
-    headers: { accept: "application/json, text/event-stream", ...headers },
+    headers: { accept: "application/json, text/event-stream", ...(token ? { authorization: `Bearer ${token}` } : {}) },
     json: {
       jsonrpc: "2.0",
       id: 1,
@@ -155,31 +158,35 @@ describe("/mcp/run/:token", () => {
   });
   afterEach(() => h.db.close());
 
-  it("refuses a wrong, revoked or expired token, without echoing it", async () => {
-    const wrong = await initialize(h, runToolsPath("not-a-token"));
+  it("refuses a missing, wrong, revoked or expired token, without echoing it", async () => {
+    expect((await initialize(h, null)).status).toBe(401);
+    const wrong = await initialize(h, "not-a-token");
     expect(wrong.status).toBe(401);
     expect(await wrong.text()).not.toContain("not-a-token");
 
     const { token, revoke } = h.integrations.runTools.tokens.mint("run-1", PR, 60_000);
-    expect((await initialize(h, runToolsPath(token))).status).toBe(200);
+    expect((await initialize(h, token)).status).toBe(200);
     revoke();
-    expect((await initialize(h, runToolsPath(token))).status).toBe(401);
+    expect((await initialize(h, token)).status).toBe(401);
 
     const expired = h.integrations.runTools.tokens.mint("run-2", PR, 0);
-    expect((await initialize(h, runToolsPath(expired.token))).status).toBe(401);
+    expect((await initialize(h, expired.token)).status).toBe(401);
   });
 
   it("is reached with the run token alone: the board's token neither needed nor enough", async () => {
     const { token } = h.integrations.runTools.tokens.mint("run-1", PR, 60_000);
-    expect((await initialize(h, runToolsPath(token))).status).toBe(200);
-    // The board's own token opens /mcp, not someone's run tools.
-    expect((await initialize(h, runToolsPath("board-secret"), { authorization: "Bearer board-secret" })).status).toBe(
-      401,
-    );
+    expect((await initialize(h, token)).status).toBe(200);
+    // The board's own token opens /mcp, not anyone's run tools.
+    expect((await initialize(h, "board-secret")).status).toBe(401);
+    // In the URL it is no credential either.
+    expect((await h.request(`${RUN_TOOLS_PATH}/${token}`, { method: "POST" })).status).toBe(404);
     // The localhost guard still applies.
-    const foreign = await h.app.request(runToolsPath(token), { method: "POST", headers: { host: "evil.example" } });
+    const foreign = await h.app.request(RUN_TOOLS_PATH, {
+      method: "POST",
+      headers: { host: "evil.example", authorization: `Bearer ${token}` },
+    });
     expect(foreign.status).toBe(403);
-    expect((await h.request(runToolsPath(token))).status).toBe(405);
+    expect((await h.request(RUN_TOOLS_PATH)).status).toBe(405);
   });
 
   it("lists only the run's tool set; board tools and others are refused", async () => {

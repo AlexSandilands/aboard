@@ -13,22 +13,22 @@ import {
   type HostPrFile,
 } from "../integrations/gitHost.ts";
 import { run, textResult } from "./shared.ts";
-import type { RunGrant, RunTokens, RunToolSet } from "./runTokens.ts";
+import { RUN_SERVER_NAME, type RunGrant, type RunTokens, type RunToolSet } from "./runTokens.ts";
 
-// Board-served run tools (docs/decisions/0013-board-served-run-tools.md): `/mcp/run/<token>` serves one headless
-// run the tools of its operation, bound to its target, so any CLI that takes one MCP server is held to exactly those
-// tools. They only read; what the agent returns is posted by the board.
-
-/** The MCP server's name in a run's config: its tools reach the agent as `mcp__<name>__<tool>` in Claude Code. */
-export const RUN_SERVER_NAME = `${BRAND.id}-run`;
+// Board-served run tools (docs/decisions/0013-board-served-run-tools.md): `/mcp/run`, called with a run's token,
+// serves that headless run the tools of its operation, bound to its target, so any CLI that takes one MCP server is
+// held to exactly those tools. They only read; what the agent returns is posted by the board.
 
 /** The tools of each set, in the order they are listed. */
 export const RUN_TOOL_NAMES: Record<RunToolSet, readonly string[]> = {
   prReview: ["pr_overview", "pr_files", "pr_diff", "pr_comments"],
 };
 
-/** The route of a token's endpoint. */
-export const runToolsPath = (token: string) => `/mcp/run/${token}`;
+/**
+ * The run tools' route. The token goes in an `Authorization: Bearer` header, never in the URL, so it shows up in no
+ * command line, access log or error message.
+ */
+export const RUN_TOOLS_PATH = "/mcp/run";
 
 export interface RunToolsContext {
   tokens: RunTokens;
@@ -219,16 +219,23 @@ const rpcError = (status: number, message: string) =>
     headers: { "content-type": "application/json" },
   });
 
+/** The bearer token of a request, or null. */
+const bearer = (header: string | undefined): string | null => {
+  const match = /^Bearer\s+(\S+)\s*$/i.exec(header ?? "");
+  return match ? match[1]! : null;
+};
+
 /**
- * Mounts `/mcp/run/:token`: stateless streamable HTTP like `/mcp`, but each request is served only the tools of the
- * token's grant. The token is the credential, so the board's own API token isn't needed (nor given to the agent); the
- * localhost guard still applies. An unknown, revoked or expired token gets 401, and never appears in a response.
+ * Mounts `/mcp/run`: stateless streamable HTTP like `/mcp`, but each request is served only the tools of the grant its
+ * bearer token names. The run token is the credential, so the board's own API token isn't needed (nor given to the
+ * agent); the localhost guard still applies. A missing, unknown, revoked or expired token gets 401.
  */
 export function registerRunMcp(app: Hono, ctx: () => RunToolsContext): void {
-  app.post("/mcp/run/:token", async (c) => {
+  app.post(RUN_TOOLS_PATH, async (c) => {
     const { tokens, gitHost } = ctx();
-    const grant = tokens.resolve(c.req.param("token"));
-    if (!grant) return rpcError(401, "This run's tools are no longer available: the token is unknown or expired.");
+    const token = bearer(c.req.header("authorization"));
+    const grant = token ? tokens.resolve(token) : null;
+    if (!grant) return rpcError(401, "This run's tools are not available: its token is missing, unknown or expired.");
     const server = createRunServer(grant, gitHost);
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
@@ -242,6 +249,6 @@ export function registerRunMcp(app: Hono, ctx: () => RunToolsContext): void {
     }
   });
   const notAllowed = () => rpcError(405, "Method not allowed. This MCP server is stateless; use POST.");
-  app.get("/mcp/run/:token", notAllowed);
-  app.delete("/mcp/run/:token", notAllowed);
+  app.get(RUN_TOOLS_PATH, notAllowed);
+  app.delete(RUN_TOOLS_PATH, notAllowed);
 }

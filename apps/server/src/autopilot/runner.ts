@@ -169,10 +169,12 @@ export function createAutopilotRunner(deps: {
   /** This board's MCP endpoint and API token, for a run that gets only the board's server (`boardTools`). */
   boardMcp?: () => { url: string; token: string | null };
   /**
-   * Mints a run's board-served tools (`request.runTools`): the URL of its own `/mcp/run/<token>` endpoint, and how to
+   * Mints a run's board-served tools (`request.runTools`): the `/mcp/run` URL, the run's token for it, and how to
    * revoke the token when the run ends.
    */
-  runTools?: { mint: (runId: string, scope: RunToolScope, ttlMs: number) => { url: string; revoke: () => void } };
+  runTools?: {
+    mint: (runId: string, scope: RunToolScope, ttlMs: number) => { url: string; token: string; revoke: () => void };
+  };
   log?: Logger;
 }): Runner {
   // One `git fetch` per repository at a time across T3 launches and headless worktrees. What the user asks for (an epic's

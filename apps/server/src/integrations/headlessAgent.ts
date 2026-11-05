@@ -7,6 +7,7 @@ import {
 } from "@repo/contracts";
 import { claudeFailure, readClaudeResult, runClaude } from "./claudeCli.ts";
 import { READ_ONLY_TOOLS } from "./headlessReview.ts";
+import { RUN_SERVER_NAME } from "../mcp/runTokens.ts";
 
 // Autopilot's headless agent: Claude Code (`claude -p`) doing real work in a worktree the board made for the run.
 // Unlike the board's reviewer it keeps its session, so the user can resume it with `claude --resume <id>`, and it
@@ -73,7 +74,7 @@ export function pushDenyRules(defaultBranch: string | null): string[] {
  * What an agent that reads untrusted text may use, instead of the read-only list. The file tools reach only the working
  * directory (a bare `Read` reaches any file the user can). git is limited to three exact commands: `git diff`, `show`
  * and `log` take any path, so they read any file (a path outside the work tree makes `diff` compare files) and write
- * any file (`--output=`). The change itself comes from `gh pr diff`, which the caller allows.
+ * any file (`--output=`). The change itself comes from the board's run tools (a PR review's `pr_diff`).
  */
 const UNTRUSTED_TOOLS = [
   "Read(./**)",
@@ -114,6 +115,13 @@ export interface AgentArgsInput {
    * board (Orchestrate). The caller narrows the board's own tools with `deniedTools`.
    */
   boardMcpConfig?: string;
+  /**
+   * The board's run tools (docs/decisions/0013-board-served-run-tools.md): the run's `/mcp/run` URL, and an MCP config
+   * file naming only that server with the run's token (runToolsMcpConfig), for a CLI that reads one. The token itself
+   * reaches a CLI that reads it from its environment as RUN_TOKEN_ENV. The run's tools are all allowed: the endpoint
+   * serves only those its operation may use.
+   */
+  runTools?: { url: string; configPath: string };
 }
 
 /**
@@ -123,6 +131,16 @@ export interface AgentArgsInput {
 export function boardMcpConfig(url: string, token: string | null): string {
   const server = { type: "http", url, ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}) };
   return JSON.stringify({ mcpServers: { [BRAND.id]: server } });
+}
+
+/**
+ * The MCP config of a run's board-served tools, for `--mcp-config`: only the run's server, with its token in a header.
+ * It goes in a file of the runner's, outside the worktree, never on the command line.
+ */
+export function runToolsMcpConfig(url: string, token: string): string {
+  return JSON.stringify({
+    mcpServers: { [RUN_SERVER_NAME]: { type: "http", url, headers: { Authorization: `Bearer ${token}` } } },
+  });
 }
 
 /**
@@ -144,6 +162,13 @@ export function mcpWaitEnv(input: Pick<AgentArgsInput, "access" | "untrusted" | 
 export function agentArgs(input: AgentArgsInput): string[] {
   const readOnly = input.access === "read-only";
   const none = input.access === "none";
+  const lockedDown = readOnly && input.untrusted;
+  // A no-tools run gets none, run tools included.
+  const runTools = none ? null : (input.runTools ?? null);
+  const mcpConfigs = [
+    ...(runTools ? [runTools.configPath] : []),
+    ...(lockedDown && input.boardMcpConfig ? [input.boardMcpConfig] : []),
+  ];
   return [
     "-p",
     "--output-format",
@@ -163,6 +188,7 @@ export function agentArgs(input: AgentArgsInput): string[] {
               ? [...UNTRUSTED_TOOLS, ...(input.boardMcpConfig ? [`mcp__${BRAND.id}`] : [])]
               : [...READ_ONLY_TOOLS, `mcp__${BRAND.id}`]
             : EDIT_TOOLS),
+          ...(runTools ? [`mcp__${RUN_SERVER_NAME}`] : []),
           ...(input.tools ?? []),
         ]),
     "--disallowedTools",
@@ -172,17 +198,20 @@ export function agentArgs(input: AgentArgsInput): string[] {
     // No MCP servers, and none of the settings the checkout carries: a branch's .claude/settings.json could allow
     // anything or run hooks, for anyone who can push to it. The user's own settings stay (some set up the login), so
     // only the built-in tools it needs are available: a global allow rule for WebFetch or the like finds no tool.
-    // With a board config, that board's server is the one MCP server it gets.
-    ...(readOnly && input.untrusted
+    // With a board config or run tools, those are the only MCP servers it gets.
+    ...(lockedDown
       ? [
           "--strict-mcp-config",
-          ...(input.boardMcpConfig ? ["--mcp-config", input.boardMcpConfig] : []),
+          ...(mcpConfigs.length > 0 ? ["--mcp-config", ...mcpConfigs] : []),
           "--setting-sources",
           "user",
           "--tools",
           "Read,Grep,Glob,Bash",
         ]
-      : []),
+      : // Any other run keeps the user's servers and gets the run's on top.
+        mcpConfigs.length > 0
+        ? ["--mcp-config", ...mcpConfigs]
+        : []),
     "--max-budget-usd",
     String(input.budgetUsd),
     "--session-id",

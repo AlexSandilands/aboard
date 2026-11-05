@@ -18,7 +18,7 @@ import { createBackupIntegration, defaultRunGit, type RunGit } from "./backup.ts
 import type { RunGh } from "./gh.ts";
 import type { GitHost } from "./gitHost.ts";
 import { createRunTokens } from "../mcp/runTokens.ts";
-import { runToolsPath, type RunToolsContext } from "../mcp/runTools.ts";
+import { RUN_TOOLS_PATH, type RunToolsContext } from "../mcp/runTools.ts";
 import { createGithubIntegration, messageOf } from "./github.ts";
 import { mergeTaskPr } from "./mergeTaskPr.ts";
 import type { RunAgent } from "./headlessAgent.ts";
@@ -188,7 +188,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       runTools: {
         mint: (runId, scope, ttlMs) => {
           const { token, revoke } = runTools.tokens.mint(runId, scope, ttlMs);
-          return { url: `http://127.0.0.1:${deps.config.port}${runToolsPath(token)}`, revoke };
+          return { url: `http://127.0.0.1:${deps.config.port}${RUN_TOOLS_PATH}`, token, revoke };
         },
       },
       ...(overrides.log ? { log: overrides.log } : {}),

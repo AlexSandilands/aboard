@@ -42,7 +42,7 @@ export interface Integrations {
   githubStatus(): GithubStatus;
   /** Whether an unfinished PR on the host keeps a Review task from Done (see GithubIntegration.holdsTasks). */
   prHostHoldsTasks(host: string): boolean;
-  /** Board-served run tools: the live run tokens and the git host their tools read (`/mcp/run/<token>`). */
+  /** Board-served run tools: the live run tokens and the git host their tools read (`/mcp/run`). */
   readonly runTools: RunToolsContext;
   /** Starts background discovery/pollers. */
   start(): void;
