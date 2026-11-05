@@ -17,6 +17,7 @@ import type {
   PrThreadState,
 } from "../integrations/github.ts";
 import type { AgentAccess } from "../integrations/headlessAgent.ts";
+import type { RunToolScope } from "../mcp/runTokens.ts";
 import type { Services } from "../services/types.ts";
 
 /** Config values keyed by field. */
@@ -236,6 +237,12 @@ export interface RunnerRequest {
    * that works through the board (Orchestrate). Narrow the board's tools with `deniedTools`.
    */
   boardTools?: boolean;
+  /**
+   * Headless only: the board's run tools for this run (docs/decisions/0013-board-served-run-tools.md). The runner mints
+   * a token bound to the run and this scope before the agent starts, points the CLI at `/mcp/run` with it, and revokes
+   * it when the run ends. Only a provider that can use them is picked.
+   */
+  runTools?: RunToolScope;
   /**
    * Headless only: the commit the worktree must be at, checked before the agent starts. A worktree at another commit
    * throws `WorktreeHeadError`.
