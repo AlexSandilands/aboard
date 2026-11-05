@@ -1,4 +1,5 @@
 import { useState, type ComponentProps } from "react";
+import { syncBlurInputDraft } from "./blurInput.logic";
 import { Input } from "~/components/ui/input";
 
 /** A text setting saved on blur or Enter, like a CLI path. */
@@ -11,6 +12,11 @@ export function BlurInput({
   onSave: (next: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
+  const [seenValue, setSeenValue] = useState(value);
+  if (value !== seenValue) {
+    setSeenValue(value);
+    setDraft(syncBlurInputDraft(draft, seenValue, value));
+  }
   return (
     <Input
       {...props}
