@@ -164,7 +164,8 @@ Board task: #123. How an epic's tasks reach the default branch (`tasks.delivery`
 - **Integration branch** (`integration`): the epic has a branch `epic/<number>-<slug>` (`epicBranchName`). Its tasks
   start from origin's copy of it and open their PRs against it; Autopilot's Merge into epic branch merges each one
   there once it is reviewed and green, and keeps a draft PR from the branch into the default branch, which only the
-  user merges ([Autopilot](autopilot.md)). It suits an epic whose tasks build on each other, which would otherwise
+  user merges ([Autopilot](autopilot.md); [its title](autopilot.md#merge-into-epic-branch) is a Conventional Commits
+  header when the task PRs' are). It suits an epic whose tasks build on each other, which would otherwise
   stop at every merge.
 
 `TaskSummary.delivery` is the epic's choice (null for tasks and for an epic nobody chose for), and

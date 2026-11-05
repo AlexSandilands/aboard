@@ -579,7 +579,16 @@ switched on, with no settings. Only epics with integration delivery ([epics](epi
 - **The epic's PR.** Once a task PR has merged into the branch and the epic has no PR from it, it opens a draft PR
   from the branch into the default branch (`ensureEpicPr`: an open one already there is used instead) and links it
   on the epic (`epic-pr:<epicId>:<branch>:<task PRs merged>`, so a failed attempt is tried again after the next
-  merge). That PR merging is what finishes the epic: the board sees it through the link and the epic goes from Review to
+  merge). Its title is set only then, so a rename by hand sticks, and it follows `epicPrTitle`: when any merged task PR
+  (the title on its link's snapshot) is a Conventional Commits header, so is the epic's, because the repo's
+  commitlint would otherwise fail `Epic #N: …`. The type is `feat` if any is a `feat`, else `fix` if any is a `fix`,
+  else the most common (ties go to the first of the epic's tasks); a scope only when every conventional one shares it; `!` if any
+  has it. The subject is the epic's title, whitespace collapsed, without a trailing period and with the first word
+  lowercased (`GitHub sync` becomes `github sync`, because commitlint's `subject-case` rejects a capital first
+  character), cut to 100 characters. Only config-conventional's types count as conventional, and an epic title that is
+  already a header keeps its type and scope. It carries no `#N`, which a squash commit
+  would turn into a link to the repo's issue #N; the body names the epic. With no conventional task PR the title
+  stays `Epic #N: <title>`. That PR merging is what finishes the epic: the board sees it through the link and the epic goes from Review to
   Done once its tasks are Done too ([epics](epics.md#delivery)). Then it keeps the PR's description, `epicPrBody` (each task with
   its state, its PRs into the branch, its latest Autopilot review counts and its local review), current: the key
   `epic-pr-body:<linkId>:<hash of the body>` changes exactly when the body does, so nothing in it is a time. A closed
