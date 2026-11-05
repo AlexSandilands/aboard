@@ -1,13 +1,6 @@
 import {
   describeInherited,
   isRetried,
-  MODEL_TIERS,
-  ModelChoice,
-  modelChoiceKey,
-  describeChoice,
-  INHERIT,
-  parseModelChoiceKey,
-  type ModelProfile,
   ScheduledAgentRunOutput,
   type AutopilotActiveRun,
   type AutopilotAutomation,
@@ -223,41 +216,6 @@ export function isClockTime(text: string): boolean {
 /** A field's value as an input shows it. */
 export function fieldText(value: unknown): string {
   return typeof value === "number" || typeof value === "string" ? String(value) : "";
-}
-
-/**
- * What a Model field offers: inherit (the board's model for the operation, then the task's), each tier, then each
- * custom model, keyed by modelChoiceKey. A saved custom model since deleted, or a model typed for one provider, stays
- * listed, so the field still says what is saved.
- */
-export function modelChoiceItems(
-  profiles: readonly Pick<ModelProfile, "id" | "name">[],
-  value: unknown,
-): Array<{ value: string; label: string }> {
-  const items = [
-    { value: INHERIT, label: "Inherit" },
-    ...MODEL_TIERS.map((t) => ({ value: `tier:${t.value}`, label: `${t.label} tier` })),
-    ...profiles.map((p) => ({ value: `profile:${p.id}`, label: p.name })),
-  ];
-  const key = modelChoiceFieldKey(value);
-  if (!items.some((item) => item.value === key)) {
-    const choice = parseModelChoiceKey(key);
-    items.push({
-      value: key,
-      label:
-        choice !== INHERIT && "profile" in choice
-          ? `${choice.profile} (deleted, the next setting decides)`
-          : (describeChoice({ profile: null, explicit: choice !== INHERIT && "provider" in choice ? choice : null }) ??
-            key),
-    });
-  }
-  return items;
-}
-
-/** A Model field's saved value as its select key; anything that isn't a ModelChoice reads as inherit. */
-export function modelChoiceFieldKey(value: unknown): string {
-  const parsed = ModelChoice.safeParse(value);
-  return parsed.success ? modelChoiceKey(parsed.data) : INHERIT;
 }
 
 // ── Engine limits ────────────────────────────────────────────────────────

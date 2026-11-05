@@ -214,7 +214,7 @@ describe("resolveSuggestion", () => {
   it("says why when the tier has no model, its provider isn't ready or the model is gone", () => {
     const why = (t3: ModelTiers["deep"]["t3"]) =>
       resolveSuggestion(taskModel("deep", tiers(t3)), null, providers)?.unavailable;
-    expect(why(null)).toBe("No T3 Code model is set for the deep tier in Settings → Model tiers.");
+    expect(why(null)).toBe("No T3 Code model is set for the deep tier in Settings → Models.");
     expect(why({ selection: { instanceId: "codex", model: "gpt", options: [] }, label: "GPT" })).toBe(
       "Codex isn't ready in T3 Code.",
     );
@@ -248,7 +248,7 @@ describe("resolveSuggestion", () => {
     expect(
       resolveSuggestion(taskModel(null, tiers(sonnet), { labels: ["codex61"], profiles: [bare] }), null, providers)
         ?.unavailable,
-    ).toBe("No T3 Code model is set for Codex 6.1 in Settings → Model tiers.");
+    ).toBe("No T3 Code model is set for Codex 6.1 in Settings → Models.");
   });
 
   it("is part of the launch options, leaving T3's default alone", () => {

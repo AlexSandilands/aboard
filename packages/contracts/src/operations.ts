@@ -257,7 +257,7 @@ export function resolveOperationChoice(
       const profile = settings.modelProfiles.find((p) => p.id === choice.profile);
       if (profile) return { profile: customProfile(profile), explicit: null, source, label: null, note: note() };
       notes.push(
-        `The model "${choice.profile}" set for ${info.label} no longer exists in Settings → Model tiers, so the next setting was used.`,
+        `The model "${choice.profile}" set for ${info.label} no longer exists in Settings → Models, so the next setting was used.`,
       );
       continue;
     }
@@ -411,7 +411,7 @@ export function resolveOperationModel(
   }
   const on = profileModelOn(profile, provider);
   if (!on && (profile.setting.t3 || Object.values(profile.setting.cli ?? {}).some(Boolean))) {
-    notes.push(`${named} has no ${harnessLabel(provider)} model in Settings → Model tiers, so the CLI's default ran.`);
+    notes.push(`${named} has no ${harnessLabel(provider)} model in Settings → Models, so the CLI's default ran.`);
   }
   return done(provider, on?.model ?? null, on?.effort ?? null);
 }

@@ -1,6 +1,6 @@
 import { CliModel, type AgentModel } from "@repo/contracts";
 
-// The model picker of a CLI on the Model tiers page: the models the CLI lists, searchable, plus whatever is typed.
+// The model picker of a CLI on the Models page: the models the CLI lists, searchable, plus whatever is typed.
 
 /** The models to list: the scanned ones, then the saved one when the scan doesn't have it, so it is still shown. */
 export function suggestedModels(models: readonly AgentModel[], saved: string): AgentModel[] {

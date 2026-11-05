@@ -105,7 +105,7 @@ export interface Integrations {
   terminalInfo(): TerminalInfo;
   /** Every provider as detected here (CLI, MCP registration, T3 Code, models scan), for Settings → Providers and the menus. */
   providers(refresh?: boolean, parts?: "all" | "cli"): Promise<ProvidersStatus>;
-  /** The models each CLI lists, for the pickers in Settings → Model tiers. */
+  /** The models each CLI lists, for the pickers in Settings → Models. */
   agentModels(refresh?: boolean): Promise<AgentModels>;
   /** What the new-session dialog offers for a task (see SessionLaunchIntegration). */
   sessionLaunchOptions(taskId: string): Promise<SessionLaunchOptions>;

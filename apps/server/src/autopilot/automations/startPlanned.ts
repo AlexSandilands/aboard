@@ -9,7 +9,7 @@ import {
 import { z } from "zod";
 import { messageOf } from "../../integrations/github.ts";
 import type { Services } from "../../services/types.ts";
-import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
+import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE, runnerFields } from "../runnerOptions.ts";
 import { defineAutomation, RunAbandonedError, type ActionResult, type Candidate, type RunnerResult } from "../types.ts";
 
 export { AUTOPILOT_START_PLANNED };
@@ -47,7 +47,7 @@ const FIELDS: AutopilotField[] = [
     builtinLabel: "Default workflow",
     help: "What the agent follows to do the work. The default is the board's own workflow, from the hand-off prompt.",
   },
-  ...RUNNER_FIELDS,
+  ...runnerFields("taskRun"),
   {
     key: "baseRef",
     label: "Start from",

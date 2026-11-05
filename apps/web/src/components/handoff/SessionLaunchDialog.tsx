@@ -417,7 +417,7 @@ function Composer({
               </span>
               {options.models[harness]
                 ? null
-                : ` · no ${harnessLabel(harness)} model is set for ${options.model.source === "label" ? "it" : "this tier"} in Settings → Model tiers`}
+                : ` · no ${harnessLabel(harness)} model is set for ${options.model.source === "label" ? "it" : "this tier"} in Settings → Models`}
             </span>
           ) : null}
           {options.namedWindow

@@ -1,6 +1,6 @@
 import { CLI_EFFORTS, type AgentHarness, type CliEffort } from "@repo/contracts";
 
-// The effort select next to a CLI model, in the launch dialogs and on the Model tiers page.
+// The effort select next to a CLI model, in the launch dialogs and on the Models page.
 
 /** The select's value for "the CLI's own default effort", which a Select can't hold as null. */
 export const DEFAULT_EFFORT = "default";

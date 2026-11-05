@@ -7,8 +7,10 @@ import {
   customAutomationKey,
   CustomAction,
   inputEnvName,
-  MODEL_TIERS,
 } from "@repo/contracts";
+import { INHERIT, type ModelChoice } from "@repo/contracts";
+import { inheritDetail } from "~/components/models/choicePicker.logic";
+import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
 import {
   BotIcon,
   EyeIcon,
@@ -417,15 +419,11 @@ export function CustomAutomationEditorForm({
                       onChange={(event) => patch({ skill: event.currentTarget.value })}
                     />
                   </Field>
-                  <Field label="Model tier">
-                    <Choice
-                      label="Model tier"
-                      value={form.tier}
-                      items={[
-                        { value: "", label: isSchedule ? "The default tier" : "The task's tier" },
-                        ...MODEL_TIERS.map((t) => ({ value: t.value, label: t.label })),
-                      ]}
-                      onChange={(tier) => patch({ tier, otherModel: null })}
+                  <Field label="Model">
+                    <ActionModelPicker
+                      value={form.model}
+                      isSchedule={isSchedule}
+                      onChange={(model) => patch({ model })}
                     />
                   </Field>
                 </div>
@@ -748,5 +746,31 @@ function ActionPicker({
         );
       })}
     </div>
+  );
+}
+
+/** The action's model: inherit (the board's model for the operation, then the task's), a tier, or any model. */
+function ActionModelPicker({
+  value,
+  isSchedule,
+  onChange,
+}: {
+  value: ModelChoice;
+  isSchedule: boolean;
+  onChange: (model: ModelChoice) => void;
+}) {
+  const settings = useSettings().data;
+  if (!settings) return null;
+  const op = isSchedule ? "customDetached" : "customTask";
+  return (
+    <ModelChoicePicker
+      op={op}
+      value={value}
+      inherit={{ label: "Inherit", detail: inheritDetail(op, {}, settings) }}
+      ariaLabel="Model"
+      size="sm"
+      className="w-full justify-between"
+      onChange={(next) => onChange(next ?? INHERIT)}
+    />
   );
 }

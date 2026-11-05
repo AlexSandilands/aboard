@@ -1,6 +1,7 @@
 import { brandEnv, CUSTOM_SCRIPT_MAX, type CustomAutomation, type Project, type TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  actionModelLabel,
   customFormToInput,
   emptyCustomForm,
   emptyFormSlots,
@@ -58,7 +59,7 @@ describe("custom automation form", () => {
       prEvent: "checks_failing",
       labels: "UI,  backend ,",
       prompt: "Fix {{pr.url}}",
-      tier: "light",
+      model: { tier: "light" },
     });
     expect(result).toEqual({
       ok: true,
@@ -580,5 +581,18 @@ describe("the preview with variables", () => {
     expect(previewAction(input, null, [billing], [{ name: "team", value: "core" }])).toContain(
       `BILL core ${PREVIEW_REPO_URL}`,
     );
+  });
+});
+
+describe("actionModelLabel", () => {
+  const profiles = [{ id: "codex61", name: "Codex 6.1" }];
+  it("names each kind of model an action can carry", () => {
+    expect(actionModelLabel({ tier: "deep" }, profiles, false)).toBe("Deep tier");
+    expect(actionModelLabel({ profile: "codex61" }, profiles, false)).toBe("Codex 6.1");
+    expect(actionModelLabel({ profile: "gone" }, profiles, false)).toBe("gone (not here yet)");
+    expect(actionModelLabel({ provider: "codex", model: "gpt-5.5", effort: "high" }, profiles, false)).toBe(
+      "gpt-5.5 on Codex, high effort",
+    );
+    expect(actionModelLabel("inherit", profiles, true)).toBe("the board's for scheduled agents");
   });
 });

@@ -1,4 +1,11 @@
-import { INHERIT, ModelChoice, T3_RUNTIME_MODES, T3RuntimeMode, type AutopilotField } from "@repo/contracts";
+import {
+  INHERIT,
+  ModelChoice,
+  T3_RUNTIME_MODES,
+  T3RuntimeMode,
+  type AutopilotField,
+  type OperationId,
+} from "@repo/contracts";
 import { z } from "zod";
 
 // The config fields every agent automation shares: which runner, and its limits. An automation spreads
@@ -55,7 +62,7 @@ export const RUNNER_FIELDS: AutopilotField[] = [
     key: "modelChoice",
     label: "Model",
     kind: "model",
-    help: "Inherit: the board's model for this kind of run, else the task's (a custom model one of its labels picks, else its suggested tier). Set in Settings → Model tiers.",
+    help: "Inherit: the board's model for this kind of run, else the task's (a custom model one of its labels picks, else its suggested tier). Set in Settings → Models.",
   },
   {
     key: "budgetUsd",
@@ -79,6 +86,10 @@ export const RUNNER_FIELDS: AutopilotField[] = [
     ],
   },
 ];
+
+/** The runner fields for an automation whose runs are `operation`, so its Model field greys out providers that can't. */
+export const runnerFields = (operation: OperationId): AutopilotField[] =>
+  RUNNER_FIELDS.map((field) => (field.kind === "model" ? { ...field, operation } : field));
 
 /** The runner options in an automation's config; anything missing or invalid takes its default. */
 export function readRunnerOptions(config: Record<string, unknown>): RunnerOptions {

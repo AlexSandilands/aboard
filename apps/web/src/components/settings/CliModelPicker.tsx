@@ -29,7 +29,7 @@ const Chevron = () => <ChevronDownIcon aria-hidden className="-me-1 size-3.5 opa
 /**
  * A CLI's model, looking like T3 Code's model picker: a button with the CLI's mark and the model's name, opening a
  * searchable list of the models the CLI lists. Anything else can be typed and used, e.g. `claude-opus-5-5` or
- * `sonnet[1m]`. On the Model tiers page it is saved as soon as a model is picked; the session launch dialog also
+ * `sonnet[1m]`. On the Models page it is saved as soon as a model is picked; the session launch dialog also
  * offers the CLI's own default (`defaultLabel`).
  */
 export function CliModelPicker({
