@@ -253,10 +253,10 @@ noise, edit the SVG's parameters (in the comment beside `--surface-grain`) and r
 each size on a canvas in Chromium and save it as PNG.
 
 The board's scroller (`[data-board-scroll]`) and the Settings pages' scroller (`SettingsScroller`) paint their own
-opaque background and grain, scrolling with the content (`bg-local`). Chromium only scrolls an element on the compositor when it can keep its subpixel text, which needs an
-opaque background inside the scroller. Over the main area's background it instead repainted and re-rastered the whole
-screen on every scroll frame. That cost grows with the screen's size and the number of cards on it. A new scrolling
-page over the main area needs the same.
+opaque background and grain, scrolling with the content (`bg-local`). Chromium only scrolls an element on the
+compositor when it can keep its subpixel text, which needs an opaque background inside the scroller. Over the main
+area's background they instead repainted and re-rastered the whole screen on every scroll frame, a cost that grows
+with the screen's size and with what is on it. A new scrolling page over the main area needs the same.
 
 `pnpm sandbox --prod --seed dense` has a project with twenty cards in every column, one with an epic across every
 column, fifteen cards spread across the columns beside the same fifteen in backlog, and a single card, for checking
