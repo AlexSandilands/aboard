@@ -118,7 +118,8 @@ subagent or an epic; also allowed on a task in Review): read the task with `get_
 the epic's integration branch while the task's code is only there, see
 [epics.md](epics.md#delivery); else the default branch), then ask the user what they want. It must not move the
 task, change its plan or reopen it; new work becomes a backlog task once the user agrees, and a fix the user asks
-for goes on a new branch and PR linked to the task.
+for goes on a new branch and PR linked to the task (against the epic's branch while the code is only there, so the
+PR doesn't carry the unmerged epic to the default branch).
 
 - The menu offers **New T3 Code thread…**, **New … session…** and **Copy follow-up prompt**; the dialogs have no
   Plan with me, and start their worktree from `origin/<epic branch>` while the code is only there

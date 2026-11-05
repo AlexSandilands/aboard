@@ -116,6 +116,7 @@ describe("subagent work prompt", () => {
     expect(prompt).not.toContain("Suggested model");
     expect(prompt).not.toContain("link(t3Thread");
     expect(prompt).toContain("Don't link a T3 thread");
+    expect(prompt).not.toContain("--base");
   });
 
   it("leaves the Autopilot flag to the user", () => {
@@ -194,6 +195,7 @@ describe("follow-up prompt", () => {
     expect(prompt).toContain("add_to_backlog");
     expect(prompt).toContain('label: "Follow-up on #9"');
     expect(prompt).toContain("Don't link a T3 thread");
+    expect(prompt).not.toContain("--base");
     expect(prompt).not.toContain("set_plan");
   });
 
@@ -206,6 +208,7 @@ describe("follow-up prompt", () => {
     });
     expect(prompt).toContain("integration branch `epic/3-epic` of epic #3");
     expect(prompt).toContain("`origin/epic/3-epic`");
+    expect(prompt).toContain("open a pull request against `epic/3-epic` (`gh pr create --base epic/3-epic`)");
     expect(prompt).not.toContain("on the default branch,");
   });
 

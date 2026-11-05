@@ -171,8 +171,11 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
               ...(args.baseRef ? { baseRef: args.baseRef } : {}),
               ...(args.startFromOrigin !== undefined ? { startFromOrigin: args.startFromOrigin } : {}),
               // An integration epic's task starts from origin's copy of its branch, where the tasks before it merged.
-              // A follow-up does only while its code is there; once the epic merged, it is on the default branch.
-              ...(!args.baseRef && task.integrationBranch && (mode !== "followup" || epicBranch)
+              // So does a follow-up, unless the task is Done and its code already reached the default branch with the
+              // epic (a task in Review is still on its way into the epic's branch).
+              ...(!args.baseRef &&
+              task.integrationBranch &&
+              (mode !== "followup" || epicBranch || task.status !== "done")
                 ? { baseRef: task.integrationBranch, startFromOrigin: args.startFromOrigin ?? true }
                 : {}),
             },

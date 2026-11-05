@@ -1,6 +1,6 @@
 import { describeEpicRollup } from "@repo/contracts";
 import { ChevronRightIcon, GroupIcon } from "lucide-react";
-import { memo, type CSSProperties, type MouseEvent } from "react";
+import { memo, type CSSProperties } from "react";
 import { AutopilotEpicButton } from "~/components/autopilot/AutopilotEpicButton";
 import { EpicBranchBadge } from "~/components/task/EpicDelivery";
 import { Button } from "~/components/ui/button";
@@ -13,6 +13,7 @@ import { useBoardContext } from "./BoardContext";
 import type { OverCell } from "./dnd.logic";
 import { EpicActions } from "./EpicActions";
 import { EpicRollupBar } from "./EpicRollupBar";
+import { opensFromHeader, type HeaderClickTarget } from "./epicHeader.logic";
 import {
   EPIC_ACCENT_BAR,
   EPIC_ACCENT_CLASS,
@@ -23,17 +24,6 @@ import {
 
 const TITLE_BUTTON_CLASS =
   "flex h-6 min-w-0 items-center gap-1.5 rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-ring";
-
-/**
- * Whether a click on the band header should open the epic: one on its background or text, not on one of its own
- * controls (chevron, badge, links, hand-off, Autopilot, which do their own thing; the title button opens it itself),
- * and not one that bubbled through React from a popup they portal out of the header.
- */
-function opensFromHeader(event: MouseEvent<HTMLElement>): boolean {
-  const target = event.target;
-  if (!(target instanceof Element) || !event.currentTarget.contains(target)) return false;
-  return !target.closest("button, a, input, [role='button'], [role='menuitem']");
-}
 
 /**
  * An epic's row in its lane: a header, then a cell for each column its children are in, laid on the lane's
@@ -135,7 +125,9 @@ export const EpicBand = memo(function EpicBand({
             narrow ? "flex-col gap-0.5 py-1" : "h-8 items-center gap-1.5",
           )}
           onClick={(event) => {
-            if (opensFromHeader(event)) openTask(epic.id);
+            if (opensFromHeader(event.target as Partial<HeaderClickTarget> | null, event.currentTarget)) {
+              openTask(epic.id);
+            }
           }}
         >
           {narrow ? (

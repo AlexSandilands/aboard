@@ -218,6 +218,15 @@ describe("T3 threads for a task over MCP", () => {
     expect(launches[0]!.input.prompt).toContain("This thread is already linked to the task");
   });
 
+  it("starts a follow-up on a Review task in an integration epic from the epic's branch", async () => {
+    const { launches } = fakeT3();
+    const epicId = h.services.tasks.summary(taskId).parent!.id;
+    h.services.tasks.setDelivery(epicId, "integration", "epic/1-checkout", "user");
+    h.services.tasks.move(taskId, { status: "review" }, "agent");
+    expect((await call(agent, "start_task_thread", { task: "#2", mode: "followup" })).isError).toBe(false);
+    expect(launches[0]!.input).toMatchObject({ followUp: true, baseRef: "epic/1-checkout", startFromOrigin: true });
+  });
+
   it("refuses modes that don't fit the task", async () => {
     fakeT3();
     expect((await call(agent, "start_task_thread", { task: "#1", mode: "work" })).text).toContain("is an epic");

@@ -277,7 +277,11 @@ function followupPrompt(
     `1. Call get_task("${task.id}") on the ${BRAND.id} MCP server to see what was done: the plan, its step notes and the handover notes.`,
     `2. ${followupCodeLine(task, linked.epicBranch)}`,
     "3. Ask me what I want to do: test it, investigate something about it, or fix a problem I found. Don't change anything before I've said.",
-    "Don't move the task, change its plan or steps, or reopen it: its work is done. If we find something new to do, suggest a backlog task for it with add_to_backlog and add it once I agree. If I ask you to fix something here, work on a new branch from where the code is, open a pull request and link it to the task, and still leave the task's status and plan alone.",
+    "Don't move the task, change its plan or steps, or reopen it: its work is done. If we find something new to do, suggest a backlog task for it with add_to_backlog and add it once I agree. " +
+      (linked.epicBranch
+        ? `If I ask you to fix something here, work on a new branch from \`origin/${linked.epicBranch}\`, open a pull request against \`${linked.epicBranch}\` (\`gh pr create --base ${linked.epicBranch}\`), not the default branch, which would take the whole unmerged epic with it, and link it to the task`
+        : "If I ask you to fix something here, work on a new branch from where the code is, open a pull request and link it to the task") +
+      "; still leave the task's status and plan alone.",
     "",
     ...(linked.linkedSession
       ? ["The board started this session and already linked it to the task; don't link it again."]
