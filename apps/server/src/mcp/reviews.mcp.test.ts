@@ -261,8 +261,18 @@ describe("local review loop over MCP", () => {
     // Round 1 is open (pending or running), whatever the age of the task's last activity.
     let text = await detail();
     expect(text).toContain(notYet);
-    expect(text).toContain("start_review");
+    // The reviewer reads get_task too: only the "Local review" pointer says who calls start_review.
+    expect(text.split("\n").find((l) => l.includes(notYet))).not.toContain("start_review");
     expect(text).not.toContain(ended);
+
+    // A round nobody picked up (stalled) is still the loop going.
+    const roundId = h.services.reviews.list(h.services.tasks.resolveId(taskRef))[0]!.id;
+    h.services.reviews.setRoundStatus(roundId, "stalled", { actor: "board", from: ["pending", "running"] });
+    text = await detail();
+    expect(text).toContain("Needs review");
+    expect(text).toContain(notYet);
+    expect(text).not.toContain(ended);
+    h.services.reviews.setRoundStatus(roundId, "pending", { actor: "board" });
 
     // Findings open with rounds left keep the loop going.
     await call(agent, "submit_review", { task: taskRef, findings: [{ severity: "major", title: "x" }] });

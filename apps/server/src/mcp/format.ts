@@ -392,9 +392,8 @@ export function missingLinkHints(
   if (task.status === "review" && !task.links.some((l) => l.kind === "pr")) {
     if (reviewIsInProgress(task.review, autoReview)) {
       hints.push(
-        "PR: none is expected yet. The local review loop is still going (a round is pending or running, or findings " +
-          "are open with rounds left), so don't raise a PR until it ends. Finish the loop first " +
-          `(start_review(task: ${ref}) gives the brief); get_task asks for the PR once the loop has ended`,
+        "PR: none is expected yet. The local review loop is still going (a round is open, pending, running or stalled, " +
+          "or findings are open with rounds left), so don't raise a PR until it ends; get_task asks for it then",
       );
     } else if (reviewIsDone(task.review)) {
       hints.push(
