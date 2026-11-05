@@ -90,7 +90,8 @@ export const AGENT_HARNESSES: Record<AgentHarness, HarnessInfo> = {
   },
   codex: {
     label: "Codex",
-    // Codex puts the thread's id in its tools' environment. Unverified against a real Codex (#252).
+    // Codex puts the thread's id in its tools' environment: the id `codex exec --json` reports in `thread.started`
+    // (checked on codex-cli 0.166.0).
     idEnvVar: "CODEX_THREAD_ID",
     cli: "codex",
     resumeArgs: (id) => ["resume", id],

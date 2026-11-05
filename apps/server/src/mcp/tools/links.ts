@@ -19,9 +19,9 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
         "Autopilot's PR review waits for it, and a PR opened earlier is reviewed on GitHub too), otherwise before " +
         "move_task to review. Inside T3 Code, pass `t3Thread` ({environmentId, threadId} from " +
         "t3_environment_read and t3_thread_configuration) whenever you start or resume a task, so the user can " +
-        "jump back to your thread. In Claude Code or Copilot CLI (inside T3 Code too), also pass `agentSession` " +
-        "with your own session when you start or resume a task: the board shows whether it is running and can " +
-        'reopen it in a terminal. Give a session a `label` saying what it does ("Implementing #107", "Planning #107", or "Orchestrating #107" for an epic you run): ' +
+        "jump back to your thread. In Claude Code, Codex or Copilot CLI (inside T3 Code too), also pass `agentSession` " +
+        "with your own session when you start or resume a task: the board can reopen it in a terminal and, for " +
+        'Claude Code and Copilot CLI, shows whether it is running. Give a session a `label` saying what it does ("Implementing #107", "Planning #107", or "Orchestrating #107" for an epic you run): ' +
         "the board shows it as the session's name, and linking the same session again with a new label renames it. A " +
         "subagent shares its parent's session id, so only the main session links; a subagent must not. Pass one of value, t3Thread or agentSession per call.",
       inputSchema: {
@@ -36,17 +36,18 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
         t3Thread: t3ThreadField.optional(),
         agentSession: z
           .object({
-            harness: AgentHarness.describe('"claude-code" or "copilot-cli": the CLI you are running in.'),
+            harness: AgentHarness.describe('"claude-code", "codex" or "copilot-cli": the CLI you are running in.'),
             sessionId: z
               .string()
               .describe(
-                "Your session id, a UUID: $CLAUDE_CODE_SESSION_ID in Claude Code, $COPILOT_AGENT_SESSION_ID in Copilot " +
-                  "CLI. Read it with the shell (echo $CLAUDE_CODE_SESSION_ID); don't guess it.",
+                "Your session id, a UUID: $CLAUDE_CODE_SESSION_ID in Claude Code, $CODEX_THREAD_ID in Codex, " +
+                  "$COPILOT_AGENT_SESSION_ID in Copilot CLI. Read it with the shell (echo $CLAUDE_CODE_SESSION_ID); " +
+                  "don't guess it.",
               ),
             cwd: z.string().describe("Absolute path of the folder the session runs in (your cwd)."),
           })
           .optional()
-          .describe("Your own Claude Code or Copilot CLI session, so the user can reopen it from the board."),
+          .describe("Your own Claude Code, Codex or Copilot CLI session, so the user can reopen it from the board."),
         label: z
           .string()
           .optional()

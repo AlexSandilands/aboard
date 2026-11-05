@@ -70,9 +70,9 @@ A task can link to:
   a preset. Pasting a key or URL makes a link to it, and with **Link keys in titles** on, a key in a task's title is
   linked by itself. A key no system matches stays plain text.
 - **T3 Code threads**, one click back to the conversation (see [T3 Code](t3-code.md)).
-- **Claude Code and Copilot CLI sessions**, which agents link themselves. The card shows whether the
-  session is still running, and **Open in terminal** resumes it in its folder (or forks it, for Claude
-  Code, when it is still running). Choose the terminal in **Settings → Integrations → Terminal**; **Copy resume command**
+- **Claude Code, Codex and Copilot CLI sessions**, which agents link themselves. The card shows whether a
+  Claude Code or Copilot CLI session is still running (a Codex session's status is unknown), and **Open in
+  terminal** resumes it in its folder (or forks it, for Claude Code, when it is still running). Choose the terminal in **Settings → Integrations → Terminal**; **Copy resume command**
   works anywhere.
 - **Any URL.**
 

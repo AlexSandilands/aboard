@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AGENT_HARNESSES } from "./agentSessions.ts";
 import { BRAND } from "./brand.ts";
 import {
   defaultHandoffMode,
@@ -83,6 +84,8 @@ describe("taskHandoffPrompt", () => {
   it("asks a session to link itself under a name saying what it does", () => {
     const work = taskHandoffPrompt({ task, boardUrl: "http://x", mode: "work" });
     expect(work).toContain(`link(agentSession: {harness, sessionId, cwd}, label: "Implementing #9")`);
+    // Every harness whose agents can link themselves, with the variable its id is in.
+    for (const { idEnvVar } of Object.values(AGENT_HARNESSES)) expect(work).toContain(`$${idEnvVar}`);
     const plan = taskHandoffPrompt({ task, boardUrl: "http://x", mode: "plan" });
     expect(plan).toContain(`label: "Planning #9"`);
   });

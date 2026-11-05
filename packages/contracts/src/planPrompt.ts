@@ -137,9 +137,9 @@ export function planTasksPrompt({ project, tasks, skill, boardUrl, linked = fals
     linked
       ? "The board started this session and already linked it to every task; don't link it again."
       : "If you're running in T3 Code, link this thread to every task with link(task, t3Thread: {environmentId, threadId}) " +
-        "from t3_environment_read and t3_thread_configuration. In Claude Code or Copilot CLI, link your own session to " +
+        "from t3_environment_read and t3_thread_configuration. In Claude Code, Codex or Copilot CLI, link your own session to " +
         `every task with link(task, agentSession: {harness, sessionId, cwd}, label: "${label}"), the id from ` +
-        "$CLAUDE_CODE_SESSION_ID or $COPILOT_AGENT_SESSION_ID (unless you're told the board linked it for you).",
+        "$CLAUDE_CODE_SESSION_ID, $CODEX_THREAD_ID or $COPILOT_AGENT_SESSION_ID (unless you're told the board linked it for you).",
     "",
     ...planSkillLines(skill),
   ].join("\n");

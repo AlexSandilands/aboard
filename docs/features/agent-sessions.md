@@ -3,9 +3,9 @@
 Board tasks: #69, #115 (starting sessions). Verified against Claude Code 2.1.301 and Copilot CLI 1.0.85 on Windows
 (October 2026).
 
-An agent in Claude Code or Copilot CLI links its own session to the task it works on, or the board starts the
-session itself from the hand-off menu and links it ([Starting a session](#starting-a-session)). The board then shows
-whether that session is still running and offers **Open in terminal**, which resumes it in a new terminal
+An agent in Claude Code, Codex or Copilot CLI links its own session to the task it works on, or the board starts a
+Claude Code or Copilot CLI session itself from the hand-off menu and links it ([Starting a session](#starting-a-session)).
+The board then shows whether that session is still running (Codex excepted: see [Live status](#live-status)) and offers **Open in terminal**, which resumes it in a new terminal
 window in the session's folder, with **Copy resume command** as a fallback. T3 Code threads already link
 back to their conversation ([agent hand-off](agent-handoff.md)); this does the same for sessions run in a
 terminal, and gives a session inside T3 Code a way out to one.
@@ -23,9 +23,11 @@ var the agent reads with its shell:
 | Codex | `codex` | `$CODEX_THREAD_ID` (checked on codex-cli 0.166.0: the same id as `thread.started`) | `codex resume <id>` | none |
 | Copilot CLI | `copilot-cli` | `$COPILOT_AGENT_SESSION_ID` | `copilot --resume=<id>` | none |
 
-Codex sessions are linked by Autopilot's headless runs ([autopilot](autopilot.md#headless-drivers)), which read
-the id from `codex exec`'s first event. Agents aren't asked to link their own Codex session yet (the shipped skill doesn't say so). Codex picks its own session id, so the board can't start a Codex session in a terminal
-(`AGENT_HARNESSES.codex.presetSessionId` is false, and the hand-off menus leave it out); it can only resume one.
+Codex sessions are linked by agents running in Codex, like the other two, and by Autopilot's headless runs
+([autopilot](autopilot.md#headless-drivers)), which read the id from `codex exec`'s first event. Codex picks its own
+session id, so the board can't start a Codex session in a terminal (`AGENT_HARNESSES.codex.presetSessionId` is false,
+and the hand-off menus leave it out); it can only resume one (`codex resume <id>`), never fork it. A Codex session an
+agent linked itself stays `unknown` ([Live status](#live-status)).
 
 The link is an `agent_session` link stored under `agent-session://<harness>/<id>`, so linking the same
 session twice returns the first link; a different folder replaces the stored one (logged as `link_updated`),
@@ -36,8 +38,10 @@ absolute path, with trailing separators dropped (`AgentSessionRef`). The board l
 `services.links.add` with the same input; their folder can be a worktree outside the project.
 
 Agents are asked for it in three places: the `link` tool's description and the server instructions, the
-hand-off prompt, and `get_task`'s **Missing links**, which asks only when the MCP client is Claude Code or
-Copilot CLI (`harnessOfClient` in `apps/server/src/mcp/format.ts`).
+hand-off and planning prompts, and `get_task`'s **Missing links**, which asks only when the MCP client is Claude
+Code, Codex or Copilot CLI (`harnessOfClient` in `apps/server/src/mcp/format.ts`). Codex names itself
+`codex-mcp-client` in `initialize` and in its User-Agent (checked on codex-cli 0.166.0); the server is stateless, so
+tool calls read it from the User-Agent. The shipped skill and `AGENTS.md` snippet say the same.
 
 ### Live status
 
