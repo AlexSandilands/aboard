@@ -94,6 +94,7 @@ and to this table.
 | Stats: the weekly trends API, its series and their definitions | [docs/features/stats.md](docs/features/stats.md)                                    |
 | What users can do, how to install, configure or connect agents | [docs/guide/](docs/guide/) (user-facing) and `README.md`                            |
 | UI styles and primitives                                       | [docs/reference/style.md](docs/reference/style.md)                                  |
+| Proposals to replace the stack (a Rust or native rewrite)      | [docs/research/rust-gpui-rewrite.md](docs/research/rust-gpui-rewrite.md)            |
 
 ## What agents are told
 

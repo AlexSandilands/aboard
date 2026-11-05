@@ -13,6 +13,7 @@ files under each app.
 | `features/<name>.md`                     | How one feature works, the decisions behind it, the alternatives turned down, its code | You add a feature, or change how one behaves                                             |
 | `decisions/NNNN-title.md`                | One cross-cutting decision (an ADR): context, decision, consequences                   | A choice constrains code beyond one feature. Never rewrite one; supersede it with a new one |
 | `reference/<name>.md`                    | Lookup material that isn't about our behaviour, such as where the styles come from     | The source it describes changes                                                          |
+| `research/<name>.md`                     | A dated assessment of an option we haven't taken, such as a rewrite                    | Never kept current: it records what was true on its date. Write a new one to revisit it    |
 | [templates/](templates/)                 | Starting points for feature docs and ADRs                                              | The shape of those docs changes                                                          |
 
 ## Rules
@@ -99,3 +100,7 @@ files under each app.
 ### Reference
 
 - [Style reference](reference/style.md): where the UI's styles come from in T3 Code
+
+### Research
+
+- [Rewriting in Rust with GPUI](research/rust-gpui-rewrite.md) (2026-11): feasibility, performance, look and feel, installing, effort
