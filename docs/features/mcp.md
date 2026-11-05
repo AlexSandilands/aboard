@@ -187,6 +187,15 @@ text when both are present.
   `update_plan`, or pass `allowDeletes`). When a `set_plan` call deleted steps, its result says
   `Deleted N step(s): 1.2 Title, …`. See [plans.md](plans.md#writing-a-plan).
 
+### Run tools
+
+A second, separate server: `POST /mcp/run` serves one headless Autopilot run the tools of its operation, bound to its
+target, with a run token as its credential (`mcp/runTools.ts`, [ADR 0013](../decisions/0013-board-served-run-tools.md)).
+Today that is the PR review set: `pr_overview`, `pr_files`, `pr_diff` and `pr_comments`, read-only and paged. These
+tools are not in the board's `/mcp` server, and the board's tools are not in a run's. Their descriptions follow the
+rules below, and the review prompt (`reviewPrompt`) is the one place that tells agents about them. See
+[autopilot.md](autopilot.md#run-tools).
+
 ### board_activity
 
 `board_activity(since, until?, projectId? | workspacePath?)` is the look-back counterpart of `board_overview`:
@@ -296,6 +305,7 @@ The sandbox sets `brandEnv("USER_HOME")` to a folder of its own, so trying this 
 | `apps/server/src/mcp/shared.ts`       | `run` (error mapping), shared fields, `planFromArgs`, project lookup  |
 | `apps/server/src/mcp/format.ts`       | Text renders: `renderTaskDetail`, `summaryLine`, `missingLinkHints`, `labelHint`, `suggestedModelHint`, `autopilotFlagHint`, `renderTranscript` |
 | `apps/server/src/mcp/tools/*.ts`      | The tools                                                            |
+| `apps/server/src/mcp/runTools.ts`, `runTokens.ts` | The run tools' server at `/mcp/run`, its tool sets and its tokens |
 | `apps/server/src/mcp/mcp.test.ts`, `reviews.mcp.test.ts` | End-to-end tests through the MCP SDK client           |
 | `skills/aboard/`                      | The skill and `AGENTS.md` snippet shipped to agents                  |
 | `skills/aboard-automations/`          | The skill for writing custom automations, shipped and synced like the board skill |
