@@ -172,7 +172,7 @@ function dominantType(types: readonly string[]): string {
  */
 function lowerFirst(subject: string): string {
   const [word = ""] = subject.split(" ");
-  return /^[A-Z]/.test(word) ? word.toLowerCase() + subject.slice(word.length) : subject;
+  return /^\p{Lu}/u.test(word) ? word.toLowerCase() + subject.slice(word.length) : subject;
 }
 
 /** The epic's title as a commit subject: whitespace collapsed, no trailing period, first word lowercased. */
@@ -201,13 +201,16 @@ export function epicPrTitle(epic: Pick<TaskSummary, "number" | "title">, childPr
 
   // An epic already titled as a header keeps its parts; its subject gets the same clean-up as a built one.
   const own = parseConventionalHeader(epic.title.replace(/\s+/g, " "));
-  if (own) return header(own.type, own.scope, own.breaking, subjectOf(own.subject));
+  if (own && subjectOf(own.subject)) return header(own.type, own.scope, own.breaking, subjectOf(own.subject));
 
   const type = dominantType(children.map((c) => c.type));
   const scopes = new Set(children.map((c) => c.scope));
   const scope = scopes.size === 1 ? [...scopes][0]! : null;
   const breaking = children.some((c) => c.breaking);
-  return header(type, scope, breaking, subjectOf(epic.title));
+  // A title of nothing but periods leaves no subject: keep the plain title rather than an empty header.
+  const subject = subjectOf(epic.title);
+  if (!subject) return `Epic #${epic.number}: ${epic.title}`;
+  return header(type, scope, breaking, subject);
 }
 
 const hashOf = (text: string) => createHash("sha1").update(text).digest("hex").slice(0, 12);

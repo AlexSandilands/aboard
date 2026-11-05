@@ -438,6 +438,8 @@ describe("epic PR title", () => {
     expect(epicPrTitle(epic("GitHub sync"), t)).toBe("feat: github sync");
     expect(epicPrTitle(epic("API keys"), t)).toBe("feat: api keys");
     expect(epicPrTitle(epic("iOS app"), t)).toBe("feat: iOS app");
+    expect(epicPrTitle(epic("Éclair support"), t)).toBe("feat: éclair support");
+    expect(epicPrTitle(epic("..."), t)).toBe("Epic #7: ...");
   });
 
   it("keeps the parts of an epic title that is already a header, and cleans its subject", () => {
