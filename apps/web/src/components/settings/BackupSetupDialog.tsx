@@ -129,6 +129,9 @@ function SetupSteps({
       return firstBackupOutcome(status, remote);
     },
     onSuccess: setOutcome,
+    // The run pins a default machine name, which the PATCH reply cached above doesn't know yet. Also on error: the
+    // PATCH may have succeeded before the run failed.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.settings }),
   });
 
   const remoteOf = (): string | null => {
