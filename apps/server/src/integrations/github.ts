@@ -681,7 +681,8 @@ export function epicMergeMethods(allowed: readonly MergeMethod[]): MergeMethod[]
 }
 
 /** GitHub refusing a merge method the repository's settings or a ruleset don't allow. */
-const METHOD_NOT_ALLOWED = /\b(?:not|n't|never) (?:allowed|permitted)\b|\bnot enabled\b/i;
+const METHOD_NOT_ALLOWED =
+  /\b(?:not|n't|never) (?:allowed|permitted)\b|\bnot enabled\b|\bmust not contain merge commits\b|\blinear history\b/i;
 
 /** What Autopilot merges: a task's PR into its epic's integration branch, at the commit it checked. */
 export interface EpicMergeInput {

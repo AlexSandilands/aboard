@@ -742,7 +742,14 @@ describe("github merge into an epic's branch", () => {
     // The settings say a merge commit is fine; a ruleset on the branch says otherwise.
     gh.repos.set("o/r", { ...repo, mergeCommitAllowed: true, squashMergeAllowed: true, rebaseMergeAllowed: false });
     gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
-    gh.failNextMutation("Merge commits are not allowed by a repository rule.");
+    gh.failNextMutation("Merge commits are not allowed on this repository.");
+    await expect(github.mergeIntoEpicBranch(link(), epicInput)).resolves.toEqual({ method: "squash" });
+    expect(methodsSent(gh)).toEqual(["MERGE", "SQUASH"]);
+
+    // A ruleset requiring linear history words its refusal of a merge commit differently.
+    gh.mutations.length = 0;
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
+    gh.failNextMutation("Repository rule violations found\n\nThis branch must not contain merge commits.");
     await expect(github.mergeIntoEpicBranch(link(), epicInput)).resolves.toEqual({ method: "squash" });
     expect(methodsSent(gh)).toEqual(["MERGE", "SQUASH"]);
 
@@ -757,9 +764,11 @@ describe("github merge into an epic's branch", () => {
     const { gh, github } = setup([link()]);
     gh.repos.set("o/r", { ...repo, mergeCommitAllowed: true, squashMergeAllowed: true, rebaseMergeAllowed: false });
     gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
-    gh.failNextMutation("Merge commits are not allowed by a repository rule.");
-    gh.failNextMutation("Squash merges are not allowed by a repository rule.");
-    await expect(github.mergeIntoEpicBranch(link(), epicInput)).rejects.toThrow(/Squash merges are not allowed/);
+    gh.failNextMutation("Merge commits are not allowed on this repository.");
+    gh.failNextMutation("Squash merges are not allowed on this repository.");
+    await expect(github.mergeIntoEpicBranch(link(), epicInput)).rejects.toThrow(
+      /Squash merges are not allowed on this repository/,
+    );
     expect(methodsSent(gh)).toEqual(["MERGE", "SQUASH"]);
   });
 
