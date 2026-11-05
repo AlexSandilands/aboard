@@ -14,7 +14,7 @@ import {
   type ModelTierSetting,
   type NotificationKind,
   type NotificationSettings,
-  parseHeadlessModel,
+  readOperationModels,
   ProviderSetting,
   type SavedViews,
   sanitizeKeybindingOverrides,
@@ -44,9 +44,8 @@ const DEFAULTS: StoredSettings = {
   providers: [],
   handoffMenus: DEFAULT_HANDOFF_MENUS,
   headlessReviewBudgetUsd: 2,
-  reviewModel: null,
   issueImportEnabled: true,
-  issueImportModel: { model: "haiku" },
+  operationModels: {},
   issueImportBudgetUsd: 0.5,
   modelTiers: EMPTY_MODEL_TIERS,
   modelProfiles: [],
@@ -87,9 +86,8 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "providers",
     "handoffMenus",
     "headlessReviewBudgetUsd",
-    "reviewModel",
     "issueImportEnabled",
-    "issueImportModel",
+    "operationModels",
     "issueImportBudgetUsd",
     "modelTiers",
     "modelProfiles",
@@ -103,7 +101,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
 /**
  * Settings older versions exported that a migration since converted (036_ticket_systems_settings turns the Jira ones
  * into a ticket system, 039_review_model renames headlessReviewModel, 040_providers_settings moves the CLI paths into
- * providers). A restore loads them with an old backup so that migration sees them; they never reach a
+ * providers, 041_operation_models moves reviewModel and issueImportModel into operationModels). A restore loads them with an old backup so that migration sees them; they never reach a
  * database at the current schema.
  */
 export const RETIRED_EXPORTED_SETTINGS: ReadonlySet<string> = new Set([
@@ -113,6 +111,8 @@ export const RETIRED_EXPORTED_SETTINGS: ReadonlySet<string> = new Set([
   "headlessReviewCli",
   "copilotCli",
   "codexCli",
+  "reviewModel",
+  "issueImportModel",
 ]);
 
 /**
@@ -263,9 +263,7 @@ export function loadSettings(repos: Repos): StoredSettings {
       (Object.keys(DEFAULTS) as Array<keyof StoredSettings>).map((key) => [key, pick(key)]),
     ) as unknown as StoredSettings),
     ticketSystems: storedTicketSystems(stored.get("ticketSystems")),
-    // Saved as a bare model name before tiers were an option.
-    reviewModel: parseHeadlessModel(stored.get("reviewModel")),
-    issueImportModel: parseHeadlessModel(stored.get("issueImportModel")) ?? DEFAULTS.issueImportModel,
+    operationModels: readOperationModels(stored.get("operationModels")),
     modelProfiles: storedProfileList(stored.get("modelProfiles")),
     providers: storedProviderList(stored.get("providers")),
     notifications: mergeNotificationSettings(stored.get("notifications") as StoredNotificationSettings | undefined),
@@ -332,11 +330,15 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.headlessReviewBudgetUsd !== undefined) {
           repos.settings.set("headlessReviewBudgetUsd", input.headlessReviewBudgetUsd);
         }
-        if (input.reviewModel !== undefined) {
-          repos.settings.set("reviewModel", input.reviewModel);
-        }
         if (input.issueImportEnabled !== undefined) repos.settings.set("issueImportEnabled", input.issueImportEnabled);
-        if (input.issueImportModel !== undefined) repos.settings.set("issueImportModel", input.issueImportModel);
+        if (input.operationModels !== undefined) {
+          const next = { ...load().operationModels };
+          for (const [op, choice] of Object.entries(input.operationModels)) {
+            if (choice === null) delete next[op as keyof typeof next];
+            else if (choice !== undefined) next[op as keyof typeof next] = choice;
+          }
+          repos.settings.set("operationModels", next);
+        }
         if (input.issueImportBudgetUsd !== undefined) {
           repos.settings.set("issueImportBudgetUsd", input.issueImportBudgetUsd);
         }

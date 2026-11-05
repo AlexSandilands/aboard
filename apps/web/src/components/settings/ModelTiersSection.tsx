@@ -137,7 +137,7 @@ export function ModelTiersSection({ settings, t3 }: { settings: AppSettings; t3:
                 )}
                 <HeadlessHarness
                   name={`${label} tier`}
-                  value={setting.headless}
+                  value={setting.provider}
                   shown={shown}
                   onChange={(value) => save(tier, { field: "headless", value })}
                 />
@@ -313,7 +313,7 @@ function CustomModelsSection({
             )}
             <HeadlessHarness
               name={profile.name}
-              value={profile.headless}
+              value={profile.provider}
               shown={shown}
               onChange={(value) => change(profile.id, { field: "headless", value })}
             />

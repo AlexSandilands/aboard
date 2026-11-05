@@ -62,8 +62,8 @@ export const T3ModelSelection = z.object({
 export type T3ModelSelection = z.infer<typeof T3ModelSelection>;
 
 /**
- * The model the task runs on (resolveRunModel: a custom model one of its labels picks, else its suggested tier) as it
- * applies to this launch. `modelSelection` is that model's T3 model when it can be used now; otherwise `unavailable`
+ * The model the task runs on (resolveOperationChoice("launch"): an automation's choice, the board's setting, a custom
+ * model one of its labels picks, else its suggested tier) as it applies to this launch. `modelSelection` is that model's T3 model when it can be used now; otherwise `unavailable`
  * says why and the dialog stays on T3's default.
  */
 export const T3LaunchSuggestion = z.object({
@@ -71,8 +71,11 @@ export const T3LaunchSuggestion = z.object({
   tier: z.enum(["light", "standard", "deep"]).nullable(),
   /** The tier's or the custom model's name. */
   name: z.string(),
-  /** What picked it: an automation's choice, a task label, or the task's suggested tier. */
-  source: z.enum(["automation", "label", "tier"]),
+  /**
+   * What picked it: an automation's choice, the board's setting (or the operation's default), a task label, or the
+   * task's suggested tier. RunModelSource's values, inlined like `tier`.
+   */
+  source: z.enum(["task", "project", "automation", "board", "default", "label", "tier", "fallback"]),
   /** The task label that picked it, when `source` is "label". */
   label: z.string().nullable(),
   /** The planner's reason for the tier, when the tier picked it. */

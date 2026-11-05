@@ -4,7 +4,7 @@ import {
   type ModelTier,
   type ModelTiers,
   type Project,
-  resolveRunModel,
+  resolveTaskModel,
 } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import type { ShellSnapshot } from "./t3.ts";
@@ -82,7 +82,11 @@ const taskModel = (
   tier: ModelTier | null,
   modelTiers: ModelTiers,
   { labels = [], profiles = [] }: { labels?: string[]; profiles?: ModelProfile[] } = {},
-) => resolveRunModel({ labels, tier }, { modelTiers, modelProfiles: profiles });
+) =>
+  resolveTaskModel(
+    { labels, suggestedModel: tier ? { tier, reason: null } : null },
+    { modelTiers, modelProfiles: profiles },
+  );
 
 const repo: WireRefs = { isRepo: true, refs: [{ name: "main", current: true, isDefault: true, worktreePath: null }] };
 

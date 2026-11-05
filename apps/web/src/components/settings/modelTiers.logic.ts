@@ -89,10 +89,9 @@ export function applyTierChange(current: ModelTierSetting, change: TierChange): 
       const cliEffort = withEffort(current.cliEffort, change.harness, change.value);
       return cliEffort ? { ...rest, cliEffort } : rest;
     }
-    case "headless": {
-      const { headless: _headless, ...rest } = current;
-      return change.value === "claude-code" ? rest : { ...rest, headless: change.value };
-    }
+    case "headless":
+      // The preferred provider; picking one stores it, Claude Code included, since unset no longer means Claude Code.
+      return { ...current, provider: change.value };
   }
 }
 

@@ -210,7 +210,8 @@ export function defaultModelSelection(
 }
 
 /**
- * The task's model (resolveRunModel) resolved against T3's providers. Its T3 model is used only when its provider is
+ * The task's model (resolveOperationChoice) resolved against T3's providers. A task with nothing chosen and no tier
+ * (the light fallback) gets no suggestion: the dialog stays on T3's default, as it always has. Its T3 model is used only when its provider is
  * ready and still offers it; option values the model no longer supports are dropped. `reason` is the planner's, shown
  * when the suggested tier picked the model.
  */
@@ -220,7 +221,7 @@ export function resolveSuggestion(
   providers: ReadonlyArray<T3LaunchProvider>,
 ): T3LaunchSuggestion | null {
   const { profile, source } = resolved;
-  if (!profile || source === "default") return null;
+  if (!profile || source === "fallback") return null;
   const suggested = {
     tier: profile.tier,
     name: profile.name,
@@ -268,7 +269,7 @@ export function buildLaunchOptions(input: {
   refs: WireRefs | null;
   shell: ShellSnapshot;
   t3Project: ShellSnapshot["projects"][number];
-  /** The task's model (resolveRunModel); null for a thread with no task. */
+  /** The task's model (resolveOperationChoice); null for a thread with no task. */
   model: RunModel | null;
   /** The planner's reason for the task's suggested tier. */
   reason: string | null;

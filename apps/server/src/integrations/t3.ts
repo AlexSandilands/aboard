@@ -12,7 +12,7 @@ import {
   parseT3ThreadInput,
   ProjectIcon,
   type Project,
-  resolveRunModel,
+  resolveOperationChoice,
   type StartT3ThreadInput,
   type T3IntegrationStatus,
   type T3LaunchOptions,
@@ -766,8 +766,12 @@ export function createT3Integration(deps: {
           shell: ctx.shell,
           t3Project: ctx.t3Project,
           model: ctx.task
-            ? resolveRunModel(
-                { labels: ctx.task.labels, tier: ctx.task.suggestedModel?.tier, choice },
+            ? resolveOperationChoice(
+                "launch",
+                {
+                  task: { labels: ctx.task.labels, suggestedModel: ctx.task.suggestedModel },
+                  automation: choice ? [choice] : [],
+                },
                 deps.services().settings.get(),
               )
             : null,

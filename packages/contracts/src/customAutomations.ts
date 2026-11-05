@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { VARIABLE_NAME, variableHasValue } from "./automationVariables.ts";
 import { BRAND, brandEnv } from "./brand.ts";
-import { ModelTier } from "./modelTiers.ts";
+import { INHERIT, ModelChoice } from "./modelProfiles.ts";
 import { WeeklySchedule } from "./recurring.ts";
 import { CustomToolRule } from "./toolRules.ts";
 import { TaskStatus, type Project, type TaskLink, type TaskSummary } from "./schemas.ts";
@@ -154,8 +154,11 @@ export const CustomAction = z.discriminatedUnion("kind", [
     prompt: z.string().trim().min(1).max(CUSTOM_PROMPT_MAX),
     /** A skill the agent is told to use, by name; blank for none. */
     skill: z.string().trim().max(200).default(""),
-    /** The model tier; null takes the task's suggested tier. */
-    tier: ModelTier.nullable().default(null),
+    /**
+     * The model its agents run on; inherit takes the automation's Model setting, then the board's for custom
+     * automations, then the task's own (resolveOperationChoice). Saved as a `tier` before 041_operation_models.
+     */
+    model: ModelChoice.default(INHERIT),
     /** Work on the branch of the task's open pull request when it has one, instead of a new branch. */
     onPrBranch: z.boolean().default(false),
     /**

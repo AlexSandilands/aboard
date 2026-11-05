@@ -1,4 +1,4 @@
-import type { HeadlessModel } from "@repo/contracts";
+import type { HeadlessModel } from "~/components/settings/headlessModel.logic";
 import { autoReviewValue, type AutoReviewChoice } from "~/components/review/review.logic";
 import { autopilotValue, type AutopilotChoice } from "./autopilot.logic";
 

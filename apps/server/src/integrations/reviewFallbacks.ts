@@ -6,9 +6,7 @@ import {
   reviewFixInstructions,
   reviewIsDone,
   reviewLoopInstructions,
-  resolveHeadlessEffort,
   harnessCliSetting,
-  resolveHeadlessModel,
   type TaskSummary,
 } from "@repo/contracts";
 import type { ReviewRecord } from "../db/repos/reviews.ts";
@@ -99,15 +97,18 @@ export function createReviewFallbacks(deps: {
       const cwd = workspace?.worktreePath ?? project.workspaceRoot;
       if (!cwd) throw new Error(`${project.title} has no workspace folder to review in`);
       const settings = s.settings.get();
-      const reviewModel = s.reviews.modelFor(task.id);
+      const resolved = s.reviews.boardReviewerModel(task.id);
+      // No provider that can run it: the round stalls with the reason, rather than running something else.
+      if (!resolved.ok) throw new Error(resolved.reason);
       // The task's screenshots live in the data dir, outside the checkout: the reviewer may read that folder.
       const images = s.attachments.forTask(task.id);
       const result = await runHeadless({
-        cli: harnessCliSetting(settings, "claude-code"),
+        // Only `claude -p` meets the board reviewer's needs today, so the resolver picks it whenever it picks one.
+        cli: harnessCliSetting(settings, resolved.provider),
         cwd,
         budgetUsd: settings.headlessReviewBudgetUsd,
-        model: resolveHeadlessModel(settings.modelTiers, reviewModel),
-        effort: resolveHeadlessEffort(settings.modelTiers, reviewModel),
+        model: resolved.model,
+        effort: resolved.effort,
         ...(images.length ? { addDirs: [...new Set(images.map((i) => dirname(i.path)))] } : {}),
         prompt: headlessPrompt({
           taskNumber: task.number,

@@ -86,10 +86,11 @@ export const ModelTierSetting = z.object({
    */
   cliEffort: CliEfforts.optional(),
   /**
-   * The harness a headless Autopilot run on this model uses, with its `cli` model. Unset (and settings saved before it
-   * existed) is Claude Code.
+   * The provider a headless run on this model prefers, with its `cli` model. Used when it is added, switched on and
+   * can do what the operation needs; otherwise, and when unset, the first such provider in Settings → Providers runs it
+   * (resolveOperationModel). Stored as `headless` before 041_operation_models.
    */
-  headless: AgentHarness.optional(),
+  provider: AgentHarness.optional(),
 });
 export type ModelTierSetting = z.infer<typeof ModelTierSetting>;
 

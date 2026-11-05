@@ -128,7 +128,7 @@ export async function produceDigest(input: ProduceDigestInput): Promise<Produced
           run: input.run,
           label: "Digest",
           prompt: digestPrompt(plain, config.skill, skillText),
-          tier: "light",
+          operation: "digest",
           options: config,
           // The plain digest has everything, and an agent with any tool could be steered by a task title.
           access: "none",

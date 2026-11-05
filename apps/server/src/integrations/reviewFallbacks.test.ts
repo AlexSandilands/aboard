@@ -1,4 +1,4 @@
-import { BOARD_REVIEWER, type HeadlessModel, type T3ThreadSnapshot } from "@repo/contracts";
+import { BOARD_REVIEWER, type ModelChoice, type T3ThreadSnapshot } from "@repo/contracts";
 import { dirname } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
@@ -22,7 +22,11 @@ function setup(
 ) {
   const h = createTestHarness();
   const s = h.services;
-  s.settings.update({ autoReview: true, headlessReviewEnabled: opts.headless ?? false });
+  s.settings.update({
+    autoReview: true,
+    headlessReviewEnabled: opts.headless ?? false,
+    providers: [{ id: "claude-code", enabled: true }],
+  });
   const project = s.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
   const task = s.tasks.create({
     projectId: project.id,
@@ -164,7 +168,7 @@ describe("review fallbacks", () => {
   it("runs the board's review on the chosen model: a typed one, or a tier's Claude Code model", async () => {
     const run = async (
       reviewModel: Parameters<ReturnType<typeof setup>["s"]["settings"]["update"]>[0],
-      taskModel?: HeadlessModel,
+      taskModel?: ModelChoice,
     ) => {
       const { s, task, fallbacks, advance, jobs } = setup({ headless: true });
       if (taskModel) s.tasks.update(task.id, { reviewModel: taskModel }, "user");
@@ -181,12 +185,13 @@ describe("review fallbacks", () => {
       await fallbacks.idle();
       return [jobs[0]?.model, jobs[0]?.effort];
     };
-    // A typed model carries no effort; a tier's Claude Code model carries the tier's.
-    expect(await run({ reviewModel: { model: "sonnet" } })).toEqual(["sonnet", null]);
-    expect(await run({ reviewModel: { tier: "light" } })).toEqual(["haiku", "low"]);
-    expect(await run({ reviewModel: { tier: "deep" } })).toEqual([null, null]);
+    const board = (choice: ModelChoice) => ({ operationModels: { boardReviewer: choice } });
+    // A typed model carries only its own effort; a tier's Claude Code model carries the tier's.
+    expect(await run(board({ provider: "claude-code", model: "sonnet" }))).toEqual(["sonnet", null]);
+    expect(await run(board({ tier: "light" }))).toEqual(["haiku", "low"]);
+    expect(await run(board({ tier: "deep" }))).toEqual([null, null]);
     // The task's own choice wins over the board's.
-    expect(await run({ reviewModel: { model: "sonnet" } }, { tier: "light" })).toEqual(["haiku", "low"]);
+    expect(await run(board({ provider: "claude-code", model: "sonnet" }), { tier: "light" })).toEqual(["haiku", "low"]);
   });
 
   it("keeps ticking after a pass with nothing to do", async () => {

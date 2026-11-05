@@ -271,22 +271,31 @@ describe("reviews", () => {
     expect(s.reviews.openRound(task.id, { trigger: "manual", actor: "agent" }).skill).toBe("pr-review");
   });
 
-  it("resolves the reviewer model from task, project and global settings", () => {
+  it("resolves the board reviewer's model from task, project and board settings", () => {
     const { s, project, task } = setup();
-    expect(s.reviews.modelFor(task.id)).toBeNull();
-    s.settings.update({ reviewModel: { tier: "standard" } });
-    expect(s.reviews.modelFor(task.id)).toEqual({ tier: "standard" });
-    s.projects.update(project.id, { reviewModel: { model: "sonnet" } });
-    expect(s.reviews.modelFor(task.id)).toEqual({ model: "sonnet" });
+    const sonnet = { provider: "claude-code" as const, model: "sonnet" };
+    const picked = () => {
+      const r = s.reviews.boardReviewerModel(task.id);
+      return r.ok ? { source: r.source, id: r.choice.profile?.id ?? r.choice.explicit?.model } : r.reason;
+    };
+    // No provider can run it yet.
+    expect(picked()).toContain("Board reviewer needs a provider");
+    s.settings.update({ providers: [{ id: "claude-code", enabled: true }] });
+    expect(picked()).toEqual({ source: "default", id: "standard" });
+    s.settings.update({ operationModels: { boardReviewer: { tier: "light" } } });
+    expect(picked()).toEqual({ source: "board", id: "light" });
+    s.projects.update(project.id, { reviewModel: sonnet });
+    expect(picked()).toEqual({ source: "project", id: "sonnet" });
     s.tasks.update(task.id, { reviewModel: { tier: "deep" } }, "user");
-    expect(s.reviews.modelFor(task.id)).toEqual({ tier: "deep" });
+    expect(picked()).toEqual({ source: "task", id: "deep" });
     expect(s.tasks.summary(task.id).reviewModel).toEqual({ tier: "deep" });
 
-    // null inherits again, level by level.
-    s.tasks.update(task.id, { reviewModel: null }, "user");
-    expect(s.reviews.modelFor(task.id)).toEqual({ model: "sonnet" });
+    // null (or inherit) inherits again, level by level.
+    s.tasks.update(task.id, { reviewModel: "inherit" }, "user");
+    expect(s.tasks.summary(task.id).reviewModel).toBeNull();
+    expect(picked()).toEqual({ source: "project", id: "sonnet" });
     s.projects.update(project.id, { reviewModel: null });
-    expect(s.reviews.modelFor(task.id)).toEqual({ tier: "standard" });
+    expect(picked()).toEqual({ source: "board", id: "light" });
   });
 
   it("includes rounds in the task detail and drops them with the task", () => {

@@ -68,7 +68,7 @@ function setup(opts: { now?: () => Date; runEnded?: (run: AutopilotRun) => void 
       } = await ctx.runner.start({
         run: ctx.run,
         prompt: "go",
-        tier: null,
+        operation: "taskRun",
         options: ctx.config,
       });
       return patch;

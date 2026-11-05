@@ -1,4 +1,4 @@
-import { normalizeWorkspaceKey, workspaceBasename, type Project } from "@repo/contracts";
+import { normalizeWorkspaceKey, overrideValue, workspaceBasename, type Project } from "@repo/contracts";
 import { generateKeyBetween, generateNKeysBetween } from "fractional-indexing";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -244,7 +244,7 @@ export function createProjectsService(
         }
         if (input.icon !== undefined) next.icon = input.icon;
         if (input.reviewSkill !== undefined) next.reviewSkill = input.reviewSkill;
-        if (input.reviewModel !== undefined) next.reviewModel = input.reviewModel;
+        if (input.reviewModel !== undefined) next.reviewModel = overrideValue(input.reviewModel);
         if (input.planSkill !== undefined) next.planSkill = input.planSkill;
         // Which projects a custom automation still needs a variable in shows on its row.
         if (input.variables !== undefined) {

@@ -47,9 +47,11 @@ describe("review REST routes", () => {
       ((await (await h.request(`/api/tasks/${h.task.id}/review-prompt`)).json()) as { prompt: string }).prompt;
     expect(await promptOf()).not.toContain("Run the reviewer on");
 
-    h.services.settings.update({ reviewModel: { model: "claude-opus-5-5" } });
+    h.services.settings.update({
+      operationModels: { reviewer: { provider: "claude-code", model: "claude-opus-5-5" } },
+    });
     expect(await promptOf()).toContain('Run the reviewer on `claude-opus-5-5`: in Claude Code pass `model: "opus"`');
-    h.services.tasks.update(h.task.id, { reviewModel: { model: "sonnet" } }, "user");
+    h.services.tasks.update(h.task.id, { reviewModel: { provider: "claude-code", model: "sonnet" } }, "user");
     expect(await promptOf()).toContain('Run the reviewer on `sonnet`: in Claude Code pass `model: "sonnet"`');
   });
 

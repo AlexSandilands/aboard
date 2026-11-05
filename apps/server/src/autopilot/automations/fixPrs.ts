@@ -702,7 +702,7 @@ export const fixPrs = defineAutomation({
         run,
         label: `Fix PRs · PR #${data.number}`,
         prompt,
-        tier: task.suggestedModel?.tier ?? null,
+        operation: "prFix",
         options: config,
         stillWanted,
         ...(thread ? { kind: "nudge" as const } : { workspace: { branch: data.headRef }, expectHead: data.headOid }),

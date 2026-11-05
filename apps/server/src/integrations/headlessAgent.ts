@@ -1,4 +1,10 @@
-import { BRAND, type AgentHarness, type CliEffort } from "@repo/contracts";
+import {
+  BRAND,
+  HEADLESS_CAPABILITIES,
+  type AgentHarness,
+  type CliEffort,
+  type DriverCapabilities,
+} from "@repo/contracts";
 import { claudeFailure, readClaudeResult, runClaude } from "./claudeCli.ts";
 import { READ_ONLY_TOOLS } from "./headlessReview.ts";
 
@@ -231,22 +237,6 @@ export interface AgentJob {
   env?: Record<string, string>;
 }
 
-/** What a harness's headless CLI can be held to, beyond doing work in a folder. */
-export interface DriverCapabilities {
-  /** A JSON schema the final answer must match. */
-  outputSchema: boolean;
-  /** The lockdown for agents that read untrusted text (and a board-only MCP config). */
-  untrusted: boolean;
-  /** A run with no tools at all (`access: "none"`). */
-  noTools: boolean;
-  /** Extra allow and deny rules in Claude Code's syntax (`tools`, `deniedTools`). */
-  toolRules: boolean;
-  /** A spending cap per run. */
-  budget: boolean;
-  /** The board gives the session its id before the run starts; otherwise the CLI reports it (sessionIdOf). */
-  presetSessionId: boolean;
-}
-
 /** One harness's headless CLI: how to call it and how to read what it printed. */
 export interface HeadlessDriver {
   harness: AgentHarness;
@@ -267,14 +257,7 @@ export const claudeDriver: HeadlessDriver = {
   harness: "claude-code",
   command: "claude",
   label: "Claude Code",
-  capabilities: {
-    outputSchema: true,
-    untrusted: true,
-    noTools: true,
-    toolRules: true,
-    budget: true,
-    presetSessionId: true,
-  },
+  capabilities: HEADLESS_CAPABILITIES["claude-code"],
   args: agentArgs,
   parse: parseAgentOutput,
 };

@@ -9,8 +9,7 @@ import {
   codexSessionId,
   copilotArgs,
   copilotDriver,
-  headlessDriverFor,
-  missingCapability,
+  driverNeeds,
   parseCodexOutput,
   parseCopilotOutput,
 } from "./headlessDrivers.ts";
@@ -230,33 +229,16 @@ describe("choosing a driver", () => {
     expect(copilotDriver.capabilities.budget).toBe(false);
   });
 
-  it("names what a run needs that the harness can't do", () => {
-    expect(missingCapability(codexDriver, { access: "edit" })).toBeNull();
-    expect(missingCapability(codexDriver, { access: "read-only" })).toBeNull();
-    expect(missingCapability(codexDriver, { access: "edit", outputSchema: {} })).toBe("structured output");
-    expect(missingCapability(copilotDriver, { access: "read-only", untrusted: true })).toBe(
-      "the lockdown for untrusted input",
-    );
-    expect(missingCapability(codexDriver, { access: "none" })).toBe("a run with no tools");
-    expect(missingCapability(copilotDriver, { access: "read-only", tools: ["Bash(gh pr review *)"] })).toBe(
-      "its own tool rules",
-    );
-    expect(missingCapability(claudeDriver, { access: "none", outputSchema: {}, untrusted: true })).toBeNull();
+  it("turns what a run asks into the needs the resolver checks providers against", () => {
+    expect(driverNeeds({ access: "edit" })).toEqual(["edit"]);
+    expect(driverNeeds({ access: "read-only" })).toEqual([]);
+    expect(driverNeeds({ access: "none", outputSchema: {} })).toEqual(["noTools", "outputSchema"]);
+    expect(driverNeeds({ access: "read-only", untrusted: true, tools: ["Bash(gh pr review *)"] })).toEqual([
+      "untrusted",
+      "toolRules",
+    ]);
     // With no worktree there is no push guard: only Claude Code's deny rules hold an editing agent back.
-    expect(missingCapability(codexDriver, { access: "edit", unguarded: true })).toBe(
-      "push rules of its own, as a run with no worktree has no push guard",
-    );
-    expect(missingCapability(copilotDriver, { access: "read-only", unguarded: true })).toBeNull();
-    expect(missingCapability(claudeDriver, { access: "edit", unguarded: true })).toBeNull();
-  });
-
-  it("falls back to Claude Code, saying why, when the harness can't do what the run needs", () => {
-    expect(headlessDriverFor("codex", { access: "edit" })).toEqual({ driver: codexDriver, fallback: null });
-    const fallback = headlessDriverFor("copilot-cli", { access: "edit", outputSchema: {} });
-    expect(fallback.driver).toBe(claudeDriver);
-    expect(fallback.fallback).toBe(
-      "Copilot CLI can't run this action headless (it needs structured output), so Claude Code ran it.",
-    );
-    expect(headlessDriverFor("claude-code", { access: "none" })).toEqual({ driver: claudeDriver, fallback: null });
+    expect(driverNeeds({ access: "edit", unguarded: true })).toEqual(["edit", "toolRules"]);
+    expect(driverNeeds({ access: "read-only", unguarded: true })).toEqual([]);
   });
 });

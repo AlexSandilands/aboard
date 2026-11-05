@@ -233,9 +233,9 @@ function automationSummary(
   const parts = [
     task.autopilot === null ? null : `Autopilot ${on(task.autopilot)}`,
     task.autoReview === null ? null : `Auto-review ${on(task.autoReview)}`,
-    task.reviewModel === null
+    task.reviewModel === null || task.reviewModel === "inherit"
       ? null
-      : `Reviewer ${"tier" in task.reviewModel ? task.reviewModel.tier : task.reviewModel.model}`,
+      : `Reviewer ${"tier" in task.reviewModel ? task.reviewModel.tier : "profile" in task.reviewModel ? task.reviewModel.profile : task.reviewModel.model}`,
     task.autoMerge === null ? null : `Auto-merge ${on(task.autoMerge)}`,
     task.priority ? "Priority" : null,
   ].filter((part) => part !== null);

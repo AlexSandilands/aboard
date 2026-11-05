@@ -6,7 +6,8 @@ import {
   normalizeLabel,
   parseImportSource,
   renderTemplateText,
-  sameHeadlessModel,
+  overrideValue,
+  sameModelChoice,
   resolutionNeedsTask,
   startedEpicTasks,
   templateHasPlan,
@@ -535,8 +536,8 @@ export function createTasksService(
           next.autoReview = input.autoReview;
           changed.push("autoReview");
         }
-        if (input.reviewModel !== undefined && !sameHeadlessModel(input.reviewModel, current.reviewModel)) {
-          next.reviewModel = input.reviewModel;
+        if (input.reviewModel !== undefined && !sameModelChoice(input.reviewModel, current.reviewModel)) {
+          next.reviewModel = overrideValue(input.reviewModel);
           changed.push("reviewModel");
         }
         if (current.kind === "epic" && input.manual) throw new AppError("VALIDATION", EPIC_MANUAL_MESSAGE);

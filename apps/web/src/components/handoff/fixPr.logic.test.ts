@@ -37,6 +37,7 @@ const run = (over: Partial<AutopilotRun> = {}): AutopilotRun => ({
   needsAttention: false,
   dismissedAt: null,
   output: null,
+  model: null,
   createdAt: minutesAgo(5),
   startedAt: minutesAgo(5),
   finishedAt: null,

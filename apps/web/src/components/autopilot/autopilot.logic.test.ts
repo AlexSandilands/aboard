@@ -401,18 +401,29 @@ describe("scheduled agent runs", () => {
 });
 
 describe("model field", () => {
-  it("lists the task's model, the tiers and the custom models, keeping a deleted one", () => {
+  it("lists inherit, the tiers and the custom models, keeping a deleted one or a typed model", () => {
     const items = modelChoiceItems([{ id: "codex61", name: "Codex 6.1" }], { tier: "deep" });
-    expect(items.map((i) => i.value)).toEqual(["task", "tier:light", "tier:standard", "tier:deep", "profile:codex61"]);
+    expect(items.map((i) => i.value)).toEqual([
+      "inherit",
+      "tier:light",
+      "tier:standard",
+      "tier:deep",
+      "profile:codex61",
+    ]);
     expect(modelChoiceItems([], { profile: "gone" }).at(-1)).toEqual({
       value: "profile:gone",
-      label: "gone (deleted, runs on the task's model)",
+      label: "gone (deleted, the next setting decides)",
+    });
+    expect(modelChoiceItems([], { provider: "codex", model: "gpt-5.5" }).at(-1)).toEqual({
+      value: "model:codex:gpt-5.5",
+      label: "gpt-5.5 on Codex",
     });
   });
 
-  it("reads anything that isn't a choice as From the task", () => {
-    expect(modelChoiceFieldKey(undefined)).toBe("task");
-    expect(modelChoiceFieldKey("opus")).toBe("task");
+  it("reads anything that isn't a choice as inherit", () => {
+    expect(modelChoiceFieldKey(undefined)).toBe("inherit");
+    expect(modelChoiceFieldKey("opus")).toBe("inherit");
+    expect(modelChoiceFieldKey({ from: "task" })).toBe("inherit");
     expect(modelChoiceFieldKey({ profile: "codex61" })).toBe("profile:codex61");
   });
 });

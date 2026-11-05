@@ -1,10 +1,4 @@
-import {
-  harnessCliSetting,
-  parseImportSource,
-  resolveHeadlessEffort,
-  resolveHeadlessModel,
-  type TaskLink,
-} from "@repo/contracts";
+import { harnessCliSetting, parseImportSource, resolveOperationModel, type TaskLink } from "@repo/contracts";
 import { tmpdir } from "node:os";
 import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ImportResult, Services } from "../services/types.ts";
@@ -91,12 +85,18 @@ export function createIssueImporter(deps: {
     });
     const settings = s.settings.get();
     if (!settings.issueImportEnabled) return raw();
+    const resolved = resolveOperationModel("issueImport", {}, settings);
+    if (!resolved.ok) {
+      log.warn(`[import] ${record.sourceUrl}: not summarised, using the issue as written: ${resolved.reason}`);
+      return raw();
+    }
     try {
       const outcome = await runImport({
-        cli: harnessCliSetting(settings, "claude-code"),
+        // Only `claude -p` meets the import's needs today, so the resolver picks it whenever it picks one.
+        cli: harnessCliSetting(settings, resolved.provider),
         cwd: tmpdir(),
-        model: resolveHeadlessModel(settings.modelTiers, settings.issueImportModel),
-        effort: resolveHeadlessEffort(settings.modelTiers, settings.issueImportModel),
+        model: resolved.model,
+        effort: resolved.effort,
         budgetUsd: settings.issueImportBudgetUsd,
         source: {
           kind: "issue",
@@ -158,13 +158,16 @@ export function createIssueImporter(deps: {
     if (system.importTools.length === 0) {
       throw new Error(`Add import tools to ${system.name} in Settings → Integrations → Ticket systems`);
     }
-    const servers = await connectedServers(harnessCliSetting(settings, "claude-code"));
+    const resolved = resolveOperationModel("issueImport", {}, settings);
+    if (!resolved.ok) throw new Error(resolved.reason);
+    const cli = harnessCliSetting(settings, resolved.provider);
+    const servers = await connectedServers(cli);
     const outcome = await runImport({
-      cli: harnessCliSetting(settings, "claude-code"),
+      cli,
       // Not the project's folder: its .mcp.json and settings are the repo's, and a run in it reads its CLAUDE.md.
       cwd: tmpdir(),
-      model: resolveHeadlessModel(settings.modelTiers, settings.issueImportModel),
-      effort: resolveHeadlessEffort(settings.modelTiers, settings.issueImportModel),
+      model: resolved.model,
+      effort: resolved.effort,
       budgetUsd: settings.issueImportBudgetUsd,
       source: {
         kind: "ticket",

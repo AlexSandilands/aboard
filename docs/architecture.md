@@ -64,6 +64,9 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 
 Settings changed in the UI (T3 token, polling, review options) live in the `settings` table, not in env
 vars. See `apps/server/src/services/settings.ts`. Backups and restore: [features/backup.md](features/backup.md).
+Which model each operation runs on is one of them, `operationModels` (`ModelChoice` per `OperationId`, resolved by
+`resolveOperationModel` in `packages/contracts/src/operations.ts`; see [Models](features/autopilot.md#models) and
+[ADR 0012](decisions/0012-provider-neutral-operation-models.md)).
 
 ## The guard
 

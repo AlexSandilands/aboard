@@ -1,5 +1,5 @@
 import { BRAND } from "./brand.ts";
-import { describeRunModel, resolveRunModel, type ModelProfile } from "./modelProfiles.ts";
+import { describeChoice, resolveTaskModel, type ModelProfile } from "./modelProfiles.ts";
 import { modelTierDescription, type ModelTiers } from "./modelTiers.ts";
 import type { Project, TaskSummary } from "./schemas.ts";
 
@@ -102,12 +102,12 @@ export function suggestedModelLine(
   modelProfiles: readonly ModelProfile[] = [],
 ): string | null {
   if (modelTiers && modelProfiles.length > 0) {
-    const model = resolveRunModel(
-      { labels: task.labels ?? [], tier: task.suggestedModel?.tier ?? null },
+    const model = resolveTaskModel(
+      { labels: task.labels ?? [], suggestedModel: task.suggestedModel ?? null },
       { modelTiers, modelProfiles },
     );
     if (model.source === "label" && model.profile) {
-      const named = describeRunModel({ ...model, source: "tier" });
+      const named = describeChoice(model);
       return `Model: ${named}, picked by the task's label ${model.label}. ${advice}`;
     }
   }

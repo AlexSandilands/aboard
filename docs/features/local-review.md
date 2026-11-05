@@ -76,21 +76,24 @@ keep counting across cycles.
 
 ### The reviewer model
 
-One setting says which model reviews, for the reviewer subagent and for the board reviewer alike. It is a
-`HeadlessModel` (a tier from Settings → Model tiers or a typed model id), or `null` for none. Three levels,
-the nearest wins: the task (Automation → Reviewer in the task panel, or `update_task(reviewModel)`: a tier name,
-a model id, or `null` to inherit), then the project (project settings → Local review), then the board
-(Settings → Tasks → Review → Reviewer model). `services.reviews.modelFor(taskId)` resolves it, next to `skillFor`.
+The reviewer subagent and the board reviewer are two operations (`reviewer`, `boardReviewer` in
+[Autopilot's Models](autopilot.md#models)), each with a `ModelChoice` (a tier, a custom model, a model typed for one
+provider, or inherit). The nearest level wins: the task (Automation → Reviewer in the task panel, or
+`update_task(reviewModel)`: a tier, a custom model's id, `provider:model`, or `null` to inherit), then the project
+(project settings → Local review), then the board (`operationModels.reviewer` and `.boardReviewer`; Settings → Tasks →
+Review → Reviewer model sets both until the Models page sets them apart), then the operation's default. The task and
+project overrides apply to both reviewers.
 
-- **Subagent:** `reviewLoopInstructions` gets `reviewerModelLine(tiers, model)` as `modelLine` and adds it to
-  step 1: "Run the reviewer on the deep tier (Opus 5.5): in Claude Code pass `model: "opus"` to the Agent tool;
-  elsewhere pick that model if your harness lets you, else use your own." The Agent tool takes an alias, which
-  `claudeAgentAlias` reads from the tier's Claude Code model id (opus, sonnet, haiku or fable); an id that matches
-  none goes through as it is. A tier with no Claude Code model leaves out the Claude Code part. Every place that
-  builds the loop text passes it: `move_task` and `start_review`, the Copy prompt route and the T3 nudge.
-- **Board reviewer:** the same model sets `--model` and `--effort` (see [Fallbacks](#fallbacks-when-no-agent-runs-the-round)).
-- **None set:** the line is left out and nothing changes: the subagent follows the implementer's model, the
-  board reviewer the CLI's default.
+- **Subagent:** `services.reviews.modelLineFor(taskId)` gives `reviewLoopInstructions` the `reviewerModelLine` as
+  `modelLine`, added to step 1: "Run the reviewer on the deep tier (Opus 5.5): in Claude Code pass `model: "opus"` to
+  the Agent tool; elsewhere pick that model if your harness lets you, else use your own." The Agent tool takes an
+  alias, which `claudeAgentAlias` reads from the tier's Claude Code model id (opus, sonnet, haiku or fable); an id that
+  matches none goes through as it is. A tier with no Claude Code model leaves out the Claude Code part; a model typed
+  for another provider is named with its provider. Every place that builds the loop text passes it: `move_task` and
+  `start_review`, the Copy prompt route and the T3 nudge. Its default is inherit: with nothing set above the task's own
+  model the line is left out, and the subagent follows the implementer's model.
+- **Board reviewer:** `services.reviews.boardReviewerModel(taskId)` resolves it to a provider, model and effort (see
+  [Fallbacks](#fallbacks-when-no-agent-runs-the-round)); its default is the Standard tier.
 
 ### Review skills
 
@@ -169,10 +172,11 @@ else the project folder. One review runs at a time.
   the board records under the actor "board reviewer". The round's summary shows what the review cost.
 - **Windows shims:** a `claude.cmd` (npm install) runs through cmd.exe with its arguments escaped twice,
   because the shim expands them again; the schema and paths with spaces survive intact.
-- **Model:** the task's [reviewer model](#the-reviewer-model), a `HeadlessModel` like the issue import's (a tier
-  or a typed model, see [issue import](issue-import.md#settings)); `null` (the default) leaves `--model` off, so
-  the CLI's default runs. A tier with no Claude Code model set under Model tiers does the same. The setting was
-  `headlessReviewModel` before it also covered the subagent; migration 039 renames the stored key.
+- **Model:** the board reviewer's [model](#the-reviewer-model), resolved like any operation's: the Standard tier by
+  default, on a provider that can return structured output and follow tool rules (only Claude Code today). A tier
+  with no Claude Code model leaves `--model` off, so the CLI's default runs. With no such provider added the round
+  fails with the reason. The setting was `headlessReviewModel`, then `reviewModel` (039); 041_operation_models moved
+  it into `operationModels`.
 - **Capped:** `--max-budget-usd` (Settings, default $2) and a 20-minute timeout. `--no-session-persistence`
   keeps these runs out of your session history.
 
@@ -207,10 +211,10 @@ The board-run reviewer survives as fallback 3, where it fits: rounds nobody else
 
 ### Other decisions
 
-- **One reviewer model, not two.** The board reviewer already had a model setting, but the subagent, which
-  does nearly all the reviewing, inherited the implementer's tier: "Opus reviews everything" wasn't possible.
-  Rather than a second setting for the subagent, the existing one became the reviewer model and applies to
-  both. The cost is that the board reviewer can't differ from the subagent; nobody asked for that.
+- **One override for both reviewers.** The subagent, which does nearly all the reviewing, used to inherit the
+  implementer's tier, so "Opus reviews everything" wasn't possible; one reviewer model was added for both. Since
+  041 they are two operations on the board, so the board reviewer can differ, but a task's or project's override
+  still sets both: nobody asked for two there.
 
 - **No column.** A Local Review column between In Progress and Review was the original idea. The board is
   already short of width, and cards narrower than now get too busy, so review state is a badge.

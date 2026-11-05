@@ -1,7 +1,7 @@
 import {
   BOARD_ACTOR,
   deriveReviewSummary,
-  type HeadlessModel,
+  resolveOperationModel,
   reviewerModelLine,
   reviewSkillName,
   reviewWantsAnotherRound,
@@ -98,10 +98,14 @@ export function createReviewsService(
     return project?.reviewSkill ?? loadSettings(repos).reviewSkill;
   };
 
-  /** The task's reviewer model, else its project's, else the board's; null runs the reviewer on its own default. */
-  const modelFor = (taskId: string): HeadlessModel | null => {
+  /** What the reviewer operations resolve against: the task's model and the task's and project's overrides. */
+  const reviewerContext = (taskId: string) => {
     const task = deps.task(taskId);
-    return task.reviewModel ?? repos.projects.get(task.projectId)?.reviewModel ?? loadSettings(repos).reviewModel;
+    return {
+      task: { labels: repos.labels.forTasks([taskId]).get(taskId) ?? [], suggestedModel: task.suggestedModel },
+      taskOverride: task.reviewModel,
+      projectOverride: repos.projects.get(task.projectId)?.reviewModel ?? null,
+    };
   };
 
   /** Finds a finding by id or "R2.3" label within the task. */
@@ -202,9 +206,10 @@ export function createReviewsService(
 
     skillFor,
 
-    modelFor,
+    boardReviewerModel: (taskId) =>
+      resolveOperationModel("boardReviewer", reviewerContext(taskId), loadSettings(repos)),
 
-    modelLineFor: (taskId) => reviewerModelLine(loadSettings(repos).modelTiers, modelFor(taskId)),
+    modelLineFor: (taskId) => reviewerModelLine(reviewerContext(taskId), loadSettings(repos)),
 
     openRound(taskId, opts) {
       const id = core.write((fx) => openRoundIn(taskId, opts, fx).id);

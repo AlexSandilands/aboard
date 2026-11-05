@@ -173,7 +173,7 @@ describe("a summarised digest", () => {
     work();
     await pass(at(11, 9, 0));
     expect(requests).toHaveLength(1);
-    expect(requests[0]).toMatchObject({ tier: "light", access: "none" });
+    expect(requests[0]).toMatchObject({ operation: "digest", access: "none" });
     expect(requests[0]!.run.taskId).toBeNull();
     expect(requests[0]!.label).toBe("Digest");
     expect(requests[0]!.prompt).toContain("Add exports: Planned → In Progress");

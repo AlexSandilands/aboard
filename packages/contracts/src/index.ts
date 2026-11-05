@@ -21,7 +21,7 @@ export * from "./t3Launch.ts";
 export * from "./agentModels.ts";
 export * from "./modelTiers.ts";
 export * from "./modelProfiles.ts";
-export * from "./headlessModel.ts";
+export * from "./operations.ts";
 export * from "./backup.ts";
 export * from "./agentSessions.ts";
 export * from "./sessionLaunch.ts";

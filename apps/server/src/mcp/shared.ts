@@ -5,7 +5,11 @@ import {
   AUTOPILOT_START_PLANNED,
   deliveryHintApplies,
   DueDate,
-  HeadlessModel,
+  activeProviderIds,
+  AgentHarness,
+  type AppSettings,
+  ExplicitModel,
+  type ModelChoice,
   MODEL_TIERS,
   ModelTier,
   PlanInput,
@@ -156,19 +160,39 @@ export const reviewModelField = z
   .min(1)
   .describe(
     "The model that reviews this task's changes, for both the reviewer subagent and the board's own reviewer: a tier " +
-      "(light, standard or deep, which the user maps to a model) or a model id such as claude-opus-5-5. null follows " +
+      "(light, standard or deep, which the user maps to a model), the id of one of the user's custom models, or a " +
+      'model on one provider as provider:model (e.g. "claude-code:claude-opus-5-5", "codex:gpt-5.5"). null follows ' +
       "the project's setting, then the board's. Set it only when the user has asked for it; never on your own.",
   );
 
-/** The stored reviewer model for a tool's `reviewModel` argument: a tier name, else a model id (refused if it isn't one). */
-export const reviewModelValue = (choice: string | null): HeadlessModel | null => {
+/**
+ * The stored reviewer model for a tool's `reviewModel` argument: a tier, a custom model's id, or `provider:model`. A
+ * bare model id is refused, with the added providers to put in front of it: which provider runs it can't be guessed.
+ */
+export const reviewModelValue = (
+  choice: string | null,
+  settings: Pick<AppSettings, "modelProfiles" | "providers">,
+): ModelChoice | null => {
   if (choice === null) return null;
   const tier = ModelTier.safeParse(choice);
-  const parsed = HeadlessModel.safeParse(tier.success ? { tier: tier.data } : { model: choice });
-  if (!parsed.success) {
-    throw new AppError("VALIDATION", `"${choice}" is neither a tier (light, standard, deep) nor a model id.`);
+  if (tier.success) return { tier: tier.data };
+  if (settings.modelProfiles.some((p) => p.id === choice)) return { profile: choice };
+  const at = choice.indexOf(":");
+  const provider = AgentHarness.safeParse(at > 0 ? choice.slice(0, at) : "");
+  if (provider.success) {
+    const parsed = ExplicitModel.safeParse({ provider: provider.data, model: choice.slice(at + 1) });
+    if (!parsed.success) throw new AppError("VALIDATION", `"${choice.slice(at + 1)}" isn't a model id.`);
+    return parsed.data;
   }
-  return parsed.data;
+  const added = activeProviderIds(settings);
+  const hint =
+    added.length > 0
+      ? ` For a model, name its provider: ${added.map((id) => `"${id}:${choice}"`).join(" or ")}.`
+      : " For a model, name its provider as provider:model; the user has no CLI provider switched on in Settings → Providers.";
+  throw new AppError(
+    "VALIDATION",
+    `"${choice}" is neither a tier (light, standard, deep) nor one of the user's custom models.${hint}`,
+  );
 };
 
 /** The task's stored flag (null is Default) for a tool's `autopilot` or `autoMerge` argument. */

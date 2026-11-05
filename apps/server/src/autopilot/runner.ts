@@ -7,19 +7,16 @@ import {
   implementingThread,
   autopilotSessionName,
   BRAND,
-  AGENT_HARNESSES,
-  type CliEffort,
+  describeResolution,
   describeRunModel,
   harnessCliSetting,
-  isClaudeModel,
-  profileCliEffort,
-  profileCliModel,
-  profileHeadless,
-  profileHeadlessModel,
-  resolveRunModel,
+  resolveOperationChoice,
+  resolveOperationModel,
+  runModelRecord,
   type AgentHarness,
   type AppSettings,
-  type RunModel,
+  type OperationSettings,
+  type ResolvedModel,
   type TaskSummary,
 } from "@repo/contracts";
 import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
@@ -33,7 +30,7 @@ import {
   type HeadlessDriver,
   type RunAgent,
 } from "../integrations/headlessAgent.ts";
-import { headlessDriverFor, type DriverNeeds } from "../integrations/headlessDrivers.ts";
+import { driverNeeds, HEADLESS_DRIVERS, type DriverNeeds } from "../integrations/headlessDrivers.ts";
 import {
   isT3Unavailable,
   t3Unavailable,
@@ -62,80 +59,36 @@ import { createWorktree, defaultBranchOf, removeWorktree, type Worktree } from "
 /** The T3 command id of a run's launch or nudge: T3 de-duplicates by it, so a retry never starts a second thread. */
 export const runCommandId = (runId: string) => `autopilot-${runId}`;
 
-/**
- * The model a run starts on: the automation's choice (its config's, else the action's own), else what the task's labels
- * or suggested tier pick (resolveRunModel).
- */
-export function runModel(
-  request: Pick<RunnerRequest, "tier" | "modelChoice">,
+/** What a run resolves its model against: its task's own model and the automation's choices, config first. */
+const runContext = (
+  request: Pick<RunnerRequest, "modelChoice">,
   options: RunnerOptions,
-  task: Pick<TaskSummary, "labels"> | null,
-  settings: Parameters<typeof resolveRunModel>[1],
-): RunModel {
-  const configured = "from" in options.modelChoice ? null : options.modelChoice;
-  const input = { labels: task?.labels ?? [], tier: request.tier };
-  const model = resolveRunModel({ ...input, choice: configured ?? request.modelChoice ?? null }, settings);
-  // The Model setting names a custom model since deleted: the action's own choice still comes before the task's.
-  if (model.note && configured && request.modelChoice) {
-    return { ...resolveRunModel({ ...input, choice: request.modelChoice }, settings), note: model.note };
-  }
-  return model;
-}
+  task: Pick<TaskSummary, "labels" | "suggestedModel"> | null,
+) => ({
+  task: task ? { labels: task.labels, suggestedModel: task.suggestedModel } : null,
+  automation: [options.modelChoice, request.modelChoice],
+});
 
 /**
- * A headless run's `--model` and what to note on the run about it: a model typed in the automation's config wins,
- * then the chosen model's model for its headless harness; a chosen model with none runs on the CLI's default, and
- * says so.
- */
-export function headlessModel(
-  model: RunModel,
-  typed: string,
-): { model: string | null; effort: CliEffort | null; note: string | null } {
-  if (typed.trim()) return { model: typed.trim(), effort: null, note: null };
-  const { harness, model: cli } = profileHeadless(model.profile);
-  const label = AGENT_HARNESSES[harness].label;
-  const on = harness === "claude-code" ? "" : `, on ${label}`;
-  const described = describeRunModel(model);
-  const lines = [model.note];
-  // A model set only for T3 Code is worth a word; one with nothing set is the CLI's default as always.
-  if (described && cli) lines.push(`Model: ${described}${on}`);
-  else if (described && (model.profile?.setting.t3 || harness !== "claude-code")) {
-    lines.push(`Model: ${described} has no ${label} model in Settings → Model tiers, so the CLI's default ran${on}`);
-  }
-  const note = lines.filter(Boolean).join("\n") || null;
-  // The effort goes with the harness's own model: a T3 model that stood in for the Claude Code one carries none.
-  return { model: cli, effort: profileCliEffort(model.profile, harness), note };
-}
-
-/**
- * The driver, `--model` and note of a headless run: the harness the chosen model names, unless the run needs something
- * that harness can't do (headlessDriverFor), in which case Claude Code runs it on the model a run on Claude Code would
- * take: a typed override that is a Claude model, else the chosen model's Claude Code model, else the CLI's default. A
- * typed model for another harness (say a Codex model) would fail `claude`, so it is passed over.
+ * The driver, model and note of a headless run: the provider and model resolveOperationModel picks for the run's
+ * operation, among the providers that can do what this run needs. When none can, the run fails with the reason; it
+ * never quietly runs on something else.
  */
 export function headlessRun(
-  model: RunModel,
-  typed: string,
+  request: Pick<RunnerRequest, "operation" | "modelChoice">,
+  options: RunnerOptions,
+  task: Pick<TaskSummary, "labels" | "suggestedModel"> | null,
+  settings: OperationSettings,
   needs: DriverNeeds,
-): { driver: HeadlessDriver; model: string | null; effort: CliEffort | null; note: string | null } {
-  const { driver, fallback } = headlessDriverFor(profileHeadless(model.profile).harness, needs);
-  if (!fallback) return { driver, ...headlessModel(model, typed) };
-  const claudeTyped = isClaudeModel(typed.trim()) ? typed.trim() : null;
-  const cli = claudeTyped ?? profileHeadlessModel(model.profile);
-  // Claude Code's effort goes only with the model it was set for: not a typed one, nor a T3 model standing in.
-  const effort =
-    !claudeTyped && cli && cli === profileCliModel(model.profile, "claude-code")
-      ? profileCliEffort(model.profile, "claude-code")
-      : null;
-  const described = describeRunModel(model);
-  const note = [
-    model.note,
-    described ? `Model: ${described}` : null,
-    `${fallback} ${cli ? `It ran on ${cli}.` : "It ran on the CLI's default model."}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  return { driver, model: cli, effort, note };
+): { driver: HeadlessDriver; resolved: ResolvedModel; note: string } {
+  const resolved = resolveOperationModel(
+    request.operation,
+    { ...runContext(request, options, task), needs: driverNeeds(needs) },
+    settings,
+  );
+  if (!resolved.ok) throw new Error(resolved.reason);
+  const note = [resolved.note, describeResolution(resolved)].filter(Boolean).join("\n");
+  return { driver: HEADLESS_DRIVERS[resolved.provider], resolved, note };
 }
 
 /** Whether T3 Code can take a run now: detected, with a token that works. */
@@ -337,8 +290,18 @@ export function createAutopilotRunner(deps: {
       throw new Error(`${project.title} has neither a workspace folder nor a T3 project to start a thread in`);
     }
     const defaultBranch = await checkBranch(project.workspaceRoot, branch ?? prBase);
-    const model = runModel(request, options, task, deps.services().settings.get());
-    const described = describeRunModel(model);
+    const model = resolveOperationChoice(
+      request.operation,
+      runContext(request, options, task),
+      deps.services().settings.get(),
+    );
+    // With nothing chosen and no tier (the light fallback) the launch keeps T3's default, as a launch from the dialog
+    // does (resolveSuggestion), so there is no model to speak of.
+    const fallback = model.source === "fallback";
+    const described = fallback ? null : describeRunModel(model);
+    // T3 Code runs a tier's or custom model's T3 model; a model typed for a CLI provider has none.
+    const t3Model = fallback ? null : (model.profile?.setting.t3?.selection.model ?? null);
+    const record = (ran: string | null) => ({ provider: "t3-code", model: ran, effort: null, source: model.source });
     // What the run says about its model, and why T3's default ran instead when the model's T3 model couldn't be used.
     const t3Note = (unavailable: string | null) =>
       [
@@ -349,7 +312,13 @@ export function createAutopilotRunner(deps: {
         .filter(Boolean)
         .join("\n");
     const before = t3Note(
-      model.profile && !model.profile.setting.t3 ? "It has no T3 Code model in Settings → Model tiers." : null,
+      fallback
+        ? null
+        : model.explicit
+          ? "It is a model for a CLI provider, which T3 Code doesn't run."
+          : model.profile && !model.profile.setting.t3
+            ? "It has no T3 Code model in Settings → Model tiers."
+            : null,
     );
     if (before) update({ detail: before });
     const launchThread = () =>
@@ -360,8 +329,9 @@ export function createAutopilotRunner(deps: {
           commandId: runCommandId(request.run.id),
           ...(request.label ? { title: autopilotSessionName(request.label, task) } : {}),
           work: true,
-          // The task's labels and tier are read again where the launch resolves its model; only a choice is passed.
-          ...(model.source === "automation" && model.profile
+          // The task's labels and tier are read again where the launch resolves its model; only a choice above the
+          // task's own is passed.
+          ...(model.profile && !["label", "tier", "fallback"].includes(model.source)
             ? { modelChoice: model.profile.tier ? { tier: model.profile.tier } : { profile: model.profile.id } }
             : {}),
           // A pull request's branch is on origin, and origin's copy is the one to build on.
@@ -381,8 +351,9 @@ export function createAutopilotRunner(deps: {
     // until T3 is past preparing its workspace.
     const launchAndSettle = async () => {
       const launch = await launchThread();
-      update({ runner: "t3", threadUrl: launch.link.url });
       // The launch knows best: the model's provider may not be ready, or T3 may no longer offer it.
+      const ran = launch.suggestionUnavailable ? null : t3Model;
+      update({ runner: "t3", threadUrl: launch.link.url, model: record(ran) });
       if (launch.suggestionUnavailable && described) update({ detail: t3Note(launch.suggestionUnavailable) });
       if (launch.link.kind === "t3_thread") await settle(launch.link, request.run.id);
       return launch;
@@ -411,14 +382,13 @@ export function createAutopilotRunner(deps: {
   };
 
   /**
-   * Runs the headless agent on the driver the run's model picks (headlessRun). A driver that takes a preset session id
+   * Runs the headless agent on the provider and model the run's operation resolves to (headlessRun). A driver that takes a preset session id
    * has it recorded and linked before the run starts; one whose CLI picks its own (Codex) has it linked as soon as its
    * output names it, so the card shows the session while it works.
    */
   const runOnDriver = async (
     request: RunnerRequest,
     task: TaskSummary | null,
-    model: RunModel,
     options: RunnerOptions,
     settings: AppSettings,
     where: Pick<AgentArgsInput, "defaultBranch" | "boardMcpConfig"> & {
@@ -433,7 +403,7 @@ export function createAutopilotRunner(deps: {
     link: (harness: AgentHarness, sessionId: string) => void,
   ): Promise<{ outcome: AgentOutcome; sessionId: string | null }> => {
     const access = request.access ?? "edit";
-    const plan = headlessRun(model, options.model, {
+    const plan = headlessRun(request, options, task, settings, {
       access,
       outputSchema: request.outputSchema,
       untrusted: request.untrustedInput,
@@ -441,12 +411,12 @@ export function createAutopilotRunner(deps: {
       deniedTools: request.deniedTools,
       unguarded: !where.hooksPath,
     });
-    const { driver } = plan;
+    const { driver, resolved } = plan;
     const preset = driver.capabilities.presetSessionId ? newSessionId() : null;
     let sessionId: string | null = preset;
-    update({ ...started, ...(preset ? { sessionId: preset } : {}) });
+    update({ ...started, model: runModelRecord(resolved), ...(preset ? { sessionId: preset } : {}) });
     if (preset) link(driver.harness, preset);
-    if (plan.note) update({ detail: plan.note });
+    update({ detail: plan.note });
     const found = (id: string) => {
       if (sessionId) return;
       sessionId = id;
@@ -478,8 +448,8 @@ export function createAutopilotRunner(deps: {
         budgetUsd: options.budgetUsd,
         // Ignored by a driver that can't preset one.
         sessionId: preset ?? "",
-        model: plan.model,
-        effort: plan.effort,
+        model: resolved.model,
+        effort: resolved.effort,
         name: autopilotSessionName(request.label, task),
         defaultBranch: where.defaultBranch,
         ...(request.tools ? { tools: request.tools } : {}),
@@ -535,7 +505,6 @@ export function createAutopilotRunner(deps: {
     const { outcome, sessionId } = await runOnDriver(
       request,
       task,
-      runModel(request, options, task, settings),
       options,
       settings,
       {
@@ -609,7 +578,6 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
       const { outcome, sessionId } = await runOnDriver(
         request,
         null,
-        runModel(request, options, null, settings),
         options,
         settings,
         { cwd, prompt, defaultBranch, ...(mcpConfig ? { boardMcpConfig: mcpConfig } : {}) },

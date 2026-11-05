@@ -240,7 +240,7 @@ export const startPlanned = defineAutomation({
             return false;
           }
         },
-        tier: task.suggestedModel?.tier ?? null,
+        operation: "taskRun",
         options: config,
         // An integration epic's task starts from its branch whatever the setting says: its PR goes there.
         ...(task.integrationBranch

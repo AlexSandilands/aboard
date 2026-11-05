@@ -118,13 +118,14 @@ export function ReviewSettingsSection({ settings }: { settings: AppSettings }) {
         id="tasks.review.model"
         title="Reviewer model"
         description="The model that reviews, for the reviewer subagent and the board reviewer."
-        info="A model tier, or a model passed to claude --model. Without one, the reviewer subagent runs on the implementing agent's model and the board reviewer on the CLI's default. A project or a task can pick its own."
+        info="A model tier, or a model passed to claude --model. Without one, the reviewer subagent runs on the implementing agent's model and the board reviewer on the Standard tier. A project or a task can pick its own."
         label="Reviewer model"
         tiers={settings.modelTiers}
-        value={settings.reviewModel}
+        value={settings.operationModels.reviewer ?? null}
         allowDefault
         defaultLabel="Implementer's model"
-        onChange={(next) => updateSettings.mutate({ reviewModel: next })}
+        // One row for both reviewers until the Models & Operations page sets them apart; none puts both back to default.
+        onChange={(next) => updateSettings.mutate({ operationModels: { reviewer: next, boardReviewer: next } })}
       />
       <HeadlessReviewerRows settings={settings} />
     </SettingsSection>

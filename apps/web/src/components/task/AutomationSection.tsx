@@ -1,4 +1,4 @@
-import type { HeadlessModel, TaskDetail } from "@repo/contracts";
+import type { TaskDetail } from "@repo/contracts";
 import { useId, useState, type ReactNode } from "react";
 
 import { autoReviewChoice, autoReviewOptions } from "~/components/review/review.logic";
@@ -10,6 +10,8 @@ import {
   headlessModelItems,
   headlessModelOption,
   typedHeadlessModel,
+  customModelText,
+  type HeadlessModel,
 } from "~/components/settings/headlessModel.logic";
 import { useUpdateTask } from "~/state/mutations";
 import { useSettings } from "~/state/queries";
@@ -174,12 +176,12 @@ function ReviewModelPicker({
       />
       {option === "custom" ? (
         <BlurInput
-          key={`${value && "model" in value ? value.model : "typing"}-${rejected}`}
+          key={`${customModelText(value) || "typing"}-${rejected}`}
           size="sm"
           className="w-28"
           aria-label="Reviewer model id"
           placeholder="claude-opus-5-5"
-          value={value && "model" in value ? value.model : ""}
+          value={customModelText(value)}
           onSave={(next) => {
             const typed = typedHeadlessModel(next);
             if (!typed) {

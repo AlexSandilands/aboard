@@ -18,7 +18,7 @@ By default the reviewer runs on the same model as the agent that did the work. T
 everything (say, Opus), pick a tier or type a model under **Reviewer model** in **Settings → Tasks → Review**. A
 project can choose its own in its settings, and a task in the **Automation** section of its panel (shown while
 auto-review is on for it). Agents can set the task's with `update_task`, when you ask them to. The same model
-runs the board's own reviewer. If no agent runs the review, the board nudges the task's T3
+runs the board's own reviewer, which otherwise runs on the Standard tier. If no agent runs the review, the board nudges the task's T3
 Code thread, and can run the review itself with Claude Code headless.
 
 How it works: [docs/features/local-review.md](../features/local-review.md).

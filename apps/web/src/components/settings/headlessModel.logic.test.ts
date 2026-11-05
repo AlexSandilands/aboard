@@ -27,7 +27,7 @@ describe("headless model picker", () => {
   it("shows the option a stored choice is", () => {
     expect(headlessModelOption(null)).toBe("default");
     expect(headlessModelOption({ tier: "deep" })).toBe("deep");
-    expect(headlessModelOption({ model: "opus" })).toBe("custom");
+    expect(headlessModelOption({ provider: "claude-code" as const, model: "opus" })).toBe("custom");
     // Custom picked, nothing typed yet: the stored choice is still the old one.
     expect(headlessModelOption({ tier: "deep" }, true)).toBe("custom");
   });
@@ -37,12 +37,15 @@ describe("headless model picker", () => {
     expect(headlessModelForOption("default", { tier: "light" })).toBeNull();
     expect(headlessModelForOption("custom", { tier: "light" })).toBeUndefined();
     expect(headlessModelForOption("custom", null)).toBeUndefined();
-    expect(headlessModelForOption("custom", { model: "opus" })).toEqual({ model: "opus" });
+    expect(headlessModelForOption("custom", { provider: "claude-code" as const, model: "opus" })).toEqual({
+      provider: "claude-code" as const,
+      model: "opus",
+    });
     expect(headlessModelForOption("bogus", null)).toBeUndefined();
   });
 
   it("saves a typed model trimmed, and nothing for a blank or unsafe one", () => {
-    expect(typedHeadlessModel("  haiku ")).toEqual({ model: "haiku" });
+    expect(typedHeadlessModel("  haiku ")).toEqual({ provider: "claude-code", model: "haiku" });
     expect(typedHeadlessModel("")).toBeNull();
     expect(typedHeadlessModel("a b")).toBeNull();
     expect(typedHeadlessModel("x; y")).toBeNull();
@@ -50,7 +53,10 @@ describe("headless model picker", () => {
 
   it("says what a choice runs, and when a tier falls back to the CLI default", () => {
     expect(headlessModelRun(tiers, null)).toEqual({ kind: "default" });
-    expect(headlessModelRun(tiers, { model: "opus" })).toEqual({ kind: "model", model: "opus" });
+    expect(headlessModelRun(tiers, { provider: "claude-code" as const, model: "opus" })).toEqual({
+      kind: "model",
+      model: "opus",
+    });
     expect(headlessModelRun(tiers, { tier: "light" })).toEqual({
       kind: "tier",
       tier: "light",

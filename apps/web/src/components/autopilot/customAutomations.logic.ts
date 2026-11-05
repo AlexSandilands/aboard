@@ -1,4 +1,6 @@
 import {
+  INHERIT,
+  type ModelChoice,
   checkCustomDefinition,
   CreateCustomAutomationInput,
   customAgentPrompt,
@@ -75,6 +77,11 @@ export interface CustomForm {
   skill: string;
   /** "" takes the task's tier (a schedule has none, so the default one). */
   tier: ModelTier | "";
+  /**
+   * The saved model when it isn't a tier (a custom model or a typed one), kept as it is: the form only offers tiers
+   * until the shared model picker (#75). Picking a tier replaces it.
+   */
+  otherModel: ModelChoice | null;
   onPrBranch: boolean;
   /** One tool or server per line, as typed. */
   allowedTools: string;
@@ -139,6 +146,7 @@ export function emptyCustomForm(): CustomForm {
     prompt: "",
     skill: "",
     tier: "",
+    otherModel: null,
     onPrBranch: false,
     allowedTools: "",
     inputs: [],
@@ -190,7 +198,8 @@ export function formFromCustom(custom: CustomAutomation): CustomForm {
     Object.assign(form, {
       prompt: a.prompt,
       skill: a.skill,
-      tier: a.tier ?? "",
+      tier: a.model !== INHERIT && "tier" in a.model ? a.model.tier : "",
+      otherModel: a.model !== INHERIT && !("tier" in a.model) ? a.model : null,
       onPrBranch: a.onPrBranch,
       allowedTools: a.allowedTools.join("\n"),
       slots: a.slots.map(({ name, label, description, tools }) => ({
@@ -286,7 +295,7 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
             kind: "agent",
             prompt: form.prompt,
             skill: form.skill,
-            tier: form.tier || null,
+            model: form.tier ? { tier: form.tier } : (form.otherModel ?? INHERIT),
             // The switch is hidden on a schedule, which has no pull request.
             onPrBranch: form.triggerKind === "schedule" ? false : form.onPrBranch,
             allowedTools: parseAllowedTools(form.allowedTools),
