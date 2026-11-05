@@ -38,7 +38,11 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
   const tabButton = (tab: PickerTab) => {
     const disabled = tab.disabledReason !== null;
     const selected = props.selectedTab === tab.id;
-    const tooltip = disabled ? `${tab.label}: ${tab.disabledReason}` : tab.label;
+    const tooltip = disabled
+      ? `${tab.label}: ${tab.disabledReason}`
+      : tab.warning
+        ? `${tab.label}: ${tab.warning}`
+        : tab.label;
     const button = (
       <ToolbarButton
         className={cn(BUTTON, disabled && "cursor-not-allowed opacity-50 hover:bg-transparent")}
@@ -51,6 +55,13 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
         type="button"
       >
         <PickerIcon icon={tab.icon} className="size-5" />
+        {tab.warning && !disabled ? (
+          <span
+            aria-hidden="true"
+            data-model-picker-warning="true"
+            className="absolute end-1.5 top-1.5 size-2 rounded-full bg-warning ring-2 ring-background"
+          />
+        ) : null}
       </ToolbarButton>
     );
     return (

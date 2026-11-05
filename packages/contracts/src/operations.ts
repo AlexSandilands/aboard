@@ -35,7 +35,15 @@ import { type ProviderId, type ProviderSetting } from "./providers.ts";
 export const DriverCapability = z.enum([
   /** A JSON schema the final answer must match. */
   "outputSchema",
-  /** The lockdown for agents that read untrusted text (and a board-only MCP config). */
+  /**
+   * A read-only run held apart from the user's setup: it can't write or reach the network, and gets none of the
+   * user's MCP servers or the checkout's settings. For the user's own input (a task's diff, a settings question).
+   */
+  "readOnly",
+  /**
+   * The lockdown for agents that read untrusted text: `readOnly`, plus file reads confined to the working folder and
+   * no shell beyond exact commands (and a board-only MCP config).
+   */
   "untrusted",
   /** A run with no tools at all (`access: "none"`). */
   "noTools",
@@ -56,6 +64,7 @@ export type DriverCapabilities = Record<DriverCapability, boolean>;
 
 const LIMITED: Omit<DriverCapabilities, "presetSessionId" | "runTools"> = {
   outputSchema: false,
+  readOnly: false,
   untrusted: false,
   noTools: false,
   toolRules: false,
@@ -63,12 +72,14 @@ const LIMITED: Omit<DriverCapabilities, "presetSessionId" | "runTools"> = {
 };
 
 /**
- * Each harness's headless CLI: `claude -p` can be held to everything; `codex exec` and the Copilot CLI only do work
- * in a folder (docs/features/autopilot.md#headless-drivers). The server's drivers read their capabilities from here.
+ * Each harness's headless CLI: `claude -p` can be held to everything; `codex exec` returns structured output and runs
+ * isolated read-only, but can't confine its reads; the Copilot CLI only does work in a folder. Each claim was checked
+ * against the real CLI (docs/features/autopilot.md#headless-drivers). The server's drivers read them from here.
  */
 export const HEADLESS_CAPABILITIES: Record<AgentHarness, DriverCapabilities> = {
   "claude-code": {
     outputSchema: true,
+    readOnly: true,
     untrusted: true,
     noTools: true,
     toolRules: true,
@@ -76,19 +87,29 @@ export const HEADLESS_CAPABILITIES: Record<AgentHarness, DriverCapabilities> = {
     presetSessionId: true,
     runTools: true,
   },
-  // `--ignore-user-config` plus `-c mcp_servers.<name>…` gives a run the board's endpoint and no other server.
-  codex: { ...LIMITED, presetSessionId: false, runTools: true },
+  // `--output-schema` (strict), `--sandbox read-only` with `--ignore-user-config`, and `-c mcp_servers.<name>…` for the
+  // board's endpoint as its only server. Not `untrusted`: its read-only sandbox still reads any file the user can.
+  codex: { ...LIMITED, outputSchema: true, readOnly: true, presetSessionId: false, runTools: true },
   // Not yet: whether the Copilot CLI can be held to one given MCP server is tracked on its own.
   "copilot-cli": { ...LIMITED, presetSessionId: true, runTools: false },
 };
 
 /** What an operation can ask of the provider that runs it. */
-export const OperationNeed = z.enum(["outputSchema", "untrusted", "noTools", "toolRules", "runTools", "edit"]);
+export const OperationNeed = z.enum([
+  "outputSchema",
+  "readOnly",
+  "untrusted",
+  "noTools",
+  "toolRules",
+  "runTools",
+  "edit",
+]);
 export type OperationNeed = z.infer<typeof OperationNeed>;
 
 /** The capability a need takes; `edit` is work in a folder, which every headless CLI does. */
 const NEED_CAPABILITY: Record<OperationNeed, DriverCapability | null> = {
   outputSchema: "outputSchema",
+  readOnly: "readOnly",
   untrusted: "untrusted",
   noTools: "noTools",
   toolRules: "toolRules",
@@ -99,6 +120,7 @@ const NEED_CAPABILITY: Record<OperationNeed, DriverCapability | null> = {
 /** A need in words, after "a provider that can". */
 export const NEED_WORDS: Record<OperationNeed, string> = {
   outputSchema: "return structured output",
+  readOnly: "run read-only, apart from your own setup",
   untrusted: "lock a run down to read untrusted input",
   noTools: "run with no tools",
   toolRules: "follow tool rules of its own",
@@ -106,12 +128,46 @@ export const NEED_WORDS: Record<OperationNeed, string> = {
   edit: "edit code",
 };
 
-/** The needs a harness's headless CLI can't meet, in the order given. */
+/** What a harness's headless CLI makes of an operation's needs. */
+export interface NeedsCheck {
+  /** Needs it can't meet: it can't run the operation. */
+  missing: OperationNeed[];
+  /**
+   * Needs it meets only in part: the untrusted lockdown, by a CLI that runs isolated read-only but can't confine its
+   * reads. It runs the operation only when the user chose it, with a warning (needsWarning).
+   */
+  warned: OperationNeed[];
+}
+
+const hasCapability = (harness: AgentHarness, need: OperationNeed): boolean => {
+  const capability = NEED_CAPABILITY[need];
+  return capability === null || HEADLESS_CAPABILITIES[harness][capability];
+};
+
+/** The needs a harness's headless CLI can't meet, and the ones it meets with a warning, each in the order given. */
+export function checkNeeds(harness: AgentHarness, needs: readonly OperationNeed[]): NeedsCheck {
+  const out: NeedsCheck = { missing: [], warned: [] };
+  for (const need of needs) {
+    if (hasCapability(harness, need)) continue;
+    if (need === "untrusted" && hasCapability(harness, "readOnly")) out.warned.push(need);
+    else out.missing.push(need);
+  }
+  return out;
+}
+
+/** The needs a harness's headless CLI can't meet, in the order given. A need it meets with a warning isn't one. */
 export const missingNeeds = (harness: AgentHarness, needs: readonly OperationNeed[]): OperationNeed[] =>
-  needs.filter((need) => {
-    const capability = NEED_CAPABILITY[need];
-    return capability !== null && !HEADLESS_CAPABILITIES[harness][capability];
-  });
+  checkNeeds(harness, needs).missing;
+
+/**
+ * The warning a harness carries for these needs, or null: what could go wrong when it runs an operation whose
+ * lockdown it can't fully keep. The picker shows it on the provider and the run repeats it in its note.
+ */
+export function needsWarning(harness: AgentHarness, needs: readonly OperationNeed[]): string | null {
+  return checkNeeds(harness, needs).warned.includes("untrusted")
+    ? `${harnessLabel(harness)} can't confine its file reads, so text anyone can write (a pull request, an issue) could make it leak local files into what it returns.`
+    : null;
+}
 
 // ── The registry ─────────────────────────────────────────────────────────
 
@@ -156,8 +212,8 @@ export const OPERATIONS: Record<OperationId, OperationInfo> = {
   },
   boardReviewer: {
     label: "Board reviewer",
-    // runHeadlessReview: a read-only `claude -p` with its own tool rules and a findings schema.
-    needs: ["outputSchema", "toolRules"],
+    // runHeadlessReview: the user's own task, read-only and apart from their setup, with a findings schema.
+    needs: ["outputSchema", "readOnly"],
     taskScoped: true,
     default: { tier: "standard" },
     reviewerOverrides: true,
@@ -185,13 +241,18 @@ export const OPERATIONS: Record<OperationId, OperationInfo> = {
   },
   issueImport: {
     label: "Issue import",
-    // runImport: `claude -p` with a schema and the ticket system's tool rules.
-    needs: ["outputSchema", "toolRules"],
+    // runImport: a GitHub issue (text anyone can write) in the prompt, with a schema. A ticket also needs tool rules
+    // for the user's MCP servers (IMPORT_TICKET_NEEDS).
+    needs: ["outputSchema", "untrusted"],
     taskScoped: false,
     default: { tier: "light" },
   },
-  ask: { label: "Ask", needs: ["outputSchema", "noTools"], taskScoped: false, default: { tier: "light" } },
+  // The user's own question, answered in an empty folder.
+  ask: { label: "Ask", needs: ["outputSchema", "readOnly"], taskScoped: false, default: { tier: "light" } },
 };
+
+/** What a ticket import asks beyond the issue import's needs: the user's own MCP servers, held to tool rules. */
+export const IMPORT_TICKET_NEEDS: readonly OperationNeed[] = ["toolRules"];
 
 /** The board's model per operation; one left out takes its default. */
 export const OperationModels = z.partialRecord(OperationId, ModelChoiceSchema);
@@ -285,8 +346,13 @@ export interface ResolvedModel {
   source: RunModelSource;
   /** The choice it came from. */
   choice: RunModel;
-  /** Fallbacks worth telling the user about (another provider, no model for it, a deleted model), else null. */
+  /**
+   * Fallbacks worth telling the user about (another provider, no model for it, a deleted model) and the warning, else
+   * null.
+   */
   note: string | null;
+  /** What could go wrong on this provider (needsWarning): it runs only because the user chose it. Also in `note`. */
+  warning: string | null;
 }
 
 export interface ModelRefusal {
@@ -341,6 +407,9 @@ function profileModelOn(
 
 const harnessLabel = (harness: AgentHarness) => AGENT_HARNESSES[harness].label;
 
+/** Where a choice was made for the operation itself, so a provider it prefers may run it with a warning. */
+const CHOSEN_SOURCES: ReadonlySet<RunModelSource> = new Set(["task", "project", "automation", "board"]);
+
 /** The headless providers the user added and switched on, in their order. */
 const activeHarnesses = (settings: { providers: readonly ProviderSetting[] }): AgentHarness[] =>
   settings.providers.flatMap((p) => {
@@ -357,7 +426,9 @@ const listWords = (words: readonly string[]): string =>
  * custom model runs on its preferred provider when that is all three, else on the first provider in the user's
  * Providers order that is all three and has a model for it (a T3 model T3 files under it counts), else on the first
  * that is all three, on the CLI's default model. Any fallback is in `note`. With no such provider at all it refuses,
- * and never runs something else quietly.
+ * and never runs something else quietly. A provider that meets the needs only with a warning (checkNeeds) runs it
+ * only when the user chose it: a typed model on it, or the preferred provider of the chosen tier or custom model.
+ * It is never fallen back to, and its warning is in `note` and `warning`.
  */
 export function resolveOperationModel(
   op: OperationId,
@@ -368,17 +439,24 @@ export function resolveOperationModel(
   const choice = resolveOperationChoice(op, ctx, settings);
   const needs = [...new Set([...info.needs, ...(ctx.needs ?? [])])];
   const active = activeHarnesses(settings);
-  const capable = active.filter((h) => missingNeeds(h, needs).length === 0);
+  const checks = new Map(active.map((h) => [h, checkNeeds(h, needs)]));
+  const meets = (h: AgentHarness) => checks.get(h)?.missing.length === 0;
+  // Fallen back to: only providers that meet every need without a warning.
+  const capable = active.filter((h) => meets(h) && checks.get(h)?.warned.length === 0);
   const notes = [choice.note];
-  const done = (provider: AgentHarness, model: string | null, effort: CliEffort | null): ResolvedModel => ({
-    ok: true,
-    provider,
-    model,
-    effort,
-    source: choice.source,
-    choice,
-    note: notes.filter(Boolean).join("\n") || null,
-  });
+  const done = (provider: AgentHarness, model: string | null, effort: CliEffort | null): ResolvedModel => {
+    const warning = needsWarning(provider, needs);
+    return {
+      ok: true,
+      provider,
+      model,
+      effort,
+      source: choice.source,
+      choice,
+      note: [...notes, warning].filter(Boolean).join("\n") || null,
+      warning,
+    };
+  };
 
   if (choice.explicit) {
     const { provider, model, effort } = choice.explicit;
@@ -398,24 +476,45 @@ export function resolveOperationModel(
     return done(provider, model, cliEffortFor(provider, effort));
   }
 
-  if (capable.length === 0) {
-    const wanted = needs.filter((n) => NEED_CAPABILITY[n] !== null);
-    const can = wanted.length > 0 ? ` that can ${listWords(wanted.map((n) => NEED_WORDS[n]))}` : "";
-    return { ok: false, reason: `${info.label} needs a provider${can}; add one in Settings → Providers.` };
-  }
-
   // resolveOperationChoice always ends on a profile when nothing is typed.
   const profile = choice.profile!;
   const named = describeChoice(choice) ?? profile.name;
   const preferred = profile.setting.provider;
+  // A preferred provider that meets the needs only with a warning runs only when the tier or custom model was chosen
+  // for this operation (on the task, project, automation or Models page). A tier that is merely the operation's
+  // default, or the task's own model, was picked for other work, so it never moves untrusted text onto that provider.
+  const chosenHere = CHOSEN_SOURCES.has(choice.source);
+  const preferredRuns =
+    preferred !== undefined &&
+    active.includes(preferred) &&
+    meets(preferred) &&
+    (chosenHere || checks.get(preferred)?.warned.length === 0);
+
+  if (!preferredRuns && capable.length === 0) {
+    const wanted = needs.filter((n) => NEED_CAPABILITY[n] !== null);
+    const can = wanted.length > 0 ? ` that can ${listWords(wanted.map((n) => NEED_WORDS[n]))}` : "";
+    const warned = active.filter((h) => meets(h));
+    const withWarning =
+      warned.length > 0
+        ? ` ${listWords(warned.map(harnessLabel))} can run it with a warning if you choose ${warned.length === 1 ? "it" : "one"} for ${info.label} on the Models page.`
+        : "";
+    return {
+      ok: false,
+      reason: `${info.label} needs a provider${can}; add one in Settings → Providers.${withWarning}`,
+    };
+  }
+
   let provider: AgentHarness;
-  if (preferred && capable.includes(preferred)) provider = preferred;
+  if (preferredRuns) provider = preferred;
   else {
     provider = capable.find((h) => profileModelOn(profile, h)) ?? capable[0]!;
     if (preferred) {
+      const missing = missingNeeds(preferred, needs);
       const why = !active.includes(preferred)
         ? "isn't added and switched on in Settings → Providers"
-        : `can't ${listWords(missingNeeds(preferred, needs).map((n) => NEED_WORDS[n]))}`;
+        : missing.length > 0
+          ? `can't ${listWords(missing.map((n) => NEED_WORDS[n]))}`
+          : `can't fully ${listWords((checks.get(preferred)?.warned ?? []).map((n) => NEED_WORDS[n]))} and wasn't chosen for ${info.label}`;
       notes.push(`${named} prefers ${harnessLabel(preferred)}, which ${why}, so ${harnessLabel(provider)} ran it.`);
     }
   }

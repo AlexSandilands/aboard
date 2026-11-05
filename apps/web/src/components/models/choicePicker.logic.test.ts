@@ -72,22 +72,42 @@ describe("choicePickerModel", () => {
   });
 
   it("says what each tier resolves to for the operation", () => {
-    const model = choicePickerModel(input());
+    const model = choicePickerModel(input({ op: "orchestrate" }));
     const detail = (key: string) => model.rows.find((r) => r.key === key)?.detail;
-    // The board reviewer needs structured output, so the deep tier's Codex preference falls to Claude Code.
+    // Orchestrate needs tool rules, so the deep tier's Codex preference falls to Claude Code.
     expect(detail("tier:standard")).toBe("Claude Code · sonnet");
     expect(detail("tier:deep")).toBe("Claude Code · default model");
   });
 
   it("greys out a provider that can't do what the operation needs, with the reason", () => {
-    const model = choicePickerModel(input());
+    const model = choicePickerModel(input({ op: "orchestrate" }));
     const codex = model.tabs.find((t) => t.id === "codex")!;
-    expect(codex.disabledReason).toBe(
-      "Codex can't return structured output and follow tool rules of its own, which Board reviewer needs.",
-    );
+    expect(codex.disabledReason).toBe("Codex can't follow tool rules of its own, which Orchestrate needs.");
+    expect(codex.warning).toBeNull();
     expect(codex.notice).toContain("codex isn't scanned");
     expect(codex.settingsTarget).toBe("providers.codex");
     expect(choicePickerModel(input({ op: "taskRun" })).tabs.find((t) => t.id === "codex")!.disabledReason).toBeNull();
+  });
+
+  it("offers a provider that only partly locks down, marked with its warning", () => {
+    const pr = choicePickerModel(input({ op: "prReview" }));
+    const codex = pr.tabs.find((t) => t.id === "codex")!;
+    expect(codex.disabledReason).toBeNull();
+    expect(codex.warning).toBe(
+      "Codex can't confine its file reads, so text anyone can write (a pull request, an issue) could make it leak local files into what it returns. It runs PR review only when you choose it.",
+    );
+    expect(pr.tabs.find((t) => t.id === "claude-code")!.warning).toBeNull();
+    // Chosen for issue import, Codex can't read tickets, and the warning says so.
+    expect(choicePickerModel(input({ op: "issueImport" })).tabs.find((t) => t.id === "codex")!.warning).toMatch(
+      /Ticket imports need tool rules, which Codex can't follow/,
+    );
+    // The deep tier prefers Codex, so choosing it runs there, with the warning.
+    expect(pr.rows.find((r) => r.key === "tier:deep")?.detail).toMatch(/^Codex · .*, with a warning$/);
+    // The user's own task diff: Codex runs the board reviewer without one.
+    expect(choicePickerModel(input()).tabs.find((t) => t.id === "codex")).toMatchObject({
+      disabledReason: null,
+      warning: null,
+    });
   });
 
   it("keeps a saved model the scan doesn't list, and a saved model's provider that isn't added", () => {
@@ -161,7 +181,7 @@ describe("typedRows", () => {
   });
 
   it("leaves out providers that can't run the operation, and refuses what can't be a model", () => {
-    const model = choicePickerModel(input());
+    const model = choicePickerModel(input({ op: "orchestrate" }));
     expect(typedRows(model, "gpt-6", CHOICES_TAB).rows.map((r) => r.tab)).toEqual(["claude-code"]);
     expect(typedRows(model, "rm -rf", CHOICES_TAB).error).toMatch(/letters, digits/);
   });
@@ -237,9 +257,9 @@ describe("resolvesTo", () => {
   });
 
   it("passes on the resolver's note and its refusal", () => {
-    const deep = settings({ operationModels: { boardReviewer: { tier: "deep" } } });
-    expect(resolvesTo("boardReviewer", {}, deep).note).toMatch(/prefers Codex/);
-    const refused = resolvesTo("boardReviewer", {}, settings({ providers: on("codex") }));
+    const deep = settings({ operationModels: { orchestrate: { tier: "deep" } } });
+    expect(resolvesTo("orchestrate", {}, deep).note).toMatch(/prefers Codex/);
+    const refused = resolvesTo("orchestrate", {}, settings({ providers: on("codex") }));
     expect(refused.ok).toBe(false);
     expect(refused.text).toMatch(/needs a provider that can/);
   });

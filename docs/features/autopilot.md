@@ -1279,22 +1279,55 @@ the Copilot CLI when the run's model says so ([Headless drivers](#headless-drive
 Each harness has a `HeadlessDriver` (`integrations/headlessAgent.ts` for Claude Code, `integrations/headlessDrivers.ts`
 for the others): the argv, a parser that turns its output into an outcome, and what it can be held to.
 
-| Capability                             | Claude Code | Codex | Copilot CLI |
-| -------------------------------------- | ----------- | ----- | ----------- |
-| Structured output (`outputSchema`)     | yes         | no    | no          |
-| Untrusted-input lockdown               | yes         | no    | no          |
-| No tools (`access: "none"`)            | yes         | no    | no          |
-| Extra tool rules (`tools`, `deniedTools`) | yes      | no    | no          |
-| Board-served [run tools](#run-tools) (`runTools`) | yes | yes   | no          |
-| Spending cap (`budgetUsd`) and cost    | yes         | no    | no          |
-| Session id given up front              | yes         | no    | yes         |
+| Capability                                        | Claude Code | Codex          | Copilot CLI |
+| ------------------------------------------------- | ----------- | -------------- | ----------- |
+| Structured output (`outputSchema`)                | yes         | yes            | no          |
+| Isolated read-only run (`readOnly`)               | yes         | yes            | no          |
+| Untrusted-input lockdown (`untrusted`)            | yes         | no, warns      | no          |
+| No tools (`access: "none"`)                       | yes         | no             | no          |
+| Extra tool rules (`tools`, `deniedTools`)         | yes         | no             | no          |
+| Board-served [run tools](#run-tools) (`runTools`) | yes         | yes            | no          |
+| Spending cap (`budgetUsd`) and cost               | yes         | no             | no          |
+| Session id given up front                         | yes         | no             | yes         |
+
+Each "yes" for Codex was checked against codex-cli 0.166.0; the findings are below. "No, warns": Codex has every other
+part of the lockdown but can't confine its file reads, so an operation that reads text anyone can write runs on it only
+when the user chose it, with a warning ([Warnings](#capability-warnings)).
 
 - **Which one.** The provider the run's operation resolves to ([Models](#models)): the chosen model's preferred
   provider when it can do what the run needs, else the first in the user's Providers order that can. A run that needs
-  what only Claude Code can do (a reviewer's structured verdict, the untrusted lockdown, a no-tools digest, tool rules,
-  or an editing run with no task, which has no worktree and so no push guard) runs on Claude Code, and its detail says
-  why; with Claude Code not added, it fails with the reason instead. So in practice only edit and plain read-only runs
-  (Start planned, Fix PRs, Unstick, custom agent actions without tool rules) run on Codex or Copilot.
+  what only Claude Code can do (a no-tools digest, tool rules, the full untrusted lockdown, or an editing run with no
+  task, which has no worktree and so no push guard) runs on Claude Code, and its detail says why; with Claude Code not
+  added, it fails with the reason instead. Codex also runs the structured operations on the user's own input (the
+  [board reviewer](local-review.md#the-board-reviewer), the settings Ask) and, when the user chooses it, those that read
+  text anyone can write (PR review, GitHub [issue import](issue-import.md)), with a [warning](#capability-warnings).
+  The Copilot CLI runs only edit and plain read-only runs. Every operation goes through `headlessDriverFor`: the
+  Autopilot runner, the board reviewer (`headlessReview.ts`), Ask (`settingsAsk.ts`) and issue import
+  (`headlessImport.ts`, through `structuredRun.ts`).
+- **Needs.** Each operation's needs are in `OPERATIONS` (contracts `operations.ts`): the board reviewer and Ask need
+  `outputSchema` and `readOnly` (isolated read-only, for the user's own diff or question); PR review needs
+  `outputSchema`, `untrusted` and `runTools`; issue import needs `outputSchema` and `untrusted` for a GitHub issue (its
+  text is in the prompt) and `toolRules` on top for a ticket (`IMPORT_TICKET_NEEDS`: it reads through the user's own
+  MCP servers). `checkNeeds(harness, needs)` sorts what a CLI lacks into *missing* (it can't run it) and *warned*.
+- **Structured output on Codex:** `--output-schema <file>`. Checked on codex-cli 0.166.0: Codex sends the schema as an
+  OpenAI strict response format and holds the answer to it (asked for an enum value outside the schema and extra
+  fields, it returned a conforming object). Strict mode refuses a schema whose objects don't say
+  `additionalProperties: false` (a 400 in `turn.failed`) and wants every property required, so `strictSchema()`
+  (`integrations/strictSchema.ts`) closes every object and makes an optional field nullable, and `fromStrict()` drops
+  the nulls the model then writes for them before the caller's zod schema reads it. `withDriverArgs` writes the
+  converted schema to a temp folder outside the run's working folder and removes it when the run ends. The answer is
+  the last `agent_message` item's text, parsed as JSON; one that isn't fails the run.
+- **Isolated read-only on Codex** (`readOnly`, and every untrusted run): `--sandbox read-only --ignore-user-config
+  --ignore-rules -c web_search="disabled" --disable apps`, plus `--ephemeral` for a run with nothing to resume (the
+  board reviewer, Ask, import). Checked on codex-cli 0.166.0: the sandbox refused a write in the working folder
+  ("Read-only file system", and `apply_patch` was rejected) and the shell had no network (`curl` couldn't resolve a
+  host that the machine could). Two things sit outside the sandbox and are turned off: the model's hosted web search
+  (`web__run`) and, once the shell is off, the hosted `codex_apps` connector. Claude Code's isolated read-only run is
+  its reviewer's read-only tool list without the board, `--strict-mcp-config` and `--setting-sources user`.
+- **Codex can't confine reads,** so it lacks `untrusted`. Its read-only sandbox read a file outside the working folder.
+  `--disable shell_tool --disable unified_exec` does remove the shell, but the run keeps code-mode `exec`,
+  `spawn_agent` subagents and `view_image`, several of the features involved are marked under development, and what
+  the model lists as its tools changed from run to run, so no reliable confinement was found.
 - **Codex:** `codex exec --json --skip-git-repo-check --sandbox danger-full-access [--model <m>] [-c
   model_reasoning_effort=<effort>] -` (read-only runs use `--sandbox read-only`), prompt on stdin. Checked against
   codex-cli 0.166.0 (recorded output is in `integrations/fixtures/codex/`). Edit runs leave Codex's sandbox off. Its
@@ -1323,13 +1356,34 @@ for the others): the argv, a parser that turns its output into an outcome, and w
 - **Run tools:** Claude Code gets `--mcp-config <file>` naming only the run's server (`aboard-run`, `RUN_SERVER_NAME`)
   with its token in a header, and `mcp__<server>` allowed; a locked-down run keeps `--strict-mcp-config`, any other
   keeps the user's servers too. Codex gets `--ignore-user-config -c mcp_servers.<server>.url="…" -c
-  mcp_servers.<server>.bearer_token_env_var="<RUN_TOKEN_ENV>"`, with the token in that variable. Checked on
+  mcp_servers.<server>.bearer_token_env_var="<RUN_TOKEN_ENV>" -c
+  mcp_servers.<server>.default_tools_approval_mode="approve"`, with the token in that variable. The approval mode
+  matters in the read-only sandbox: there Codex asks before calling a tool without `readOnlyHint`, and with nobody to
+  answer the call fails ("MCP tool call requires approval, but approval policy is never"; a tool with the hint ran,
+  checked on 0.166.0). The run tools all carry the hint, and the endpoint serves only the tools the run may use. Checked on
   codex-cli 0.166.0: a `codex exec` pointed at a run endpoint called `pr_overview` and `pr_diff` (`mcp_tool_call`
   items, no approval asked) and answered from the diff; and with `--ignore-user-config` a stdio server named in a
   `config.toml` was not started, while without it it was. The login under `CODEX_HOME` still applies. The Copilot
   CLI can't yet be held to one given MCP server, so it lacks the capability.
 - **Cost:** Codex and Copilot report none and take no cap. Only `timeoutMinutes` stops them, the run records no cost,
   and the spend cap doesn't count them.
+
+#### Capability warnings
+
+A provider that has the isolated read-only run but not the untrusted lockdown (Codex) meets `untrusted` with a
+warning rather than not at all (`checkNeeds` puts it under `warned`, `needsWarning` gives the text: it can't confine
+its file reads, so text anyone can write could make it leak local files into what it returns, such as a review the
+board then posts):
+
+- **Never a fallback.** `resolveOperationModel` falls back only to providers with nothing missing and nothing warned.
+  With none, it refuses, and says which provider could run it with a warning if the user chose it.
+- **Only when chosen for the operation:** a typed model on that provider, at any level, or a tier or custom model
+  whose preferred provider it is, set for this operation (on the task, the project, the automation or the Models
+  page). A tier that is only the operation's default, or the task's own model, was chosen for other work: its
+  preferred provider is passed over like any other with a warning, and the note says why.
+- **Said where it runs:** `ResolvedModel.warning`, also appended to `note`, so a run's detail repeats it; an import
+  logs it. The [picker](#models) shows the provider with a warning dot and its tooltip, the warning under its list, and
+  ", with a warning" on a tier that resolves to it; a provider with a need missing stays greyed out with the reason.
 
 #### Run tools
 
@@ -1431,6 +1485,8 @@ asks on top: `driverNeeds` in `integrations/headlessDrivers.ts`) count:
   model for it, else on the first that counts, on the CLI's default model. A CLI model comes with its effort; when a
   tier has no CLI model for a provider, its T3 model stands in when T3 files it under that provider
   (`t3InstanceHarness`), with no effort.
+- A provider that meets the needs only with a [warning](#capability-warnings) counts for a typed model on it and as
+  the preferred provider of a tier or custom model chosen for the operation, never as a fallback or through a default.
 - No provider counts: the operation refuses with the reason ("Ask needs a provider that can return structured output
   and run with no tools; add one in Settings → Providers"). It never runs something else quietly. The refusal is the
   Ask error, the issue-import failure, the board review round's error and the Autopilot run's failure.

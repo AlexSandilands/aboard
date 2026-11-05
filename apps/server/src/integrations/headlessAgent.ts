@@ -6,7 +6,6 @@ import {
   type DriverCapabilities,
 } from "@repo/contracts";
 import { claudeFailure, readClaudeResult, runClaude } from "./claudeCli.ts";
-import { READ_ONLY_TOOLS } from "./headlessReview.ts";
 import { RUN_SERVER_NAME } from "../mcp/runTokens.ts";
 
 // Autopilot's headless agent: Claude Code (`claude -p`) doing real work in a worktree the board made for the run.
@@ -18,6 +17,19 @@ import { RUN_SERVER_NAME } from "../mcp/runTokens.ts";
  * no tools at all and answer from its prompt (no built-in tools, no MCP servers).
  */
 export type AgentAccess = "edit" | "read-only" | "none";
+
+/** Read files, search, and read-only git. Everything else is denied by `--permission-mode dontAsk`. */
+export const READ_ONLY_TOOLS = [
+  "Read",
+  "Grep",
+  "Glob",
+  "Bash(git diff *)",
+  "Bash(git log *)",
+  "Bash(git show *)",
+  "Bash(git status *)",
+  "Bash(git merge-base *)",
+  "Bash(git rev-parse *)",
+];
 
 /** What an agent with edit access may use without asking. `--permission-mode acceptEdits` covers file edits. */
 export const EDIT_TOOLS = [
@@ -104,6 +116,19 @@ export interface AgentArgsInput {
   /** A JSON schema the agent's final answer must match (`--json-schema`). */
   outputSchema?: object | null;
   /**
+   * Where the schema was written, for a CLI that reads it from a file (`HeadlessDriver.schemaFile`); withDriverArgs
+   * writes it.
+   */
+  outputSchemaPath?: string;
+  /**
+   * A read-only run held apart from the user's setup (the `readOnly` capability): none of their MCP servers, the
+   * checkout's settings or a CLI's own hosted tools; only the run tools, when it has them. For the user's own input
+   * (a task's diff, a settings question); `untrusted` locks down further. Read-only agents only.
+   */
+  isolated?: boolean;
+  /** Nothing to resume: the CLI keeps no session (a reviewer's verdict, a settings answer). */
+  ephemeral?: boolean;
+  /**
    * The agent reads text anyone can write, so a prompt injection could try to steal or misuse what it can reach: it
    * gets no MCP servers (the board's included), no settings from the checkout, only exact git commands, and file tools
    * that reach only its own worktree. Read-only agents only.
@@ -169,6 +194,8 @@ export function agentArgs(input: AgentArgsInput): string[] {
   const readOnly = input.access === "read-only";
   const none = input.access === "none";
   const lockedDown = readOnly && input.untrusted;
+  // Isolated but trusted: the reviewer's read-only list without the board, and no MCP servers but the run's.
+  const isolated = readOnly && !input.untrusted && Boolean(input.isolated);
   // A no-tools run gets none, run tools included.
   const runTools = none ? null : (input.runTools ?? null);
   const mcpConfigs = [
@@ -192,7 +219,9 @@ export function agentArgs(input: AgentArgsInput): string[] {
           ...(readOnly
             ? input.untrusted
               ? [...UNTRUSTED_TOOLS, ...(input.boardMcpConfig ? [`mcp__${BRAND.id}`] : [])]
-              : [...READ_ONLY_TOOLS, `mcp__${BRAND.id}`]
+              : isolated
+                ? READ_ONLY_TOOLS
+                : [...READ_ONLY_TOOLS, `mcp__${BRAND.id}`]
             : EDIT_TOOLS),
           ...(runTools ? [`mcp__${RUN_SERVER_NAME}`] : []),
           ...(input.tools ?? []),
@@ -214,16 +243,23 @@ export function agentArgs(input: AgentArgsInput): string[] {
           "--tools",
           "Read,Grep,Glob,Bash",
         ]
-      : // Any other run keeps the user's servers and gets the run's on top.
-        mcpConfigs.length > 0
-        ? ["--mcp-config", ...mcpConfigs]
-        : []),
+      : isolated
+        ? [
+            "--strict-mcp-config",
+            ...(mcpConfigs.length > 0 ? ["--mcp-config", ...mcpConfigs] : []),
+            "--setting-sources",
+            "user",
+          ]
+        : // Any other run keeps the user's servers and gets the run's on top.
+          mcpConfigs.length > 0
+          ? ["--mcp-config", ...mcpConfigs]
+          : []),
     "--max-budget-usd",
     String(input.budgetUsd),
     "--session-id",
     input.sessionId,
     // Nothing to resume: a no-tools run has no worktree or card, so its transcript would only pile up.
-    ...(none ? ["--no-session-persistence"] : []),
+    ...(none || input.ephemeral ? ["--no-session-persistence"] : []),
     ...(input.model ? ["--model", input.model] : []),
     ...(input.effort ? ["--effort", input.effort] : []),
     ...(input.name ? ["--name", input.name] : []),
@@ -285,9 +321,12 @@ export interface HeadlessDriver {
   /** How runs and errors name it. */
   label: string;
   capabilities: DriverCapabilities;
+  /** The CLI reads the output schema from a file (`outputSchemaPath`), which withDriverArgs writes. */
+  schemaFile?: boolean;
   /** The argv for a run; the prompt goes over stdin. `sessionId` is ignored without `presetSessionId`. */
   args(input: AgentArgsInput): string[];
-  parse(stdout: string, wantsOutput: boolean): AgentOutcome;
+  /** The run's outcome; with the run's output schema, its structured output is checked for and read. */
+  parse(stdout: string, outputSchema?: object | null): AgentOutcome;
   /** The session id a stdout line reports, for a CLI that picks its own. */
   sessionIdOf?(line: string): string | null;
 }
@@ -299,7 +338,7 @@ export const claudeDriver: HeadlessDriver = {
   label: "Claude Code",
   capabilities: HEADLESS_CAPABILITIES["claude-code"],
   args: agentArgs,
-  parse: parseAgentOutput,
+  parse: (stdout, outputSchema) => parseAgentOutput(stdout, Boolean(outputSchema)),
 };
 
 /** Runs one headless agent to the end and returns its stdout. */

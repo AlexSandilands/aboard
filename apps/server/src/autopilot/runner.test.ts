@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   BRAND,
@@ -586,18 +587,18 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       expect(h.services.links.listByKind("agent_session")[0]).toMatchObject({ ref: { harness: "copilot-cli" } });
     });
 
-    it("runs on Claude Code, saying why, when the action needs structured output", async () => {
+    it("runs on Claude Code, saying why, when the action needs tool rules", async () => {
       const { h, task, jobs, start, patches } = setup({
         agent: async () => result({ result: "ok", structured_output: { ok: true }, session_id: SESSION }),
       });
       h.services.settings.update({ modelProfiles: [codexProfile("codex")] });
       h.services.tasks.update(task.id, { labels: ["other"] }, "test");
-      await start({ options: { runner: "headless" }, access: "read-only", outputSchema: { type: "object" } });
+      await start({ options: { runner: "headless" }, access: "read-only", tools: ["Bash(gh pr view *)"] });
       expect(jobs[0]!.args[0]).toBe("-p");
       expect(jobs[0]!.args).not.toContain("--model");
       expect(patches).toContainEqual({
         detail: [
-          "Other prefers Codex, which can't return structured output, so Claude Code ran it.",
+          "Other prefers Codex, which can't follow tool rules of its own, so Claude Code ran it.",
           "Other has no Claude Code model in Settings → Models, so the CLI's default ran.",
           "Model: Other, from label other: the CLI's default model on Claude Code",
         ].join("\n"),
@@ -615,7 +616,7 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
         const run = start({
           options: { runner: "headless", ...(typed ? { modelChoice: { provider: "codex", model: typed } } : {}) },
           access: "read-only",
-          outputSchema: { type: "object" },
+          tools: ["Bash(gh pr view *)"],
         });
         return { run, jobs, patches };
       };
@@ -628,9 +629,69 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       );
       const typed = await setupWith("gpt-5.5-codex");
       await expect(typed.run).rejects.toThrow(
-        "Task runs is set to run on Codex, which can't return structured output.",
+        "Task runs is set to run on Codex, which can't follow tool rules of its own.",
       );
       expect(typed.jobs).toHaveLength(0);
+    });
+
+    it("gives Codex a structured run's schema in strict form in a file, and reads its answer back", async () => {
+      const schema = {
+        type: "object",
+        properties: { verdict: { type: "string" }, note: { type: "string" } },
+        required: ["verdict"],
+      };
+      let schemaPath = "";
+      let written: unknown = null;
+      const { h, task, jobs, start } = setup({
+        agent: async (job) => {
+          schemaPath = job.args[job.args.indexOf("--output-schema") + 1]!;
+          written = JSON.parse(await readFile(schemaPath, "utf8"));
+          const answer = JSON.stringify({ verdict: "clean", note: null });
+          return [
+            JSON.stringify({ type: "thread.started", thread_id: CODEX_ID }),
+            JSON.stringify({ type: "item.completed", item: { id: "i", type: "agent_message", text: answer } }),
+            JSON.stringify({ type: "turn.completed" }),
+          ].join("\n");
+        },
+      });
+      h.services.settings.update({ modelProfiles: [codexProfile("codex")] });
+      h.services.tasks.update(task.id, { labels: ["other"] }, "test");
+      const out = await start({ options: { runner: "headless" }, access: "read-only", outputSchema: schema });
+      expect(jobs[0]!.command).toBe("codex");
+      expect(written).toEqual({
+        type: "object",
+        properties: { verdict: { type: "string" }, note: { type: ["string", "null"] } },
+        required: ["verdict", "note"],
+        additionalProperties: false,
+      });
+      // The optional field the model had to write as null is left out again.
+      expect(out).toMatchObject({ output: { verdict: "clean" } });
+      expect((out as { output: object }).output).not.toHaveProperty("note");
+      await expect(readFile(schemaPath, "utf8")).rejects.toThrow("ENOENT");
+    });
+
+    it("runs a PR review on Codex only when chosen, with the warning in the run's detail", async () => {
+      const { h, task, jobs, start, patches } = setup({
+        agent: async () =>
+          [
+            JSON.stringify({ type: "thread.started", thread_id: CODEX_ID }),
+            JSON.stringify({ type: "item.completed", item: { id: "i", type: "agent_message", text: "{}" } }),
+            JSON.stringify({ type: "turn.completed" }),
+          ].join("\n"),
+      });
+      h.services.settings.update({ modelProfiles: [codexProfile("codex")] });
+      h.services.tasks.update(task.id, { labels: ["other"] }, "test");
+      await start({
+        options: { runner: "headless", modelChoice: { provider: "codex", model: "gpt-5.5-codex" } },
+        access: "read-only",
+        untrustedInput: true,
+        outputSchema: { type: "object", properties: {} },
+      });
+      const args = jobs[0]!.args;
+      expect(args).toEqual(
+        expect.arrayContaining(["--sandbox", "read-only", "--ignore-user-config", "--ignore-rules"]),
+      );
+      expect(patches.some((p) => p.detail?.includes("Codex can't confine its file reads"))).toBe(true);
     });
 
     it("fails with the harness's own name", async () => {

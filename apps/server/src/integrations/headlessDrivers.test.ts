@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { BRAND } from "@repo/contracts";
 import { RUN_SERVER_NAME, RUN_TOKEN_ENV } from "../mcp/runTokens.ts";
@@ -13,6 +13,7 @@ import {
   driverNeeds,
   parseCodexOutput,
   parseCopilotOutput,
+  withDriverArgs,
 } from "./headlessDrivers.ts";
 
 const ID = "0199a213-81c0-7800-8aa1-bbab2a035a53";
@@ -90,11 +91,84 @@ describe("the Codex driver", () => {
       `mcp_servers.${RUN_SERVER_NAME}.url="http://127.0.0.1:4317/mcp/run"`,
       "-c",
       `mcp_servers.${RUN_SERVER_NAME}.bearer_token_env_var="${RUN_TOKEN_ENV}"`,
+      // In the read-only sandbox a tool call is otherwise asked about, and nobody is there to answer.
+      "-c",
+      `mcp_servers.${RUN_SERVER_NAME}.default_tools_approval_mode="approve"`,
       "-",
     ]);
     // The token is never on the command line, nor the config file Claude Code reads.
     expect(args.join(" ")).not.toContain("run-mcp.json");
     expect(codexArgs(input())).not.toContain("--ignore-user-config");
+  });
+
+  it("holds an isolated or untrusted read-only run apart from the user's setup, and never an edit run", () => {
+    const isolation = ["--ignore-user-config", "--ignore-rules", "-c", 'web_search="disabled"', "--disable", "apps"];
+    expect(codexArgs(input({ access: "read-only", isolated: true, ephemeral: true }))).toEqual([
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      ...isolation,
+      "--ephemeral",
+      "-",
+    ]);
+    expect(codexArgs(input({ access: "read-only", untrusted: true }))).toEqual(expect.arrayContaining(isolation));
+    expect(codexArgs(input({ access: "read-only" }))).not.toContain("--ignore-rules");
+    expect(codexArgs(input({ access: "edit", isolated: true }))).not.toContain("--ignore-user-config");
+    // With run tools too, the user's config is ignored once.
+    const both = codexArgs(
+      input({ access: "read-only", untrusted: true, runTools: { url: "http://x/mcp/run", configPath: "/tmp/c.json" } }),
+    );
+    expect(both.filter((a) => a === "--ignore-user-config")).toHaveLength(1);
+  });
+
+  it("asks for structured output with the schema file withDriverArgs wrote, in strict form, then removes it", async () => {
+    expect(codexArgs(input({ access: "read-only", outputSchemaPath: "/tmp/s.json" }))).toEqual(
+      expect.arrayContaining(["--output-schema", "/tmp/s.json"]),
+    );
+    const schema = { type: "object", properties: { a: { type: "string" } } };
+    let path = "";
+    const written = await withDriverArgs(codexDriver, input({ access: "read-only", outputSchema: schema }), (args) => {
+      path = args[args.indexOf("--output-schema") + 1]!;
+      return Promise.resolve(JSON.parse(readFileSync(path, "utf8")) as unknown);
+    });
+    expect(written).toEqual({
+      type: "object",
+      properties: { a: { type: ["string", "null"] } },
+      required: ["a"],
+      additionalProperties: false,
+    });
+    expect(existsSync(path)).toBe(false);
+    // Claude Code takes the schema inline, so nothing is written.
+    const claude = await withDriverArgs(claudeDriver, input({ access: "read-only", outputSchema: schema }), (args) =>
+      Promise.resolve(args),
+    );
+    expect(claude).toContain("--json-schema");
+  });
+
+  it("reads a structured answer back in the original schema's shape", () => {
+    const schema = {
+      type: "object",
+      properties: { settingId: { type: ["string", "null"] }, answer: { type: "string" }, extra: { type: "string" } },
+      required: ["settingId", "answer"],
+    };
+    const lines = (text: string) =>
+      [
+        JSON.stringify({ type: "thread.started", thread_id: "0199a213-81c0-7800-8aa1-bbab2a035a53" }),
+        JSON.stringify({ type: "item.completed", item: { id: "i", type: "agent_message", text } }),
+        JSON.stringify({ type: "turn.completed" }),
+      ].join("\n");
+    const out = parseCodexOutput(lines(JSON.stringify({ settingId: null, answer: "Hi", extra: null })), schema);
+    // A null the schema allows stays; one only strict mode made it write is dropped.
+    expect(out).toMatchObject({ ok: true, output: { settingId: null, answer: "Hi" } });
+    expect(out.output).not.toHaveProperty("extra");
+    expect(parseCodexOutput(lines("not json"), schema)).toMatchObject({
+      ok: false,
+      error: "its answer wasn't the JSON its output schema asks for",
+    });
+    // Without a schema the answer is plain text.
+    expect(parseCodexOutput(lines("not json"))).toMatchObject({ ok: true, result: "not json", output: undefined });
   });
 
   // The fixtures are `codex exec --json` stdout recorded on codex-cli 0.166.0, scrubbed of paths and ids.
@@ -244,7 +318,8 @@ describe("the Copilot CLI driver", () => {
 describe("choosing a driver", () => {
   it("knows what each harness can do", () => {
     expect(codexDriver.capabilities).toEqual({
-      outputSchema: false,
+      outputSchema: true,
+      readOnly: true,
       untrusted: false,
       noTools: false,
       toolRules: false,

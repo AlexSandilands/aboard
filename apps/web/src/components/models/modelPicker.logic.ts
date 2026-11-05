@@ -31,6 +31,11 @@ export interface PickerTab {
   disabledReason: string | null;
   /** A note under the list, such as a scan that failed. */
   notice: string | null;
+  /**
+   * What could go wrong when this provider runs the operation (it can't fully lock it down): it can still be picked,
+   * and the sidebar marks it.
+   */
+  warning: string | null;
   /** The settings target of the provider's own page, for the link under its list. */
   settingsTarget: string | null;
   /** A model the list doesn't have can be typed and used on this provider. */

@@ -146,7 +146,7 @@ fallbacks in order:
    starts a turn or queues it behind the running one). The command id is stable per round, so a retry
    doesn't post twice. It needs the `orchestration:operate` scope.
 3. **The board reviewer.** If it's on (Settings → Tasks → Review → Board reviewer), the board reviews the
-   round itself with Claude Code headless. If an agent's reviewer submits while it runs, the agent's review
+   round itself with a headless CLI on the board reviewer's provider. If an agent's reviewer submits while it runs, the agent's review
    stands and the board's is dropped. Moving the task to Review meanwhile isn't blocked; the running review
    covers it. When blocking or major findings are open and a T3 thread is linked,
    it posts a "fix these findings" prompt into the thread. When the loop is over with nothing to fix and no PR
@@ -156,8 +156,11 @@ fallbacks in order:
 
 #### The board reviewer
 
-The board runs `claude -p` in the task's checkout: the linked T3 thread's worktree when T3 reports one,
-else the project folder. One review runs at a time.
+The board runs a headless CLI in the task's checkout: the linked T3 thread's worktree when T3 reports one,
+else the project folder. One review runs at a time. It runs on the board reviewer's provider
+(`createHeadlessReviewer`): `claude -p` as below, or `codex exec` read-only and isolated
+([Headless drivers](autopilot.md#headless-drivers)). The task diff is the user's own, so it needs structured output
+and an isolated read-only run, not the untrusted lockdown.
 
 - **Read-only:** `--permission-mode dontAsk` with `--allowedTools` limited to Read, Grep, Glob and read-only
   git (`git diff`, `log`, `show`, `status`, `merge-base`, `rev-parse`). Edit, Write and NotebookEdit are
@@ -171,12 +174,16 @@ else the project folder. One review runs at a time.
   agent's reviewer the same, including a major finding when a UI task has no screenshots at all.
 - **Structured output:** `--json-schema` makes Claude Code return the summary and findings as JSON, which
   the board records under the actor "board reviewer". The round's summary shows what the review cost.
+- **On Codex:** `codex exec --sandbox read-only --ignore-user-config --ignore-rules -c web_search="disabled"
+  --disable apps --ephemeral --output-schema <file>`. The sandbox blocks writes and the shell's network; it reads any
+  file, so the screenshots need no extra folder. The findings schema goes in strict form (`strictSchema`). Codex
+  reports no cost and takes no budget: only the 20-minute timeout stops it.
 - **Windows shims:** a `claude.cmd` (npm install) runs through cmd.exe with its arguments escaped twice,
   because the shim expands them again; the schema and paths with spaces survive intact.
 - **Model:** the board reviewer's [model](#the-reviewer-model), resolved like any operation's: the Standard tier by
-  default, on a provider that can return structured output and follow tool rules (only Claude Code today). A tier
-  with no Claude Code model leaves `--model` off, so the CLI's default runs. With no such provider added the round
-  fails with the reason. The setting was `headlessReviewModel`, then `reviewModel` (039); 041_operation_models moved
+  default, on a provider that can return structured output and run isolated read-only (Claude Code or Codex). A tier
+  with no model for that provider leaves `--model` off, so the CLI's default runs. With no such provider added the
+  round fails with the reason. The setting was `headlessReviewModel`, then `reviewModel` (039); 041_operation_models moved
   it into `operationModels`.
 - **Capped:** `--max-budget-usd` (Settings, default $2) and a 20-minute timeout. `--no-session-persistence`
   keeps these runs out of your session history.
@@ -251,6 +258,6 @@ The board-run reviewer survives as fallback 3, where it fits: rounds nobody else
 | `apps/server/src/mcp/tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` |
 | `apps/server/src/skills.ts` | Skill discovery |
 | `apps/server/src/integrations/reviewFallbacks.ts` | The watchdog and fallback chain |
-| `apps/server/src/integrations/headlessReview.ts` | The board reviewer (`claude -p`) |
+| `apps/server/src/integrations/headlessReview.ts` | The board reviewer (`claude -p`, or another driver) |
 | `apps/web/src/components/review/` | Card badge and the panel's Local review section |
 | `apps/web/src/components/settings/ReviewSettingsSection.tsx` | Settings |

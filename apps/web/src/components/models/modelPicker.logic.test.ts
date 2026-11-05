@@ -114,6 +114,7 @@ describe("adjacentTab", () => {
     icon: { kind: "choices" },
     disabledReason: id === "b" ? "no" : null,
     notice: null,
+    warning: null,
     settingsTarget: null,
     typed: false,
   }));

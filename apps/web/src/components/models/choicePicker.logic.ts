@@ -10,8 +10,10 @@ import {
   ModelTier,
   modelEffortLevels,
   modelTierDescription,
+  IMPORT_TICKET_NEEDS,
   missingNeeds,
   NEED_WORDS,
+  needsWarning,
   OPERATIONS,
   resolveOperationModel,
   type AgentModel,
@@ -141,6 +143,26 @@ export function providerDisabledReason(
 }
 
 /**
+ * What could go wrong when a provider that can be picked runs the operation, or null: it meets the operation's needs
+ * only with a warning (Codex reading untrusted text). It is never fallen back to, so this only matters when chosen.
+ */
+export function providerWarning(
+  harness: AgentHarness,
+  input: Pick<ChoicePickerInput, "settings" | "op" | "needs" | "lockedProvider">,
+): string | null {
+  if (!input.op || providerDisabledReason(harness, input)) return null;
+  const needs = [...new Set([...OPERATIONS[input.op].needs, ...(input.needs ?? [])])];
+  const warning = needsWarning(harness, needs);
+  if (!warning) return null;
+  // Picked for issue import, it summarises GitHub issues, but a ticket also needs tool rules it may not follow.
+  const tickets =
+    input.op === "issueImport" && missingNeeds(harness, [...needs, ...IMPORT_TICKET_NEEDS]).length > 0
+      ? ` Ticket imports need tool rules, which ${harnessLabel(harness)} can't follow, so they fail while it is chosen.`
+      : "";
+  return `${warning} It runs ${OPERATIONS[input.op].label} only when you choose it.${tickets}`;
+}
+
+/**
  * The provider tabs: the providers the user added, in their order (switched-off ones greyed out), plus the saved
  * model's provider if it isn't among them, so the selection always has a tab. Locked to a provider, only that one.
  */
@@ -158,7 +180,7 @@ function providerTabs(input: ChoicePickerInput): AgentHarness[] {
 export function shortResolution(resolution: OperationResolution, taskScopedWithoutTask = false): string {
   if (!resolution.ok) return "Nothing can run it";
   if (taskScopedWithoutTask && isTaskOwnModel(resolution)) return "The task's own model";
-  return `${harnessLabel(resolution.provider)} · ${resolution.model ?? "default model"}${resolution.effort ? ` (${resolution.effort})` : ""}`;
+  return `${harnessLabel(resolution.provider)} · ${resolution.model ?? "default model"}${resolution.effort ? ` (${resolution.effort})` : ""}${resolution.warning ? ", with a warning" : ""}`;
 }
 
 const isTaskOwnModel = (resolution: ResolvedModel) =>
@@ -311,6 +333,7 @@ export function choicePickerModel(input: ChoicePickerInput): PickerModel {
             icon: { kind: "choices" } as const,
             disabledReason: null,
             notice: null,
+            warning: null,
             settingsTarget: "models.tiers",
             typed: false,
           },
@@ -323,6 +346,7 @@ export function choicePickerModel(input: ChoicePickerInput): PickerModel {
         label: harnessLabel(harness),
         icon: { kind: "harness", harness },
         disabledReason: providerDisabledReason(harness, input),
+        warning: providerWarning(harness, input),
         notice: scan?.error
           ? `Couldn't list ${harnessLabel(harness)}'s models: ${scan.error}. A model can be typed.`
           : null,

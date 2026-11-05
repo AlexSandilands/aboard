@@ -31,7 +31,7 @@ import {
   type HeadlessDriver,
   type RunAgent,
 } from "../integrations/headlessAgent.ts";
-import { driverNeeds, HEADLESS_DRIVERS, type DriverNeeds } from "../integrations/headlessDrivers.ts";
+import { driverNeeds, headlessDriverFor, withDriverArgs, type DriverNeeds } from "../integrations/headlessDrivers.ts";
 import {
   isT3Unavailable,
   t3Unavailable,
@@ -90,7 +90,7 @@ export function headlessRun(
   );
   if (!resolved.ok) throw new Error(resolved.reason);
   const note = [resolved.note, describeResolution(resolved)].filter(Boolean).join("\n");
-  return { driver: HEADLESS_DRIVERS[resolved.provider], resolved, note };
+  return { driver: headlessDriverFor(resolved.provider), resolved, note };
 }
 
 /** Whether T3 Code can take a run now: detected, with a token that works. */
@@ -444,40 +444,43 @@ export function createAutopilotRunner(deps: {
         ...mcpWaitEnv({ access, untrusted: request.untrustedInput, tools: request.tools, runTools: Boolean(tools) }),
         ...(tools && driver.runTokenFromEnv ? { [RUN_TOKEN_ENV]: tools.token } : {}),
       };
-      const stdout = await runAgent({
-        cli: harnessCliSetting(settings, driver.harness),
-        command: driver.command,
-        label: driver.label,
-        cwd: where.cwd,
-        prompt: where.prompt,
-        timeoutMs: options.timeoutMinutes * 60_000,
-        ...(Object.keys(env).length > 0 ? { env } : {}),
-        ...(driver.sessionIdOf
-          ? {
-              onStdoutLine: (line: string) => {
-                const id = driver.sessionIdOf?.(line);
-                if (id) found(id);
-              },
-            }
-          : {}),
-        args: driver.args({
-          access,
-          budgetUsd: options.budgetUsd,
-          // Ignored by a driver that can't preset one.
-          sessionId: preset ?? "",
-          model: resolved.model,
-          effort: resolved.effort,
-          name: autopilotSessionName(request.label, task),
-          defaultBranch: where.defaultBranch,
-          ...(request.tools ? { tools: request.tools } : {}),
-          ...(request.deniedTools ? { deniedTools: request.deniedTools } : {}),
-          ...(request.untrustedInput ? { untrusted: true } : {}),
-          ...(where.boardMcpConfig ? { boardMcpConfig: where.boardMcpConfig } : {}),
-          ...(tools ? { runTools: { url: tools.url, configPath: tools.configPath } } : {}),
-          ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
+      const argsInput: AgentArgsInput = {
+        access,
+        budgetUsd: options.budgetUsd,
+        // Ignored by a driver that can't preset one.
+        sessionId: preset ?? "",
+        model: resolved.model,
+        effort: resolved.effort,
+        name: autopilotSessionName(request.label, task),
+        defaultBranch: where.defaultBranch,
+        ...(request.tools ? { tools: request.tools } : {}),
+        ...(request.deniedTools ? { deniedTools: request.deniedTools } : {}),
+        ...(request.untrustedInput ? { untrusted: true } : {}),
+        ...(where.boardMcpConfig ? { boardMcpConfig: where.boardMcpConfig } : {}),
+        ...(tools ? { runTools: { url: tools.url, configPath: tools.configPath } } : {}),
+        ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
+      };
+      const stdout = await withDriverArgs(driver, argsInput, (args) =>
+        runAgent({
+          cli: harnessCliSetting(settings, driver.harness),
+          command: driver.command,
+          label: driver.label,
+          cwd: where.cwd,
+          prompt: where.prompt,
+          timeoutMs: options.timeoutMinutes * 60_000,
+          ...(Object.keys(env).length > 0 ? { env } : {}),
+          ...(driver.sessionIdOf
+            ? {
+                onStdoutLine: (line: string) => {
+                  const id = driver.sessionIdOf?.(line);
+                  if (id) found(id);
+                },
+              }
+            : {}),
+          args,
         }),
-      });
-      const outcome = driver.parse(stdout, Boolean(request.outputSchema));
+      );
+      const outcome = driver.parse(stdout, request.outputSchema);
       // A run whose id came only in its final output (a fake, or a line the stream split oddly) is still linked.
       if (outcome.sessionId && !driver.capabilities.presetSessionId) found(outcome.sessionId);
       if (outcome.costUsd !== null) update({ costUsd: outcome.costUsd });
