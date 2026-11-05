@@ -190,10 +190,16 @@ function operationModels(db: Db): void {
   // Both always ran on Claude Code.
   const existing = read("operationModels");
   const ops: OperationModels = existing && typeof existing === "object" ? { ...(existing as OperationModels) } : {};
-  const review = chosen(read("reviewModel"));
+  const savedReview = read("reviewModel");
+  const review = chosen(savedReview);
   if (review) {
     ops.reviewer ??= review;
     ops.boardReviewer ??= review;
+  } else if (readLegacyModelChoice(savedReview) === INHERIT && savedReview !== null && savedReview !== undefined) {
+    // "From the task", saved on purpose: the board reviewer ran on the task's model. Its default is now the Standard
+    // tier, and only the board's inherit keeps the task's model. The subagent inherits by default already. A saved
+    // null was "none" (the CLI's default), so it takes the new default like an unsaved one.
+    ops.boardReviewer ??= INHERIT;
   }
   const importModel = chosen(read("issueImportModel"));
   if (importModel) ops.issueImport ??= importModel;

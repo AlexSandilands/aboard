@@ -312,6 +312,19 @@ describe("migrations", () => {
       db.close();
     });
 
+    it("keeps a board reviewer model saved as From the task on the task's model", () => {
+      const db = before(`INSERT INTO settings (key, value_json) VALUES ('reviewModel', '{"from":"task"}');`);
+      expect(setting(db, "operationModels")).toEqual({ boardReviewer: "inherit" });
+      expect(setting(db, "reviewModel")).toBeUndefined();
+      db.close();
+    });
+
+    it("gives a reviewer model saved as none the new defaults", () => {
+      const db = before(`INSERT INTO settings (key, value_json) VALUES ('reviewModel', 'null');`);
+      expect(setting(db, "operationModels")).toBeUndefined();
+      db.close();
+    });
+
     it("leaves defaults never saved to the operations' new defaults", () => {
       const db = before("");
       expect(setting(db, "operationModels")).toBeUndefined();
