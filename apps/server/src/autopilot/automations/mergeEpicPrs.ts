@@ -60,6 +60,8 @@ interface EpicPrData {
   /** The epic's PR link, when it has one (update). */
   linkId: string | null;
   body: string;
+  /** The PR's title, set only when it is opened (open_pr). Absent in data queued before it existed. */
+  title?: string;
 }
 
 /** On a skipped merge run: it settled nothing, so the head may be tried again. */
@@ -131,6 +133,68 @@ export function epicPrBody(
       .sort((a, b) => a.number - b.number)
       .map((c) => taskLine(c, branch, runsOf(c.id))),
   ].join("\n");
+}
+
+export interface ConventionalHeader {
+  type: string;
+  scope: string | null;
+  breaking: boolean;
+  subject: string;
+}
+
+/** `type(scope)!: subject`, the header shape of config-conventional. Null for anything else. */
+export function parseConventionalHeader(title: string): ConventionalHeader | null {
+  const match = /^([a-z]+)(?:\(([^()\s][^()]*)\))?(!)?: (\S.*)$/.exec(title.trim());
+  if (!match) return null;
+  return { type: match[1]!, scope: match[2] ?? null, breaking: match[3] === "!", subject: match[4]!.trim() };
+}
+
+/** commitlint's header-max-length in config-conventional. */
+const HEADER_MAX = 100;
+
+/** The type that stands for a set of children: feat, else fix, else the most common (ties go to the first merged). */
+function dominantType(types: readonly string[]): string {
+  if (types.includes("feat")) return "feat";
+  if (types.includes("fix")) return "fix";
+  const counts = new Map<string, number>();
+  for (const t of types) counts.set(t, (counts.get(t) ?? 0) + 1);
+  let best = types[0]!;
+  for (const [t, n] of counts) if (n > counts.get(best)!) best = t;
+  return best;
+}
+
+/** Lowercases the first letter unless the first word has more capitals (GitHub, API): subject-case rejects sentence case. */
+function lowerFirst(subject: string): string {
+  const word = subject.split(" ")[0]!;
+  return /^[A-Z][^A-Z]*$/.test(word) ? subject.charAt(0).toLowerCase() + subject.slice(1) : subject;
+}
+
+function cut(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const clipped = text.slice(0, max - 1);
+  const space = clipped.lastIndexOf(" ");
+  return `${(space > max / 2 ? clipped.slice(0, space) : clipped).trimEnd()}…`;
+}
+
+/**
+ * The title for the epic's PR. When any merged child PR has a Conventional Commits title the repo lints PR titles, so
+ * the epic's gets one too (no epic number: a `#N` in the squash commit would link to the repo's issue #N). Otherwise
+ * `Epic #N: <title>`.
+ */
+export function epicPrTitle(epic: Pick<TaskSummary, "number" | "title">, childPrTitles: readonly string[]): string {
+  const children = childPrTitles.flatMap((t) => parseConventionalHeader(t) ?? []);
+  if (children.length === 0) return `Epic #${epic.number}: ${epic.title}`;
+
+  const own = parseConventionalHeader(epic.title.replace(/\s+/g, " "));
+  if (own) return cut(epic.title.replace(/\s+/g, " ").trim(), HEADER_MAX);
+
+  const type = dominantType(children.map((c) => c.type));
+  const scopes = new Set(children.map((c) => c.scope));
+  const scope = scopes.size === 1 ? [...scopes][0]! : null;
+  const breaking = children.some((c) => c.breaking);
+  const prefix = `${type}${scope ? `(${scope})` : ""}${breaking ? "!" : ""}: `;
+  const subject = lowerFirst(epic.title.replace(/\s+/g, " ").trim().replace(/\.+$/, ""));
+  return prefix + cut(subject, HEADER_MAX - prefix.length);
 }
 
 const hashOf = (text: string) => createHash("sha1").update(text).digest("hex").slice(0, 12);
@@ -212,6 +276,14 @@ export const mergeEpicPrs = defineAutomation({
           repo: first.ref.repo,
           linkId: own ? own.id : null,
           body,
+          ...(own
+            ? {}
+            : {
+                title: epicPrTitle(
+                  epic,
+                  merged.map((l) => l.snapshot?.title ?? ""),
+                ),
+              }),
         };
         const upkeep: Candidate = own
           ? {
@@ -293,7 +365,7 @@ export const mergeEpicPrs = defineAutomation({
         host: data.host,
         repo: data.repo,
         head: data.branch,
-        title: `Epic #${epic.number}: ${epic.title}`,
+        title: data.title ?? `Epic #${epic.number}: ${epic.title}`,
         body: data.body,
       });
       services.links.add(epic.id, { value: pr.url }, actor);

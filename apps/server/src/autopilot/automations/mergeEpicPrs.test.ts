@@ -17,7 +17,7 @@ import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
 import { NO_GITHUB, NO_RUNNER, type GithubActions } from "../types.ts";
 import { NO_CHECKS_WAIT_MS } from "../mergeGate.ts";
-import { epicPrBody, MERGE_ATTEMPTS, mergeEpicPrs } from "./mergeEpicPrs.ts";
+import { epicPrBody, epicPrTitle, MERGE_ATTEMPTS, mergeEpicPrs, parseConventionalHeader } from "./mergeEpicPrs.ts";
 import { reviewPrs } from "./reviewPrs.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it", status: "done" as const }] }] };
@@ -58,7 +58,14 @@ function setup() {
       merges.push({ linkId: link.id, input });
       if (mergeError) throw mergeError;
       // As the real one: the refreshed snapshot says merged, which moves the task to Done.
-      s.links.setSnapshot(link.id, snapshot({ state: "merged", headOid: input.headOid }));
+      s.links.setSnapshot(
+        link.id,
+        snapshot({
+          state: "merged",
+          headOid: input.headOid,
+          title: ("snapshot" in link ? link.snapshot?.title : undefined) ?? undefined,
+        }),
+      );
     },
     ensureEpicPr: async (input) => {
       opened.push(input);
@@ -360,6 +367,68 @@ describe("merge into epic branch", () => {
     expect(bodies[0]!.body).toContain("#3 Next");
     await pass();
     expect(bodies).toHaveLength(1); // same body, same key
+  });
+});
+
+describe("epic PR title", () => {
+  it("opens the epic's PR with a conventional title when its merged child PRs have one", async () => {
+    const { toReview, setPr, pass, turnOn, opened } = setup();
+    turnOn();
+    toReview();
+    setPr({ title: "feat(web): add a checkout page" });
+    await pass(); // merges
+    await pass(); // opens the epic PR
+    expect(opened[0]!.title).toBe("feat(web): checkout");
+  });
+
+  it("parses config-conventional headers", () => {
+    expect(parseConventionalHeader("fix(server)!: stop leaking")).toEqual({
+      type: "fix",
+      scope: "server",
+      breaking: true,
+      subject: "stop leaking",
+    });
+    expect(parseConventionalHeader("Epic #3: Checkout")).toBeNull();
+    expect(parseConventionalHeader("feat:no space")).toBeNull();
+    expect(parseConventionalHeader("Add the thing")).toBeNull();
+  });
+
+  const epic = (title: string) => ({ number: 7, title });
+
+  it("keeps Epic #N: <title> when no child PR is conventional", () => {
+    expect(epicPrTitle(epic("Checkout"), ["Add the thing", ""])).toBe("Epic #7: Checkout");
+    expect(epicPrTitle(epic("Checkout"), [])).toBe("Epic #7: Checkout");
+  });
+
+  it("picks feat over fix, else the most common type, ties to the first merged", () => {
+    expect(epicPrTitle(epic("Sync"), ["fix: a", "feat: b", "fix: c"])).toBe("feat: sync");
+    expect(epicPrTitle(epic("Sync"), ["chore: a", "fix: b"])).toBe("fix: sync");
+    expect(epicPrTitle(epic("Sync"), ["docs: a", "chore: b", "chore: c"])).toBe("chore: sync");
+    expect(epicPrTitle(epic("Sync"), ["docs: a", "chore: b"])).toBe("docs: sync");
+  });
+
+  it("adds a scope only when every conventional child shares it, and carries a breaking mark", () => {
+    expect(epicPrTitle(epic("Sync"), ["feat(web): a", "fix(web): b", "Plain"])).toBe("feat(web): sync");
+    expect(epicPrTitle(epic("Sync"), ["feat(web): a", "fix(server): b"])).toBe("feat: sync");
+    expect(epicPrTitle(epic("Sync"), ["feat(web): a", "fix: b"])).toBe("feat: sync");
+    expect(epicPrTitle(epic("Sync"), ["feat(web): a", "fix(web)!: b"])).toBe("feat(web)!: sync");
+  });
+
+  it("lowercases a sentence-case first word only, and drops a trailing period", () => {
+    const t = ["feat: a"];
+    expect(epicPrTitle(epic("Git backups  across\nmachines."), t)).toBe("feat: git backups across machines");
+    expect(epicPrTitle(epic("GitHub sync"), t)).toBe("feat: GitHub sync");
+    expect(epicPrTitle(epic("API keys"), t)).toBe("feat: API keys");
+  });
+
+  it("uses an epic title that is already a conventional header as it is", () => {
+    expect(epicPrTitle(epic("fix(server): stop leaking"), ["feat: a"])).toBe("fix(server): stop leaking");
+  });
+
+  it("shortens the header to 100 characters", () => {
+    const title = epicPrTitle(epic(`Big ${"word ".repeat(40)}`), ["feat: a"]);
+    expect(title.length).toBeLessThanOrEqual(100);
+    expect(title.startsWith("feat: big word")).toBe(true);
   });
 });
 
