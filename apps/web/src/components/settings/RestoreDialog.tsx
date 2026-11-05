@@ -7,7 +7,7 @@ import {
   type RestoreBoardResult,
   type RestoreTasksResult,
 } from "@repo/contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "~/components/ui/button";
 import {
@@ -25,7 +25,6 @@ import { Spinner } from "~/components/ui/spinner";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { api } from "~/lib/api";
 import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
-import { queryKeys } from "~/state/queries";
 
 type Tab = "tasks" | "board";
 
@@ -240,17 +239,12 @@ function TasksTab({ diff, loading, source }: { diff: BackupDiff | undefined; loa
 function BoardTab({ diff, source, onDone }: { diff: BackupDiff | undefined; source: Source; onDone: () => void }) {
   const [typed, setTyped] = useState("");
   const [otherMachine, setOtherMachine] = useState<RestoreBoardInput["otherMachine"]>(undefined);
-  const queryClient = useQueryClient();
   const restore = useMutation({
     mutationFn: () =>
       api<RestoreBoardResult>("/api/backup/restore-board", {
         method: "POST",
         body: { ...source, confirm: RESTORE_CONFIRM_WORD, ...(otherMachine ? { otherMachine } : {}) },
       }),
-    // A take-over renames this machine to the old one's folder, which no live event reports.
-    onSuccess: (result) => {
-      if (result.tookOver) void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
-    },
   });
   if (restore.data) {
     return (
