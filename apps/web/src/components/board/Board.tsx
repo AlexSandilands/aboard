@@ -98,8 +98,8 @@ const collisionDetection: CollisionDetection = (args) => {
  * first card so the card lands on top; Up/Down keep sortable's stepping through the cards.
  */
 const keyboardCoordinates: KeyboardCoordinateGetter = (event, args) => {
-  const code = event.code as KeyboardCode;
-  const step = code === KeyboardCode.Left ? -1 : code === KeyboardCode.Right ? 1 : 0;
+  const code: string = event.code;
+  const step = code === (KeyboardCode.Left as string) ? -1 : code === (KeyboardCode.Right as string) ? 1 : 0;
   if (step === 0) return sortableKeyboardCoordinates(event, args);
   event.preventDefault();
   const { active, collisionRect, droppableContainers, droppableRects } = args.context;
