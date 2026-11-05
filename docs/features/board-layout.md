@@ -342,7 +342,8 @@ inactive threads are dimmed.
 
 Right-click, the Menu key or Shift+F10 on a card (or an epic's header, in its band or as a finished epic's card) opens its menu: **Move to**
 (the statuses, through `useSetTaskStatus`, so the plan gate still opens the plan editor; not offered for an epic, whose
-status follows its tasks), then the panel's More menu without **Jump to card** (the card is in view; a click opens it). The two share their items (`TaskMenuItems` in `components/task`),
+status follows its tasks), the **Turn Autopilot / auto-merge / auto-review on / off** items (`AutomationMenuItems`;
+see below), then the panel's More menu without **Jump to card** (the card is in view; a click opens it). The two share their items (`TaskMenuItems` in `components/task`),
 which take a `TaskSummary`, since a card has no more; **Save as template…** fetches the task's detail when picked
 (`fetchTaskDetail`). Pin toggles are the panel's only. `CardContextMenu` wraps the card in a `ContextMenu`
 (`components/ui/context-menu.tsx`, Base UI) whose trigger draws no box (`display: contents`) and whose items mount only
@@ -358,6 +359,11 @@ offers both **Mark as priority** and **Remove priority** while a uniform one off
 - **Move to**: skips epics, archived cards and cards already there, and refuses planless cards outside Backlog like the
   server does (shown as "N without a plan" beside the status, and counted as skipped in the toast).
 - **Mark as priority / Remove priority**, **Archive / Unarchive**.
+- **Turn Autopilot / auto-merge / auto-review on / off** (`AutomationMenuItems`, the same component the single-card
+  menu uses with one card): skips epics, manual and archived cards, like the panel's Automation section. Autopilot and
+  auto-merge compare `=== true` and Off clears the flag to Default (it behaves like Off, and the panel keeps reading
+  "Default"). Auto-review compares the effective value (`task.autoReview ?? settings.autoReview`) and Off writes
+  `false`, because clearing to Default would leave it on while the board's setting is on.
 - **Close as**: **Won't do**, or **Done by another task…**, which opens the close dialog for all of them against one
   task. Duplicate needs a task per card, so it is single-card only.
 - **Labels**: add (a find-or-create field and the labels in use) or remove one label.

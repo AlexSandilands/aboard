@@ -48,6 +48,32 @@ export function useBulkActions() {
     );
   };
 
+  // Off clears Autopilot and auto-merge to Default, which behaves the same and keeps the panel reading "Default".
+  const setAutopilot = async (tasks: readonly TaskSummary[], on: boolean) => {
+    const { ok, failed } = await runAll(tasks, (t) => updateTask({ id: t.id, autopilot: on ? true : null }));
+    toast(
+      bulkSummary((n) => `Turned Autopilot ${on ? "on" : "off"} for ${n}`, { ok, failed }),
+      { ok, failed },
+    );
+  };
+
+  const setAutoMerge = async (tasks: readonly TaskSummary[], on: boolean) => {
+    const { ok, failed } = await runAll(tasks, (t) => updateTask({ id: t.id, autoMerge: on ? true : null }));
+    toast(
+      bulkSummary((n) => `Turned auto-merge ${on ? "on" : "off"} for ${n}`, { ok, failed }),
+      { ok, failed },
+    );
+  };
+
+  // Off is an explicit false: clearing to Default would leave auto-review on while the board's setting is on.
+  const setAutoReview = async (tasks: readonly TaskSummary[], on: boolean) => {
+    const { ok, failed } = await runAll(tasks, (t) => updateTask({ id: t.id, autoReview: on }));
+    toast(
+      bulkSummary((n) => `Turned auto-review ${on ? "on" : "off"} for ${n}`, { ok, failed }),
+      { ok, failed },
+    );
+  };
+
   const archive = async (tasks: readonly TaskSummary[], archived: boolean) => {
     const { ok, failed } = await runAll(tasks, (t) => updateTask({ id: t.id, archived }));
     toast(
@@ -90,5 +116,16 @@ export function useBulkActions() {
 
   const copyReferences = (tasks: readonly TaskSummary[]) => copyToClipboard(referenceList(tasks), "references");
 
-  return { move, setPriority, archive, setLabel, wontDo, closeAgainst, copyReferences };
+  return {
+    move,
+    setPriority,
+    setAutopilot,
+    setAutoMerge,
+    setAutoReview,
+    archive,
+    setLabel,
+    wontDo,
+    closeAgainst,
+    copyReferences,
+  };
 }
