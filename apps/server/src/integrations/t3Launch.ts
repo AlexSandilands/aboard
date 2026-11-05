@@ -329,6 +329,11 @@ export interface AutoLaunchChoice {
   work: boolean;
   /** An automation's choice of model, over the task's labels and tier. */
   modelChoice?: ModelChoice | undefined;
+  /**
+   * Run on T3's default model whatever the task's or the board's settings pick: the run resolved its model already
+   * and it has no T3 model (a model typed for a CLI provider, or the light fallback).
+   */
+  defaultModel?: boolean | undefined;
   /** The ref to branch the new worktree from. Defaults to the default branch, else the current one. */
   baseRef?: string | undefined;
   /**
@@ -350,7 +355,8 @@ export type AutoLaunch = { ok: true; launch: AutoLaunchSettings } | { ok: false;
  * checkout. A folder that isn't a repository can only run in the current checkout.
  */
 export function autoLaunchSettings(options: T3LaunchOptions, choice: AutoLaunchChoice): AutoLaunch {
-  const modelSelection = (choice.work ? options.suggestion?.modelSelection : null) ?? options.defaults.modelSelection;
+  const suggested = choice.work && !choice.defaultModel ? options.suggestion?.modelSelection : null;
+  const modelSelection = suggested ?? options.defaults.modelSelection;
   const provider = options.providers.find((p) => p.instanceId === modelSelection?.instanceId);
   if (!modelSelection || !provider?.ready) return { ok: false, reason: "T3 Code has no model ready to start a thread" };
   // Unattended, so never more access than T3's default: the most permissive supported mode up to it.

@@ -358,6 +358,11 @@ describe("autoLaunchSettings", () => {
     });
   });
 
+  it("works on T3's default model when the run has no T3 model of its own", () => {
+    const result = autoLaunchSettings(options({ suggest: true }), { work: true, defaultModel: true });
+    expect(result.ok && result.launch.modelSelection).not.toEqual(sonnet.selection);
+  });
+
   it("plans on T3's default model, and never takes more access than T3's default", () => {
     // The provider offers approval-required and full-access; T3's default, auto, sits between them.
     const result = autoLaunchSettings(options({ suggest: true, settings: { defaultRuntimeMode: "auto" } }), {

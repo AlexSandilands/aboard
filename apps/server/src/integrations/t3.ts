@@ -946,7 +946,7 @@ export function createT3Integration(deps: {
     const auto = autoLaunchSettings(options, choice);
     if (!auto.ok) throw new AppError("VALIDATION", auto.reason);
     const link = await startThread(taskId, { prompt, commandId, ...auto.launch }, actor, title);
-    const unavailable = choice.work ? (options.suggestion?.unavailable ?? null) : null;
+    const unavailable = choice.work && !choice.defaultModel ? (options.suggestion?.unavailable ?? null) : null;
     return { link, ...auto.launch, suggestionUnavailable: unavailable };
   };
 

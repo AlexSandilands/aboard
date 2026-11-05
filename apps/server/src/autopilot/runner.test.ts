@@ -667,6 +667,23 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
     expect(launches[0]).toMatchObject({ work: true, modelChoice: { tier: "deep" } });
   });
 
+  it("passes the task run's own model to a T3 launch, so the board's model for new sessions doesn't replace it", async () => {
+    const { h, task, launches, start } = setup({ t3: T3_UP });
+    h.services.settings.update({ operationModels: { launch: { tier: "light" } } });
+    h.services.tasks.update(task.id, { suggestedModel: { tier: "deep" } }, "test");
+    await start({ options: { runner: "t3" } });
+    expect(launches[0]).toMatchObject({ modelChoice: { tier: "deep" } });
+    // With nothing chosen and no tier, or a model typed for a CLI, T3's default runs whatever the board's launch model.
+    const bare = setup({ t3: T3_UP });
+    bare.h.services.settings.update({ operationModels: { launch: { tier: "light" } } });
+    await bare.start({ options: { runner: "t3" } });
+    expect(bare.launches[0]).toMatchObject({ defaultModel: true });
+    expect(bare.launches[0]).not.toHaveProperty("modelChoice");
+    const typed = setup({ t3: T3_UP });
+    await typed.start({ options: { runner: "t3", modelChoice: { provider: "codex", model: "gpt-5.5" } } });
+    expect(typed.launches[0]).toMatchObject({ defaultModel: true });
+  });
+
   describe("runner choice", () => {
     it("Auto starts a T3 thread when T3 is connected, with a stable command id and lowered access", async () => {
       const { run, jobs, launches, start, patches } = setup({ t3: T3_UP });

@@ -329,11 +329,12 @@ export function createAutopilotRunner(deps: {
           commandId: runCommandId(request.run.id),
           ...(request.label ? { title: autopilotSessionName(request.label, task) } : {}),
           work: true,
-          // The task's labels and tier are read again where the launch resolves its model; only a choice above the
-          // task's own is passed.
-          ...(model.profile && !["label", "tier", "fallback"].includes(model.source)
+          // The model this run's operation resolved to, whatever picked it: the launch would otherwise resolve it
+          // again as a new session (the "launch" operation), and the board's model for those would win. A typed CLI
+          // model or the light fallback has no T3 model, so T3's default runs, as the run's detail says.
+          ...(model.profile && !fallback
             ? { modelChoice: model.profile.tier ? { tier: model.profile.tier } : { profile: model.profile.id } }
-            : {}),
+            : { defaultModel: true }),
           // A pull request's branch is on origin, and origin's copy is the one to build on.
           ...(branch
             ? { baseRef: branch, startFromOrigin: true }
