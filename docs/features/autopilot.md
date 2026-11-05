@@ -393,10 +393,9 @@ as comments only.
   - git in three exact commands only (`rev-parse HEAD`, `status --short`, `log --oneline -20`), because `git diff`,
     `show` and `log` take any path, so read any file (a path outside the work tree makes `diff` compare files) and
     write any file (`--output=`);
-  - `gh` in exact commands only: `gh pr view <url>` (also with `--comments`), `gh pr diff <url>` (also with `--name-only`, for a diff too long for
-    one command output) and two reads of
-    the PR's comments and reviews with `gh api`. The PR is named by its URL, so there is no `-R` to point it at
-    another repository, and no wildcard for `--web`, `-f` or `--method` to ride on.
+  - the PR itself only through its [run tools](#run-tools) (`runTools: {toolSet: "prReview", target}`): `pr_overview`,
+    `pr_files`, `pr_diff` and `pr_comments`, bound to this one PR, served by the board and paged so a diff of any size
+    is read in full. No `gh` and no network: the run tools' server is its one MCP server.
 
   Before the agent starts the runner checks the worktree is at the commit the run is about (`expectHead`,
   `WorktreeHeadError`) and, when it isn't, removes the worktree and its branch (the run records neither). A branch
@@ -893,8 +892,9 @@ empty by default, so rows saved before them still parse (#238 added inputs to sh
   run gets the user's servers (not `access: "none"`, nor read-only and untrusted, which use `--strict-mcp-config`), the
   runner adds `MCP_CONNECTION_NONBLOCKING=false` to the agent's environment beside the push guard's (`mcpWaitEnv`), so
   Claude Code connects them first. Such a run waits for every user server, up to Claude Code's MCP timeout, within the
-  run's own timeout; runs that need only the board's server don't wait. Same cause as ticket imports
-  ([issue-import.md](issue-import.md#the-job)).
+  run's own timeout; runs that need only the board's server don't wait. A run with [run tools](#run-tools) waits too,
+  locked down or not: its only way to read its target is that server, and a locked-down run has no ToolSearch to find
+  a late one. Same cause as ticket imports ([issue-import.md](issue-import.md#the-job)).
 - **Blocked.** While a slot has no tools, `customBlockedReason` gives "Won't work until you fill in: Jira tools". The
   catalogue entry carries it as `Automation.blocked` (`AutopilotAutomation.blocked` in the API): `setScope` refuses
   `mode: "on"` with that message (`VALIDATION`), the UI shows it in orange and disables On, and the automation's `check`
@@ -1202,7 +1202,8 @@ with that error.
   (`Bash(gh pr review *)`), **`deniedTools`** to deny more (Orchestrate with May merge off), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
   can't be held to these, so a request with any of them runs headless under Auto, and fails under T3 only.
   Also headless only: **`untrustedInput`** for a read-only agent that reads text anyone can write (no MCP servers or
-  checkout settings, file tools limited to the worktree, only exact git commands) and **`expectHead`**, the commit the worktree must be at, checked before the
+  checkout settings, file tools limited to the worktree, only exact git commands), **`runTools`**, the board-served
+  tools the run reads its target through ([Run tools](#run-tools)), and **`expectHead`**, the commit the worktree must be at, checked before the
   agent starts (`WorktreeHeadError`, with `moved` when the branch is ahead of it).
 
 Every agent automation spreads the shared runner options into its config (`autopilot/runnerOptions.ts`:
@@ -1275,6 +1276,7 @@ for the others): the argv, a parser that turns its output into an outcome, and w
 | Untrusted-input lockdown               | yes         | no    | no          |
 | No tools (`access: "none"`)            | yes         | no    | no          |
 | Extra tool rules (`tools`, `deniedTools`) | yes      | no    | no          |
+| Board-served [run tools](#run-tools) (`runTools`) | yes | yes   | no          |
 | Spending cap (`budgetUsd`) and cost    | yes         | no    | no          |
 | Session id given up front              | yes         | no    | yes         |
 
@@ -1309,8 +1311,47 @@ for the others): the argv, a parser that turns its output into an outcome, and w
   `assistant.message` or `session.task_complete` summary as the answer, and `session.error` or a printed `Error:`
   line as the failure. Copilot's rules match a command's first-level subcommand (`git push`), so they can refuse
   merging but not a force-push alone: the push guard does that.
+- **Run tools:** Claude Code gets `--mcp-config <file>` naming only the run's server (`aboard-run`, `RUN_SERVER_NAME`)
+  with its token in a header, and `mcp__<server>` allowed; a locked-down run keeps `--strict-mcp-config`, any other
+  keeps the user's servers too. Codex gets `--ignore-user-config -c mcp_servers.<server>.url="…" -c
+  mcp_servers.<server>.bearer_token_env_var="<RUN_TOKEN_ENV>"`, with the token in that variable. Checked on
+  codex-cli 0.166.0: a `codex exec` pointed at a run endpoint called `pr_overview` and `pr_diff` (`mcp_tool_call`
+  items, no approval asked) and answered from the diff; and with `--ignore-user-config` a stdio server named in a
+  `config.toml` was not started, while without it it was. The login under `CODEX_HOME` still applies. The Copilot
+  CLI can't yet be held to one given MCP server, so it lacks the capability.
 - **Cost:** Codex and Copilot report none and take no cap. Only `timeoutMinutes` stops them, the run records no cost,
   and the spend cap doesn't count them.
+
+#### Run tools
+
+A headless run that reads a git host gets that host's reads as tools the board serves for it alone, instead of `gh`
+and tool rules only Claude Code can follow ([ADR 0013](../decisions/0013-board-served-run-tools.md)):
+
+- **The scope.** `RunnerRequest.runTools` is `{toolSet, target}` (`mcp/runTokens.ts`): one tool set per kind of
+  operation and the one thing it reads. Today the set is `prReview` and the target a PR.
+- **The token.** `runOnDriver` mints one before the agent starts (`RunTokens.mint`, through the runner's `runTools`
+  dep): 32 random bytes, kept in memory by its SHA-256 only, alive for the run's timeout plus five minutes and never
+  more than a day (`RUN_TOKEN_MAX_TTL_MS`). It writes the MCP config (`runToolsMcpConfig`) to a temp folder of its own
+  outside the worktree, mode 0600, and in a `finally` revokes the token and removes the folder, however the run
+  ended. Only a driver that reads the token from its environment (`runTokenFromEnv`: Codex) gets it there, in
+  `RUN_TOKEN_ENV`. The token is never logged, never in a URL, never on a command line.
+- **The endpoint.** `POST /mcp/run` with `Authorization: Bearer <run token>` (`mcp/runTools.ts`): stateless
+  streamable HTTP like `/mcp`, but each request gets a server with only its grant's tools. A missing, unknown,
+  revoked or expired token gets 401 without the token in the answer; the board's own API token is neither needed nor
+  accepted. The localhost guard applies.
+- **The PR review set.** `pr_overview`, `pr_files`, `pr_diff(path?, page?)` and `pr_comments(page?)`. None takes a
+  target: each reads the grant's PR, so arguments naming another one are dropped, and a path the PR doesn't change is
+  refused. The diff comes in pages of at most 400 lines and 20,000 characters (`PAGE_LIMITS`, small enough that Codex
+  shows a result whole), by file or for the whole PR in order; a file split across pages repeats its header with
+  `(continued)`, each result names its page, the count and the next call, and only a line longer than half a page is
+  cut, with a marker. The file list is read once per run (`RunGrant.cache`) however many pages follow. Results mark
+  the PR's own text as untrusted.
+- **What they read through.** A `GitHost` (`integrations/gitHost.ts`): `getPr`, `listFiles` (with each file's patch),
+  `getDiff(path, page)`, `getComments` (conversation comments, review bodies and inline comments with their ids,
+  oldest first) and `getIssue`. GitHub's (`integrations/githubHost.ts`) reads REST (`GithubApi.rest`) with the `gh`
+  token, 100 a page up to 30 pages; a file GitHub serves no patch for (binary, too large) says so.
+- **Which providers.** The `runTools` capability: Claude Code and Codex. A run with `runTools` adds the `runTools`
+  need, so the resolver never picks the Copilot CLI for it, and it runs headless only.
 
 #### The push guard
 
@@ -1347,7 +1388,7 @@ each with what it needs from the provider and a default that is a tier or inheri
 | New sessions, terminal and T3 (`launch`)     | inherit | nothing                                  |
 | Reviewer subagent (`reviewer`)               | inherit | nothing (it is a line in the brief)      |
 | Board reviewer (`boardReviewer`)             | standard | structured output, tool rules           |
-| PR review (`prReview`)                       | standard | structured output, untrusted lockdown, tool rules |
+| PR review (`prReview`)                       | standard | structured output, untrusted lockdown, run tools |
 | Orchestrate (`orchestrate`)                  | standard | untrusted lockdown, tool rules          |
 | Digest (`digest`)                            | light   | no tools                                 |
 | Custom agents on a task (`customTask`)       | inherit | edit                                     |
@@ -1500,6 +1541,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/repoGate.ts` | One `git fetch` per repository at a time: Autopilot's T3 launches and headless worktrees |
 | `apps/server/src/integrations/headlessAgent.ts` | `claude -p` arguments for agent runs, the push deny rules, the outcome, the driver interface |
 | `apps/server/src/integrations/headlessDrivers.ts` | The Codex and Copilot CLI drivers, capabilities and the fallback to Claude Code |
+| `apps/server/src/mcp/runTokens.ts`, `mcp/runTools.ts` | Run tools: the tokens, `/mcp/run` and the tool sets |
+| `apps/server/src/integrations/gitHost.ts`, `githubHost.ts` | `GitHost`, the paging helpers, and GitHub's implementation |
 | `apps/server/src/autopilot/engine.ts` | The pass, the event and tick wiring |
 | `apps/server/src/autopilot/limits.ts` | `agentHold`: quiet hours, concurrency and the daily caps, for the engine and Orchestrate's state |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |

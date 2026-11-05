@@ -31,6 +31,7 @@ import type {
   TerminalInfo,
 } from "@repo/contracts";
 import type { DigestStart } from "../autopilot/digest.ts";
+import type { RunToolsContext } from "../mcp/runTools.ts";
 import type { MergeTaskPrResult } from "./mergeTaskPr.ts";
 import type { SessionTranscript } from "./sessionTranscript.ts";
 import type { TaskThreadInput, TaskThreadLaunch, ThreadLink } from "./t3.ts";
@@ -41,6 +42,8 @@ export interface Integrations {
   githubStatus(): GithubStatus;
   /** Whether an unfinished PR on the host keeps a Review task from Done (see GithubIntegration.holdsTasks). */
   prHostHoldsTasks(host: string): boolean;
+  /** Board-served run tools: the live run tokens and the git host their tools read (`/mcp/run`). */
+  readonly runTools: RunToolsContext;
   /** Starts background discovery/pollers. */
   start(): void;
   stop(): void;

@@ -25,7 +25,8 @@ function isAllowedOrigin(origin: string, config: Pick<Config, "port" | "webPort"
 /**
  * Localhost guard: rejects non-local Host headers (DNS rebinding) and browser requests from
  * any origin other than this server or the Vite dev server, and enforces the optional bearer
- * token on /api, /mcp and /events.
+ * token on /api, /mcp and /events. `/mcp/run` (run tools) is not behind the board's token: a run's own token is the
+ * credential, so an agent reading untrusted text never holds the board's.
  */
 export function localGuard(config: Pick<Config, "token" | "port" | "webPort">): MiddlewareHandler {
   return async (c, next) => {

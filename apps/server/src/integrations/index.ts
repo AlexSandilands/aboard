@@ -16,6 +16,9 @@ import { createAgentModels, type AgentModelProbes } from "./agentModels.ts";
 import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
 import { createBackupIntegration, defaultRunGit, type RunGit } from "./backup.ts";
 import type { RunGh } from "./gh.ts";
+import type { GitHost } from "./gitHost.ts";
+import { createRunTokens } from "../mcp/runTokens.ts";
+import { RUN_TOOLS_PATH, type RunToolsContext } from "../mcp/runTools.ts";
 import { createGithubIntegration, messageOf } from "./github.ts";
 import { mergeTaskPr } from "./mergeTaskPr.ts";
 import type { RunAgent } from "./headlessAgent.ts";
@@ -66,6 +69,8 @@ export interface IntegrationOverrides {
   /** The machine "Open in terminal" runs on, and how it starts a terminal. */
   terminalHost?: () => TerminalHost;
   spawnTerminal?: SpawnTerminal;
+  /** What run tools read instead of GitHub. */
+  gitHost?: GitHost;
   /** Carries out Autopilot's agent actions; replaces the T3 and headless runners entirely. */
   autopilotRunner?: Runner;
   /** Git for Autopilot's worktrees (the runner and their cleanup). */
@@ -91,6 +96,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.githubFetch ? { fetch: overrides.githubFetch } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const runTools: RunToolsContext = { tokens: createRunTokens(), gitHost: overrides.gitHost ?? github.gitHost };
   const t3 = createT3Integration({
     t3Home: deps.config.t3Home,
     bus: deps.bus,
@@ -179,6 +185,12 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       ...(overrides.runAgent ? { runAgent: overrides.runAgent } : {}),
       sessionLinked: refreshSession,
       boardMcp: () => ({ url: `http://127.0.0.1:${deps.config.port}/mcp`, token: deps.config.token ?? null }),
+      runTools: {
+        mint: (runId, scope, ttlMs) => {
+          const { token, revoke } = runTools.tokens.mint(runId, scope, ttlMs);
+          return { url: `http://127.0.0.1:${deps.config.port}${RUN_TOOLS_PATH}`, token, revoke };
+        },
+      },
       ...(overrides.log ? { log: overrides.log } : {}),
     });
   const autopilot = createAutopilotEngine({
@@ -208,6 +220,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     t3Status: () => t3.status(),
     githubStatus: () => github.status(),
     prHostHoldsTasks: (host) => github.holdsTasks(host),
+    runTools,
     start() {
       if (!deps.config.pollers || started) return;
       started = true;

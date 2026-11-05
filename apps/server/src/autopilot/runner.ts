@@ -24,6 +24,7 @@ import { messageOf } from "../integrations/github.ts";
 import {
   boardMcpConfig,
   mcpWaitEnv,
+  runToolsMcpConfig,
   runHeadlessAgent,
   type AgentArgsInput,
   type AgentOutcome,
@@ -39,6 +40,7 @@ import {
   type ThreadWorkspace,
 } from "../integrations/t3.ts";
 import type { Logger } from "../integrations/util.ts";
+import { RUN_TOKEN_ENV, type RunToolScope } from "../mcp/runTokens.ts";
 import type { Services } from "../services/types.ts";
 import { pushGuardEnv } from "./pushGuard.ts";
 import { createRepoGate, gateFetches } from "./repoGate.ts";
@@ -104,6 +106,9 @@ export const T3_RETRY_MS = 15_000;
  * a `git fetch`). Past it the gate is released and the run goes on as if the workspace were ready.
  */
 export const T3_PREPARE_MS = 3 * 60_000;
+/** How much longer than its timeout a run's tools stay usable: the run is stopped at its timeout and revokes them. */
+const RUN_TOOLS_GRACE_MS = 5 * 60_000;
+
 /** How often a launch looks at whether T3 has prepared the workspace. */
 export const T3_PREPARE_POLL_MS = 2_000;
 
@@ -167,6 +172,13 @@ export function createAutopilotRunner(deps: {
   sessionLinked?: (sessionId: string) => void;
   /** This board's MCP endpoint and API token, for a run that gets only the board's server (`boardTools`). */
   boardMcp?: () => { url: string; token: string | null };
+  /**
+   * Mints a run's board-served tools (`request.runTools`): the `/mcp/run` URL, the run's token for it, and how to
+   * revoke the token when the run ends.
+   */
+  runTools?: {
+    mint: (runId: string, scope: RunToolScope, ttlMs: number) => { url: string; token: string; revoke: () => void };
+  };
   log?: Logger;
 }): Runner {
   // One `git fetch` per repository at a time across T3 launches and headless worktrees. What the user asks for (an epic's
@@ -411,6 +423,7 @@ export function createAutopilotRunner(deps: {
       tools: request.tools,
       deniedTools: request.deniedTools,
       unguarded: !where.hooksPath,
+      runTools: Boolean(request.runTools),
     });
     const { driver, resolved } = plan;
     const preset = driver.capabilities.presetSessionId ? newSessionId() : null;
@@ -424,48 +437,87 @@ export function createAutopilotRunner(deps: {
       update({ sessionId: id });
       link(driver.harness, id);
     };
-    const env = {
-      ...(where.hooksPath ? pushGuardEnv(where.hooksPath, process.env.GIT_CONFIG_PARAMETERS) : {}),
-      ...mcpWaitEnv({ access, untrusted: request.untrustedInput, tools: request.tools }),
-    };
-    const stdout = await runAgent({
-      cli: harnessCliSetting(settings, driver.harness),
-      command: driver.command,
-      label: driver.label,
-      cwd: where.cwd,
-      prompt: where.prompt,
-      timeoutMs: options.timeoutMinutes * 60_000,
-      ...(Object.keys(env).length > 0 ? { env } : {}),
-      ...(driver.sessionIdOf
-        ? {
-            onStdoutLine: (line: string) => {
-              const id = driver.sessionIdOf?.(line);
-              if (id) found(id);
-            },
-          }
-        : {}),
-      args: driver.args({
-        access,
-        budgetUsd: options.budgetUsd,
-        // Ignored by a driver that can't preset one.
-        sessionId: preset ?? "",
-        model: resolved.model,
-        effort: resolved.effort,
-        name: autopilotSessionName(request.label, task),
-        defaultBranch: where.defaultBranch,
-        ...(request.tools ? { tools: request.tools } : {}),
-        ...(request.deniedTools ? { deniedTools: request.deniedTools } : {}),
-        ...(request.untrustedInput ? { untrusted: true } : {}),
-        ...(where.boardMcpConfig ? { boardMcpConfig: where.boardMcpConfig } : {}),
-        ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
-      }),
-    });
-    const outcome = driver.parse(stdout, Boolean(request.outputSchema));
-    // A run whose id came only in its final output (a fake, or a line the stream split oddly) is still linked.
-    if (outcome.sessionId && !driver.capabilities.presetSessionId) found(outcome.sessionId);
-    if (outcome.costUsd !== null) update({ costUsd: outcome.costUsd });
-    if (!outcome.ok) throw new Error(`${driver.label} stopped: ${outcome.error ?? "unknown error"}`);
-    return { outcome, sessionId };
+    const tools = request.runTools ? await mintRunTools(request.run.id, request.runTools, options) : null;
+    try {
+      const env = {
+        ...(where.hooksPath ? pushGuardEnv(where.hooksPath, process.env.GIT_CONFIG_PARAMETERS) : {}),
+        ...mcpWaitEnv({ access, untrusted: request.untrustedInput, tools: request.tools, runTools: Boolean(tools) }),
+        ...(tools && driver.runTokenFromEnv ? { [RUN_TOKEN_ENV]: tools.token } : {}),
+      };
+      const stdout = await runAgent({
+        cli: harnessCliSetting(settings, driver.harness),
+        command: driver.command,
+        label: driver.label,
+        cwd: where.cwd,
+        prompt: where.prompt,
+        timeoutMs: options.timeoutMinutes * 60_000,
+        ...(Object.keys(env).length > 0 ? { env } : {}),
+        ...(driver.sessionIdOf
+          ? {
+              onStdoutLine: (line: string) => {
+                const id = driver.sessionIdOf?.(line);
+                if (id) found(id);
+              },
+            }
+          : {}),
+        args: driver.args({
+          access,
+          budgetUsd: options.budgetUsd,
+          // Ignored by a driver that can't preset one.
+          sessionId: preset ?? "",
+          model: resolved.model,
+          effort: resolved.effort,
+          name: autopilotSessionName(request.label, task),
+          defaultBranch: where.defaultBranch,
+          ...(request.tools ? { tools: request.tools } : {}),
+          ...(request.deniedTools ? { deniedTools: request.deniedTools } : {}),
+          ...(request.untrustedInput ? { untrusted: true } : {}),
+          ...(where.boardMcpConfig ? { boardMcpConfig: where.boardMcpConfig } : {}),
+          ...(tools ? { runTools: { url: tools.url, configPath: tools.configPath } } : {}),
+          ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
+        }),
+      });
+      const outcome = driver.parse(stdout, Boolean(request.outputSchema));
+      // A run whose id came only in its final output (a fake, or a line the stream split oddly) is still linked.
+      if (outcome.sessionId && !driver.capabilities.presetSessionId) found(outcome.sessionId);
+      if (outcome.costUsd !== null) update({ costUsd: outcome.costUsd });
+      if (!outcome.ok) throw new Error(`${driver.label} stopped: ${outcome.error ?? "unknown error"}`);
+      return { outcome, sessionId };
+    } finally {
+      await tools?.release();
+    }
+  };
+
+  /**
+   * A run's board-served tools: a token bound to the run and its scope, living a little longer than the run may, and
+   * the MCP config naming them, in a folder of its own outside the worktree (it carries the token, so the agent's
+   * file tools can't reach it). `release` revokes the token and removes the folder.
+   */
+  const mintRunTools = async (runId: string, scope: RunToolScope, options: RunnerOptions) => {
+    if (!deps.runTools) throw new Error("The board's run tools aren't available to the runner");
+    const minted = deps.runTools.mint(runId, scope, options.timeoutMinutes * 60_000 + RUN_TOOLS_GRACE_MS);
+    let dir: string | null = null;
+    try {
+      dir = await mkdtemp(join(tmpdir(), `${BRAND.id}-run-tools-`));
+      const configPath = join(dir, "mcp.json");
+      await writeFile(configPath, runToolsMcpConfig(minted.url, minted.token), { mode: 0o600 });
+      const folder = dir;
+      return {
+        url: minted.url,
+        token: minted.token,
+        configPath,
+        release: async () => {
+          minted.revoke();
+          await rm(folder, { recursive: true, force: true }).catch((error: unknown) => {
+            log.warn(`[autopilot] couldn't remove ${folder}: ${messageOf(error)}`);
+          });
+        },
+      };
+    } catch (error) {
+      minted.revoke();
+      if (dir) await rm(dir, { recursive: true, force: true }).catch(() => null);
+      throw error;
+    }
   };
 
   const startHeadless = async (
@@ -609,12 +661,14 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
       const task = taskOf(request.run.taskId);
       if (request.kind === "nudge") return nudge(request, task, update);
       const options = readRunnerOptions(request.options);
-      // A T3 thread can't be held to read-only, given tools or asked for structured output.
+      // A T3 thread can't be held to read-only, given tools (its own or the board's run tools) or asked for structured
+      // output.
       const headlessOnly =
         (request.access ?? "edit") !== "edit" ||
         (request.tools?.length ?? 0) > 0 ||
         (request.deniedTools?.length ?? 0) > 0 ||
-        Boolean(request.outputSchema);
+        Boolean(request.outputSchema) ||
+        Boolean(request.runTools);
       if (headlessOnly) {
         if (options.runner === "t3")
           throw new Error("This action needs a headless run, but the automation runs only in T3 Code");

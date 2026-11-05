@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { BRAND } from "@repo/contracts";
+import { RUN_SERVER_NAME, RUN_TOKEN_ENV } from "../mcp/runTokens.ts";
 import { describe, expect, it } from "vitest";
 import { agentArgs, claudeDriver, type AgentArgsInput } from "./headlessAgent.ts";
 import {
@@ -69,6 +70,31 @@ describe("the Codex driver", () => {
     expect(args.at(-1)).toBe("-");
     expect(codexArgs(input({ effort: null }))).not.toContain("-c");
     expect(codexArgs(input())).not.toContain("-c");
+  });
+
+  it("gives a run with run tools only the board's endpoint, its token read from the environment", () => {
+    const args = codexArgs(
+      input({
+        access: "read-only",
+        runTools: { url: "http://127.0.0.1:4317/mcp/run", configPath: "/tmp/run-mcp.json" },
+      }),
+    );
+    expect(args).toEqual([
+      "exec",
+      "--json",
+      "--skip-git-repo-check",
+      "--sandbox",
+      "read-only",
+      "--ignore-user-config",
+      "-c",
+      `mcp_servers.${RUN_SERVER_NAME}.url="http://127.0.0.1:4317/mcp/run"`,
+      "-c",
+      `mcp_servers.${RUN_SERVER_NAME}.bearer_token_env_var="${RUN_TOKEN_ENV}"`,
+      "-",
+    ]);
+    // The token is never on the command line, nor the config file Claude Code reads.
+    expect(args.join(" ")).not.toContain("run-mcp.json");
+    expect(codexArgs(input())).not.toContain("--ignore-user-config");
   });
 
   // The fixtures are `codex exec --json` stdout recorded on codex-cli 0.166.0, scrubbed of paths and ids.
@@ -224,8 +250,10 @@ describe("choosing a driver", () => {
       toolRules: false,
       budget: false,
       presetSessionId: false,
+      runTools: true,
     });
     expect(copilotDriver.capabilities.presetSessionId).toBe(true);
+    expect(copilotDriver.capabilities.runTools).toBe(false);
     expect(copilotDriver.capabilities.budget).toBe(false);
   });
 
@@ -240,5 +268,10 @@ describe("choosing a driver", () => {
     // With no worktree there is no push guard: only Claude Code's deny rules hold an editing agent back.
     expect(driverNeeds({ access: "edit", unguarded: true })).toEqual(["edit", "toolRules"]);
     expect(driverNeeds({ access: "read-only", unguarded: true })).toEqual([]);
+    expect(driverNeeds({ access: "read-only", untrusted: true, runTools: true, outputSchema: {} })).toEqual([
+      "outputSchema",
+      "untrusted",
+      "runTools",
+    ]);
   });
 });

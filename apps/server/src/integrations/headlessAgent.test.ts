@@ -1,6 +1,14 @@
 import { BRAND } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { agentArgs, boardMcpConfig, mcpWaitEnv, parseAgentOutput, pushDenyRules } from "./headlessAgent.ts";
+import { RUN_SERVER_NAME } from "../mcp/runTokens.ts";
+import {
+  agentArgs,
+  boardMcpConfig,
+  mcpWaitEnv,
+  parseAgentOutput,
+  pushDenyRules,
+  runToolsMcpConfig,
+} from "./headlessAgent.ts";
 
 const SESSION = "11111111-2222-4333-8444-555555555555";
 const after = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
@@ -101,6 +109,52 @@ describe("headless agent", () => {
     expect(args).toEqual(expect.arrayContaining(["Read(./**)", `mcp__${BRAND.id}`, "Bash(gh pr view *)"]));
     expect(args).not.toContain("Read");
     expect(args).not.toContain("Bash(git diff *)");
+  });
+
+  it("gives an untrusted agent with run tools the run's server and nothing more", () => {
+    const base = {
+      access: "read-only",
+      budgetUsd: 1,
+      sessionId: SESSION,
+      model: null,
+      defaultBranch: null,
+      runTools: { url: "http://127.0.0.1:1/mcp/run", configPath: "/tmp/run-mcp.json" },
+    } as const;
+    const locked = agentArgs({ ...base, untrusted: true });
+    expect(locked).toContain("--strict-mcp-config");
+    expect(after(locked, "--mcp-config")).toBe("/tmp/run-mcp.json");
+    const allowed = locked.slice(locked.indexOf("--allowedTools") + 1, locked.indexOf("--disallowedTools"));
+    expect(allowed).toContain(`mcp__${RUN_SERVER_NAME}`);
+    // No gh, and not the board's own tools.
+    expect(allowed.some((t) => t.includes("gh "))).toBe(false);
+    expect(allowed).not.toContain(`mcp__${BRAND.id}`);
+    // With a board config too, both servers and no other.
+    const both = agentArgs({ ...base, untrusted: true, boardMcpConfig: "/tmp/board-mcp.json" });
+    expect(both.slice(both.indexOf("--mcp-config") + 1, both.indexOf("--setting-sources"))).toEqual([
+      "/tmp/run-mcp.json",
+      "/tmp/board-mcp.json",
+    ]);
+    // Any other run keeps the user's servers and gets the run's on top.
+    const open = agentArgs(base);
+    expect(open).not.toContain("--strict-mcp-config");
+    expect(after(open, "--mcp-config")).toBe("/tmp/run-mcp.json");
+    // A no-tools run gets none.
+    const none = agentArgs({ ...base, access: "none" });
+    expect(none).not.toContain("--mcp-config");
+    expect(none).not.toContain(`mcp__${RUN_SERVER_NAME}`);
+  });
+
+  it("builds the run tools' MCP config, with the run token in a header", () => {
+    const token = ["r", "1"].join("");
+    expect(JSON.parse(runToolsMcpConfig("http://127.0.0.1:1/mcp/run", token))).toEqual({
+      mcpServers: {
+        [RUN_SERVER_NAME]: {
+          type: "http",
+          url: "http://127.0.0.1:1/mcp/run",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      },
+    });
   });
 
   it("builds a board-only MCP config, with the token only when there is one", () => {
@@ -214,6 +268,10 @@ describe("headless agent", () => {
     // These runs get no user servers (--strict-mcp-config), so there is nothing to wait for.
     expect(mcpWaitEnv({ access: "none", tools: jira })).toEqual({});
     expect(mcpWaitEnv({ access: "read-only", untrusted: true, tools: jira })).toEqual({});
+    // Run tools are a run's only way to read its target, so it waits for them, locked down or not.
+    expect(mcpWaitEnv({ access: "read-only", untrusted: true, runTools: true })).toEqual(wait);
+    expect(mcpWaitEnv({ access: "edit", runTools: true })).toEqual(wait);
+    expect(mcpWaitEnv({ access: "none", runTools: true })).toEqual({});
   });
 
   it("reads the outcome, with the cost even when the run stopped", () => {
