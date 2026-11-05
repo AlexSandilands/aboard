@@ -193,6 +193,23 @@ first backup. The server side is `apps/server/src/integrations/backupSetup.ts`:
 The last step saves the folder, remote and machine name, turns backup on and calls `POST /api/backup/run`,
 showing the commit, the push or the error. gh and git keep the credentials; the board stores none.
 
+#### Clearing and resetting
+
+Both are web-only: `PATCH /api/settings` already takes the nulls (`CLEAR_BACKUP_FOLDER` and
+`RESET_BACKUP_SETTINGS` in `backupSetup.logic.ts`), each behind a `ConfirmDialog`.
+
+- **Clear** (beside **Change**, only with a folder) sends `backupEnabled: false, backupDir: null`. Backup can't run
+  without a folder, so it goes off too; the remote and machine name stay.
+- **Reset…** (the last row, shown while anything is set: `canResetBackup`) sends `backupEnabled: false` and null for
+  `backupDir`, `backupRemote` and `machineName`, so the name follows the host name again. It stays reachable after
+  **Clear**, which leaves a remote or custom name behind. The section is `unconfigured` again and **Set up backup**
+  reruns the dialog.
+- Nothing on disk or on the remote is touched, and the dialogs say so: the folder, its backups and the take-over
+  adoption file in its `.git` stay. Setting the same folder up again therefore picks up where it was; under the old
+  machine name the folder's `instanceId` is still this board's, so it is accepted without a take-over.
+- Without a folder the scheduler's `tick` skips, **Back up now** is disabled and the Last backup row says "No backup
+  folder is set." instead of the previous run's error.
+
 ### Machine folders
 
 Several machines can back up to one repo. The repo holds `backup.json` and one folder per machine:

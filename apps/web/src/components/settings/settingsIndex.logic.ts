@@ -212,6 +212,9 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "directory",
     "path",
     "repo",
+    "clear",
+    "unset",
+    "remove",
   ]),
   draft(
     "board.data.backup-remote",
@@ -247,6 +250,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Tasks from another machine",
     "Move or copy tasks from another machine that backs up to the same repo.",
     ["move", "copy", "transfer", "machine", "laptop", "desktop", "import"],
+  ),
+  draft(
+    "board.data.backup-reset",
+    "Reset backup settings",
+    "Forget the folder, remote and machine name and turn backup off, so Set up backup starts over.",
+    ["clear", "unset", "remove", "folder", "remote", "start over", "setup"],
   ),
   draft(
     "board.data.archived-projects",

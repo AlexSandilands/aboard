@@ -9,6 +9,27 @@ export function backupState(settings: Pick<AppSettings, "backupDir" | "backupRem
   return settings.backupRemote ? ("remote" as const) : ("local_only" as const);
 }
 
+/** Clearing the folder also turns backup off: with no folder there is nothing to run. The remote and name stay. */
+export const CLEAR_BACKUP_FOLDER = { backupEnabled: false, backupDir: null } as const;
+
+/** Back to the state before setup; a null machine name follows the host name again. */
+export const RESET_BACKUP_SETTINGS = {
+  backupEnabled: false,
+  backupDir: null,
+  backupRemote: null,
+  machineName: null,
+} as const;
+
+/**
+ * Whether Reset has anything to clear. Clearing the folder leaves the remote and a custom name behind, so the
+ * section is "unconfigured" while Reset is still the only way to drop them.
+ */
+export function canResetBackup(
+  settings: Pick<AppSettings, "backupEnabled" | "backupDir" | "backupRemote" | "machineNameIsDefault">,
+): boolean {
+  return settings.backupEnabled || !!settings.backupDir || !!settings.backupRemote || !settings.machineNameIsDefault;
+}
+
 /** The choice the GitHub step starts on: creating a repo needs gh signed in, and a set remote is kept. */
 export function initialRemoteChoice(info: BackupSetupInfo): RemoteChoice {
   if (info.backupRemote) return "existing";
