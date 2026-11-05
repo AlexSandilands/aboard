@@ -32,6 +32,8 @@ export function createTestHarness(
     /** Registers the sandbox's /api/demo routes. */
     demo?: boolean;
     integrations?: IntegrationOverrides;
+    /** This board's id; a fresh one when unset. */
+    instanceId?: string;
   } = {},
 ) {
   const { integrations, ...config } = overrides;

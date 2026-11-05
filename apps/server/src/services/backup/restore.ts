@@ -23,6 +23,8 @@ const TABLES = [
   // After autopilot_settings, so clearing it (whose trigger deletes its switches) comes first.
   "autopilot_custom",
   "suggestions",
+  "task_transfers",
+  "applied_transfers",
   ...TASK_BUNDLE_TABLES,
   "task_events",
 ] as const;
@@ -42,6 +44,8 @@ const rowsByTable = (dump: BoardDump): Record<Table, BackupRow[]> => ({
   autopilot_recurring: dump.autopilot_recurring,
   autopilot_custom: dump.autopilot_custom,
   suggestions: dump.suggestions,
+  task_transfers: dump.task_transfers,
+  applied_transfers: dump.applied_transfers,
   plan_phases: dump.tasks.flatMap((b) => b.plan_phases),
   plan_steps: dump.tasks.flatMap((b) => b.plan_steps),
   task_links: dump.tasks.flatMap((b) => b.task_links),
@@ -91,12 +95,30 @@ export function insertRows(db: Db, table: Table, rows: readonly BackupRow[]): vo
   }
 }
 
+/** Tables the dump doesn't hold (notifications, Autopilot runs) whose rows point at rows the load removed. */
+function sweepOrphans(db: Db, restored: ReadonlySet<string>): void {
+  // Deleting one orphan can orphan a row that points at it, as a cascade would; a few rounds settle it.
+  for (let round = 0; round < 10; round += 1) {
+    const broken = db.prepare("PRAGMA foreign_key_check").all() as Array<{ table: string; rowid: number | null }>;
+    const others = broken.filter((b) => !restored.has(b.table));
+    if (others.length === 0) return;
+    for (const { table, rowid } of others) {
+      if (rowid === null) throw new AppError("VALIDATION", `Cannot clear ${table} rows left by the restore`);
+      db.prepare(`DELETE FROM ${table} WHERE rowid = ?`).run(rowid);
+    }
+  }
+}
+
 /**
  * Loads the dump into `db`, which must be at the dump's schema version, replacing what is there, in one
  * transaction. Before committing it checks every foreign key and that each table holds the manifest's row count;
- * on any failure nothing is written.
+ * on any failure nothing is written. `keep` are settings rows to add after the checks (the machine's own).
+ *
+ * On a live board the caller turns foreign keys off first, so wiping a task doesn't cascade into the tables a dump
+ * doesn't hold: a task that comes back keeps its notifications and Autopilot runs, and only rows left pointing at
+ * nothing are removed, as the cascade would have.
  */
-function loadDump(db: Db, dump: BoardDump): void {
+export function loadDump(db: Db, dump: BoardDump, keep: readonly BackupRow[] = []): void {
   const rows = rowsByTable(dump);
   // An older schema lacks later tables (label_colors before 005); a dump taken at it has no rows for them.
   const existing = new Set(
@@ -110,6 +132,7 @@ function loadDump(db: Db, dump: BoardDump): void {
       throw new AppError("VALIDATION", `Backup has ${table} rows, but its schema has no ${table}`);
     return false;
   });
+  const restored = new Set<string>(tables);
   transaction(db, () => {
     // Rows reference each other in both directions (tasks closed against tasks); check them all at COMMIT.
     db.exec("PRAGMA defer_foreign_keys = ON");
@@ -117,17 +140,19 @@ function loadDump(db: Db, dump: BoardDump): void {
     for (const table of [...tables].reverse()) db.exec(`DELETE FROM ${table}`);
     for (const table of tables) insertRows(db, table, rows[table]);
 
+    sweepOrphans(db, restored);
     const broken = db.prepare("PRAGMA foreign_key_check").all();
     if (broken.length > 0) {
       throw new AppError("VALIDATION", `The backup has ${broken.length} broken reference(s)`, broken.slice(0, 10));
     }
     for (const [table, expected] of Object.entries(dump.manifest.counts)) {
-      if (!(tables as readonly string[]).includes(table)) continue;
+      if (!restored.has(table)) continue;
       const { n } = db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number };
       if (n !== expected) {
         throw new AppError("VALIDATION", `Restored ${n} ${table} row(s) but the backup's manifest lists ${expected}`);
       }
     }
+    insertRows(db, "settings", keep);
   });
 }
 
@@ -182,6 +207,10 @@ function machineSettings(path: string): BackupRow[] {
 
 const SQLITE_SIDE_FILES = ["", "-wal", "-shm"];
 
+/** Where the board a restore replaces is kept: `<db>.before-restore-<time>`. */
+const beforeRestorePath = (dbPath: string, at: Date) =>
+  `${dbPath}.before-restore-${at.toISOString().replace(/[:.]/g, "-")}`;
+
 export interface RestoreResult {
   counts: Record<string, number>;
   schemaVersion: string;
@@ -231,7 +260,7 @@ export function restoreBoard(dbPath: string, dump: BoardDump, options: RestoreOp
 
   let previousDb: string | null = null;
   if (exists) {
-    previousDb = `${dbPath}.before-restore-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+    previousDb = beforeRestorePath(dbPath, new Date());
     for (const suffix of SQLITE_SIDE_FILES) {
       if (existsSync(dbPath + suffix)) renameSync(dbPath + suffix, previousDb + suffix);
     }
@@ -246,4 +275,37 @@ export function restoreBoard(dbPath: string, dump: BoardDump, options: RestoreOp
       )
     : { copied: 0, missing: 0 };
   return { counts: dump.manifest.counts, schemaVersion: dump.manifest.schemaVersion, previousDb, attachments };
+}
+
+export interface LiveRestoreResult {
+  counts: Record<string, number>;
+  /** The board as it was before, beside the database file; null for an in-memory database. */
+  safetyCopy: string | null;
+}
+
+/**
+ * Replaces the board in the open database `db` with the dump, without swapping files under the open handle. The
+ * dump is upgraded to the current schema, the board is copied to `<db>.before-restore-<time>` with VACUUM INTO,
+ * and every table the dump holds is wiped and loaded in one transaction with the same checks as restoreBoard;
+ * the machine's own settings (the backup setup, the T3 token, Autopilot's pause) stay. It runs synchronously, so
+ * nothing else on the server (the scheduler, a request) writes in between. The caller publishes board.reset.
+ */
+export function restoreBoardLive(db: Db, dump: BoardDump, now: Date = new Date()): LiveRestoreResult {
+  const current = upgradeDump(dump);
+  const main = (db.prepare("PRAGMA database_list").all() as Array<{ name: string; file: string }>).find(
+    (d) => d.name === "main",
+  );
+  const safetyCopy = main?.file ? beforeRestorePath(main.file, now) : null;
+  if (safetyCopy) db.prepare("VACUUM INTO ?").run(safetyCopy);
+  const kept = (db.prepare("SELECT key, value_json FROM settings ORDER BY key").all() as BackupRow[]).filter(
+    (r) => !EXPORTED_SETTINGS.has(String(r.key)) && !RETIRED_EXPORTED_SETTINGS.has(String(r.key)),
+  );
+  // Off outside the transaction (SQLite ignores it inside one): see loadDump.
+  db.exec("PRAGMA foreign_keys = OFF");
+  try {
+    loadDump(db, current, kept);
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON");
+  }
+  return { counts: current.manifest.counts, safetyCopy };
 }
