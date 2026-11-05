@@ -436,8 +436,9 @@ function ModelField({
   return (
     <ModelChoicePicker
       op={op}
+      needs={field.needs}
       value={parseModelChoice(value)}
-      inherit={{ label: "Inherit", detail: inheritDetail(op, {}, settings) }}
+      inherit={{ label: "Inherit", detail: inheritDetail(op, { needs: field.needs }, settings) }}
       ariaLabel={label}
       size="sm"
       className={SETTINGS_TEXT_WIDTH}

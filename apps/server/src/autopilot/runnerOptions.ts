@@ -5,6 +5,7 @@ import {
   T3RuntimeMode,
   type AutopilotField,
   type OperationId,
+  type OperationNeed,
 } from "@repo/contracts";
 import { z } from "zod";
 
@@ -87,9 +88,14 @@ export const RUNNER_FIELDS: AutopilotField[] = [
   },
 ];
 
-/** The runner fields for an automation whose runs are `operation`, so its Model field greys out providers that can't. */
-export const runnerFields = (operation: OperationId): AutopilotField[] =>
-  RUNNER_FIELDS.map((field) => (field.kind === "model" ? { ...field, operation } : field));
+/**
+ * The runner fields for an automation whose runs are `operation` (asking `needs` beyond it), so its Model field greys
+ * out the providers that can't run them.
+ */
+export const runnerFields = (operation: OperationId, needs: readonly OperationNeed[] = []): AutopilotField[] =>
+  RUNNER_FIELDS.map((field) =>
+    field.kind === "model" ? { ...field, operation, ...(needs.length > 0 ? { needs: [...needs] } : {}) } : field,
+  );
 
 /** The runner options in an automation's config; anything missing or invalid takes its default. */
 export function readRunnerOptions(config: Record<string, unknown>): RunnerOptions {

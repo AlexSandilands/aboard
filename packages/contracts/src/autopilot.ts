@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { FindingSeverity } from "./reviews.ts";
-import { OperationId, RunModelRecord } from "./operations.ts";
+import { OperationId, OperationNeed, RunModelRecord } from "./operations.ts";
 import type { TaskSummary } from "./schemas.ts";
 
 // Autopilot: a rule engine in the server that runs a catalogue of automations (docs/decisions/0008-autopilot-engine.md).
@@ -178,7 +178,13 @@ export const AutopilotField = z.discriminatedUnion("kind", [
    * tier, a custom model from Settings → Models, or a model typed for one provider. The UI lists them live, greying
    * out the providers that can't run `operation`.
    */
-  z.object({ ...FieldBase, kind: z.literal("model"), operation: OperationId.optional() }),
+  z.object({
+    ...FieldBase,
+    kind: z.literal("model"),
+    operation: OperationId.optional(),
+    /** What its runs ask beyond the operation's needs (a custom agent's tools or schema), greyed out the same way. */
+    needs: z.array(OperationNeed).optional(),
+  }),
   /** A skill reference, picked the way the review skill is. */
   z.object({
     ...FieldBase,

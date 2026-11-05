@@ -3,7 +3,8 @@ import { useId, type ReactNode } from "react";
 
 import { autoReviewChoice, autoReviewOptions } from "~/components/review/review.logic";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
-import { inheritDetail } from "~/components/models/choicePicker.logic";
+import { TriangleAlertIcon } from "lucide-react";
+import { inheritDetail, resolvesTo } from "~/components/models/choicePicker.logic";
 import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
 import { Switch } from "~/components/ui/switch";
 import { useUpdateTask } from "~/state/mutations";
@@ -145,16 +146,26 @@ function ReviewModelPicker({ task, onChange }: { task: TaskDetail; onChange: (ne
   const settings = useSettings().data;
   const project = useBoard().data?.projects.find((p) => p.id === task.projectId);
   if (!settings) return null;
-  const ctx = { task, projectOverride: project?.reviewModel ?? null };
+  const ctx = { task, projectOverride: project?.reviewModel ?? null, taskOverride: task.reviewModel };
+  // The override drives the board reviewer too, which needs more of its provider than the subagent does.
+  const board = resolvesTo("boardReviewer", ctx, settings);
   return (
-    <ModelChoicePicker
-      op="reviewer"
-      value={task.reviewModel}
-      inherit={{ label: "Inherit", detail: inheritDetail("reviewer", ctx, settings) }}
-      ariaLabel="Reviewer model for this task"
-      size="xs"
-      className="min-w-28"
-      onChange={(next) => onChange(overrideValue(next))}
-    />
+    <>
+      <ModelChoicePicker
+        op="reviewer"
+        value={task.reviewModel}
+        inherit={{ label: "Inherit", detail: inheritDetail("reviewer", { ...ctx, taskOverride: null }, settings) }}
+        ariaLabel="Reviewer model for this task"
+        size="xs"
+        className="min-w-28"
+        onChange={(next) => onChange(overrideValue(next))}
+      />
+      {board.ok ? null : (
+        <span title={`Board reviewer: ${board.text}`} className="flex text-warning">
+          <TriangleAlertIcon aria-hidden className="size-3.5" />
+          <span className="sr-only">Board reviewer: {board.text}</span>
+        </span>
+      )}
+    </>
   );
 }

@@ -4,6 +4,7 @@ import {
   CHECK_FAILED_KEY_PREFIX,
   CHECK_NEW_ITEMS_MAX,
   customAgentPrompt,
+  customAgentNeeds,
   customAllowedTools,
   customBlockedReason,
   customAgentToolsNote,
@@ -523,7 +524,12 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
         }
       : {}),
     schema: isAgent ? AgentConfig : z.object({}),
-    fields: isAgent ? runnerFields(trigger.kind === "schedule" ? "customDetached" : "customTask") : [],
+    fields: isAgent
+      ? runnerFields(
+          trigger.kind === "schedule" ? "customDetached" : "customTask",
+          action.kind === "agent" ? customAgentNeeds(trigger.kind, action) : [],
+        )
+      : [],
     defaults: isAgent ? RUNNER_DEFAULTS : {},
     check,
     async act(candidate, ctx): Promise<ActionResult> {

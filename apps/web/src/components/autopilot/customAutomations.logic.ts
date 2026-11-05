@@ -1,5 +1,7 @@
 import {
   AGENT_HARNESSES,
+  customAgentNeeds,
+  type OperationNeed,
   INHERIT,
   MODEL_TIERS,
   type ModelChoice,
@@ -491,3 +493,13 @@ export function actionModelLabel(
     return profiles.find((p) => p.id === model.profile)?.name ?? `${model.profile} (not here yet)`;
   return `${model.model} on ${AGENT_HARNESSES[model.provider].label}${model.effort ? `, ${model.effort} effort` : ""}`;
 }
+
+/** What the form's agent asks of its provider beyond its operation's needs, as the server will run it. */
+export const formAgentNeeds = (form: CustomForm): OperationNeed[] =>
+  customAgentNeeds(form.triggerKind, {
+    kind: "agent",
+    allowedTools: parseAllowedTools(form.allowedTools),
+    slots: form.slots.map((slot) => ({ tools: parseAllowedTools(slot.tools) })),
+    check: form.checkOn ? true : null,
+    untrustedItems: form.untrustedItems,
+  });

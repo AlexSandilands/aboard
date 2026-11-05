@@ -8,7 +8,7 @@ import {
   CustomAction,
   inputEnvName,
 } from "@repo/contracts";
-import { INHERIT, type ModelChoice } from "@repo/contracts";
+import { INHERIT, type ModelChoice, type OperationNeed } from "@repo/contracts";
 import { inheritDetail } from "~/components/models/choicePicker.logic";
 import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
 import {
@@ -36,6 +36,7 @@ import { cn } from "~/lib/utils";
 import { useCreateCustomAutomation, useUpdateCustomAutomation } from "~/state/customAutomations";
 import { useBoard, useSettings } from "~/state/queries";
 import {
+  formAgentNeeds,
   customFormToInput,
   emptyFormSlots,
   formSampleTask,
@@ -423,6 +424,7 @@ export function CustomAutomationEditorForm({
                     <ActionModelPicker
                       value={form.model}
                       isSchedule={isSchedule}
+                      needs={formAgentNeeds(form)}
                       onChange={(model) => patch({ model })}
                     />
                   </Field>
@@ -753,10 +755,13 @@ function ActionPicker({
 function ActionModelPicker({
   value,
   isSchedule,
+  needs,
   onChange,
 }: {
   value: ModelChoice;
   isSchedule: boolean;
+  /** What its runs ask beyond the operation (a schema, tools, untrusted items), so providers that can't grey out. */
+  needs: readonly OperationNeed[];
   onChange: (model: ModelChoice) => void;
 }) {
   const settings = useSettings().data;
@@ -765,8 +770,9 @@ function ActionModelPicker({
   return (
     <ModelChoicePicker
       op={op}
+      needs={needs}
       value={value}
-      inherit={{ label: "Inherit", detail: inheritDetail(op, {}, settings) }}
+      inherit={{ label: "Inherit", detail: inheritDetail(op, { needs }, settings) }}
       ariaLabel="Model"
       size="sm"
       className="w-full justify-between"

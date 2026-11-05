@@ -421,12 +421,15 @@ export function choiceForPick(
   }
 }
 
-/** The levels a provider's model takes: its scanned ones, else the CLI's. */
+/**
+ * The levels a provider's model takes: its scanned ones, else the CLI's. None for the CLI's default model (null): an
+ * effort goes with a model set here, so picking the default drops it, as it does on the Models page.
+ */
 export const modelLevels = (
   scanned: AgentModels | undefined,
   provider: AgentHarness,
   model: string | null,
-): readonly CliEffort[] => modelEffortLevels(provider, findScanned(scanned, provider, model));
+): readonly CliEffort[] => (model ? modelEffortLevels(provider, findScanned(scanned, provider, model)) : []);
 
 /**
  * The effort column beside the list: the selected model's levels, with "Default" for the CLI's own; a level saved

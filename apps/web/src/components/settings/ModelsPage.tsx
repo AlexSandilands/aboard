@@ -171,6 +171,7 @@ function TiersSection({ settings, cells }: { settings: AppSettings; cells: CellC
                 <ProviderCell
                   key={provider}
                   provider={provider}
+                  group={`tier-${tier}`}
                   name={`${label} tier`}
                   setting={setting}
                   cells={cells}
@@ -238,12 +239,15 @@ function GridRow({
 /** One provider's model for a tier or custom model, and for a CLI whether headless runs prefer it. */
 function ProviderCell({
   provider,
+  group,
   name,
   setting,
   cells,
   onChange,
 }: {
   provider: TierProvider;
+  /** The tier's value or the custom model's id, unique on the page. */
+  group: string;
   name: string;
   setting: ModelTierSetting;
   cells: CellContext;
@@ -282,19 +286,20 @@ function ProviderCell({
           </Button>
         ) : null}
       </div>
-      <PreferredRadio name={name} harness={provider} value={setting.provider} onChange={onChange} />
+      <PreferredRadio group={group} harness={provider} value={setting.provider} onChange={onChange} />
     </div>
   );
 }
 
 /** The radio that makes this provider the one headless runs on this model prefer. */
 function PreferredRadio({
-  name,
+  group,
   harness,
   value,
   onChange,
 }: {
-  name: string;
+  /** The tier's or custom model's id: names are free text, and two may be the same. */
+  group: string;
   harness: AgentHarness;
   value: AgentHarness | undefined;
   onChange: (change: TierChange) => void;
@@ -304,7 +309,7 @@ function PreferredRadio({
       <input
         type="radio"
         className="size-3 accent-primary"
-        name={`preferred-${name}`}
+        name={`preferred-${group}`}
         checked={value === harness}
         onChange={() => onChange({ field: "headless", value: harness })}
       />
@@ -455,6 +460,7 @@ function CustomModelsSection({ profiles, cells }: { profiles: readonly ModelProf
                 <ProviderCell
                   key={provider}
                   provider={provider}
+                  group={`profile-${profile.id}`}
                   name={profile.name}
                   setting={profile}
                   cells={cells}

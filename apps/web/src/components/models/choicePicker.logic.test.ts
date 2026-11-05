@@ -6,6 +6,7 @@ import {
   choicePickerModel,
   choiceRowKey,
   inheritDetail,
+  modelLevels,
   parsePickKey,
   providerDisabledReason,
   resolvesTo,
@@ -246,5 +247,13 @@ describe("resolvesTo", () => {
   it("says an operation on a task falls to the task's own model when nothing is set", () => {
     expect(resolvesTo("taskRun", {}, settings()).text).toMatch(/task's own model/);
     expect(inheritDetail("taskRun", {}, settings())).toBe("The task's own model");
+  });
+});
+
+describe("modelLevels", () => {
+  it("lists a model's levels, and none for the CLI's default model, so an effort can't ride along hidden", () => {
+    expect(modelLevels(scanned, "claude-code", "opus")).toEqual(["low", "high", "max"]);
+    expect(modelLevels(scanned, "codex", "gpt-x")).toEqual(["low", "medium", "high", "xhigh"]);
+    expect(modelLevels(scanned, "claude-code", null)).toEqual([]);
   });
 });
