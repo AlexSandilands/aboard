@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { ModelProfile, type ModelChoice } from "./modelProfiles.ts";
 import { EMPTY_MODEL_TIERS, type ModelTiers } from "./modelTiers.ts";
 import {
+  checkNeeds,
+  IMPORT_TICKET_NEEDS,
   missingNeeds,
+  needsWarning,
   OperationId,
   OPERATIONS,
   type OperationContext,
@@ -67,6 +70,21 @@ describe("the operation registry", () => {
     expect(missingNeeds("claude-code", ["outputSchema", "untrusted", "noTools", "toolRules", "edit"])).toEqual([]);
     expect(missingNeeds("codex", ["edit"])).toEqual([]);
     expect(missingNeeds("copilot-cli", ["outputSchema", "edit", "noTools"])).toEqual(["outputSchema", "noTools"]);
+  });
+
+  it("lets Codex return structured output and run isolated read-only, and warns rather than lock it down", () => {
+    expect(checkNeeds("codex", ["outputSchema", "readOnly"])).toEqual({ missing: [], warned: [] });
+    expect(checkNeeds("codex", ["outputSchema", "untrusted", "runTools"])).toEqual({
+      missing: [],
+      warned: ["untrusted"],
+    });
+    expect(checkNeeds("codex", ["untrusted", "noTools"])).toEqual({ missing: ["noTools"], warned: ["untrusted"] });
+    // Without the isolated read-only run there is nothing to warn about: it can't run it at all.
+    expect(checkNeeds("copilot-cli", ["untrusted"])).toEqual({ missing: ["untrusted"], warned: [] });
+    expect(checkNeeds("claude-code", ["untrusted", "readOnly", "noTools"])).toEqual({ missing: [], warned: [] });
+    expect(needsWarning("codex", ["untrusted"])).toMatch(/^Codex can't confine its file reads/);
+    expect(needsWarning("codex", ["readOnly"])).toBeNull();
+    expect(needsWarning("claude-code", ["untrusted"])).toBeNull();
   });
 
   it("lets Claude Code and Codex use the board's run tools, and not yet the Copilot CLI", () => {
@@ -230,9 +248,48 @@ describe("resolveOperationModel: picking a provider", () => {
   });
 
   it("falls back, with a note, when the preferred provider can't do what the operation needs", () => {
+    const r = resolveOperationModel("orchestrate", { automation: [{ tier: "deep" }] }, settings());
+    expect(r).toMatchObject({ ok: true, provider: "claude-code", model: "opus", warning: null });
+    expect(r).toMatchObject({
+      note: expect.stringContaining("prefers Codex, which can't follow tool rules of its own"),
+    });
+  });
+
+  it("runs a chosen tier on its preferred provider with a warning when that provider only partly locks down", () => {
     const r = resolveOperationModel("prReview", { automation: [{ tier: "deep" }] }, settings());
-    expect(r).toMatchObject({ ok: true, provider: "claude-code", model: "opus" });
-    expect(r).toMatchObject({ note: expect.stringContaining("prefers Codex, which can't return structured output") });
+    expect(r).toMatchObject({ ok: true, provider: "codex", model: "gpt-5.5" });
+    const warning =
+      "Codex can't confine its file reads, so text anyone can write (a pull request, an issue) could make it leak local files into what it returns.";
+    expect(r).toMatchObject({ warning, note: warning });
+  });
+
+  it("never falls back to a provider that carries a warning", () => {
+    // The standard tier prefers nothing, so Codex would only be a fallback.
+    const r = resolveOperationModel("prReview", {}, settings({ providers: on("codex", "claude-code") }));
+    expect(r).toMatchObject({ ok: true, provider: "claude-code", warning: null });
+    expect(resolveOperationModel("prReview", {}, settings({ providers: on("codex") }))).toEqual({
+      ok: false,
+      reason:
+        "PR review needs a provider that can return structured output, lock a run down to read untrusted input and use the board's run tools; add one in Settings → Providers. Codex can run it with a warning if you choose it for PR review on the Models page.",
+    });
+    // The preferred provider switched off: no fallback to a warned one either.
+    const deepOff = settings({ providers: [{ id: "codex", enabled: false }, ...on("claude-code")] });
+    expect(resolveOperationModel("prReview", { automation: [{ tier: "deep" }] }, deepOff)).toMatchObject({
+      ok: true,
+      provider: "claude-code",
+      warning: null,
+    });
+  });
+
+  it("runs the structured operations of the user's own input on Codex", () => {
+    const codexOnly = settings({ providers: on("codex") });
+    for (const op of ["ask", "boardReviewer"] as const) {
+      expect(resolveOperationModel(op, {}, codexOnly)).toMatchObject({ ok: true, provider: "codex", warning: null });
+    }
+    // A ticket import needs tool rules for the user's MCP servers, which only Claude Code follows.
+    expect(resolveOperationModel("issueImport", { needs: IMPORT_TICKET_NEEDS }, codexOnly)).toMatchObject({
+      ok: false,
+    });
   });
 
   it("takes the first provider in the user's order that has a model for the tier", () => {
@@ -260,7 +317,7 @@ describe("resolveOperationModel: picking a provider", () => {
 
   it("skips disabled, missing and incapable providers", () => {
     const r = resolveOperationModel(
-      "ask",
+      "digest",
       {},
       settings({
         providers: [
@@ -288,10 +345,9 @@ describe("resolveOperationModel: picking a provider", () => {
   });
 
   it("refuses, with the reason, when no provider can run it", () => {
-    expect(resolveOperationModel("ask", {}, settings({ providers: on("codex", "copilot-cli") }))).toEqual({
+    expect(resolveOperationModel("digest", {}, settings({ providers: on("codex", "copilot-cli") }))).toEqual({
       ok: false,
-      reason:
-        "Ask needs a provider that can return structured output and run with no tools; add one in Settings → Providers.",
+      reason: "Digest needs a provider that can run with no tools; add one in Settings → Providers.",
     });
     expect(resolveOperationModel("launch", {}, settings({ providers: [] }))).toEqual({
       ok: false,
@@ -309,9 +365,15 @@ describe("resolveOperationModel: picking a provider", () => {
     ).toMatchObject({ ok: true, provider: "codex", model: "x", effort: null });
     expect(resolveOperationModel("orchestrate", {}, typed({ provider: "codex", model: "gpt-5.5" }))).toEqual({
       ok: false,
-      reason:
-        "Orchestrate is set to run on Codex, which can't lock a run down to read untrusted input and follow tool rules of its own.",
+      reason: "Orchestrate is set to run on Codex, which can't follow tool rules of its own.",
     });
+    // A typed model on a provider that only partly locks down runs, with the warning.
+    const pr = resolveOperationModel(
+      "prReview",
+      {},
+      settings({ operationModels: { prReview: { provider: "codex", model: "gpt-5.5" } } }),
+    );
+    expect(pr).toMatchObject({ ok: true, provider: "codex", warning: expect.stringContaining("can't confine") });
     expect(resolveOperationModel("orchestrate", {}, typed({ provider: "copilot-cli", model: "gpt-5.5" }))).toEqual({
       ok: false,
       reason:

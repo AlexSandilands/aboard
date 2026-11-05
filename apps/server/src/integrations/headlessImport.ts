@@ -1,4 +1,4 @@
-import { BRAND, type CliEffort, type TicketSystem } from "@repo/contracts";
+import { type AgentHarness, BRAND, type CliEffort, type TicketSystem } from "@repo/contracts";
 import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,10 +6,15 @@ import { join } from "node:path";
 import { z } from "zod";
 import { IMPORT_CHILDREN_MAX } from "../services/imports.ts";
 import { claudeOutput, parseClaudeOutput, runClaude } from "./claudeCli.ts";
+import type { RunAgent } from "./headlessAgent.ts";
+import { headlessDriverFor } from "./headlessDrivers.ts";
+import { runStructured } from "./structuredRun.ts";
 
-// Turns an issue into a task for the board with Claude Code headless (`claude -p`), on a small model.
-// GitHub issues are fetched by the board and put in the prompt, so the run needs no tools at all. A ticket is read
-// by the run itself, through the user's own MCP server and the tools its ticket system lists.
+// Turns an issue into a task for the board with a headless CLI on the import's provider, on a small model.
+// GitHub issues are fetched by the board and put in the prompt, so the run needs no tools at all: Claude Code gets none,
+// Codex runs read-only and held apart from the user's setup, with a warning (it can still read local files). A ticket
+// is read by the run itself, through the user's own MCP server and the tools its ticket system lists, which only
+// Claude Code's tool rules can hold it to.
 
 const GITHUB_TIMEOUT_MS = 2 * 60_000;
 const TICKET_TIMEOUT_MS = 4 * 60_000;
@@ -60,7 +65,9 @@ export type IssueSource =
     };
 
 export interface ImportJob {
-  /** The Claude Code CLI; null looks up `claude` on PATH. */
+  /** The import's provider, as the resolver picked it; Claude Code when absent. Only Claude Code reads tickets. */
+  provider?: AgentHarness;
+  /** The provider's CLI; null looks it up on PATH. */
   cli: string | null;
   cwd: string;
   /** As `--model` takes it; null keeps the CLI's default. */
@@ -205,8 +212,48 @@ export function importPrompt(
   ].join("\n");
 }
 
+/**
+ * An import on a provider other than Claude Code: a GitHub issue only, read-only and isolated (with `untrusted`, which
+ * on Codex adds nothing its sandbox can enforce, hence the resolver's warning), with no session kept.
+ */
+async function runImportOnDriver(job: ImportJob, provider: AgentHarness, runAgent?: RunAgent): Promise<ImportOutcome> {
+  const driver = headlessDriverFor(provider);
+  if (job.source.kind !== "issue") throw new Error(`Importing a ticket needs Claude Code, not ${driver.label}`);
+  const { output, costUsd } = await runStructured({
+    driver,
+    cli: job.cli,
+    cwd: job.cwd,
+    prompt: importPrompt(job.source, job.boardLabels),
+    timeoutMs: GITHUB_TIMEOUT_MS,
+    input: {
+      access: "read-only",
+      isolated: true,
+      untrusted: true,
+      ephemeral: true,
+      budgetUsd: job.budgetUsd,
+      sessionId: "",
+      model: job.model,
+      effort: job.effort ?? null,
+      defaultBranch: null,
+      outputSchema: IMPORT_OUTPUT_SCHEMA,
+    },
+    schema: ImportOutput,
+    what: "import",
+    ...(runAgent ? { runAgent } : {}),
+  });
+  return importOutcome(output, job.source.kind, costUsd, driver.label);
+}
+
+/** The import runner on each provider; `runAgent` stands in for a CLI other than Claude Code's (tests). */
+export function createIssueImporter(runAgent?: RunAgent): RunImport {
+  return (job) =>
+    job.provider && job.provider !== "claude-code"
+      ? runImportOnDriver(job, job.provider, runAgent)
+      : runClaudeImport(job);
+}
+
 /** Runs one import with Claude Code headless. Throws with the CLI's own message when it fails or can't read the issue. */
-export const runIssueImport: RunImport = async (job) => {
+const runClaudeImport: RunImport = async (job) => {
   const dir = job.source.kind === "ticket" ? await mkdtemp(join(tmpdir(), `${BRAND.id}-import-`)) : null;
   let stdout: string;
   try {
@@ -231,15 +278,20 @@ export const runIssueImport: RunImport = async (job) => {
   return importOutcome(output, job.source.kind, costUsd);
 };
 
+/** Runs one import on the job's provider. */
+export const runIssueImport: RunImport = createIssueImporter();
+
 /** The outcome of a run's structured output. Throws when the model couldn't read the issue or gave no title. */
 export function importOutcome(
   output: z.infer<typeof ImportOutput>,
   sourceKind: IssueSource["kind"],
   costUsd: number | null,
+  /** The CLI that ran it, for the error. */
+  label = "Claude Code",
 ): ImportOutcome {
   if (!output.found) throw new Error(output.reason?.trim() || "the issue couldn't be read");
   const title = output.title?.trim();
-  if (!title) throw new Error("Claude Code returned no title");
+  if (!title) throw new Error(`${label} returned no title`);
   const children = output.children ?? [];
   // Only a ticket run is asked about an epic; a GitHub issue's sub-issues come from the board.
   const epic =

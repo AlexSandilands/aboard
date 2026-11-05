@@ -329,6 +329,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
               </ComboboxEmpty>
             )}
             <TabFooter
+              warning={isSearching ? null : (openTab?.warning ?? null)}
               notice={isSearching ? null : (openTab?.notice ?? null)}
               settingsTarget={isSearching ? null : (openTab?.settingsTarget ?? null)}
               settingsLabel={
@@ -350,24 +351,38 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   );
 });
 
-/** Under the open tab's list: why it is short (a failed scan), and a link to where its models are set. */
+/**
+ * Under the open tab's list: what running the operation on its provider risks, why it is short (a failed scan), and a
+ * link to where its models are set.
+ */
 function TabFooter({
+  warning,
   notice,
   settingsTarget,
   settingsLabel,
   onOpenSettings,
 }: {
+  warning: string | null;
   notice: string | null;
   settingsTarget: string | null;
   settingsLabel: string;
   onOpenSettings: ((target: string) => void) | undefined;
 }) {
   const link = settingsTarget && onOpenSettings ? settingsTarget : null;
-  if (!notice && !link) return null;
+  if (!warning && !notice && !link) return null;
   return (
-    <p className="shrink-0 border-t border-border/70 px-3 py-2 text-xs leading-snug text-muted-foreground">
-      {notice ? <span className="me-1">{notice}</span> : null}
-      {link ? <InlineButton onClick={() => onOpenSettings?.(link)}>{settingsLabel}</InlineButton> : null}
-    </p>
+    <div className="shrink-0 border-t border-border/70 text-xs leading-snug">
+      {warning ? (
+        <p role="note" className="bg-warning-surface px-3 py-2 text-warning-foreground">
+          {warning}
+        </p>
+      ) : null}
+      {notice || link ? (
+        <p className="px-3 py-2 text-muted-foreground">
+          {notice ? <span className="me-1">{notice}</span> : null}
+          {link ? <InlineButton onClick={() => onOpenSettings?.(link)}>{settingsLabel}</InlineButton> : null}
+        </p>
+      ) : null}
+    </div>
   );
 }

@@ -1,9 +1,13 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { BRAND, HEADLESS_CAPABILITIES, type AgentHarness, type OperationNeed } from "@repo/contracts";
 import { RUN_SERVER_NAME, RUN_TOKEN_ENV } from "../mcp/runTokens.ts";
 import { claudeDriver, type AgentArgsInput, type AgentOutcome, type HeadlessDriver } from "./headlessAgent.ts";
+import { fromStrict, strictSchema } from "./strictSchema.ts";
 
 // Autopilot's headless runs on harnesses other than Claude Code: `codex exec` and the Copilot CLI. Neither can be held
-// to as much as `claude -p` (structured output, the untrusted-input lockdown, a budget): what each can do is
+// to as much as `claude -p` (the untrusted-input lockdown, tool rules, a budget): what each can do is
 // HEADLESS_CAPABILITIES in contracts, and the resolver only picks a provider that can do what the run needs
 // (resolveOperationModel). See docs/features/autopilot.md#runners.
 
@@ -43,38 +47,58 @@ const clip = (message: string) =>
  * stores, so an edit run that installs or tests would fail. Hence the sandbox stays off.
  * That is the access a Claude Code edit run has too (Bash allowed outright); the push guard still refuses force, delete
  * and default-branch pushes, and only the prompt says not to run `gh pr merge`. Read-only runs keep the read-only
- * sandbox. The effort is the config key `model_reasoning_effort` (`codex exec` has no flag for it). `-` reads the
+ * sandbox (no writes, no network for its shell); an isolated or untrusted one also drops the user's config and rules
+ * and Codex's hosted web search and apps (codexIsolationArgs). The schema goes in a file (`--output-schema`), in
+ * strict mode. The effort is the config key `model_reasoning_effort` (`codex exec` has no flag for it). `-` reads the
  * prompt from stdin. Checked against codex-cli 0.166.0 (docs/features/autopilot.md#headless-drivers).
  */
 export function codexArgs(input: AgentArgsInput): string[] {
+  const edit = input.access === "edit";
+  const isolated = !edit && Boolean(input.isolated || input.untrusted);
   return [
     "exec",
     "--json",
     // A task-less run works in an empty folder that isn't a repository.
     "--skip-git-repo-check",
     "--sandbox",
-    input.access === "edit" ? "danger-full-access" : "read-only",
+    edit ? "danger-full-access" : "read-only",
+    ...(isolated ? codexIsolationArgs() : []),
+    ...(input.ephemeral ? ["--ephemeral"] : []),
+    ...(input.outputSchemaPath ? ["--output-schema", input.outputSchemaPath] : []),
     ...(input.model ? ["--model", input.model] : []),
     ...(input.effort ? ["-c", `model_reasoning_effort=${input.effort}`] : []),
-    ...(input.runTools ? codexRunToolsArgs(input.runTools.url) : []),
+    ...(input.runTools ? codexRunToolsArgs(input.runTools.url, { configIgnored: isolated }) : []),
     "-",
   ];
+}
+
+/**
+ * A read-only `codex exec` held apart from the user's setup: none of their `config.toml` (so none of their MCP
+ * servers) or exec-policy rules, no hosted web search (a tool of the model's, outside the sandbox) and no apps
+ * connector. Its read-only sandbox still reads any file the user can, so it isn't the untrusted lockdown.
+ */
+export function codexIsolationArgs(): string[] {
+  return ["--ignore-user-config", "--ignore-rules", "-c", 'web_search="disabled"', "--disable", "apps"];
 }
 
 /**
  * The board's run tools for `codex exec`: none of the user's `config.toml` (so none of their MCP servers, the board's
  * included), and the run's endpoint as the one server. The token isn't on the command line, where any local process
  * can read it: Codex sends the RUN_TOKEN_ENV variable as the bearer token. `--ignore-user-config` still uses the
- * login under CODEX_HOME. Checked against codex-cli 0.166.0 (docs/features/autopilot.md#headless-drivers).
+ * login under CODEX_HOME. Its tools are approved up front: in the read-only sandbox Codex otherwise asks before a tool
+ * call without `readOnlyHint`, and with nobody to answer the call fails; the endpoint serves only the tools the run may
+ * use. Checked against codex-cli 0.166.0 (docs/features/autopilot.md#headless-drivers).
  */
-export function codexRunToolsArgs(url: string): string[] {
+export function codexRunToolsArgs(url: string, opts: { configIgnored?: boolean } = {}): string[] {
   const server = `mcp_servers.${RUN_SERVER_NAME}`;
   return [
-    "--ignore-user-config",
+    ...(opts.configIgnored ? [] : ["--ignore-user-config"]),
     "-c",
     `${server}.url=${JSON.stringify(url)}`,
     "-c",
     `${server}.bearer_token_env_var=${JSON.stringify(RUN_TOKEN_ENV)}`,
+    "-c",
+    `${server}.default_tools_approval_mode="approve"`,
   ];
 }
 
@@ -94,9 +118,10 @@ function codexErrorText(message: unknown): string | null {
 
 /**
  * Reads `codex exec --json` stdout: `thread.started` names the session, each completed `agent_message` item is the
- * agent speaking (the last is its answer), and `turn.failed` or a top-level `error` is why it stopped.
+ * agent speaking (the last is its answer), and `turn.failed` or a top-level `error` is why it stopped. With an output
+ * schema the answer is the structured output, as JSON written to the strict form of the schema (strictSchema).
  */
-export function parseCodexOutput(stdout: string): AgentOutcome {
+export function parseCodexOutput(stdout: string, outputSchema?: object | null): AgentOutcome {
   let sessionId: string | null = null;
   let result: string | null = null;
   let failure: string | null = null;
@@ -112,15 +137,30 @@ export function parseCodexOutput(stdout: string): AgentOutcome {
     } else if (e.type === "error") failure ??= codexErrorText(e.message) ?? "Codex reported an error";
     else if (e.type === "turn.completed") completed = true;
   }
+  let output: unknown;
+  if (outputSchema && failure === null && completed) {
+    output = structuredAnswer(result, outputSchema);
+    if (output === undefined) failure = "its answer wasn't the JSON its output schema asks for";
+  }
   const failed = failure !== null || !completed;
   return {
     ok: !failed,
     error: failed ? clip(failure ?? (stdout.trim() ? "Codex ended before its turn completed" : "no output")) : null,
     result,
-    output: undefined,
+    output,
     sessionId,
     costUsd: null,
   };
+}
+
+/** The answer read as JSON and given back the original schema's shape (fromStrict), or undefined when it isn't JSON. */
+function structuredAnswer(result: string | null, outputSchema: object): unknown {
+  if (result === null) return undefined;
+  try {
+    return fromStrict(outputSchema, JSON.parse(result));
+  } catch {
+    return undefined;
+  }
 }
 
 /** The thread id of a `thread.started` line. */
@@ -136,8 +176,9 @@ export const codexDriver: HeadlessDriver = {
   label: "Codex",
   runTokenFromEnv: true,
   capabilities: HEADLESS_CAPABILITIES.codex,
+  schemaFile: true,
   args: codexArgs,
-  parse: (stdout) => parseCodexOutput(stdout),
+  parse: parseCodexOutput,
   sessionIdOf: codexSessionId,
 };
 
@@ -223,6 +264,29 @@ export const HEADLESS_DRIVERS: Record<AgentHarness, HeadlessDriver> = {
   "copilot-cli": copilotDriver,
 };
 
+/** The driver of the provider an operation resolved to. */
+export const headlessDriverFor = (harness: AgentHarness): HeadlessDriver => HEADLESS_DRIVERS[harness];
+
+/**
+ * Calls `run` with the driver's argv for `input`. A CLI that reads its output schema from a file (Codex) gets the
+ * schema, in strict form, in a folder of its own outside the run's working folder, removed once `run` settles.
+ */
+export async function withDriverArgs<T>(
+  driver: HeadlessDriver,
+  input: AgentArgsInput,
+  run: (args: string[]) => Promise<T>,
+): Promise<T> {
+  if (!driver.schemaFile || !input.outputSchema) return run(driver.args(input));
+  const dir = await mkdtemp(join(tmpdir(), `${BRAND.id}-schema-`));
+  try {
+    const outputSchemaPath = join(dir, "schema.json");
+    await writeFile(outputSchemaPath, JSON.stringify(strictSchema(input.outputSchema)));
+    return await run(driver.args({ ...input, outputSchemaPath }));
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 /** What a run asks of its driver. */
 export interface DriverNeeds {
   access: AgentArgsInput["access"];
@@ -237,6 +301,8 @@ export interface DriverNeeds {
   unguarded?: boolean | undefined;
   /** The run reads through the board's run tools. */
   runTools?: boolean | undefined;
+  /** A read-only run held apart from the user's setup (AgentArgsInput.isolated). */
+  isolated?: boolean | undefined;
 }
 
 /** What a run asks of its driver, as the operation needs the resolver checks providers against. */
@@ -245,6 +311,7 @@ export function driverNeeds(needs: DriverNeeds): OperationNeed[] {
   if (needs.access === "edit") out.push("edit");
   if (needs.access === "none") out.push("noTools");
   if (needs.outputSchema) out.push("outputSchema");
+  if (needs.isolated && !needs.untrusted && needs.access !== "edit") out.push("readOnly");
   if (needs.untrusted) out.push("untrusted");
   if (needs.runTools) out.push("runTools");
   // Only Claude Code's own deny rules keep an editing agent with no push guard from force-pushing or merging.

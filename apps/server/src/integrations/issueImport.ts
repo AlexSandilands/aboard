@@ -1,4 +1,10 @@
-import { harnessCliSetting, parseImportSource, resolveOperationModel, type TaskLink } from "@repo/contracts";
+import {
+  harnessCliSetting,
+  IMPORT_TICKET_NEEDS,
+  parseImportSource,
+  resolveOperationModel,
+  type TaskLink,
+} from "@repo/contracts";
 import { tmpdir } from "node:os";
 import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ImportResult, Services } from "../services/types.ts";
@@ -90,9 +96,11 @@ export function createIssueImporter(deps: {
       log.warn(`[import] ${record.sourceUrl}: not summarised, using the issue as written: ${resolved.reason}`);
       return raw();
     }
+    // Only a provider the user chose carries one (resolveOperationModel never falls back to it).
+    if (resolved.warning) log.warn(`[import] ${record.sourceUrl}: ${resolved.warning}`);
     try {
       const outcome = await runImport({
-        // Only `claude -p` meets the import's needs today, so the resolver picks it whenever it picks one.
+        provider: resolved.provider,
         cli: harnessCliSetting(settings, resolved.provider),
         cwd: tmpdir(),
         model: resolved.model,
@@ -158,11 +166,13 @@ export function createIssueImporter(deps: {
     if (system.importTools.length === 0) {
       throw new Error(`Add import tools to ${system.name} in Settings → Integrations → Ticket systems`);
     }
-    const resolved = resolveOperationModel("issueImport", {}, settings);
+    // A ticket is read through the user's own MCP servers, held to the system's tools by tool rules.
+    const resolved = resolveOperationModel("issueImport", { needs: IMPORT_TICKET_NEEDS }, settings);
     if (!resolved.ok) throw new Error(resolved.reason);
     const cli = harnessCliSetting(settings, resolved.provider);
     const servers = await connectedServers(cli);
     const outcome = await runImport({
+      provider: resolved.provider,
       cli,
       // Not the project's folder: its .mcp.json and settings are the repo's, and a run in it reads its CLAUDE.md.
       cwd: tmpdir(),

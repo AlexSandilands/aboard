@@ -103,7 +103,7 @@ export function createReviewFallbacks(deps: {
       // The task's screenshots live in the data dir, outside the checkout: the reviewer may read that folder.
       const images = s.attachments.forTask(task.id);
       const result = await runHeadless({
-        // Only `claude -p` meets the board reviewer's needs today, so the resolver picks it whenever it picks one.
+        provider: resolved.provider,
         cli: harnessCliSetting(settings, resolved.provider),
         cwd,
         budgetUsd: settings.headlessReviewBudgetUsd,

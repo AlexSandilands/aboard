@@ -194,6 +194,20 @@ describe("review fallbacks", () => {
     expect(await run(board({ provider: "claude-code", model: "sonnet" }), { tier: "light" })).toEqual(["haiku", "low"]);
   });
 
+  it("runs the board's review on Codex when Codex is the provider that can", async () => {
+    const { s, task, fallbacks, advance, jobs } = setup({ headless: true });
+    s.settings.update({
+      providers: [{ id: "codex", enabled: true, cliPath: "/opt/codex" }],
+      operationModels: { boardReviewer: { provider: "codex", model: "gpt-5.5" } },
+    });
+    s.tasks.move(task.id, { status: "review" }, "user");
+    await fallbacks.tick();
+    advance(PAST_GRACE);
+    await fallbacks.tick();
+    await fallbacks.idle();
+    expect(jobs[0]).toMatchObject({ provider: "codex", cli: "/opt/codex", model: "gpt-5.5" });
+  });
+
   it("keeps ticking after a pass with nothing to do", async () => {
     const { s, task, fallbacks, advance, round } = setup();
     await fallbacks.tick();
@@ -294,7 +308,7 @@ describe("review fallbacks", () => {
     await fallbacks.tick();
     expect(jobs[0]!.addDirs).toEqual([dirname(image!.path)]);
     expect(jobs[0]!.prompt).toContain(image!.path);
-    expect(jobs[0]!.prompt).toContain("Open each one with the Read tool");
+    expect(jobs[0]!.prompt).toContain("Open each one (with the Read tool");
   });
 
   it("adds no folders for a task without images", async () => {

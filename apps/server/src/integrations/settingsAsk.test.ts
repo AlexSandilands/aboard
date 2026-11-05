@@ -150,13 +150,41 @@ describe("settings Ask", () => {
       jobs.push(job);
       return Promise.resolve(cliResult({ settingId: null, answer: "x" }));
     });
-    h.services.settings.update({ providers: [{ id: "codex", enabled: true }] });
+    h.services.settings.update({ providers: [{ id: "copilot-cli", enabled: true }] });
     expect(await ask(h)).toEqual({
       ok: false,
       error:
-        "Ask needs a provider that can return structured output and run with no tools; add one in Settings → Providers.",
+        "Ask needs a provider that can return structured output and run read-only, apart from your own setup; add one in Settings → Providers.",
     });
     expect(jobs).toHaveLength(0);
+  });
+
+  it("answers on Codex, read-only and isolated in its empty folder, naming Codex when it fails", async () => {
+    const jobs: AgentJob[] = [];
+    let answer = JSON.stringify({ settingId: "autopilot.engine.quiet-hours", answer: "Pick a theme." });
+    const h = setup((job) => {
+      jobs.push(job);
+      return Promise.resolve(
+        [
+          JSON.stringify({ type: "thread.started", thread_id: "0199a213-81c0-7800-8aa1-bbab2a035a53" }),
+          JSON.stringify({ type: "item.completed", item: { id: "i", type: "agent_message", text: answer } }),
+          JSON.stringify({ type: "turn.completed" }),
+        ].join("\n"),
+      );
+    });
+    h.services.settings.update({ providers: [{ id: "codex", enabled: true, cliPath: "/opt/codex" }] });
+    const out = await ask(h);
+    expect(out).toMatchObject({ ok: true, answer: "Pick a theme.", costUsd: null });
+    const job = jobs[0]!;
+    expect(job).toMatchObject({ cli: "/opt/codex", command: "codex", label: "Codex" });
+    expect(job.args).toEqual(
+      expect.arrayContaining(["--sandbox", "read-only", "--ignore-user-config", "--ephemeral", "--output-schema"]),
+    );
+    answer = "not json";
+    expect(await ask(h)).toEqual({
+      ok: false,
+      error: "Codex stopped: its answer wasn't the JSON its output schema asks for.",
+    });
   });
 
   it("answers with the reason, without spawning anything, when the CLI isn't found", async () => {

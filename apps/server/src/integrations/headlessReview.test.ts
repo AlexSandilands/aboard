@@ -1,5 +1,14 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { headlessArgs, headlessPrompt, parseHeadlessOutput } from "./headlessReview.ts";
+import type { AgentJob } from "./headlessAgent.ts";
+import { createHeadlessReviewer, headlessArgs, headlessPrompt, parseHeadlessOutput } from "./headlessReview.ts";
+
+const codexAnswer = (text: string) =>
+  [
+    JSON.stringify({ type: "thread.started", thread_id: "0199a213-81c0-7800-8aa1-bbab2a035a53" }),
+    JSON.stringify({ type: "item.completed", item: { id: "i", type: "agent_message", text } }),
+    JSON.stringify({ type: "turn.completed" }),
+  ].join("\n");
 
 describe("headless review", () => {
   it("runs read-only, without MCP servers, within the budget", () => {
@@ -47,7 +56,7 @@ describe("headless review", () => {
       skill: { source: "global" as const, name: "review-loop", path: "/h/SKILL.md" },
       baseRef: null,
     };
-    expect(headlessPrompt({ ...input, hasImages: true })).toContain("Open each one with the Read tool");
+    expect(headlessPrompt({ ...input, hasImages: true })).toContain("Open each one (with the Read tool");
     expect(headlessPrompt(input)).not.toContain("screenshots");
   });
 
@@ -64,6 +73,67 @@ describe("headless review", () => {
     expect(prompt).not.toContain("$(");
     expect(prompt).toContain('"review-loop" at /h/skills/review-loop/SKILL.md');
     expect(prompt).toContain("#7 Add exports [Review]");
+  });
+
+  it("reviews on Codex, read-only and isolated, with the findings schema in strict form", async () => {
+    const jobs: AgentJob[] = [];
+    let schema: unknown = null;
+    const review = createHeadlessReviewer(async (job) => {
+      jobs.push(job);
+      schema = JSON.parse(readFileSync(job.args[job.args.indexOf("--output-schema") + 1]!, "utf8"));
+      return codexAnswer(
+        JSON.stringify({
+          summary: "One bug",
+          findings: [{ severity: "major", title: "Off by one", file: "a.ts", line: 3, body: null, suggestion: null }],
+        }),
+      );
+    });
+    const out = await review({
+      provider: "codex",
+      cli: "/opt/codex",
+      cwd: "/w",
+      prompt: "p",
+      budgetUsd: 1,
+      model: "gpt-5.5",
+      effort: "high",
+    });
+    expect(out).toEqual({
+      summary: "One bug",
+      findings: [{ severity: "major", title: "Off by one", file: "a.ts", line: 3 }],
+      costUsd: null,
+    });
+    const job = jobs[0]!;
+    expect(job).toMatchObject({ cli: "/opt/codex", command: "codex", label: "Codex", cwd: "/w" });
+    expect(job.args).toEqual(
+      expect.arrayContaining(["--sandbox", "read-only", "--ignore-user-config", "--ignore-rules", "--ephemeral"]),
+    );
+    expect(job.args).toEqual(expect.arrayContaining(["--model", "gpt-5.5", "-c", "model_reasoning_effort=high"]));
+    expect(schema).toMatchObject({ additionalProperties: false, required: ["summary", "findings"] });
+  });
+
+  it("names the provider when its review fails or doesn't fit the schema", async () => {
+    const failing = createHeadlessReviewer(async () =>
+      JSON.stringify({ type: "turn.failed", error: { message: "rate limited" } }),
+    );
+    const job = { provider: "codex", cli: null, cwd: "/w", prompt: "p", budgetUsd: 1, model: null } as const;
+    await expect(failing(job)).rejects.toThrow("Codex's review failed: rate limited");
+    const odd = createHeadlessReviewer(async () => codexAnswer(JSON.stringify({ summary: 3 })));
+    await expect(odd(job)).rejects.toThrow("Codex's result didn't match the expected shape");
+  });
+
+  it("keeps Claude Code's own reviewer argv", async () => {
+    const jobs: AgentJob[] = [];
+    const review = createHeadlessReviewer(async (job) => {
+      jobs.push(job);
+      return JSON.stringify({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        structured_output: { summary: "ok", findings: [] },
+      });
+    });
+    await review({ cli: null, cwd: "/w", prompt: "p", budgetUsd: 2, model: "sonnet" });
+    expect(jobs[0]!.args).toEqual(headlessArgs(2, "sonnet", null, []));
   });
 
   it("parses structured findings and surfaces failures", () => {

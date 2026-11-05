@@ -34,10 +34,13 @@ Imported tasks land in Backlog like any task created without a plan, and a sourc
 `integrations/issueImport.ts` runs up to three imports at once, in the server process.
 
 - **GitHub.** `gh issue view` reads the issue (`GithubIntegration.fetchIssue`), and its state is stored as
-  the `issue` link's snapshot. Claude Code headless (`claude -p` on the issue import operation's model, the light
-  tier by default, see [Settings](#settings)) then turns it
-  into a concise title, a summary and labels. The issue text goes in the prompt, so the run has no tools and
-  no MCP servers. If the model can't run (import turned off, no provider that can, CLI missing, a failure), the task gets the
+  the `issue` link's snapshot. A headless CLI on the issue import operation's model and provider (the light tier by
+  default, see [Settings](#settings)) then turns it into a concise title, a summary and labels. The issue text goes in
+  the prompt, so on Claude Code the run has no tools and no MCP servers. On Codex, which has no tool-less run, it runs
+  read-only and isolated (`codex exec --sandbox read-only --ignore-user-config --ignore-rules -c web_search="disabled"
+  --disable apps --ephemeral --output-schema <file>`, [Headless drivers](autopilot.md#headless-drivers)); its sandbox
+  can still read local files, so it runs only when the user chose Codex, and the log repeats the
+  [warning](autopilot.md#capability-warnings). If the model can't run (import turned off, no provider that can, CLI missing, a failure), the task gets the
   issue's own title, its body cut to 4000 characters and its GitHub labels, and the import still succeeds.
 - **Ticket.** Only the model can read it, through the user's own MCP server for its system, so the run keeps the user's
   MCP configuration (no `--strict-mcp-config`). It runs in the temp folder, not the project's: the project's
@@ -56,13 +59,13 @@ Imported tasks land in Backlog like any task created without a plan, and a sourc
   user server, up to Claude Code's MCP timeout, so a slow or broken one delays the import (within the 4-minute
   ticket timeout).
 
-Both runs use `--permission-mode dontAsk`, `--tools ""` (no built-in tools, so no files or shell),
+Both Claude Code runs use `--permission-mode dontAsk`, `--tools ""` (no built-in tools, so no files or shell),
 `--setting-sources user` (the project's and local settings files, with their allow rules, hooks and MCP servers,
 don't apply; the user's do, because sign-in can live there) and `--max-budget-usd`, with the result as
 structured output (`{found, reason?, title, description, labels, isEpic?, children?, childTotal?}`; the last three
 only for a ticket epic, see [Epics](#epics)).
-`found: false` is how the model reports an issue it couldn't read. The CLI path is the Claude Code
-provider's (`harnessCliSetting`, Settings → Providers).
+`found: false` is how the model reports an issue it couldn't read. The CLI path is the provider's
+(`harnessCliSetting`, Settings → Providers).
 
 The result is applied by `ImportsService.complete`: the title is replaced only while it is still the
 placeholder and the description only while it is empty, so anything the user typed in the meantime stands.
@@ -184,10 +187,11 @@ not here. Before ticket systems a Jira tools setting (`issueImportJiraTools`) li
 import tools ([upgrading](ticket-systems.md#upgrading-from-the-jira-settings)).
 
 The import is the `issueImport` operation ([Autopilot's Models](autopilot.md#models)): `operationModels.issueImport`
-is a `ModelChoice`, the light tier when unset. It needs a provider that can return structured output and follow tool
-rules, which today is only Claude Code: with none added and switched on, a GitHub issue imports as written (the log
-says why) and a ticket import fails with the reason. A tier runs its Claude Code model at its effort; a tier with none
-leaves `--model` off, so the CLI's own default runs. It is set under Settings → Models › Operations, whose line says
+is a `ModelChoice`, the light tier when unset. A GitHub issue needs a provider that can return structured output and
+lock a run down to read untrusted input: Claude Code, or Codex with a warning when the user chose it. A ticket also
+needs tool rules (`IMPORT_TICKET_NEEDS`), which only Claude Code follows. With no such provider, a GitHub issue imports
+as written (the log says why) and a ticket import fails with the reason. A tier runs its model for that provider at
+its effort; a tier with none leaves `--model` off, so the CLI's own default runs. It is set under Settings → Models › Operations, whose line says
 which model it resolves to; the Issue import card in Tasks shows that line with a **Change** link. It was `issueImportModel` (default `haiku`) before 041_operation_models, which moved a saved one
 over as that model on Claude Code; an install that never saved one now runs the light tier.
 

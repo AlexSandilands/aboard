@@ -331,7 +331,7 @@ export const reviewPrs = defineAutomation({
       help: "A review runs headless: it must be held to read-only.",
       options: [
         { value: "auto", label: "Auto (headless)" },
-        { value: "headless", label: "Headless (claude -p in a worktree)" },
+        { value: "headless", label: "Headless (a CLI in a worktree)" },
       ],
     },
     {
@@ -339,7 +339,7 @@ export const reviewPrs = defineAutomation({
       label: "Model",
       kind: "model",
       operation: "prReview",
-      help: "Inherit: the board's model for PR review, by default the Standard tier. It runs on a provider that can lock a run down to read untrusted input.",
+      help: "Inherit: the board's model for PR review, by default the Standard tier. It runs on a provider that can lock a run down to read untrusted input; Codex runs it only when you choose it, with a warning that it can read local files.",
     },
     { key: "budgetUsd", label: "Budget", kind: "number", min: 0.5, max: 100, step: 0.5, unit: "USD" },
     { key: "timeoutMinutes", label: "Timeout", kind: "number", min: 1, max: 1440, unit: "minutes" },

@@ -1,4 +1,5 @@
 import {
+  type AgentHarness,
   BUILTIN_REVIEW_SKILL_BODY,
   type CliEffort,
   FindingSeverity,
@@ -7,9 +8,13 @@ import {
 } from "@repo/contracts";
 import { z } from "zod";
 import { parseClaudeOutput, runClaude } from "./claudeCli.ts";
+import { READ_ONLY_TOOLS, type RunAgent } from "./headlessAgent.ts";
+import { headlessDriverFor } from "./headlessDrivers.ts";
+import { runStructured } from "./structuredRun.ts";
 
-// The board's own reviewer: Claude Code headless (`claude -p`), read-only, with no MCP servers, returning its
-// findings as structured output for the board to record. A fallback for rounds no agent runs.
+// The board's own reviewer: a headless CLI on the board reviewer's provider (`claude -p` or `codex exec`), read-only
+// and held apart from the user's MCP servers, returning its findings as structured output for the board to record. A
+// fallback for rounds no agent runs.
 
 const RUN_TIMEOUT_MS = 20 * 60_000;
 
@@ -36,19 +41,6 @@ export const REVIEW_OUTPUT_SCHEMA = {
   },
   required: ["summary", "findings"],
 } as const;
-
-/** Read files, search, and read-only git. Everything else is denied by `--permission-mode dontAsk`. */
-export const READ_ONLY_TOOLS = [
-  "Read",
-  "Grep",
-  "Glob",
-  "Bash(git diff *)",
-  "Bash(git log *)",
-  "Bash(git show *)",
-  "Bash(git status *)",
-  "Bash(git merge-base *)",
-  "Bash(git rev-parse *)",
-];
 
 export function headlessArgs(
   budgetUsd: number,
@@ -110,7 +102,7 @@ export function headlessPrompt({
     `Find where the branch forked with \`git merge-base HEAD ${base}\`, then read the changes with \`git diff <that commit>\` and \`git status\` for uncommitted work. Run each git command on its own. Don't edit any files.`,
     ...(hasImages
       ? [
-          "The task has images, listed under Images in the task text with their file paths. Some may be the bug report's own picture; the author's captures are the ones written into the plan steps' notes. Open each one with the Read tool and look at it: record a finding for any that shows a visual bug, or when the states the change introduced aren't covered, and a major one for a ui task with no capture in its steps.",
+          "The task has images, listed under Images in the task text with their file paths. Some may be the bug report's own picture; the author's captures are the ones written into the plan steps' notes. Open each one (with the Read tool, or your own way of viewing an image) and look at it: record a finding for any that shows a visual bug, or when the states the change introduced aren't covered, and a major one for a ui task with no capture in its steps.",
         ]
       : []),
     "Return your result as the structured output: a summary and one finding per problem (an empty list when the change is clean).",
@@ -153,6 +145,8 @@ export function parseHeadlessOutput(stdout: string): HeadlessReview {
 }
 
 export interface HeadlessJob {
+  /** The board reviewer's provider, as the resolver picked it; Claude Code when absent. */
+  provider?: AgentHarness;
   cli: string | null;
   cwd: string;
   prompt: string;
@@ -167,14 +161,44 @@ export interface HeadlessJob {
 
 export type RunHeadless = (job: HeadlessJob) => Promise<HeadlessReview>;
 
-/** Runs one headless review. */
-export const runHeadlessReview: RunHeadless = async ({ cli, cwd, prompt, budgetUsd, model, effort, addDirs }) =>
-  parseHeadlessOutput(
-    await runClaude({
+/**
+ * The headless review on the job's provider. Claude Code keeps its own argv (headlessArgs: its read-only tool list,
+ * extra folders and budget). Any other driver runs read-only and isolated (no writes, no network, none of the user's
+ * MCP servers), with no session kept; its sandbox reads any file, so the task's images need no extra folder.
+ */
+export function createHeadlessReviewer(runAgent?: RunAgent): RunHeadless {
+  return async ({ provider = "claude-code", cli, cwd, prompt, budgetUsd, model, effort, addDirs }) => {
+    if (provider === "claude-code") {
+      const args = headlessArgs(budgetUsd, model, effort, addDirs);
+      const stdout = runAgent
+        ? await runAgent({ cli, cwd, prompt, args, timeoutMs: RUN_TIMEOUT_MS })
+        : await runClaude({ cli, cwd, prompt, args, timeoutMs: RUN_TIMEOUT_MS });
+      return parseHeadlessOutput(stdout);
+    }
+    const { output, costUsd } = await runStructured({
+      driver: headlessDriverFor(provider),
       cli,
       cwd,
       prompt,
-      args: headlessArgs(budgetUsd, model, effort, addDirs),
       timeoutMs: RUN_TIMEOUT_MS,
-    }),
-  );
+      input: {
+        access: "read-only",
+        isolated: true,
+        ephemeral: true,
+        budgetUsd,
+        sessionId: "",
+        model,
+        effort: effort ?? null,
+        defaultBranch: null,
+        outputSchema: REVIEW_OUTPUT_SCHEMA,
+      },
+      schema: ReviewOutput,
+      what: "review",
+      ...(runAgent ? { runAgent } : {}),
+    });
+    return { summary: output.summary, findings: output.findings, costUsd };
+  };
+}
+
+/** Runs one headless review. */
+export const runHeadlessReview: RunHeadless = createHeadlessReviewer();

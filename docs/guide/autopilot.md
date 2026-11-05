@@ -139,9 +139,12 @@ under a provider's column for each tier and custom model in Settings → Models)
 that can and has a model for it. So a `codex61` label can mean Codex in T3 Code and headless alike. Add the provider
 with its CLI path if it isn't on your PATH, and register the board's MCP server with it
 ([connecting agents](connect-agents.md)) so the agent can move its task. Some things only Claude Code can do: a
-reviewer's verdict, reading untrusted text locked down, a digest with no tools. Those runs go to Claude Code, on the
-model's Claude Code model (or the CLI's default when it has none), and the run says why; without Claude Code added
-they fail and say what is missing, rather than running somewhere else. Codex and Copilot have no budget and report no
+digest with no tools, a run held to tool rules, reading untrusted text fully locked down. Those runs go to Claude Code,
+on the model's Claude Code model (or the CLI's default when it has none), and the run says why; without Claude Code
+added they fail and say what is missing, rather than running somewhere else. Codex can also run the board reviewer and
+the settings Ask, and, if you choose it, PR review and GitHub issue import. For those two the model picker shows a
+warning: Codex can't keep its file reads inside the checkout, so text in a pull request or issue could make it leak
+local files into what it writes. Autopilot never picks Codex for them on its own, and the run repeats the warning. Codex and Copilot have no budget and report no
 cost, so only the timeout stops them and the spend cap doesn't count them. A model with none set for its provider runs
 on the CLI's default, and the run says so. Each run records the provider and model it ran on.
 

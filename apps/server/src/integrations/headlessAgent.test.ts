@@ -216,6 +216,25 @@ describe("headless agent", () => {
     expect(open).not.toContain("--setting-sources");
   });
 
+  it("holds an isolated read-only agent apart from the user's servers and the checkout's settings", () => {
+    const base = { access: "read-only", budgetUsd: 1, sessionId: SESSION, model: null, defaultBranch: null } as const;
+    const args = agentArgs({ ...base, isolated: true, ephemeral: true });
+    expect(args).toEqual(expect.arrayContaining(["--strict-mcp-config", "--setting-sources", "user"]));
+    expect(args).toContain("--no-session-persistence");
+    expect(args).not.toContain(`mcp__${BRAND.id}`);
+    expect(args).toContain("Bash(git diff *)");
+    // Its run tools are the only server it gets.
+    const tools = agentArgs({ ...base, isolated: true, runTools: { url: "http://x", configPath: "/tmp/run.json" } });
+    expect(tools.slice(tools.indexOf("--strict-mcp-config"), tools.indexOf("--strict-mcp-config") + 3)).toEqual([
+      "--strict-mcp-config",
+      "--mcp-config",
+      "/tmp/run.json",
+    ]);
+    // Without it, a read-only agent keeps the user's servers, the board's included.
+    expect(agentArgs(base)).toContain(`mcp__${BRAND.id}`);
+    expect(agentArgs(base)).not.toContain("--strict-mcp-config");
+  });
+
   it("can have no tools at all: none built in, no MCP servers, nothing allowed", () => {
     const args = agentArgs({
       access: "none",

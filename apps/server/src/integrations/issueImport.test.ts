@@ -212,6 +212,24 @@ describe("issue import", () => {
     expect(warnings.some((w) => w.includes("Settings → Providers"))).toBe(true);
   });
 
+  it("summarises a GitHub issue on Codex when it is chosen, with the warning, but reads no ticket there", async () => {
+    const { s, create, run, jobs, warnings } = setup();
+    s.settings.update({
+      providers: [{ id: "codex", enabled: true, cliPath: "/opt/codex" }],
+      operationModels: { issueImport: { provider: "codex", model: "gpt-mini" } },
+    });
+    const done = await run(create(GH_URL).id);
+    expect(done).toMatchObject({ title: outcome.title, import: { status: "done" } });
+    expect(jobs[0]).toMatchObject({ provider: "codex", cli: "/opt/codex", model: "gpt-mini" });
+    expect(warnings.some((w) => w.includes("Codex can't confine its file reads"))).toBe(true);
+    const ticket = await run(create("PROJ-9").id);
+    expect(ticket.import).toMatchObject({
+      status: "failed",
+      error: "Issue import is set to run on Codex, which can't follow tool rules of its own.",
+    });
+    expect(jobs).toHaveLength(1);
+  });
+
   it("asks which servers are connected once for several imports", async () => {
     const { create, run, listed } = setup();
     await run(create("PROJ-7").id);
