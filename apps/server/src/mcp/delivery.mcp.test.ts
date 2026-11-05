@@ -155,7 +155,9 @@ describe("epic delivery over MCP", () => {
     const merged = await call("get_handoff_prompt", { task: "#1", mode: "followup" });
     expect(merged).toContain("Its code is on the default branch");
     expect(merged).not.toContain("origin/epic/");
-    expect(await call("get_task", { task: "#1" })).not.toContain("not on the default branch yet");
+    const after = await call("get_task", { task: "#1" });
+    expect(after).not.toContain("not on the default branch yet");
+    expect(after).not.toContain("open your pull request against");
   });
 
   it("goes back to main while nothing started, and reuses the branch when switching again", async () => {
