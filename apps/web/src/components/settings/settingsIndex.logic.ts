@@ -212,6 +212,9 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "directory",
     "path",
     "repo",
+    "clear",
+    "unset",
+    "remove",
   ]),
   draft(
     "board.data.backup-remote",
