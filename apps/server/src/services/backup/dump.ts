@@ -60,6 +60,8 @@ export function dumpBoard(db: Db): BoardDump {
     );
     const custom = rowsOf(db, "autopilot_custom", "SELECT * FROM autopilot_custom ORDER BY created_at, id");
     const suggestions = rowsOf(db, "suggestions", "SELECT * FROM suggestions ORDER BY created_at, id");
+    const transfers = rowsOf(db, "task_transfers", "SELECT * FROM task_transfers ORDER BY at, transfer_id");
+    const applied = rowsOf(db, "applied_transfers", "SELECT * FROM applied_transfers ORDER BY applied_at, transfer_id");
     const tasks = rowsOf(db, "tasks", "SELECT * FROM tasks ORDER BY number");
     const events = rowsOf(db, "task_events", "SELECT * FROM task_events ORDER BY id");
 
@@ -89,6 +91,8 @@ export function dumpBoard(db: Db): BoardDump {
       autopilot_recurring: recurring.length,
       autopilot_custom: custom.length,
       suggestions: suggestions.length,
+      task_transfers: transfers.length,
+      applied_transfers: applied.length,
       tasks: tasks.length,
       task_events: events.length,
     };
@@ -116,6 +120,8 @@ export function dumpBoard(db: Db): BoardDump {
       autopilot_recurring: recurring,
       autopilot_custom: custom,
       suggestions,
+      task_transfers: transfers,
+      applied_transfers: applied,
       tasks: [...bundles.values()],
       task_events: events,
     };

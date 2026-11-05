@@ -108,7 +108,7 @@ export const TaskCardContent = memo(function TaskCardContent({
         <AutopilotBadge taskId={task.id} />
         {task.archivedAt ? (
           <Badge variant="secondary" size="sm">
-            Archived
+            {task.movedTo ? `Moved to ${task.movedTo.machine} #${task.movedTo.number}` : "Archived"}
           </Badge>
         ) : null}
         {fetching ? (

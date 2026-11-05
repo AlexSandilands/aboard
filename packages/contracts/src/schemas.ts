@@ -4,7 +4,7 @@ import { KeybindingOverrides } from "./keybindings.ts";
 import { LabelHue } from "./labels.ts";
 import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
 import { AutomationVariables } from "./automationVariables.ts";
-import { BackupSettings } from "./backup.ts";
+import { BackupSettings, MachineName } from "./backup.ts";
 import { ModelChoice } from "./modelProfiles.ts";
 import { OperationId, OperationModels } from "./operations.ts";
 import { ModelProfiles } from "./modelProfiles.ts";
@@ -520,6 +520,14 @@ export const DueDate = z
     return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
   }, "Not a real date");
 
+/** Where a task moved to on another machine (backup.md#moving-tasks-between-machines), on the copy it left here. */
+export const MovedTo = z.object({
+  machine: z.string(),
+  number: z.number().int(),
+  at: IsoDate,
+});
+export type MovedTo = z.infer<typeof MovedTo>;
+
 export const TaskSummary = z.object({
   id: z.string(),
   number: z.number().int(),
@@ -592,6 +600,8 @@ export const TaskSummary = z.object({
   suggestedModel: SuggestedModel.nullable(),
   /** Set when the task was created from an issue URL; null otherwise. */
   import: TaskImport.nullable(),
+  /** Set on the archived copy of a task that was moved to another machine; null otherwise. */
+  movedTo: MovedTo.nullable(),
 });
 export type TaskSummary = z.infer<typeof TaskSummary>;
 
@@ -656,6 +666,8 @@ export const BoardEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("suggestions.changed"), open: z.number() }),
   /** Providers were added, removed, switched or given a new CLI path. Sent whole: the list is short. */
   z.object({ type: z.literal("providers.changed"), providers: ProviderSettings }),
+  /** The whole board was replaced (restored from a backup); clients refetch everything. */
+  z.object({ type: z.literal("board.reset") }),
 ]);
 export type BoardEvent = z.infer<typeof BoardEvent>;
 
@@ -957,6 +969,8 @@ export const UpdateSettingsInput = z.object({
   backupDir: z.string().trim().nullable().optional(),
   backupRemote: z.string().trim().nullable().optional(),
   backupIntervalMinutes: BackupSettings.shape.backupIntervalMinutes.optional(),
+  /** null goes back to the host name. */
+  machineName: MachineName.nullable().optional(),
   /** null clears the token. */
   t3Token: z.string().trim().nullable().optional(),
 });

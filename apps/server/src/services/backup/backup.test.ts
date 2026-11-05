@@ -9,7 +9,7 @@ import { createTestHarness } from "../../test/harness.ts";
 import { EXPORTED_SETTINGS, loadSettings } from "../settings.ts";
 import { createRepos } from "../../db/repos/index.ts";
 import { dumpFileJson, readDump, readDumpDir, writeDumpDir } from "./files.ts";
-import { restoreBoard } from "./restore.ts";
+import { restoreBoard, restoreBoardLive } from "./restore.ts";
 
 const plan: PlanInput = {
   phases: [
@@ -197,6 +197,7 @@ describe("settings export", () => {
       "backupDir",
       "backupRemote",
       "backupIntervalMinutes",
+      "machineName",
       "terminal",
       "terminalOpenIn",
       // Goes with its posts, which are never backed up.
@@ -496,6 +497,8 @@ describe("restore", () => {
       autopilot_custom: _cu,
       suggestions: _sg,
       task_relations: _rel,
+      task_transfers: _tt,
+      applied_transfers: _at2,
       ...counts
     } = dump.manifest.counts;
     const old: BoardDump = {
@@ -507,6 +510,8 @@ describe("restore", () => {
       autopilot_recurring: [],
       autopilot_custom: [],
       suggestions: [],
+      task_transfers: [],
+      applied_transfers: [],
       projects: dump.projects.map(
         ({ plan_skill_json: _ps, variables_json: _v, review_model_json: _rm, ...project }) => project,
       ),
@@ -526,6 +531,7 @@ describe("restore", () => {
           delivery: _d,
           integration_branch: _b,
           integration_merged_at: _im,
+          moved_to_json: _mt,
           attention_message: _atm,
           attention_actor: _aa,
           attention_requested_at: _at,
@@ -627,6 +633,16 @@ describe("backups from before relations existed", () => {
 });
 
 describe("backup routes", () => {
+  it("refuses to restore without a backup repo, and a whole-board restore that isn't confirmed", async () => {
+    const { request } = seed();
+    expect((await request("/api/backup/history")).status).toBe(400);
+    expect((await request("/api/backup/diff?commit=HEAD")).status).toBe(400);
+    const unconfirmed = await request("/api/backup/restore-board", { method: "POST", json: { confirm: "yes" } });
+    expect(unconfirmed.status).toBe(400);
+    const tasks = await request("/api/backup/restore-tasks", { method: "POST", json: { numbers: [1] } });
+    expect(tasks.status).toBe(400);
+  });
+
   it("serves the status, reports a run without a folder, and restores a task over HTTP", async () => {
     const { s, a, request } = seed();
     s.settings.update({ backupDir: "" });
@@ -752,5 +768,121 @@ describe("restoreTask", () => {
     expect(s.tasks.summary(epic.id).projectId).toBe(project.id);
     expect(s.tasks.summary(moves.id).parent).toBeNull();
     expect(s.tasks.summary(stays.id).parent).toBeNull();
+  });
+});
+
+describe("diff", () => {
+  it("lists tasks missing from the board and tasks that changed, and nothing for an unchanged board", () => {
+    const { s, a, b } = seed();
+    const dump = s.backup.dump();
+    expect(s.backup.diff(dump)).toEqual({
+      counts: { backup: dump.tasks.length, board: dump.tasks.length, missing: 0, changed: 0 },
+      tasks: [],
+    });
+
+    s.tasks.update(a.id, { title: "Feature, renamed" }, "user");
+    s.tasks.update(b.id, { archived: true }, "user");
+    s.tasks.delete(b.id, "user");
+    const diff = s.backup.diff(dump);
+    expect(diff.counts).toMatchObject({ missing: 1, changed: 1, board: dump.tasks.length - 1 });
+    expect(diff.tasks).toEqual([
+      expect.objectContaining({ number: a.number, title: "Feature", change: "changed", projectOnBoard: true }),
+      expect.objectContaining({ number: b.number, title: "Duplicate", change: "missing", projectName: "Alpha" }),
+    ]);
+  });
+});
+
+describe("restoreBoardLive", () => {
+  /** The seeded board in a database file, as the server has it open. */
+  function fileBoard() {
+    const { s, a, idea } = seed();
+    const dump = s.backup.dump();
+    const dbPath = join(tempDir(), "data.sqlite");
+    restoreBoard(dbPath, dump);
+    return { dump, dbPath, db: openDatabase(dbPath), a, idea };
+  }
+
+  it("replaces the open board with the backup, keeps machine settings and a safety copy of what it replaced", () => {
+    const { dump, dbPath, db, a } = fileBoard();
+    try {
+      const before = comparableTables(db);
+      const repos = createRepos(db);
+      repos.settings.set("t3Token", "kept-value");
+      db.prepare("UPDATE tasks SET title = 'Changed since' WHERE id = ?").run(a.id);
+      db.prepare("DELETE FROM projects").run();
+
+      const result = restoreBoardLive(db, dump, new Date("2026-11-03T10:00:00Z"));
+      expect(result.safetyCopy).toBe(`${dbPath}.before-restore-2026-11-03T10-00-00-000Z`);
+      expect(comparableTables(db)).toEqual(before);
+      expect(repos.settings.all().get("t3Token")).toBe("kept-value");
+      expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
+
+      const copy = openDatabase(result.safetyCopy!);
+      try {
+        expect(copy.prepare("SELECT count(*) AS n FROM projects").get()).toEqual({ n: 0 });
+      } finally {
+        copy.close();
+      }
+    } finally {
+      db.close();
+    }
+  });
+
+  it("keeps notifications of tasks that come back and drops those of tasks that don't", () => {
+    const { dump, db, a } = fileBoard();
+    try {
+      const insert = db.prepare(
+        "INSERT INTO notifications (id, kind, task_id, title, body, created_at, dedupe_key) VALUES (?, 'task_done', ?, 't', 'b', '2026-01-01', ?)",
+      );
+      // A task made since the backup: a copy of one under a new id and number.
+      const {
+        id: _id,
+        number: _n,
+        ...row
+      } = db.prepare("SELECT * FROM tasks WHERE id = ?").get(a.id) as Record<string, string>;
+      const columns = ["id", "number", ...Object.keys(row)];
+      db.prepare(`INSERT INTO tasks (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`).run(
+        "new",
+        99,
+        ...Object.values(row),
+      );
+      insert.run("n1", a.id, "k1");
+      insert.run("n2", "new", "k2");
+
+      restoreBoardLive(db, dump);
+      expect(db.prepare("SELECT id FROM notifications ORDER BY id").all()).toEqual([{ id: "n1" }]);
+      expect(db.prepare("SELECT 1 FROM tasks WHERE id = 'new'").get()).toBeUndefined();
+    } finally {
+      db.close();
+    }
+  });
+
+  it("rolls back on a failed check and leaves the board as it was", () => {
+    const { dump, db } = fileBoard();
+    try {
+      db.prepare("UPDATE tasks SET title = 'Changed since'").run();
+      const before = comparableTables(db);
+      const broken: BoardDump = {
+        ...dump,
+        manifest: { ...dump.manifest, counts: { ...dump.manifest.counts, plan_steps: 1 } },
+      };
+      expectCode(() => restoreBoardLive(db, broken), "VALIDATION");
+      expectCode(() => restoreBoardLive(db, { ...dump, projects: [] }), "VALIDATION");
+      expect(comparableTables(db)).toEqual(before);
+      expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
+    } finally {
+      db.close();
+    }
+  });
+
+  it("publishes board.reset when the service restores the board", () => {
+    const { s, a, events } = seed();
+    const dump = s.backup.dump();
+    s.tasks.update(a.id, { title: "Changed since" }, "user");
+    events.length = 0;
+    const result = s.backup.restoreBoard(dump, { attachmentsFrom: null });
+    expect(result.safetyCopy).toBeNull();
+    expect(s.tasks.detail(a.id).title).toBe("Feature");
+    expect(events).toEqual([{ type: "board.reset" }]);
   });
 });

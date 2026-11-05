@@ -1,3 +1,4 @@
+import { hostname } from "node:os";
 import {
   AGENT_HARNESSES,
   type AgentHarness,
@@ -8,6 +9,7 @@ import {
   DEFAULT_REVIEW_MAX_ROUNDS,
   EMPTY_MODEL_TIERS,
   type AppSettings,
+  machineNameFrom,
   MODEL_PROFILES_MAX,
   ModelProfile,
   type ModelTiers,
@@ -28,7 +30,11 @@ import type { Core } from "./core.ts";
 import { GENERAL_PROJECT_KEY } from "./projects.ts";
 import type { SettingsService } from "./types.ts";
 
-type StoredSettings = Omit<AppSettings, "t3TokenSet"> & { t3Token: string | null };
+type StoredSettings = Omit<AppSettings, "t3TokenSet" | "machineName" | "machineNameIsDefault"> & {
+  t3Token: string | null;
+  /** Null follows the host name. */
+  machineName: string | null;
+};
 
 const DEFAULTS: StoredSettings = {
   ticketSystems: [],
@@ -60,11 +66,12 @@ const DEFAULTS: StoredSettings = {
   backupDir: null,
   backupRemote: null,
   backupIntervalMinutes: 60,
+  machineName: null,
 };
 
 /**
  * Settings written to a backup, as an allow-list so a new key (a secret, a machine-specific path) stays out until
- * someone decides otherwise. Left out: the T3 token, and the terminal, backup and skill sync (services/skillSync.ts)
+ * someone decides otherwise. Left out: the T3 token, and the terminal, backup (with the machine's name) and skill sync (services/skillSync.ts)
  * settings, which describe this machine; and the social network's switch, which goes with its posts (never backed up). A forced restore keeps them
  * from the database it replaces. Autopilot's engine settings are stored beside
  * these (services/autopilot.ts) and exported too; its pause is not, so a restore can't lift Pause all.
@@ -293,8 +300,13 @@ export function createSettingsService(core: Core): SettingsService {
   const load = () => loadSettings(repos);
 
   const get = (): AppSettings => {
-    const { t3Token, ...rest } = load();
-    return { ...rest, t3TokenSet: Boolean(t3Token) };
+    const { t3Token, machineName, ...rest } = load();
+    return {
+      ...rest,
+      t3TokenSet: Boolean(t3Token),
+      machineName: machineName ?? machineNameFrom(hostname()),
+      machineNameIsDefault: machineName === null,
+    };
   };
 
   return {
@@ -348,6 +360,7 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.backupIntervalMinutes !== undefined) {
           repos.settings.set("backupIntervalMinutes", input.backupIntervalMinutes);
         }
+        if (input.machineName !== undefined) repos.settings.set("machineName", input.machineName);
         if (input.terminal !== undefined) repos.settings.set("terminal", input.terminal);
         if (input.terminalOpenIn !== undefined) repos.settings.set("terminalOpenIn", input.terminalOpenIn);
         if (input.modelTiers !== undefined)

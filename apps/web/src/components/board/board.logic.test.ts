@@ -79,6 +79,7 @@ function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
     review: null,
     suggestedModel: null,
     import: null,
+    movedTo: null,
     ...overrides,
   };
 }

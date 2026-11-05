@@ -50,6 +50,7 @@ export const queryKeys = {
   settings: ["settings"] as const,
   integrations: ["integrations"] as const,
   backupStatus: ["backupStatus"] as const,
+  backupSetupInfo: ["backupSetupInfo"] as const,
   skillSync: ["skillSync"] as const,
   notifications: ["notifications"] as const,
   socialFeed: ["socialFeed"] as const,
@@ -609,6 +610,8 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.providers });
         void queryClient.invalidateQueries({ queryKey: queryKeys.agentModels });
       }
+      // Restored from a backup: every cached task, setting and list may be another board's now.
+      if (event.type === "board.reset") void queryClient.invalidateQueries();
     };
     // EventSource retries a dropped connection itself, but an error response (e.g. Vite's proxy while
     // the dev server restarts) closes it for good, leaving the board silently stale. Reopen it then.

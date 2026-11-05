@@ -15,7 +15,8 @@ import type { Services } from "../services/types.ts";
 import { createAgentModels, type AgentModelProbes } from "./agentModels.ts";
 import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
 import { createBackupIntegration, defaultRunGit, type RunGit } from "./backup.ts";
-import type { RunGh } from "./gh.ts";
+import { defaultRunGh, type RunGh } from "./gh.ts";
+import { createBackupSetup } from "./backupSetup.ts";
 import type { GitHost } from "./gitHost.ts";
 import { createRunTokens } from "../mcp/runTokens.ts";
 import { RUN_TOOLS_PATH, type RunToolsContext } from "../mcp/runTools.ts";
@@ -43,7 +44,12 @@ export interface IntegrationDeps {
     "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir" | "attachmentsDir" | "port" | "webPort"
   > &
     Partial<Pick<Config, "token">> &
-    Partial<Pick<Config, "webDist">>;
+    Partial<Pick<Config, "webDist">> & {
+      /** This board's id (instance.ts), which owns its folder in the backup repo. */
+      instanceId: string;
+      /** Where the backup setup offers to keep the backup clone: `<data dir>/backup`. */
+      backupDefaultDir: string;
+    };
   bus: EventBus;
   /** Late-bound: services are created after integrations (they read t3Status). */
   services: () => Services;
@@ -125,8 +131,17 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   const backup = createBackupIntegration({
     services: deps.services,
     attachmentsDir: deps.config.attachmentsDir,
+    instanceId: deps.config.instanceId,
     ...(overrides.runGit ? { runGit: overrides.runGit } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  const backupSetup = createBackupSetup({
+    services: deps.services,
+    ghStatus: () => github.checkStatus(),
+    runGh: overrides.runGh ?? defaultRunGh,
+    runGit: overrides.runGit ?? defaultRunGit,
+    defaultDir: deps.config.backupDefaultDir,
+    instanceId: deps.config.instanceId,
   });
   const sessions = createAgentSessionsIntegration({
     services: deps.services,
@@ -331,6 +346,16 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     digestsIdle: () => digests.idle(),
     backupStatus: () => backup.status(),
     runBackup: () => backup.run(),
+    backupMachines: () => backup.machines(),
+    backupHistory: (machine) => backup.history(machine),
+    backupDiff: (source) => backup.diff(source),
+    restoreBackupTasks: (input, actor) => backup.restoreTasks(input, actor),
+    restoreBackupBoard: (input) => backup.restoreBoard(input),
+    backupMachineTasks: (machine) => backup.machineTasks(machine),
+    importBackupTasks: (input, actor) => backup.importTasks(input, actor),
+    backupSetupInfo: () => backupSetup.info(),
+    createBackupRepo: (name) => backupSetup.createRepo(name),
+    checkBackupRemote: (remote) => backupSetup.checkRemote(remote),
   };
   return integrations;
 }

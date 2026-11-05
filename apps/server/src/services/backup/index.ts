@@ -1,10 +1,18 @@
-import { TASK_BUNDLE_TABLES, type BoardDump } from "@repo/contracts";
+import {
+  TASK_BUNDLE_TABLES,
+  type BackupDiffTask,
+  type BackupRow,
+  type BoardDump,
+  type TaskBundle,
+} from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import type { Core } from "../core.ts";
 import { syncEpicStatus } from "../tasks.ts";
 import { dumpBoard } from "./dump.ts";
 import { copyAttachmentFiles } from "./files.ts";
-import { insertRows, upgradeDump } from "./restore.ts";
+import type { NotificationsService } from "../notifications.ts";
+import { insertRows, restoreBoardLive, upgradeDump, type LiveRestoreResult } from "./restore.ts";
+import { createTransferService, type TransferService } from "./transfers.ts";
 
 export interface RestoreTaskResult {
   taskId: string;
@@ -12,7 +20,18 @@ export interface RestoreTaskResult {
   number: number;
 }
 
-export interface BackupService {
+export interface BackupDiffResult {
+  counts: { backup: number; board: number; missing: number; changed: number };
+  tasks: BackupDiffTask[];
+}
+
+/** A row's JSON with its keys sorted, so the same row compares equal whatever order its columns came in. */
+const sortedRow = (row: BackupRow) =>
+  JSON.stringify(Object.fromEntries(Object.entries(row).sort(([a], [b]) => (a < b ? -1 : 1))));
+const bundleKey = (bundle: TaskBundle) =>
+  [sortedRow(bundle.task), ...TASK_BUNDLE_TABLES.map((table) => bundle[table].map(sortedRow).join("\n"))].join("\n\n");
+
+export interface BackupService extends TransferService {
   /** The whole board as a dump (see files.ts for writing it out). */
   dump(): BoardDump;
   /**
@@ -29,12 +48,70 @@ export interface BackupService {
       attachmentsFrom?: string | null;
     },
   ): RestoreTaskResult;
+  /** The backup's tasks that the board doesn't have, or has with other contents, by number. */
+  diff(dump: BoardDump): BackupDiffResult;
+  /**
+   * Replaces the whole live board with the dump (see restoreBoardLive), copies its pasted images back from
+   * `attachmentsFrom`, and publishes board.reset.
+   */
+  restoreBoard(dump: BoardDump, options: { attachmentsFrom: string | null }): LiveRestoreResult;
 }
 
-export function createBackupService(core: Core, attachmentsDir: string): BackupService {
+export function createBackupService(
+  core: Core,
+  attachmentsDir: string,
+  deps: { instanceId: string; notifications: () => NotificationsService },
+): BackupService {
   const { db, repos } = core;
   return {
+    ...createTransferService(core, { attachmentsDir, ...deps }),
     dump: () => dumpBoard(db),
+    diff(dump) {
+      const backup = upgradeDump(dump);
+      const board = dumpBoard(db);
+      const onBoard = new Map(board.tasks.map((b) => [String(b.task.id), bundleKey(b)]));
+      const boardProjects = new Set(board.projects.map((p) => String(p.id)));
+      const projectNames = new Map(
+        [...backup.projects, ...board.projects].map((p) => [String(p.id), String(p.title)] as const),
+      );
+      const tasks = backup.tasks.flatMap((bundle): BackupDiffTask[] => {
+        const id = String(bundle.task.id);
+        const current = onBoard.get(id);
+        if (current === bundleKey(bundle)) return [];
+        const projectId = String(bundle.task.project_id);
+        return [
+          {
+            number: Number(bundle.task.number),
+            taskId: id,
+            title: String(bundle.task.title),
+            status: String(bundle.task.status),
+            kind: String(bundle.task.kind ?? "task"),
+            projectName: projectNames.get(projectId) ?? null,
+            projectOnBoard: boardProjects.has(projectId),
+            change: current === undefined ? "missing" : "changed",
+          },
+        ];
+      });
+      return {
+        counts: {
+          backup: backup.tasks.length,
+          board: board.tasks.length,
+          missing: tasks.filter((t) => t.change === "missing").length,
+          changed: tasks.filter((t) => t.change === "changed").length,
+        },
+        tasks,
+      };
+    },
+    restoreBoard(dump, { attachmentsFrom }) {
+      const result = restoreBoardLive(db, dump, core.now());
+      copyAttachmentFiles(
+        dump.tasks.flatMap((b) => b.task_attachments),
+        attachmentsFrom,
+        attachmentsDir,
+      );
+      core.bus.publish({ type: "board.reset" });
+      return result;
+    },
     restoreTask(dump, number, { force = false, actor, attachmentsFrom = null }) {
       // Before the write: upgrading an older dump runs its own transaction on a scratch database.
       const current = upgradeDump(dump);
