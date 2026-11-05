@@ -5,14 +5,29 @@ import type { Project, TaskSummary } from "./schemas.ts";
 
 /**
  * "work" picks the task up; "plan" asks the agent to shape the plan with the user first; "orchestrate" (epics
- * only) has the agent start the epic's tasks in other sessions and see them through.
+ * only) has the agent start the epic's tasks in other sessions and see them through; "followup" (tasks in Review or
+ * Done) opens a session on finished work to ask about, test or investigate it, without reopening the task.
  */
-export type HandoffMode = "work" | "plan" | "orchestrate";
+export type HandoffMode = "work" | "plan" | "orchestrate" | "followup";
+
+/** Every hand-off mode, for the MCP tools' enums. */
+export const HANDOFF_MODES = ["work", "plan", "orchestrate", "followup"] as const satisfies readonly HandoffMode[];
 
 export interface HandoffPromptInput {
   task: Pick<TaskSummary, "id" | "number" | "title"> &
     Partial<
-      Pick<TaskSummary, "suggestedModel" | "labels" | "kind" | "blocked" | "integrationBranch" | "delivery" | "parent">
+      Pick<
+        TaskSummary,
+        | "suggestedModel"
+        | "labels"
+        | "kind"
+        | "blocked"
+        | "integrationBranch"
+        | "delivery"
+        | "parent"
+        | "links"
+        | "status"
+      >
     >;
   /** Board origin, e.g. `http://127.0.0.1:5317`. */
   boardUrl: string;
@@ -30,6 +45,11 @@ export interface HandoffPromptInput {
    * review loop, so it reports back instead.
    */
   subagent?: boolean;
+  /**
+   * For a follow-up: the epic's integration branch while the task's code is only there (see unmergedEpicBranch), so
+   * the prompt says where to find it. Null or absent means it is on the default branch.
+   */
+  epicBranch?: string | null;
 }
 
 /**
@@ -39,17 +59,24 @@ export interface HandoffPromptInput {
 const SCREEN_CAPTURE_LINE =
   "If the plan has a Screen capture step (UI tasks do), it is required, not optional: open the changed surface in a real browser, in each state you introduced (menus open, warnings showing, a narrow phone width where the layout can change), save the screenshots as JPEG or WebP at a sensible width (each must be under 5 MB), and look at every one. Fix anything that looks wrong and capture again before you move to Review. Then attach them with update_step(step, status: \"done\", images: [absolute paths]). A capture you didn't look at doesn't count.";
 
-/** Epics are orchestrated. Backlog and plan-less tasks still need a plan, so they default to planning together. */
+/**
+ * Epics are orchestrated. A Done task's work is finished, so a session on it is a follow-up. Backlog and plan-less
+ * tasks still need a plan, so they default to planning together.
+ */
 export function defaultHandoffMode(
   task: Pick<TaskSummary, "status" | "progress"> & Partial<Pick<TaskSummary, "kind">>,
 ): HandoffMode {
   if (task.kind === "epic") return "orchestrate";
+  if (task.status === "done") return "followup";
   return task.status === "backlog" || task.progress.total === 0 ? "plan" : "work";
 }
 
-/** Why a mode doesn't fit a task, or null when it does: epics are only orchestrated, and only work prompts go to subagents. */
+/**
+ * Why a mode doesn't fit a task, or null when it does: epics are only orchestrated, follow-ups are only on finished
+ * work (Review or Done), and only work prompts go to subagents.
+ */
 export function handoffModeError(
-  task: Pick<TaskSummary, "number"> & Partial<Pick<TaskSummary, "kind" | "progress" | "manual">>,
+  task: Pick<TaskSummary, "number"> & Partial<Pick<TaskSummary, "kind" | "progress" | "manual" | "status">>,
   mode: HandoffMode,
   subagent = false,
 ): string | null {
@@ -61,6 +88,9 @@ export function handoffModeError(
     return `#${task.number} is an epic: its prompt is mode "orchestrate". Hand off its tasks with their own prompts.`;
   }
   if (!epic && mode === "orchestrate") return `#${task.number} isn't an epic; only epics are orchestrated`;
+  if (mode === "followup" && task.status !== undefined && task.status !== "review" && task.status !== "done") {
+    return `#${task.number} isn't finished: a follow-up is for a task in Review or Done. Use mode "work" to work on it.`;
+  }
   if (subagent && mode !== "work") {
     return "Only work prompts go to subagents: a subagent can't plan with the user or orchestrate. Draft unplanned tasks' plans yourself.";
   }
@@ -148,10 +178,12 @@ export function taskHandoffPrompt({
   modelTiers,
   modelProfiles,
   subagent = false,
+  epicBranch = null,
 }: HandoffPromptInput): string {
   const ref = `#${task.number} "${task.title}"`;
   const getTask = `Call get_task("${task.id}") on the ${BRAND.id} MCP server`;
   if (mode === "orchestrate") return orchestratePrompt(task, boardUrl, { linkedThread, linkedSession });
+  if (mode === "followup") return followupPrompt(task, boardUrl, { linkedThread, linkedSession, epicBranch });
   if (subagent) return subagentPrompt(task, boardUrl);
   const lines =
     mode === "plan"
@@ -207,6 +239,61 @@ export function taskHandoffPrompt({
       "$COPILOT_AGENT_SESSION_ID, so it can be reopened from the board under that name (unless you're told the board linked it for you).",
   );
   return lines.join("\n");
+}
+
+/** Where a finished task's code is: the epic's branch while only there, its open PR, else the default branch. */
+function followupCodeLine(task: HandoffPromptInput["task"], epicBranch: string | null): string {
+  const prs = (task.links ?? []).filter((l) => l.kind === "pr").map((l) => l.url);
+  const prText = prs.length === 0 ? "" : `Its pull request${prs.length === 1 ? "" : "s"}: ${prs.join(", ")}. `;
+  if (epicBranch) {
+    const epic = task.parent ? `epic #${task.parent.number}` : "its epic";
+    return (
+      `${prText}It merged into the integration branch \`${epicBranch}\` of ${epic}, which hasn't merged into the ` +
+      `default branch yet: the code is on \`origin/${epicBranch}\`, not on the default branch.`
+    );
+  }
+  if (task.status === "review") {
+    return `${prText}It is in Review, so its code may still be only on its pull request's branch.`;
+  }
+  return `${prText}Its code is on the default branch, unless get_task's links show its pull request didn't merge.`;
+}
+
+/**
+ * The follow-up prompt: a session on a finished task (Review or Done) to test, investigate or fix something about it
+ * with the user. It leaves the task where it is; new work becomes a backlog task. It never links a T3 thread itself:
+ * a thread the board starts for a follow-up is marked as one so board messages keep going to the implementing thread,
+ * and one an agent linked would not be.
+ */
+function followupPrompt(
+  task: HandoffPromptInput["task"],
+  boardUrl: string,
+  linked: { linkedThread: boolean; linkedSession: boolean; epicBranch: string | null },
+): string {
+  const where = task.status === "review" ? "in Review" : "finished";
+  return [
+    `Let's follow up on #${task.number} "${task.title}" from the ${BRAND.id} task board. Its work is ${where}.`,
+    `Board: ${taskBoardUrl(boardUrl, task.id)}`,
+    "",
+    `1. Call get_task("${task.id}") on the ${BRAND.id} MCP server to see what was done: the plan, its step notes and the handover notes.`,
+    `2. ${followupCodeLine(task, linked.epicBranch)}`,
+    "3. Ask me what I want to do: test it, investigate something about it, or fix a problem I found. Don't change anything before I've said.",
+    "Don't move the task, change its plan or steps, or reopen it: its work is done. If we find something new to do, suggest a backlog task for it with add_to_backlog and add it once I agree. " +
+      (linked.epicBranch
+        ? `If I ask you to fix something here, work on a new branch from \`origin/${linked.epicBranch}\`, open a pull request against \`${linked.epicBranch}\` (\`gh pr create --base ${linked.epicBranch}\`), not the default branch, which would take the whole unmerged epic with it, and link it to the task`
+        : "If I ask you to fix something here, work on a new branch from where the code is, open a pull request and link it to the task") +
+      "; still leave the task's status and plan alone.",
+    "",
+    ...(linked.linkedSession
+      ? ["The board started this session and already linked it to the task; don't link it again."]
+      : linked.linkedThread
+        ? ["This thread is already linked to the task; don't link it again."]
+        : [
+            "In Claude Code or Copilot CLI, link your own session with link(agentSession: {harness, sessionId, cwd}, " +
+              `label: "Follow-up on #${task.number}"), the id from $CLAUDE_CODE_SESSION_ID or $COPILOT_AGENT_SESSION_ID, ` +
+              "so it can be reopened from the board under that name (unless you're told the board linked it for you). Don't link a T3 thread to the task: the board " +
+              "would take it for the thread that did the work.",
+          ]),
+  ].join("\n");
 }
 
 /**

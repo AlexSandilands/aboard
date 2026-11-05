@@ -79,8 +79,11 @@ export type SessionLaunchOptions = z.infer<typeof SessionLaunchOptions>;
 
 export const StartSessionInput = z.object({
   harness: AgentHarness,
-  /** Picks the session's label: "Planning #N", "Implementing #N", "Fixing the PR of #N" or, for an epic, "Orchestrating #N". */
-  mode: z.enum(["work", "plan", "orchestrate", "fix"]),
+  /**
+   * Picks the session's label: "Planning #N", "Implementing #N", "Fixing the PR of #N", "Follow-up on #N" (a finished
+   * task) or, for an epic, "Orchestrating #N".
+   */
+  mode: z.enum(["work", "plan", "orchestrate", "followup", "fix"]),
   prompt: z.string().trim().min(1).max(100_000),
   /** Images pasted into the dialog: claimed onto the task, and their paths added to the prompt. */
   attachmentIds: LaunchAttachmentIds.optional(),
@@ -127,7 +130,9 @@ export const isTaskWindowName = (name: string): boolean => name.length <= 80 && 
 export const sessionLabel = (mode: StartSessionInput["mode"], taskNumber: number): string =>
   mode === "fix"
     ? `Fixing the PR of #${taskNumber}`
-    : `${mode === "plan" ? "Planning" : mode === "orchestrate" ? "Orchestrating" : "Implementing"} #${taskNumber}`;
+    : mode === "followup"
+      ? `Follow-up on #${taskNumber}`
+      : `${mode === "plan" ? "Planning" : mode === "orchestrate" ? "Orchestrating" : "Implementing"} #${taskNumber}`;
 
 /**
  * The CLI's argv for a new session: its model and effort, its id, a name to find it by, and the first prompt as one

@@ -81,3 +81,17 @@ export function awaitingBranchMerge(task: Pick<TaskSummary, "integrationMerge" |
     task.rollup.done === task.rollup.total
   );
 }
+
+/**
+ * The epic's integration branch when a Done task's code is only there: the task merged into it and the epic's branch
+ * hasn't merged into the default branch yet. Null for anything else (a task closed without being done, a task in an
+ * epic delivered to main, or once the branch merged). `epic` is the task's parent, looked up by the caller.
+ */
+export function unmergedEpicBranch(
+  task: Pick<TaskSummary, "kind" | "status" | "resolution" | "integrationBranch">,
+  epic: Pick<TaskSummary, "integrationMerge"> | null | undefined,
+): string | null {
+  if (task.kind === "epic" || task.status !== "done" || task.resolution !== null || !task.integrationBranch)
+    return null;
+  return epic?.integrationMerge?.merged === false ? task.integrationBranch : null;
+}

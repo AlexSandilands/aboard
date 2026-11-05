@@ -91,6 +91,7 @@ describe("new session argv", () => {
     expect(sessionLabel("work", 4)).toBe("Implementing #4");
     expect(sessionLabel("plan", 4)).toBe("Planning #4");
     expect(sessionLabel("orchestrate", 4)).toBe("Orchestrating #4");
+    expect(sessionLabel("followup", 4)).toBe("Follow-up on #4");
   });
 });
 

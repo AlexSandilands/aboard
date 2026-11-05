@@ -23,6 +23,7 @@ import {
   selectModel,
   setOption,
   showHandoffActions,
+  followupEpicBranch,
   syncPicks,
   toLaunchWorkspace,
   workspaceLabel,
@@ -136,10 +137,25 @@ describe("visibility", () => {
   const t3 = { detected: true };
   const settings = { t3TokenSet: true };
 
-  it("hides hand-off actions on finished or archived tasks", () => {
+  it("shows hand-off actions on Done tasks (a follow-up), but not on archived ones", () => {
     expect(showHandoffActions(task)).toBe(true);
-    expect(showHandoffActions({ ...task, status: "done" })).toBe(false);
+    expect(showHandoffActions({ ...task, status: "done" })).toBe(true);
     expect(showHandoffActions({ ...task, archivedAt: "x" })).toBe(false);
+  });
+
+  it("finds a Done task's code on its epic's branch only until the epic merges", () => {
+    const done = {
+      kind: "task" as const,
+      status: "done" as const,
+      resolution: null,
+      integrationBranch: "epic/3-x",
+      parent: { id: "e", number: 3, title: "X" },
+    };
+    const epic = (merged: boolean) => ({ id: "e", integrationMerge: { merged, by: null, pr: null } });
+    expect(followupEpicBranch(done, [epic(false)])).toBe("epic/3-x");
+    expect(followupEpicBranch(done, [epic(true)])).toBeNull();
+    expect(followupEpicBranch(done, undefined)).toBeNull();
+    expect(followupEpicBranch({ ...done, parent: null }, [epic(false)])).toBeNull();
   });
 
   it("offers no hand-off on a manual task, which is for a person", () => {
@@ -154,9 +170,9 @@ describe("visibility", () => {
     expect(showHandoffActions({ ...epic, archivedAt: "x" })).toBe(false);
   });
 
-  it("offers a new T3 Code thread on a finished epic, but not on a finished task", () => {
+  it("offers a new T3 Code thread on a finished epic, and on a finished task for a follow-up", () => {
     expect(canStartT3Thread({ ...task, status: "done", kind: "epic" }, project, t3, settings)).toBe(true);
-    expect(canStartT3Thread({ ...task, status: "done" }, project, t3, settings)).toBe(false);
+    expect(canStartT3Thread({ ...task, status: "done" }, project, t3, settings)).toBe(true);
   });
 
   it("offers a new T3 Code thread whenever T3 can take it, even with threads linked", () => {

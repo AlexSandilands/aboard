@@ -94,11 +94,18 @@ export function shortPrompt(
   /** Pasted images, pointed at after the text: the full prompt, which also has them, is only on the clipboard. */
   images: readonly LaunchImage[] = [],
 ): string {
-  const verb = mode === "plan" ? "Let's plan" : mode === "orchestrate" ? "Let's run the epic" : "Let's work on";
-  // An epic's steps live only in its orchestrating prompt, which get_task doesn't carry.
+  const verb =
+    mode === "plan"
+      ? "Let's plan"
+      : mode === "orchestrate"
+        ? "Let's run the epic"
+        : mode === "followup"
+          ? "Let's follow up on"
+          : "Let's work on";
+  // An epic's steps, and what a follow-up may and may not do, live only in their prompts, which get_task doesn't carry.
   const first =
-    mode === "orchestrate"
-      ? `call get_handoff_prompt(task: "${task.id}", mode: "orchestrate") on the ${BRAND.id} MCP server first and follow it.`
+    mode === "orchestrate" || mode === "followup"
+      ? `call get_handoff_prompt(task: "${task.id}", mode: "${mode}") on the ${BRAND.id} MCP server first and follow it.`
       : `call get_task("${task.id}") on the ${BRAND.id} MCP server first.`;
   const text =
     (mode === "fix"
