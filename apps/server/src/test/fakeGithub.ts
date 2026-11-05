@@ -20,8 +20,8 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
   const repos = new Map<string, GraphqlRepo>();
   const requests: { url: string; operation: string; variables: Record<string, unknown> }[] = [];
   const mutations: { operation: string; input: Record<string, unknown> }[] = [];
-  /** GitHub's error message for the next mutation, to test failures. */
-  let failNextMutation: string | null = null;
+  /** GitHub's error messages for the next mutations, one each, to test failures. */
+  const failNextMutations: string[] = [];
   /** Refuse the next review that has inline threads, as GitHub does for a line outside the diff. */
   let failNextThreadedReview = false;
   let reviewCount = 0;
@@ -44,6 +44,11 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
           viewerPermission: "WRITE",
         }
       : undefined);
+
+  const repoMergeSettings = (owner: string, name: string) => {
+    const { mergeCommitAllowed, squashMergeAllowed, rebaseMergeAllowed } = repoOf(owner, name) ?? {};
+    return { mergeCommitAllowed, squashMergeAllowed, rebaseMergeAllowed };
+  };
 
   const prById = (id: unknown): FakePr => {
     const pr = [...prs.entries()].find(([key]) => `PR_${key}` === id)?.[1];
@@ -143,6 +148,7 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
       return {
         data: {
           repository: {
+            ...repoMergeSettings(owner, name),
             defaultBranchRef: { name: "main" },
             pullRequest: {
               id: `PR_${key}`,
@@ -185,9 +191,8 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
       };
     }
     mutations.push({ operation, input });
-    if (failNextMutation) {
-      const message = failNextMutation;
-      failNextMutation = null;
+    const message = failNextMutations.shift();
+    if (message !== undefined) {
       return { data: null, errors: [{ type: "UNPROCESSABLE", message }] };
     }
     if (operation === "ResolveReviewThread") {
@@ -221,8 +226,18 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
       if (refused) return { data: null, errors: [{ type: "INTERNAL", message: refused.message }] };
       return { data: { addPullRequestReview: { pullRequestReview: { databaseId: id, url } } } };
     }
-    if (operation === "MergePullRequest") pr.state = "MERGED";
-    else if (operation === "EnableAutoMerge") pr.autoMergeRequest = { mergeMethod: String(input.mergeMethod) };
+    if (operation === "MergePullRequest") {
+      // As GitHub: a method the repository's settings turn off is refused, with its message for that method.
+      const [, owner, name] = /^PR_([^/]+)\/([^#]+)#/.exec(String(input.pullRequestId)) ?? [];
+      const settings = repoMergeSettings(owner ?? "", name ?? "");
+      const refusal = {
+        MERGE: settings.mergeCommitAllowed ? null : "Merge commits are not allowed on this repository.",
+        SQUASH: settings.squashMergeAllowed ? null : "Squash merges are not allowed on this repository.",
+        REBASE: settings.rebaseMergeAllowed ? null : "Rebase merges are not allowed on this repository.",
+      }[String(input.mergeMethod) as "MERGE" | "SQUASH" | "REBASE"];
+      if (refusal) return { data: null, errors: [{ type: "UNPROCESSABLE", message: refusal }] };
+      pr.state = "MERGED";
+    } else if (operation === "EnableAutoMerge") pr.autoMergeRequest = { mergeMethod: String(input.mergeMethod) };
     else if (operation === "DisableAutoMerge") pr.autoMergeRequest = null;
     else if (operation === "UpdatePullRequestBody") return { data: { updatePullRequest: { clientMutationId: null } } };
     else throw new Error(`fake github: unknown operation ${operation}`);
@@ -256,7 +271,7 @@ export function createFakeGithub(opts: { hosts?: string[] } = {}) {
     fetch,
     runGh,
     failNextMutation(message: string) {
-      failNextMutation = message;
+      failNextMutations.push(message);
     },
     failNextThreadedReview() {
       failNextThreadedReview = true;
