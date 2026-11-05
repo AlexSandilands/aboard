@@ -36,6 +36,12 @@ up in its history for good. The T3 token and the backup settings are never expor
 While backups have no remote, the section says **Local only: commits aren't pushed**, with a **Connect GitHub**
 button that opens the same steps. The rows below it change the folder, remote, machine name and interval later.
 
+To stop using a folder, click **Clear** beside **Change** on the Folder row: backup turns off and the board forgets
+the folder, but keeps the remote and machine name. **Reset…** at the end of the section forgets all of them (the
+machine name goes back to the host name), turns backup off and brings **Set up backup** back, so you can go
+through the steps again. Neither deletes anything: the folder, its backups and the remote stay where they are and
+the board just stops using them. Setting up the same folder again later carries on from its history.
+
 Several machines can share one backup repo: each writes into a folder of its own, named after the machine
 (the host name, kept from the first backup, unless you set **Machine name** in the same section). Give each machine a different name; a
 name another machine's folder already has is refused. Renaming a machine moves its folder on the next backup.

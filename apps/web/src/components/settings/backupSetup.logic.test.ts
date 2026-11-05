@@ -2,6 +2,9 @@ import type { BackupMachine, BackupRemoteCheck, BackupSetupInfo, BackupStatus } 
 import { describe, expect, it } from "vitest";
 import {
   backupState,
+  canResetBackup,
+  CLEAR_BACKUP_FOLDER,
+  RESET_BACKUP_SETTINGS,
   createUnavailableReason,
   firstBackupOutcome,
   initialRemoteChoice,
@@ -27,6 +30,32 @@ describe("backupState", () => {
     expect(backupState({ backupDir: null, backupRemote: null })).toBe("unconfigured");
     expect(backupState({ backupDir: "/b", backupRemote: null })).toBe("local_only");
     expect(backupState({ backupDir: "/b", backupRemote: "git@github.com:o/r.git" })).toBe("remote");
+  });
+});
+
+describe("clearing and resetting", () => {
+  const unset = { backupEnabled: false, backupDir: null, backupRemote: null, machineNameIsDefault: true };
+
+  it("offers Reset only while something is set, including what Clear leaves behind", () => {
+    expect(canResetBackup(unset)).toBe(false);
+    expect(canResetBackup({ ...unset, backupDir: "/b" })).toBe(true);
+    expect(canResetBackup({ ...unset, backupRemote: "git@github.com:o/r.git" })).toBe(true);
+    expect(canResetBackup({ ...unset, machineNameIsDefault: false })).toBe(true);
+    expect(canResetBackup({ ...unset, backupEnabled: true })).toBe(true);
+  });
+
+  it("clears the folder and switches backup off, keeping the remote and name", () => {
+    expect(CLEAR_BACKUP_FOLDER).toEqual({ backupEnabled: false, backupDir: null });
+    expect(backupState({ backupDir: null, backupRemote: "git@github.com:o/r.git" })).toBe("unconfigured");
+  });
+
+  it("resets the folder, remote and name together, so setup starts over", () => {
+    expect(RESET_BACKUP_SETTINGS).toEqual({
+      backupEnabled: false,
+      backupDir: null,
+      backupRemote: null,
+      machineName: null,
+    });
   });
 });
 
