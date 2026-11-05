@@ -69,7 +69,7 @@ files under each app.
 - [Ticket systems](features/ticket-systems.md): configured issue trackers, ticket links, key patterns, presets
 - [Issue import](features/issue-import.md): a task from a ticket or a GitHub issue URL, filled in by Claude Code
 - [Agent hand-off](features/agent-handoff.md): copy a prompt, or start a T3 Code thread
-- [Agent sessions](features/agent-sessions.md): linked Claude Code and Copilot CLI sessions, their status, resuming them in a terminal
+- [Agent sessions](features/agent-sessions.md): linked Claude Code, Codex and Copilot CLI sessions, their status, resuming them in a terminal
 - [Local review](features/local-review.md): the review loop before a PR
 - [Desktop app](features/desktop.md): the Electron shell
 - [Releases](features/releases.md): cutting a release, the installers and the pacman repo CI builds for it

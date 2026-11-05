@@ -713,7 +713,7 @@ export const LinkInput = z.object({
   kind: LinkKind.optional(),
   label: z.string().optional(),
   t3Thread: T3ThreadRef.optional(),
-  /** A Claude Code or Copilot CLI session, so the board can show its status and resume it in a terminal. */
+  /** A Claude Code, Codex or Copilot CLI session, so the board can resume it in a terminal (and show its status, for all but Codex). */
   agentSession: AgentSessionRef.optional(),
 });
 export type LinkInput = z.infer<typeof LinkInput>;
