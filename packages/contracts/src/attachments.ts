@@ -77,7 +77,5 @@ export const attachedImagesLines = (images: ReadonlyArray<{ filename: string; pa
   images.map((image) => `[Attached image "${image.filename}" is saved at: ${image.path}]`).join("\n\n");
 
 /** The prompt with the pointers to its images after it, as T3 Code adds them. */
-export const withAttachedImages = (
-  prompt: string,
-  images: ReadonlyArray<{ filename: string; path: string }>,
-): string => (images.length === 0 ? prompt : `${prompt}\n\n${attachedImagesLines(images)}`);
+export const withAttachedImages = (prompt: string, images: ReadonlyArray<{ filename: string; path: string }>): string =>
+  images.length === 0 ? prompt : `${prompt}\n\n${attachedImagesLines(images)}`;
