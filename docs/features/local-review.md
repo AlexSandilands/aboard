@@ -230,8 +230,8 @@ The board-run reviewer survives as fallback 3, where it fits: rounds nobody else
   pending, running or stalled, or findings open with rounds left under auto-review) and no PR is linked, it says
   instead that none is expected yet and the PR comes once the loop ends, so nobody (the Orchestrate agent included)
   asks for one early; the line leaves out `start_review`, since the reviewer reads `get_task` too. Each state gets
-  exactly one PR line, and a linked PR gets none. Without auto-review the only PR line is that not-yet one, and only
-  while a round opened by hand is open.
+  exactly one PR line, and a linked PR gets none. Without auto-review the not-yet line shows only while a round opened
+  by hand is open; the loop-ended line still follows such a round once it is done.
 - **`get_task` shows a pointer, not the loop.** The reviewer reads the task with `get_task` too. If that
   result told it to start a reviewer subagent, it might start one of its own. So `get_task` only says that a
   round is waiting and who does what; the loop instructions come from `move_task` and `start_review`.
