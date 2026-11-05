@@ -1,19 +1,9 @@
-// Composer controls modelled on T3 Code's new-thread composer (ComposerControl, ModelPickerContent,
-// TraitsPicker, BranchToolbar), MIT — see NOTICE. Rebuilt on our primitives rather than copied.
-import {
-  runtimeModesFor,
-  type T3LaunchOptions,
-  type T3LaunchProvider,
-  type T3ModelCatalog,
-  type T3ModelSelection,
-  type T3RuntimeMode,
-} from "@repo/contracts";
+// Composer controls modelled on T3 Code's new-thread composer (ComposerControl and
+// BranchToolbar), MIT — see NOTICE. Rebuilt on our primitives rather than copied.
+import { runtimeModesFor, type T3LaunchOptions, type T3LaunchProvider, type T3RuntimeMode } from "@repo/contracts";
 import {
   BotIcon,
-  BrainIcon,
-  CheckIcon,
   ChevronDownIcon,
-  ChevronRightIcon,
   FolderGit2Icon,
   FolderIcon,
   GitBranchIcon,
@@ -21,40 +11,27 @@ import {
   LockIcon,
   LockOpenIcon,
   SearchIcon,
-  StarIcon,
-  ZapIcon,
 } from "lucide-react";
 import { useState, type ComponentProps } from "react";
 import {
   Menu,
-  MenuCheckboxItem,
   MenuGroup,
   MenuGroupLabel,
   MenuPopup,
   MenuRadioGroup,
   MenuRadioItem,
-  MenuSeparator,
   MenuTrigger,
 } from "~/components/ui/menu";
 import { ClaudeAI, OpenAI } from "~/components/handoff/providerIcons";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { cn } from "~/lib/utils";
 import {
-  FAVORITES,
-  findModel,
-  initialPickerTab,
-  modelTraits,
-  optionValue,
-  pickerModels,
   refBadge,
   refDisabledReason,
   refLabel,
-  selectModel,
   selectedRef,
-  setOption,
   WORKSPACE_LABELS,
   workspaceLabel,
-  type PickerModel,
   type WorkspaceChoice,
   type WorkspaceMode,
 } from "./handoff.logic";
@@ -100,258 +77,6 @@ export function ProviderIcon({ driver, className }: { driver: string; className?
   if (driver === "claudeAgent") return <ClaudeAI aria-hidden className={cn("size-4", className)} />;
   if (driver === "codex") return <OpenAI aria-hidden className={cn("size-4", className)} />;
   return <BotIcon aria-hidden className={cn("size-4", className)} />;
-}
-
-// ── Model ────────────────────────────────────────────────────────────────
-
-export function ModelPicker({
-  options,
-  selection,
-  onChange,
-}: {
-  options: T3ModelCatalog;
-  selection: T3ModelSelection | null;
-  onChange: (selection: T3ModelSelection) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState(() => initialPickerTab(options, selection));
-  const [query, setQuery] = useState("");
-  const [legacyOpen, setLegacyOpen] = useState(false);
-  const current = findModel(options, selection);
-  const { models, legacy } = pickerModels(options, tab, query);
-
-  const pick = (entry: PickerModel) => {
-    onChange(selectModel(selection, entry));
-    setOpen(false);
-  };
-
-  return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) {
-          setQuery("");
-          setTab(initialPickerTab(options, selection));
-        }
-      }}
-    >
-      {/* The one toolbar control that may shrink, so the submit arrow is never pushed past the composer's edge. */}
-      <PopoverTrigger
-        render={<ComposerControl className="max-w-80 shrink" aria-label="Model" title={current?.model.name} />}
-      >
-        {current ? <ProviderIcon driver={current.provider.driver} /> : null}
-        <span className="min-w-0 truncate">{current?.model.name ?? "Choose a model"}</span>
-        <Chevron />
-      </PopoverTrigger>
-      <PopoverPopup align="start" padding="none" className="before:hidden">
-        <div className="flex max-h-86.5 w-screen max-w-90 flex-row overflow-hidden">
-          <div className="flex w-11 shrink-0 flex-col items-center gap-1 py-2">
-            <RailButton active={tab === FAVORITES} label="Favorites" onClick={() => setTab(FAVORITES)}>
-              <StarIcon className="size-4.5 fill-current" />
-            </RailButton>
-            {options.providers.map((provider) => (
-              <RailButton
-                key={provider.instanceId}
-                active={tab === provider.instanceId}
-                label={provider.ready ? provider.displayName : `${provider.displayName} (unavailable)`}
-                onClick={() => setTab(provider.instanceId)}
-              >
-                <ProviderIcon driver={provider.driver} className={cn("size-4.5", !provider.ready && "opacity-40")} />
-              </RailButton>
-            ))}
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-l border-border/70 bg-muted/40">
-            <label className="mx-2 mt-2 flex items-center gap-2 border-b border-border px-1 pb-2 text-sm focus-within:border-primary">
-              <SearchIcon aria-hidden className="size-4 text-muted-foreground" />
-              <input
-                autoFocus
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search models..."
-                className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
-              />
-            </label>
-            <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1.5">
-              {models.map((entry) => (
-                <ModelRow
-                  key={`${entry.provider.instanceId}:${entry.model.slug}`}
-                  entry={entry}
-                  selected={
-                    entry.provider.instanceId === selection?.instanceId && entry.model.slug === selection?.model
-                  }
-                  onPick={pick}
-                />
-              ))}
-              {legacy.length > 0 ? (
-                <>
-                  <button
-                    type="button"
-                    aria-expanded={legacyOpen}
-                    onClick={() => setLegacyOpen((v) => !v)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-medium leading-snug">Legacy models</span>
-                      <span className="mt-1 block text-xs leading-snug text-muted-foreground/70">
-                        {legacy.length} models
-                      </span>
-                    </span>
-                    <ChevronRightIcon className={cn("size-4 transition-transform", legacyOpen && "rotate-90")} />
-                  </button>
-                  {legacyOpen
-                    ? legacy.map((entry) => (
-                        <ModelRow
-                          key={`${entry.provider.instanceId}:${entry.model.slug}`}
-                          entry={entry}
-                          selected={
-                            entry.provider.instanceId === selection?.instanceId && entry.model.slug === selection?.model
-                          }
-                          onPick={pick}
-                        />
-                      ))
-                    : null}
-                </>
-              ) : null}
-              {models.length === 0 && legacy.length === 0 ? (
-                <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-                  {tab === FAVORITES && !query ? "No favorite models yet" : "No models found"}
-                </p>
-              ) : null}
-            </div>
-            <ProviderNotice provider={options.providers.find((p) => p.instanceId === tab)} />
-          </div>
-        </div>
-      </PopoverPopup>
-    </Popover>
-  );
-}
-
-function RailButton({
-  active,
-  label,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      aria-pressed={active}
-      onClick={onClick}
-      className="relative flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring aria-pressed:text-foreground aria-pressed:after:absolute aria-pressed:after:-right-1.5 aria-pressed:after:h-5 aria-pressed:after:w-0.5 aria-pressed:after:rounded-full aria-pressed:after:bg-primary"
-    >
-      {children}
-    </button>
-  );
-}
-
-function ModelRow({
-  entry,
-  selected,
-  onPick,
-}: {
-  entry: PickerModel;
-  selected: boolean;
-  onPick: (entry: PickerModel) => void;
-}) {
-  const disabled = !entry.provider.ready;
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => onPick(entry)}
-      aria-current={selected || undefined}
-      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none hover:bg-accent focus-visible:bg-accent disabled:cursor-not-allowed disabled:opacity-50 aria-current:bg-accent/60"
-    >
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5 text-xs font-medium leading-snug">
-          <span className="truncate">{entry.model.name}</span>
-          {entry.model.badge === "new" ? (
-            <span className="rounded-sm border border-info/40 px-1 text-[10px] font-semibold uppercase text-info">
-              New
-            </span>
-          ) : null}
-        </span>
-        <span className="mt-1 flex items-center gap-1 text-xs leading-snug text-muted-foreground/70">
-          <ProviderIcon driver={entry.provider.driver} className="size-3" />
-          {entry.provider.displayName}
-          {disabled ? " · unavailable" : null}
-        </span>
-      </span>
-      {selected ? <CheckIcon aria-hidden className="size-4 text-muted-foreground" /> : null}
-    </button>
-  );
-}
-
-function ProviderNotice({ provider }: { provider: T3LaunchProvider | undefined }) {
-  if (!provider || provider.ready) return null;
-  return (
-    <p className="shrink-0 border-t border-border/70 px-3 py-2 text-xs leading-snug text-muted-foreground">
-      {provider.message ?? `${provider.displayName} isn't ready in T3 Code.`}
-    </p>
-  );
-}
-
-// ── Effort and fast mode ─────────────────────────────────────────────────
-
-export function TraitsPicker({
-  options,
-  selection,
-  onChange,
-}: {
-  options: T3ModelCatalog;
-  selection: T3ModelSelection;
-  onChange: (selection: T3ModelSelection) => void;
-}) {
-  const { effort, fastMode } = modelTraits(findModel(options, selection)?.model);
-  if (!effort && !fastMode) return null;
-  const effortValue = effort ? optionValue(selection, effort) : null;
-  const effortLabel = effort?.options.find((o) => o.id === effortValue)?.label ?? effort?.label;
-  const fast = fastMode ? optionValue(selection, fastMode) === true : false;
-  return (
-    <Menu>
-      <MenuTrigger render={<ComposerControl aria-label="Model options" />}>
-        {fast ? <ZapIcon /> : <BrainIcon />}
-        <span>{effortLabel ?? "Fast"}</span>
-        <Chevron />
-      </MenuTrigger>
-      <MenuPopup align="start">
-        {effort ? (
-          <MenuGroup>
-            <MenuGroupLabel>{effort.label}</MenuGroupLabel>
-            <MenuRadioGroup
-              value={effortValue}
-              onValueChange={(value: string) => onChange(setOption(selection, effort.id, value))}
-            >
-              {effort.options.map((option) => (
-                <MenuRadioItem key={option.id} value={option.id}>
-                  {option.label}
-                  {option.isDefault ? <span className="text-muted-foreground"> (default)</span> : null}
-                </MenuRadioItem>
-              ))}
-            </MenuRadioGroup>
-          </MenuGroup>
-        ) : null}
-        {effort && fastMode ? <MenuSeparator /> : null}
-        {fastMode ? (
-          <MenuCheckboxItem
-            variant="switch"
-            checked={fast}
-            onCheckedChange={(checked) => onChange(setOption(selection, fastMode.id, checked))}
-          >
-            {fastMode.label}
-          </MenuCheckboxItem>
-        ) : null}
-      </MenuPopup>
-    </Menu>
-  );
 }
 
 // ── Access ───────────────────────────────────────────────────────────────

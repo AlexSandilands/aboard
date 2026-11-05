@@ -135,11 +135,6 @@ export function adjacentTab(tabs: readonly PickerTab[], current: string, directi
   return ids[(index + direction + ids.length) % ids.length]!;
 }
 
-/** What the trigger shows for the selected row, else `fallback`. */
-export function selectedRow(model: PickerModel): PickerRow | null {
-  return model.rows.find((row) => row.key === model.selectedKey) ?? null;
-}
-
 // ── The effort column ────────────────────────────────────────────────────
 
 export interface EffortOption {

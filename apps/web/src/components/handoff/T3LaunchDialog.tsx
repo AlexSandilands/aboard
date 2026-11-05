@@ -42,15 +42,8 @@ import { copyHandoffPrompt, copySuggestEpicsPrompt } from "./HandoffActions";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
 import { LaunchUnavailable, ToolbarSkeleton } from "./LaunchStates";
 import { usePlanPrompt } from "./PlanTasksDialog";
-import {
-  AccessPicker,
-  ComposerControl,
-  ComposerStrip,
-  ModelPicker,
-  RefPicker,
-  TraitsPicker,
-  WorkspaceMenu,
-} from "./T3LaunchPickers";
+import { AccessPicker, ComposerControl, ComposerStrip, RefPicker, WorkspaceMenu } from "./T3LaunchPickers";
+import { T3ModelPicker } from "~/components/models/T3ModelPicker";
 
 /**
  * What the dialog starts a thread for: a task, which the thread is linked to, a project's Suggest epics, or a plan
@@ -420,14 +413,13 @@ function Composer({
         <div className="flex min-w-0 items-center gap-1 px-3 pb-3">
           {ready ? (
             <>
-              <ModelPicker options={ready.options} selection={ready.selection} onChange={pickModel} />
-              {ready.selection ? (
-                <TraitsPicker
-                  options={ready.options}
-                  selection={ready.selection}
-                  onChange={(next) => pick({ selection: next })}
-                />
-              ) : null}
+              {/* The one toolbar control that may shrink, so the submit arrow is never pushed past the composer's edge. */}
+              <T3ModelPicker
+                catalog={ready.options}
+                selection={ready.selection}
+                className="max-w-80 shrink"
+                onChange={pickModel}
+              />
               <AccessPicker
                 provider={provider}
                 value={ready.runtimeMode}

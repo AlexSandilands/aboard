@@ -3,9 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canStartProjectT3Thread,
   canStartT3Thread,
-  FAVORITES,
   handoffClis,
-  initialPickerTab,
   emptyPickState,
   initialPicks,
   pickBy,
@@ -14,7 +12,6 @@ import {
   launchModelSelection,
   modelTraits,
   optionValue,
-  pickerModels,
   refBadge,
   refDisabledReason,
   refLabel,
@@ -208,17 +205,6 @@ describe("visibility", () => {
 });
 
 describe("model picker", () => {
-  it("lists favorites, a provider's models with legacy split out, or search results across providers", () => {
-    expect(initialPickerTab(options, null)).toBe(FAVORITES);
-    expect(initialPickerTab({ ...options, favorites: [] }, options.defaults.modelSelection)).toBe("claudeAgent");
-    expect(pickerModels(options, FAVORITES, "").models.map((e) => e.model.slug)).toEqual(["gpt"]);
-    const tab = pickerModels(options, "claudeAgent", "");
-    expect(tab.models.map((e) => e.model.slug)).toEqual(["opus", "haiku"]);
-    expect(tab.legacy.map((e) => e.model.slug)).toEqual(["old"]);
-    expect(pickerModels(options, FAVORITES, "codex").models.map((e) => e.model.slug)).toEqual(["gpt"]);
-    expect(pickerModels(options, "codex", "OLD").models.map((e) => e.model.slug)).toEqual(["old"]);
-  });
-
   it("keeps compatible option values when switching models and defaults the rest", () => {
     const start = setOption(setOption(options.defaults.modelSelection!, "effort", "low"), "fastMode", true);
     expect(optionValue(start, effort)).toBe("low");
