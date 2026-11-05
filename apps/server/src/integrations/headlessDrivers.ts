@@ -1,15 +1,10 @@
-import { BRAND, type AgentHarness } from "@repo/contracts";
-import {
-  claudeDriver,
-  type AgentArgsInput,
-  type AgentOutcome,
-  type DriverCapabilities,
-  type HeadlessDriver,
-} from "./headlessAgent.ts";
+import { BRAND, HEADLESS_CAPABILITIES, type AgentHarness, type OperationNeed } from "@repo/contracts";
+import { claudeDriver, type AgentArgsInput, type AgentOutcome, type HeadlessDriver } from "./headlessAgent.ts";
 
 // Autopilot's headless runs on harnesses other than Claude Code: `codex exec` and the Copilot CLI. Neither can be held
-// to as much as `claude -p` (structured output, the untrusted-input lockdown, a budget), so a run that needs one of
-// those runs on Claude Code instead (headlessDriverFor). See docs/features/autopilot.md#runners.
+// to as much as `claude -p` (structured output, the untrusted-input lockdown, a budget): what each can do is
+// HEADLESS_CAPABILITIES in contracts, and the resolver only picks a provider that can do what the run needs
+// (resolveOperationModel). See docs/features/autopilot.md#runners.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -36,14 +31,6 @@ const field = (value: unknown, key: string): unknown =>
 const MAX_FAILURE_TEXT = 500;
 const clip = (message: string) =>
   message.length > MAX_FAILURE_TEXT ? `${message.slice(0, MAX_FAILURE_TEXT)}…` : message;
-
-const LIMITED: Omit<DriverCapabilities, "presetSessionId"> = {
-  outputSchema: false,
-  untrusted: false,
-  noTools: false,
-  toolRules: false,
-  budget: false,
-};
 
 // ── Codex ────────────────────────────────────────────────────────────────
 
@@ -128,7 +115,7 @@ export const codexDriver: HeadlessDriver = {
   harness: "codex",
   command: "codex",
   label: "Codex",
-  capabilities: { ...LIMITED, presetSessionId: false },
+  capabilities: HEADLESS_CAPABILITIES.codex,
   args: codexArgs,
   parse: (stdout) => parseCodexOutput(stdout),
   sessionIdOf: codexSessionId,
@@ -203,7 +190,7 @@ export const copilotDriver: HeadlessDriver = {
   harness: "copilot-cli",
   command: "copilot",
   label: "Copilot CLI",
-  capabilities: { ...LIMITED, presetSessionId: true },
+  capabilities: HEADLESS_CAPABILITIES["copilot-cli"],
   args: copilotArgs,
   parse: (stdout) => parseCopilotOutput(stdout),
 };
@@ -230,34 +217,15 @@ export interface DriverNeeds {
   unguarded?: boolean | undefined;
 }
 
-/** What `needs` asks that the driver can't do, in words, or null when it can do all of it. */
-export function missingCapability(driver: HeadlessDriver, needs: DriverNeeds): string | null {
-  const c = driver.capabilities;
-  if (needs.unguarded && needs.access === "edit" && !c.toolRules) {
-    return "push rules of its own, as a run with no worktree has no push guard";
-  }
-  if (needs.outputSchema && !c.outputSchema) return "structured output";
-  if (needs.untrusted && !c.untrusted) return "the lockdown for untrusted input";
-  if (needs.access === "none" && !c.noTools) return "a run with no tools";
-  if (((needs.tools?.length ?? 0) > 0 || (needs.deniedTools?.length ?? 0) > 0) && !c.toolRules) {
-    return "its own tool rules";
-  }
-  return null;
-}
-
-/**
- * The driver for a run on `harness`: its own, or Claude Code's when the run needs something the harness can't do,
- * with a note saying so. The runner picks the fallback's model (headlessRun).
- */
-export function headlessDriverFor(
-  harness: AgentHarness,
-  needs: DriverNeeds,
-): { driver: HeadlessDriver; fallback: string | null } {
-  const driver = HEADLESS_DRIVERS[harness];
-  const missing = missingCapability(driver, needs);
-  if (!missing) return { driver, fallback: null };
-  return {
-    driver: claudeDriver,
-    fallback: `${driver.label} can't run this action headless (it needs ${missing}), so Claude Code ran it.`,
-  };
+/** What a run asks of its driver, as the operation needs the resolver checks providers against. */
+export function driverNeeds(needs: DriverNeeds): OperationNeed[] {
+  const out: OperationNeed[] = [];
+  if (needs.access === "edit") out.push("edit");
+  if (needs.access === "none") out.push("noTools");
+  if (needs.outputSchema) out.push("outputSchema");
+  if (needs.untrusted) out.push("untrusted");
+  // Only Claude Code's own deny rules keep an editing agent with no push guard from force-pushing or merging.
+  const unguardedEdit = needs.unguarded && needs.access === "edit";
+  if (unguardedEdit || (needs.tools?.length ?? 0) > 0 || (needs.deniedTools?.length ?? 0) > 0) out.push("toolRules");
+  return out;
 }

@@ -32,7 +32,12 @@ const cliResult = (structured: unknown, extra: Record<string, unknown> = {}) =>
   });
 
 function setup(runAgent: RunAgent) {
-  return createTestHarness({ integrations: { runAgent } });
+  const h = createTestHarness({ integrations: { runAgent } });
+  h.services.settings.update({
+    providers: [{ id: "claude-code", enabled: true }],
+    modelTiers: { light: { description: null, t3: null, cli: { "claude-code": "haiku" } } },
+  });
+  return h;
 }
 
 const ask = async (h: ReturnType<typeof setup>, question = "How do I stop Autopilot at night?") => {
@@ -56,6 +61,7 @@ describe("settings Ask", () => {
     });
     const [job] = jobs;
     const args = job!.args;
+    // The Ask operation's model: the light tier's Claude Code model.
     expect(args[args.indexOf("--model") + 1]).toBe("haiku");
     expect(args[args.indexOf("--tools") + 1]).toBe("");
     expect(args).toContain("--strict-mcp-config");
@@ -80,7 +86,15 @@ describe("settings Ask", () => {
     const failed = setup(() =>
       Promise.resolve(cliResult(undefined, { is_error: true, subtype: "error_max_budget_usd", result: "x" })),
     );
-    expect(await ask(failed)).toEqual({ ok: false, error: "Claude Code stopped: error max budget usd" });
+    expect(await ask(failed)).toEqual({ ok: false, error: "Claude Code stopped: error max budget usd." });
+    // On the CLI's default model (no model for the tier), the error says where to set one.
+    failed.services.settings.update({ modelTiers: { light: { description: null, t3: null } } });
+    expect(await ask(failed)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining(
+        "(the Light tier, unless you chose another) a Claude Code model in Settings → Model tiers",
+      ),
+    });
 
     const slow = setup(() => Promise.reject(new Error("Claude Code didn't finish within 60 seconds")));
     expect(await ask(slow)).toEqual({ ok: false, error: "Claude Code didn't finish within 60 seconds" });
@@ -128,6 +142,21 @@ describe("settings Ask", () => {
     expect(empty.status).toBe(400);
     const none = await h.request("/api/settings/ask", { method: "POST", json: { question: "hi", entries: [] } });
     expect(none.status).toBe(400);
+  });
+
+  it("answers with the reason, without running anything, when no provider can answer", async () => {
+    const jobs: AgentJob[] = [];
+    const h = setup((job) => {
+      jobs.push(job);
+      return Promise.resolve(cliResult({ settingId: null, answer: "x" }));
+    });
+    h.services.settings.update({ providers: [{ id: "codex", enabled: true }] });
+    expect(await ask(h)).toEqual({
+      ok: false,
+      error:
+        "Ask needs a provider that can return structured output and run with no tools; add one in Settings → Providers.",
+    });
+    expect(jobs).toHaveLength(0);
   });
 
   it("answers with the reason, without spawning anything, when the CLI isn't found", async () => {

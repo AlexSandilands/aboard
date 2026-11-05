@@ -108,7 +108,7 @@ describe("start planned tasks: eligibility", () => {
     await pass();
     expect(requests).toHaveLength(1);
     const request = requests[0]!;
-    expect(request.tier).toBe("deep");
+    expect(request.operation).toBe("taskRun");
     expect(request.label).toBe("Start planned");
     expect(request.prompt).toContain(`Let's work on #${t.number} "Flagged"`);
     expect(request.prompt).toContain(`get_task("${t.id}")`);

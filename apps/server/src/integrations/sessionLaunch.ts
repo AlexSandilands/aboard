@@ -18,7 +18,7 @@ import {
   taskWindowName,
   profileCliEffort,
   profileCliModel,
-  resolveTaskModel,
+  resolveOperationChoice,
   type AgentCliStatus,
   type AppSettings,
   type CliEffort,
@@ -348,8 +348,14 @@ export function createSessionLaunch(deps: {
         branches[0] ??
         null;
       const tier = task.suggestedModel?.tier ?? null;
-      const model = resolveTaskModel(task, settings);
-      const picked = model.source === "label" || model.source === "tier" ? model.profile : null;
+      const model = resolveOperationChoice("launch", { task }, settings);
+      // A task with nothing chosen and no tier (the light fallback) keeps each CLI's default, as it always has.
+      const profile = model.source === "fallback" ? null : model.profile;
+      // A model typed for one provider fills in that CLI only.
+      const typed = (harness: AgentHarness) => (model.explicit?.provider === harness ? model.explicit : null);
+      const cliModel = (harness: AgentHarness) => typed(harness)?.model ?? profileCliModel(profile, harness);
+      const cliEffort = (harness: AgentHarness) =>
+        typed(harness) ? cliEffortFor(harness, typed(harness)?.effort) : profileCliEffort(profile, harness);
       const resolved = terminal(settings, h);
       return {
         clis: LAUNCHABLE_HARNESSES.map((harness) => cliStatus(settings, harness, h)),
@@ -358,17 +364,19 @@ export function createSessionLaunch(deps: {
         branches,
         defaultBaseRef,
         models: {
-          "claude-code": profileCliModel(model.profile, "claude-code"),
-          codex: profileCliModel(model.profile, "codex"),
-          "copilot-cli": profileCliModel(model.profile, "copilot-cli"),
+          "claude-code": cliModel("claude-code"),
+          codex: cliModel("codex"),
+          "copilot-cli": cliModel("copilot-cli"),
         },
         efforts: {
-          "claude-code": profileCliEffort(model.profile, "claude-code"),
-          codex: profileCliEffort(model.profile, "codex"),
-          "copilot-cli": profileCliEffort(model.profile, "copilot-cli"),
+          "claude-code": cliEffort("claude-code"),
+          codex: cliEffort("codex"),
+          "copilot-cli": cliEffort("copilot-cli"),
         },
         tier,
-        model: picked ? { name: picked.name, source: model.source as "label" | "tier", label: model.label } : null,
+        model: profile
+          ? { name: profile.name, source: model.source === "label" ? "label" : "tier", label: model.label }
+          : null,
         namedWindow: "launch" in resolved && resolved.focus !== undefined,
       };
     },

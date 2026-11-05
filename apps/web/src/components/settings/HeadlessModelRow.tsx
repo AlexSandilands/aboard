@@ -1,8 +1,10 @@
-import type { AppSettings, HeadlessModel } from "@repo/contracts";
+import type { AppSettings } from "@repo/contracts";
 import { useState, type ReactNode } from "react";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { BlurInput } from "./BlurInput";
 import {
+  customModelText,
+  type HeadlessModel,
   headlessModelForOption,
   headlessModelItems,
   headlessModelOption,
@@ -91,12 +93,12 @@ export function HeadlessModelRow({
           </Select>
           {option === "custom" ? (
             <BlurInput
-              key={`${value && "model" in value ? value.model : "typing"}-${rejected}`}
+              key={`${customModelText(value) || "typing"}-${rejected}`}
               aria-label={label}
               size="sm"
               className="sm:w-40"
               placeholder="haiku"
-              value={value && "model" in value ? value.model : ""}
+              value={customModelText(value)}
               onSave={(next) => {
                 const typed = typedHeadlessModel(next);
                 if (!typed) {

@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vitest";
+import type { AgentHarness } from "./agentSessions.ts";
 import { BRAND } from "./brand.ts";
 import { EMPTY_MODEL_TIERS, ModelTiers } from "./modelTiers.ts";
-import {
-  CliModel,
-  isTaskWindowName,
-  newSessionArgv,
-  sessionLabel,
-  taskWindowName,
-  tierCliEffort,
-  tierCliModel,
-} from "./sessionLaunch.ts";
+import { CliModel, isTaskWindowName, newSessionArgv, sessionLabel, taskWindowName } from "./sessionLaunch.ts";
+import { profileCliEffort, profileCliModel, tierProfile } from "./modelProfiles.ts";
+
+const tierCliModel = (tiers: ModelTiers, tier: "light" | "deep", harness: AgentHarness) =>
+  profileCliModel(tierProfile(tiers, tier), harness);
+const tierCliEffort = (tiers: ModelTiers, tier: "light" | "deep", harness: AgentHarness) =>
+  profileCliEffort(tierProfile(tiers, tier), harness);
 
 const ID = "b76a4a91-3196-48df-a421-9a32d5ac9978";
 
@@ -110,7 +109,6 @@ describe("models and windows", () => {
     expect(tierCliModel(tiers, "deep", "claude-code")).toBe("opus");
     expect(tierCliModel(tiers, "deep", "copilot-cli")).toBeNull();
     expect(tierCliModel(tiers, "light", "claude-code")).toBeNull();
-    expect(tierCliModel(tiers, null, "claude-code")).toBeNull();
   });
 
   it("reads a tier's effort for a CLI only while it has a model there", () => {
@@ -126,7 +124,6 @@ describe("models and windows", () => {
     expect(tierCliEffort(tiers, "deep", "claude-code")).toBe("max");
     expect(tierCliEffort(tiers, "deep", "copilot-cli")).toBeNull();
     expect(tierCliEffort(tiers, "light", "claude-code")).toBeNull();
-    expect(tierCliEffort(tiers, null, "claude-code")).toBeNull();
     // A level only Copilot takes, stored under Claude Code, falls back to the CLI's default.
     const stale = ModelTiers.parse({
       ...EMPTY_MODEL_TIERS,

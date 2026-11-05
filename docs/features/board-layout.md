@@ -431,7 +431,8 @@ rule editor take `?project=`; without it the page shows the project the board wa
   word and at least four words), else the best result is. `POST /api/settings/ask` (`integrations/settingsAsk.ts`)
   takes the question and the index as `askEntries` sends it, since the web app owns the index. It runs `claude -p`
   through the shared headless runner (`agentArgs` with `access: "none"`, the Claude Code provider's CLI path, `harnessCliSetting`) on
-  `haiku`, with a $0.05 budget and a 60 s timeout, in an empty temp folder, and asks for `{ settingId | null,
+  the Ask operation's model (the light tier unless set; `resolveOperationModel`, which refuses with the reason when no
+  added provider can return structured output with no tools), with a $0.05 budget and a 60 s timeout, in an empty temp folder, and asks for `{ settingId | null,
   answer }`. The question and the index are fenced as data with a random fence. A `settingId` that isn't one of the
   request's ids becomes null (the answer stays). Only one question runs at a time (the page discards an edited pending question but can't stop its run), so a second
   one meanwhile gets "Another question is still being answered". A failed run, a timeout or an answer of the wrong shape comes back

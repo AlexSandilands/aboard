@@ -67,53 +67,53 @@ describe("CLI efforts", () => {
   });
 });
 
-describe("headless job models", () => {
-  it("defaults to haiku for imports and the CLI's own model for the board reviewer", () => {
+describe("operation models", () => {
+  it("starts with none set, so every operation takes its default", () => {
     const { services } = createTestHarness();
-    expect(services.settings.get()).toMatchObject({ issueImportModel: { model: "haiku" }, reviewModel: null });
+    expect(services.settings.get().operationModels).toEqual({});
+    expect(services.settings.get()).not.toHaveProperty("reviewModel");
+    expect(services.settings.get()).not.toHaveProperty("issueImportModel");
   });
 
-  it("reads a model saved as a bare string, as before tiers were an option", () => {
+  it("reads stored choices one by one, dropping one that is no ModelChoice", () => {
     const h = createTestHarness();
-    createRepos(h.db).settings.set("issueImportModel", "claude-sonnet-5-5");
-    createRepos(h.db).settings.set("reviewModel", "opus");
-    expect(h.services.settings.get()).toMatchObject({
-      issueImportModel: { model: "claude-sonnet-5-5" },
-      reviewModel: { model: "opus" },
+    createRepos(h.db).settings.set("operationModels", {
+      issueImport: { provider: "claude-code", model: "claude-sonnet-5-5" },
+      ask: { tier: "huge" },
+      digest: { model: "haiku" },
+    });
+    expect(h.services.settings.get().operationModels).toEqual({
+      issueImport: { provider: "claude-code", model: "claude-sonnet-5-5" },
     });
   });
 
-  it("falls back to the default for a stored value that is neither a model nor a tier", () => {
-    const h = createTestHarness();
-    createRepos(h.db).settings.set("issueImportModel", { tier: "huge" });
-    createRepos(h.db).settings.set("reviewModel", 7);
-    expect(h.services.settings.get()).toMatchObject({
-      issueImportModel: { model: "haiku" },
-      reviewModel: null,
-    });
-  });
-
-  it("saves a tier or a model, and a string from an older client as a model", async () => {
+  it("merges each change, and null puts an operation back to its default", async () => {
     const h = createTestHarness();
     const patch = (json: unknown) => h.request("/api/settings", { method: "PATCH", json });
-    await patch({ issueImportModel: { tier: "light" }, reviewModel: "sonnet" });
-    expect(h.services.settings.get()).toMatchObject({
-      issueImportModel: { tier: "light" },
-      reviewModel: { model: "sonnet" },
+    await patch({
+      operationModels: { issueImport: { tier: "light" }, reviewer: { provider: "codex", model: "gpt-5.5" } },
     });
-    await patch({ issueImportModel: "haiku", reviewModel: null });
-    expect(h.services.settings.get()).toMatchObject({
-      issueImportModel: { model: "haiku" },
-      reviewModel: null,
+    await patch({ operationModels: { ask: "inherit" } });
+    expect(h.services.settings.get().operationModels).toEqual({
+      issueImport: { tier: "light" },
+      reviewer: { provider: "codex", model: "gpt-5.5" },
+      ask: "inherit",
     });
+    await patch({ operationModels: { reviewer: null } });
+    expect(h.services.settings.get().operationModels).toEqual({ issueImport: { tier: "light" }, ask: "inherit" });
   });
 
-  it("refuses a model that couldn't go on a command line, or a tier that doesn't exist", async () => {
+  it("refuses a model that couldn't go on a command line, an unknown operation, a tier or provider that doesn't exist", async () => {
     const h = createTestHarness();
     const patch = (json: unknown) => h.request("/api/settings", { method: "PATCH", json });
-    expect((await patch({ issueImportModel: "haiku; rm -rf /" })).status).toBe(400);
-    expect((await patch({ reviewModel: { tier: "huge" } })).status).toBe(400);
-    expect((await patch({ issueImportModel: "" })).status).toBe(400);
+    expect(
+      (await patch({ operationModels: { ask: { provider: "claude-code", model: "haiku; rm -rf /" } } })).status,
+    ).toBe(400);
+    expect((await patch({ operationModels: { ask: { tier: "huge" } } })).status).toBe(400);
+    expect((await patch({ operationModels: { ask: { provider: "t3-code", model: "x" } } })).status).toBe(400);
+    expect((await patch({ operationModels: { nope: { tier: "light" } } })).status).toBe(400);
+    // A bare model, as older clients sent, names no provider.
+    expect((await patch({ operationModels: { issueImport: "haiku" } })).status).toBe(400);
   });
 });
 

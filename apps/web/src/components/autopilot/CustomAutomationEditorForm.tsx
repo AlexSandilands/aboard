@@ -425,7 +425,7 @@ export function CustomAutomationEditorForm({
                         { value: "", label: isSchedule ? "The default tier" : "The task's tier" },
                         ...MODEL_TIERS.map((t) => ({ value: t.value, label: t.label })),
                       ]}
-                      onChange={(tier) => patch({ tier })}
+                      onChange={(tier) => patch({ tier, otherModel: null })}
                     />
                   </Field>
                 </div>

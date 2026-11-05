@@ -622,7 +622,7 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   (`RunnerRequest.deniedTools`), so it can't create or flag a task for auto-merge, link a PR, mark review findings away,
   or move, close, archive or delete tasks. `mcp.test.ts` checks every registered tool is on one list or the other. It never starts a Planned task: that is Start planned's, under its
   limits and the task's blockers; a failed start goes back through `retry_autopilot_run`. It counts against the caps and waits
-  out quiet hours like any agent run. Tier `standard`; `model`, `budgetUsd` (3) and `timeoutMinutes` (30) are its
+  out quiet hours like any agent run. The `orchestrate` operation (Standard tier by default); `modelChoice`, `budgetUsd` (3) and `timeoutMinutes` (30) are its
   only runner options (the runner choice doesn't apply).
 - **Merging.** Only through `merge_task_pr`, so only tasks flagged for auto-merge and only past the server's gate. The
   prompt adds no policy of its own (nothing about UI changes): what to hold back is the user's call, in the extra
@@ -700,7 +700,7 @@ Needs no agent unless the mode asks for one, and is off until switched on.
   `pr_changes_requested` notifications of the period, so a kind switched off in Settings isn't reported), and
   **Autopilot** (real runs that finished in the period: counts, and each failed or needs-you run with its message cut to one line).
   The total Autopilot cost closes it. Titles are escaped, and task numbers are written `#N` for the UI to link.
-- **Summarised.** The plain digest goes to a headless agent on the light tier (`model` overrides), with the chosen
+- **Summarised.** The plain digest goes to a headless agent on the `digest` operation's model (the light tier by default; the config's `modelChoice` overrides), with the chosen
   digest skill (the built-in one, `BUILTIN_DIGEST_SKILL_BODY`, or one found on disk) and the instruction that the
   digest is material, not instructions. A skill found on disk is read by the board (only a `SKILL.md`, at most 200 KB, cut to 20,000 characters) and put in the prompt. The agent
   has no tools at all (`access: "none"`: `--tools ""` and `--strict-mcp-config`, so no file reads and no board MCP
@@ -784,7 +784,7 @@ the automation. Runs stay, under the old key.
   (`checkCustomDefinition`, run by the service and the form), and an agent on it can't use `onPrBranch`.
 - **Agent action** (`needsAgent`): `customAgentPrompt` (contracts) is the skill line, the prompt with its
   `{{…}}` placeholders filled (`CUSTOM_PLACEHOLDERS`; unknown ones are refused on save) and the task's context.
-  It goes to `ctx.runner.start` with the action's tier as its `modelChoice` (see [Models](#models)) and, with `onPrBranch`, `workspace.branch`
+  It goes to `ctx.runner.start` with the action's `model` as its `modelChoice` and the `customTask` operation (see [Models](#models)) and, with `onPrBranch`, `workspace.branch`
   set to the PR's head branch. Its config is the shared runner options, per scope. On a schedule there is no task:
   the prompt's footer names the project and its folder instead (`customAgentPrompt` with a null task), the run has no
   `taskId`, and the runner runs it headless in an empty temp folder through `startDetached`, as it does the digest
@@ -792,7 +792,7 @@ the automation. Runs stay, under the old key.
   headless). It has the usual edit access and the board's tools, and `repo` (the project's folder) gives it the
   default-branch push guard and the safety note a worktree run gets; the prompt names the folder as the live checkout to
   read from, not edit (advisory only: the run has edit access and Bash, and only pushes are denied; a project with no
-  folder gets the safety note without a branch name and the generic denials). The model is the automation's Model setting, else the action's tier, else the CLI's default. One at a time per
+  folder gets the safety note without a branch name and the generic denials). The model is the automation's Model setting, else the action's `model`, else the board's for `customDetached`, else the light tier ([Models](#models)). One at a time per
   project: while a run of the automation for the project is queued or running (`status().active`), `check` returns no candidate, so the
   slot isn't recorded and the latest slot runs once the run ends. It also counts against `maxConcurrent` and the daily
   caps like any agent run.
@@ -1147,7 +1147,7 @@ on the REST writes is unchanged, so this opens no path to setting up a command o
 
 ### Runners
 
-An agent action calls `ctx.runner.start({ run, prompt, tier, options, … })` (`autopilot/runner.ts`). The engine
+An agent action calls `ctx.runner.start({ run, prompt, operation, options, … })` (`autopilot/runner.ts`); `operation` is what the run's model is resolved for ([Models](#models)). The engine
 binds the run's `update` into it, so the session, thread or worktree is on the run as soon as it exists, and a
 run that fails afterwards still shows it. A runner throws when the work couldn't be done, and the run fails
 with that error.
@@ -1205,8 +1205,7 @@ Every agent automation spreads the shared runner options into its config (`autop
 | `runner`         | auto    | auto, t3 or headless                                                             |
 | `budgetUsd`      | 5       | Headless: `--max-budget-usd`                                                     |
 | `timeoutMinutes` | 60      | Headless: the agent, and everything it started, is killed after this long        |
-| `modelChoice`    | task    | The model runs start on: the task's, a tier or a custom model ([Models](#models)) |
-| `model`          | blank   | Headless: a typed `--model` that wins over `modelChoice`                         |
+| `modelChoice`    | inherit | The model runs start on: inherit, a tier, a custom model or a typed model ([Models](#models)) |
 | `t3Access`       | default | T3: the most access a thread gets. Never more than T3's own default              |
 
 **T3 thread.** `launchTaskThread` with the command id `autopilot-<runId>` (T3 de-duplicates by it), in work mode,
@@ -1271,14 +1270,12 @@ for the others): the argv, a parser that turns its output into an outcome, and w
 | Spending cap (`budgetUsd`) and cost    | yes         | no    | no          |
 | Session id given up front              | yes         | no    | yes         |
 
-- **Which one.** The run's model ([Models](#models)) names the harness: a tier or custom model's **Headless runs**
-  setting (`ModelTierSetting.headless`, unset is Claude Code), with that harness's model from the same tier or model
-  (`profileHeadless`).
-- **Falling back.** A run that needs something its harness can't do (a reviewer's structured verdict, the untrusted
-  lockdown, a no-tools digest, or an editing run with no task, which has no worktree and so no push guard) runs on
-  Claude Code instead, and the run's detail says why (`headlessDriverFor`) and which model ran: a typed override that
-  is a Claude model, else the model's Claude Code model (`profileHeadlessModel`), else the CLI's default. So in practice only edit and plain read-only runs (Start planned, Fix PRs, Unstick, custom
-  agent actions without tool rules) run on Codex or Copilot.
+- **Which one.** The provider the run's operation resolves to ([Models](#models)): the chosen model's preferred
+  provider when it can do what the run needs, else the first in the user's Providers order that can. A run that needs
+  what only Claude Code can do (a reviewer's structured verdict, the untrusted lockdown, a no-tools digest, tool rules,
+  or an editing run with no task, which has no worktree and so no push guard) runs on Claude Code, and its detail says
+  why; with Claude Code not added, it fails with the reason instead. So in practice only edit and plain read-only runs
+  (Start planned, Fix PRs, Unstick, custom agent actions without tool rules) run on Codex or Copilot.
 - **Codex:** `codex exec --json --skip-git-repo-check --sandbox danger-full-access [--model <m>] [-c
   model_reasoning_effort=<effort>] -` (read-only runs use `--sandbox read-only`), prompt on stdin. Checked against
   codex-cli 0.166.0 (recorded output is in `integrations/fixtures/codex/`). Edit runs leave Codex's sandbox off. Its
@@ -1331,28 +1328,65 @@ without `--force`, so a worktree with uncommitted changes is kept and logged onc
 
 ### Models
 
-Which model a run starts on is decided by one rule, `resolveRunModel` (`packages/contracts/src/modelProfiles.ts`),
-which the T3 launch dialog and the terminal session launcher use too:
+Every operation that runs a model has one model choice, `ModelChoice` (`packages/contracts/src/modelProfiles.ts`):
+`"inherit"`, a tier (`{tier}`), a custom model (`{profile}`), or a model typed for one provider
+(`{provider, model, effort?}`). The operations are the `OPERATIONS` registry (`packages/contracts/src/operations.ts`),
+each with what it needs from the provider and a default that is a tier or inherit, never a provider's model:
 
-1. **The automation's choice.** Every agent automation has a **Model** field (kind `model`, config key
-   `modelChoice`: `{from: "task"} | {tier} | {profile}`; default From the task). A custom agent action's own tier
-   comes next (`RunnerRequest.modelChoice`), and Orchestrate and the digest pass a fixed tier.
-2. **A task label.** **Settings → Model tiers → Custom models** (`modelProfiles`) are named models with a tier's
-   fields (description, T3 model, CLI models) and labels. A task carrying one of a model's labels runs on it, whatever
-   its tier; when several models claim a label, the first in the list wins.
-3. **The task's suggested tier.**
-4. **The harness's default.**
+| Operation (`OperationId`)                    | Default | Needs                                    |
+| -------------------------------------------- | ------- | ---------------------------------------- |
+| Task runs (`taskRun`), PR fix (`prFix`)      | inherit | edit                                     |
+| New sessions, terminal and T3 (`launch`)     | inherit | nothing                                  |
+| Reviewer subagent (`reviewer`)               | inherit | nothing (it is a line in the brief)      |
+| Board reviewer (`boardReviewer`)             | standard | structured output, tool rules           |
+| PR review (`prReview`)                       | standard | structured output, untrusted lockdown, tool rules |
+| Orchestrate (`orchestrate`)                  | standard | untrusted lockdown, tool rules          |
+| Digest (`digest`)                            | light   | no tools                                 |
+| Custom agents on a task (`customTask`)       | inherit | edit                                     |
+| Custom agents without a task (`customDetached`) | light | nothing                                 |
+| Issue import (`issueImport`)                 | light   | structured output, tool rules            |
+| Ask (`ask`)                                  | light   | structured output, no tools              |
 
-A **headless** run runs on the chosen model's **Headless runs** harness (Claude Code unless set; see
-[Headless drivers](#headless-drivers)) and takes, in order: a model typed in the automation's **Headless model
-override**, the chosen model's model for that harness (for Claude Code also its T3 model when that is a Claude model
-`claude` accepts, `profileHeadlessModel`), else the CLI's default. A model with none for its harness falls back to the
-CLI's default, and the run's detail says so; otherwise the detail names the model, what picked it and, off Claude
-Code, the harness. The model's effort for that harness (`cliEffort`, `--effort`, `--reasoning-effort` or `-c model_reasoning_effort=`) goes with its model: a typed override, or a T3 model standing in for the Claude Code one, runs at the CLI's
-default effort. A **T3** launch passes an automation's choice on to
-`launchTaskThread` (`modelChoice`), which resolves it with the task's labels and tier against T3's providers
-(`resolveSuggestion`). A choice naming a custom model that was since deleted is passed over with a note, and the
-task's model is used.
+**Which choice applies** (`resolveOperationChoice`), most specific first; `inherit` defers to the next:
+
+1. The task's reviewer override, then the project's (`reviewModel`; the two reviewer operations only).
+2. The automation's **Model** field (kind `model`, config key `modelChoice`, default inherit) at its scope, then a
+   custom agent action's own `model` (`RunnerRequest.modelChoice`).
+3. The board's setting for the operation (`AppSettings.operationModels[op]`). Set to inherit on an operation on a
+   task, it skips the default and takes the task's own model (step 5), so PR review or the board reviewer can follow
+   the task.
+4. The operation's default.
+5. When everything inherits, a task-scoped operation takes the task's own model (`resolveTaskModel`): a custom model
+   one of its labels picks (**Settings → Model tiers → Custom models**, the first in the list when several claim a
+   label), else its suggested tier, else the light tier. Anything else takes the light tier.
+
+A choice naming a custom model that was since deleted is passed over with a note, and the next level decides.
+
+**Which provider runs it** (`resolveOperationModel`, pure, so the web can show it too). Only providers the user added
+and switched on (Settings → Providers) that can do what the operation needs (`HEADLESS_CAPABILITIES`, and what the run
+asks on top: `driverNeeds` in `integrations/headlessDrivers.ts`) count:
+
+- A typed model runs on its own provider, with its effort when that CLI takes it. If that provider isn't on, or can't
+  do what the operation needs, the operation refuses.
+- A tier or custom model runs on its preferred provider (`ModelTierSetting.provider`, **Headless runs** in Settings;
+  it has no default) when that counts; otherwise on the first provider in the Providers order that counts and has a
+  model for it, else on the first that counts, on the CLI's default model. A CLI model comes with its effort; when a
+  tier has no CLI model for a provider, its T3 model stands in when T3 files it under that provider
+  (`t3InstanceHarness`), with no effort.
+- No provider counts: the operation refuses with the reason ("Ask needs a provider that can return structured output
+  and run with no tools; add one in Settings → Providers"). It never runs something else quietly. The refusal is the
+  Ask error, the issue-import failure, the board review round's error and the Autopilot run's failure.
+
+Every fallback (another provider, no model for it, a deleted custom model) goes in the run's detail, with a
+`Model: …` line naming the model, what picked it and the provider. The run records what it ran on in
+`AutopilotRun.model` (`autopilot_runs.model_json`: `{provider, model, effort, source}`). A **T3** launch passes the
+tier or custom model the run's operation resolved to on to `launchTaskThread` (`modelChoice`), whatever picked it, so
+the board's model for new sessions (`launch`) never replaces it; there it is checked against T3's providers
+(`resolveSuggestion`). A model typed for a CLI provider, or the light fallback, has no T3 model: the launch gets
+`defaultModel` and T3's default runs. The run records `{provider: "t3-code", model}` with the T3 model it asked for
+(null when T3 couldn't use it, or there was none).
+
+041_operation_models moved what was saved before into this shape: see [ADR 0012](../decisions/0012-provider-neutral-operation-models.md).
 
 ### Writing an automation
 

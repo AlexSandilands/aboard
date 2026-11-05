@@ -138,10 +138,13 @@ describe("applyTierChange", () => {
     expect(applyTierChange(light, { field: "t3", value: null })).toEqual({ ...light, t3: null });
   });
 
-  it("sets the headless harness, storing Claude Code as no choice", () => {
+  it("sets the preferred provider, Claude Code included: unset is no longer Claude Code", () => {
     const codex = applyTierChange(current.light, { field: "headless", value: "codex" });
-    expect(codex).toEqual({ ...current.light, headless: "codex" });
-    expect(applyTierChange(codex, { field: "headless", value: "claude-code" })).toEqual(current.light);
+    expect(codex).toEqual({ ...current.light, provider: "codex" });
+    expect(applyTierChange(codex, { field: "headless", value: "claude-code" })).toEqual({
+      ...current.light,
+      provider: "claude-code",
+    });
   });
 
   it("changes one CLI's model and keeps the other's", () => {

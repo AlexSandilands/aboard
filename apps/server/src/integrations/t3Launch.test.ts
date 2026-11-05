@@ -4,7 +4,7 @@ import {
   type ModelTier,
   type ModelTiers,
   type Project,
-  resolveRunModel,
+  resolveTaskModel,
 } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import type { ShellSnapshot } from "./t3.ts";
@@ -82,7 +82,11 @@ const taskModel = (
   tier: ModelTier | null,
   modelTiers: ModelTiers,
   { labels = [], profiles = [] }: { labels?: string[]; profiles?: ModelProfile[] } = {},
-) => resolveRunModel({ labels, tier }, { modelTiers, modelProfiles: profiles });
+) =>
+  resolveTaskModel(
+    { labels, suggestedModel: tier ? { tier, reason: null } : null },
+    { modelTiers, modelProfiles: profiles },
+  );
 
 const repo: WireRefs = { isRepo: true, refs: [{ name: "main", current: true, isDefault: true, worktreePath: null }] };
 
@@ -352,6 +356,11 @@ describe("autoLaunchSettings", () => {
         workspace: { mode: "new_worktree", baseRef: "main", startFromOrigin: true },
       },
     });
+  });
+
+  it("works on T3's default model when the run has no T3 model of its own", () => {
+    const result = autoLaunchSettings(options({ suggest: true }), { work: true, defaultModel: true });
+    expect(result.ok && result.launch.modelSelection).not.toEqual(sonnet.selection);
   });
 
   it("plans on T3's default model, and never takes more access than T3's default", () => {

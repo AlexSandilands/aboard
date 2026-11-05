@@ -2,17 +2,23 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRAND, harnessCliSetting, type AskSettingsInput, type AskSettingsResult } from "@repo/contracts";
+import {
+  BRAND,
+  harnessCliSetting,
+  resolveOperationModel,
+  type AskSettingsInput,
+  type AskSettingsResult,
+} from "@repo/contracts";
 import { z } from "zod";
 import type { Services } from "../services/types.ts";
 import { resolveExecutable } from "./claudeCli.ts";
 import { agentArgs, parseAgentOutput, runHeadlessAgent, type RunAgent } from "./headlessAgent.ts";
 import { messageOf } from "./github.ts";
 
-// The settings "Ask": answers "how do I…?" with Claude Code headless (`claude -p`) on a small model, and names the
-// setting to jump to. It has no tools (the index is in the prompt), a small budget and a short timeout.
+// The settings "Ask": answers "how do I…?" with a headless run on the Ask operation's model (the light tier by
+// default), and names the setting to jump to. It has no tools (the index is in the prompt), a small budget and a short
+// timeout. Only `claude -p` can return structured output with no tools today, so that is what the resolver picks.
 
-const ASK_MODEL = "haiku";
 const ASK_BUDGET_USD = 0.05;
 const ASK_TIMEOUT_MS = 60_000;
 
@@ -68,13 +74,15 @@ export interface SettingsAsker {
 
 export function createSettingsAsker(deps: { services: () => Services; runAgent?: RunAgent }): SettingsAsker {
   const runAgent = deps.runAgent ?? runHeadlessAgent;
-  const cliOf = () => harnessCliSetting(deps.services().settings.get(), "claude-code");
   // One run at a time: a question edited while it is pending is discarded by the page, not stopped, so without this
   // a few Enters would pile up paid runs.
   let running = false;
   return {
     async ask(input) {
-      const cli = cliOf();
+      const settings = deps.services().settings.get();
+      const resolved = resolveOperationModel("ask", {}, settings);
+      if (!resolved.ok) return { ok: false, error: resolved.reason };
+      const cli = harnessCliSetting(settings, resolved.provider);
       // A fake runner (tests) stands in for the CLI, so only a real run needs it to exist.
       if (!deps.runAgent && !resolveExecutable(cli ?? "claude")) {
         return {
@@ -99,13 +107,22 @@ export function createSettingsAsker(deps: { services: () => Services; runAgent?:
             access: "none",
             budgetUsd: ASK_BUDGET_USD,
             sessionId: randomUUID(),
-            model: ASK_MODEL,
+            model: resolved.model,
+            effort: resolved.effort,
             defaultBranch: null,
             outputSchema: ASK_OUTPUT_SCHEMA,
           }),
         });
         const outcome = parseAgentOutput(stdout, true);
-        if (!outcome.ok) return { ok: false, error: `Claude Code stopped: ${outcome.error ?? "unknown error"}` };
+        if (!outcome.ok) {
+          const why = (outcome.error ?? "unknown error").replace(/[.\s]+$/, "");
+          // With no model set for its tier or custom model the CLI's default runs, which can outspend Ask's budget.
+          const hint =
+            !resolved.model && /budget/i.test(why)
+              ? " Ask ran on the CLI's default model: give the model Ask uses (the Light tier, unless you chose another) a Claude Code model in Settings → Model tiers."
+              : "";
+          return { ok: false, error: `Claude Code stopped: ${why}.${hint}` };
+        }
         const output = AskOutput.safeParse(outcome.output);
         if (!output.success) return { ok: false, error: "Claude Code's answer wasn't in the expected shape" };
         const answer = output.data.answer.trim();

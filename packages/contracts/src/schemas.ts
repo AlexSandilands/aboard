@@ -5,7 +5,8 @@ import { LabelHue } from "./labels.ts";
 import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
 import { AutomationVariables } from "./automationVariables.ts";
 import { BackupSettings } from "./backup.ts";
-import { HeadlessModel } from "./headlessModel.ts";
+import { ModelChoice } from "./modelProfiles.ts";
+import { OperationId, OperationModels } from "./operations.ts";
 import { ModelProfiles } from "./modelProfiles.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
@@ -146,8 +147,8 @@ export const Project = z.object({
   t3ProjectId: z.string().nullable(),
   /** Overrides the global review skill for this project's tasks; null inherits it. */
   reviewSkill: ReviewSkillRef.nullable(),
-  /** Overrides the board's reviewer model for this project's tasks; null inherits it. */
-  reviewModel: HeadlessModel.nullable(),
+  /** Overrides the board's reviewer models (the subagent's and the board reviewer's) for this project's tasks; null inherits them. */
+  reviewModel: ModelChoice.nullable(),
   /** Overrides the global planning skill for this project's bulk-planning sessions; null inherits it. */
   planSkill: PlanSkillRef.nullable(),
   /** Overrides of the board's automation variables in this project (effectiveVariables). */
@@ -559,7 +560,7 @@ export const TaskSummary = z.object({
   /** Per-task auto-review override; null inherits the global setting. */
   autoReview: z.boolean().nullable(),
   /** Per-task reviewer model override; null inherits the project's, then the board's. */
-  reviewModel: HeadlessModel.nullable(),
+  reviewModel: ModelChoice.nullable(),
   /** Per-task Autopilot flag: null is Default, true is On, false is Off. Start planned tasks only starts tasks flagged On. */
   autopilot: z.boolean().nullable(),
   /**
@@ -700,7 +701,8 @@ export const UpdateProjectInput = z.object({
   collapsed: z.boolean().optional(),
   archived: z.boolean().optional(),
   reviewSkill: ReviewSkillRef.nullable().optional(),
-  reviewModel: HeadlessModel.nullable().optional(),
+  /** null (or inherit) inherits the board's reviewer models. */
+  reviewModel: ModelChoice.nullable().optional(),
   planSkill: PlanSkillRef.nullable().optional(),
   /** Replaces the project's automation variable overrides. */
   variables: AutomationVariables.optional(),
@@ -781,8 +783,8 @@ export const UpdateTaskInput = z.object({
   archived: z.boolean().optional(),
   /** null inherits the global auto-review setting. */
   autoReview: z.boolean().nullable().optional(),
-  /** null inherits the project's reviewer model, then the board's. */
-  reviewModel: HeadlessModel.nullable().optional(),
+  /** null (or inherit) inherits the project's reviewer model, then the board's. */
+  reviewModel: ModelChoice.nullable().optional(),
   /** null is Default: Start planned tasks never starts the task. */
   autopilot: z.boolean().nullable().optional(),
   /** null is Default: merge_task_pr refuses to merge the task's PR, as for false. */
@@ -885,15 +887,13 @@ export const AppSettings = z
      */
     handoffMenus: z.record(HandoffTarget, z.boolean()),
     headlessReviewBudgetUsd: z.number().positive().max(100),
-    /** The model the board reviewer runs; null keeps the CLI's own default. */
-    reviewModel: HeadlessModel.nullable(),
     /** Fill in tasks created from a ticket or a GitHub issue URL in the background. */
     issueImportEnabled: z.boolean(),
     /**
-     * The model `claude -p` runs for an import: a model tier, or a model as `--model` takes it (an alias like "haiku"
-     * or a full id). Saved as a bare string before tiers were an option; always returned in the object form.
+     * The model each operation runs on (operations.ts); one left out takes its default, a tier or the task's own.
+     * Replaced reviewModel and issueImportModel in 041_operation_models.
      */
-    issueImportModel: HeadlessModel,
+    operationModels: OperationModels,
     issueImportBudgetUsd: z.number().positive().max(100),
     /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
     modelTiers: ModelTiers,
@@ -935,9 +935,8 @@ export const UpdateSettingsInput = z.object({
   handoffMenus: z.partialRecord(HandoffTarget, z.boolean()).optional(),
   headlessReviewBudgetUsd: z.number().positive().max(100).optional(),
   issueImportEnabled: z.boolean().optional(),
-  /** A tier, a model, or null for the CLI's default. A bare string is a model. */
-  reviewModel: HeadlessModel.nullable().optional(),
-  issueImportModel: HeadlessModel.optional(),
+  /** Merges into the operations' models: one left out keeps its model, and null puts one back to its default. */
+  operationModels: z.partialRecord(OperationId, ModelChoice.nullable()).optional(),
   issueImportBudgetUsd: z.number().positive().max(100).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */
   modelTiers: ModelTiers.partial().optional(),

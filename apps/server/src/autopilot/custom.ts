@@ -554,7 +554,8 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
             run: ctx.run,
             label: `${custom.name} · ${data.item.key}`,
             prompt: customAgentPrompt(custom, values, null, null),
-            tier: action.tier,
+            operation: "customDetached",
+            modelChoice: action.model,
             options: { ...ctx.config, runner: "headless" },
             repo: project?.workspaceRoot ?? null,
             // An item often carries text anyone can write: read-only, and only this board's server, narrowed.
@@ -575,7 +576,8 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
             run: ctx.run,
             label: `${custom.name} · ${where}`,
             prompt: customAgentPrompt(custom, values, null, null, project ? handoverIn(services, project.id) : null),
-            tier: action.tier,
+            operation: "customDetached",
+            modelChoice: action.model,
             options: { ...ctx.config, runner: "headless" },
             ...(tools.length > 0 ? { tools } : {}),
             repo: project?.workspaceRoot ?? null,
@@ -606,9 +608,9 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
           run: ctx.run,
           label: custom.name,
           prompt,
-          tier: task.suggestedModel?.tier ?? null,
-          // The action's tier is its author's choice, so a task label doesn't override it; the Model setting does.
-          modelChoice: action.tier ? { tier: action.tier } : null,
+          operation: "customTask",
+          // The action's model is its author's choice, so a task label doesn't override it; the Model setting does.
+          modelChoice: action.model,
           options: ctx.config,
           // Makes the run headless: a T3 thread can't be given extra tools. The push and merge deny rules still apply.
           ...(tools.length > 0 ? { tools } : {}),

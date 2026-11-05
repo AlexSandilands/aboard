@@ -380,9 +380,9 @@ the CLI's own. Clearing the model clears its effort, and so does choosing a mode
 drops an effort for a harness with no model. The effort goes everywhere the model does:
 
 - a new session (`newSessionArgv`; the dialog prefills it);
-- headless `claude -p` runs that resolve to a tier or custom model: Autopilot's headless agent (`headlessModel` in the
-  runner returns it with the model; a typed **Headless model override**, or a T3 model standing in for the Claude Code
-  one, carries none), the board reviewer and the issue import (`resolveHeadlessEffort`; a typed model carries none).
+- headless runs that resolve to a tier or custom model (`resolveOperationModel` returns it with the model): Autopilot's
+  headless agent, the board reviewer, the issue import and Ask. A T3 model standing in for a CLI model carries none; a
+  typed model carries its own.
 
 ## Code map
 

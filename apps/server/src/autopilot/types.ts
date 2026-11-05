@@ -3,7 +3,7 @@ import type {
   AutopilotField,
   AutopilotRun,
   ModelChoice,
-  ModelTier,
+  OperationId,
   PrRef,
   Project,
   TaskLink,
@@ -68,7 +68,10 @@ export interface CheckContext<C> {
 
 /** What a runner recorded about an agent action. */
 export type RunPatch = Partial<
-  Pick<AutopilotRun, "runner" | "sessionId" | "threadUrl" | "worktreePath" | "costUsd" | "detail" | "exitCode">
+  Pick<
+    AutopilotRun,
+    "runner" | "sessionId" | "threadUrl" | "worktreePath" | "costUsd" | "detail" | "exitCode" | "model"
+  >
 >;
 
 /**
@@ -192,10 +195,10 @@ export interface RunnerRequest {
    */
   label?: string;
   /**
-   * The task's suggested tier, mapped to a model through the user's tier settings. A custom model one of the task's
-   * labels picks wins over it, and the automation's own Model setting over both (runner.ts runModel).
+   * What the run is, for its model (resolveOperationModel): the automation's Model setting, then `modelChoice`, then the
+   * board's setting for the operation and its default, then the task's own model (its labels, its suggested tier).
    */
-  tier: ModelTier | null;
+  operation: OperationId;
   /** The action's own choice of model (a custom automation's), below the automation's Model setting. */
   modelChoice?: ModelChoice | null;
   /** The automation's config; the runner reads its RunnerOptions fields (runner choice, budget, timeout, access). */

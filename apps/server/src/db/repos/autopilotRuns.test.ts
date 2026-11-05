@@ -34,6 +34,7 @@ function setup() {
       needsAttention: false,
       dismissedAt: null,
       output: { kind: "pr_review", handoff, counts: { blocking: 0, major: 0, minor: 0, nit: 0, ...counts } },
+      model: null,
       createdAt: "2026-01-01T10:00:00.000Z",
       startedAt: "2026-01-01T10:00:00.000Z",
       finishedAt: "2026-01-01T10:01:00.000Z",
@@ -77,5 +78,16 @@ describe("autopilotRuns.cleanPrReviewTimes", () => {
     expect(repo.cleanPrReviewTimes([task.id]).size).toBe(0);
     insert({ counts: { minor: 2 }, startedAt: "2026-01-01T11:00:00.000Z" });
     expect(repo.cleanPrReviewTimes([task.id]).get(task.id)).toBe("2026-01-01T11:00:00.000Z");
+  });
+});
+
+describe("autopilotRuns model", () => {
+  it("keeps what a run ran on, and reads an odd stored value as none", () => {
+    const { repo, insert } = setup();
+    const model = { provider: "codex", model: "gpt-5.5", effort: "high", source: "board" };
+    insert({ model });
+    insert({});
+    expect(repo.get("run-1")?.model).toEqual(model);
+    expect(repo.get("run-2")?.model).toBeNull();
   });
 });

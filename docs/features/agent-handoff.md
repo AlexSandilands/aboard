@@ -136,7 +136,7 @@ plans a task suggests a **model tier** for implementing it, and hand-offs use it
 - **Custom models.** Under the tiers, **Custom models** (`modelProfiles`, `services/settings.ts` stores the whole
   list; `modelProfiles.logic.ts` builds each edit on the one still saving) are named models with a tier's fields
   plus task labels. A task carrying one of a model's labels runs on it instead of its tier everywhere a model is
-  picked (`resolveRunModel`; the first model in the list wins a label several claim): the copied prompt names it
+  picked (`resolveTaskModel`, under any choice an operation's settings make, see [Models](autopilot.md#models); the first model in the list wins a label several claim): the copied prompt names it
   (`Model: Codex 6.1 (…), picked by the task's label codex61.`), the T3 dialog starts on its T3 model, the session
   dialog fills in its CLI model, the task panel's Details says "Runs on …", and `get_task` / `epic_overview` show
   **Runs on**. Autopilot uses the same rule, under an automation's own Model setting
@@ -381,7 +381,7 @@ the user turns on **Let agents start threads** ([epics.md](epics.md#t3-code-thre
 | `packages/contracts/src/planPrompt.ts` | Plan tasks: the built-in planning skill, `planTasksPrompt` and its short CLI prompt, which tasks can be planned, the launch inputs |
 | `apps/server/src/services/planning.ts` | Checks a planning session's tasks (`tasksToPlan`) and resolves the project's planning skill |
 | `packages/contracts/src/modelTiers.ts` | Model tiers, the task's `suggestedModel` and the tier settings |
-| `packages/contracts/src/modelProfiles.ts` | Custom models, `ModelChoice` and `resolveRunModel`, the rule that picks a run's or session's model (tested) |
+| `packages/contracts/src/modelProfiles.ts` | Custom models, `ModelChoice` and `resolveTaskModel`, a task's own model; `operations.ts` resolves an operation's (tested) |
 | `packages/contracts/src/t3Launch.ts` | Launch options and launch input schemas, runtime modes and clamping, the default base ref |
 | `apps/server/src/integrations/t3Rpc.ts` | Minimal Effect-RPC client: ticket, socket, request/Exit frames, error mapping |
 | `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, the suggested tier's model (`resolveSuggestion`), workspace → `workspaceStrategy`, a launch without the dialog (`autoLaunchSettings`) |

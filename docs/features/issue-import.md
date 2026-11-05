@@ -34,10 +34,10 @@ Imported tasks land in Backlog like any task created without a plan, and a sourc
 `integrations/issueImport.ts` runs up to three imports at once, in the server process.
 
 - **GitHub.** `gh issue view` reads the issue (`GithubIntegration.fetchIssue`), and its state is stored as
-  the `issue` link's snapshot. Claude Code headless (`claude -p`, `--model`, default `haiku`, or a model tier,
-  see [Settings](#settings)) then turns it
+  the `issue` link's snapshot. Claude Code headless (`claude -p` on the issue import operation's model, the light
+  tier by default, see [Settings](#settings)) then turns it
   into a concise title, a summary and labels. The issue text goes in the prompt, so the run has no tools and
-  no MCP servers. If the model can't run (import turned off, CLI missing, a failure), the task gets the
+  no MCP servers. If the model can't run (import turned off, no provider that can, CLI missing, a failure), the task gets the
   issue's own title, its body cut to 4000 characters and its GitHub labels, and the import still succeeds.
 - **Ticket.** Only the model can read it, through the user's own MCP server for its system, so the run keeps the user's
   MCP configuration (no `--strict-mcp-config`). It runs in the temp folder, not the project's: the project's
@@ -176,21 +176,20 @@ cache; nothing polls an issue, so a restored `issue` link shows no open/closed b
 | Setting                | Default | What it does                                                          |
 | ---------------------- | ------- | --------------------------------------------------------------------- |
 | `issueImportEnabled`   | on      | Run the model. Off: GitHub issues import as written, tickets fail     |
-| `issueImportModel`     | `haiku` | A `HeadlessModel`: a tier or a model for `claude --model`, see below  |
+| `operationModels.issueImport` | light tier | A `ModelChoice`: a tier, a custom model or a typed model, see below |
 | `issueImportBudgetUsd` | 0.5     | `claude --max-budget-usd` for one import                              |
 
 A ticket system's `importTools` and `importInstructions` are on the system ([ticket systems](ticket-systems.md#a-system)),
 not here. Before ticket systems a Jira tools setting (`issueImportJiraTools`) lived here; it became the `jira` system's
 import tools ([upgrading](ticket-systems.md#upgrading-from-the-jira-settings)).
 
-`issueImportModel` is a `HeadlessModel` (`packages/contracts/src/headlessModel.ts`): `{ tier }` or `{ model }`.
-A bare string, which is how it was saved before tiers were an option, parses as `{ model }`, and the settings
-service normalizes a stored string on read (a value that is neither falls back to `haiku`). A tier runs the
-`claude-code` model of that tier in Settings → Model tiers (`resolveHeadlessModel`), at that tier's effort
-(`resolveHeadlessEffort`, as `--effort`; a typed model has none); a tier with none leaves
-`--model` off, so the CLI's own default runs. The picker (`HeadlessModelRow`) says which of the two it will be and
-links to the tier. The board reviewer's model (`reviewModel`, see
-[local review](local-review.md#the-board-reviewer)) is the same type.
+The import is the `issueImport` operation ([Autopilot's Models](autopilot.md#models)): `operationModels.issueImport`
+is a `ModelChoice`, the light tier when unset. It needs a provider that can return structured output and follow tool
+rules, which today is only Claude Code: with none added and switched on, a GitHub issue imports as written (the log
+says why) and a ticket import fails with the reason. A tier runs its Claude Code model at its effort; a tier with none
+leaves `--model` off, so the CLI's own default runs. The picker (`HeadlessModelRow`) says which of the two it will be
+and links to the tier. It was `issueImportModel` (default `haiku`) before 041_operation_models, which moved a saved one
+over as that model on Claude Code; an install that never saved one now runs the light tier.
 
 ## Decisions
 

@@ -3,7 +3,7 @@ import {
   BRAND,
   capHandover,
   inQuietHours,
-  FROM_TASK,
+  INHERIT,
   isRetried,
   latestMinutesSlot,
   localStamp,
@@ -49,7 +49,6 @@ const schema = z.object({
   instructions: z.string().max(10_000),
   budgetUsd: RUNNER_OPTION_SHAPE.budgetUsd,
   timeoutMinutes: RUNNER_OPTION_SHAPE.timeoutMinutes,
-  model: RUNNER_OPTION_SHAPE.model,
   modelChoice: RUNNER_OPTION_SHAPE.modelChoice,
 });
 type OrchestrateConfig = z.infer<typeof schema>;
@@ -60,8 +59,7 @@ const defaults: OrchestrateConfig = {
   instructions: "",
   budgetUsd: 3,
   timeoutMinutes: 30,
-  model: "",
-  modelChoice: FROM_TASK,
+  modelChoice: INHERIT,
 };
 
 /** Run now's dedupe key: its own per request, apart from the slots' `orchestrate:<projectId>:<slot stamp>`. */
@@ -223,12 +221,10 @@ export const orchestrate = defineAutomation({
       placeholder: "E.g. hold PRs that change the board's layout for me to check.",
       help: "Added to the end of the built-in prompt, and win where they differ.",
     },
-    ...RUNNER_FIELDS.filter((f) => ["modelChoice", "budgetUsd", "timeoutMinutes", "model"].includes(f.key)).map((f) =>
+    ...RUNNER_FIELDS.filter((f) => ["modelChoice", "budgetUsd", "timeoutMinutes"].includes(f.key)).map((f) =>
       f.key === "modelChoice"
-        ? { ...f, help: "It has no task, so From the task means the Standard tier." }
-        : f.key === "model"
-          ? { ...f, placeholder: "The model above", help: "As claude --model takes it." }
-          : f,
+        ? { ...f, help: "Inherit: the board's model for Orchestrate, by default the Standard tier." }
+        : f,
     ),
   ],
   defaults,
@@ -294,7 +290,7 @@ export const orchestrate = defineAutomation({
         instructions: config.instructions,
         handover: services.autopilot.lastHandover(AUTOPILOT_ORCHESTRATE, project.id),
       }),
-      tier: "standard",
+      operation: "orchestrate",
       // Task-less, so always headless in an empty folder; `repo` gives it the default branch's push guard.
       options: { ...config, runner: "headless" },
       repo: project.workspaceRoot ?? null,

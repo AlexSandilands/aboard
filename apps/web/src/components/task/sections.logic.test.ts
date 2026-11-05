@@ -294,9 +294,9 @@ describe("summarizeSection", () => {
     expect(summarizeSection("automation", task({ autoReview: true, reviewModel: { tier: "deep" } }))).toBe(
       "Auto-review on · Reviewer deep",
     );
-    expect(summarizeSection("automation", task({ reviewModel: { model: "claude-opus-5-5" } }))).toBe(
-      "Reviewer claude-opus-5-5",
-    );
+    expect(
+      summarizeSection("automation", task({ reviewModel: { provider: "claude-code", model: "claude-opus-5-5" } })),
+    ).toBe("Reviewer claude-opus-5-5");
     expect(summarizeSection("automation", task({ manual: true, autoReview: true }))).toBe("Manual task");
   });
 

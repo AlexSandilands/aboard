@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { suggestedModelLine } from "./handoff.ts";
 import {
+  customProfile,
   describeRunModel,
   type ModelChoice,
   modelChoiceKey,
   ModelProfile,
   ModelProfiles,
+  overrideValue,
+  parseModelChoice,
   parseModelChoiceKey,
   profileCliEffort,
-  profileHeadless,
-  profileHeadlessModel,
-  resolveRunModel,
+  profileCliModel,
+  readLegacyModelChoice,
+  resolveTaskModel,
+  sameModelChoice,
   type ModelSettings,
 } from "./modelProfiles.ts";
 import { EMPTY_MODEL_TIERS } from "./modelTiers.ts";
@@ -30,6 +34,7 @@ const sonnet = ModelProfile.parse({
   t3: null,
   cli: { "claude-code": "sonnet" },
 });
+const deep = { tier: "deep" as const, reason: null };
 const settings: ModelSettings = {
   modelTiers: { ...EMPTY_MODEL_TIERS, deep: { description: "Opus", t3: null, cli: { "claude-code": "opus" } } },
   modelProfiles: [codex, sonnet],
@@ -42,53 +47,47 @@ describe("model profiles", () => {
     expect(ModelProfiles.safeParse([codex, codex]).success).toBe(false);
   });
 
-  it("resolves the automation's choice, then a label, then the tier, then the default", () => {
-    const task = { labels: ["ui", "codex61"], tier: "deep" as const };
-    expect(resolveRunModel({ ...task, choice: { tier: "light" } }, settings)).toMatchObject({
-      source: "automation",
-      profile: { id: "light", tier: "light" },
-    });
-    expect(resolveRunModel({ ...task, choice: { profile: "sonnet" } }, settings)).toMatchObject({
-      source: "automation",
-      profile: { id: "sonnet" },
-    });
-    expect(resolveRunModel({ ...task, choice: { from: "task" } }, settings)).toMatchObject({
+  it("resolves a task's own model: a label, then its tier, then the light tier", () => {
+    expect(resolveTaskModel({ labels: ["ui", "codex61"], suggestedModel: deep }, settings)).toMatchObject({
       source: "label",
       label: "codex61",
       profile: { id: "codex61" },
     });
-    expect(resolveRunModel({ labels: ["ui"], tier: "deep" }, settings)).toMatchObject({
+    expect(resolveTaskModel({ labels: ["ui"], suggestedModel: deep }, settings)).toMatchObject({
       source: "tier",
       profile: { id: "deep" },
     });
-    expect(resolveRunModel({ labels: [], tier: null }, settings)).toEqual({
-      profile: null,
-      source: "default",
-      label: null,
-      note: null,
+    expect(resolveTaskModel({ labels: [], suggestedModel: null }, settings)).toMatchObject({
+      source: "fallback",
+      profile: { id: "light" },
+      explicit: null,
     });
+    expect(resolveTaskModel(null, settings).source).toBe("fallback");
   });
 
   it("gives a label several models claim to the first in the list", () => {
-    expect(resolveRunModel({ labels: ["fast-lane"], tier: null }, settings).profile?.id).toBe("codex61");
+    expect(resolveTaskModel({ labels: ["fast-lane"], suggestedModel: null }, settings).profile?.id).toBe("codex61");
     const swapped = { ...settings, modelProfiles: [sonnet, codex] };
-    expect(resolveRunModel({ labels: ["Fast Lane"], tier: null }, swapped).profile?.id).toBe("sonnet");
+    expect(resolveTaskModel({ labels: ["Fast Lane"], suggestedModel: null }, swapped).profile?.id).toBe("sonnet");
   });
 
-  it("falls back to the task's model, with a note, when the automation's model was deleted", () => {
-    const model = resolveRunModel({ labels: [], tier: "deep", choice: { profile: "gone" } }, settings);
-    expect(model).toMatchObject({ source: "tier", profile: { id: "deep" } });
-    expect(model.note).toContain('"gone" no longer exists');
-  });
-
-  it("picks the headless model and describes where it came from", () => {
-    const label = resolveRunModel({ labels: ["fast-lane"], tier: null }, { ...settings, modelProfiles: [sonnet] });
-    expect(profileHeadlessModel(label.profile)).toBe("sonnet");
+  it("describes a model and where it came from", () => {
+    const label = resolveTaskModel(
+      { labels: ["fast-lane"], suggestedModel: null },
+      { ...settings, modelProfiles: [sonnet] },
+    );
+    expect(profileCliModel(label.profile, "claude-code")).toBe("sonnet");
     expect(describeRunModel(label)).toBe("Sonnet (Sonnet, medium effort), from label fast-lane");
-    const t3Only = resolveRunModel({ labels: ["codex61"], tier: null }, settings);
-    expect(profileHeadlessModel(t3Only.profile)).toBeNull();
-    const tier = resolveRunModel({ labels: [], tier: "deep" }, settings);
-    expect(describeRunModel(tier)).toBe("Deep tier (Opus)");
+    expect(describeRunModel(resolveTaskModel({ labels: [], suggestedModel: deep }, settings))).toBe("Deep tier (Opus)");
+    expect(
+      describeRunModel({
+        profile: null,
+        explicit: { provider: "codex", model: "gpt-5.5", effort: "high" },
+        source: "board",
+        label: null,
+        note: null,
+      }),
+    ).toBe("gpt-5.5 on Codex, high effort, the board's setting");
   });
 
   it("carries a model's effort only while its CLI model is set", () => {
@@ -100,43 +99,68 @@ describe("model profiles", () => {
       cli: { "claude-code": "opus" },
       cliEffort: { "claude-code": "high", "copilot-cli": "low" },
     });
-    const run = resolveRunModel(
-      { labels: [], tier: null, choice: { profile: "hi" } },
-      { ...settings, modelProfiles: [high] },
-    );
-    expect(profileCliEffort(run.profile, "claude-code")).toBe("high");
-    expect(profileCliEffort(run.profile, "copilot-cli")).toBeNull();
+    const profile = customProfile(high);
+    expect(profileCliEffort(profile, "claude-code")).toBe("high");
+    expect(profileCliEffort(profile, "copilot-cli")).toBeNull();
     expect(profileCliEffort(null, "claude-code")).toBeNull();
   });
 
-  it("runs headless on the harness a model names, with that harness's model, else on Claude Code", () => {
-    const headless = ModelProfile.parse({ ...codex, cli: { codex: "gpt-5.5-codex" }, headless: "codex" });
-    expect(profileHeadless({ id: "x", name: "x", tier: null, setting: headless })).toEqual({
-      harness: "codex",
-      model: "gpt-5.5-codex",
-    });
-    const noModel = { id: "x", name: "x", tier: null, setting: { ...headless, cli: {} } };
-    expect(profileHeadless(noModel)).toEqual({ harness: "codex", model: null });
-    // Unset: Claude Code with its own model; a tier works the same way.
-    const label = resolveRunModel({ labels: ["fast-lane"], tier: null }, { ...settings, modelProfiles: [sonnet] });
-    expect(profileHeadless(label.profile)).toEqual({ harness: "claude-code", model: "sonnet" });
-    const tier = resolveRunModel({ labels: [], tier: "deep" }, settings);
-    expect(profileHeadless(tier.profile)).toEqual({ harness: "claude-code", model: "opus" });
-    const copilotTier = {
-      ...settings,
-      modelTiers: { ...settings.modelTiers, light: { description: null, t3: null, headless: "copilot-cli" as const } },
-    };
-    expect(profileHeadless(resolveRunModel({ labels: [], tier: "light" }, copilotTier).profile)).toEqual({
-      harness: "copilot-cli",
-      model: null,
-    });
-    expect(profileHeadless(null)).toEqual({ harness: "claude-code", model: null });
+  it("parses every shape of choice, and nothing else", () => {
+    const choices: ModelChoice[] = [
+      "inherit",
+      { tier: "standard" },
+      { profile: "codex61" },
+      { provider: "codex", model: "gpt-5.5" },
+      { provider: "claude-code", model: "claude-opus-5-5[1m]", effort: "max" },
+    ];
+    for (const choice of choices) expect(parseModelChoice(choice)).toEqual(choice);
+    for (const bad of [
+      { from: "task" },
+      { model: "haiku" },
+      "haiku",
+      { tier: "huge" },
+      { provider: "t3-code", model: "x" },
+    ]) {
+      expect(parseModelChoice(bad)).toBeNull();
+    }
+    expect(parseModelChoice({ provider: "codex", model: "rm -rf" })).toBeNull();
+  });
+
+  it("reads every shape the board ever saved, for migrations and old bundles", () => {
+    expect(readLegacyModelChoice({ from: "task" })).toBe("inherit");
+    expect(readLegacyModelChoice(null)).toBe("inherit");
+    expect(readLegacyModelChoice(undefined)).toBe("inherit");
+    expect(readLegacyModelChoice("")).toBe("inherit");
+    expect(readLegacyModelChoice({ tier: "deep" })).toEqual({ tier: "deep" });
+    expect(readLegacyModelChoice("haiku")).toEqual({ provider: "claude-code", model: "haiku" });
+    expect(readLegacyModelChoice({ model: "haiku" })).toEqual({ provider: "claude-code", model: "haiku" });
+    expect(readLegacyModelChoice("gpt-5.5", "codex")).toEqual({ provider: "codex", model: "gpt-5.5" });
+    expect(readLegacyModelChoice({ profile: "codex61" })).toEqual({ profile: "codex61" });
+    expect(readLegacyModelChoice("not a model")).toBeNull();
+    expect(readLegacyModelChoice(42)).toBeNull();
+  });
+
+  it("stores inherit as no override, and compares choices by value", () => {
+    expect(overrideValue("inherit")).toBeNull();
+    expect(overrideValue(null)).toBeNull();
+    expect(overrideValue({ tier: "deep" })).toEqual({ tier: "deep" });
+    expect(sameModelChoice(null, "inherit")).toBe(true);
+    expect(sameModelChoice({ provider: "codex", model: "a" }, { provider: "codex", model: "a" })).toBe(true);
+    expect(sameModelChoice({ provider: "codex", model: "a" }, { provider: "claude-code", model: "a" })).toBe(false);
   });
 
   it("round-trips a choice through its select key", () => {
-    const choices: ModelChoice[] = [{ from: "task" }, { tier: "standard" }, { profile: "codex61" }];
+    const choices: ModelChoice[] = [
+      "inherit",
+      { tier: "standard" },
+      { profile: "codex61" },
+      { provider: "codex", model: "gpt-5.5" },
+      { provider: "claude-code", model: "claude-opus-5-5[1m]", effort: "max" },
+      { provider: "copilot-cli", model: "anthropic/claude:sonnet" },
+    ];
     for (const choice of choices) expect(parseModelChoiceKey(modelChoiceKey(choice))).toEqual(choice);
-    expect(parseModelChoiceKey("tier:huge")).toEqual({ from: "task" });
+    expect(parseModelChoiceKey("tier:huge")).toBe("inherit");
+    expect(parseModelChoiceKey("model:nope:x")).toBe("inherit");
   });
 
   it("names a label-picked model in a copied work prompt", () => {

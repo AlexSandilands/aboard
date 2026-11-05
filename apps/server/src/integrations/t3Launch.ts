@@ -210,7 +210,8 @@ export function defaultModelSelection(
 }
 
 /**
- * The task's model (resolveRunModel) resolved against T3's providers. Its T3 model is used only when its provider is
+ * The task's model (resolveOperationChoice) resolved against T3's providers. A task with nothing chosen and no tier
+ * (the light fallback) gets no suggestion: the dialog stays on T3's default, as it always has. Its T3 model is used only when its provider is
  * ready and still offers it; option values the model no longer supports are dropped. `reason` is the planner's, shown
  * when the suggested tier picked the model.
  */
@@ -220,7 +221,7 @@ export function resolveSuggestion(
   providers: ReadonlyArray<T3LaunchProvider>,
 ): T3LaunchSuggestion | null {
   const { profile, source } = resolved;
-  if (!profile || source === "default") return null;
+  if (!profile || source === "fallback") return null;
   const suggested = {
     tier: profile.tier,
     name: profile.name,
@@ -268,7 +269,7 @@ export function buildLaunchOptions(input: {
   refs: WireRefs | null;
   shell: ShellSnapshot;
   t3Project: ShellSnapshot["projects"][number];
-  /** The task's model (resolveRunModel); null for a thread with no task. */
+  /** The task's model (resolveOperationChoice); null for a thread with no task. */
   model: RunModel | null;
   /** The planner's reason for the task's suggested tier. */
   reason: string | null;
@@ -328,6 +329,11 @@ export interface AutoLaunchChoice {
   work: boolean;
   /** An automation's choice of model, over the task's labels and tier. */
   modelChoice?: ModelChoice | undefined;
+  /**
+   * Run on T3's default model whatever the task's or the board's settings pick: the run resolved its model already
+   * and it has no T3 model (a model typed for a CLI provider, or the light fallback).
+   */
+  defaultModel?: boolean | undefined;
   /** The ref to branch the new worktree from. Defaults to the default branch, else the current one. */
   baseRef?: string | undefined;
   /**
@@ -349,7 +355,8 @@ export type AutoLaunch = { ok: true; launch: AutoLaunchSettings } | { ok: false;
  * checkout. A folder that isn't a repository can only run in the current checkout.
  */
 export function autoLaunchSettings(options: T3LaunchOptions, choice: AutoLaunchChoice): AutoLaunch {
-  const modelSelection = (choice.work ? options.suggestion?.modelSelection : null) ?? options.defaults.modelSelection;
+  const suggested = choice.work && !choice.defaultModel ? options.suggestion?.modelSelection : null;
+  const modelSelection = suggested ?? options.defaults.modelSelection;
   const provider = options.providers.find((p) => p.instanceId === modelSelection?.instanceId);
   if (!modelSelection || !provider?.ready) return { ok: false, reason: "T3 Code has no model ready to start a thread" };
   // Unattended, so never more access than T3's default: the most permissive supported mode up to it.
