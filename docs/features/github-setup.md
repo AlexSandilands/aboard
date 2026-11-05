@@ -53,7 +53,8 @@ Secret scanning and push protection are on already and aren't managed by the scr
 - Every action is pinned to a commit hash, with its version in a comment, so a moved tag can't change what runs.
 - `.github/dependabot.yml` opens monthly updates for npm and the actions, minor and patch grouped into one PR per
   ecosystem, with `chore(deps):` and `ci(deps):` titles. `commitlint.config.js` skips Dependabot's commits, whose
-  bodies break the footer rules; their PR titles are still linted.
+  bodies break the footer rules; their PR titles are still linted. It never offers `@types/node` majors: those
+  follow the Node version in `engines` and CI, and are bumped by hand along with it.
 - The `pacman` and `aur` jobs in `release.yml` run in the `release` environment, which holds the signing secrets
   and only deploys from `main` and `v*` tags. A workflow on a PR branch can't read them.
 
