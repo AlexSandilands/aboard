@@ -144,13 +144,19 @@ export function runToolsMcpConfig(url: string, token: string): string {
 }
 
 /**
- * Environment for a run whose extra tools name one of the user's MCP servers (a filled tool slot, say). `claude -p`
- * connects MCP servers in the background, so a slow one's tools may not be there on the first turn; this makes it
- * connect them first. Not for a run that gets no user servers (`none`, or read-only and untrusted), nor for one that
- * only needs the board's, so those aren't held up by every other server the user has.
+ * Environment for a run whose tools come from an MCP server it can't work without: one of the user's that its extra
+ * tools name (a filled tool slot, say), or the board's run tools. `claude -p` connects MCP servers in the background,
+ * so a slow one's tools may not be there on the first turn, and a locked-down run has no ToolSearch to find them
+ * later; this makes it connect them first. Not for a run that gets no servers (`none`), nor for one that only needs
+ * the board's, so those aren't held up by every other server the user has. A locked-down run with run tools has only
+ * the board's local servers, so waiting costs it nothing.
  */
-export function mcpWaitEnv(input: Pick<AgentArgsInput, "access" | "untrusted" | "tools">): Record<string, string> {
-  if (input.access === "none" || (input.access === "read-only" && input.untrusted)) return {};
+export function mcpWaitEnv(
+  input: Pick<AgentArgsInput, "access" | "untrusted" | "tools"> & { runTools?: boolean | undefined },
+): Record<string, string> {
+  if (input.access === "none") return {};
+  if (input.runTools) return { MCP_CONNECTION_NONBLOCKING: "false" };
+  if (input.access === "read-only" && input.untrusted) return {};
   const board = `mcp__${BRAND.id}`;
   const userServer = (input.tools ?? []).some(
     (tool) => tool.startsWith("mcp__") && tool !== board && !tool.startsWith(`${board}__`),
@@ -271,6 +277,11 @@ export interface HeadlessDriver {
   harness: AgentHarness;
   /** Its name on PATH. */
   command: string;
+  /**
+   * The CLI reads the run tools' token from its environment (RUN_TOKEN_ENV) rather than from a config file. Only then
+   * does the runner put it there, where every process the agent starts would inherit it.
+   */
+  runTokenFromEnv?: boolean;
   /** How runs and errors name it. */
   label: string;
   capabilities: DriverCapabilities;

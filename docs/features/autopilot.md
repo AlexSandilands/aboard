@@ -884,8 +884,9 @@ empty by default, so rows saved before them still parse (#238 added inputs to sh
   run gets the user's servers (not `access: "none"`, nor read-only and untrusted, which use `--strict-mcp-config`), the
   runner adds `MCP_CONNECTION_NONBLOCKING=false` to the agent's environment beside the push guard's (`mcpWaitEnv`), so
   Claude Code connects them first. Such a run waits for every user server, up to Claude Code's MCP timeout, within the
-  run's own timeout; runs that need only the board's server don't wait. Same cause as ticket imports
-  ([issue-import.md](issue-import.md#the-job)).
+  run's own timeout; runs that need only the board's server don't wait. A run with [run tools](#run-tools) waits too,
+  locked down or not: its only way to read its target is that server, and a locked-down run has no ToolSearch to find
+  a late one. Same cause as ticket imports ([issue-import.md](issue-import.md#the-job)).
 - **Blocked.** While a slot has no tools, `customBlockedReason` gives "Won't work until you fill in: Jira tools". The
   catalogue entry carries it as `Automation.blocked` (`AutopilotAutomation.blocked` in the API): `setScope` refuses
   `mode: "on"` with that message (`VALIDATION`), the UI shows it in orange and disables On, and the automation's `check`
@@ -1324,7 +1325,8 @@ and tool rules only Claude Code can follow ([ADR 0013](../decisions/0013-board-s
   dep): 32 random bytes, kept in memory by its SHA-256 only, alive for the run's timeout plus five minutes and never
   more than a day (`RUN_TOKEN_MAX_TTL_MS`). It writes the MCP config (`runToolsMcpConfig`) to a temp folder of its own
   outside the worktree, mode 0600, and in a `finally` revokes the token and removes the folder, however the run
-  ended. The token is never logged, never in a URL, never on a command line.
+  ended. Only a driver that reads the token from its environment (`runTokenFromEnv`: Codex) gets it there, in
+  `RUN_TOKEN_ENV`. The token is never logged, never in a URL, never on a command line.
 - **The endpoint.** `POST /mcp/run` with `Authorization: Bearer <run token>` (`mcp/runTools.ts`): stateless
   streamable HTTP like `/mcp`, but each request gets a server with only its grant's tools. A missing, unknown,
   revoked or expired token gets 401 without the token in the answer; the board's own API token is neither needed nor

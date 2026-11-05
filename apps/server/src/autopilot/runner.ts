@@ -441,8 +441,8 @@ export function createAutopilotRunner(deps: {
     try {
       const env = {
         ...(where.hooksPath ? pushGuardEnv(where.hooksPath, process.env.GIT_CONFIG_PARAMETERS) : {}),
-        ...mcpWaitEnv({ access, untrusted: request.untrustedInput, tools: request.tools }),
-        ...(tools ? { [RUN_TOKEN_ENV]: tools.token } : {}),
+        ...mcpWaitEnv({ access, untrusted: request.untrustedInput, tools: request.tools, runTools: Boolean(tools) }),
+        ...(tools && driver.runTokenFromEnv ? { [RUN_TOKEN_ENV]: tools.token } : {}),
       };
       const stdout = await runAgent({
         cli: harnessCliSetting(settings, driver.harness),

@@ -134,6 +134,7 @@ export const codexDriver: HeadlessDriver = {
   harness: "codex",
   command: "codex",
   label: "Codex",
+  runTokenFromEnv: true,
   capabilities: HEADLESS_CAPABILITIES.codex,
   args: codexArgs,
   parse: (stdout) => parseCodexOutput(stdout),

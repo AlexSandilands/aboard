@@ -196,8 +196,11 @@ describe("a run on the board's run tools", { timeout: PROCESS_TEST_TIMEOUT }, ()
       const otherAccess = process.platform === "win32" ? 0 : statSync(configPath).mode & 0o077;
       expect(otherAccess).toBe(0);
       const server = JSON.parse(readFileSync(configPath, "utf8")).mcpServers[RUN_SERVER_NAME];
-      // Nothing in the argv carries the token.
+      // Nothing in the argv or the environment carries the token: Claude Code reads it from the config alone.
       expect(args.join(" ")).not.toContain(server.headers.Authorization.slice("Bearer ".length));
+      expect(job.env).not.toHaveProperty(RUN_TOKEN_ENV);
+      // Its only way to read the PR is that server, so it connects it before the first turn.
+      expect(job.env?.MCP_CONNECTION_NONBLOCKING).toBe("false");
       const client = await connect(app, server.url, server.headers);
       try {
         expect((await client.listTools()).tools.map((t) => t.name)).toEqual([

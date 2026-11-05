@@ -268,6 +268,10 @@ describe("headless agent", () => {
     // These runs get no user servers (--strict-mcp-config), so there is nothing to wait for.
     expect(mcpWaitEnv({ access: "none", tools: jira })).toEqual({});
     expect(mcpWaitEnv({ access: "read-only", untrusted: true, tools: jira })).toEqual({});
+    // Run tools are a run's only way to read its target, so it waits for them, locked down or not.
+    expect(mcpWaitEnv({ access: "read-only", untrusted: true, runTools: true })).toEqual(wait);
+    expect(mcpWaitEnv({ access: "edit", runTools: true })).toEqual(wait);
+    expect(mcpWaitEnv({ access: "none", runTools: true })).toEqual({});
   });
 
   it("reads the outcome, with the cost even when the run stopped", () => {
