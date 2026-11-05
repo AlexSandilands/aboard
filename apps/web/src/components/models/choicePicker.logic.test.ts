@@ -85,7 +85,7 @@ describe("choicePickerModel", () => {
     expect(codex.disabledReason).toBe("Codex can't follow tool rules of its own, which Orchestrate needs.");
     expect(codex.warning).toBeNull();
     expect(codex.notice).toContain("codex isn't scanned");
-    expect(codex.settingsTarget).toBe("providers.codex");
+    expect(codex.settingsTarget).toBe("agents.providers.codex");
     expect(choicePickerModel(input({ op: "taskRun" })).tabs.find((t) => t.id === "codex")!.disabledReason).toBeNull();
   });
 

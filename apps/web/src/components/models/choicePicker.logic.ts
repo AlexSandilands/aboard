@@ -334,7 +334,7 @@ export function choicePickerModel(input: ChoicePickerInput): PickerModel {
             disabledReason: null,
             notice: null,
             warning: null,
-            settingsTarget: "models.tiers",
+            settingsTarget: "agents.models.tiers",
             typed: false,
           },
         ]
@@ -350,7 +350,7 @@ export function choicePickerModel(input: ChoicePickerInput): PickerModel {
         notice: scan?.error
           ? `Couldn't list ${harnessLabel(harness)}'s models: ${scan.error}. A model can be typed.`
           : null,
-        settingsTarget: `providers.${harness}`,
+        settingsTarget: `agents.providers.${harness}`,
         // Every CLI takes a model by name, so one the scan doesn't list (or a CLI that isn't scanned) can be typed.
         typed: true,
       };

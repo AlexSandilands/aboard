@@ -69,13 +69,11 @@ export function ModelsPage({ settings, t3 }: { settings: AppSettings; t3: T3Inte
   };
   return (
     <>
-      <SettingsSubsection id="models.tiers">
+      <SettingsSubsection id="agents.models">
         <TiersSection settings={settings} cells={cells} />
-      </SettingsSubsection>
-      <SettingsSubsection id="models.custom">
         <CustomModelsSection profiles={settings.modelProfiles} cells={cells} />
       </SettingsSubsection>
-      <SettingsSubsection id="models.operations">
+      <SettingsSubsection id="agents.operations">
         <OperationsSection settings={settings} />
       </SettingsSubsection>
     </>
@@ -132,7 +130,7 @@ function TiersSection({ settings, cells }: { settings: AppSettings; cells: CellC
     void saveTierChange(edits, updateSettings.mutateAsync, settings.modelTiers[tier], tier, change);
   return (
     <SettingsSection
-      id="models.tiers.list"
+      id="agents.models.tiers.list"
       title="Tiers"
       headerAction={
         anyCli ? (
@@ -153,7 +151,7 @@ function TiersSection({ settings, cells }: { settings: AppSettings; cells: CellC
         {MODEL_TIERS.map(({ value: tier, label, description }) => {
           const setting = settings.modelTiers[tier];
           return (
-            <GridRow key={tier} id={`models.tiers.${tier}`} shown={cells.shown} label={`${label} tier`}>
+            <GridRow key={tier} id={`agents.models.tiers.${tier}`} shown={cells.shown} label={`${label} tier`}>
               <div className="min-w-0 space-y-1.5">
                 <h3 className="text-sm font-medium text-foreground" title={description}>
                   {label}
@@ -186,7 +184,7 @@ function TiersSection({ settings, cells }: { settings: AppSettings; cells: CellC
         A tier's description is named in prompts copied from a task; each cell is the model a session on that provider
         starts on when a task suggests the tier (empty: the provider's default). Headless runs use the provider marked
         Preferred when it can do what the run needs, else the first that can in{" "}
-        <SettingsLink to="providers">Providers</SettingsLink>.
+        <SettingsLink to="agents.providers">Providers</SettingsLink>.
         {cells.shown.length < TIER_PROVIDERS.length ? " A provider's column shows once you add it there." : null}
       </SettingsNote>
     </SettingsSection>
@@ -197,7 +195,7 @@ function ModelGrid({ shown, children }: { shown: readonly TierProvider[]; childr
   if (shown.length === 0) {
     return (
       <SettingsNote>
-        Add a provider in <SettingsLink to="providers">Providers</SettingsLink> to set its models here.
+        Add a provider in <SettingsLink to="agents.providers">Providers</SettingsLink> to set its models here.
       </SettingsNote>
     );
   }
@@ -380,7 +378,7 @@ function CustomModelsSection({ profiles, cells }: { profiles: readonly ModelProf
   const conflicts = labelConflicts(profiles);
   return (
     <SettingsSection
-      id="models.custom.list"
+      id="agents.models.custom.list"
       title="Custom models"
       headerAction={
         <Button
@@ -402,7 +400,12 @@ function CustomModelsSection({ profiles, cells }: { profiles: readonly ModelProf
       ) : (
         <ModelGrid shown={cells.shown}>
           {profiles.map((profile, index) => (
-            <GridRow key={profile.id} id={`models.custom.${profile.id}`} shown={cells.shown} label={profile.name}>
+            <GridRow
+              key={profile.id}
+              id={`agents.models.custom.${profile.id}`}
+              shown={cells.shown}
+              label={profile.name}
+            >
               <div className="min-w-0 space-y-1.5">
                 <div className="flex min-w-0 items-center gap-0.5">
                   <BlurInput
@@ -488,7 +491,7 @@ function OperationsSection({ settings }: { settings: AppSettings }) {
   return (
     <>
       {OPERATION_GROUPS.map((group) => (
-        <SettingsSection key={group.id} id={`models.operations.${group.id}`} title={group.title}>
+        <SettingsSection key={group.id} id={`agents.operations.${group.id}`} title={group.title}>
           {group.operations.map((op) => (
             <OperationRow key={op} op={op} settings={settings} />
           ))}

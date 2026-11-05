@@ -59,7 +59,7 @@ export function ProvidersPage({ settings }: { settings: AppSettings }) {
   const selected = selectedProvider(added, requested);
   const statusOf = (id: ProviderId) => providers.data?.providers.find((p) => p.id === id);
   const select = (id: ProviderId) =>
-    void navigate({ to: "/settings/$group", params: { group: "providers" }, search: { provider: id }, replace: true });
+    void navigate({ to: "/settings/$group", params: { group: "agents" }, search: { provider: id }, replace: true });
   // Each change is applied to the latest list when it runs (useUpdateProviders), not to the one this render saw.
   const save = (change: (current: AppSettings["providers"]) => AppSettings["providers"]) =>
     updateProviders.mutate(change);
@@ -86,7 +86,7 @@ export function ProvidersPage({ settings }: { settings: AppSettings }) {
   const checked = providers.data ? new Date(providers.data.checkedAt) : null;
 
   return (
-    <SettingsSubsection id={selected ? `providers.${selected}` : "providers"}>
+    <SettingsSubsection id="agents.providers">
       <section className="@container/providers space-y-2.5">
         <SettingsSectionHeader
           title="Providers"

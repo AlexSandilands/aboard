@@ -492,7 +492,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
     <SetupBadge
       label="Not detected"
       hint="Start T3 Code to import its projects. Open Settings for details."
-      onClick={() => openSettings("providers.t3-code")}
+      onClick={() => openSettings("agents.providers.t3-code")}
     />
   );
 

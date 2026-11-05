@@ -56,7 +56,7 @@ export function t3PickerModel(catalog: T3ModelCatalog, selection: T3ModelSelecti
       disabledReason: provider.ready ? null : (provider.message ?? `${provider.displayName} isn't ready in T3 Code.`),
       notice: null,
       warning: null,
-      settingsTarget: "providers.t3-code",
+      settingsTarget: "agents.providers.t3-code",
       typed: false,
     })),
   ];

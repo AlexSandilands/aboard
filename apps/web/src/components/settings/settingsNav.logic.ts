@@ -7,8 +7,7 @@ export const SETTINGS_GROUP_IDS = [
   "board",
   "keybindings",
   "tasks",
-  "providers",
-  "models",
+  "agents",
   "autopilot",
   "integrations",
   "project",
@@ -65,21 +64,25 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     ],
   },
   {
-    id: "providers",
-    label: "Providers",
-    // One sub-section per provider, which selects it on the page; the list only shows those the user added.
+    id: "agents",
+    label: "Agents",
+    // Providers come first: until one is added, the other sections have nothing to set and are hidden.
     sections: [
-      section("providers.t3-code", "T3 Code", ["pairing", "threads", "connection", "t3"]),
-      section("providers.claude-code", "Claude Code", ["mcp", "skill", "cli", "session", "claude"]),
-      section("providers.codex", "Codex", ["mcp", "openai", "cli", "headless"]),
-      section("providers.copilot-cli", "GitHub Copilot", ["mcp", "vs code", "cli", "session", "copilot"]),
-    ],
-  },
-  {
-    id: "models",
-    label: "Models",
-    sections: [
-      section("models.tiers", "Tiers", [
+      section("agents.providers", "Providers", [
+        "t3 code",
+        "claude code",
+        "codex",
+        "copilot",
+        "mcp",
+        "skill",
+        "cli",
+        "pairing",
+        "threads",
+        "openai",
+        "vs code",
+        "add provider",
+      ]),
+      section("agents.models", "Models", [
         "light",
         "standard",
         "deep",
@@ -94,9 +97,12 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
         "effort",
         "preferred provider",
         "model tiers",
+        "custom model",
+        "profile",
+        "label",
+        "model per label",
       ]),
-      section("models.custom", "Custom models", ["custom model", "profile", "label", "model per label"]),
-      section("models.operations", "Operations", [
+      section("agents.operations", "Operations", [
         "operation",
         "reviewer model",
         "board reviewer",
@@ -178,27 +184,47 @@ const MOVED_TARGETS: ReadonlyArray<[string, string]> = [
 ];
 
 /**
- * A target from before it moved: a provider's from before providers had their own page
- * (`integrations.claude-code.cli-path`, a bookmark or an old link) as it is now (`providers.claude-code.cli-path`),
- * and the model settings that moved to the Models page. Any other target as it is.
+ * The Providers and Models pages, merged into Agents: their old targets by prefix (the longest that matches wins), so
+ * bookmarks and links into either keep working.
  */
-export function redirectSettingsTarget(target: string): string {
-  for (const [old, moved] of MOVED_TARGETS) {
-    if (old.endsWith(".") ? target.startsWith(old) : target === old) {
-      return old.endsWith(".") ? moved + target.slice(old.length) : moved;
-    }
-  }
-  for (const [old, provider] of Object.entries(MOVED_PROVIDER_SECTIONS)) {
-    if (target !== old && !target.startsWith(`${old}.`)) continue;
-    const moved = `providers.${provider}${target.slice(old.length)}`;
-    return MOVED_PROVIDER_ROWS[moved] ?? moved;
+const MOVED_TO_AGENTS: ReadonlyArray<[string, string]> = [
+  ["providers", "agents.providers"],
+  ["models.operations", "agents.operations"],
+  ["models.tiers", "agents.models.tiers"],
+  ["models.custom", "agents.models.custom"],
+  ["models", "agents.models"],
+];
+
+function movedToAgents(target: string): string {
+  for (const [old, moved] of MOVED_TO_AGENTS) {
+    if (target === old || target.startsWith(`${old}.`)) return moved + target.slice(old.length);
   }
   return target;
 }
 
 /**
+ * A target from before it moved: a provider's from before providers had their own page
+ * (`integrations.claude-code.cli-path`, a bookmark or an old link) and anything on the old Providers and Models pages
+ * as it is now on Agents (`agents.providers.claude-code.cli-path`), and the model settings that moved to the Models
+ * page. Any other target as it is.
+ */
+export function redirectSettingsTarget(target: string): string {
+  for (const [old, moved] of MOVED_TARGETS) {
+    if (old.endsWith(".") ? target.startsWith(old) : target === old) {
+      return movedToAgents(old.endsWith(".") ? moved + target.slice(old.length) : moved);
+    }
+  }
+  for (const [old, provider] of Object.entries(MOVED_PROVIDER_SECTIONS)) {
+    if (target !== old && !target.startsWith(`${old}.`)) continue;
+    const moved = `providers.${provider}${target.slice(old.length)}`;
+    return movedToAgents(MOVED_PROVIDER_ROWS[moved] ?? moved);
+  }
+  return movedToAgents(MOVED_PROVIDER_ROWS[target] ?? target);
+}
+
+/**
  * Where a settings target lives: a group (`"tasks"`), a section (`"tasks.review"`) or a row
- * (`"providers.claude-code.cli-path"`). The group is the first segment; anything longer is the anchor to scroll
+ * (`"agents.providers.claude-code.cli-path"`). The group is the first segment; anything longer is the anchor to scroll
  * to. Null when the first segment isn't a group. An old target is read as the one it moved to.
  */
 export function parseSettingsTarget(target: string): { group: SettingsGroupId; anchor: string | null } | null {
@@ -208,23 +234,23 @@ export function parseSettingsTarget(target: string): { group: SettingsGroupId; a
   return { group, anchor: current === group ? null : current };
 }
 
-/** The provider a Providers target is about (`providers.codex.cli-path` → codex), or null. */
+/** The provider a Providers target is about (`agents.providers.codex.cli-path` → codex), or null. */
 export function providerOfTarget(target: string | null | undefined): ProviderId | null {
-  const [group, id] = (target ?? "").split(".");
+  const [group, page, id] = (target ?? "").split(".");
   const parsed = ProviderId.safeParse(id);
-  return group === "providers" && parsed.success ? parsed.data : null;
+  return group === "agents" && page === "providers" && parsed.success ? parsed.data : null;
 }
 
 /**
- * The sub-sections the list shows for a group: on Providers only the providers the user added, so one that wasn't
- * appears nowhere but the Add provider dialog.
+ * The sub-sections the list shows for a group: on Agents only Providers until the user adds one, since Models and
+ * Operations have nothing to set without one.
  */
 export function visibleSections(
   group: SettingsGroupDef,
   added: ReadonlyArray<{ id: ProviderId }> | undefined,
 ): ReadonlyArray<SettingsSectionDef> {
-  if (group.id !== "providers") return group.sections;
-  return group.sections.filter((entry) => added?.some((p) => providerOfTarget(entry.id) === p.id));
+  if (group.id !== "agents" || (added?.length ?? 0) > 0) return group.sections;
+  return group.sections.filter((entry) => entry.id === "agents.providers");
 }
 
 /** The sidebar section that holds an anchor (a section id, or a row id under one). */

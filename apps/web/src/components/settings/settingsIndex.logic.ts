@@ -54,7 +54,7 @@ const draft = (id: string, title: string, description: string, keywords: Readonl
  */
 export const DYNAMIC_ROW_PREFIXES: ReadonlyArray<string> = [
   "integrations.github.host-",
-  "models.custom.",
+  "agents.models.custom.",
   "integrations.tickets.system-",
 ];
 
@@ -403,12 +403,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
   ),
   // Providers › T3 Code
   draft(
-    "providers.t3-code.status",
+    "agents.providers.t3-code.status",
     "T3 Code connection",
     "Whether the board can reach the T3 Code app on this machine.",
     ["status", "detected", "running"],
   ),
-  draft("providers.t3-code.models", "T3 Code models per tier", MODELS_PER_TIER, [
+  draft("agents.providers.t3-code.models", "T3 Code models per tier", MODELS_PER_TIER, [
     "model tier",
     "light",
     "standard",
@@ -417,55 +417,55 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "effort",
   ]),
   draft(
-    "providers.t3-code.open-links-in",
+    "agents.providers.t3-code.open-links-in",
     "Open thread links in",
     "Where “Open in T3 Code” goes. The other target stays in the link's menu.",
     ["desktop app", "browser", "deep link"],
   ),
   draft(
-    "providers.t3-code.pairing",
+    "agents.providers.t3-code.pairing",
     "T3 Code pairing",
     "Optional. Live thread status and starting threads from a task.",
     ["pairing code", "token", "connect", "credentials", "link"],
   ),
   draft(
-    "providers.t3-code.agent-threads",
+    "agents.providers.t3-code.agent-threads",
     "Let agents start threads",
     "An agent orchestrating an epic may start its tasks in new T3 threads and message them in your name.",
     ["epic", "orchestrator", "subagent", "worktree", "permission"],
   ),
   draft(
-    "providers.t3-code.handoff-menus",
+    "agents.providers.t3-code.handoff-menus",
     "Show T3 Code in hand-off menus",
     "Offer “New T3 Code thread…” on tasks and lanes. Off hides it from the board's menus.",
     ["hide", "show", "menu", "hand off", "handoff", "new thread", "new session", "disable", "start"],
   ),
   // Providers › Claude Code
-  draft("providers.claude-code.mcp", "Claude Code MCP server", MCP, [
+  draft("agents.providers.claude-code.mcp", "Claude Code MCP server", MCP, [
     "add mcp",
     "claude mcp add",
     "register",
     "command",
   ]),
   draft(
-    "providers.claude-code.skill",
+    "agents.providers.claude-code.skill",
     "Claude Code board skills",
     `${BOARD_SKILL} In ~/.claude/skills.`,
     BOARD_SKILL_KEYWORDS,
   ),
   draft(
-    "providers.claude-code.cli-path",
+    "agents.providers.claude-code.cli-path",
     "Claude Code CLI path",
     "What the board runs headless for the board reviewer, issue import and the settings Ask, and opens for a new Claude Code session. Leave empty to use claude from your PATH.",
     ["claude path", "executable", "binary", "headless", "session"],
   ),
   draft(
-    "providers.claude-code.handoff-menus",
+    "agents.providers.claude-code.handoff-menus",
     "Show Claude Code in hand-off menus",
     "Offer “New Claude Code session…” on tasks and lanes. Off hides it from the board's menus.",
     ["hide", "show", "menu", "hand off", "handoff", "new thread", "new session", "disable", "start"],
   ),
-  draft("providers.claude-code.models", "Claude Code models per tier", MODELS_PER_TIER, [
+  draft("agents.providers.claude-code.models", "Claude Code models per tier", MODELS_PER_TIER, [
     "model tier",
     "light",
     "standard",
@@ -475,35 +475,35 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "new session",
   ]),
   // Providers › GitHub Copilot, Codex
-  draft("providers.copilot-cli.mcp", "Copilot CLI MCP server", `${MCP} In ~/.copilot/mcp-config.json.`, [
+  draft("agents.providers.copilot-cli.mcp", "Copilot CLI MCP server", `${MCP} In ~/.copilot/mcp-config.json.`, [
     "add mcp",
     "github copilot",
     "register",
     "mcp-config",
   ]),
   draft(
-    "providers.copilot-cli.vscode",
+    "agents.providers.copilot-cli.vscode",
     "Copilot in VS Code",
     "Add the MCP server to your VS Code user profile, or to .vscode/mcp.json.",
     ["github copilot", "mcp.json", "editor", "servers"],
   ),
-  draft("providers.copilot-cli.skill", "Copilot board skills", `${BOARD_SKILL} In ~/.copilot/skills.`, [
+  draft("agents.providers.copilot-cli.skill", "Copilot board skills", `${BOARD_SKILL} In ~/.copilot/skills.`, [
     "github copilot",
     ...BOARD_SKILL_KEYWORDS,
   ]),
   draft(
-    "providers.copilot-cli.cli-path",
+    "agents.providers.copilot-cli.cli-path",
     "Copilot CLI path",
     "What the board opens for a new Copilot CLI session. Leave empty to use copilot from your PATH.",
     ["github copilot", "executable", "binary", "session"],
   ),
   draft(
-    "providers.copilot-cli.handoff-menus",
+    "agents.providers.copilot-cli.handoff-menus",
     "Show Copilot CLI in hand-off menus",
     "Offer “New Copilot CLI session…” on tasks and lanes. Off hides it from the board's menus.",
     ["github copilot", "hide", "show", "menu", "hand off", "handoff", "new thread", "new session", "disable", "start"],
   ),
-  draft("providers.copilot-cli.models", "Copilot models per tier", MODELS_PER_TIER, [
+  draft("agents.providers.copilot-cli.models", "Copilot models per tier", MODELS_PER_TIER, [
     "github copilot",
     "model tier",
     "light",
@@ -513,8 +513,8 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "session model",
     "new session",
   ]),
-  draft("providers.codex.mcp", "Codex MCP server", MCP, ["openai", "add mcp", "register", "command"]),
-  draft("providers.codex.models", "Codex models per tier", MODELS_PER_TIER, [
+  draft("agents.providers.codex.mcp", "Codex MCP server", MCP, ["openai", "add mcp", "register", "command"]),
+  draft("agents.providers.codex.models", "Codex models per tier", MODELS_PER_TIER, [
     "openai",
     "model tier",
     "light",
@@ -524,17 +524,17 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "headless",
   ]),
   draft(
-    "providers.codex.cli-path",
+    "agents.providers.codex.cli-path",
     "Codex CLI path",
     "What headless Autopilot runs start for a model that runs on Codex. Leave empty to use codex from your PATH.",
     ["openai", "executable", "binary", "headless", "autopilot"],
   ),
-  draft("providers.codex.skill", "Codex board skills", `${BOARD_SKILL} In ~/.codex/skills.`, [
+  draft("agents.providers.codex.skill", "Codex board skills", `${BOARD_SKILL} In ~/.codex/skills.`, [
     "openai",
     ...BOARD_SKILL_KEYWORDS,
   ]),
   draft(
-    "providers.codex.snippet",
+    "agents.providers.codex.snippet",
     "AGENTS.md snippet",
     "Copy the board's instructions for your AGENTS.md, for agents that don't read skills. Says when it changed since you copied it.",
     ["agents.md", "instructions", "copy", "other agents", "workflow"],
@@ -685,7 +685,7 @@ function generated(): Draft[] {
       ),
     ),
     draft(
-      "models.tiers.list",
+      "agents.models.tiers.list",
       "Tiers",
       "What light, standard and deep mean for you: a description, and the model each provider starts a session on.",
       [
@@ -703,13 +703,13 @@ function generated(): Draft[] {
       ],
     ),
     draft(
-      "models.custom.list",
+      "agents.models.custom.list",
       "Custom models",
       "Named models beyond the tiers, each with the task labels that pick it and the models each provider starts on.",
       ["custom model", "profile", "label", "codex", "override", "model per label", "automation model"],
     ),
     ...MODEL_TIERS.map(({ value, label, description }) =>
-      draft(`models.tiers.${value}`, `${label} model`, description, [
+      draft(`agents.models.tiers.${value}`, `${label} model`, description, [
         "model tier",
         "suggested model",
         "t3 code model",
@@ -724,7 +724,7 @@ function generated(): Draft[] {
     ),
     ...OPERATION_GROUPS.map((group) =>
       draft(
-        `models.operations.${group.id}`,
+        `agents.operations.${group.id}`,
         `${group.title} models`,
         `The model each of these runs on: ${group.operations.map((op) => OPERATIONS[op].label).join(", ")}.`,
         ["operation", "model", "inherit", "tier"],
@@ -793,9 +793,9 @@ const CARD_IDS: ReadonlySet<string> = new Set([
   "board.data.archived-projects",
   "tasks.new-tasks.templates",
   "tasks.new-tasks.issue-import",
-  "models.tiers.list",
-  "models.custom.list",
-  ...OPERATION_GROUPS.map((group) => `models.operations.${group.id}`),
+  "agents.models.tiers.list",
+  "agents.models.custom.list",
+  ...OPERATION_GROUPS.map((group) => `agents.operations.${group.id}`),
   "project.autopilot.automations",
   "project.autopilot.variables",
   "autopilot.custom.variables",

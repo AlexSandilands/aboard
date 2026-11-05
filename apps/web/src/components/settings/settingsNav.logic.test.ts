@@ -39,22 +39,31 @@ describe("parseSettingsTarget", () => {
   it("splits a target into its group and the anchor to scroll to", () => {
     expect(parseSettingsTarget("tasks")).toEqual({ group: "tasks", anchor: null });
     expect(parseSettingsTarget("tasks.review")).toEqual({ group: "tasks", anchor: "tasks.review" });
-    expect(parseSettingsTarget("providers.claude-code.cli-path")).toEqual({
-      group: "providers",
-      anchor: "providers.claude-code.cli-path",
+    expect(parseSettingsTarget("agents.providers.claude-code.cli-path")).toEqual({
+      group: "agents",
+      anchor: "agents.providers.claude-code.cli-path",
     });
+  });
+
+  it("reads a target on the old Providers and Models pages as the one on Agents", () => {
+    expect(redirectSettingsTarget("providers")).toBe("agents.providers");
+    expect(redirectSettingsTarget("providers.codex.cli-path")).toBe("agents.providers.codex.cli-path");
+    expect(redirectSettingsTarget("models")).toBe("agents.models");
+    expect(redirectSettingsTarget("models.custom.list")).toBe("agents.models.custom.list");
+    expect(redirectSettingsTarget("models.operations.reviewer")).toBe("agents.operations.reviewer");
+    expect(redirectSettingsTarget("modelsx")).toBe("modelsx");
   });
 
   it("reads a target from before Providers had its own page as the one it moved to", () => {
     expect(parseSettingsTarget("integrations.claude-code.cli-path")).toEqual({
-      group: "providers",
-      anchor: "providers.claude-code.cli-path",
+      group: "agents",
+      anchor: "agents.providers.claude-code.cli-path",
     });
-    expect(redirectSettingsTarget("integrations.copilot")).toBe("providers.copilot-cli");
-    expect(redirectSettingsTarget("integrations.copilot.cli")).toBe("providers.copilot-cli.mcp");
-    expect(redirectSettingsTarget("integrations.copilot.cli-path")).toBe("providers.copilot-cli.cli-path");
-    expect(redirectSettingsTarget("integrations.t3-code.connection")).toBe("providers.t3-code.status");
-    expect(redirectSettingsTarget("integrations.codex.status")).toBe("providers.codex.status");
+    expect(redirectSettingsTarget("integrations.copilot")).toBe("agents.providers.copilot-cli");
+    expect(redirectSettingsTarget("integrations.copilot.cli")).toBe("agents.providers.copilot-cli.mcp");
+    expect(redirectSettingsTarget("integrations.copilot.cli-path")).toBe("agents.providers.copilot-cli.cli-path");
+    expect(redirectSettingsTarget("integrations.t3-code.connection")).toBe("agents.providers.t3-code.status");
+    expect(redirectSettingsTarget("integrations.codex.status")).toBe("agents.providers.codex.status");
     // What stayed in Integrations stays put, and a lookalike prefix isn't moved.
     expect(redirectSettingsTarget("integrations.github.poll-prs")).toBe("integrations.github.poll-prs");
     expect(redirectSettingsTarget("integrations.codexes")).toBe("integrations.codexes");
@@ -71,7 +80,7 @@ describe("sectionOf", () => {
   it("maps a section or a row inside it to the section", () => {
     expect(sectionOf("autopilot.engine")?.label).toBe("Autopilot");
     expect(sectionOf("autopilot.engine.quiet-hours")?.id).toBe("autopilot.engine");
-    expect(sectionOf("providers.claude-code.cli-path")?.id).toBe("providers.claude-code");
+    expect(sectionOf("agents.providers.claude-code.cli-path")?.id).toBe("agents.providers");
   });
 
   it("doesn't match a section whose id is only a prefix of another word", () => {
@@ -82,20 +91,22 @@ describe("sectionOf", () => {
 
 describe("providers in the list", () => {
   it("reads the provider a target is about", () => {
-    expect(providerOfTarget("providers.codex.cli-path")).toBe("codex");
-    expect(providerOfTarget("providers.copilot-cli")).toBe("copilot-cli");
-    expect(providerOfTarget("providers")).toBeNull();
-    expect(providerOfTarget("providers.gemini")).toBeNull();
+    expect(providerOfTarget("agents.providers.codex.cli-path")).toBe("codex");
+    expect(providerOfTarget("agents.providers.copilot-cli")).toBe("copilot-cli");
+    expect(providerOfTarget("agents.providers")).toBeNull();
+    expect(providerOfTarget("agents.providers.gemini")).toBeNull();
+    expect(providerOfTarget("agents.models.codex")).toBeNull();
     expect(providerOfTarget("tasks.codex")).toBeNull();
     expect(providerOfTarget(null)).toBeNull();
   });
 
-  it("lists only the providers the user added, and every other group's sections", () => {
-    const providers = settingsGroup("providers");
-    expect(visibleSections(providers, []).map((s) => s.id)).toEqual([]);
-    expect(visibleSections(providers, [{ id: "copilot-cli" }, { id: "t3-code" }]).map((s) => s.id)).toEqual([
-      "providers.t3-code",
-      "providers.copilot-cli",
+  it("shows only Providers on Agents until one is added, and every other group's sections", () => {
+    const agents = settingsGroup("agents");
+    expect(visibleSections(agents, []).map((s) => s.id)).toEqual(["agents.providers"]);
+    expect(visibleSections(agents, [{ id: "codex" }]).map((s) => s.id)).toEqual([
+      "agents.providers",
+      "agents.models",
+      "agents.operations",
     ]);
     expect(visibleSections(settingsGroup("tasks"), undefined)).toBe(settingsGroup("tasks").sections);
   });
@@ -169,8 +180,7 @@ describe("settingsPaletteEntries", () => {
       "Settings: Board",
       "Settings: Keybindings",
       "Settings: Tasks",
-      "Settings: Providers",
-      "Settings: Models",
+      "Settings: Agents",
       "Settings: Autopilot",
       "Settings: Integrations",
       "Settings: Project",
@@ -184,10 +194,10 @@ describe("settingsPaletteEntries", () => {
   });
 
   it("sends the model settings that moved to where they are now", () => {
-    expect(redirectSettingsTarget("models.tiers.custom")).toBe("models.custom.list");
-    expect(redirectSettingsTarget("models.tiers.custom.codex61")).toBe("models.custom.codex61");
-    expect(redirectSettingsTarget("tasks.review.model")).toBe("models.operations.reviewer");
-    expect(redirectSettingsTarget("tasks.new-tasks.import-model")).toBe("models.operations.issueImport");
+    expect(redirectSettingsTarget("models.tiers.custom")).toBe("agents.models.custom.list");
+    expect(redirectSettingsTarget("models.tiers.custom.codex61")).toBe("agents.models.custom.codex61");
+    expect(redirectSettingsTarget("tasks.review.model")).toBe("agents.operations.reviewer");
+    expect(redirectSettingsTarget("tasks.new-tasks.import-model")).toBe("agents.operations.issueImport");
     expect(parseSettingsTarget("project.review-skill.model")).toEqual({
       group: "project",
       anchor: "project.models.reviewer",
@@ -195,11 +205,11 @@ describe("settingsPaletteEntries", () => {
     expect(redirectSettingsTarget("tasks.review.rounds")).toBe("tasks.review.rounds");
   });
 
-  it("finds the Models page by the old names for its settings", () => {
-    const group = settingsPaletteEntries().find((e) => e.target === "models");
+  it("finds the Models section by the old names for its settings", () => {
+    const group = settingsPaletteEntries().find((e) => e.target === "agents");
     expect(group?.isGroup).toBe(true);
-    expect(parseSettingsTarget("models.tiers.light")).toEqual({ group: "models", anchor: "models.tiers.light" });
-    expect(sectionOf("models.tiers.light")?.id).toBe("models.tiers");
-    expect(settingsGroup("models").sections[0]?.keywords).toEqual(expect.arrayContaining(["session model", "--model"]));
+    expect(parseSettingsTarget("models.tiers.light")).toEqual({ group: "agents", anchor: "agents.models.tiers.light" });
+    expect(sectionOf("agents.models.tiers.light")?.id).toBe("agents.models");
+    expect(settingsGroup("agents").sections[1]?.keywords).toEqual(expect.arrayContaining(["session model", "--model"]));
   });
 });

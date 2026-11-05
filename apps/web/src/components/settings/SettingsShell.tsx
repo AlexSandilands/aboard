@@ -4,16 +4,16 @@ import { Outlet, useLocation, useSearch } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
   BlocksIcon,
-  CpuIcon,
+  BotIcon,
   FolderIcon,
   KeyboardIcon,
   ListTodoIcon,
   type LucideIcon,
-  PlugIcon,
   SquareKanbanIcon,
   ZapIcon,
 } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
+import { AgentsVariantSelect } from "./agentsVariants/VariantSelect";
 import { SidebarBrandRow } from "~/components/sidebar/SidebarBrandRow";
 import {
   SidebarContent,
@@ -49,8 +49,7 @@ const GROUP_ICONS: Record<SettingsGroupId, LucideIcon> = {
   board: SquareKanbanIcon,
   keybindings: KeyboardIcon,
   tasks: ListTodoIcon,
-  providers: PlugIcon,
-  models: CpuIcon,
+  agents: BotIcon,
   autopilot: ZapIcon,
   integrations: BlocksIcon,
   project: FolderIcon,
@@ -251,7 +250,11 @@ export function SettingsTopBar({
           })}
         </ol>
       </nav>
-      {actions ? <div className="ms-auto flex shrink-0 items-center gap-1.5">{actions}</div> : null}
+      <div className="ms-auto flex shrink-0 items-center gap-1.5">
+        {/* Temporary (#97): compare the competing Agents designs. */}
+        <AgentsVariantSelect />
+        {actions}
+      </div>
     </header>
   );
 }

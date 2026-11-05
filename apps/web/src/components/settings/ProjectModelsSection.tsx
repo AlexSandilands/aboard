@@ -23,7 +23,7 @@ export function ProjectModelsSection({ project }: { project: Project }) {
         info={
           <>
             Inherit uses the board's, set under{" "}
-            <SettingsLink to="models.operations.reviewer">Models › Operations</SettingsLink>. The board reviewer needs a
+            <SettingsLink to="agents.operations.reviewer">Models › Operations</SettingsLink>. The board reviewer needs a
             provider that can return structured output.
           </>
         }

@@ -103,8 +103,8 @@ describe("settingsLocation", () => {
   it("names the group and sub-section a setting is in", () => {
     const row = entries.find((entry) => entry.id === "autopilot.engine.quiet-hours")!;
     expect(settingsLocation(row)).toBe("Autopilot");
-    const provider = entries.find((entry) => entry.id === "providers.claude-code.cli-path")!;
-    expect(settingsLocation(provider)).toBe("Providers › Claude Code");
+    const provider = entries.find((entry) => entry.id === "agents.providers.claude-code.cli-path")!;
+    expect(settingsLocation(provider)).toBe("Agents › Providers");
   });
 
   it("gives a sub-section just its group", () => {

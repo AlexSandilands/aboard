@@ -72,11 +72,27 @@ export const settingsGroupRoute = createRoute({
   path: "$group",
   validateSearch: (search) => SettingsGroupSearch.parse(search),
   beforeLoad: ({ params, location }) => {
+    const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
     if (!isSettingsGroup(params.group)) {
-      throw redirect({ to: "/settings/$group", params: { group: "board" }, replace: true });
+      // The old Providers and Models pages are sections of Agents now; anything else goes to the first page.
+      const moved = redirectSettingsTarget(hash || params.group);
+      const group = moved.split(".")[0]!;
+      if (!isSettingsGroup(group))
+        throw redirect({ to: "/settings/$group", params: { group: "board" }, replace: true });
+      const search = location.search as { provider?: string };
+      throw redirect({
+        to: "/settings/$group",
+        params: { group },
+        search: search.provider
+          ? { provider: search.provider }
+          : providerOfTarget(moved)
+            ? { provider: providerOfTarget(moved)! }
+            : {},
+        hash: moved,
+        replace: true,
+      });
     }
     // An old link into Integrations (`#integrations.claude-code.cli-path`) goes to where that setting is now.
-    const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
     const moved = hash ? redirectSettingsTarget(hash) : hash;
     if (moved !== hash) {
       const provider = providerOfTarget(moved);

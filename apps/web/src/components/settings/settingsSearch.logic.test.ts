@@ -43,7 +43,7 @@ describe("searchSettings", () => {
   });
 
   it("finds a setting by an alternative name", () => {
-    expect(ids("copilot")).toContain("providers.copilot-cli");
+    expect(ids("copilot")).toContain("agents.providers.copilot-cli.mcp");
     expect(ids("dark mode")).toContain("board.appearance.theme");
     expect(ids("do not disturb")).toContain("board.notifications.mute-quiet-hours");
   });
@@ -63,7 +63,7 @@ describe("searchSettings", () => {
 
   it("finds generated rows: notification kinds and model tiers", () => {
     expect(ids("checks failing")).toContain("board.notifications.kind-pr_checks_failing");
-    expect(ids("deep")).toContain("models.tiers.deep");
+    expect(ids("deep")).toContain("agents.models.tiers.deep");
   });
 
   it("returns a sub-section after a row of the same rank", () => {

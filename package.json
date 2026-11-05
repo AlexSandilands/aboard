@@ -32,6 +32,7 @@
     "github:check": "node scripts/github-setup.ts --check",
     "github:setup": "node scripts/github-setup.ts",
     "demo:record": "node scripts/demo/director.ts",
+    "agents:shots": "node scripts/agents-shots.ts",
     "skill:embed": "node scripts/embed-board-skill.ts",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm docs:check && pnpm github:check && pnpm test",
     "prepare": "lefthook install"
