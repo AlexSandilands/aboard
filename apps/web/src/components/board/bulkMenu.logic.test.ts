@@ -1,7 +1,11 @@
 import type { TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  automationEligible,
   bulkArchive,
+  bulkAutoMerge,
+  bulkAutoReview,
+  bulkAutopilot,
   bulkCloseable,
   bulkLabel,
   bulkLabelChoices,
@@ -26,6 +30,9 @@ const task = (over: Partial<TaskSummary> & { number: number }): TaskSummary =>
     resolution: null,
     priority: false,
     manual: false,
+    autopilot: null,
+    autoMerge: null,
+    autoReview: null,
     labels: [],
     progress: { done: 0, total: 3 },
     ...over,
@@ -146,5 +153,44 @@ describe("wording", () => {
     expect(bulkSummary((n) => `Moved ${n} to Review`, { ok: 2, skipped: 1, failed: 1 }, "no plan")).toBe(
       "Moved 2 tasks to Review, 1 skipped (no plan), 1 failed",
     );
+  });
+});
+
+describe("bulk automation", () => {
+  const plain = task({ number: 1 });
+  const epic = task({ number: 2, kind: "epic" });
+  const manual = task({ number: 3, manual: true });
+  const archived = task({ number: 4, archivedAt: "2026-01-01" });
+  const all = [plain, epic, manual, archived];
+
+  it("offers automation to open, non-manual tasks only", () => {
+    expect(all.filter(automationEligible).map((t) => t.number)).toEqual([1]);
+    expect(bulkAutopilot(all, true).map((t) => t.number)).toEqual([1]);
+    expect(bulkAutoMerge(all, true).map((t) => t.number)).toEqual([1]);
+    expect(bulkAutoReview(all, true, false).map((t) => t.number)).toEqual([1]);
+  });
+
+  it("treats Default and Off alike for Autopilot and auto-merge", () => {
+    const tasks = [
+      task({ number: 1, autopilot: null, autoMerge: null }),
+      task({ number: 2, autopilot: false, autoMerge: false }),
+      task({ number: 3, autopilot: true, autoMerge: true }),
+    ];
+    expect(bulkAutopilot(tasks, true).map((t) => t.number)).toEqual([1, 2]);
+    expect(bulkAutopilot(tasks, false).map((t) => t.number)).toEqual([3]);
+    expect(bulkAutoMerge(tasks, true).map((t) => t.number)).toEqual([1, 2]);
+    expect(bulkAutoMerge(tasks, false).map((t) => t.number)).toEqual([3]);
+  });
+
+  it("reads auto-review against the board's setting when the task inherits", () => {
+    const tasks = [
+      task({ number: 1, autoReview: null }),
+      task({ number: 2, autoReview: true }),
+      task({ number: 3, autoReview: false }),
+    ];
+    expect(bulkAutoReview(tasks, true, false).map((t) => t.number)).toEqual([1, 3]);
+    expect(bulkAutoReview(tasks, false, false).map((t) => t.number)).toEqual([2]);
+    expect(bulkAutoReview(tasks, true, true).map((t) => t.number)).toEqual([3]);
+    expect(bulkAutoReview(tasks, false, true).map((t) => t.number)).toEqual([1, 2]);
   });
 });
