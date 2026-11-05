@@ -249,6 +249,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     ["move", "copy", "transfer", "machine", "laptop", "desktop", "import"],
   ),
   draft(
+    "board.data.backup-reset",
+    "Reset backup settings",
+    "Forget the folder, remote and machine name and turn backup off, so Set up backup starts over.",
+    ["clear", "unset", "remove", "folder", "remote", "start over", "setup"],
+  ),
+  draft(
     "board.data.archived-projects",
     "Archived projects",
     "Archiving a project hides its lane; it can be restored here.",

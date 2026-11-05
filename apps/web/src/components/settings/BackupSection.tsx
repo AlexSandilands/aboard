@@ -2,6 +2,7 @@ import type { AppSettings, BackupStatus } from "@repo/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { withTrailingSeparator } from "~/components/command/palette.logic";
+import { ConfirmDialog } from "~/components/task/ConfirmDialog";
 import { Button } from "~/components/ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
@@ -10,7 +11,7 @@ import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { useUpdateSettings } from "~/state/mutations";
 import { queryKeys, useBackupStatus } from "~/state/queries";
 import { BackupSetupDialog } from "./BackupSetupDialog";
-import { backupState } from "./backupSetup.logic";
+import { backupState, canResetBackup, CLEAR_BACKUP_FOLDER, RESET_BACKUP_SETTINGS } from "./backupSetup.logic";
 import { BlurInput } from "./BlurInput";
 import { FolderPicker } from "./FolderPicker";
 import { MoveTasksDialog } from "./MoveTasksDialog";
@@ -32,6 +33,7 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
   const [browsing, setBrowsing] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [confirming, setConfirming] = useState<"clear" | "reset" | null>(null);
   const [setup, setSetup] = useState<"folder" | "github" | null>(null);
   const state = backupState(settings);
   const run = useMutation({
@@ -95,9 +97,16 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
         }
         control={
           browsing ? null : (
-            <Button size="sm" variant="outline" onClick={() => setBrowsing(true)}>
-              {settings.backupDir ? "Change" : "Choose"}
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setBrowsing(true)}>
+                {settings.backupDir ? "Change" : "Choose"}
+              </Button>
+              {settings.backupDir ? (
+                <Button size="sm" variant="outline" onClick={() => setConfirming("clear")}>
+                  Clear
+                </Button>
+              ) : null}
+            </div>
           )
         }
       >
@@ -171,7 +180,14 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="board.data.backup-last"
         title="Last backup"
-        description={<BackupStatusLine status={status.data} remote={settings.backupRemote} />}
+        // The last run belongs to a folder that is no longer set, and its error would linger after a clear.
+        description={
+          settings.backupDir ? (
+            <BackupStatusLine status={status.data} remote={settings.backupRemote} />
+          ) : (
+            "No backup folder is set."
+          )
+        }
         control={
           <Button
             size="sm"
@@ -209,6 +225,34 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
         }
       />
       {moving ? <MoveTasksDialog open onClose={() => setMoving(false)} /> : null}
+      {canResetBackup(settings) ? (
+        <SettingsRow
+          id="board.data.backup-reset"
+          title="Reset backup settings"
+          description="Forget the folder, remote and machine name and turn backup off, so Set up backup starts over."
+          control={
+            <Button size="sm" variant="outline" onClick={() => setConfirming("reset")}>
+              Reset…
+            </Button>
+          }
+        />
+      ) : null}
+      <ConfirmDialog
+        open={confirming === "clear"}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title="Clear the backup folder?"
+        description="Backup turns off and the board stops using this folder. The folder, its backups and the remote stay where they are; nothing is deleted. The remote and machine name are kept."
+        confirmLabel="Clear folder"
+        onConfirm={() => updateSettings.mutate(CLEAR_BACKUP_FOLDER)}
+      />
+      <ConfirmDialog
+        open={confirming === "reset"}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        title="Reset backup settings?"
+        description="Backup turns off and the board forgets the folder, remote and machine name (the host name is used again). The folder, its backups and the remote stay where they are; nothing is deleted. You can run Set up backup again afterwards."
+        confirmLabel="Reset"
+        onConfirm={() => updateSettings.mutate(RESET_BACKUP_SETTINGS)}
+      />
     </SettingsSection>
   );
 }
