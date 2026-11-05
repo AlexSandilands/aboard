@@ -226,7 +226,11 @@ The board-run reviewer survives as fallback 3, where it fits: rounds nobody else
   finds nothing to fix, the message it posts into the task's T3 thread (an idle agent never reads the
   board). Each says to push to the PR instead when one is already linked, as after a re-review. As a safety net, `get_task`
   lists a PR under **Missing links** when the task is in Review, `reviewIsDone` says the loop ended (clean,
-  or no further round allowed) and no PR is linked. Nothing is added without auto-review.
+  or no further round allowed) and no PR is linked. While the loop is still going (`reviewIsInProgress`: a round
+  pending, running or stalled, or findings open with rounds left under auto-review) and no PR is linked, it says
+  instead that none is expected yet and the PR comes once the loop ends, so nobody (the Orchestrate agent included)
+  asks for one early. Each state gets exactly one PR line, and a linked PR gets none. Nothing is added without
+  auto-review.
 - **`get_task` shows a pointer, not the loop.** The reviewer reads the task with `get_task` too. If that
   result told it to start a reviewer subagent, it might start one of its own. So `get_task` only says that a
   round is waiting and who does what; the loop instructions come from `move_task` and `start_review`.

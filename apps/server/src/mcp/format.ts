@@ -17,6 +17,7 @@ import {
   reviewFixedAtLimit,
   resolveTaskModel,
   reviewIsDone,
+  reviewIsInProgress,
   type ReviewFinding,
   type PlanPhase,
   type PrSnapshot,
@@ -345,13 +346,14 @@ export function eventText(event: TaskEvent): string {
 
 /**
  * Links an open task is missing, each naming the exact call that adds it: ticket keys mentioned in the description
- * (and in the title, for a system that doesn't link them itself), the agent's own T3 thread, and the PR once the review loop has ended. Agents act on what tool results say far more reliably than on
+ * (and in the title, for a system that doesn't link them itself), the agent's own T3 thread, and the PR (why none is expected yet, while the review loop runs, or to open it once it has ended). Agents act on what tool results say far more reliably than on
  * instructions read once, and `link` is idempotent, so following a hint twice is harmless.
  */
 export function missingLinkHints(
   task: TaskDetail,
   sessionHarness: AgentHarness | null = null,
   ticketSystems: readonly TicketSystem[] = [],
+  autoReview = false,
 ): string[] {
   if (task.status === "done" || task.archivedAt) return [];
   const ref = `"#${task.number}"`;
@@ -385,13 +387,22 @@ export function missingLinkHints(
         "and reopen it in a terminal from the board",
     );
   }
-  // The review loop ended but no PR was raised: the one step agents tend to drop at the very end of it.
-  if (task.status === "review" && reviewIsDone(task.review) && !task.links.some((l) => l.kind === "pr")) {
-    hints.push(
-      "PR: the review loop has ended and no pull request is linked. Fix any open blocking/major findings you can, " +
-        "then open the pull request, listing any still open in its description, unless the user asked you not to, " +
-        `and link(task: ${ref}, value: "<PR URL>")`,
-    );
+  // No PR is linked in Review: exactly one line says why, so nobody asks for one mid-loop (the PR is opened once the
+  // loop ends, and a PR opened early is reviewed on GitHub twice) or forgets it at the very end of it.
+  if (task.status === "review" && !task.links.some((l) => l.kind === "pr")) {
+    if (reviewIsInProgress(task.review, autoReview)) {
+      hints.push(
+        "PR: none is expected yet. The local review loop is still going (a round is pending or running, or findings " +
+          "are open with rounds left), so don't raise a PR until it ends. Finish the loop first " +
+          `(start_review(task: ${ref}) gives the brief); get_task asks for the PR once the loop has ended`,
+      );
+    } else if (reviewIsDone(task.review)) {
+      hints.push(
+        "PR: the review loop has ended and no pull request is linked. Fix any open blocking/major findings you can, " +
+          "then open the pull request, listing any still open in its description, unless the user asked you not to, " +
+          `and link(task: ${ref}, value: "<PR URL>")`,
+      );
+    }
   }
   return hints;
 }
@@ -759,6 +770,8 @@ export function renderTaskDetail(
     deliveryHint?: string | null;
     /** Adds the "Plan progress" nudges; off for renderings that aren't for the implementing agent. */
     progress?: { now: number; closing?: boolean };
+    /** The task's effective auto-review setting, which decides whether a loop with rounds left is still going (PR hint). */
+    autoReview?: boolean;
     /** For an epic: each child's newest activity, shown in its overview. */
     childActivity?: ChildActivity;
     /** Images pasted into the task's text, with where they are on disk. */
@@ -866,7 +879,7 @@ export function renderTaskDetail(
     lines.push("", "Links:");
     for (const link of task.links) lines.push(`- ${linkText(link, opts.ticketSystems)}`);
   }
-  const missing = missingLinkHints(task, opts.sessionHarness ?? null, opts.ticketSystems);
+  const missing = missingLinkHints(task, opts.sessionHarness ?? null, opts.ticketSystems, opts.autoReview ?? false);
   if (missing.length) {
     lines.push("", "Missing links:");
     for (const hint of missing) lines.push(`- ${hint}`);
@@ -908,6 +921,7 @@ export function renderTaskShort(
     autopilotHint?: boolean;
     deliveryHint?: string | null;
     progress?: { now: number; closing?: boolean };
+    autoReview?: boolean;
     ticketSystems?: readonly TicketSystem[];
   } = {},
 ): string {
