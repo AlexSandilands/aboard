@@ -53,6 +53,11 @@ export interface ChoicePickerInput {
   choices: boolean;
   /** The inherit row: its name and what it comes down to now. Null leaves inherit out. */
   inherit: { label: string; detail: string | null } | null;
+  /**
+   * A row for no setting at this level (saved as none, so the level below decides): the board's operation models,
+   * where none takes the operation's default while inherit, for an operation on a task, takes the task's own model.
+   */
+  unset?: { label: string; detail: string | null } | null;
   /** Only this provider's models can be picked. */
   lockedProvider: AgentHarness | null;
   /** Offer the CLI's own default model, under this name, first in each provider's tab. */
@@ -61,6 +66,7 @@ export interface ChoicePickerInput {
 
 /** What a row saves: inherit, a tier, a custom model, or a provider's model (null for the CLI's default). */
 export type PickedChoice =
+  | { kind: "unset" }
   | { kind: "inherit" }
   | { kind: "tier"; tier: ModelTier }
   | { kind: "profile"; id: string }
@@ -70,8 +76,11 @@ export const modelRowKey = (provider: AgentHarness, model: string) => `model:${p
 const defaultRowKey = (provider: AgentHarness) => `default:${provider}`;
 const typedRowKey = (provider: AgentHarness, model: string) => `typed:${provider}:${model}`;
 
+const UNSET_KEY = "unset";
+
 /** The pick a row's key stands for, or null for a key that isn't a row's (the legacy toggle). */
 export function parsePickKey(key: string): PickedChoice | null {
+  if (key === UNSET_KEY) return { kind: "unset" };
   if (key === INHERIT) return { kind: "inherit" };
   if (key.startsWith("tier:")) {
     const tier = ModelTier.safeParse(key.slice(5));
@@ -86,9 +95,13 @@ export function parsePickKey(key: string): PickedChoice | null {
   return null;
 }
 
-/** The key of the row a saved choice shows as. */
-export function choiceRowKey(value: ModelChoice | null): string {
-  if (!value || value === INHERIT) return INHERIT;
+/**
+ * The key of the row a saved choice shows as. With an unset row, none shows as it and inherit as the inherit row;
+ * without one, both show as inherit.
+ */
+export function choiceRowKey(value: ModelChoice | null, hasUnset = false, hasInherit = true): string {
+  if (!value) return hasUnset ? UNSET_KEY : INHERIT;
+  if (value === INHERIT) return hasInherit || !hasUnset ? INHERIT : UNSET_KEY;
   if ("tier" in value) return `tier:${value.tier}`;
   if ("profile" in value) return `profile:${value.profile}`;
   return modelRowKey(value.provider, value.model);
@@ -168,6 +181,17 @@ function choiceRows(input: ChoicePickerInput): PickerRow[] {
     closes: true,
   });
   const rows: PickerRow[] = [];
+  if (input.unset) {
+    rows.push(
+      row({
+        key: UNSET_KEY,
+        icon: { kind: "inherit" },
+        name: input.unset.label,
+        value: "",
+        detail: input.unset.detail,
+      }),
+    );
+  }
   if (input.inherit) {
     rows.push(
       row({
@@ -315,7 +339,7 @@ export function choicePickerModel(input: ChoicePickerInput): PickerModel {
       ? input.defaultLabel && harnesses[0]
         ? defaultRowKey(harnesses[0])
         : null
-      : choiceRowKey(value);
+      : choiceRowKey(value, !!input.unset, !!input.inherit);
   return { tabs, rows, selectedKey: rows.some((row) => row.key === selectedKey) ? selectedKey : null };
 }
 
@@ -368,15 +392,17 @@ const isHarnessTab = (model: PickerModel, id: string) =>
   model.tabs.some((tab) => tab.id === id) && AgentHarness.safeParse(id).success;
 
 /**
- * The choice a pick saves. A provider's model keeps the saved effort while the new model takes it; the CLI's default
- * model (null) saves no choice here, which a caller without one reads as inherit.
+ * The choice a pick saves: null for the unset row. A provider's model keeps the saved effort while the new model
+ * takes it; the CLI's default model (null) saves inherit, as there is no choice to keep.
  */
 export function choiceForPick(
   pick: PickedChoice,
   current: ModelChoice | null,
   scanned: AgentModels | undefined,
-): ModelChoice {
+): ModelChoice | null {
   switch (pick.kind) {
+    case "unset":
+      return null;
     case "inherit":
       return INHERIT;
     case "tier":
@@ -415,7 +441,7 @@ export function choiceEffortColumn(
 ): EffortColumnModel {
   const empty = (note: string): EffortColumnModel => ({ modelLabel, groups: [], toggles: [], note });
   if (!pick) return empty("Pick a model to set its effort.");
-  if (pick.kind === "inherit") return empty("The setting it inherits sets the effort.");
+  if (pick.kind === "inherit" || pick.kind === "unset") return empty("The setting it comes down to sets the effort.");
   if (pick.kind !== "model") return empty("A tier or custom model sets its own effort on the Models page.");
   if (!pick.model) return empty(`${harnessLabel(pick.provider)}'s default model runs at its default effort.`);
   const levels = modelLevels(scanned, pick.provider, pick.model);

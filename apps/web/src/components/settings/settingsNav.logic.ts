@@ -77,9 +77,9 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
   },
   {
     id: "models",
-    label: "Model tiers",
+    label: "Models",
     sections: [
-      section("models.tiers", "Model tiers", [
+      section("models.tiers", "Tiers", [
         "light",
         "standard",
         "deep",
@@ -90,7 +90,24 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
         "t3 code",
         "claude code",
         "copilot",
+        "codex",
         "effort",
+        "preferred provider",
+        "model tiers",
+      ]),
+      section("models.custom", "Custom models", ["custom model", "profile", "label", "model per label"]),
+      section("models.operations", "Operations", [
+        "operation",
+        "reviewer model",
+        "board reviewer",
+        "pr review",
+        "fix prs",
+        "orchestrate",
+        "digest",
+        "issue import",
+        "ask",
+        "headless",
+        "automation model",
       ]),
     ],
   },
@@ -118,6 +135,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
       section("project.general", "General", ["name", "icon", "folder", "workspace"]),
       section("project.plan-skill", "Planning skill"),
       section("project.review-skill", "Review skill"),
+      section("project.models", "Reviewer model", ["models", "review model", "board reviewer"]),
       section("project.autopilot", "Autopilot overrides", ["automations"]),
       section("project.recurring", "Recurring tasks", ["schedule", "rules"]),
       section("project.danger-zone", "Danger zone", ["archive", "delete"]),
@@ -148,10 +166,28 @@ const MOVED_PROVIDER_ROWS: Record<string, string> = {
 };
 
 /**
- * A target from before providers had their own page (`integrations.claude-code.cli-path`, a bookmark or an old link)
- * as it is now (`providers.claude-code.cli-path`); any other target as it is.
+ * Targets that moved to the Models page, or to their own section, by their old id; one ending in "." moves every row
+ * under it.
+ */
+const MOVED_TARGETS: ReadonlyArray<[string, string]> = [
+  ["models.tiers.custom.", "models.custom."],
+  ["models.tiers.custom", "models.custom.list"],
+  ["tasks.review.model", "models.operations.reviewer"],
+  ["tasks.new-tasks.import-model", "models.operations.issueImport"],
+  ["project.review-skill.model", "project.models.reviewer"],
+];
+
+/**
+ * A target from before it moved: a provider's from before providers had their own page
+ * (`integrations.claude-code.cli-path`, a bookmark or an old link) as it is now (`providers.claude-code.cli-path`),
+ * and the model settings that moved to the Models page. Any other target as it is.
  */
 export function redirectSettingsTarget(target: string): string {
+  for (const [old, moved] of MOVED_TARGETS) {
+    if (old.endsWith(".") ? target.startsWith(old) : target === old) {
+      return old.endsWith(".") ? moved + target.slice(old.length) : moved;
+    }
+  }
   for (const [old, provider] of Object.entries(MOVED_PROVIDER_SECTIONS)) {
     if (target !== old && !target.startsWith(`${old}.`)) continue;
     const moved = `providers.${provider}${target.slice(old.length)}`;

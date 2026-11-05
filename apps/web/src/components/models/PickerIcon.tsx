@@ -1,6 +1,6 @@
 import { CornerDownRightIcon, GaugeIcon, LayersIcon, SparklesIcon, StarIcon } from "lucide-react";
 import { ProviderIcon } from "~/components/handoff/T3LaunchPickers";
-import { HarnessIcon } from "~/components/sessions/SessionParts";
+import { HarnessIcon, T3Icon } from "~/components/sessions/SessionParts";
 import { cn } from "~/lib/utils";
 import type { PickerIcon as PickerIconKind } from "./modelPicker.logic";
 
@@ -12,6 +12,8 @@ export function PickerIcon({ icon, className }: { icon: PickerIconKind; classNam
       return <HarnessIcon harness={icon.harness} className={size} />;
     case "t3":
       return <ProviderIcon driver={icon.driver} className={size} />;
+    case "t3code":
+      return <T3Icon className={size} />;
     case "choices":
       return <LayersIcon aria-hidden className={size} />;
     case "favorites":

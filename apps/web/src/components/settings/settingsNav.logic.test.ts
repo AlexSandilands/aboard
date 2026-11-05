@@ -170,7 +170,7 @@ describe("settingsPaletteEntries", () => {
       "Settings: Keybindings",
       "Settings: Tasks",
       "Settings: Providers",
-      "Settings: Model tiers",
+      "Settings: Models",
       "Settings: Autopilot",
       "Settings: Integrations",
       "Settings: Project",
@@ -180,10 +180,22 @@ describe("settingsPaletteEntries", () => {
     expect(review?.searchTerms).toContain("Tasks");
     // No second "Settings: Autopilot" for the Autopilot page's own section.
     expect(entries.filter((e) => e.title === "Settings: Autopilot")).toHaveLength(1);
-    expect(entries.filter((e) => e.title === "Settings: Model tiers")).toHaveLength(1);
+    expect(entries.filter((e) => e.title === "Settings: Models")).toHaveLength(1);
   });
 
-  it("finds the Model tiers page by the old names for its settings", () => {
+  it("sends the model settings that moved to where they are now", () => {
+    expect(redirectSettingsTarget("models.tiers.custom")).toBe("models.custom.list");
+    expect(redirectSettingsTarget("models.tiers.custom.codex61")).toBe("models.custom.codex61");
+    expect(redirectSettingsTarget("tasks.review.model")).toBe("models.operations.reviewer");
+    expect(redirectSettingsTarget("tasks.new-tasks.import-model")).toBe("models.operations.issueImport");
+    expect(parseSettingsTarget("project.review-skill.model")).toEqual({
+      group: "project",
+      anchor: "project.models.reviewer",
+    });
+    expect(redirectSettingsTarget("tasks.review.rounds")).toBe("tasks.review.rounds");
+  });
+
+  it("finds the Models page by the old names for its settings", () => {
     const group = settingsPaletteEntries().find((e) => e.target === "models");
     expect(group?.isGroup).toBe(true);
     expect(parseSettingsTarget("models.tiers.light")).toEqual({ group: "models", anchor: "models.tiers.light" });

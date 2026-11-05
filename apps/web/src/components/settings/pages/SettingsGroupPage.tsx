@@ -13,7 +13,7 @@ import { BackupSection } from "../BackupSection";
 import { GithubSection } from "../IntegrationsSections";
 import { IssueImportSection } from "../IssueImportSection";
 import { KeybindingsSection } from "../KeybindingsSection";
-import { ModelTiersSection } from "../ModelTiersSection";
+import { ModelsPage } from "../ModelsPage";
 import { PlanSkillSection } from "../PlanSkillSection";
 import { ProvidersPage } from "../ProvidersPage";
 import { ReviewSettingsSection } from "../ReviewSettingsSection";
@@ -112,11 +112,7 @@ function TasksContent() {
 
 function ModelsContent() {
   const integrations = useIntegrationsStatus();
-  return (
-    <SettingsSubsection id="models.tiers">
-      <WithSettings>{(settings) => <ModelTiersSection settings={settings} t3={integrations.data?.t3} />}</WithSettings>
-    </SettingsSubsection>
-  );
+  return <WithSettings>{(settings) => <ModelsPage settings={settings} t3={integrations.data?.t3} />}</WithSettings>;
 }
 
 function IntegrationsContent() {

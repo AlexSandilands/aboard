@@ -14,6 +14,8 @@ export type PickerIcon =
   | { kind: "harness"; harness: AgentHarness }
   /** A T3 Code provider instance, by its driver ("claudeAgent", "codex"). */
   | { kind: "t3"; driver: string }
+  /** T3 Code itself. */
+  | { kind: "t3code" }
   | { kind: "choices" }
   | { kind: "favorites" }
   /** Rows of the Choices tab. */

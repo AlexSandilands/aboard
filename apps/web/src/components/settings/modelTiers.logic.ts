@@ -1,6 +1,8 @@
-// Pure helpers for the Model tiers page: which providers' fields a tier row shows, and the tier one edit sends.
+// Pure helpers for the tiers and custom models on the Models page: which providers' fields a tier row shows, and the tier one edit sends.
+import type {
+  AgentHarness} from "@repo/contracts";
 import {
-  AgentHarness,
+  MODEL_TIERS,
   type CliEffort,
   type ModelTier,
   type ModelTierSetting,
@@ -28,20 +30,11 @@ export function visibleTierProviders(active: TierProviderState): TierProvider[] 
   return TIER_PROVIDERS.map(({ provider }) => provider).filter((provider) => active[provider] === true);
 }
 
-/**
- * What the Headless runs select offers: the harnesses added and on, plus the one saved (Claude Code when none is), so
- * the select never shows a value it doesn't list.
- */
-export function headlessHarnesses(shown: ReadonlySet<TierProvider>, value: AgentHarness | undefined): AgentHarness[] {
-  const current = value ?? "claude-code";
-  return AgentHarness.options.filter((harness) => shown.has(harness) || harness === current);
-}
-
 /** Settings' providers as the page's state: T3 Code's id is "t3" here. */
 export const tierProviderState = (providers: readonly ProviderSetting[]): TierProviderState =>
   Object.fromEntries(providers.filter((p) => p.enabled).map((p) => [p.id === "t3-code" ? "t3" : p.id, true]));
 
-/** One edit to a tier: the description, T3 Code's model, the `--model` or effort of one CLI, or its headless harness. */
+/** One edit to a tier: the description, T3 Code's model, the `--model` or effort of one CLI, or its preferred provider. */
 export type TierChange =
   | { field: "description"; value: string | null }
   | { field: "t3"; value: ModelTierSetting["t3"] }
@@ -53,7 +46,7 @@ export type TierChange =
       levels?: readonly CliEffort[];
     }
   | { field: "cliEffort"; harness: AgentHarness; value: CliEffort | null }
-  /** The harness headless Autopilot runs use; Claude Code is stored as no choice. */
+  /** The provider headless runs on this model prefer (the Preferred radio). */
   | { field: "headless"; value: AgentHarness };
 
 /** The efforts without the harness's: null clears it, and nothing is left behind as an empty record. */
@@ -138,4 +131,33 @@ export function saveTierChange(
     () => edits.settle(tier),
     () => edits.settle(tier),
   );
+}
+
+/** What one tier is set to on one provider, for that provider's own page. */
+export interface ProviderTierModel {
+  tier: ModelTier;
+  label: string;
+  /** The model's name (T3 Code's label, or the CLI's `--model`), or null for the provider's default. */
+  model: string | null;
+  effort: CliEffort | null;
+  /** Headless runs on this tier prefer this provider. */
+  preferred: boolean;
+}
+
+/** Each tier's model on a provider, light to deep. */
+export function providerTierModels(tiers: ModelTiers, provider: TierProvider): ProviderTierModel[] {
+  return MODEL_TIERS.map(({ value, label }) => {
+    const setting = tiers[value];
+    if (provider === "t3") {
+      return { tier: value, label, model: setting.t3?.label ?? null, effort: null, preferred: false };
+    }
+    const model = setting.cli?.[provider]?.trim() || null;
+    return {
+      tier: value,
+      label,
+      model,
+      effort: model ? (setting.cliEffort?.[provider] ?? null) : null,
+      preferred: setting.provider === provider,
+    };
+  });
 }

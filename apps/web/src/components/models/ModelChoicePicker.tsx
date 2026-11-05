@@ -5,7 +5,6 @@ import {
   MODEL_TIERS,
   type AgentHarness,
   type ModelChoice,
-  type OperationContext,
   type OperationId,
   type OperationNeed,
   type OperationSettings,
@@ -17,7 +16,6 @@ import {
   choiceForPick,
   choicePickerModel,
   findScanned,
-  inheritDetail,
   modelLevels,
   parsePickKey,
   typedRows,
@@ -33,8 +31,8 @@ const hasHarness = (settings: OperationSettings | undefined) =>
 
 /**
  * The shared picker for a ModelChoice: inherit, a tier, a custom model, or one provider's model with its effort.
- * Providers that can't run `op` are greyed out with the reason. `inherit` names what inheriting comes down to (the
- * next level's context, resolved now); without it inherit isn't offered.
+ * Providers that can't run `op` are greyed out with the reason. `inherit` and `unset` name their rows and what each
+ * comes down to (inheritDetail); a row left out isn't offered. `onChange` gets null for the unset row.
  */
 export function ModelChoicePicker({
   value,
@@ -42,6 +40,7 @@ export function ModelChoicePicker({
   op,
   needs,
   inherit,
+  unset = null,
   lockedProvider = null,
   ariaLabel,
   size,
@@ -49,10 +48,11 @@ export function ModelChoicePicker({
   disabled,
 }: {
   value: ModelChoice | null;
-  onChange: (next: ModelChoice) => void;
+  onChange: (next: ModelChoice | null) => void;
   op: OperationId;
   needs?: readonly OperationNeed[];
-  inherit: { label: string; ctx: OperationContext } | null;
+  inherit: { label: string; detail: string | null } | null;
+  unset?: { label: string; detail: string | null } | null;
   lockedProvider?: AgentHarness | null;
   ariaLabel: string;
   size?: "sm" | "xs";
@@ -69,13 +69,14 @@ export function ModelChoicePicker({
     op,
     needs,
     choices: true,
-    inherit: inherit ? { label: inherit.label, detail: inheritDetail(op, inherit.ctx, settings) } : null,
+    inherit,
+    unset,
     lockedProvider,
   };
   const model = choicePickerModel(input);
-  const pick = parsePickKey(model.selectedKey ?? "") ?? (inherit ? { kind: "inherit" as const } : null);
+  const pick = parsePickKey(model.selectedKey ?? "");
   const explicit = value && value !== INHERIT && "provider" in value ? value : null;
-  const trigger = choiceTrigger(value, settings, inherit?.label ?? null);
+  const trigger = choiceTrigger(value, settings, (value ? (inherit ?? unset) : (unset ?? inherit))?.label ?? null);
   return (
     <ModelPicker
       model={model}
