@@ -75,7 +75,8 @@ which lets `merge_task_pr` merge the task's PR into the default branch. Agents s
 task out), `list_tasks` filters by `epic`, and `create_epic` can group existing `tasks` when it creates the
 epic. `get_task` on an epic and `epic_overview` render its tasks instead of a plan. `get_handoff_prompt` returns
 the hand-off prompt the board would copy (with `subagent: true`, the variant for an orchestrator's subagent), so an
-epic's orchestrator can start its tasks; with `tasks: ["#3", "#4"]` instead of `task`, it returns the prompt that
+epic's orchestrator can start its tasks; for a Done task it defaults to mode `followup`
+([agent-handoff.md](agent-handoff.md#follow-up-finished-tasks)), which `start_task_thread` also takes; with `tasks: ["#3", "#4"]` instead of `task`, it returns the prompt that
 plans several of a project's tasks with the user ([agent-handoff.md](agent-handoff.md#plan-tasks-several-tasks-at-once)).
 `create_epic` and `update_task` (epics only) take `delivery: "main" |
 "integration"`; switching to integration makes the epic's branch on origin first. See [epics.md](epics.md#delivery).

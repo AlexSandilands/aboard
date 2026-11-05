@@ -195,11 +195,16 @@ start means the epic stops every time a task is done. An epic can instead delive
   badge and press **Mark merged into main**.
 - The epic's tasks start from that branch and open their pull requests against it: Start planned tasks, the
   hand-off prompts and **New T3 Code thread…** all default to it.
-- **Merge into epic branch** merges a task's pull request into the epic's branch, with a merge commit, once all of
+- **Merge into epic branch** merges a task's pull request into the epic's branch once all of
   these hold: the task is in Review, its local review has finished with no blocking or major finding open, Review
   PRs (when it's on) found nothing at or above the fix threshold at the current commit, no reviewer asked for
   changes, its checks pass (a repository with no checks waits ten minutes after each push, in case they just
   haven't started) and it merges cleanly. The task then goes to Done, so the tasks it blocks can start from the updated branch.
+- It merges with a merge commit if the repository allows one, otherwise a squash, otherwise a rebase, going by the
+  repository's settings when it merges (and moving to the next method if GitHub refuses one, for example because of a
+  branch rule). A squash-only repository therefore gets squashed task commits on the epic's branch. That can
+  conflict for a task whose branch was built on another task's branch that hasn't merged yet; tasks normally start
+  from the epic's branch once the tasks blocking them are Done, so it rarely comes up.
 - If the merge fails for a reason that may pass (another task's pull request merged into the branch first), it
   tries again a couple of times. If GitHub won't let it merge (a branch rule wants an approving review, say), the task shows **Ready to merge into
   the epic branch** under Needs attention and you get a notification. Merge it yourself.

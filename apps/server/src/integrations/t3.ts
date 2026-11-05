@@ -431,6 +431,8 @@ export interface TaskThreadInput extends AutoLaunchChoice {
   commandId: string;
   /** The thread's title in T3 Code; defaults to the task's number and title. */
   title?: string;
+  /** A follow-up on finished work: linked with role "followup", so the board never messages it (see startThread). */
+  followUp?: boolean;
 }
 
 /** A thread launched without the dialog: its link and what was chosen for it. */
@@ -893,13 +895,14 @@ export function createT3Integration(deps: {
     input: StartT3ThreadInput,
     actor: string,
     title?: string,
-    fromCard = false,
+    /** Asked for a follow-up (the card's dialog, or start_task_thread in follow-up mode). */
+    followUpAsked = false,
   ): Promise<TaskLink> => {
     const ctx = await launchContext({ taskId });
     const threadId = await launch(ctx, input, title ?? `#${ctx.task!.number} ${ctx.task!.title}`, taskId);
     // A thread the user opens on finished work is to ask about it: the board must not hand it review messages meant
     // for the thread that did the work (see implementingThread).
-    const followUp = fromCard && (ctx.task!.status === "review" || ctx.task!.status === "done");
+    const followUp = followUpAsked && (ctx.task!.status === "review" || ctx.task!.status === "done");
     const link = deps
       .services()
       .links.add(
@@ -933,7 +936,7 @@ export function createT3Integration(deps: {
 
   const launchTaskThread = async (
     taskId: string,
-    { prompt, commandId, title, ...choice }: TaskThreadInput,
+    { prompt, commandId, title, followUp = false, ...choice }: TaskThreadInput,
     actor: string,
   ): Promise<TaskThreadLaunch> => {
     const { options, refsListed, refsUnreachable } = await loadLaunchOptions({ taskId }, choice.modelChoice);
@@ -945,7 +948,7 @@ export function createT3Integration(deps: {
     }
     const auto = autoLaunchSettings(options, choice);
     if (!auto.ok) throw new AppError("VALIDATION", auto.reason);
-    const link = await startThread(taskId, { prompt, commandId, ...auto.launch }, actor, title);
+    const link = await startThread(taskId, { prompt, commandId, ...auto.launch }, actor, title, followUp);
     const unavailable = choice.work && !choice.defaultModel ? (options.suggestion?.unavailable ?? null) : null;
     return { link, ...auto.launch, suggestionUnavailable: unavailable };
   };

@@ -713,6 +713,73 @@ describe("github merge into an epic's branch", () => {
     expect(snapshots.get("l1")).toMatchObject({ state: "merged", baseRef: "epic/3-checkout" });
   });
 
+  const epicInput = { base: "epic/3-checkout", headOid: "head-1" };
+  const methodsSent = (gh: ReturnType<typeof setup>["gh"]) => gh.mutations.map((m) => m.input.mergeMethod);
+
+  it("squashes where the repository allows only squash merges", async () => {
+    const { gh, github, snapshots } = setup([link()]);
+    gh.repos.set("o/r", { ...repo, mergeCommitAllowed: false, squashMergeAllowed: true, rebaseMergeAllowed: false });
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
+    await expect(github.mergeIntoEpicBranch(link(), epicInput)).resolves.toEqual({ method: "squash" });
+    expect(methodsSent(gh)).toEqual(["SQUASH"]);
+    expect(snapshots.get("l1")).toMatchObject({ state: "merged" });
+  });
+
+  it("keeps a merge commit where the repository allows one, and a rebase only as the last resort", async () => {
+    const { gh, github } = setup([link()]);
+    gh.repos.set("o/r", { ...repo, mergeCommitAllowed: true, squashMergeAllowed: true, rebaseMergeAllowed: true });
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
+    await expect(github.mergeIntoEpicBranch(link(), epicInput)).resolves.toEqual({ method: "merge" });
+    gh.mutations.length = 0;
+    gh.repos.set("o/r", { ...repo, mergeCommitAllowed: false, squashMergeAllowed: false, rebaseMergeAllowed: true });
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
+    await expect(github.mergeIntoEpicBranch(link(), epicInput)).resolves.toEqual({ method: "rebase" });
+    expect(methodsSent(gh)).toEqual(["REBASE"]);
+  });
+
+  it("moves to the next method when GitHub refuses one as not allowed, and not for any other error", async () => {
+    const { gh, github } = setup([link()]);
+    // The settings say a merge commit is fine; a ruleset on the branch says otherwise.
+    gh.repos.set("o/r", { ...repo, mergeCommitAllowed: true, squashMergeAllowed: true, rebaseMergeAllowed: false });
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
+    gh.failNextMutation("Merge commits are not allowed on this repository.");
+    await expect(github.mergeIntoEpicBranch(link(), epicInput)).resolves.toEqual({ method: "squash" });
+    expect(methodsSent(gh)).toEqual(["MERGE", "SQUASH"]);
+
+    // A ruleset requiring linear history words its refusal of a merge commit differently.
+    gh.mutations.length = 0;
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
+    gh.failNextMutation("Repository rule violations found\n\nThis branch must not contain merge commits.");
+    await expect(github.mergeIntoEpicBranch(link(), epicInput)).resolves.toEqual({ method: "squash" });
+    expect(methodsSent(gh)).toEqual(["MERGE", "SQUASH"]);
+
+    gh.mutations.length = 0;
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
+    gh.failNextMutation("Base branch was modified. Review and try the merge again.");
+    await expect(github.mergeIntoEpicBranch(link(), epicInput)).rejects.toThrow(/Base branch was modified/);
+    expect(methodsSent(gh)).toEqual(["MERGE"]);
+  });
+
+  it("throws GitHub's refusal when every allowed method is refused", async () => {
+    const { gh, github } = setup([link()]);
+    gh.repos.set("o/r", { ...repo, mergeCommitAllowed: true, squashMergeAllowed: true, rebaseMergeAllowed: false });
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
+    gh.failNextMutation("Merge commits are not allowed on this repository.");
+    gh.failNextMutation("Squash merges are not allowed on this repository.");
+    await expect(github.mergeIntoEpicBranch(link(), epicInput)).rejects.toThrow(
+      /Squash merges are not allowed on this repository/,
+    );
+    expect(methodsSent(gh)).toEqual(["MERGE", "SQUASH"]);
+  });
+
+  it("fails with a clear message when the repository allows no merge method", async () => {
+    const { gh, github } = setup([link()]);
+    gh.repos.set("o/r", { ...repo, mergeCommitAllowed: false, squashMergeAllowed: false, rebaseMergeAllowed: false });
+    gh.prs.set("o/r#7", fakePr({ baseRefName: "epic/3-checkout" }));
+    await expect(github.mergeIntoEpicBranch(link(), epicInput)).rejects.toThrow(/allows no merge method/);
+    expect(gh.mutations).toEqual([]);
+  });
+
   it("never merges into the default branch, whatever it was asked", async () => {
     const { gh, github } = setup([link()]);
     gh.prs.set("o/r#7", fakePr({ baseRefName: "main" }));
