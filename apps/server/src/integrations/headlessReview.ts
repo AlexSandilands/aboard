@@ -54,6 +54,8 @@ export function headlessArgs(
   budgetUsd: number,
   model: string | null = null,
   effort: CliEffort | null = null,
+  /** Folders outside the checkout the reviewer may read, such as the task's screenshots. */
+  addDirs: readonly string[] = [],
 ): string[] {
   return [
     "-p",
@@ -71,6 +73,7 @@ export function headlessArgs(
     "Edit",
     "Write",
     "NotebookEdit",
+    ...(addDirs.length ? ["--add-dir", ...addDirs] : []),
     // No MCP servers: the user's config may register this board, and the reviewer must not record twice.
     "--strict-mcp-config",
     "--max-budget-usd",
@@ -87,15 +90,29 @@ export interface HeadlessPromptInput {
   skill: ReviewSkillRef;
   /** Branch the work forked from, for the diff. */
   baseRef: string | null;
+  /** Whether the task has images attached (listed in `taskText` with their paths): the reviewer opens them. */
+  hasImages?: boolean;
 }
 
 /** The headless reviewer has no board tools, so the task comes inline and the findings go out as JSON. */
-export function headlessPrompt({ taskNumber, round, taskText, skill, baseRef }: HeadlessPromptInput): string {
+export function headlessPrompt({
+  taskNumber,
+  round,
+  taskText,
+  skill,
+  baseRef,
+  hasImages,
+}: HeadlessPromptInput): string {
   const base = baseRef ?? "origin/HEAD (fall back to origin/main or main)";
   return [
     `Review the changes for task #${taskNumber}, review round ${round}. You are working in the task's checkout.`,
     // Only plain git commands are allowed: `$(...)` substitutions are denied, so the fork point is its own step.
     `Find where the branch forked with \`git merge-base HEAD ${base}\`, then read the changes with \`git diff <that commit>\` and \`git status\` for uncommitted work. Run each git command on its own. Don't edit any files.`,
+    ...(hasImages
+      ? [
+          "The task has images, listed under Images in the task text with their file paths. Some may be the bug report's own picture; the author's captures are the ones written into the plan steps' notes. Open each one with the Read tool and look at it: record a finding for any that shows a visual bug, or when the states the change introduced aren't covered, and a major one for a ui task with no capture in its steps.",
+        ]
+      : []),
     "Return your result as the structured output: a summary and one finding per problem (an empty list when the change is clean).",
     "",
     skill.source === "builtin"
@@ -144,12 +161,20 @@ export interface HeadlessJob {
   model: string | null;
   /** As `--effort` takes it; absent or null keeps the CLI's default. */
   effort?: CliEffort | null;
+  /** Extra folders the reviewer may read, as `--add-dir` takes them. */
+  addDirs?: readonly string[];
 }
 
 export type RunHeadless = (job: HeadlessJob) => Promise<HeadlessReview>;
 
 /** Runs one headless review. */
-export const runHeadlessReview: RunHeadless = async ({ cli, cwd, prompt, budgetUsd, model, effort }) =>
+export const runHeadlessReview: RunHeadless = async ({ cli, cwd, prompt, budgetUsd, model, effort, addDirs }) =>
   parseHeadlessOutput(
-    await runClaude({ cli, cwd, prompt, args: headlessArgs(budgetUsd, model, effort), timeoutMs: RUN_TIMEOUT_MS }),
+    await runClaude({
+      cli,
+      cwd,
+      prompt,
+      args: headlessArgs(budgetUsd, model, effort, addDirs),
+      timeoutMs: RUN_TIMEOUT_MS,
+    }),
   );

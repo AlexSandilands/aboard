@@ -194,7 +194,8 @@ function TaskLaunchContent({ task, fix, onDone }: { task: TaskSummary; fix: PrFi
     isPending: mutation.isPending,
     start: (input, { onSuccess, onError }) =>
       mutation.mutate(
-        { taskId: task.id, ...input },
+        // A plain launch on finished work is to ask about it (a follow-up); a PR fix or an epic's thread does work.
+        { taskId: task.id, ...input, ...(fix || epic ? {} : { followUp: true }) },
         { onSuccess: (link) => onSuccess(link.kind === "t3_thread" ? link.ref : null), onError },
       ),
   };

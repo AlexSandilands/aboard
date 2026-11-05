@@ -40,7 +40,10 @@ export const projectFields = {
   workspacePath: z
     .string()
     .optional()
-    .describe("Absolute path of the repo/workspace you are working in (your cwd). Identifies the project."),
+    .describe(
+      "Absolute path of the repo/workspace you are working in (your cwd). Identifies the project. A path inside " +
+        "a git worktree finds the main checkout's project.",
+    ),
 };
 
 export const generalField = z
@@ -278,9 +281,27 @@ export function requireWritingProject(args: WritingProjectArgs): void {
   }
 }
 
-/** The project a new task goes to: General, or the one the path or id names, made if the board doesn't know it. */
-export function writingProject(services: Services, args: WritingProjectArgs) {
-  return args.general ? services.projects.general() : services.projects.resolve(projectRef(args), { autoCreate: true });
+/**
+ * The project a new task goes to: General, or the one the path or id names, made if the board doesn't know it.
+ * `created` says it was just made, so the result can say so (see `newProjectNotice`).
+ */
+export function writingProject(services: Services, args: WritingProjectArgs): { project: Project; created: boolean } {
+  return args.general
+    ? { project: services.projects.general(), created: false }
+    : services.projects.resolveOrCreate(projectRef(args));
+}
+
+/**
+ * Leads a result whose call made a new project. A success that quietly filed tasks into a stray lane (a copy of a
+ * repo the board already tracks, say) is easy to read past, so it comes first and says how to undo it.
+ */
+export function newProjectNotice(project: Project, created: boolean, what: string): string {
+  if (!created) return "";
+  return (
+    `Created a NEW project ${project.title} at ${project.workspaceRoot ?? "no folder"}. If ${what} belongs to a ` +
+    "project the board already has, move it with update_task(moveToProjectId) and tell the user the new project " +
+    "can be deleted.\n\n"
+  );
 }
 
 /** Read-only lookup: an unknown project is "no tasks yet", not an error. */
@@ -353,7 +374,7 @@ export function epicDeliveryHint(services: Services, epicId: string | null): str
 
 /**
  * Mutating tools answer with a one-line confirmation plus the task's new state. `planningHints` adds the
- * "Missing labels", "Suggested model" and (when Start planned tasks is on) "Autopilot flag" nudges; only the planning
+ * "Missing labels", "Suggested model", "Missing screen capture step" and (when Start planned tasks is on) "Autopilot flag" nudges; only the planning
  * moments (set_plan, create_task) ask for them, so they aren't noise elsewhere. Every result carries the "Plan progress"
  * nudges; `closing` (the move to Done) adds the open-steps one, which get_task never shows for a task that is already
  * Done.
@@ -362,7 +383,7 @@ export function taskResult(
   services: Services,
   taskId: string,
   headline: string,
-  opts: { planningHints?: boolean; closing?: boolean; deliveryHint?: boolean } = {},
+  opts: { planningHints?: boolean; closing?: boolean; deliveryHint?: boolean; captureHint?: boolean } = {},
 ): CallToolResult {
   const task = services.tasks.detail(taskId);
   const project = safeProject(services, task.projectId);
@@ -377,12 +398,18 @@ export function taskResult(
     ? renderTaskShort(task, project, {
         labelsInUse: services.labels.usage(),
         modelHint: true,
+        captureHint: true,
         autopilotHint: startPlannedOn(services, task.projectId, task.parent?.id ?? null),
         deliveryHint: delivery,
         progress,
         ticketSystems,
       })
-    : renderTaskShort(task, project, { progress, deliveryHint: delivery, ticketSystems });
+    : renderTaskShort(task, project, {
+        progress,
+        deliveryHint: delivery,
+        ticketSystems,
+        ...(opts.captureHint ? { captureHint: true } : {}),
+      });
   return textResult(`${headline}\n\n${body}`);
 }
 

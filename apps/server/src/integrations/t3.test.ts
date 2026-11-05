@@ -254,19 +254,25 @@ function threadLink(id: string, threadId: string, environmentId = ENV_ID): TaskL
 type FakeImage = TaskAttachment & { path: string };
 
 function fakeServices(
-  opts: { token?: string | null; links?: TaskLink[]; projects?: Project[]; images?: FakeImage[] } = {},
+  opts: {
+    token?: string | null;
+    links?: TaskLink[];
+    projects?: Project[];
+    images?: FakeImage[];
+    taskStatus?: TaskSummary["status"];
+  } = {},
 ) {
   const snapshots = new Map<string, LinkSnapshot | null>();
   const claimed: Array<{ taskId: string; ids: readonly string[] }> = [];
   const projects = [...(opts.projects ?? [])];
-  const added: Array<{ taskId: string; input: LinkInput; actor: string }> = [];
+  const added: Array<{ taskId: string; input: LinkInput; actor: string; role?: "followup" }> = [];
   let token = opts.token ?? null;
   const services: T3Services = {
     links: {
       listByKind: (kind) => (opts.links ?? []).filter((l) => l.kind === kind),
       setSnapshot: (id, snapshot) => void snapshots.set(id, snapshot),
-      add: (taskId, input, actor) => {
-        added.push({ taskId, input, actor });
+      add: (taskId, input, actor, linkOpts) => {
+        added.push({ taskId, input, actor, ...(linkOpts?.role ? { role: linkOpts.role } : {}) });
         return threadLink("l-new", input.t3Thread!.threadId, input.t3Thread!.environmentId);
       },
     },
@@ -279,7 +285,14 @@ function fakeServices(
       },
     },
     tasks: {
-      summary: (id) => ({ id, number: 9, title: "Hand off", projectId: projects[0]?.id ?? "none" }) as TaskSummary,
+      summary: (id) =>
+        ({
+          id,
+          number: 9,
+          title: "Hand off",
+          projectId: projects[0]?.id ?? "none",
+          status: opts.taskStatus ?? "in_progress",
+        }) as TaskSummary,
     },
     attachments: {
       forLaunch: (ids, taskId) =>
@@ -655,8 +668,9 @@ describe("T3 thread launch", () => {
     token: string | null = "tok",
     fetch: FetchFn = t3Fetch(),
     images: FakeImage[] = [],
+    taskStatus?: TaskSummary["status"],
   ) => {
-    const fake = fakeServices({ token, projects: [acme], images });
+    const fake = fakeServices({ token, projects: [acme], images, ...(taskStatus ? { taskStatus } : {}) });
     const socket = fakeSocket(reply);
     const t3 = createT3Integration({
       t3Home: makeT3Home(),
@@ -877,6 +891,39 @@ describe("T3 thread launch", () => {
       { taskId: "task-1", input: { t3Thread: { environmentId: ENV_ID, threadId: "th-new" } }, actor: "user" },
     ]);
     expect(link.kind).toBe("t3_thread");
+  });
+
+  it("marks a follow-up launch from the card on a task in Review or Done as a follow-up", async () => {
+    for (const status of ["review", "done"] as const) {
+      const { t3, added } = setup(
+        (frame) => success(frame.id, { threadId: "th-new", resumed: false }),
+        "tok",
+        t3Fetch(),
+        [],
+        status,
+      );
+      await t3.startThread("task-1", { ...LAUNCH, followUp: true }, "user");
+      expect(added.map((a) => a.role)).toEqual(["followup"]);
+    }
+  });
+
+  it("leaves the role off a launch that isn't a follow-up, or one before the work is in Review", async () => {
+    const cases = [
+      { status: "review", followUp: undefined }, // a PR fix does work on the task
+      { status: "planned", followUp: true },
+      { status: "in_progress", followUp: true },
+    ] as const;
+    for (const { status, followUp } of cases) {
+      const { t3, added } = setup(
+        (frame) => success(frame.id, { threadId: "th-new", resumed: false }),
+        "tok",
+        t3Fetch(),
+        [],
+        status,
+      );
+      await t3.startThread("task-1", { ...LAUNCH, ...(followUp ? { followUp } : {}) }, "user");
+      expect(added.map((a) => a.role)).toEqual([undefined]);
+    }
   });
 
   it("launches a task's thread without the dialog in a new worktree, and links it", async () => {

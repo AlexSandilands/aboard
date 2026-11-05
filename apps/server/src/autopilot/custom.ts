@@ -604,7 +604,7 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
         const branch = action.onPrBranch ? (prOfTask(task, data.prLinkId)?.snapshot?.headRef ?? null) : null;
         const result = await ctx.runner.start({
           run: ctx.run,
-          label: `${custom.name} · #${task.number}`,
+          label: custom.name,
           prompt,
           tier: task.suggestedModel?.tier ?? null,
           // The action's tier is its author's choice, so a task label doesn't override it; the Model setting does.

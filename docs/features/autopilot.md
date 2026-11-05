@@ -476,7 +476,8 @@ to fix a pull request linked to a task.
   handed to a T3 thread (a nudge, or a new thread) is still working on it (`t3RunWorking` in `packages/contracts/src/runThreads.ts`,
   shared with Start planned): those runs end as soon as the message is sent, so without this, comments arriving
   while the agent works would use up the attempts and give up before it pushed.
-- **Action.** When the task's latest T3 thread is there, not settled, and seen by the live poll in the last ten
+- **Action.** When the task's [implementing thread](agent-handoff.md#follow-up-threads) (never a follow-up the user
+  opened to ask about the work) is there, not settled, and seen by the live poll in the last ten
   minutes (so T3 Code is up to take it), and the runner isn't set to headless, the fix prompt is a nudge into it.
   Otherwise the runner starts a session (T3 or headless, from the runner setting) with `workspace: { branch:
   headRef }` and `expectHead`: a branch that moved on skips the run, and one at an unrelated commit fails unless
@@ -879,6 +880,13 @@ empty by default, so rows saved before them still parse (#238 added inputs to sh
 - **Slots** are `{name, label, description, tools}`; `tools` follow the `allowedTools` rules. `customAllowedTools` is
   the allowed tools and every slot's tools together, which is what `act` passes as `RunnerRequest.tools` and what the
   dry-run note lists. `customAgentPrompt` adds a "Tools to use for this" line per *filled* slot after the prompt.
+- **Waiting for the slot's server.** `claude -p` connects MCP servers in the background, so a slow server's tools may not
+  be there on the agent's first turn. When `RunnerRequest.tools` name an `mcp__<server>` other than the board's, and the
+  run gets the user's servers (not `access: "none"`, nor read-only and untrusted, which use `--strict-mcp-config`), the
+  runner adds `MCP_CONNECTION_NONBLOCKING=false` to the agent's environment beside the push guard's (`mcpWaitEnv`), so
+  Claude Code connects them first. Such a run waits for every user server, up to Claude Code's MCP timeout, within the
+  run's own timeout; runs that need only the board's server don't wait. Same cause as ticket imports
+  ([issue-import.md](issue-import.md#the-job)).
 - **Blocked.** While a slot has no tools, `customBlockedReason` gives "Won't work until you fill in: Jira tools". The
   catalogue entry carries it as `Automation.blocked` (`AutopilotAutomation.blocked` in the API): `setScope` refuses
   `mode: "on"` with that message (`VALIDATION`), the UI shows it in orange and disables On, and the automation's `check`
@@ -1159,11 +1167,17 @@ with that error.
   else fails at once (no model ready, no token, project not in T3, a changed protocol), and so does a T3 that is
   still unreachable when the ten minutes end. A board restart during the wait fails the run like any run a restart
   strands.
-- **`label`** is what the run is, short: "Review PRs · PR #73 round 1", "Fix PRs · PR #73", "Start planned · #107",
-  "<custom name> · #42", "Digest". Each automation supplies it, and the runner (`sessionName`) prefixes it with
-  "Autopilot · " and uses it as the session link's label, `claude --name` and the T3 thread's title
-  (`TaskThreadInput.title`, default the task's number and title). Without one the name is "Autopilot session".
-- **`kind: "nudge"`** posts the prompt into the task's latest live T3 thread (`sendToThread`). It never starts a
+- **`label`** is what the run is, short, and leaves the task's number out: "Review PRs · PR #73 round 1",
+  "Fix PRs · PR #73", "Start planned", "<custom name>", "Digest". Each automation supplies it, and the runner
+  names the session with `autopilotSessionName(label, task)`. A run on a task is `#<n> <task title> · Autopilot:
+  <label>` (the title cut to about 60 characters with `…`, the automation part never cut), the task first like a
+  thread started by hand, so the useful part survives a truncated sidebar. A run with no task (a digest, Orchestrate,
+  a scheduled or item-driven custom agent) is `Autopilot · <label>`, and `Autopilot session` without a label. That
+  one name is the session link's label, `claude --name` and the T3 thread's title (`TaskThreadInput.title`, default
+  the task's number and title). `isAutopilotSessionName` still recognises the old `Autopilot · ` prefix, so session
+  links named before the change stay marked as Autopilot sessions.
+- **`kind: "nudge"`** posts the prompt into the task's implementing T3 thread (`implementingThread`, see
+  [agent-handoff.md](agent-handoff.md#follow-up-threads); `sendToThread`). It never starts a
   session, and fails when the task has no live thread.
 - **`workspace.prBase`**: the branch the agent's PR goes to when it isn't the default branch (an integration
   epic's). The session starts from origin's copy of it (T3: `baseRef` with `startFromOrigin`; headless:

@@ -149,6 +149,11 @@ export const StartT3ThreadInput = z.object({
   modelSelection: T3ModelSelection,
   runtimeMode: T3RuntimeMode,
   workspace: T3LaunchWorkspace,
+  /**
+   * Set by the card's plain launch dialog, to ask questions about the task: on a task in Review or Done the thread is
+   * saved as a follow-up, which the board never messages. Not set for a PR fix, which does work on the task.
+   */
+  followUp: z.boolean().optional(),
 });
 export type StartT3ThreadInput = z.infer<typeof StartT3ThreadInput>;
 

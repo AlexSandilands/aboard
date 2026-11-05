@@ -69,6 +69,17 @@ describe("taskHandoffPrompt", () => {
     }
   });
 
+  it("makes the screen capture step required, looked at, and attached with update_step", () => {
+    for (const subagent of [false, true]) {
+      const prompt = taskHandoffPrompt({ task, boardUrl: "http://x", mode: "work", subagent });
+      expect(prompt).toContain("Screen capture step (UI tasks do), it is required");
+      expect(prompt).toContain("look at every one");
+      expect(prompt).toContain("JPEG or WebP");
+      expect(prompt).toContain('update_step(step, status: "done", images: [absolute paths])');
+    }
+    expect(taskHandoffPrompt({ task, boardUrl: "http://x", mode: "plan" })).not.toContain("Screen capture");
+  });
+
   it("asks a session to link itself under a name saying what it does", () => {
     const work = taskHandoffPrompt({ task, boardUrl: "http://x", mode: "work" });
     expect(work).toContain(`link(agentSession: {harness, sessionId, cwd}, label: "Implementing #9")`);

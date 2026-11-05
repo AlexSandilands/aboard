@@ -1,0 +1,31 @@
+# Monthly version updates, minor and patch grouped into one PR per ecosystem; majors come one PR each. Security
+# updates come as soon as there's an alert (turned on by scripts/github-setup.ts). Titles are Conventional, which
+# the commitlint check needs: `chore(deps): …` and `ci(deps): …`. How it fits together: docs/features/github-setup.md.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    # Like pnpm's minimumReleaseAge: let a release sit a few days before taking it.
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      npm:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      actions:
+        update-types: [minor, patch]

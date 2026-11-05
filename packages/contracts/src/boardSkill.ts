@@ -12,7 +12,9 @@ export const BOARD_SKILL_BODY = `# ${BRAND.name} (task board)
 The user keeps a local kanban board of their work across projects. Columns: **Backlog → Planned → In
 Progress → Review → Done**, one swimlane per project. You read and update it through the \`${BRAND.id}\`
 MCP server; the board updates live in the user's browser. Identify the project by passing
-\`workspacePath\` = your current working directory. Unknown paths create the project automatically.
+\`workspacePath\` = your current working directory; from a git worktree the board finds the main repo's
+project. Unknown paths create the project automatically, and the result then starts with "Created a NEW
+project": if the task belongs to a project the board already has, move it with \`update_task(moveToProjectId)\`.
 Work that belongs to no code project (a document to update, something to review) goes in the **General**
 project: pass \`general: true\` to \`add_to_backlog\` / \`create_task\` instead of \`workspacePath\`. Leaving the
 path out never defaults to it, and work in a repo belongs in the repo's project.
@@ -138,6 +140,17 @@ Tasks are referenced as \`#42\`, steps as \`"2.3"\` (phase 2, step 3).
    write it, \`update_step(task, "3.1", "done")\`, then the same for \`3.2\`; not one \`update_plan\` at the end.
    Tool results say when no step is in progress, when the plan hasn't changed for a while, and when a
    task reaches Review with steps still open; follow them.
+
+   **UI work needs a screen capture.** When a task changes what the user sees (components, styles, layout, or
+   the \`ui\` label), its plan has a **Screen capture** step; if it doesn't, \`add_steps\` one (and move it ahead of any
+   review or PR step with \`update_plan\`). Do it for real: open the changed surface in a browser, in each state you introduced (menus open,
+   warnings showing, a narrow phone width where the layout can change), save the screenshots as JPEG or WebP at
+   a sensible width (each must be under 5 MB), and look at every one. Fix whatever looks wrong and capture
+   again before moving to Review. Attach them in the same call that finishes the step:
+   \`update_step(task, "4.2", status: "done", images: ["/abs/path/menu-open.jpg", ...])\` (absolute paths, up to
+   10, PNG/JPEG/WebP/GIF; a bad path attaches nothing). They show under the step and in \`get_task\`'s Images.
+   A capture you didn't look at doesn't count; moving a \`ui\` task to Review without screenshots draws a
+   warning, and the reviewer checks them.
 
    Several things to change at once (add notes, move a step, rename a phase)? One \`update_plan\` call,
    with \`steps: [{step: "2.3", notes: "…"}, …]\`; labels refer to the plan as it was before the call.
@@ -808,7 +821,7 @@ ${AUTOMATIONS_SKILL_BODY}`;
 /** The snippet users paste into their own AGENTS.md; `skills/aboard/AGENTS-snippet.md` ships the same text. */
 export const BOARD_AGENTS_SNIPPET = `## ${BRAND.name} (task board)
 
-Track work on the user's local task board via the \`${BRAND.id}\` MCP server (Backlog → Planned → In Progress → Review → Done). Pass \`workspacePath\` = your cwd to identify the project, or \`general: true\` on \`add_to_backlog\` / \`create_task\` for work that belongs to no code project (it goes in the General project; never for work in a repo). Tasks are \`#42\`, steps \`"2.3"\`.
+Track work on the user's local task board via the \`${BRAND.id}\` MCP server (Backlog → Planned → In Progress → Review → Done). Pass \`workspacePath\` = your cwd to identify the project (a git worktree finds its main repo's project), or \`general: true\` on \`add_to_backlog\` / \`create_task\` for work that belongs to no code project (it goes in the General project; never for work in a repo). Tasks are \`#42\`, steps \`"2.3"\`.
 
 - **Orient:** \`board_overview\` / \`list_tasks\` at the start of meaningful work. \`board_activity(since: "7d")\` looks back over a period: tasks finished, review findings, Autopilot failures, stalls, notes.
 - **Resume:** always \`get_task\` before continuing an existing task; it has the plan, current step and handover notes. Add any **Missing links** it lists, and open any **Images** it lists (absolute file paths; often a screenshot of the bug).
@@ -825,6 +838,7 @@ Track work on the user's local task board via the \`${BRAND.id}\` MCP server (Ba
 - **Auto-merge:** \`autoMerge: "on"\` on \`create_task\` / \`add_to_backlog\` / \`update_task\` lets \`merge_task_pr(task)\` merge the task's PR into the default branch once it's reviewed, green and mergeable (the board refuses, with the reason, until then). Set it only when the user says so; never merge with \`gh\`/\`git\` instead. A failed or interrupted Autopilot run on a task: \`retry_autopilot_run(task)\`, never an empty commit.
 - **Templates:** the user keeps task templates (Bug, Spike, Feature, their own). \`list_templates\` shows them; \`template: "Bug"\` on \`add_to_backlog\` / \`create_task\` starts from one: description, labels and plan fill in what you leave out (a \`labels\` you pass replaces the template's), \`create_task\` needs no plan when the template has one. \`add_to_backlog\` keeps it in Backlog. You can't create or edit templates.
 - **Keep steps current:** \`update_step\` → \`in_progress\` when starting, \`done\` when finished, one call per step the moment it changes, never saved up for the end of a phase (if steps can only be verified together, still mark each \`in_progress\` as you start it and \`done\` once written, with testing as its own step); \`blocked\` + \`appendNotes\` when stuck or before asking the user a question and waiting (say what you need; back to \`in_progress\` once answered). \`add_steps\` for new work, \`update_plan\` to change many steps at once (notes, moves, phase renames), not to catch up on statuses. \`set_plan\` REPLACES the whole plan (steps not passed back with their id are deleted, status and notes too): only for writing or rewriting a plan, never to update a few steps.
+- **UI changes need a screen capture:** a task that changes what the user sees (components, styles, layout, \`ui\` label) has a Screen capture step in its plan (\`add_steps\` one if it doesn't, then \`update_plan\` it ahead of any review or PR step). Open the changed surface in a real browser in each state you introduced (menus open, warnings showing, narrow phone width where relevant), save JPEG/WebP screenshots (each under 5 MB), look at every one, fix what's wrong, then attach them with \`update_step(step, status: "done", images: [absolute paths])\` before moving to \`review\`.
 - **Links:** link the task's ticket when the task is created (\`links\` on \`create_task\` / \`add_to_backlog\`, or \`link\`); keys in the title may be linked automatically, and \`unlink\` removes a wrong link. \`link\` PRs once they're open (with auto-review on, only after the review loop ends, see Local review).
 - **Status:** \`review\` when the work is done, \`done\` when merged/verified. On \`PLAN_REQUIRED\`, call \`set_plan\` first.
 - **Local review:** if moving to \`review\` says a review round is open, run the loop it describes before opening the PR: a fresh reviewer subagent per round, on the model the instructions name if they do (\`submit_review\`), fix and \`resolve_finding\` each blocking/major finding (the board then opens the next round: \`start_review\` returns its brief), until clean or the limit, and only then always open and link the PR (at the limit too, listing open findings in it), or push to the one already linked. Without auto-review, open and link the PR before moving to \`review\`.

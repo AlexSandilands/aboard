@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   defaultHandoffMode,
   handoffModeError,
+  implementingThread,
   T3_RUNTIME_MODES,
   taskHandoffPrompt,
   type HandoffMode,
@@ -22,21 +23,18 @@ const BUSY = new Set(["working", "waiting", "input", "approval"]);
 /** How long a just-linked thread counts as busy before the live poll has read its status. */
 const JUST_STARTED_MS = 2 * 60_000;
 
-/** The task's newest linked thread that is still busy on it, or was linked too recently to know. */
+/**
+ * The task's newest linked thread that is still busy on it, or was linked too recently to know. A follow-up (what the
+ * user opened to ask about finished work) isn't working on the task, so it doesn't block a new thread.
+ */
 function busyThread(task: TaskSummary, now = Date.now()): ThreadLink | undefined {
   return task.links.findLast(
     (l): l is ThreadLink =>
       l.kind === "t3_thread" &&
+      l.role !== "followup" &&
       (l.snapshot
         ? !l.snapshot.settled && !l.snapshot.archived && BUSY.has(l.snapshot.status)
         : now - Date.parse(l.createdAt) < JUST_STARTED_MS),
-  );
-}
-
-/** The thread message_task_thread writes to: the one busy on the task, else the newest that isn't archived. */
-function messageTarget(task: TaskSummary): ThreadLink | undefined {
-  return (
-    busyThread(task) ?? task.links.findLast((l): l is ThreadLink => l.kind === "t3_thread" && !l.snapshot?.archived)
   );
 }
 
@@ -91,7 +89,8 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
         "worktree branched from baseRef (default: the epic's integration branch when it has one, else the default " +
         "branch), so tasks can run side by side. Calling it " +
         "again after a failure returns the same thread rather than starting a second. Refused when the task already " +
-        "has a thread working on it (use message_task_thread), is blocked by unfinished tasks, or when T3 Code can't take it.",
+        "has a thread working on it (use message_task_thread; a thread the user opened to ask about finished work " +
+        "doesn't count), is blocked by unfinished tasks, or when T3 Code can't take it.",
       inputSchema: {
         task: taskField,
         mode: z
@@ -183,10 +182,12 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
     {
       title: "Message a task's T3 Code thread",
       description:
-        "Send a message into the T3 Code thread working on a task (else its newest one): T3 starts a turn, or " +
-        "queues it behind the one running. It arrives marked as coming from the orchestrating agent. Use it to " +
-        "answer a blocked step, nudge a stalled thread or redirect a task started with start_task_thread. Only for T3 threads; for a " +
-        "session the user started, add_note on the task instead, which it reads on its next get_task.",
+        "Send a message into the T3 Code thread that worked on a task: T3 starts a turn, or queues it behind the " +
+        "one running. It arrives marked as coming from the orchestrating agent. Use it to answer a blocked step, " +
+        "nudge a stalled thread or redirect a task started with start_task_thread. Never goes to a thread the user " +
+        "opened on the finished task to ask about it; with no other thread it is refused, so start_task_thread " +
+        "instead. Only for T3 threads; for a session the user started, add_note on the task instead, which it reads " +
+        "on its next get_task.",
       inputSchema: {
         task: taskField,
         text: z.string().trim().min(1).describe("The message, written to the agent working on the task."),
@@ -197,11 +198,13 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
         const task = services.tasks.summary(services.tasks.resolveId(args.task));
         const blocker = t3LaunchBlocker(ctx, services.projects.get(task.projectId));
         if (blocker) throw new AppError("VALIDATION", `${blocker}. Leave the session an add_note on the task instead.`);
-        const thread = messageTarget(task);
+        const thread = implementingThread(task);
         if (!thread) {
           throw new AppError(
             "VALIDATION",
-            `#${task.number} has no T3 thread linked. Leave the session an add_note on the task instead.`,
+            `#${task.number} has no T3 thread to message: none is linked, or the ones linked are archived or were ` +
+              `opened to ask about the finished work, which a message would interrupt. Start one with ` +
+              `start_task_thread("#${task.number}"), or leave the session an add_note on the task instead.`,
           );
         }
         // T3 shows it as the user's own message, so say who really sent it.

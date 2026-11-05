@@ -1,4 +1,5 @@
 import {
+  autopilotSessionName,
   BOARD_REVIEWER,
   type AgentHarness,
   type AgentSessionSnapshot,
@@ -434,6 +435,8 @@ const threads: Scenario = (s, opts) => {
     );
     s.links.setSnapshot(link.id, snapshot);
   };
+  // How a run on the task names its session: the task first, then the automation.
+  const apName = (taskId: string, what: string) => autopilotSessionName(what, s.tasks.summary(taskId));
   const manyLinks = [
     "SHOP-31",
     "https://example.com/spec",
@@ -447,9 +450,9 @@ const threads: Scenario = (s, opts) => {
     links: manyLinks,
   });
   manySession(noThread, "Implementing the cart", { status: "busy", inApp: false });
-  manySession(noThread, "Autopilot · Review", { status: "finished", inApp: false, endedAt: manyEnded });
-  manySession(noThread, "Autopilot · Fix failing checks", { status: "failed", inApp: false, endedAt: manyEnded });
-  manySession(noThread, "Autopilot · Review", { status: "finished", inApp: false, endedAt: manyEnded });
+  manySession(noThread, apName(noThread, "Review"), { status: "finished", inApp: false, endedAt: manyEnded });
+  manySession(noThread, apName(noThread, "Fix failing checks"), { status: "failed", inApp: false, endedAt: manyEnded });
+  manySession(noThread, apName(noThread, "Review"), { status: "finished", inApp: false, endedAt: manyEnded });
   manySession(noThread, null, { status: "not_running", inApp: false });
   const withThread = addTask(s, project.id, {
     title: "Many sessions beside a T3 thread",
@@ -465,8 +468,12 @@ const threads: Scenario = (s, opts) => {
   });
   manySession(withThread, "Planning the cart", { status: "not_running", inApp: false });
   manySession(withThread, "Implementing the cart", { status: "busy", inApp: true });
-  manySession(withThread, "Autopilot · Review", { status: "finished", inApp: false, endedAt: manyEnded });
-  manySession(withThread, "Autopilot · Fix failing checks", { status: "failed", inApp: false, endedAt: manyEnded });
+  manySession(withThread, apName(withThread, "Review"), { status: "finished", inApp: false, endedAt: manyEnded });
+  manySession(withThread, apName(withThread, "Fix failing checks"), {
+    status: "failed",
+    inApp: false,
+    endedAt: manyEnded,
+  });
 };
 
 /**

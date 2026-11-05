@@ -112,6 +112,18 @@ describe("unstick stale tasks", () => {
     expect(runs()).toHaveLength(1);
   });
 
+  it("doesn't flag a follow-up thread the user left waiting on input", async () => {
+    const { s, working, pass, runs, turnOn } = setup();
+    const task = working();
+    const link = s.links.add(task.id, { t3Thread: { environmentId: "env", threadId: "thread-ask" } }, "user", {
+      role: "followup",
+    });
+    s.links.setSnapshot(link.id, { title: "Questions", status: "input", lastActivityAt: new Date().toISOString() });
+    turnOn();
+    await pass(2 * HOUR_MS);
+    expect(runs().filter((r) => r.summary.startsWith(UNSTICK_WAITING_PREFIX))).toHaveLength(0);
+  });
+
   it("ignores a thread that is working, and tasks that aren't In Progress", async () => {
     const { s, project, working, withThread, pass, runs, turnOn } = setup();
     withThread(working().id, "working");

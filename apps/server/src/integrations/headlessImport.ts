@@ -133,6 +133,15 @@ export function importArgs(
   return args;
 }
 
+/**
+ * The environment for one import's CLI; undefined keeps the server's. `claude -p` connects MCP servers in the
+ * background and `--tools ""` drops ToolSearch, which would wait for them, so a ticket run makes it connect them
+ * before the first turn or a slow server's tools aren't there yet.
+ */
+export function importEnv(sourceKind: IssueSource["kind"]): NodeJS.ProcessEnv | undefined {
+  return sourceKind === "ticket" ? { ...process.env, MCP_CONNECTION_NONBLOCKING: "false" } : undefined;
+}
+
 const STYLE = [
   "Write the task for a kanban board:",
   '- title: a concise task title of at most 80 characters, in the imperative where it fits ("Fix login redirect"). Don\'t include the issue key or number.',
@@ -206,12 +215,14 @@ export const runIssueImport: RunImport = async (job) => {
       settingsPath = join(dir, "settings.json");
       await writeFile(settingsPath, importSettings(job));
     }
+    const env = importEnv(job.source.kind);
     stdout = await runClaude({
       cli: job.cli,
       cwd: job.cwd,
       prompt: importPrompt(job.source, job.boardLabels),
       args: importArgs({ ...job, settingsPath }),
       timeoutMs: job.source.kind === "ticket" ? TICKET_TIMEOUT_MS : GITHUB_TIMEOUT_MS,
+      ...(env ? { env } : {}),
     });
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});

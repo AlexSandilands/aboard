@@ -5,6 +5,7 @@ import {
   AUTOPILOT_REVIEW_PRS,
   BRAND,
   ReviewSkillRef,
+  implementingThread,
   currentPrReview,
   describeCounts,
   isReviewOfLink,
@@ -26,7 +27,6 @@ import {
 } from "@repo/contracts";
 import { z } from "zod";
 import { AppError } from "../../errors.ts";
-import { latestThread } from "../../integrations/reviewFallbacks.ts";
 import { shQuote } from "../../integrations/terminal.ts";
 import { messageOf } from "../../integrations/github.ts";
 import type { Services } from "../../services/types.ts";
@@ -373,7 +373,7 @@ export function fixPrompt({
  */
 const liveThread = (task: TaskSummary, runner: Config["runner"], at: number) => {
   if (runner === "headless") return null;
-  const thread = latestThread(task);
+  const thread = implementingThread(task);
   return thread?.snapshot && !thread.snapshot.settled && threadSeen(thread, at) ? thread : null;
 };
 

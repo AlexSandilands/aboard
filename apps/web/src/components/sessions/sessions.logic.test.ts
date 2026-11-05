@@ -52,6 +52,7 @@ describe("sessions", () => {
     expect(isAutopilotSession(link({}, "Implementing #7"))).toBe(false);
     expect(isAutopilotSession(link({}, "Autopilot · Review #7"))).toBe(true);
     expect(isAutopilotSession(link({}, "Autopilot session"))).toBe(true);
+    expect(isAutopilotSession(link({}, "#7 Add a cart · Autopilot: Review PRs · PR #9"))).toBe(true);
     expect(isAutopilotSession({ ...link(), snapshot: { status: "failed", inApp: false } })).toBe(true);
     expect(isAutopilotSession({ ...link(), snapshot: { status: "idle", inApp: false } })).toBe(false);
   });
