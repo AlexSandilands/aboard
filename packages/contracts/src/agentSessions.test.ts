@@ -8,6 +8,8 @@ import {
   isAbsolutePath,
   isRunningSession,
   resumeArgv,
+  selfLinkLine,
+  startedSessionLine,
   TerminalSetting,
 } from "./agentSessions.ts";
 import { TaskLink } from "./schemas.ts";
@@ -66,10 +68,25 @@ describe("harness table", () => {
     expect(resumeArgv({ harness: "codex", sessionId: ID }, "resume")).toEqual(["codex", "resume", ID]);
   });
 
-  it("refuses to fork a Codex session, and starts none from the board", () => {
+  it("refuses to fork a Codex session, but starts one from the board that links itself", () => {
     expect(canFork("codex")).toBe(false);
     expect(() => resumeArgv({ harness: "codex", sessionId: ID }, "fork")).toThrow(/can't be forked/);
-    expect(LAUNCHABLE_HARNESSES).toEqual(["claude-code", "copilot-cli"]);
+    expect(LAUNCHABLE_HARNESSES).toEqual(["claude-code", "codex", "copilot-cli"]);
+  });
+
+  it("tells a session the board couldn't link to link itself, and one it linked not to", () => {
+    const self = startedSessionLine("codex", "Implementing #4");
+    expect(self).toBe(selfLinkLine("codex", "Implementing #4"));
+    expect(self).toContain(
+      'link(agentSession: {harness: "codex", sessionId: $CODEX_THREAD_ID, cwd: your working directory}, label: "Implementing #4")',
+    );
+    expect(startedSessionLine("codex", "Planning #3, #4", "every task")).toContain(
+      'link it to every task yourself first with link(task, agentSession: {harness: "codex"',
+    );
+    expect(startedSessionLine("claude-code", "Implementing #4")).toBe(
+      "The board started this session and already linked it to the task; don't link it again.",
+    );
+    expect(startedSessionLine(null, "Orchestrating #4", "the epic")).toContain("already linked it to the epic");
   });
 
   it("refuses to fork a Copilot session", () => {

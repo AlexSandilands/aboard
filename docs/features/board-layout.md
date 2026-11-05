@@ -495,7 +495,10 @@ over a virtualised list (`LegendList` inside a Base UI `Combobox`), and an effor
   (`missingNeeds` over `OPERATIONS[op].needs`) is greyed out in the rail, its reason in a tooltip and on its rows
   (`providerDisabledReason`). Each tab's footer links to that provider's settings and says when its scan failed.
 - **Typing.** A search that is a valid model name and isn't listed is offered as **Use `<model>`** on each CLI that can
-  run it (only the open tab's when a CLI's tab is open), so Codex and a failed scan still work.
+  run it (only the open tab's when a CLI's tab is open), so a model the scan doesn't list and a failed scan still work.
+- **Defaults.** When the scan says which model the CLI runs with none given (Codex's `isDefault`), the **Default
+  model** row names it ("GPT-6.1-Sol, unless Codex is set to another": the CLI's own config can pick another), and the effort
+  column's **Default** names the level the model runs at (`defaultEffort`).
 - **Effort.** Picking a model with levels keeps the popup open and moves focus to the column; a tier, inherit, or a
   model with no levels closes it. A saved level the new model doesn't take is dropped.
 - **Keys.** Left from an empty search goes to the rail, Right at its end to the column, Ctrl+[ and Ctrl+] change tab,

@@ -398,7 +398,11 @@ describe("resolveOperationModel: picking a provider", () => {
       resolveOperationModel("orchestrate", {}, typed({ provider: "claude-code", model: "opus", effort: "max" })),
     ).toMatchObject({ ok: true, provider: "claude-code", model: "opus", effort: "max", source: "board" });
     expect(
-      resolveOperationModel("taskRun", { automation: [{ provider: "codex", model: "x", effort: "max" }] }, settings()),
+      resolveOperationModel(
+        "taskRun",
+        { automation: [{ provider: "codex", model: "x", effort: "minimal" }] },
+        settings(),
+      ),
     ).toMatchObject({ ok: true, provider: "codex", model: "x", effort: null });
     expect(resolveOperationModel("orchestrate", {}, typed({ provider: "codex", model: "gpt-5.5" }))).toEqual({
       ok: false,

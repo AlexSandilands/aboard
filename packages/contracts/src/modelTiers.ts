@@ -44,7 +44,7 @@ export const SuggestedModelInput = z.object({
 export type SuggestedModelInput = z.infer<typeof SuggestedModelInput>;
 
 /** An effort level as `--effort` (Claude Code), `--reasoning-effort` (Copilot CLI) or `model_reasoning_effort` (Codex) takes it: the union of them. */
-export const CliEffort = z.enum(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
+export const CliEffort = z.enum(["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]);
 export type CliEffort = z.infer<typeof CliEffort>;
 
 /**
@@ -53,12 +53,16 @@ export type CliEffort = z.infer<typeof CliEffort>;
  */
 export const CLI_EFFORTS: Record<AgentHarness, readonly CliEffort[]> = {
   "claude-code": ["low", "medium", "high", "xhigh", "max"],
-  // `model_reasoning_effort` in Codex's config (`-c model_reasoning_effort=<level>`): the levels every Codex model takes.
-  codex: ["low", "medium", "high", "xhigh"],
+  // `model_reasoning_effort` in Codex's config (`-c model_reasoning_effort=<level>`): the levels Codex's models list in
+  // `model/list` (codex-cli 0.166.0), which narrows them per model.
+  codex: ["low", "medium", "high", "xhigh", "max", "ultra"],
   "copilot-cli": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
 };
 
-/** The level, when the harness's CLI takes it: `none` and `minimal` are Copilot's, and `claude --effort` refuses them. */
+/**
+ * The level, when the harness's CLI takes it: `none` and `minimal` are Copilot's and `ultra` is Codex's, and
+ * `claude --effort` refuses them.
+ */
 export const cliEffortFor = (harness: AgentHarness, effort: CliEffort | null | undefined): CliEffort | null =>
   effort && CLI_EFFORTS[harness].includes(effort) ? effort : null;
 

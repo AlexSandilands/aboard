@@ -1067,6 +1067,16 @@ describe("manualFix: Fix in → on a PR", () => {
     expect(() => manualFix(s, linkId())).toThrow(/nothing to fix/);
   });
 
+  it("tells a Codex session to link itself, as the board can't", () => {
+    const { s, setPr, linkId } = setup();
+    setPr({ checks: "failing" });
+    const { prompt } = manualFix(s, linkId(), "codex");
+    expect(prompt).toContain('harness: "codex", sessionId: $CODEX_THREAD_ID');
+    expect(prompt).toMatch(/label: "Fixing the PR of #\d+"/);
+    expect(prompt).not.toContain("already linked");
+    expect(manualFix(s, linkId(), "copilot-cli").prompt).toContain("already linked it to the task");
+  });
+
   it("follows the Fix skill chosen for the task's scope", () => {
     const { s, setPr, linkId, turnOn } = setup();
     setPr({ checks: "failing" });

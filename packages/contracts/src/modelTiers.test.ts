@@ -14,7 +14,7 @@ describe("cli effort", () => {
     const base = { description: null, t3: null };
     expect(ModelTierSetting.safeParse({ ...base, cliEffort: { "claude-code": "huge" } }).success).toBe(false);
     const profile = { id: "x", name: "X", ...base };
-    expect(ModelProfile.safeParse({ ...profile, cliEffort: { "copilot-cli": "ultra" } }).success).toBe(false);
+    expect(ModelProfile.safeParse({ ...profile, cliEffort: { "copilot-cli": "huge" } }).success).toBe(false);
     expect(ModelProfile.parse({ ...profile, cliEffort: { "copilot-cli": "none" } }).cliEffort).toEqual({
       "copilot-cli": "none",
     });

@@ -71,7 +71,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     sections: [
       section("providers.t3-code", "T3 Code", ["pairing", "threads", "connection", "t3"]),
       section("providers.claude-code", "Claude Code", ["mcp", "skill", "cli", "session", "claude"]),
-      section("providers.codex", "Codex", ["mcp", "openai", "cli", "headless"]),
+      section("providers.codex", "Codex", ["mcp", "openai", "cli", "session", "headless"]),
       section("providers.copilot-cli", "GitHub Copilot", ["mcp", "vs code", "cli", "session", "copilot"]),
     ],
   },

@@ -853,11 +853,8 @@ export const StepPatch = z.object({
 });
 export type StepPatch = z.infer<typeof StepPatch>;
 
-/**
- * What the board's hand-off menus can start: a T3 Code thread, or a session of a CLI harness the board can start
- * (LAUNCHABLE_HARNESSES: not Codex, which picks its own session id).
- */
-export const HandoffTarget = z.enum(["t3-code", "claude-code", "copilot-cli"]);
+/** What the board's hand-off menus can start: a T3 Code thread, or a session of a CLI harness (LAUNCHABLE_HARNESSES). */
+export const HandoffTarget = z.enum(["t3-code", "claude-code", "codex", "copilot-cli"]);
 export type HandoffTarget = z.infer<typeof HandoffTarget>;
 
 /** Every target shown, as a target added later starts. */

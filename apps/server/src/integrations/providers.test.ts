@@ -142,7 +142,7 @@ function service(
   const settings = {
     providers: [] as ProviderSetting[],
     t3TokenSet: false,
-    handoffMenus: { "t3-code": true, "claude-code": true, "copilot-cli": true },
+    handoffMenus: { "t3-code": true, "claude-code": true, codex: true, "copilot-cli": true },
   };
   let seedPending = false;
   const update = vi.fn<(input: { providers?: ProviderSetting[] }) => void>((input) => {
@@ -476,12 +476,13 @@ describe("providers: seeding from detection", () => {
     expect(seedPending()).toBe(false);
   });
 
-  it("leaves out a CLI the user hid from the hand-off menus, and T3 Code without a token", async () => {
+  it("leaves out a CLI the user hid from the hand-off menus, T3 Code without a token, and Codex", async () => {
     const { svc, settings, pendSeed, update } = service(
       { claudeMcp: () => Promise.resolve("") },
       { t3: { ...T3_OFF, detected: true } },
     );
-    settings.handoffMenus = { "t3-code": true, "claude-code": false, "copilot-cli": false };
+    // Codex had no hand-off entry before providers were opt-in, so its CLI alone doesn't add it.
+    settings.handoffMenus = { "t3-code": true, "claude-code": false, codex: true, "copilot-cli": false };
     pendSeed();
     expect(await svc.seedFromDetection()).toEqual([]);
     expect(update).not.toHaveBeenCalled();

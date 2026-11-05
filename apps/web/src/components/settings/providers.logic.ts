@@ -155,7 +155,10 @@ export function providerLosses(id: ProviderId): string[] {
         "Claude Code models leave the tier and custom-model pickers, and the Ask box in Settings stops.",
       ];
     case "codex":
-      return ["Codex leaves the Headless runs select and the tier and custom-model pickers."];
+      return [
+        "“New Codex session” leaves the hand-off menus and the launch and plan dialogs.",
+        "Codex leaves the Headless runs select and the tier and custom-model pickers.",
+      ];
     case "copilot-cli":
       return [
         "“New Copilot CLI session” leaves the hand-off menus and the launch and plan dialogs.",

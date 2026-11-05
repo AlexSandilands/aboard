@@ -25,6 +25,26 @@ describe("new session argv", () => {
     ).toEqual(["copilot", "--session-id", ID, "--name", "Planning #4", "-i", "Plan"]);
   });
 
+  it("starts Codex with its model, its effort as a config key and the prompt after --, with no id or name", () => {
+    expect(
+      newSessionArgv({
+        harness: "codex",
+        sessionId: null,
+        model: "gpt-6.1-sol",
+        effort: "xhigh",
+        name: "Implementing #4",
+        prompt: "- Go",
+      }),
+    ).toEqual(["codex", "--model", "gpt-6.1-sol", "-c", "model_reasoning_effort=xhigh", "--", "- Go"]);
+    // A level Codex doesn't take is left off; an id given anyway is ignored, as Codex picks its own.
+    expect(
+      newSessionArgv({ harness: "codex", sessionId: ID, model: null, effort: "minimal", name: "n", prompt: "p" }),
+    ).toEqual(["codex", "--", "p"]);
+    expect(() =>
+      newSessionArgv({ harness: "claude-code", sessionId: null, model: null, name: "n", prompt: "p" }),
+    ).toThrow(/needs a session id/);
+  });
+
   it("passes the effort after the model, as each CLI names the flag", () => {
     expect(
       newSessionArgv({

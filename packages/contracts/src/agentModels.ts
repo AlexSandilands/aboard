@@ -16,6 +16,10 @@ export const AgentModel = z.object({
    * model (Copilot CLI): then the CLI's own list applies (`CLI_EFFORTS`).
    */
   effortLevels: z.array(CliEffort).nullable(),
+  /** The model the CLI runs when none is given, when the CLI says (Codex's `isDefault`). */
+  isDefault: z.boolean().optional(),
+  /** The effort it runs at when none is given, when the CLI says (Codex's `defaultReasoningEffort`). */
+  defaultEffort: CliEffort.nullable().optional(),
 });
 export type AgentModel = z.infer<typeof AgentModel>;
 

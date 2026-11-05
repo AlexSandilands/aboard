@@ -1,4 +1,5 @@
 import {
+  AgentHarness,
   AskSettingsInput,
   ConnectT3Input,
   MergePrInput,
@@ -59,7 +60,11 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
 
   app.get(
     "/api/links/:id/fix",
-    handle((c) => c.json(manualFix(services, idParam(c)))),
+    // `harness`: the CLI the fix starts in, as one that picks its own session id is told to link itself.
+    handle((c) => {
+      const { harness } = parseQuery(c, z.object({ harness: AgentHarness.optional() }));
+      return c.json(manualFix(services, idParam(c), harness));
+    }),
   );
   app.get(
     "/api/links/:id/resume-command",
