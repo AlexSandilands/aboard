@@ -333,9 +333,11 @@ describe("starting a session from the board", () => {
     expect(body.command).toBe(
       `cd ${shQuote(app.root)} && codex --model gpt-6.1-sol -c model_reasoning_effort=ultra -- '- Work on #1'`,
     );
-    // Copilot's level is refused for Codex before any terminal opens.
-    expect((await app.start({ harness: "codex", effort: "minimal" })).status).toBe(400);
-    expect(app.spawned).toHaveLength(1);
+    // The levels older Codex models list reach the argv too.
+    const minimal = await app.start({ harness: "codex", model: "gpt-old", effort: "minimal", prompt: "go" });
+    expect(minimal.status).toBe(201);
+    expect(minimal.body.command).toContain("-c model_reasoning_effort=minimal");
+    expect(app.spawned).toHaveLength(2);
   });
 
   it("tells a Codex session in a short prompt to link itself, under the label the board would give it", () => {

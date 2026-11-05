@@ -53,15 +53,16 @@ export type CliEffort = z.infer<typeof CliEffort>;
  */
 export const CLI_EFFORTS: Record<AgentHarness, readonly CliEffort[]> = {
   "claude-code": ["low", "medium", "high", "xhigh", "max"],
-  // `model_reasoning_effort` in Codex's config (`-c model_reasoning_effort=<level>`): the levels Codex's models list in
-  // `model/list` (codex-cli 0.166.0), which narrows them per model.
-  codex: ["low", "medium", "high", "xhigh", "max", "ultra"],
+  // `model_reasoning_effort` in Codex's config (`-c model_reasoning_effort=<level>`): Codex's `ReasoningEffort`, which
+  // the models list in `model/list` (codex-cli 0.166.0) and which narrows them per model. Older models list `none` and
+  // `minimal`.
+  codex: ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"],
   "copilot-cli": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
 };
 
 /**
- * The level, when the harness's CLI takes it: `none` and `minimal` are Copilot's and `ultra` is Codex's, and
- * `claude --effort` refuses them.
+ * The level, when the harness's CLI takes it: `none` and `minimal` are Copilot's and Codex's and `ultra` is
+ * Codex's, and `claude --effort` refuses them.
  */
 export const cliEffortFor = (harness: AgentHarness, effort: CliEffort | null | undefined): CliEffort | null =>
   effort && CLI_EFFORTS[harness].includes(effort) ? effort : null;

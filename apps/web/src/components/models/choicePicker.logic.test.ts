@@ -280,6 +280,8 @@ describe("choiceEffortColumn", () => {
     const column = choiceEffortColumn({ kind: "model", provider: "codex", model: "gpt-x" }, null, scanned, "gpt-x");
     expect(column.groups[0]!.options.map((o) => o.id)).toEqual([
       null,
+      "none",
+      "minimal",
       "low",
       "medium",
       "high",
@@ -323,7 +325,16 @@ describe("resolvesTo", () => {
 describe("modelLevels", () => {
   it("lists a model's levels, and none for the CLI's default model, so an effort can't ride along hidden", () => {
     expect(modelLevels(scanned, "claude-code", "opus")).toEqual(["low", "high", "max"]);
-    expect(modelLevels(scanned, "codex", "gpt-x")).toEqual(["low", "medium", "high", "xhigh", "max", "ultra"]);
+    expect(modelLevels(scanned, "codex", "gpt-x")).toEqual([
+      "none",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra",
+    ]);
     expect(modelLevels(scanned, "claude-code", null)).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AgentModels, ProviderSetting } from "@repo/contracts";
+import { cliEffortFor, type AgentModels, type ProviderSetting } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
@@ -159,6 +159,22 @@ describe("parseCodexModels", () => {
     ]);
     expect(models.map((m) => m.value)).toEqual(["gpt-6.1-sol", "gpt-odd"]);
     expect(models[1]).toEqual({ value: "gpt-odd", label: null, description: null, effortLevels: ["high"] });
+  });
+
+  it("keeps the none and minimal levels older models list, which the CLI list accepts", () => {
+    const [model] = parseCodexModels([
+      {
+        data: [
+          {
+            model: "gpt-old",
+            supportedReasoningEfforts: [{ reasoningEffort: "none" }, { reasoningEffort: "minimal" }],
+            defaultReasoningEffort: "none",
+          },
+        ],
+      },
+    ]);
+    expect(model).toMatchObject({ effortLevels: ["none", "minimal"], defaultEffort: "none" });
+    for (const level of model!.effortLevels ?? []) expect(cliEffortFor("codex", level)).toBe(level);
   });
 
   it("throws when no page lists a model", () => {

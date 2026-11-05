@@ -400,7 +400,7 @@ describe("resolveOperationModel: picking a provider", () => {
     expect(
       resolveOperationModel(
         "taskRun",
-        { automation: [{ provider: "codex", model: "x", effort: "minimal" }] },
+        { automation: [{ provider: "codex", model: "x", effort: "turbo" as never }] },
         settings(),
       ),
     ).toMatchObject({ ok: true, provider: "codex", model: "x", effort: null });

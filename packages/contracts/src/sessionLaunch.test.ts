@@ -38,7 +38,14 @@ describe("new session argv", () => {
     ).toEqual(["codex", "--model", "gpt-6.1-sol", "-c", "model_reasoning_effort=xhigh", "--", "- Go"]);
     // A level Codex doesn't take is left off; an id given anyway is ignored, as Codex picks its own.
     expect(
-      newSessionArgv({ harness: "codex", sessionId: ID, model: null, effort: "minimal", name: "n", prompt: "p" }),
+      newSessionArgv({
+        harness: "codex",
+        sessionId: ID,
+        model: null,
+        effort: "turbo" as never,
+        name: "n",
+        prompt: "p",
+      }),
     ).toEqual(["codex", "--", "p"]);
     expect(() =>
       newSessionArgv({ harness: "claude-code", sessionId: null, model: null, name: "n", prompt: "p" }),

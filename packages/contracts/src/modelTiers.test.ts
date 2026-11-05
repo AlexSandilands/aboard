@@ -26,6 +26,8 @@ describe("cli effort", () => {
     expect(cliEffortFor("claude-code", "minimal")).toBeNull();
     expect(cliEffortFor("copilot-cli", "none")).toBe("none");
     expect(cliEffortFor("copilot-cli", null)).toBeNull();
+    expect(cliEffortFor("codex", "minimal")).toBe("minimal");
+    expect(cliEffortFor("codex", "none")).toBe("none");
   });
 
   it("lists only valid levels for each harness", () => {
