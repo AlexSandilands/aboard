@@ -1,5 +1,4 @@
-import type {
-  AgentHarness} from "@repo/contracts";
+import type { AgentHarness } from "@repo/contracts";
 import {
   AGENT_HARNESSES,
   MODEL_PROFILES_MAX,

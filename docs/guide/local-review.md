@@ -15,10 +15,12 @@ The reviewer follows the built-in review skill, or any skill you have installed 
 or Codex, chosen per project if you like.
 
 By default the reviewer runs on the same model as the agent that did the work. To have a specific model review
-everything (say, Opus), pick a tier or type a model under **Reviewer model** in **Settings → Tasks → Review**. A
-project can choose its own in its settings, and a task in the **Automation** section of its panel (shown while
-auto-review is on for it). Agents can set the task's with `update_task`, when you ask them to. The same model
-runs the board's own reviewer, which otherwise runs on the Standard tier. If no agent runs the review, the board nudges the task's T3
+everything (say, Opus), pick it for **Reviewer subagent** under **Settings → Models → Operations**: a tier, a custom
+model, or any provider's model with its effort. **Board reviewer** beside it is the board's own reviewer, which runs
+on the Standard tier unless you pick another; it needs a provider that can return a structured verdict, so the picker
+greys out the ones that can't. **Settings → Tasks → Review** shows what both come down to, with a link. A project can
+choose its own reviewer for both in its settings (**Reviewer model**), and a task in the **Automation** section of its
+panel (shown while auto-review is on for it). Agents can set the task's with `update_task`, when you ask them to. If no agent runs the review, the board nudges the task's T3
 Code thread, and can run the review itself with Claude Code headless.
 
 How it works: [docs/features/local-review.md](../features/local-review.md).

@@ -1,6 +1,5 @@
 // Pure helpers for the tiers and custom models on the Models page: which providers' fields a tier row shows, and the tier one edit sends.
-import type {
-  AgentHarness} from "@repo/contracts";
+import type { AgentHarness } from "@repo/contracts";
 import {
   MODEL_TIERS,
   type CliEffort,

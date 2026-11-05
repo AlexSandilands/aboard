@@ -124,7 +124,7 @@ plans a task suggests a **model tier** for implementing it, and hand-offs use it
   null. Agents set it with `set_plan`, `create_task` or `update_task` (`null` clears it), and never need to
   know any harness's model names. The user can change or clear it under Details in the task panel. A change
   is logged as `suggested_model_changed`.
-- **Settings → Model tiers** says what each tier means for you, one row per tier: a free-text description (e.g.
+- **Settings → Models** says what each tier means for you, one row per tier: a free-text description (e.g.
   "Sonnet 5.5, medium effort") for any harness; when T3 Code is connected, a T3 model with its effort and fast
   mode; and a `--model` and `--effort` for each CLI found (Claude Code, Copilot CLI; `modelTiers[tier].cli` and
   `cliEffort`), picked from the models the CLI lists, see [agent-sessions.md](agent-sessions.md#choosing-a-clis-model). A provider that
@@ -258,7 +258,7 @@ own web client uses:
 2. Connect to `ws://<t3-origin>/ws?orchestrationProtocol=2&wsTicket=<ticket>`.
 3. Send Effect-RPC JSON requests and wait for each reply:
    - `server.getConfig` (providers, models, settings) and `vcs.listRefs` (branches) fill the dialog, and
-     `server.getConfig` alone fills the model pickers in Settings → Model tiers;
+     `server.getConfig` alone fills the model pickers in Settings → Models;
    - for each pasted image, `attachments.createUploadUrl` (`{type: "image", name, mimeType, sizeBytes}`) returns a
      pending attachment id and a signed `relativeUrl`; the server `POST`s the image's bytes to `<t3-origin><relativeUrl>`
      (no token: the URL carries its own, valid for 10 minutes). A refused upload stops the launch before anything starts;
@@ -388,4 +388,4 @@ the user turns on **Let agents start threads** ([epics.md](epics.md#t3-code-thre
 | `apps/server/src/integrations/t3.ts` | `launchOptions`, `startThread` and `launchTaskThread`, and linking the new thread to the task; `startProjectThread` for a project's Suggest epics |
 | `apps/web/src/components/handoff/` | Buttons, the dialog (for a task, a project or a set of tasks to plan) and its pickers, `PlanTasksDialog`; pasted images (`LaunchImages.tsx`, `launchImages.logic.ts`); pure logic in `handoff.logic.ts` |
 | `apps/web/src/components/board/boardSelection.logic.ts` | Ctrl/⌘-click picking of cards, and which of them a planning session can take |
-| `apps/web/src/components/settings/ModelTiersSection.tsx`, `modelTiers.logic.ts` | Settings → Model tiers; which providers' fields show and the per-tier update (`modelTiers.logic.ts` is tested) |
+| `apps/web/src/components/settings/ModelsPage.tsx`, `modelTiers.logic.ts` | Settings → Models; which providers' columns show and the per-tier update (`modelTiers.logic.ts` is tested) |

@@ -44,12 +44,12 @@ it a plan, put it in an epic, flagged it for Autopilot or marked it a priority.
   presets fill them in; edit them if your tracker differs (a custom field for epics, say).
 
 Both run the Claude Code CLI, the one named under **Settings → Providers → Claude Code** (it's `claude` from your PATH
-unless you set another), on a small model (Haiku by default). The model can be one of your **Model tiers**
-instead: set it once there and pick the tier here.
+unless you set another), on the Light tier by default. Pick another under **Settings → Models → Operations →
+Issue import**: a tier, a custom model, or a model with its effort.
 
 ## Settings
 
-**Settings → Tasks → New tasks** (Issue import) has the switch, the model and the most one import may spend. Each ticket
+**Settings → Tasks → New tasks** (Issue import) has the switch, what the model resolves to (with a link to change it) and the most one import may spend. Each ticket
 system's import tools and instructions are on the system, under **Settings → Integrations → Ticket systems**. If your own
 tools lack a search tool, an epic's children can't be found and it imports as a single task, with a note saying so.
 

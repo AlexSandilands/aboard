@@ -37,10 +37,10 @@ and a click tries again.
 | **Keybindings**  | [Shortcuts](using-the-board.md#keyboard) by group (General, Navigation), with a search box |
 | **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), [Suggestions](#suggested-changes) |
 | **Providers**    | [Providers](#providers): T3 Code, Claude Code, Codex and GitHub Copilot, once you add them ([connecting agents](connect-agents.md), [T3 Code](t3-code.md)) |
-| **Model tiers**  | What Light, Standard and Deep mean: a description for prompts, and the model each provider starts on (T3 Code, Claude Code, Copilot CLI), picked from the models each lists, with an effort for the CLIs. **Custom models** add named models picked by a task label |
+| **Models**       | [Models](#models): **Tiers** (what Light, Standard and Deep mean on each provider you added), **Custom models** (named models picked by a task label), **Operations** (the model each kind of run uses) |
 | **Autopilot**    | [Autopilot](autopilot.md) (pause, limits, quiet hours, then each automation), [Custom automations](custom-automations.md) |
 | **Integrations** | GitHub, Ticket systems, Terminal |
-| **Project**      | General (name, icon, folder), Planning skill, Review skill and reviewer model, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
+| **Project**      | General (name, icon, folder), Planning skill, Review skill, Reviewer model, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
 
 - **Project → General → Choose icon → Image** lists the images already in the project's folder under **Found in
   project**: PNG, JPEG, WebP, GIF, SVG and ICO files under 2 MB, up to 60, with names like `favicon` and `logo` first,
@@ -50,24 +50,37 @@ and a click tries again.
   General and for a project with no folder.
 - GitHub, Ticket systems and Terminal each have a dot by their name: green when working, amber when something needs
   fixing.
-- The model a new session starts on for each suggested tier is set on the **Model tiers** page (empty leaves the
-  CLI's default). A provider's fields show there only while it is added and on.
-- The issue import and the board reviewer can run on a tier too: their **Model** rows take a tier (Light, Standard
-  or Deep) or a model you type. A tier runs its Claude Code model from the Model tiers page; if it has none, the
-  CLI's default runs, and the row says so with a link to the tier. The board reviewer's default is the CLI's own
-  model.
 - A session whose CLI isn't available here has no **Open in terminal** or **Fork in terminal** in its menus, only
   the copy commands.
 - On the Autopilot page each automation is folded: its On / Off switch is in the header, and opening it
   shows what it does and its settings. Only a project's or epic's switch has Inherit.
 - The Project page has a picker at the top. It starts on the project the board was showing, else the first one.
 
+## Models
+
+Every place you choose a model uses the same picker: the providers you added down the side, a search over their
+models, and the effort beside the list. Its first tab holds **Inherit** (where there is one, with what it comes down
+to), the three tiers and your custom models, each saying what it would run on. A provider that can't do what the job
+needs is greyed out; hover it to see why. A model a provider doesn't list (Codex lists none) can be typed in the
+search and used.
+
+- **Tiers**: one row per tier and one column per provider you added and switched on. Give each tier a description
+  (named in copied prompts) and, per provider, the model and effort a session starts on when a task suggests that
+  tier (empty leaves the provider's default). **Preferred** marks the provider headless runs on that tier try first;
+  without one, or when it can't do the job, the first able provider in your Providers list runs it.
+- **Custom models**: the same row for a named model, with the task labels that pick it whatever the task's tier.
+- **Operations**: the model for each kind of run, in three groups: Review (the reviewer subagent, the board reviewer,
+  PR review and fixes), Autopilot (task runs, Orchestrate, the digest, custom automations) and Board tools (new
+  sessions, issue import, Ask). **Default** keeps the built-in choice. Under each row is what it resolves to right now,
+  on which provider and why, or why nothing can run it. A project and a task can still pick their own reviewer, and
+  each automation its own Model.
+
 ## Providers
 
 The board only offers the tools you add here. On a new install the page is empty: **Add provider** lists T3 Code,
 Claude Code, Codex and GitHub Copilot with what this machine has (installed and its version, running, or not found),
 and picking one adds it and opens it. Until you add a provider it appears nowhere else: not in the hand-off menus,
-the launch and planning dialogs, the Model tiers page or the Headless runs select. An upgraded board starts with the
+the launch and planning dialogs, or the Models page. An upgraded board starts with the
 providers you were already using.
 
 The list on the left shows each provider you added with a dot, its version (or T3 Code's name) and an on/off switch;
@@ -81,7 +94,7 @@ reload opens it. On a narrow window the two stack. Each provider's settings come
 - **MCP & skill**: the command that registers the board's MCP server, whether it is registered, and **Board skills**.
 - **Hand-off menu**: **Show in hand-off menus**, to stop offering a new thread or session in that tool while keeping it
   added.
-- **Models**: a link to the Model tiers page.
+- **Models**: what each tier runs on this provider, the models its CLI lists, and a link to the Models page.
 
 The dot is green when the CLI runs and the board's MCP server is registered with it (the board finds the server by its
 address, so it doesn't matter what you named it; `localhost` and `127.0.0.1` count as the same), or for T3 Code once a

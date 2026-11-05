@@ -133,8 +133,8 @@ sessions, [ADR 0010](../decisions/0010-board-starts-new-sessions.md).
 A provider (T3 Code, Claude Code, Codex, GitHub Copilot: `PROVIDERS` in `packages/contracts/src/providers.ts`) is
 opt-in. The user adds it in **Settings → Providers**, and the `providers` setting keeps `{ id, enabled, cliPath }` for
 each one added. A provider that isn't added, or is switched off, shows nowhere else: not in the hand-off menus
-(`handoffClis`, `canStartProjectT3Thread`), the launch and plan dialogs opened from them, the model tier and custom-model
-fields, or the Headless runs select. Agents can't start T3 threads without T3 Code added (`t3LaunchBlocker`). Sessions
+(`handoffClis`, `canStartProjectT3Thread`), the launch and plan dialogs opened from them, the Models page's columns, or the
+model pickers' provider tabs. Agents can't start T3 threads without T3 Code added (`t3LaunchBlocker`). Sessions
 and threads already linked to tasks still open whatever the list says. `harnessCliSetting` reads a CLI provider's
 path from the list (none looks the CLI's name up on PATH); the board reviewer, issue import, the settings Ask, new
 sessions, resumes and headless runs all use it. See [ADR 0011](../decisions/0011-opt-in-providers.md).
@@ -194,10 +194,10 @@ model for the task's model, which model that is and what picked it (a label's cu
   with `linkedSession`: the agent is told the board linked the session and has no suggested-model line. An epic's
   is the orchestrating prompt (mode `orchestrate`, session label "Orchestrating #N") with no **Plan with me**, and
   the server refuses a mode that doesn't fit the task (`handoffModeError`);
-- a model, filled in from **Settings → Model tiers** (the custom model's or the tier's `cli[harness]`) for a work prompt; **Default
-  model**, and planning, use the CLI's default. It is the Model tiers page's picker (`CliModelPicker`, with
-  `defaultLabel`), listing the models the CLI's scan found (`GET /api/agent-models`); a name it doesn't list can be
-  typed. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
+- a model, filled in from **Settings → Models** (the custom model's or the tier's `cli[harness]`) for a work prompt; **Default
+  model**, and planning, use the CLI's default. It is the shared model picker locked to the CLI (`CliModelPicker` in
+  `components/models/`, with `defaultLabel`), listing the models the CLI's scan found (`GET /api/agent-models`) with
+  the effort beside them; a name it doesn't list can be typed. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
 - an effort next to it (`--effort` for Claude Code, `--reasoning-effort` for Copilot CLI; `CliEffortMenu`), filled in
   from the same model's `cliEffort[harness]` (`options.efforts`) and followed by the plan toggle like the model. It
   offers the levels the scan lists for the model, else the CLI's own (`CLI_EFFORTS`), or "Default effort", which passes
@@ -351,16 +351,16 @@ Copilot CLI support is unit-tested only.
 
 ## Choosing a CLI's model
 
-**Settings → Model tiers** picks each tier's (and each custom model's) Claude Code and Copilot CLI model from a list
-the CLI itself gives, so a model isn't typed from memory. The row looks like the T3 Code one above it, on the same
-`ComposerControl`: a button with the CLI's mark and the model's name (`CliModelPicker`) opens a searchable list of
-the models, each with its name, its value and what the CLI says about it. Search text the list doesn't have can be
-used as typed (`claude-opus-5-5`, `sonnet[1m]`; checked as a `CliModel`). A saved model the scan doesn't list still
-shows. Beside it are the effort menu (`CliEffortMenu`) and a button that clears the model, which means the CLI's
-default. A model is saved as soon as it is picked.
+**Settings → Models** picks each tier's (and each custom model's) CLI model from a list the CLI itself gives, so a
+model isn't typed from memory. Each cell is the shared model picker ([board-layout.md](board-layout.md#the-model-picker))
+locked to the CLI: a button with the CLI's mark, the model's name and its effort opens a searchable list of the
+models, each with its name, its value and what the CLI says about it, and the effort column beside it. Search text the
+list doesn't have can be used as typed (`claude-opus-5-5`, `sonnet[1m]`; checked as a `CliModel`). A saved model the
+scan doesn't list still shows. Beside the cell is a button that clears the model, which means the CLI's default. A
+model is saved as soon as it is picked.
 
-`GET /api/agent-models` (`integrations/agentModels.ts`) asks each CLI, and only the Model tiers page does, once a CLI's
-field is shown (`useAgentModels`); `GET /api/providers` reuses the same cache for its model counts:
+`GET /api/agent-models` (`integrations/agentModels.ts`) asks each CLI, and only where a picker needs it, once a CLI's
+cell or tab is shown (`useAgentModels`); `GET /api/providers` reuses the same cache for its model counts:
 
 - **Claude Code:** `claude -p --input-format stream-json --output-format stream-json --verbose` is given one
   `initialize` control request on stdin, then stdin closes. The CLI answers with `models[]` (`value`, `displayName`,
@@ -399,7 +399,7 @@ drops an effort for a harness with no model. The effort goes everywhere the mode
 | `apps/server/src/integrations/providers.ts` | `GET /api/providers`: CLI, MCP, T3 and models checks, their cache, and the seed from detection (tested) |
 | `apps/server/src/db/codeMigrations.ts` | `040_providers_settings`: seeds the list and moves the CLI paths (tested in `database.test.ts`) |
 | `apps/web/src/components/settings/ProvidersPage.tsx`, `ProviderEditors.tsx` | Settings → Providers: the list, the Add provider dialog and each provider's editor (`providers.logic.ts` is tested) |
-| `apps/web/src/components/settings/CliModelPicker.tsx` | The model picker and effort menu of the Model tiers page and the new-session and planning dialogs (`cliModelPicker.logic.ts` is tested) |
+| `apps/web/src/components/models/` | The shared model picker of the Models page, the new-session and planning dialogs and every other model control (`*.logic.ts` tested) |
 | `apps/server/src/db/migrations/015_agent_session_links.sql` | Adds the `agent_session` link kind |
 | `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/providers`, `/api/agent-models` |
 | `apps/server/src/http/routes/tasks.ts` | `/api/tasks/:id/session-launch-options`, `/api/tasks/:id/sessions` |
