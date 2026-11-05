@@ -6,6 +6,7 @@ import { cliEffortFor, type AgentModels, type ProviderSetting } from "@repo/cont
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
+import { liveGroups } from "./processTree.ts";
 import {
   CLAUDE_INITIALIZE_REQUEST,
   createAgentModels,
@@ -239,6 +240,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       expect(parseCodexModels(pages).map((m) => m.value)).toEqual(["gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"]);
       expect(sent().map((m) => m.method)).toEqual(["initialize", "initialized", "model/list", "model/list"]);
       expect(sent()[3]?.params).toEqual({ cursor: "page-2" });
+      // The server's process group (off Windows) is tracked until it has really exited.
+      await vi.waitFor(() => expect(liveGroups.size).toBe(0), { timeout: 3000 });
     },
     PROCESS_TEST_TIMEOUT,
   );

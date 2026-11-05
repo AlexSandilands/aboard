@@ -16,6 +16,9 @@ export type CodexModelPages = unknown[];
 /** More pages than any model list has: a server that keeps sending cursors is cut off rather than followed forever. */
 const MAX_PAGES = 20;
 
+/** How long `codex app-server` gets to exit after SIGTERM before it is killed. */
+const FORCE_KILL_MS = 2000;
+
 /**
  * Runs `<exe> app-server`, sends `initialize` and `initialized`, then asks `model/list` (following `nextCursor`) and
  * returns every page's `result`. Rejects when the process can't start, exits early, answers an error or takes longer
@@ -38,6 +41,15 @@ export function codexModelPages(
       : spawn(exe, args, { cwd: opts.cwd, env: opts.env, windowsHide: true, detached: POSIX_GROUPS });
     const group = POSIX_GROUPS ? child.pid : undefined;
     if (group !== undefined) liveGroups.add(group);
+    // The group stays tracked until the server has really exited, so a server that ignores SIGTERM is still ended
+    // with the board; it gets SIGKILL if it outlives the grace period.
+    let exited = false;
+    let forceKill: NodeJS.Timeout | undefined;
+    child.once("exit", () => {
+      exited = true;
+      clearTimeout(forceKill);
+      if (group !== undefined) liveGroups.delete(group);
+    });
 
     const pages: CodexModelPages = [];
     let nextId = 1;
@@ -50,8 +62,11 @@ export function codexModelPages(
       settled = true;
       clearTimeout(timer);
       child.stdin.end();
-      killTree(child);
-      if (group !== undefined) liveGroups.delete(group);
+      if (!exited) {
+        killTree(child);
+        forceKill = setTimeout(() => killTree(child, true), FORCE_KILL_MS);
+        forceKill.unref();
+      }
       if (error) reject(error);
       else resolve(pages);
     };
