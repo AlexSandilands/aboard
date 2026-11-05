@@ -49,6 +49,7 @@ function setup() {
   const opened: EpicPrInput[] = [];
   const bodies: Array<{ number: number; body: string }> = [];
   let mergeError: Error | null = null;
+  let mergeMethod: "merge" | "squash" | "rebase" = "merge";
   let openError: Error | null = null;
   const h = createTestHarness({ integrations: { automations: [reviewPrs, mergeEpicPrs] } });
   const s = h.services;
@@ -66,6 +67,7 @@ function setup() {
           title: ("snapshot" in link ? link.snapshot?.title : undefined) ?? undefined,
         }),
       );
+      return { method: mergeMethod };
     },
     ensureEpicPr: async (input) => {
       opened.push(input);
@@ -153,6 +155,8 @@ function setup() {
     merges,
     opened,
     bodies,
+    /** The method the fake merge reports, as the real one does for the repository's settings. */
+    mergeWith: (m: "merge" | "squash" | "rebase") => (mergeMethod = m),
     failMerge: (e: Error | null) => (mergeError = e),
     failOpen: (e: Error | null) => (openError = e),
   };
@@ -170,6 +174,20 @@ describe("merge into epic branch", () => {
     expect(s.tasks.summary(task.id).status).toBe("done");
     await pass();
     expect(merges).toHaveLength(1);
+  });
+
+  it("names the method the merge used, as a squash-only repository gets", async () => {
+    const { s, task, setPr, toReview, pass, turnOn, runs, mergeWith } = setup();
+    mergeWith("squash");
+    turnOn();
+    toReview();
+    setPr();
+    await pass();
+    expect(runs()[0]).toMatchObject({
+      status: "succeeded",
+      summary: expect.stringMatching(/^Merged PR #\d+ into epic\/.* \(squash\)$/),
+    });
+    expect(s.tasks.summary(task.id).status).toBe("done");
   });
 
   it("waits for Review, an open PR into the branch, passing checks and a clean merge", async () => {

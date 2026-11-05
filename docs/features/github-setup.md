@@ -36,7 +36,8 @@ fails the release's date check has to stay, or the ruleset has to be switched of
 `scripts/github-setup.ts` also sets:
 
 - **Squash merges only**, titled with the PR title and with the commit messages as the body, so `main` gets one
-  Conventional commit per PR and keeps `Co-Authored-By` trailers.
+  Conventional commit per PR and keeps `Co-Authored-By` trailers. Autopilot's merges of task PRs into an epic's
+  branch follow it: with merge commits off it squashes there too ([Autopilot](autopilot.md)).
 - **Auto-merge** allowed, **update branch** offered, **head branches deleted** on merge.
 - **Dependabot alerts and security updates** on.
 
