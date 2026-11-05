@@ -350,10 +350,17 @@ async function start(argv: string[]): Promise<void> {
   const { live, seed, desktop, prod } = parseArgs(argv, isScenarioName);
   const existing = readState();
   if (existing && ownedPids(existing).includes(existing.pid)) {
-    // Same checkout, so Vite already hot-reloads its edits: hand back the running one instead of a port clash.
+    // Same checkout: hand back the running one instead of a port clash. A dev sandbox hot-reloads its edits; a
+    // production one serves the build it started with, so asking for the other kind needs a fresh one.
+    if (Boolean(existing.prod) !== prod) {
+      fail(
+        `a ${existing.prod ? "production" : "dev"} sandbox is already running; ` +
+          `run \`pnpm sandbox stop\` first for a ${prod ? "production" : "dev"} one`,
+      );
+    }
     console.log(
-      `[sandbox] already running (${existing.mode}${existing.seed ? `, seed ${existing.seed}` : ""}); ` +
-        "run `pnpm sandbox stop` first for a fresh one",
+      `[sandbox] already running (${existing.mode}${existing.prod ? ", production build" : ""}` +
+        `${existing.seed ? `, seed ${existing.seed}` : ""}); run \`pnpm sandbox stop\` first for a fresh one`,
     );
     console.log(`${READY_PREFIX} ${JSON.stringify(existing)}`);
     if (desktop) await openDesktop(existing).catch((error: Error) => fail(error.message));
@@ -396,6 +403,29 @@ async function start(argv: string[]): Promise<void> {
   };
   process.on("SIGINT", () => shutdown(0));
   process.on("SIGTERM", () => shutdown(0));
+
+  const viteBin = join(
+    dirname(createRequire(join(webDir, "package.json")).resolve("vite/package.json")),
+    "bin",
+    "vite.js",
+  );
+  const viteConfig = join(webDir, "vite.config.ts");
+  // React's development build is several times slower to render, so `--prod` judges performance on a production
+  // build. It goes in the sandbox's home, leaving apps/web/dist alone; `vite preview` reuses the dev server's proxy.
+  // Built before anything starts, so a failed build leaves nothing running.
+  const outDir = join(home, "web-dist");
+  if (prod) {
+    console.log("[sandbox] building the web app for --prod");
+    const build = spawnSync(process.execPath, [viteBin, "build", "--config", viteConfig, "--outDir", outDir], {
+      cwd: webDir,
+      env,
+      stdio: "inherit",
+    });
+    if (build.status !== 0) {
+      removeHome();
+      fail("the production build failed");
+    }
+  }
 
   if (live) {
     try {
@@ -442,26 +472,7 @@ async function start(argv: string[]): Promise<void> {
     );
   }
 
-  const viteBin = join(
-    dirname(createRequire(join(webDir, "package.json")).resolve("vite/package.json")),
-    "bin",
-    "vite.js",
-  );
-  const viteConfig = join(webDir, "vite.config.ts");
   if (prod) {
-    // React's development build is several times slower to render, so judge performance on a production build. It
-    // goes in the sandbox's home, leaving apps/web/dist alone; `vite preview` reuses the dev server's proxy.
-    const outDir = join(home, "web-dist");
-    console.log("[sandbox] building the web app for --prod");
-    const build = spawnSync(process.execPath, [viteBin, "build", "--config", viteConfig, "--outDir", outDir], {
-      cwd: webDir,
-      env,
-      stdio: "inherit",
-    });
-    if (build.status !== 0) {
-      removeHome();
-      fail("the production build failed");
-    }
     const args = ["preview", "--config", viteConfig, "--outDir", outDir, "--port", String(webPort), "--strictPort"];
     children.push(run("web", [viteBin, ...args], webDir, env));
   } else {

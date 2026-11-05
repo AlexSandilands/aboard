@@ -192,10 +192,13 @@ ones. The code is `lib/boardMotion.ts` and the View Transition block in `index.c
 
 - **Task panel:** the router wraps the navigation (`defaultViewTransition` in `router.tsx`), only for `?task=` appearing
   or disappearing on the board (`panelTransitionType`), with the types `panel-open` and `panel-close`. Any other
-  navigation returns `false`, which the router takes as no transition. `TaskPanel` skips `startSlide`, and `AppLayout`
-  unmounts a closing panel at once, since its snapshot (`task-panel`) slides out instead.
+  navigation returns `false`, which the router takes as no transition. While a board transition runs
+  (`boardTransitionRunning`), `TaskPanel` skips `startSlide` and `AppLayout` unmounts a closing panel at once, since its
+  snapshot (`task-panel`) slides out instead. A task opened from another page or on load gets no transition, so its
+  panel slides in with `startSlide`.
 - **Sidebar:** `setOpen` (`ui/sidebar.tsx`) starts its own transition (`startSidebarTransition`, types `sidebar-open`
-  and `sidebar-close`, the change applied in `flushSync`) and `useSidebarSlide` stands down. The offcanvas sidebar is
+  and `sidebar-close`, the change applied in `flushSync`) and `useSidebarSlide` stands down. The change applies only
+  once the old state is captured, so a second toggle before then starts from the state the first one asked for. The offcanvas sidebar is
   there in both states, so its snapshot (`app-sidebar`) slides between its two places by itself.
 - **When:** `boardSnapshotMotion()`: the setting is on, Panel animations are on (so not at 0 ms or under reduced
   motion), and `snapshotMotionSupported()`, which wants transition types, `match-element` and

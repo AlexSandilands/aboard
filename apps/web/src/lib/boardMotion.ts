@@ -57,6 +57,17 @@ const HURRY_MS = 120;
 
 /** What the latest transition named. A transition started over a running one takes them over (see unname). */
 let named: HTMLElement[] = [];
+/** Whether a board transition is running, from prepareBoardTransition until the latest one finishes. */
+let running = false;
+
+/**
+ * Whether the panel's or the sidebar's change is happening inside a board transition, which moves it, so its own slide
+ * should stand down. False when the router skipped the transition (a task opened from another page, or on load):
+ * then the panel slides in as without snapshot motion.
+ */
+export function boardTransitionRunning(): boolean {
+  return running;
+}
 
 function unname(elements: HTMLElement[]) {
   for (const element of elements) {
@@ -77,6 +88,7 @@ export function prepareBoardTransition(kind: "panel" | "sidebar") {
   unname(named);
   const mine: HTMLElement[] = [];
   named = mine;
+  running = true;
   const { innerWidth: width, innerHeight: height } = window;
   const selector = kind === "sidebar" ? `${MOVERS}, ${LEFT_EDGE}` : MOVERS;
   for (const element of document.querySelectorAll<HTMLElement>(selector)) {
@@ -90,6 +102,7 @@ export function prepareBoardTransition(kind: "panel" | "sidebar") {
     if (named !== mine) return;
     unname(mine);
     named = [];
+    running = false;
   };
   // Both callers start the transition right after this, synchronously.
   queueMicrotask(() => {

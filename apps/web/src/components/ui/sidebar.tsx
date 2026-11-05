@@ -151,17 +151,25 @@ function SidebarProvider({
   // We use openProp and setOpenProp for control from outside the component.
   const [_open, _setOpen] = React.useState(defaultOpen);
   const open = openProp ?? _open;
+  // With snapshot motion the change applies only once the transition has captured the old state, a frame or more
+  // later: a second toggle before then starts from the state the first one asked for, not the stale `open`.
+  const pendingOpen = React.useRef<boolean | null>(null);
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
-      const openState = typeof value === "function" ? value(open) : value;
+      const current = pendingOpen.current ?? open;
+      const openState = typeof value === "function" ? value(current) : value;
       const apply = () => {
+        // A skipped transition still applies its change first; it must not clear the newer request.
+        if (pendingOpen.current === openState) pendingOpen.current = null;
         if (setOpenProp) {
           setOpenProp(openState);
         } else {
           _setOpen(openState);
         }
       };
-      if (openState === open || !startSidebarTransition(openState, () => flushSync(apply))) apply();
+      if (openState === current) return;
+      pendingOpen.current = openState;
+      if (!startSidebarTransition(openState, () => flushSync(apply))) apply();
     },
     [setOpenProp, open],
   );

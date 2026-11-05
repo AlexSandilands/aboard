@@ -3,16 +3,16 @@ import { memo, useEffect, useEffectEvent, useState } from "react";
 import { Board } from "~/components/board/Board";
 import { useCloseTask, useSelectedTaskId } from "~/components/board/boardNavigation";
 import { TaskPanel } from "~/components/task/TaskPanel";
-import { boardSnapshotMotion } from "~/lib/boardMotion";
+import { boardTransitionRunning } from "~/lib/boardMotion";
 import { useMarkTaskNotificationsRead } from "~/state/mutations";
 import { useSettingsNav } from "~/state/ui";
 
 /**
  * Whether a closing panel stays mounted to slide out. Read from <html>, where the Appearance prefs and reduced motion
- * have already been resolved. Not with snapshot motion, whose View Transition animates the panel's snapshot instead.
+ * have already been resolved. Not in a board transition, whose View Transition animates the panel's snapshot instead.
  */
 function panelSlidesOut(): boolean {
-  return document.documentElement.dataset.panelAnimations === "true" && !boardSnapshotMotion();
+  return document.documentElement.dataset.panelAnimations === "true" && !boardTransitionRunning();
 }
 
 /**
