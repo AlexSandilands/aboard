@@ -38,7 +38,11 @@ export function BackupSection({ settings }: { settings: AppSettings }) {
   const state = backupState(settings);
   const run = useMutation({
     mutationFn: () => api<BackupStatus>("/api/backup/run", { method: "POST", body: {} }),
-    onSuccess: (next) => queryClient.setQueryData(queryKeys.backupStatus, next),
+    onSuccess: (next) => {
+      queryClient.setQueryData(queryKeys.backupStatus, next);
+      // The first run pins a default machine name, so the settings reply cached before it is stale.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+    },
   });
   const intervals = INTERVALS.some((i) => i.value === settings.backupIntervalMinutes)
     ? INTERVALS
