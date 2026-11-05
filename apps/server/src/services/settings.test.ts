@@ -1,3 +1,5 @@
+import { hostname } from "node:os";
+import { machineNameFrom } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { createRepos } from "../db/repos/index.ts";
 import { createTestHarness } from "../test/harness.ts";
@@ -189,5 +191,25 @@ describe("providers", () => {
     h.events.length = 0;
     h.services.settings.update({ githubPolling: false });
     expect(h.events.some((e) => e.type === "providers.changed")).toBe(false);
+  });
+});
+
+describe("machine name", () => {
+  it("follows the host name until one is set, and goes back to it when cleared", () => {
+    const h = createTestHarness();
+    expect(h.services.settings.get()).toMatchObject({
+      machineName: machineNameFrom(hostname()),
+      machineNameIsDefault: true,
+    });
+    h.services.settings.update({ machineName: "work-laptop" });
+    expect(h.services.settings.get()).toMatchObject({ machineName: "work-laptop", machineNameIsDefault: false });
+    h.services.settings.update({ machineName: null });
+    expect(h.services.settings.get().machineNameIsDefault).toBe(true);
+  });
+
+  it("refuses a name that can't be a folder", async () => {
+    const h = createTestHarness();
+    const res = await h.request("/api/settings", { method: "PATCH", json: { machineName: "../up" } });
+    expect(res.status).toBe(400);
   });
 });

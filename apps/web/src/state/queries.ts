@@ -35,6 +35,7 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 import { useCallback, useEffect } from "react";
 import { taskActiveRun } from "~/components/autopilot/autopilot.logic";
 import { projectHasOrchestrateWork } from "~/components/autopilot/orchestrate.logic";
+import { followupEpicBranch } from "~/components/handoff/handoff.logic";
 import { deliverNotification } from "~/components/notifications/delivery";
 import { withCreated } from "~/components/notifications/notifications.logic";
 import { agentClisOf } from "~/components/settings/providers.logic";
@@ -49,6 +50,7 @@ export const queryKeys = {
   settings: ["settings"] as const,
   integrations: ["integrations"] as const,
   backupStatus: ["backupStatus"] as const,
+  backupSetupInfo: ["backupSetupInfo"] as const,
   skillSync: ["skillSync"] as const,
   notifications: ["notifications"] as const,
   socialFeed: ["socialFeed"] as const,
@@ -192,6 +194,16 @@ export function useProjectHasOrchestrateWork(projectId: string): boolean {
   return (
     useQuery({ ...boardQuery, select: (board) => projectHasOrchestrateWork(board.tasks, projectId) }).data ?? false
   );
+}
+
+/**
+ * The epic's branch while a Done task's code is only there (see followupEpicBranch), for its card chip and its
+ * follow-up hand-off; re-renders only when it changes.
+ */
+export function useFollowupEpicBranch(
+  task: Pick<TaskSummary, "kind" | "status" | "resolution" | "integrationBranch" | "parent">,
+): string | null {
+  return useQuery({ ...boardQuery, select: (board) => followupEpicBranch(task, board.tasks) }).data ?? null;
 }
 
 /** The run in flight on a task, for its card badge. The reducer keeps run objects stable between events. */
@@ -598,6 +610,8 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.providers });
         void queryClient.invalidateQueries({ queryKey: queryKeys.agentModels });
       }
+      // Restored from a backup: every cached task, setting and list may be another board's now.
+      if (event.type === "board.reset") void queryClient.invalidateQueries();
     };
     // EventSource retries a dropped connection itself, but an error response (e.g. Vite's proxy while
     // the dev server restarts) closes it for good, leaving the board silently stale. Reopen it then.

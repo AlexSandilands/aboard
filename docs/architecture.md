@@ -11,6 +11,7 @@ same services, so an agent's change reaches open browsers within a second.
         └──SSE /events◄── bus ◄────┤                     └── commit ─► BoardEvents ─► bus
  agents ──MCP POST /mcp────────────┘
  pollers (GitHub, T3 Code, review watchdog, Autopilot) ──► services/*
+ headless runs ──MCP POST /mcp/run (run token) ──► run tools ──► GitHost (read-only)
 ```
 
 ## Packages
@@ -48,7 +49,7 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 
 | Variable                  | Default                     | Meaning                                                            |
 | ------------------------- | --------------------------- | ------------------------------------------------------------------ |
-| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, and `worktrees/` for Autopilot's headless runs |
+| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, `instance-id` (this board's id, see features/backup.md), and `worktrees/` for Autopilot's headless runs |
 | `brandEnv("PORT")`        | `4317`                      | Listen port. Also read by Vite's proxy and the desktop shell       |
 | `brandEnv("WEB_PORT")`    | `5317`                      | Vite's port. The guard allows it as an Origin                      |
 | `brandEnv("TOKEN")`       | none                        | Optional bearer token for `/api/*`, `/mcp` and `/events`           |
@@ -78,6 +79,10 @@ Which model each operation runs on is one of them, `operationModels` (`ModelChoi
 - **Token**, when configured: `/api/*` (except `/api/health`), `/mcp` and `/events` need
   `Authorization: Bearer <token>` or a `token` query parameter (EventSource can't send headers). Static
   files don't.
+- **Run tools:** `/mcp/run` isn't behind the board's token. Its credential is a run token, minted by the Autopilot
+  runner for one headless run and sent as `Authorization: Bearer`; it opens only that run's tool set, bound to its
+  target, and is revoked when the run ends ([ADR 0013](decisions/0013-board-served-run-tools.md)). The Host and
+  Origin checks apply as everywhere.
 
 ## How a change flows
 
@@ -158,7 +163,9 @@ on independent timers:
 - **GitHub:** batched GraphQL for PR links on GitHub hosts (every 20 seconds for PRs that are changing, down to
   every 30 minutes for finished ones), with the token `gh` holds,
   and merging on request ([ADR 0006](decisions/0006-github-graphql-via-gh-token.md)). See
-  [github-prs.md](features/github-prs.md).
+  [github-prs.md](features/github-prs.md). What headless runs read from GitHub goes through a `GitHost`
+  (`integrations/gitHost.ts`, GitHub's in `githubHost.ts`, REST with the same token), served to the run as its
+  [run tools](features/autopilot.md#run-tools).
 - **T3 Code:** discovery every 60 seconds from `~/.t3/userdata/server-runtime.json`, live thread status
   every 20 seconds while a browser is connected and a token is set, project import, and thread launches
   over T3's WebSocket RPC. See [agent-handoff.md](features/agent-handoff.md).

@@ -110,6 +110,25 @@ An orchestrator in any harness can also start an epic's tasks in T3 Code threads
 `start_task_thread`. That is the launch below without the dialog: [epics.md](epics.md#t3-code-threads) says what it
 picks instead.
 
+#### Follow-up (finished tasks)
+
+A task in Done still has a hand-off menu, to start a session that tests, investigates or fixes something about the
+finished work. Its prompt is mode `followup` (the default, and the only prompt, for a Done task; never for a
+subagent or an epic; also allowed on a task in Review): read the task with `get_task`, where the code is (its PRs;
+the epic's integration branch while the task's code is only there, see
+[epics.md](epics.md#delivery); else the default branch), then ask the user what they want. It must not move the
+task, change its plan or reopen it; new work becomes a backlog task once the user agrees, and a fix the user asks
+for goes on a new branch and PR linked to the task (against the epic's branch while the code is only there, so the
+PR doesn't carry the unmerged epic to the default branch).
+
+- The menu offers **New T3 Code thread…**, **New … session…** and **Copy follow-up prompt**; the dialogs have no
+  Plan with me, and start their worktree from `origin/<epic branch>` while the code is only there
+  (`useFollowupEpicBranch`, `unmergedEpicBranch`).
+- A thread started this way is linked with `role: "followup"`, like any thread opened from the card on finished work,
+  so board messages keep going to the thread that did the work. The prompt asks the agent not to link a T3 thread
+  itself, since an agent-made link has no role. A CLI session is labelled "Follow-up on #N".
+- `start_task_thread(task, mode: "followup")` does the same over MCP, beside a thread still busy on the task.
+
 Agents get the same prompts over MCP with `get_handoff_prompt(task, mode?, subagent?)`, which defaults the mode
 like the menu does. Its board link points at this server when it serves the built web app, else at the Vite dev
 server (`boardUrl` in `apps/server/src/mcp/shared.ts`). Under `pnpm dev` with a `dist/` left from an earlier

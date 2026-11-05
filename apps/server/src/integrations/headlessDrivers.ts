@@ -1,4 +1,5 @@
 import { BRAND, HEADLESS_CAPABILITIES, type AgentHarness, type OperationNeed } from "@repo/contracts";
+import { RUN_SERVER_NAME, RUN_TOKEN_ENV } from "../mcp/runTokens.ts";
 import { claudeDriver, type AgentArgsInput, type AgentOutcome, type HeadlessDriver } from "./headlessAgent.ts";
 
 // Autopilot's headless runs on harnesses other than Claude Code: `codex exec` and the Copilot CLI. Neither can be held
@@ -55,7 +56,25 @@ export function codexArgs(input: AgentArgsInput): string[] {
     input.access === "edit" ? "danger-full-access" : "read-only",
     ...(input.model ? ["--model", input.model] : []),
     ...(input.effort ? ["-c", `model_reasoning_effort=${input.effort}`] : []),
+    ...(input.runTools ? codexRunToolsArgs(input.runTools.url) : []),
     "-",
+  ];
+}
+
+/**
+ * The board's run tools for `codex exec`: none of the user's `config.toml` (so none of their MCP servers, the board's
+ * included), and the run's endpoint as the one server. The token isn't on the command line, where any local process
+ * can read it: Codex sends the RUN_TOKEN_ENV variable as the bearer token. `--ignore-user-config` still uses the
+ * login under CODEX_HOME. Checked against codex-cli 0.166.0 (docs/features/autopilot.md#headless-drivers).
+ */
+export function codexRunToolsArgs(url: string): string[] {
+  const server = `mcp_servers.${RUN_SERVER_NAME}`;
+  return [
+    "--ignore-user-config",
+    "-c",
+    `${server}.url=${JSON.stringify(url)}`,
+    "-c",
+    `${server}.bearer_token_env_var=${JSON.stringify(RUN_TOKEN_ENV)}`,
   ];
 }
 
@@ -115,6 +134,7 @@ export const codexDriver: HeadlessDriver = {
   harness: "codex",
   command: "codex",
   label: "Codex",
+  runTokenFromEnv: true,
   capabilities: HEADLESS_CAPABILITIES.codex,
   args: codexArgs,
   parse: (stdout) => parseCodexOutput(stdout),
@@ -215,6 +235,8 @@ export interface DriverNeeds {
    * rules can keep an editing agent from force-pushing or merging there.
    */
   unguarded?: boolean | undefined;
+  /** The run reads through the board's run tools. */
+  runTools?: boolean | undefined;
 }
 
 /** What a run asks of its driver, as the operation needs the resolver checks providers against. */
@@ -224,6 +246,7 @@ export function driverNeeds(needs: DriverNeeds): OperationNeed[] {
   if (needs.access === "none") out.push("noTools");
   if (needs.outputSchema) out.push("outputSchema");
   if (needs.untrusted) out.push("untrusted");
+  if (needs.runTools) out.push("runTools");
   // Only Claude Code's own deny rules keep an editing agent with no push guard from force-pushing or merging.
   const unguardedEdit = needs.unguarded && needs.access === "edit";
   if (unguardedEdit || (needs.tools?.length ?? 0) > 0 || (needs.deniedTools?.length ?? 0) > 0) out.push("toolRules");

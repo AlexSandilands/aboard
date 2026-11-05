@@ -52,6 +52,7 @@ function task(id: string, status: TaskSummary["status"], position: string): Task
     review: null,
     suggestedModel: null,
     import: null,
+    movedTo: null,
   };
 }
 

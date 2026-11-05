@@ -60,6 +60,8 @@ interface EpicPrData {
   /** The epic's PR link, when it has one (update). */
   linkId: string | null;
   body: string;
+  /** The PR's title, set only when it is opened (open_pr). Absent in data queued before it existed. */
+  title?: string;
 }
 
 /** On a skipped merge run: it settled nothing, so the head may be tried again. */
@@ -133,6 +135,84 @@ export function epicPrBody(
   ].join("\n");
 }
 
+export interface ConventionalHeader {
+  type: string;
+  scope: string | null;
+  breaking: boolean;
+  subject: string;
+}
+
+/** config-conventional's type-enum: a header with any other type fails commitlint, so it doesn't count as conventional. */
+const TYPES = new Set(["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "revert", "style", "test"]);
+
+/** `type(scope)!: subject`, the header shape of config-conventional. Null for anything else. */
+export function parseConventionalHeader(title: string): ConventionalHeader | null {
+  const match = /^([a-z]+)(?:\(([^()\s][^()]*)\))?(!)?: (\S.*)$/.exec(title.trim());
+  if (!match || !TYPES.has(match[1]!)) return null;
+  return { type: match[1]!, scope: match[2] ?? null, breaking: match[3] === "!", subject: match[4]!.trim() };
+}
+
+/** commitlint's header-max-length in config-conventional. */
+const HEADER_MAX = 100;
+
+/** The type that stands for a set of children: feat, else fix, else the most common (ties go to the first of the epic's tasks). */
+function dominantType(types: readonly string[]): string {
+  if (types.includes("feat")) return "feat";
+  if (types.includes("fix")) return "fix";
+  const counts = new Map<string, number>();
+  for (const t of types) counts.set(t, (counts.get(t) ?? 0) + 1);
+  let best = types[0]!;
+  for (const [t, n] of counts) if (n > counts.get(best)!) best = t;
+  return best;
+}
+
+/**
+ * Lowercases the first word when it starts with a capital: config-conventional's subject-case rejects a subject whose
+ * first character is upper case, so `GitHub sync` and `API keys` become `github sync` and `api keys`.
+ */
+function lowerFirst(subject: string): string {
+  const [word = ""] = subject.split(" ");
+  return /^\p{Lu}/u.test(word) ? word.toLowerCase() + subject.slice(word.length) : subject;
+}
+
+/** The epic's title as a commit subject: whitespace collapsed, no trailing period, first word lowercased. */
+const subjectOf = (title: string) => lowerFirst(title.replace(/\s+/g, " ").trim().replace(/\.+$/, ""));
+
+function header(type: string, scope: string | null, breaking: boolean, subject: string): string {
+  const prefix = `${type}${scope ? `(${scope})` : ""}${breaking ? "!" : ""}: `;
+  return prefix + cut(subject, HEADER_MAX - prefix.length);
+}
+
+function cut(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const clipped = text.slice(0, max - 1);
+  const space = clipped.lastIndexOf(" ");
+  return `${(space > max / 2 ? clipped.slice(0, space) : clipped).trimEnd()}…`;
+}
+
+/**
+ * The title for the epic's PR. When any merged child PR has a Conventional Commits title the repo lints PR titles, so
+ * the epic's gets one too (no epic number: a `#N` in the squash commit would link to the repo's issue #N). Otherwise
+ * `Epic #N: <title>`.
+ */
+export function epicPrTitle(epic: Pick<TaskSummary, "number" | "title">, childPrTitles: readonly string[]): string {
+  const children = childPrTitles.flatMap((t) => parseConventionalHeader(t) ?? []);
+  if (children.length === 0) return `Epic #${epic.number}: ${epic.title}`;
+
+  // An epic already titled as a header keeps its parts; its subject gets the same clean-up as a built one.
+  const own = parseConventionalHeader(epic.title.replace(/\s+/g, " "));
+  if (own && subjectOf(own.subject)) return header(own.type, own.scope, own.breaking, subjectOf(own.subject));
+
+  const type = dominantType(children.map((c) => c.type));
+  const scopes = new Set(children.map((c) => c.scope));
+  const scope = scopes.size === 1 ? [...scopes][0]! : null;
+  const breaking = children.some((c) => c.breaking);
+  // A title of nothing but periods leaves no subject: keep the plain title rather than an empty header.
+  const subject = subjectOf(epic.title);
+  if (!subject) return `Epic #${epic.number}: ${epic.title}`;
+  return header(type, scope, breaking, subject);
+}
+
 const hashOf = (text: string) => createHash("sha1").update(text).digest("hex").slice(0, 12);
 
 /** The epic's own PR from its branch: one whose head is the branch, or (before its first poll) any PR linked on it. */
@@ -146,7 +226,8 @@ const epicPrLink = (epic: TaskSummary, branch: string): PrLink | "unpolled" | nu
 /**
  * Merge into epic branch (docs/features/autopilot.md#merge-into-epic-branch). For each epic delivered through an
  * integration branch:
- * - merges a task's PR into the branch, with a merge commit, once `notMergeable` finds nothing in the way. Once per PR
+ * - merges a task's PR into the branch once `notMergeable` finds nothing in the way: with a merge commit if the
+ *   repository allows one, else a squash, else a rebase (mergeIntoEpicBranch). Once per PR
  *   and head commit. GitHub refusing (branch rules wanting an approval) puts "Ready to merge into the epic branch" on
  *   the task and notifies. The merge moves the task to Done, which unblocks what waits on it.
  * - opens a draft PR from the branch into the default branch once a task has merged, links it on the epic, and keeps
@@ -212,6 +293,14 @@ export const mergeEpicPrs = defineAutomation({
           repo: first.ref.repo,
           linkId: own ? own.id : null,
           body,
+          ...(own
+            ? {}
+            : {
+                title: epicPrTitle(
+                  epic,
+                  merged.map((l) => l.snapshot?.title ?? ""),
+                ),
+              }),
         };
         const upkeep: Candidate = own
           ? {
@@ -251,8 +340,9 @@ export const mergeEpicPrs = defineAutomation({
       const reason = notMergeable(services, task, link, data.branch, runs, timing);
       // Something changed since the check; the next pass looks again.
       if (reason) return { status: "skipped", summary: `Didn't merge PR #${data.number}: ${reason}`, output: RECHECK };
+      let method: string;
       try {
-        await github.mergeIntoEpicBranch(link, { base: data.branch, headOid: data.headOid });
+        ({ method } = await github.mergeIntoEpicBranch(link, { base: data.branch, headOid: data.headOid }));
       } catch (error) {
         if (error instanceof MergeTargetError) {
           return {
@@ -281,7 +371,7 @@ export const mergeEpicPrs = defineAutomation({
           needsAttention: true,
         };
       }
-      return { summary: `Merged PR #${data.number} into ${data.branch}` };
+      return { summary: `Merged PR #${data.number} into ${data.branch} (${method})` };
     }
 
     const epic = services.tasks.summary(candidate.taskId!);
@@ -293,7 +383,7 @@ export const mergeEpicPrs = defineAutomation({
         host: data.host,
         repo: data.repo,
         head: data.branch,
-        title: `Epic #${epic.number}: ${epic.title}`,
+        title: data.title ?? `Epic #${epic.number}: ${epic.title}`,
         body: data.body,
       });
       services.links.add(epic.id, { value: pr.url }, actor);

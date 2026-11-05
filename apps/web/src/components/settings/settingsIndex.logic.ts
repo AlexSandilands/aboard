@@ -190,6 +190,18 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "import",
   ]),
   draft(
+    "board.data.backup-setup",
+    "Set up backup",
+    "Pick a folder, connect a private GitHub repo and take the first backup.",
+    ["backup", "github", "setup", "wizard", "repo"],
+  ),
+  draft(
+    "board.data.backup-local-only",
+    "Connect GitHub",
+    "Shown when backups only commit locally: push them to a private GitHub repo.",
+    ["backup", "github", "push", "local only", "remote"],
+  ),
+  draft(
     "board.data.backup-enabled",
     "Back up to git",
     "Writes the board as JSON into a git repo and commits when it changes. Restore with pnpm backup import.",
@@ -201,12 +213,21 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "directory",
     "path",
     "repo",
+    "clear",
+    "unset",
+    "remove",
   ]),
   draft(
     "board.data.backup-remote",
     "Backup remote",
     "Optional. Use a private repo: task text stays in its history for good. Pushes use git's own sign-in.",
     ["backup", "push", "origin", "git remote", "private repo"],
+  ),
+  draft(
+    "board.data.machine-name",
+    "Machine name",
+    "This machine's folder in the backup repo, so several machines can share one repo. Blank uses the host name.",
+    ["backup", "machine", "computer", "host name", "folder", "rename"],
   ),
   draft(
     "board.data.backup-interval",
@@ -219,6 +240,24 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "status",
     "failed",
   ]),
+  draft("board.data.backup-restore", "Restore", "Bring back tasks, or the whole board, from any backup commit.", [
+    "backup",
+    "restore",
+    "undo",
+    "deleted",
+  ]),
+  draft(
+    "board.data.backup-move-tasks",
+    "Tasks from another machine",
+    "Move or copy tasks from another machine that backs up to the same repo.",
+    ["move", "copy", "transfer", "machine", "laptop", "desktop", "import"],
+  ),
+  draft(
+    "board.data.backup-reset",
+    "Reset backup settings",
+    "Forget the folder, remote and machine name and turn backup off, so Set up backup starts over.",
+    ["clear", "unset", "remove", "folder", "remote", "start over", "setup"],
+  ),
   draft(
     "board.data.archived-projects",
     "Archived projects",

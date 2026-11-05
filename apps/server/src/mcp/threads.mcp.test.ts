@@ -209,6 +209,28 @@ describe("T3 threads for a task over MCP", () => {
     expect((await call(agent, "start_task_thread", { task: "#2", baseRef: "t3/feat-x_1.2" })).isError).toBe(false);
   });
 
+  it("starts a follow-up thread on a finished task beside a busy one, marked as a follow-up", async () => {
+    const { launches } = fakeT3();
+    expect((await call(agent, "start_task_thread", { task: "#2", mode: "followup" })).text).toContain("isn't finished");
+    h.services.tasks.move(taskId, { status: "done" }, "agent");
+    linkThread("th-busy", { status: "working" });
+    const started = await call(agent, "start_task_thread", { task: "#2" });
+    expect(started.text).toContain("(followup prompt)");
+    expect(launches).toHaveLength(1);
+    expect(launches[0]!.input).toMatchObject({ followUp: true, work: false });
+    expect(launches[0]!.input.prompt).toContain(`Let's follow up on #2 "Address form"`);
+    expect(launches[0]!.input.prompt).toContain("This thread is already linked to the task");
+  });
+
+  it("starts a follow-up on a Review task in an integration epic from the epic's branch", async () => {
+    const { launches } = fakeT3();
+    const epicId = h.services.tasks.summary(taskId).parent!.id;
+    h.services.tasks.setDelivery(epicId, "integration", "epic/1-checkout", "user");
+    h.services.tasks.move(taskId, { status: "review" }, "agent");
+    expect((await call(agent, "start_task_thread", { task: "#2", mode: "followup" })).isError).toBe(false);
+    expect(launches[0]!.input).toMatchObject({ followUp: true, baseRef: "epic/1-checkout", startFromOrigin: true });
+  });
+
   it("refuses modes that don't fit the task", async () => {
     fakeT3();
     expect((await call(agent, "start_task_thread", { task: "#1", mode: "work" })).text).toContain("is an epic");

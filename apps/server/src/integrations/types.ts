@@ -2,9 +2,16 @@ import type {
   AgentModels,
   AskSettingsInput,
   AskSettingsResult,
+  BackupCommit,
+  BackupDiff,
+  BackupMachine,
+  BackupSource,
+  BackupRemoteCheck,
+  BackupSetupInfo,
   BackupStatus,
   EpicDelivery,
   ConnectT3Result,
+  CreateBackupRepoResult,
   GithubStatus,
   LinkInput,
   MergeMethod,
@@ -15,6 +22,13 @@ import type {
   ResumeMode,
   ResumeResult,
   ResumeSessionInput,
+  RestoreBoardInput,
+  RestoreBoardResult,
+  ImportTasksInput,
+  ImportTasksResult,
+  MachineTasks,
+  RestoreTasksInput,
+  RestoreTasksResult,
   SessionLaunchOptions,
   StartPlanningSessionInput,
   StartPlanningThreadInput,
@@ -31,6 +45,7 @@ import type {
   TerminalInfo,
 } from "@repo/contracts";
 import type { DigestStart } from "../autopilot/digest.ts";
+import type { RunToolsContext } from "../mcp/runTools.ts";
 import type { MergeTaskPrResult } from "./mergeTaskPr.ts";
 import type { SessionTranscript } from "./sessionTranscript.ts";
 import type { TaskThreadInput, TaskThreadLaunch, ThreadLink } from "./t3.ts";
@@ -41,6 +56,8 @@ export interface Integrations {
   githubStatus(): GithubStatus;
   /** Whether an unfinished PR on the host keeps a Review task from Done (see GithubIntegration.holdsTasks). */
   prHostHoldsTasks(host: string): boolean;
+  /** Board-served run tools: the live run tokens and the git host their tools read (`/mcp/run`). */
+  readonly runTools: RunToolsContext;
   /** Starts background discovery/pollers. */
   start(): void;
   stop(): void;
@@ -130,4 +147,24 @@ export interface Integrations {
   backupStatus(): BackupStatus;
   /** Backs the board up to its git repo now; failures land in the returned status. */
   runBackup(): Promise<BackupStatus>;
+  /** The machine folders in the backup repo, as of its last pull. */
+  backupMachines(): Promise<BackupMachine[]>;
+  /** The latest backup commits that touched a machine's folder (this machine's by default). */
+  backupHistory(machine?: string): Promise<BackupCommit[]>;
+  /** The tasks in the backup at a commit that the board lacks or has with other contents. */
+  backupDiff(source: BackupSource): Promise<BackupDiff>;
+  /** Puts tasks from the backup at a commit back on the board. */
+  restoreBackupTasks(input: RestoreTasksInput, actor: string): Promise<RestoreTasksResult>;
+  /** Replaces the whole board with the backup at a commit (publishes board.reset). */
+  restoreBackupBoard(input: RestoreBoardInput): Promise<RestoreBoardResult>;
+  /** Another machine's latest backup, offered for moving or copying its tasks here. */
+  backupMachineTasks(machine: string): Promise<MachineTasks>;
+  /** Moves or copies tasks from another machine's latest backup onto this board. */
+  importBackupTasks(input: ImportTasksInput, actor: string): Promise<ImportTasksResult>;
+  /** What the backup setup dialog starts from: gh's sign-in, the default folder and the current setup. */
+  backupSetupInfo(): Promise<BackupSetupInfo>;
+  /** Creates a private GitHub repo for backups with gh. Throws CONFLICT when the account has one of that name. */
+  createBackupRepo(name: string): Promise<CreateBackupRepoResult>;
+  /** Whether this machine's git can read a remote, and the machine folders already in it. */
+  checkBackupRemote(remote: string): Promise<BackupRemoteCheck>;
 }

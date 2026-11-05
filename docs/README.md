@@ -97,6 +97,7 @@ files under each app.
 - [0010 The board may start a new agent session with the user's prompt](decisions/0010-board-starts-new-sessions.md)
 - [0011 Providers are opt-in, with one detection source](decisions/0011-opt-in-providers.md)
 - [0012 One model choice per operation, with no provider assumed](decisions/0012-provider-neutral-operation-models.md)
+- [0013 The board serves a headless run its tools](decisions/0013-board-served-run-tools.md)
 
 ### Reference
 

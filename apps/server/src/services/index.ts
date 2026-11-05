@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   AUTOPILOT_RECURRING,
   customAutomationId,
@@ -65,6 +66,8 @@ export interface ServiceDeps {
   userHome: string;
   /** Each harness's folder for the board skill; defaults under `userHome`. */
   harnessHomes?: HarnessHomes;
+  /** This board's id (instance.ts), which tasks moved away from it name; a fresh one when unset (tests). */
+  instanceId?: string;
 }
 
 /** Builds the service layer over one database. */
@@ -175,7 +178,10 @@ export function createServices(deps: ServiceDeps): Services {
     labels: labels.service,
     imports: imports.service,
     attachments,
-    backup: createBackupService(core, deps.attachmentsDir),
+    backup: createBackupService(core, deps.attachmentsDir, {
+      instanceId: deps.instanceId ?? randomUUID(),
+      notifications: () => notifications,
+    }),
     templates,
     notifications,
     social: createSocialService(core, { resolveTask: (ref) => tasks.service.resolveId(ref) }),

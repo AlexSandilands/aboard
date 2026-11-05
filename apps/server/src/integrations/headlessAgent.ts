@@ -7,6 +7,7 @@ import {
 } from "@repo/contracts";
 import { claudeFailure, readClaudeResult, runClaude } from "./claudeCli.ts";
 import { READ_ONLY_TOOLS } from "./headlessReview.ts";
+import { RUN_SERVER_NAME } from "../mcp/runTokens.ts";
 
 // Autopilot's headless agent: Claude Code (`claude -p`) doing real work in a worktree the board made for the run.
 // Unlike the board's reviewer it keeps its session, so the user can resume it with `claude --resume <id>`, and it
@@ -73,7 +74,7 @@ export function pushDenyRules(defaultBranch: string | null): string[] {
  * What an agent that reads untrusted text may use, instead of the read-only list. The file tools reach only the working
  * directory (a bare `Read` reaches any file the user can). git is limited to three exact commands: `git diff`, `show`
  * and `log` take any path, so they read any file (a path outside the work tree makes `diff` compare files) and write
- * any file (`--output=`). The change itself comes from `gh pr diff`, which the caller allows.
+ * any file (`--output=`). The change itself comes from the board's run tools (a PR review's `pr_diff`).
  */
 const UNTRUSTED_TOOLS = [
   "Read(./**)",
@@ -114,6 +115,13 @@ export interface AgentArgsInput {
    * board (Orchestrate). The caller narrows the board's own tools with `deniedTools`.
    */
   boardMcpConfig?: string;
+  /**
+   * The board's run tools (docs/decisions/0013-board-served-run-tools.md): the run's `/mcp/run` URL, and an MCP config
+   * file naming only that server with the run's token (runToolsMcpConfig), for a CLI that reads one. The token itself
+   * reaches a CLI that reads it from its environment as RUN_TOKEN_ENV. The run's tools are all allowed: the endpoint
+   * serves only those its operation may use.
+   */
+  runTools?: { url: string; configPath: string };
 }
 
 /**
@@ -126,13 +134,29 @@ export function boardMcpConfig(url: string, token: string | null): string {
 }
 
 /**
- * Environment for a run whose extra tools name one of the user's MCP servers (a filled tool slot, say). `claude -p`
- * connects MCP servers in the background, so a slow one's tools may not be there on the first turn; this makes it
- * connect them first. Not for a run that gets no user servers (`none`, or read-only and untrusted), nor for one that
- * only needs the board's, so those aren't held up by every other server the user has.
+ * The MCP config of a run's board-served tools, for `--mcp-config`: only the run's server, with its token in a header.
+ * It goes in a file of the runner's, outside the worktree, never on the command line.
  */
-export function mcpWaitEnv(input: Pick<AgentArgsInput, "access" | "untrusted" | "tools">): Record<string, string> {
-  if (input.access === "none" || (input.access === "read-only" && input.untrusted)) return {};
+export function runToolsMcpConfig(url: string, token: string): string {
+  return JSON.stringify({
+    mcpServers: { [RUN_SERVER_NAME]: { type: "http", url, headers: { Authorization: `Bearer ${token}` } } },
+  });
+}
+
+/**
+ * Environment for a run whose tools come from an MCP server it can't work without: one of the user's that its extra
+ * tools name (a filled tool slot, say), or the board's run tools. `claude -p` connects MCP servers in the background,
+ * so a slow one's tools may not be there on the first turn, and a locked-down run has no ToolSearch to find them
+ * later; this makes it connect them first. Not for a run that gets no servers (`none`), nor for one that only needs
+ * the board's, so those aren't held up by every other server the user has. A locked-down run with run tools has only
+ * the board's local servers, so waiting costs it nothing.
+ */
+export function mcpWaitEnv(
+  input: Pick<AgentArgsInput, "access" | "untrusted" | "tools"> & { runTools?: boolean | undefined },
+): Record<string, string> {
+  if (input.access === "none") return {};
+  if (input.runTools) return { MCP_CONNECTION_NONBLOCKING: "false" };
+  if (input.access === "read-only" && input.untrusted) return {};
   const board = `mcp__${BRAND.id}`;
   const userServer = (input.tools ?? []).some(
     (tool) => tool.startsWith("mcp__") && tool !== board && !tool.startsWith(`${board}__`),
@@ -144,6 +168,13 @@ export function mcpWaitEnv(input: Pick<AgentArgsInput, "access" | "untrusted" | 
 export function agentArgs(input: AgentArgsInput): string[] {
   const readOnly = input.access === "read-only";
   const none = input.access === "none";
+  const lockedDown = readOnly && input.untrusted;
+  // A no-tools run gets none, run tools included.
+  const runTools = none ? null : (input.runTools ?? null);
+  const mcpConfigs = [
+    ...(runTools ? [runTools.configPath] : []),
+    ...(lockedDown && input.boardMcpConfig ? [input.boardMcpConfig] : []),
+  ];
   return [
     "-p",
     "--output-format",
@@ -163,6 +194,7 @@ export function agentArgs(input: AgentArgsInput): string[] {
               ? [...UNTRUSTED_TOOLS, ...(input.boardMcpConfig ? [`mcp__${BRAND.id}`] : [])]
               : [...READ_ONLY_TOOLS, `mcp__${BRAND.id}`]
             : EDIT_TOOLS),
+          ...(runTools ? [`mcp__${RUN_SERVER_NAME}`] : []),
           ...(input.tools ?? []),
         ]),
     "--disallowedTools",
@@ -172,17 +204,20 @@ export function agentArgs(input: AgentArgsInput): string[] {
     // No MCP servers, and none of the settings the checkout carries: a branch's .claude/settings.json could allow
     // anything or run hooks, for anyone who can push to it. The user's own settings stay (some set up the login), so
     // only the built-in tools it needs are available: a global allow rule for WebFetch or the like finds no tool.
-    // With a board config, that board's server is the one MCP server it gets.
-    ...(readOnly && input.untrusted
+    // With a board config or run tools, those are the only MCP servers it gets.
+    ...(lockedDown
       ? [
           "--strict-mcp-config",
-          ...(input.boardMcpConfig ? ["--mcp-config", input.boardMcpConfig] : []),
+          ...(mcpConfigs.length > 0 ? ["--mcp-config", ...mcpConfigs] : []),
           "--setting-sources",
           "user",
           "--tools",
           "Read,Grep,Glob,Bash",
         ]
-      : []),
+      : // Any other run keeps the user's servers and gets the run's on top.
+        mcpConfigs.length > 0
+        ? ["--mcp-config", ...mcpConfigs]
+        : []),
     "--max-budget-usd",
     String(input.budgetUsd),
     "--session-id",
@@ -242,6 +277,11 @@ export interface HeadlessDriver {
   harness: AgentHarness;
   /** Its name on PATH. */
   command: string;
+  /**
+   * The CLI reads the run tools' token from its environment (RUN_TOKEN_ENV) rather than from a config file. Only then
+   * does the runner put it there, where every process the agent starts would inherit it.
+   */
+  runTokenFromEnv?: boolean;
   /** How runs and errors name it. */
   label: string;
   capabilities: DriverCapabilities;

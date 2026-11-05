@@ -75,7 +75,8 @@ which lets `merge_task_pr` merge the task's PR into the default branch. Agents s
 task out), `list_tasks` filters by `epic`, and `create_epic` can group existing `tasks` when it creates the
 epic. `get_task` on an epic and `epic_overview` render its tasks instead of a plan. `get_handoff_prompt` returns
 the hand-off prompt the board would copy (with `subagent: true`, the variant for an orchestrator's subagent), so an
-epic's orchestrator can start its tasks; with `tasks: ["#3", "#4"]` instead of `task`, it returns the prompt that
+epic's orchestrator can start its tasks; for a Done task it defaults to mode `followup`
+([agent-handoff.md](agent-handoff.md#follow-up-finished-tasks)), which `start_task_thread` also takes; with `tasks: ["#3", "#4"]` instead of `task`, it returns the prompt that
 plans several of a project's tasks with the user ([agent-handoff.md](agent-handoff.md#plan-tasks-several-tasks-at-once)).
 `create_epic` and `update_task` (epics only) take `delivery: "main" |
 "integration"`; switching to integration makes the epic's branch on origin first. See [epics.md](epics.md#delivery).
@@ -187,6 +188,15 @@ text when both are present.
   `update_plan`, or pass `allowDeletes`). When a `set_plan` call deleted steps, its result says
   `Deleted N step(s): 1.2 Title, …`. See [plans.md](plans.md#writing-a-plan).
 
+### Run tools
+
+A second, separate server: `POST /mcp/run` serves one headless Autopilot run the tools of its operation, bound to its
+target, with a run token as its credential (`mcp/runTools.ts`, [ADR 0013](../decisions/0013-board-served-run-tools.md)).
+Today that is the PR review set: `pr_overview`, `pr_files`, `pr_diff` and `pr_comments`, read-only and paged. These
+tools are not in the board's `/mcp` server, and the board's tools are not in a run's. Their descriptions follow the
+rules below, and the review prompt (`reviewPrompt`) is the one place that tells agents about them. See
+[autopilot.md](autopilot.md#run-tools).
+
 ### board_activity
 
 `board_activity(since, until?, projectId? | workspacePath?)` is the look-back counterpart of `board_overview`:
@@ -296,6 +306,7 @@ The sandbox sets `brandEnv("USER_HOME")` to a folder of its own, so trying this 
 | `apps/server/src/mcp/shared.ts`       | `run` (error mapping), shared fields, `planFromArgs`, project lookup  |
 | `apps/server/src/mcp/format.ts`       | Text renders: `renderTaskDetail`, `summaryLine`, `missingLinkHints`, `labelHint`, `suggestedModelHint`, `autopilotFlagHint`, `renderTranscript` |
 | `apps/server/src/mcp/tools/*.ts`      | The tools                                                            |
+| `apps/server/src/mcp/runTools.ts`, `runTokens.ts` | The run tools' server at `/mcp/run`, its tool sets and its tokens |
 | `apps/server/src/mcp/mcp.test.ts`, `reviews.mcp.test.ts` | End-to-end tests through the MCP SDK client           |
 | `skills/aboard/`                      | The skill and `AGENTS.md` snippet shipped to agents                  |
 | `skills/aboard-automations/`          | The skill for writing custom automations, shipped and synced like the board skill |

@@ -2,6 +2,7 @@ import type {
   AutopilotEngineSettings,
   AutopilotField,
   AutopilotRun,
+  MergeMethod,
   ModelChoice,
   OperationId,
   PrRef,
@@ -17,6 +18,7 @@ import type {
   PrThreadState,
 } from "../integrations/github.ts";
 import type { AgentAccess } from "../integrations/headlessAgent.ts";
+import type { RunToolScope } from "../mcp/runTokens.ts";
 import type { Services } from "../services/types.ts";
 
 /** Config values keyed by field. */
@@ -83,7 +85,8 @@ export interface GithubActions {
   postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
   /** The PR's head commit on GitHub now, in full. */
   prHead(ref: PrRef): Promise<string>;
-  mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<void>;
+  /** Merges the PR, with the method the repository allows (a merge commit if it can), and says which. */
+  mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<{ method: MergeMethod }>;
   ensureEpicPr(input: EpicPrInput): Promise<{ number: number; url: string; created: boolean }>;
   setPrBody(ref: PrRef, body: string): Promise<void>;
   /** The PR's unresolved review threads and newest commits, read now. */
@@ -236,6 +239,12 @@ export interface RunnerRequest {
    * that works through the board (Orchestrate). Narrow the board's tools with `deniedTools`.
    */
   boardTools?: boolean;
+  /**
+   * Headless only: the board's run tools for this run (docs/decisions/0013-board-served-run-tools.md). The runner mints
+   * a token bound to the run and this scope before the agent starts, points the CLI at `/mcp/run` with it, and revokes
+   * it when the run ends. Only a provider that can use them is picked.
+   */
+  runTools?: RunToolScope;
   /**
    * Headless only: the commit the worktree must be at, checked before the agent starts. A worktree at another commit
    * throws `WorktreeHeadError`.

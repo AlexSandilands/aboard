@@ -96,7 +96,9 @@ when it changed.
 ### Reviews by Autopilot
 
 The poller's snapshot (`state`, `headRef`, `headOid`, `isCrossRepository`) is what the **Review PRs** automation
-reads: it reviews an open (or, if asked, draft) PR once per head commit. `postReview` posts the result with the
+reads: it reviews an open (or, if asked, draft) PR once per head commit. The reviewer reads the PR (its overview,
+files, paged diff and comments) through the board's [run tools](autopilot.md#run-tools), which read GitHub's REST API
+with the same `gh` token through `GitHost` (`integrations/githubHost.ts`); it has no `gh` of its own. `postReview` posts the result with the
 `gh` token as one review with `event: COMMENT` (`addPullRequestReview`), after checking the PR's live head is the
 commit that was reviewed; inline comments GitHub refuses (a line outside the diff) go into the body. When GitHub
 answers a post with an error, `postReview` looks for the review among the account's own at that head

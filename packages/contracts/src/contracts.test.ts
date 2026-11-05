@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyLink,
+  MachineName,
+  machineNameFrom,
   deliveryHintApplies,
   formatProjectScope,
   parseProjectScope,
   epicBranchName,
   startedEpicTasks,
+  unmergedEpicBranch,
   deriveAttention,
   describeEpicRollup,
   deriveEpicStatus,
@@ -529,6 +532,17 @@ describe("epic delivery helpers", () => {
     ]);
     expect(started.map((c) => c.id)).toEqual(["2", "3"]);
   });
+
+  it("finds a Done task's code on its epic's branch only until that branch merges", () => {
+    const task = { kind: "task" as const, status: "done" as const, resolution: null, integrationBranch: "epic/3-x" };
+    const open = { integrationMerge: { merged: false, by: null, pr: null } };
+    expect(unmergedEpicBranch(task, open)).toBe("epic/3-x");
+    expect(unmergedEpicBranch(task, { integrationMerge: { merged: true, by: "manual", pr: null } })).toBeNull();
+    expect(unmergedEpicBranch(task, undefined)).toBeNull();
+    expect(unmergedEpicBranch({ ...task, status: "review" }, open)).toBeNull();
+    expect(unmergedEpicBranch({ ...task, resolution: "wont_do" }, open)).toBeNull();
+    expect(unmergedEpicBranch({ ...task, integrationBranch: null }, open)).toBeNull();
+  });
 });
 
 describe("project scope", () => {
@@ -555,5 +569,29 @@ describe("project scope", () => {
     expect(formatProjectScope([], order)).toBeUndefined();
     expect(formatProjectScope(["c", "b", "a"], order)).toBeUndefined();
     expect(formatProjectScope(["gone"], order)).toBeUndefined();
+  });
+});
+
+describe("machine names", () => {
+  it("makes a folder-safe default from the host name", () => {
+    expect(machineNameFrom("Alex's MacBook Pro.local")).toBe("Alex-s-MacBook-Pro.local");
+    expect(machineNameFrom("-desk")).toBe("desk");
+    expect(machineNameFrom("")).toBe("machine");
+    expect(machineNameFrom("tasks")).toBe("machine");
+    expect(machineNameFrom("laptop.")).toBe("laptop");
+    expect(machineNameFrom("NUL")).toBe("machine");
+  });
+
+  it("accepts folder-safe names only", () => {
+    expect(MachineName.safeParse("work-laptop").success).toBe(true);
+    expect(MachineName.safeParse(".git").success).toBe(false);
+    expect(MachineName.safeParse("a/b").success).toBe(false);
+    expect(MachineName.safeParse("Events").success).toBe(false);
+    expect(MachineName.safeParse("backup.json").success).toBe(false);
+    expect(MachineName.safeParse("Settings.JSON").success).toBe(false);
+    expect(MachineName.safeParse("con").success).toBe(false);
+    expect(MachineName.safeParse("COM1.local").success).toBe(false);
+    expect(MachineName.safeParse("laptop.").success).toBe(false);
+    expect(MachineName.safeParse("console").success).toBe(true);
   });
 });

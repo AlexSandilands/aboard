@@ -69,6 +69,14 @@ describe("the operation registry", () => {
     expect(missingNeeds("copilot-cli", ["outputSchema", "edit", "noTools"])).toEqual(["outputSchema", "noTools"]);
   });
 
+  it("lets Claude Code and Codex use the board's run tools, and not yet the Copilot CLI", () => {
+    expect(missingNeeds("claude-code", ["runTools"])).toEqual([]);
+    expect(missingNeeds("codex", ["runTools"])).toEqual([]);
+    expect(missingNeeds("copilot-cli", ["runTools"])).toEqual(["runTools"]);
+    // A PR review reads through them instead of following tool rules of its own.
+    expect(OPERATIONS.prReview.needs).toEqual(["outputSchema", "untrusted", "runTools"]);
+  });
+
   it("reads stored operation models one by one, dropping what doesn't parse", () => {
     expect(
       readOperationModels({

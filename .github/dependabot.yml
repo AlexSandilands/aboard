@@ -16,6 +16,11 @@ updates:
     groups:
       npm:
         update-types: [minor, patch]
+    ignore:
+      # The types follow the Node we run (engines and CI: 24), not the newest one: newer types offer APIs that
+      # don't exist at runtime. Bump this major together with the Node version.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /

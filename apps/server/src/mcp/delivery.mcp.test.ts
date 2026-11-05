@@ -138,6 +138,28 @@ describe("epic delivery over MCP", () => {
     expect(back.text).toMatch(/can't go back to pull requests to main: #1 already started/);
   });
 
+  it("gives a Done task a follow-up prompt that points at the epic's branch until it merges", async () => {
+    const workspacePath = repo;
+    await call("create_task", { title: "Model", workspacePath, markdown });
+    await call("create_epic", { title: "One-page checkout", workspacePath, tasks: ["#1"], delivery: "integration" });
+    await call("move_task", { task: "#1", status: "done" });
+    const open = await call("get_handoff_prompt", { task: "#1" });
+    expect(open).toContain("Follow-up prompt for #1");
+    expect(open).toContain("the code is on `origin/epic/2-one-page-checkout`, not on the default branch");
+    expect(open).toContain("Don't move the task");
+    expect(await call("get_task", { task: "#1" })).toContain(
+      "Delivery: merged into epic/2-one-page-checkout, the epic's integration branch; not on the default branch yet",
+    );
+
+    await call("move_task", { task: "#2", status: "done" });
+    const merged = await call("get_handoff_prompt", { task: "#1", mode: "followup" });
+    expect(merged).toContain("Its code is on the default branch");
+    expect(merged).not.toContain("origin/epic/");
+    const after = await call("get_task", { task: "#1" });
+    expect(after).not.toContain("not on the default branch yet");
+    expect(after).not.toContain("open your pull request against");
+  });
+
   it("goes back to main while nothing started, and reuses the branch when switching again", async () => {
     const workspacePath = repo;
     await call("create_epic", { title: "Checkout", workspacePath, delivery: "integration" });

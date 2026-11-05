@@ -7,6 +7,7 @@ import type { Integrations } from "./integrations/types.ts";
 import { registerSse } from "./sse.ts";
 import { registerApiRoutes } from "./http/routes.ts";
 import { registerMcp } from "./mcp/server.ts";
+import { registerRunMcp } from "./mcp/runTools.ts";
 import { localGuard } from "./http/guard.ts";
 
 export interface AppContext {
@@ -24,5 +25,6 @@ export function createApp(ctx: AppContext): Hono {
   registerSse(app, ctx.bus);
   registerApiRoutes(app, ctx);
   registerMcp(app, ctx);
+  registerRunMcp(app, () => ctx.integrations.runTools);
   return app;
 }

@@ -44,6 +44,8 @@ export function applyBoardEvent(board: BoardSnapshot, event: BoardEvent): BoardS
     case "notifications.changed":
     case "suggestions.changed":
     case "providers.changed":
+    // A restore replaced the whole board; useBoardEvents refetches everything, the snapshot included.
+    case "board.reset":
       return board;
   }
 }

@@ -45,11 +45,16 @@ export const DriverCapability = z.enum([
   "budget",
   /** The board gives the session its id before the run starts; otherwise the CLI reports it. */
   "presetSessionId",
+  /**
+   * The board's run tools: the CLI can be pointed at one MCP server, the run's `/mcp/run` endpoint, with no other
+   * (docs/decisions/0013-board-served-run-tools.md).
+   */
+  "runTools",
 ]);
 export type DriverCapability = z.infer<typeof DriverCapability>;
 export type DriverCapabilities = Record<DriverCapability, boolean>;
 
-const LIMITED: Omit<DriverCapabilities, "presetSessionId"> = {
+const LIMITED: Omit<DriverCapabilities, "presetSessionId" | "runTools"> = {
   outputSchema: false,
   untrusted: false,
   noTools: false,
@@ -69,13 +74,16 @@ export const HEADLESS_CAPABILITIES: Record<AgentHarness, DriverCapabilities> = {
     toolRules: true,
     budget: true,
     presetSessionId: true,
+    runTools: true,
   },
-  codex: { ...LIMITED, presetSessionId: false },
-  "copilot-cli": { ...LIMITED, presetSessionId: true },
+  // `--ignore-user-config` plus `-c mcp_servers.<name>…` gives a run the board's endpoint and no other server.
+  codex: { ...LIMITED, presetSessionId: false, runTools: true },
+  // Not yet: whether the Copilot CLI can be held to one given MCP server is tracked on its own.
+  "copilot-cli": { ...LIMITED, presetSessionId: true, runTools: false },
 };
 
 /** What an operation can ask of the provider that runs it. */
-export const OperationNeed = z.enum(["outputSchema", "untrusted", "noTools", "toolRules", "edit"]);
+export const OperationNeed = z.enum(["outputSchema", "untrusted", "noTools", "toolRules", "runTools", "edit"]);
 export type OperationNeed = z.infer<typeof OperationNeed>;
 
 /** The capability a need takes; `edit` is work in a folder, which every headless CLI does. */
@@ -84,6 +92,7 @@ const NEED_CAPABILITY: Record<OperationNeed, DriverCapability | null> = {
   untrusted: "untrusted",
   noTools: "noTools",
   toolRules: "toolRules",
+  runTools: "runTools",
   edit: null,
 };
 
@@ -93,6 +102,7 @@ export const NEED_WORDS: Record<OperationNeed, string> = {
   untrusted: "lock a run down to read untrusted input",
   noTools: "run with no tools",
   toolRules: "follow tool rules of its own",
+  runTools: "use the board's run tools",
   edit: "edit code",
 };
 
@@ -154,7 +164,7 @@ export const OPERATIONS: Record<OperationId, OperationInfo> = {
   },
   prReview: {
     label: "PR review",
-    needs: ["outputSchema", "untrusted", "toolRules"],
+    needs: ["outputSchema", "untrusted", "runTools"],
     taskScoped: true,
     default: { tier: "standard" },
   },

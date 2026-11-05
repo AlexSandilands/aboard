@@ -18,6 +18,14 @@ export function githubGraphqlUrl(host: string): string {
   return `https://${normalized}/api/graphql`;
 }
 
+/** Where the REST API for a host lives, as for GraphQL: Enterprise Server serves it under `/api/v3`. */
+export function githubRestUrl(host: string): string {
+  const normalized = host.trim().toLowerCase();
+  if (normalized === "github.com") return "https://api.github.com";
+  if (normalized.endsWith(".ghe.com")) return `https://api.${normalized}`;
+  return `https://${normalized}/api/v3`;
+}
+
 export type GithubApiErrorKind =
   /** `gh` is not installed. */
   | "cli_missing"
@@ -186,24 +194,38 @@ export interface GithubApi {
     query: string,
     variables?: Record<string, unknown>,
   ): Promise<{ data: unknown; errors: GraphqlError[] }>;
+  /**
+   * One REST GET, for what GraphQL doesn't serve (a PR's file patches). `path` starts with `/` and may carry a query.
+   * Resolves the JSON body. Throws GithubApiError.
+   */
+  rest(host: string, path: string): Promise<unknown>;
 }
 
 export function createGithubApi(deps: { tokens: GithubTokens; fetch?: FetchFn; timeoutMs?: number }): GithubApi {
   const fetchFn: FetchFn = deps.fetch ?? ((input, init) => fetch(input, init));
   const timeoutMs = deps.timeoutMs ?? REQUEST_TIMEOUT_MS;
 
-  const send = async (host: string, token: string, body: string): Promise<Response> => {
+  const send = async (host: string, token: string, body: string | null, restPath?: string): Promise<Response> => {
     try {
-      return await fetchFn(githubGraphqlUrl(host), {
-        method: "POST",
-        headers: {
-          authorization: `bearer ${token}`,
-          "content-type": "application/json",
-          accept: "application/json",
-        },
-        body,
-        signal: AbortSignal.timeout(timeoutMs),
-      });
+      return await fetchFn(
+        restPath === undefined ? githubGraphqlUrl(host) : `${githubRestUrl(host)}${restPath}`,
+        body === null
+          ? {
+              method: "GET",
+              headers: { authorization: `bearer ${token}`, accept: "application/vnd.github+json" },
+              signal: AbortSignal.timeout(timeoutMs),
+            }
+          : {
+              method: "POST",
+              headers: {
+                authorization: `bearer ${token}`,
+                "content-type": "application/json",
+                accept: "application/json",
+              },
+              body,
+              signal: AbortSignal.timeout(timeoutMs),
+            },
+      );
     } catch (error) {
       const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
       throw new GithubApiError(
@@ -214,21 +236,15 @@ export function createGithubApi(deps: { tokens: GithubTokens; fetch?: FetchFn; t
     }
   };
 
-  const request = async (
-    rawHost: string,
-    query: string,
-    variables: Record<string, unknown>,
-    partial: boolean,
-  ): Promise<{ data: unknown; errors: GraphqlError[] }> => {
-    const host = rawHost.toLowerCase();
-    const body = JSON.stringify({ query, variables });
+  /** Sends with the host's token, asking gh again once when a cached token is refused. */
+  const authorized = async (host: string, body: string | null, restPath?: string): Promise<Response> => {
     let { token, cached } = await deps.tokens.get(host);
-    let response = await send(host, token, body);
+    let response = await send(host, token, body, restPath);
     // A cached token may have been revoked or switched since; ask gh once more before failing.
     if (response.status === 401 && cached) {
       deps.tokens.clear(host);
       ({ token, cached } = await deps.tokens.get(host));
-      response = await send(host, token, body);
+      response = await send(host, token, body, restPath);
     }
     if (response.status === 401) {
       deps.tokens.clear(host);
@@ -238,6 +254,17 @@ export function createGithubApi(deps: { tokens: GithubTokens; fetch?: FetchFn; t
         `GitHub refused the credential for ${host}: run \`gh auth login --hostname ${host}\``,
       );
     }
+    return response;
+  };
+
+  const request = async (
+    rawHost: string,
+    query: string,
+    variables: Record<string, unknown>,
+    partial: boolean,
+  ): Promise<{ data: unknown; errors: GraphqlError[] }> => {
+    const host = rawHost.toLowerCase();
+    const response = await authorized(host, JSON.stringify({ query, variables }));
     const text = await response.text();
     return classifyGraphqlResponse(host, response.status, response.headers, text, partial);
   };
@@ -245,6 +272,11 @@ export function createGithubApi(deps: { tokens: GithubTokens; fetch?: FetchFn; t
   return {
     graphql: async (host, query, variables = {}) => (await request(host, query, variables, false)).data,
     graphqlBatch: (host, query, variables = {}) => request(host, query, variables, true),
+    async rest(rawHost, path) {
+      const host = rawHost.toLowerCase();
+      const response = await authorized(host, null, path);
+      return classifyRestResponse(host, response.status, response.headers, await response.text());
+    },
   };
 }
 
@@ -294,4 +326,36 @@ export function classifyGraphqlResponse(
     throw new GithubApiError("response", host, `GitHub at ${host} returned HTTP ${status}`);
   }
   return { data: body.data, errors: [] };
+}
+
+/** A REST answer's JSON body, or the GithubApiError its status means. */
+export function classifyRestResponse(host: string, status: number, headers: Headers, text: string): unknown {
+  let body: unknown = undefined;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    // Not JSON: an HTML error page instead of the API's answer.
+  }
+  const message =
+    body && typeof body === "object" && typeof (body as { message?: unknown }).message === "string"
+      ? (body as { message: string }).message
+      : null;
+  if (
+    status === 429 ||
+    (status === 403 &&
+      (headers.get("x-ratelimit-remaining") === "0" || headers.has("retry-after") || /rate limit/i.test(text)))
+  ) {
+    throw new GithubApiError("rate_limited", host, `GitHub API rate limit exceeded on ${host}`);
+  }
+  if (status === 404) {
+    throw new GithubApiError(
+      "not_found",
+      host,
+      message ?? "GitHub could not find it, or the signed-in account cannot see it",
+    );
+  }
+  if (status < 200 || status >= 300 || body === undefined) {
+    throw new GithubApiError("response", host, message ?? `GitHub at ${host} returned HTTP ${status}`);
+  }
+  return body;
 }

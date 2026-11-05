@@ -93,13 +93,16 @@ Each lane stacks its epic bands above the loose cards, oldest epic first (`build
 - A band covers only the columns from its first task's to its last's (`bandSpan`); an empty epic sits in
   Backlog. Each band gets its own grid row, and its cells sit on the lane's columns through a CSS
   `subgrid`, so its cards line up with the loose cards below.
-- The header shows `#N`, the title, a roll-up bar and `done/total`; clicking it opens the epic's panel. An epic with an
+- The header shows `#N`, the title, a roll-up bar and `done/total`; clicking anywhere on it opens the epic's panel,
+  except on its own controls (`opensFromHeader` in `EpicBand.tsx`; the title is the button keyboards and screen
+  readers use). An epic with an
   integration branch then gets an info **integration** badge (`EpicBranchBadge`, also on the Done card; the tooltip names
   the branch, a click opens the delivery popover; epics delivering to main show nothing). Its threads and
   sessions and the start button (`EpicActions.tsx`, the links line of a task card: the same `CardLinks` and
   `HandoffMenu`) come next, then the Autopilot button, which sets what Autopilot does for the epic's tasks. It
-  folds to the header alone (`collapsedEpics` in the board view store, per browser). One column wide, the
-  roll-up moves under the title.
+  folds to the header alone (`collapsedEpics` in the board view store, per browser). One column wide, the header
+  takes two rows: the chevron and title, then the roll-up and `done/total` (without "done") with the badge and buttons
+  on its right; there the badge is compact (**awaiting merge**, the full sentence in its tooltip).
 - Drag and drop is per **row**: a project's loose cards, or one band (`Row` in `board.logic.ts`; the drag
   data carries `rowId`). Cards change status by dragging within their band, but not across a band's edge;
   that is refused like a drag into another project. While a band's card is dragged, the band covers every
@@ -161,7 +164,8 @@ Board task: #123. How an epic's tasks reach the default branch (`tasks.delivery`
 - **Integration branch** (`integration`): the epic has a branch `epic/<number>-<slug>` (`epicBranchName`). Its tasks
   start from origin's copy of it and open their PRs against it; Autopilot's Merge into epic branch merges each one
   there once it is reviewed and green, and keeps a draft PR from the branch into the default branch, which only the
-  user merges ([Autopilot](autopilot.md)). It suits an epic whose tasks build on each other, which would otherwise
+  user merges ([Autopilot](autopilot.md); [its title](autopilot.md#merge-into-epic-branch) is a Conventional Commits
+  header when the task PRs' are). It suits an epic whose tasks build on each other, which would otherwise
   stop at every merge.
 
 `TaskSummary.delivery` is the epic's choice (null for tasks and for an epic nobody chose for), and
@@ -183,6 +187,11 @@ reads it from the task.
   such an epic (null for any other). While all its tasks are Done and it hasn't merged, the band's integration badge
   reads **waiting for merge into main** (warning colour), and the delivery popover names the PR (a link) or says to link
   one.
+- **Its tasks stay in Done.** A task whose PR merged into the branch is finished, so it is Done while the epic waits in
+  Review. Until the branch merges, its card and panel show an info **on epic branch** chip (`OnEpicBranchChip`; the
+  tooltip names the branch and says it isn't on main yet), `get_task` says "Delivery: merged into epic/…; not on the
+  default branch yet", and a [follow-up](agent-handoff.md#follow-up-finished-tasks) on it starts from the branch
+  (`unmergedEpicBranch` in `delivery.ts`). All of these go once the epic merges.
 - **Marking merged.** For a merge with no PR to watch (Merge into epic branch is off, GitHub polling is off, or the
   branch merged some other way), **Mark merged into main** in that popover, or `move_task(epic, done)`, stores
   `integration_merged_at` on the epic (`integration_marked_merged` event) and `syncEpic` makes it Done (`status_changed`

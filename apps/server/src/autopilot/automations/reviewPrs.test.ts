@@ -21,7 +21,8 @@ import {
   type RunnerRequest,
   type RunnerResult,
 } from "../types.ts";
-import { REVIEW_ATTEMPTS, earlierReviews, renderReview, reviewHandoff, reviewPrs, reviewTools } from "./reviewPrs.ts";
+import { RUN_SERVER_NAME } from "../../mcp/runTokens.ts";
+import { REVIEW_ATTEMPTS, earlierReviews, renderReview, reviewHandoff, reviewPrs } from "./reviewPrs.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
 const SHA_A = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
@@ -561,25 +562,22 @@ describe("review PRs: the agent", () => {
     expect(request!.options).toMatchObject({ runner: "headless", budgetUsd: 2 });
   });
 
-  it("can read this PR and nothing else, and can't write to GitHub at all", () => {
-    const tools = reviewTools({ host: "github.com", repo: "acme/app", number: 7 });
-    expect(tools).toEqual([
-      "Bash(gh pr view https://github.com/acme/app/pull/7)",
-      "Bash(gh pr view https://github.com/acme/app/pull/7 --comments)",
-      "Bash(gh pr diff https://github.com/acme/app/pull/7)",
-      "Bash(gh pr diff https://github.com/acme/app/pull/7 --name-only)",
-      "Bash(gh api repos/acme/app/pulls/7/comments)",
-      "Bash(gh api repos/acme/app/pulls/7/reviews)",
-    ]);
-    // Every rule is exact: no wildcard for -R, --web, -f or --method to ride on, and no `gh pr review`.
-    expect(tools.some((t) => t.includes("*"))).toBe(false);
-    expect(tools.some((t) => t.includes("gh pr review"))).toBe(false);
-    expect(reviewTools({ host: "github.example.com", repo: "acme/app", number: 9 })).toContain(
-      "Bash(gh api repos/acme/app/pulls/9/reviews --hostname github.example.com)",
-    );
-    expect(reviewTools({ host: "github.example.com", repo: "acme/app", number: 9 })).toContain(
-      "Bash(gh pr diff https://github.example.com/acme/app/pull/9)",
-    );
+  it("reads this PR through the board's run tools, and has no gh rules to write to GitHub with", async () => {
+    const { requests, setPr, pass, turnOn } = setup();
+    turnOn();
+    setPr();
+    await pass();
+    const [request] = requests;
+    expect(request!.runTools).toEqual({
+      toolSet: "prReview",
+      target: { kind: "pr", host: "github.com", repo: "acme/app", number: 7 },
+    });
+    expect(request!.tools ?? []).toEqual([]);
+    const prompt = request!.prompt;
+    for (const tool of ["pr_overview", "pr_files", "pr_diff", "pr_comments"]) expect(prompt).toContain(`\`${tool}\``);
+    expect(prompt).toContain(`\`${RUN_SERVER_NAME}\``);
+    expect(prompt).toContain("never cut off, only paged");
+    expect(prompt).not.toMatch(/\bgh (pr|api)\b/);
   });
 
   it("tells it to post nothing, to treat the PR's text as data and to answer with its findings", async () => {
@@ -904,7 +902,7 @@ describe("review PRs: verdict, threshold and hand-off", () => {
     expect(prompt).toContain("FYI (no action needed)");
     expect(prompt).toContain("Don't raise again a point that was fixed or that the author declined");
     expect(prompt).not.toContain("this is the last round");
-    expect(prompt).toContain("put its comment `id` (from the comments API) in `fixed`");
+    expect(prompt).toContain("put its comment `id` (the number `pr_comments` shows for an inline comment) in `fixed`");
   });
 
   it("resolves its own earlier threads a later round confirms fixed, and no one else's", async () => {

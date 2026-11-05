@@ -19,6 +19,8 @@ import {
   type Project,
   type TaskDetail,
   type TaskEvent,
+  type TaskSummary,
+  unmergedEpicBranch,
 } from "@repo/contracts";
 import { deliveryHint, renderTaskShort, type ChildActivity } from "./format.ts";
 import type { AppContext } from "../app.ts";
@@ -481,3 +483,13 @@ export const planInputFields = {
   context: z.string().optional().describe("Markdown: approach, key decisions, constraints. Shown above the plan."),
   suggestedModel: suggestedModelField.optional(),
 };
+
+/** The epic's integration branch while a Done task's code is only there (see unmergedEpicBranch), for a follow-up. */
+export function epicBranchOf(services: Services, task: TaskSummary): string | null {
+  if (!task.parent || !task.integrationBranch) return null;
+  try {
+    return unmergedEpicBranch(task, services.tasks.summary(task.parent.id));
+  } catch {
+    return null;
+  }
+}
