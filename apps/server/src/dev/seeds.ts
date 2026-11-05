@@ -1,6 +1,7 @@
 import {
   autopilotSessionName,
   BOARD_REVIEWER,
+  epicBranchName,
   type AgentHarness,
   type AgentSessionSnapshot,
   type PlanInput,
@@ -156,6 +157,29 @@ const basic: Scenario = (s, opts) => {
   ] as const) {
     const done = s.tasks.create({ projectId: shop.id, title, kind: "epic", actor: AGENT }).id;
     for (const child of tasks) addTask(s, shop.id, { title: child, status: "done", epicId: done });
+  }
+
+  // Integration epics: one whose tasks are all Done, waiting for its branch to merge into main (a one-column band
+  // in Done), and one still under way, whose Done task is only on the epic's branch.
+  for (const [title, tasks] of [
+    [
+      "Saved carts",
+      [
+        ["Persist carts per account", "done"],
+        ["Restore a cart on sign-in", "done"],
+      ],
+    ],
+    [
+      "Gift cards",
+      [
+        ["Gift card balance API", "done"],
+        ["Redeem at checkout", "in_progress"],
+      ],
+    ],
+  ] as const) {
+    const epic = s.tasks.create({ projectId: shop.id, title, kind: "epic", actor: AGENT });
+    s.tasks.setDelivery(epic.id, "integration", epicBranchName(epic), "user");
+    for (const [child, status] of tasks) addTask(s, shop.id, { title: child, status, epicId: epic.id });
   }
 
   const invoices = addTask(s, billing.id, { title: "Invoice PDFs in the customer's language", status: "backlog" });

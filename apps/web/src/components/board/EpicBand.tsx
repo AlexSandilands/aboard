@@ -1,6 +1,6 @@
 import { describeEpicRollup } from "@repo/contracts";
 import { ChevronRightIcon, GroupIcon } from "lucide-react";
-import { memo, type CSSProperties } from "react";
+import { memo, type CSSProperties, type MouseEvent } from "react";
 import { AutopilotEpicButton } from "~/components/autopilot/AutopilotEpicButton";
 import { EpicBranchBadge } from "~/components/task/EpicDelivery";
 import { Button } from "~/components/ui/button";
@@ -20,6 +20,20 @@ import {
   EPIC_HEADER_CLASS,
   epicAccentStyle,
 } from "./epicStyle.logic";
+
+const TITLE_BUTTON_CLASS =
+  "flex h-6 min-w-0 items-center gap-1.5 rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+/**
+ * Whether a click on the band header should open the epic: one on its background or text, not on one of its own
+ * controls (chevron, badge, links, hand-off, Autopilot, which do their own thing; the title button opens it itself),
+ * and not one that bubbled through React from a popup they portal out of the header.
+ */
+function opensFromHeader(event: MouseEvent<HTMLElement>): boolean {
+  const target = event.target;
+  if (!(target instanceof Element) || !event.currentTarget.contains(target)) return false;
+  return !target.closest("button, a, input, [role='button'], [role='menuitem']");
+}
 
 /**
  * An epic's row in its lane: a header, then a cell for each column its children are in, laid on the lane's
@@ -63,8 +77,37 @@ export const EpicBand = memo(function EpicBand({
   const columns = STATUS_ORDER.slice(start, end + 1);
   const toggleRow = laneHasCollapsibleCell(band.cells);
   const selected = selectedTaskId === epic.id;
-  // One column is too narrow for the title and the roll-up side by side.
+  // One column is too narrow for the title and the roll-up side by side: the header takes two rows.
   const narrow = columns.length === 1;
+  const chevron = (
+    <Button
+      variant="ghost-muted"
+      size="icon-xs"
+      aria-expanded={!collapsed}
+      aria-label={collapsed ? `Expand epic #${epic.number}` : `Collapse epic #${epic.number}`}
+      onClick={() => toggleEpicCollapsed(band.id)}
+    >
+      <ChevronRightIcon className={cn("size-3.5 transition-transform", !collapsed && "rotate-90")} />
+    </Button>
+  );
+  const titleProps = { "aria-current": selected || undefined, onClick: () => openTask(epic.id) };
+  const title = (
+    <>
+      <GroupIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">#{epic.number}</span>
+      <span className="min-w-0 truncate text-sm font-medium text-foreground/90">{epic.title}</span>
+    </>
+  );
+  // The narrow header drops "done" to leave room for the badge; the roll-up's tooltip says it in full.
+  const count = (
+    <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+      {rollup.total === 0
+        ? narrow
+          ? "No tasks"
+          : "No tasks yet"
+        : `${rollup.done}/${rollup.total}${narrow ? "" : " done"}`}
+    </span>
+  );
 
   return (
     <section
@@ -80,51 +123,60 @@ export const EpicBand = memo(function EpicBand({
     >
       {/* The trigger draws no box, so the header stays a direct item of the band's grid. */}
       <CardContextMenu task={epic}>
+        {/* The whole header opens the epic, for the pointer; the title button is the keyboard and screen reader way. */}
+        {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- a larger pointer target for the title button, which keyboards use */}
         <header
           // The marker the dependency lines look for: they end on the header, which stays when the band is collapsed.
           data-task-card={epic.id}
           className={cn(
-            "col-span-full flex min-w-0 items-center gap-1.5 ps-1 pe-2",
+            "col-span-full flex min-w-0 cursor-pointer ps-1 pe-2",
             EPIC_HEADER_CLASS,
             collapsed && "rounded-b-xl",
-            narrow ? "py-1" : "h-8",
+            narrow ? "flex-col gap-0.5 py-1" : "h-8 items-center gap-1.5",
           )}
+          onClick={(event) => {
+            if (opensFromHeader(event)) openTask(epic.id);
+          }}
         >
-          <Button
-            variant="ghost-muted"
-            size="icon-xs"
-            className={cn(narrow && "self-start")}
-            aria-expanded={!collapsed}
-            aria-label={collapsed ? `Expand epic #${epic.number}` : `Collapse epic #${epic.number}`}
-            onClick={() => toggleEpicCollapsed(band.id)}
-          >
-            <ChevronRightIcon className={cn("size-3.5 transition-transform", !collapsed && "rotate-90")} />
-          </Button>
-          <button
-            type="button"
-            className={cn(
-              "flex min-w-0 flex-1 gap-x-1.5 rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              narrow ? "flex-col gap-y-1" : "items-center",
-            )}
-            aria-current={selected || undefined}
-            title={describeEpicRollup(rollup)}
-            onClick={() => openTask(epic.id)}
-          >
-            <span className="flex min-w-0 flex-1 items-center gap-1.5">
-              <GroupIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">#{epic.number}</span>
-              <span className="min-w-0 truncate text-sm font-medium text-foreground/90">{epic.title}</span>
-            </span>
-            <span className="flex shrink-0 items-center gap-1.5">
-              <EpicRollupBar rollup={rollup} className="w-16 shrink-0" />
-              <span className="text-xs tabular-nums text-muted-foreground">
-                {rollup.total === 0 ? "No tasks yet" : `${rollup.done}/${rollup.total} done`}
-              </span>
-            </span>
-          </button>
-          <EpicBranchBadge epic={epic} className={cn(narrow && "self-start")} />
-          <EpicActions epic={epic} className={cn(narrow && "self-start")} />
-          <AutopilotEpicButton epic={epic} className={cn(narrow && "self-start")} />
+          {narrow ? (
+            <>
+              <div className="flex h-6 min-w-0 items-center gap-1.5">
+                {chevron}
+                <button type="button" className={cn(TITLE_BUTTON_CLASS, "flex-1")} {...titleProps}>
+                  {title}
+                </button>
+              </div>
+              <div className="flex h-6 min-w-0 items-center gap-1.5 ps-7.5">
+                {/* No min-w-0: the count always shows, and the bar gives way first when the badge needs the room. */}
+                <span className="flex flex-1 items-center gap-1.5" title={describeEpicRollup(rollup)}>
+                  <EpicRollupBar rollup={rollup} className="min-w-0 max-w-16 flex-1" />
+                  {count}
+                </span>
+                <EpicBranchBadge epic={epic} compact />
+                <EpicActions epic={epic} />
+                <AutopilotEpicButton epic={epic} />
+              </div>
+            </>
+          ) : (
+            <>
+              {chevron}
+              <button
+                type="button"
+                className={cn(TITLE_BUTTON_CLASS, "flex-1 gap-x-3")}
+                title={describeEpicRollup(rollup)}
+                {...titleProps}
+              >
+                <span className="flex min-w-0 flex-1 items-center gap-1.5">{title}</span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <EpicRollupBar rollup={rollup} className="w-16 shrink-0" />
+                  {count}
+                </span>
+              </button>
+              <EpicBranchBadge epic={epic} />
+              <EpicActions epic={epic} />
+              <AutopilotEpicButton epic={epic} />
+            </>
+          )}
         </header>
       </CardContextMenu>
       {collapsed

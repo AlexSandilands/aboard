@@ -145,7 +145,16 @@ function EpicMergeStatus({ epic }: { epic: EpicLike }) {
  * The board's mark on an epic that delivers through an integration branch (nothing for one delivering to main). The
  * tooltip names the branch; a click opens the same delivery popover as the panel's button.
  */
-export function EpicBranchBadge({ epic, className }: { epic: EpicLike; className?: string }) {
+export function EpicBranchBadge({
+  epic,
+  className,
+  compact = false,
+}: {
+  epic: EpicLike;
+  className?: string;
+  /** Short text for a narrow header: "awaiting merge", with the whole sentence in the tooltip. */
+  compact?: boolean;
+}) {
   if (epic.kind !== "epic" || epic.archivedAt !== null || !epic.integrationBranch) return null;
   const waiting = isWaitingForMerge(epic);
   const label = waiting
@@ -162,14 +171,14 @@ export function EpicBranchBadge({ epic, className }: { epic: EpicLike; className
                   variant={waiting ? "warning" : "info"}
                   size="sm"
                   render={<button type="button" aria-label={label} />}
-                  className={className}
+                  className={cn("shrink-0", className)}
                 />
               }
             />
           }
         >
           <GitBranchIcon aria-hidden />
-          {waiting ? "waiting for merge into main" : "integration"}
+          {waiting ? (compact ? "awaiting merge" : "waiting for merge into main") : "integration"}
         </TooltipTrigger>
         <TooltipPopup>{waiting ? label : epic.integrationBranch}</TooltipPopup>
       </Tooltip>
