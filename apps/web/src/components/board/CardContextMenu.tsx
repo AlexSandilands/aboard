@@ -8,6 +8,7 @@ import { ContextMenu, ContextMenuPopup, ContextMenuTrigger } from "~/components/
 import { MenuItem, MenuItemLabel, MenuSeparator, MenuSub, MenuSubPopup, MenuSubTrigger } from "~/components/ui/menu";
 import { useArchivedTasks, useBoard } from "~/state/queries";
 import { useBoardPick } from "~/state/ui";
+import { AutomationMenuItems } from "./AutomationMenuItems";
 import { useBoardContext } from "./BoardContext";
 import { useCloseTask, useSelectedTaskId } from "./boardNavigation";
 import { BulkMenuItems } from "./BulkMenuItems";
@@ -77,6 +78,7 @@ function SingleMenuItems({ task }: { task: TaskSummary }) {
                 ))}
               </MenuSubPopup>
             </MenuSub>
+            <AutomationMenuItems tasks={[task]} />
             <MenuSeparator />
           </>
         )

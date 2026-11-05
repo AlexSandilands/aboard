@@ -32,6 +32,7 @@ import {
 } from "~/components/ui/menu";
 import { useBoard } from "~/state/queries";
 import { useDialogs } from "~/state/ui";
+import { AutomationMenuItems } from "./AutomationMenuItems";
 import { useBoardContext } from "./BoardContext";
 import { useBulkActions } from "./bulkActions";
 import {
@@ -108,6 +109,7 @@ export function BulkMenuItems({ tasks }: { tasks: readonly TaskSummary[] }) {
           Remove priority
         </MenuItem>
       ) : null}
+      <AutomationMenuItems tasks={tasks} />
       {closeable.length ? (
         <MenuSub>
           <MenuSubTrigger>

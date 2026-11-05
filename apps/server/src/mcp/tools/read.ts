@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   defaultHandoffMode,
+  HANDOFF_MODES,
   handoffModeError,
   MAX_PLAN_TASKS,
   planningSessionLabel,
@@ -29,6 +30,7 @@ import {
 import {
   boardUrl,
   childActivity,
+  epicBranchOf,
   findProject,
   hasProjectRef,
   projectFields,
@@ -319,6 +321,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
           images: services.attachments.forTask(task.id),
           ticketSystems: services.settings.get().ticketSystems,
           modelSettings: services.settings.get(),
+          epicBranch: epicBranchOf(services, task),
           ...(task.kind === "epic" ? { childActivity: childActivity(services, task) } : {}),
         });
         return textResult(withOpenRoundPointer(detail, task));
@@ -385,9 +388,12 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
           .optional()
           .describe('Several tasks of one project to plan together: "#42", "42" or uuids. Plan mode only.'),
         mode: z
-          .enum(["work", "plan", "orchestrate"])
+          .enum(HANDOFF_MODES)
           .optional()
-          .describe("work: pick the task up. plan: shape its plan with the user. orchestrate: an epic's prompt."),
+          .describe(
+            "work: pick the task up. plan: shape its plan with the user. orchestrate: an epic's prompt. followup: " +
+              "ask about, test or fix finished work (Review or Done).",
+          ),
         subagent: z.boolean().optional().describe("The prompt for a subagent you start. Work mode only."),
       },
       annotations: { readOnlyHint: true },
@@ -420,8 +426,17 @@ ${prompt}
         const problem = handoffModeError(task, mode, subagent);
         if (problem) throw new AppError("VALIDATION", problem);
         const { modelTiers, modelProfiles } = services.settings.get();
-        const prompt = taskHandoffPrompt({ task, boardUrl: boardUrl(ctx), mode, subagent, modelTiers, modelProfiles });
-        const head = `${mode[0]!.toUpperCase()}${mode.slice(1)} prompt for #${task.number}${subagent ? ", for a subagent" : ""}. Pass it on as it is:`;
+        const prompt = taskHandoffPrompt({
+          task,
+          boardUrl: boardUrl(ctx),
+          mode,
+          subagent,
+          modelTiers,
+          modelProfiles,
+          epicBranch: mode === "followup" ? epicBranchOf(services, task) : null,
+        });
+        const name = mode === "followup" ? "Follow-up" : `${mode[0]!.toUpperCase()}${mode.slice(1)}`;
+        const head = `${name} prompt for #${task.number}${subagent ? ", for a subagent" : ""}. Pass it on as it is:`;
         // A subagent can't switch its own model, so the suggestion goes to the orchestrator that starts it.
         const model = subagent
           ? suggestedModelLine(

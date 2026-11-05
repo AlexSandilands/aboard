@@ -19,7 +19,7 @@ import { HarnessIcon, T3Icon, useHandoffClis } from "~/components/sessions/Sessi
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { PrefetchSessionLaunchOptions, PrefetchT3LaunchOptions } from "./LaunchPrefetch";
 import { cn } from "~/lib/utils";
-import { useBoard, useSettings } from "~/state/queries";
+import { useBoard, useFollowupEpicBranch, useSettings } from "~/state/queries";
 import { useBoardPick, useDialogs, type PlanTarget } from "~/state/ui";
 import { pickedAmong, plannableTasks } from "~/components/board/boardSelection.logic";
 
@@ -38,19 +38,33 @@ const cardHandlers = { onClick: stop, onPointerDown: stop, onKeyDown: stop };
  */
 export function copyHandoffPrompt(
   task: Pick<TaskSummary, "id" | "number" | "title" | "suggestedModel"> &
-    Partial<Pick<TaskSummary, "labels" | "kind" | "blocked" | "integrationBranch" | "delivery" | "parent">>,
+    Partial<
+      Pick<
+        TaskSummary,
+        "labels" | "kind" | "blocked" | "integrationBranch" | "delivery" | "parent" | "links" | "status"
+      >
+    >,
   mode: HandoffMode,
   modelSettings: Pick<AppSettings, "modelTiers" | "modelProfiles"> | undefined,
+  /** For a follow-up: the epic's branch while the task's code is only there (see useFollowupEpicBranch in state/queries). */
+  epicBranch: string | null = null,
 ) {
   const prompt = taskHandoffPrompt({
     task,
     boardUrl: window.location.origin,
     mode,
+    epicBranch,
     ...(modelSettings ? { modelTiers: modelSettings.modelTiers, modelProfiles: modelSettings.modelProfiles } : {}),
   });
   copyToClipboard(
     prompt,
-    mode === "plan" ? "planning prompt" : mode === "orchestrate" ? "orchestrating prompt" : "prompt",
+    mode === "plan"
+      ? "planning prompt"
+      : mode === "orchestrate"
+        ? "orchestrating prompt"
+        : mode === "followup"
+          ? "follow-up prompt"
+          : "prompt",
   );
 }
 
@@ -181,6 +195,7 @@ export function HandoffMenu({
   const suggested = defaultHandoffMode(task);
   const modelSettings = useSettings().data;
   const sessionClis = useHandoffClis();
+  const epicBranch = useFollowupEpicBranch(task);
   return (
     <Menu>
       <Tooltip>
@@ -222,6 +237,12 @@ export function HandoffMenu({
           <MenuItem onClick={() => copyHandoffPrompt(task, "orchestrate", modelSettings)}>
             <ClipboardCopyIcon />
             Copy prompt to start its tasks
+          </MenuItem>
+        ) : suggested === "followup" ? (
+          // A Done task's work is finished: a session on it asks about it, never plans or reopens it.
+          <MenuItem onClick={() => copyHandoffPrompt(task, "followup", modelSettings, epicBranch)}>
+            <ClipboardCopyIcon />
+            Copy follow-up prompt
           </MenuItem>
         ) : (
           <>

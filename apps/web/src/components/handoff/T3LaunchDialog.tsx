@@ -26,7 +26,14 @@ import { ApiError } from "~/lib/api";
 import { openHref, t3LinkTargets } from "~/lib/t3Links";
 import { cn } from "~/lib/utils";
 import { useStartPlanningThread, useStartProjectT3Thread, useStartT3Thread } from "~/state/mutations";
-import { useBoard, usePrFix, useProjectT3LaunchOptions, useSettings, useT3LaunchOptions } from "~/state/queries";
+import {
+  useBoard,
+  useFollowupEpicBranch,
+  usePrFix,
+  useProjectT3LaunchOptions,
+  useSettings,
+  useT3LaunchOptions,
+} from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import {
   keepsCommandId,
@@ -159,8 +166,11 @@ function TaskLaunchContent({ task, fix, onDone }: { task: TaskSummary; fix: PrFi
   const options = useT3LaunchOptions(task.id);
   const modelSettings = useSettings().data;
   const mutation = useStartT3Thread({ silent: true });
-  // An epic's thread orchestrates its tasks, which carry the plans, so it has no "Plan with me".
+  // An epic's thread orchestrates its tasks, which carry the plans, so it has no "Plan with me"; nor has a follow-up on
+  // a Done task, whose work is finished.
   const epic = task.kind === "epic";
+  const followup = defaultHandoffMode(task) === "followup";
+  const epicBranch = useFollowupEpicBranch(task);
   const subject: LaunchSubject = fix
     ? {
         label: `Fix PR #${fix.number} · #${task.number} ${task.title}`,
@@ -179,16 +189,18 @@ function TaskLaunchContent({ task, fix, onDone }: { task: TaskSummary; fix: PrFi
           taskHandoffPrompt({
             task,
             boardUrl: window.location.origin,
-            mode: epic ? "orchestrate" : plan ? "plan" : "work",
+            mode: epic ? "orchestrate" : followup ? "followup" : plan ? "plan" : "work",
             linkedThread: true,
+            epicBranch,
           }),
-        planToggle: !epic,
+        planToggle: !epic && !followup,
         // An epic has no suggested model, so it starts on T3's default model, which is also what planning uses.
         initialPlan: defaultHandoffMode(task) === "plan",
         successDescription: `#${task.number} is linked to the new thread.`,
-        copyPrompt: () => copyHandoffPrompt(task, defaultHandoffMode(task), modelSettings),
+        copyPrompt: () => copyHandoffPrompt(task, defaultHandoffMode(task), modelSettings, epicBranch),
         offerOpen: false,
-        integrationBranch: epic ? null : task.integrationBranch,
+        // A follow-up starts where the code is: the epic's branch while it's only there, else the default branch.
+        integrationBranch: epic ? null : followup ? epicBranch : task.integrationBranch,
       };
   const starter: Starter = {
     isPending: mutation.isPending,

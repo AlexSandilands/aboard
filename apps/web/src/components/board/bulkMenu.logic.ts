@@ -44,6 +44,27 @@ export function bulkMove(tasks: readonly TaskSummary[], status: TaskStatus): Bul
 export const bulkPriority = (tasks: readonly TaskSummary[], on: boolean): TaskSummary[] =>
   tasks.filter((t) => isOpenTask(t) && t.priority !== on);
 
+/**
+ * The cards that have Automation settings: the panel leaves the section out for an epic, shows a manual task only
+ * Manual and Priority, and an archived card is out of play.
+ */
+export const automationEligible = (t: TaskSummary): boolean => isOpenTask(t) && !t.manual;
+
+/** Tasks whose Autopilot flag isn't `on`. Off clears to Default, which reads the same, so only On is a set value. */
+export const bulkAutopilot = (tasks: readonly TaskSummary[], on: boolean): TaskSummary[] =>
+  tasks.filter((t) => automationEligible(t) && (t.autopilot === true) !== on);
+
+/** Tasks whose auto-merge flag isn't `on` (Default and Off both don't merge). */
+export const bulkAutoMerge = (tasks: readonly TaskSummary[], on: boolean): TaskSummary[] =>
+  tasks.filter((t) => automationEligible(t) && (t.autoMerge === true) !== on);
+
+/** The effective auto-review: the task's own setting, else the board's. */
+export const effectiveAutoReview = (t: TaskSummary, globalReview: boolean): boolean => t.autoReview ?? globalReview;
+
+/** Tasks whose effective auto-review differs from `on`. */
+export const bulkAutoReview = (tasks: readonly TaskSummary[], on: boolean, globalReview: boolean): TaskSummary[] =>
+  tasks.filter((t) => automationEligible(t) && effectiveAutoReview(t, globalReview) !== on);
+
 /** Tasks that can be closed as Won't do (epics can't be closed; one already Won't do stays so). */
 export const bulkWontDo = (tasks: readonly TaskSummary[]): TaskSummary[] =>
   tasks.filter((t) => t.kind !== "epic" && t.resolution !== "wont_do");

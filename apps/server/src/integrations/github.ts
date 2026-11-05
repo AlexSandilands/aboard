@@ -316,6 +316,19 @@ const asMergeState = (value: string | null | undefined): PrMergeState | undefine
 const asMergeMethod = (value: string | null | undefined): MergeMethod | null =>
   value === "squash" || value === "merge" || value === "rebase" ? value : null;
 
+/** The merge methods the repository's settings allow, in the order merge, squash, rebase. */
+export function allowedMergeMethods(repo: {
+  mergeCommitAllowed?: boolean | null;
+  squashMergeAllowed?: boolean | null;
+  rebaseMergeAllowed?: boolean | null;
+}): MergeMethod[] {
+  const methods: MergeMethod[] = [];
+  if (repo.mergeCommitAllowed) methods.push("merge");
+  if (repo.squashMergeAllowed) methods.push("squash");
+  if (repo.rebaseMergeAllowed) methods.push("rebase");
+  return methods;
+}
+
 /** Maps one pull request, and the repo it lives in, to a PrSnapshot. */
 export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnapshot {
   const pr = GraphqlPr.parse(input);
@@ -336,10 +349,7 @@ export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnaps
   const mergeable: PrSnapshot["mergeable"] =
     merge === "MERGEABLE" ? "mergeable" : merge === "CONFLICTING" ? "conflicting" : "unknown";
   const rollup = pr.commits?.nodes.at(-1)?.commit.statusCheckRollup?.contexts.nodes;
-  const mergeMethods: MergeMethod[] = [];
-  if (repo.mergeCommitAllowed) mergeMethods.push("merge");
-  if (repo.squashMergeAllowed) mergeMethods.push("squash");
-  if (repo.rebaseMergeAllowed) mergeMethods.push("rebase");
+  const mergeMethods = allowedMergeMethods(repo);
   const optionalChecks = mapOptionalChecks(rollup);
   const mergeState = asMergeState(pr.mergeStateStatus);
   const threads = mapReviewThreads(pr.reviewThreads?.nodes);
@@ -567,12 +577,16 @@ export class StaleReviewError extends AppError {
 
 const MERGE_TARGET_QUERY = `query PullRequestMergeTarget($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
+    mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed
     defaultBranchRef { name }
     pullRequest(number: $number) { id state headRefOid baseRefName mergeStateStatus }
   }
 }`;
 const MergeTarget = z.object({
   repository: z.object({
+    mergeCommitAllowed: z.boolean().nullish(),
+    squashMergeAllowed: z.boolean().nullish(),
+    rebaseMergeAllowed: z.boolean().nullish(),
     defaultBranchRef: z.object({ name: z.string() }).nullish(),
     pullRequest: z.object({
       id: z.string(),
@@ -659,6 +673,18 @@ export function checkAutopilotMergeTarget(target: {
     throw new MergeTargetError(`The PR now merges into ${target.base}, not the epic's branch ${target.expectedBase}`);
   }
 }
+
+/**
+ * The methods to try for a merge into an epic's branch, best first: a merge commit keeps each task's commits, so it
+ * is used wherever the repository allows it; a repository that doesn't gets a squash, then a rebase.
+ */
+export function epicMergeMethods(allowed: readonly MergeMethod[]): MergeMethod[] {
+  return (["merge", "squash", "rebase"] as const).filter((m) => allowed.includes(m));
+}
+
+/** GitHub refusing a merge method the repository's settings or a ruleset don't allow. */
+const METHOD_NOT_ALLOWED =
+  /\b(?:not|n't|never) (?:allowed|permitted)\b|\bnot enabled\b|\bmust not contain merge commits\b|\blinear history\b/i;
 
 /** What Autopilot merges: a task's PR into its epic's integration branch, at the commit it checked. */
 export interface EpicMergeInput {
@@ -807,7 +833,7 @@ export interface GithubIntegration {
    * checkAutopilotMergeTarget passes on what GitHub says now. Then refreshes the link, which moves the task to Done.
    * Throws MergeTargetError for a target it may never merge into, AppError for anything else GitHub refuses.
    */
-  mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<void>;
+  mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<{ method: MergeMethod }>;
   /**
    * merge_task_pr's merge of a task's PR into the default branch, at `headOid`, once checkAutopilotMergeTarget (into
    * "default") passes on what GitHub says now. Then refreshes the link. Throws MergeTargetError for any other base,
@@ -1134,17 +1160,22 @@ ${link.ref.repo.toLowerCase()}`;
     return found ? { id: found.databaseId ?? null, url: found.url, body: found.body ?? "" } : null;
   };
 
-  /** A board-made merge at the checked head, once checkAutopilotMergeTarget passes on what GitHub says now. */
+  /**
+   * A board-made merge at the checked head, once checkAutopilotMergeTarget passes on what GitHub says now. With
+   * `method` it merges that way; without, it takes the repository's allowed methods as GitHub says now (epicMergeMethods)
+   * and moves to the next when GitHub refuses one as not allowed. Returns the method that merged.
+   */
   const mergeChecked = async (
     link: TaskLink,
-    input: { into: "epic" | "default"; base: string; headOid: string; method: MergeMethod },
-  ): Promise<void> => {
+    input: { into: "epic" | "default"; base: string; headOid: string; method?: MergeMethod },
+  ): Promise<{ method: MergeMethod }> => {
     const notGithub = () => new AppError("VALIDATION", "Only a GitHub pull request can be merged");
     if (link.kind !== "pr" || !link.ref) throw notGithub();
     if (!isGithubPr(link, await ensureStatus())) throw notGithub();
     await requireGh(link);
     const [owner, name] = splitRepo(link.ref.repo);
     const host = link.ref.host;
+    let merged: MergeMethod;
     try {
       const raw = await api.graphql(host, MERGE_TARGET_QUERY, { owner, name, number: link.ref.number });
       const parsed = MergeTarget.safeParse(raw);
@@ -1174,9 +1205,28 @@ ${link.ref.repo.toLowerCase()}`;
               : `GitHub says the PR can't be merged yet (${state}): a branch rule such as a required approval or an up-to-date branch isn't met`,
         );
       }
-      await api.graphql(host, MERGE_MUTATION, {
-        input: { pullRequestId: pr.id, mergeMethod: input.method.toUpperCase(), expectedHeadOid: pr.headRefOid },
-      });
+      const methods = input.method ? [input.method] : epicMergeMethods(allowedMergeMethods(parsed.data.repository));
+      if (methods.length === 0) {
+        throw new AppError("VALIDATION", "The repository allows no merge method (merge commit, squash or rebase)");
+      }
+      let refused: unknown;
+      let done: MergeMethod | null = null;
+      for (const method of methods) {
+        try {
+          await api.graphql(host, MERGE_MUTATION, {
+            input: { pullRequestId: pr.id, mergeMethod: method.toUpperCase(), expectedHeadOid: pr.headRefOid },
+          });
+          done = method;
+          break;
+        } catch (error) {
+          // Only a refusal of the method itself moves on to the next; anything else (a conflict, a stale head) won't
+          // change with another method.
+          if (!METHOD_NOT_ALLOWED.test(messageOf(error))) throw error;
+          refused = error;
+        }
+      }
+      if (!done) throw refused;
+      merged = done;
     } catch (error) {
       // Show the new head, or the PR merged or closed by hand, so the next check doesn't try the old head again.
       await refreshOne(link).catch(() => {});
@@ -1188,6 +1238,7 @@ ${link.ref.repo.toLowerCase()}`;
     } catch (error) {
       logOnce(link.id, link.url, messageOf(error));
     }
+    return { method: merged };
   };
 
   return {
@@ -1319,11 +1370,12 @@ ${link.ref.repo.toLowerCase()}`;
       }
     },
     mergeIntoEpicBranch(link, input) {
-      // A merge commit, never a squash or rebase: the epic's branch keeps each task's commits.
-      return mergeChecked(link, { into: "epic", base: input.base, headOid: input.headOid, method: "merge" });
+      // A merge commit where the repository allows one, so the epic's branch keeps each task's commits; else the
+      // method its settings do allow.
+      return mergeChecked(link, { into: "epic", base: input.base, headOid: input.headOid });
     },
-    mergeIntoDefaultBranch(link, input) {
-      return mergeChecked(link, { into: "default", base: input.base, headOid: input.headOid, method: input.method });
+    async mergeIntoDefaultBranch(link, input) {
+      await mergeChecked(link, { into: "default", base: input.base, headOid: input.headOid, method: input.method });
     },
     async ensureEpicPr(input) {
       await requireSignedIn(input.host);
