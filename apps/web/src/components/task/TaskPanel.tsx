@@ -133,7 +133,9 @@ function usePanelSlide(
     const aside = asideRef.current;
     const contents = contentsRef.current;
     if (!aside || !contents) return;
-    if (skipOpening && !closing) return;
+    // Only the mount's opening is skipped: a slide already running or held (the panel closing, then reopened before it
+    // left) is turned around as usual.
+    if (skipOpening && !closing && slidesOn(contents, aside).length === 0) return;
     // In a board transition the router's View Transition moves the panel and the board (index.css).
     const duration = boardTransitionRunning() ? 0 : slideDuration();
     if (duration === 0) {
