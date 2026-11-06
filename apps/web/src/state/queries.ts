@@ -308,7 +308,7 @@ export function useTerminalInfo(enabled = true) {
 
 /**
  * Every provider as detected here: its CLI, MCP registration, T3 Code's status and the models scan. The one detection
- * source, shared by Settings → Providers and every menu that offers a provider. The server caches the CLI checks for
+ * source, shared by Settings → Agents → Providers and every menu that offers a provider. The server caches the CLI checks for
  * a minute; Re-check asks past it, and a provider change (providers.changed) asks again.
  */
 export function useProviders(enabled = true) {

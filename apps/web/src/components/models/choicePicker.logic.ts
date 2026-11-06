@@ -124,7 +124,7 @@ export const findScanned = (
 ): AgentModel | undefined => (model ? scannedModels(scanned, harness).find((m) => m.value === model) : undefined);
 
 /**
- * Why a provider can't be picked here, or null: it isn't added or is switched off in Settings → Providers, or it
+ * Why a provider can't be picked here, or null: it isn't added or is switched off in Settings → Agents → Providers, or it
  * can't do what the operation needs.
  */
 export function providerDisabledReason(
@@ -136,8 +136,8 @@ export function providerDisabledReason(
     return `Only ${harnessLabel(input.lockedProvider)} models can be picked here.`;
   }
   const setting = input.settings.providers.find((p) => p.id === harness);
-  if (!setting) return `${label} isn't added. Add it in Settings → Providers.`;
-  if (!setting.enabled) return `${label} is switched off in Settings → Providers.`;
+  if (!setting) return `${label} isn't added. Add it in Settings → Agents → Providers.`;
+  if (!setting.enabled) return `${label} is switched off in Settings → Agents → Providers.`;
   if (!input.op) return null;
   const needs = [...new Set([...OPERATIONS[input.op].needs, ...(input.needs ?? [])])];
   const missing = missingNeeds(harness, needs);
@@ -478,7 +478,7 @@ export function choiceEffortColumn(
   const empty = (note: string): EffortColumnModel => ({ modelLabel, groups: [], toggles: [], note });
   if (!pick) return empty("Pick a model to set its effort.");
   if (pick.kind === "inherit" || pick.kind === "unset") return empty("The setting it comes down to sets the effort.");
-  if (pick.kind !== "model") return empty("A tier or custom model sets its own effort on the Models page.");
+  if (pick.kind !== "model") return empty("A tier or custom model sets its own effort under Models.");
   if (!pick.model) return empty(`${harnessLabel(pick.provider)}'s default model runs at its default effort.`);
   const levels = modelLevels(scanned, pick.provider, pick.model);
   if (levels.length === 0) return empty("This model takes no effort.");
@@ -509,7 +509,7 @@ const SOURCE_WORDS: Record<ResolvedModel["source"], string> = {
   task: "the task's reviewer model",
   project: "the project's reviewer model",
   automation: "the automation's setting",
-  board: "set on the Models page",
+  board: "set under Operations",
   default: "the default",
   label: "picked by a task label",
   tier: "the task's suggested tier",

@@ -127,15 +127,15 @@ An automation that needs an agent picks its **runner** in its settings:
   on Claude Code a budget. Its session is linked on the card, so **Open in terminal** picks it up where it stopped.
 
 Each agent automation also has a **Model**: **Inherit** (the default), a tier, one of your **Custom models** from
-Settings → Models, or a provider's model with its effort, picked in the same model picker as everywhere else (a
+Settings → Agents → Models, or a provider's model with its effort, picked in the same model picker as everywhere else (a
 provider that can't do what the automation needs is greyed out, with the reason). Inherit takes the board's model for that kind of run, and for a run on a task by default the
 task's own: a custom model one of its labels picks (say a `codex61` label on a model set to T3 Code's Codex), else its
 suggested tier, else the Light tier. Orchestrate, PR reviews and the digest default to a tier of their own (Standard,
-Standard and Light). The board's model for each kind of run is set under **Settings → Models → Operations**, where
+Standard and Light). The board's model for each kind of run is set under **Settings → Agents → Operations**, where
 each row says what it resolves to now.
 
-A headless run runs on a provider you added in Settings → Providers: the model's preferred one (the **Preferred** radio
-under a provider's column for each tier and custom model in Settings → Models) when it can do the job, else the first in your Providers list
+A headless run runs on a provider you added in Settings → Agents → Providers: the model's preferred one (the **Preferred** radio
+under a provider's column for each tier and custom model in Settings → Agents → Models) when it can do the job, else the first in your Providers list
 that can and has a model for it. So a `codex61` label can mean Codex in T3 Code and headless alike. Add the provider
 with its CLI path if it isn't on your PATH, and register the board's MCP server with it
 ([connecting agents](connect-agents.md)) so the agent can move its task. Some things only Claude Code can do: a

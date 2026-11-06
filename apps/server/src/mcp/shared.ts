@@ -190,7 +190,7 @@ export const reviewModelValue = (
   const hint =
     added.length > 0
       ? ` For a model, name its provider: ${added.map((id) => `"${id}:${choice}"`).join(" or ")}.`
-      : " For a model, name its provider as provider:model; the user has no CLI provider switched on in Settings → Providers.";
+      : " For a model, name its provider as provider:model; the user has no CLI provider switched on in Settings → Agents → Providers.";
   throw new AppError(
     "VALIDATION",
     `"${choice}" is neither a tier (light, standard, deep) nor one of the user's custom models.${hint}`,

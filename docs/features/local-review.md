@@ -81,7 +81,7 @@ The reviewer subagent and the board reviewer are two operations (`reviewer`, `bo
 provider, or inherit). The nearest level wins: the task (Automation → Reviewer in the task panel, or
 `update_task(reviewModel)`: a tier, a custom model's id, `provider:model`, or `null` to inherit), then the project
 (project settings → Reviewer model, `project.models.reviewer`), then the board (`operationModels.reviewer` and
-`.boardReviewer`, each its own row under Settings → Models › Operations; Tasks → Review shows what they resolve to
+`.boardReviewer`, each its own row under Settings → Agents → Operations; Tasks → Review shows what they resolve to
 with a link there), then the operation's default. The task and
 project overrides apply to both reviewers.
 
@@ -192,7 +192,7 @@ Git commands in the instructions are plain commands, one per step. `dontAsk` den
 substitutions, and an early version that used `git diff $(git merge-base …)` reviewed the files without
 the diff.
 
-Settings → Providers → Claude Code shows the result of running `claude --version` with the configured path
+Settings → Agents → Providers → Claude Code shows the result of running `claude --version` with the configured path
 (empty means `claude` on PATH), next to **Re-check** ([agent sessions](agent-sessions.md#providers-and-detection)).
 
 ## Decisions

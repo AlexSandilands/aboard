@@ -1,9 +1,9 @@
-// Design D's one layout: a card with a list down the left and the selected item's settings on the right (stacked on a
-// narrow page). Providers and Models are both this card, so the page reads as one system however many providers or
-// models there are: each is a row in a list, never a column.
+// Settings → Agents' one layout: a card with a list down the left and the selected item's settings on the right
+// (stacked on a narrow page). Providers and Models are both this card, so the page reads as one system however many
+// providers or models there are: each is a row in a list, never a column.
 import type { ReactNode } from "react";
 import { cn } from "~/lib/utils";
-import { SETTINGS_TEXT_WIDTH, SettingsGroup } from "../../settingsLayout";
+import { SETTINGS_TEXT_WIDTH, SettingsGroup } from "../settingsLayout";
 
 /**
  * The look of a model picker as a settings control: the field border and width every other control in a row has, so

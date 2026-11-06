@@ -92,7 +92,7 @@ describe("settings Ask", () => {
     expect(await ask(failed)).toMatchObject({
       ok: false,
       error: expect.stringContaining(
-        "(the Light tier, unless you chose another) a Claude Code model in Settings → Models",
+        "(the Light tier, unless you chose another) a Claude Code model in Settings → Agents → Models",
       ),
     });
 
@@ -154,7 +154,7 @@ describe("settings Ask", () => {
     expect(await ask(h)).toEqual({
       ok: false,
       error:
-        "Ask needs a provider that can return structured output and run read-only, apart from your own setup; add one in Settings → Providers.",
+        "Ask needs a provider that can return structured output and run read-only, apart from your own setup; add one in Settings → Agents → Providers.",
     });
     expect(jobs).toHaveLength(0);
   });

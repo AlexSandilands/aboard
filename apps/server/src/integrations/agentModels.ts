@@ -15,7 +15,7 @@ import { codexModelPages } from "./codexAppServer.ts";
 import { messageOf } from "./github.ts";
 import type { TerminalHost } from "./terminal.ts";
 
-// The models each CLI says it can run, for the pickers in Settings → Models. Each CLI is asked only when the page
+// The models each CLI says it can run, for the pickers in Settings → Agents → Models. Each CLI is asked only when the page
 // is opened or a rescan is requested, and the answer is kept for a while. A scan that fails leaves the list empty with
 // the reason, and the pickers still take a typed model. See docs/features/agent-sessions.md.
 

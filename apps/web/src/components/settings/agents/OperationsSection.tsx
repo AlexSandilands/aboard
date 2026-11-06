@@ -1,5 +1,6 @@
-// Design D's Operations: the baseline's rows (ModelsPage.tsx), with the picker in the same field look as the rest of
-// the page. While no provider can run anything the rows are dimmed behind one notice instead of a warning on each.
+// Settings → Agents → Operations: the model each operation runs on, with the picker in the same field look as the
+// rest of the page. While no provider can run anything the rows are dimmed behind one notice instead of a warning on
+// each.
 import { activeProviderIds, AGENT_HARNESSES, OPERATIONS, type AppSettings, type OperationId } from "@repo/contracts";
 import { CircleAlertIcon, TerminalIcon } from "lucide-react";
 import { resolvesTo } from "~/components/models/choicePicker.logic";
@@ -14,7 +15,7 @@ import {
 } from "~/components/models/operations.logic";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { useUpdateSettings } from "~/state/mutations";
-import { SettingsRow, SettingsSection, SettingsSubsection } from "../../settingsLayout";
+import { SettingsRow, SettingsSection, SettingsSubsection } from "../settingsLayout";
 import { CONTROL_PICKER } from "./SplitCard";
 
 const HEADLESS_LABELS = Object.values(AGENT_HARNESSES).map((h) => h.label);

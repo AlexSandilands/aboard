@@ -7,7 +7,7 @@ import { withDriverArgs } from "./headlessDrivers.ts";
 
 export interface StructuredRun<T> {
   driver: HeadlessDriver;
-  /** The provider's CLI path from Settings → Providers; null looks it up on PATH. */
+  /** The provider's CLI path from Settings → Agents → Providers; null looks it up on PATH. */
   cli: string | null;
   cwd: string;
   prompt: string;

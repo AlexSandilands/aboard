@@ -329,7 +329,7 @@ export function createAutopilotRunner(deps: {
         : model.explicit
           ? "It is a model for a CLI provider, which T3 Code doesn't run."
           : model.profile && !model.profile.setting.t3
-            ? "It has no T3 Code model in Settings → Models."
+            ? "It has no T3 Code model in Settings → Agents → Models."
             : null,
     );
     if (before) update({ detail: before });

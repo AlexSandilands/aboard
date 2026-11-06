@@ -133,7 +133,7 @@ sessions, [ADR 0010](../decisions/0010-board-starts-new-sessions.md).
 ### Providers and detection
 
 A provider (T3 Code, Claude Code, Codex, GitHub Copilot: `PROVIDERS` in `packages/contracts/src/providers.ts`) is
-opt-in. The user adds it in **Settings → Providers**, and the `providers` setting keeps `{ id, enabled, cliPath }` for
+opt-in. The user adds it in **Settings → Agents → Providers**, and the `providers` setting keeps `{ id, enabled, cliPath }` for
 each one added. A provider that isn't added, or is switched off, shows nowhere else: not in the hand-off menus
 (`handoffClis`, `canStartProjectT3Thread`), the launch and plan dialogs opened from them, the Models page's columns, or the
 model pickers' provider tabs. Agents can't start T3 threads without T3 Code added (`t3LaunchBlocker`). Sessions
@@ -152,7 +152,7 @@ every provider whether added or not (the Add provider dialog shows what this mac
   since scanning starts the CLI.
 
 `?parts=cli` answers with the CLI checks and T3 Code only. The board's menus and session rows read that
-(`useAgentClis`), so they never wait on `claude mcp list` or a model scan; only Settings → Providers asks for the
+(`useAgentClis`), so they never wait on `claude mcp list` or a model scan; only Settings → Agents → Providers asks for the
 rest. The CLI checks are kept for a minute by their paths and shared by both answers; the MCP and model checks are
 kept for a minute, keyed by the enabled providers and the board's URL, so a new CLI path or a provider switched on
 asks again; `?refresh=1` (Re-check) skips the cache and a refresh while a check is
@@ -187,7 +187,7 @@ hand-off entry the menus showed (the entry on and the CLI found).
 
 The hand-off menu on a card and in the panel offers **New Claude Code session…**, **New Codex session…** and **New
 Copilot CLI session…** on any open task, and on an epic (finished ones too), for each CLI provider that is added, on, and found by
-`GET /api/providers`: the path set for it in Settings → Providers, else the name on PATH. The dialog (`SessionLaunchDialog`) reads
+`GET /api/providers`: the path set for it in Settings → Agents → Providers, else the name on PATH. The dialog (`SessionLaunchDialog`) reads
 `GET /api/tasks/:id/session-launch-options` (CLIs, the project folder, its branches and default branch, each CLI's
 model for the task's model, which model that is and what picked it (a label's custom model, else the tier:
 `resolveTaskModel`), and whether sessions get a named window) and offers:
@@ -198,7 +198,7 @@ model for the task's model, which model that is and what picked it (a label's cu
   cwd}, label)` with the label the board would have given it), and has no suggested-model line. An epic's
   is the orchestrating prompt (mode `orchestrate`, session label "Orchestrating #N") with no **Plan with me**, and
   the server refuses a mode that doesn't fit the task (`handoffModeError`);
-- a model, filled in from **Settings → Models** (the custom model's or the tier's `cli[harness]`) for a work prompt; **Default
+- a model, filled in from **Settings → Agents → Models** (the custom model's or the tier's `cli[harness]`) for a work prompt; **Default
   model**, and planning, use the CLI's default. It is the shared model picker locked to the CLI (`CliModelPicker` in
   `components/models/`, with `defaultLabel`), listing the models the CLI's scan found (`GET /api/agent-models`) with
   the effort beside them; a name it doesn't list can be typed. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
@@ -364,7 +364,7 @@ Copilot CLI support is unit-tested only.
 
 ## Choosing a CLI's model
 
-**Settings → Models** picks each tier's (and each custom model's) CLI model from a list the CLI itself gives, so a
+**Settings → Agents → Models** picks each tier's (and each custom model's) CLI model from a list the CLI itself gives, so a
 model isn't typed from memory. Each cell is the shared model picker ([board-layout.md](board-layout.md#the-model-picker))
 locked to the CLI: a button with the CLI's mark, the model's name and its effort opens a searchable list of the
 models, each with its name, its value and what the CLI says about it, and the effort column beside it. Search text the
@@ -425,7 +425,7 @@ drops an effort for a harness with no model. The effort goes everywhere the mode
 | `packages/contracts/src/providers.ts` | `ProviderId`, `PROVIDERS`, the `providers` setting, `ProvidersStatus`, `harnessCliSetting`, `providerActive` |
 | `apps/server/src/integrations/providers.ts` | `GET /api/providers`: CLI, MCP, T3 and models checks, their cache, and the seed from detection (tested) |
 | `apps/server/src/db/codeMigrations.ts` | `040_providers_settings`: seeds the list and moves the CLI paths (tested in `database.test.ts`) |
-| `apps/web/src/components/settings/ProvidersPage.tsx`, `ProviderEditors.tsx` | Settings → Providers: the list, the Add provider dialog and each provider's editor (`providers.logic.ts` is tested) |
+| `apps/web/src/components/settings/agents/ProvidersSection.tsx`, `ProviderEditors.tsx` | Settings → Agents → Providers: the list, the Add provider dialog and each provider's editor (`providers.logic.ts` is tested) |
 | `apps/web/src/components/models/` | The shared model picker of the Models page, the new-session and planning dialogs and every other model control (`*.logic.ts` tested) |
 | `apps/server/src/db/migrations/015_agent_session_links.sql` | Adds the `agent_session` link kind |
 | `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/providers`, `/api/agent-models` |

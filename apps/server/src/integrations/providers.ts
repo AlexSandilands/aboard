@@ -22,7 +22,7 @@ import { claudeOutput, executableVersion, resolveExecutable } from "./claudeCli.
 import { messageOf } from "./github.ts";
 import type { TerminalHost } from "./terminal.ts";
 
-// The one place the board detects its providers, for Settings → Providers and everything that offers one: whether
+// The one place the board detects its providers, for Settings → Agents → Providers and everything that offers one: whether
 // each CLI runs here, whether it has the board's MCP server registered, T3 Code's status, and what the models scan
 // found. The MCP entry is found by its URL, not its name: it is the user's to name. Config files are read for server
 // names and URLs only; headers and tokens in them are never looked at. See docs/features/agent-sessions.md.

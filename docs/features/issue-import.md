@@ -67,7 +67,7 @@ don't apply; the user's do, because sign-in can live there) and `--max-budget-us
 structured output (`{found, reason?, title, description, labels, isEpic?, children?, childTotal?}`; the last three
 only for a ticket epic, see [Epics](#epics)).
 `found: false` is how the model reports an issue it couldn't read. The CLI path is the provider's
-(`harnessCliSetting`, Settings → Providers).
+(`harnessCliSetting`, Settings → Agents → Providers).
 
 The result is applied by `ImportsService.complete`: the title is replaced only while it is still the
 placeholder and the description only while it is empty, so anything the user typed in the meantime stands.
@@ -193,7 +193,7 @@ is a `ModelChoice`, the light tier when unset. A GitHub issue needs a provider t
 lock a run down to read untrusted input: Claude Code, or Codex with a warning when the user chose it. A ticket also
 needs tool rules (`IMPORT_TICKET_NEEDS`), which only Claude Code follows. With no such provider, a GitHub issue imports
 as written (the log says why) and a ticket import fails with the reason. A tier runs its model for that provider at
-its effort; a tier with none leaves `--model` off, so the CLI's own default runs. It is set under Settings → Models › Operations, whose line says
+its effort; a tier with none leaves `--model` off, so the CLI's own default runs. It is set under Settings → Agents → Operations, whose line says
 which model it resolves to; the Issue import card in Tasks shows that line with a **Change** link. It was `issueImportModel` (default `haiku`) before 041_operation_models, which moved a saved one
 over as that model on Claude Code; an install that never saved one now runs the light tier.
 

@@ -1,15 +1,11 @@
-// Pure helpers for design D of Settings → Agents: the Models list (tiers, then custom models), which of its items a
-// settings target names, the line under each, and what the T3 Code row shows while its models can't be picked.
+// Pure helpers for Settings → Agents: the Models list (tiers, then custom models), which of its items a settings
+// target names, the line under each, and what the T3 Code row shows while its models can't be picked.
 import { AgentHarness, MODEL_TIERS, ModelTier, type ModelProfile, type ModelTierSetting } from "@repo/contracts";
 import { FAVORITES_TAB, type PickerModel, type PickerRow } from "~/components/models/modelPicker.logic";
-import type { TierProvider } from "../../modelTiers.logic";
+import type { TierProvider } from "../modelTiers.logic";
 
 /** One item of the Models list: a tier, or a custom model by id. */
 export type ModelItem = { kind: "tier"; tier: ModelTier } | { kind: "custom"; id: string };
-
-/** The item's element id, the same ids the rest of the app links to. */
-export const modelItemId = (item: ModelItem): string =>
-  item.kind === "tier" ? `agents.models.tiers.${item.tier}` : `agents.models.custom.${item.id}`;
 
 export const sameModelItem = (a: ModelItem, b: ModelItem): boolean =>
   a.kind === "tier" ? b.kind === "tier" && a.tier === b.tier : b.kind === "custom" && a.id === b.id;

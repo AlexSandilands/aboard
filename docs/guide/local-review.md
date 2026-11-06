@@ -15,7 +15,7 @@ The reviewer follows the built-in review skill, or any skill you have installed 
 or Codex, chosen per project if you like.
 
 By default the reviewer runs on the same model as the agent that did the work. To have a specific model review
-everything (say, Opus), pick it for **Reviewer subagent** under **Settings → Models → Operations**: a tier, a custom
+everything (say, Opus), pick it for **Reviewer subagent** under **Settings → Agents → Operations**: a tier, a custom
 model, or any provider's model with its effort. **Board reviewer** beside it is the board's own reviewer, which runs
 on the Standard tier unless you pick another; it needs a provider that can return a structured verdict, so the picker
 greys out the ones that can't. **Settings → Tasks → Review** shows what both come down to, with a link. A project can

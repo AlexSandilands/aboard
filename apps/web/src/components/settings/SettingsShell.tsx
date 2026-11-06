@@ -13,7 +13,6 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
-import { AgentsVariantSelect } from "./agentsVariants/VariantSelect";
 import { SidebarBrandRow } from "~/components/sidebar/SidebarBrandRow";
 import {
   SidebarContent,
@@ -250,11 +249,7 @@ export function SettingsTopBar({
           })}
         </ol>
       </nav>
-      <div className="ms-auto flex shrink-0 items-center gap-1.5">
-        {/* Temporary (#97): compare the competing Agents designs. */}
-        <AgentsVariantSelect />
-        {actions}
-      </div>
+      {actions ? <div className="ms-auto flex shrink-0 items-center gap-1.5">{actions}</div> : null}
     </header>
   );
 }

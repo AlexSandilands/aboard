@@ -2,7 +2,7 @@ import { z } from "zod";
 import { AgentHarness } from "./agentSessions.ts";
 import { CLI_EFFORTS, CliEffort } from "./modelTiers.ts";
 
-// The models a harness's CLI says it can run, scanned when Settings → Models asks, so a tier's CLI model is picked
+// The models a harness's CLI says it can run, scanned when Settings → Agents → Models asks, so a tier's CLI model is picked
 // from a list instead of typed. See docs/features/agent-sessions.md.
 
 export const AgentModel = z.object({

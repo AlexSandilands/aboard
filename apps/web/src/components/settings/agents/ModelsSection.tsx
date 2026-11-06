@@ -1,6 +1,7 @@
-// Design D's Models: the tiers and custom models down the left, like the providers above them, and the selected one's
-// settings on the right: its description (and a custom model's name and labels), then one row per provider with the
-// model it runs there, and which CLI headless runs prefer. A provider is a row, so six fit as well as two.
+// Settings → Agents → Models: the tiers and custom models down the left, like the providers above them, and the
+// selected one's settings on the right: its description (and a custom model's name and labels), then one row per
+// provider with the model it runs there, and which CLI headless runs prefer. A provider is a row, so six fit as well
+// as two.
 import {
   AGENT_HARNESSES,
   AgentHarness,
@@ -28,7 +29,7 @@ import { cn } from "~/lib/utils";
 import { useRescanAgentModels, useUpdateSettings } from "~/state/mutations";
 import { useAgentModels, useT3ModelCatalog } from "~/state/queries";
 import { useSettingsNav } from "~/state/ui";
-import { BlurInput } from "../../BlurInput";
+import { BlurInput } from "../BlurInput";
 import {
   createProfileEdits,
   labelConflicts,
@@ -36,7 +37,7 @@ import {
   profileIdFor,
   saveProfileEdit,
   type ProfileEdit,
-} from "../../modelProfiles.logic";
+} from "../modelProfiles.logic";
 import {
   createTierEdits,
   saveTierChange,
@@ -45,16 +46,15 @@ import {
   visibleTierProviders,
   type TierChange,
   type TierProvider,
-} from "../../modelTiers.logic";
+} from "../modelTiers.logic";
 import {
   SETTINGS_TEXT_WIDTH,
   SettingsLink,
   SettingsRow,
   SettingsSectionHeader,
   SettingsSubsection,
-} from "../../settingsLayout";
+} from "../settingsLayout";
 import {
-  modelItemId,
   modelItemOfTarget,
   modelSummary,
   preferredChoices,
@@ -62,7 +62,7 @@ import {
   selectedModelItem,
   t3PlaceholderLabel,
   type ModelItem,
-} from "./agentsD.logic";
+} from "./agents.logic";
 import {
   CONTROL_PICKER,
   DetailBody,
@@ -161,7 +161,7 @@ export function ModelsSection({ settings, t3 }: { settings: AppSettings; t3: T3I
                   return (
                     <SplitListItem
                       key={value}
-                      id={modelItemId(item)}
+                      id={`agents.models.tiers.${value}`}
                       icon={<PickerIcon icon={{ kind: "tier" }} className="text-muted-foreground" />}
                       title={`${label} tier`}
                       subtitle={modelSummary(settings.modelTiers[value], shown)}
@@ -177,7 +177,7 @@ export function ModelsSection({ settings, t3 }: { settings: AppSettings; t3: T3I
                   return (
                     <SplitListItem
                       key={profile.id}
-                      id={modelItemId(item)}
+                      id={`agents.models.custom.${profile.id}`}
                       icon={<PickerIcon icon={{ kind: "custom" }} className="text-muted-foreground" />}
                       title={profile.name}
                       subtitle={profile.labels.length ? profile.labels.join(", ") : modelSummary(profile, shown)}

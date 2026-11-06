@@ -103,7 +103,8 @@ export const AUTOMATION_ENTRIES: ReadonlyArray<{
 ];
 
 const MCP = `Register the ${BRAND.id} MCP server.`;
-const MODELS_PER_TIER = "The model and effort each suggested tier starts a new session on are set on the Models page.";
+const MODELS_PER_TIER =
+  "The model and effort each suggested tier starts a new session on are set under Settings → Agents → Models.";
 const BOARD_SKILL =
   "Install the board's skills, which teach agents the workflow and how to write custom automations, and keep them updated with the app. A copy you edited is never overwritten without asking.";
 const BOARD_SKILL_KEYWORDS = ["install", "sync", "update", "agents", "instructions", "workflow", "automations"];

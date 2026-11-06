@@ -27,7 +27,7 @@ import { CommandSnippet, SettingsGroup, SettingsRow, StatusLine } from "./settin
 import { useOpenSettings } from "./settingsNavigation";
 import { AgentsSnippetRow, BoardSkillRow } from "./SkillSyncRows";
 
-// The editor of one provider on Settings → Providers, in the same sections for each: Status, Connection, MCP & skill,
+// The editor of one provider on Settings → Agents → Providers, in the same sections for each: Status, Connection, MCP & skill,
 // Hand-off menu and Models. A section that doesn't apply to the provider is left out. Row ids are
 // `agents.providers.<provider>.<row>`, written out at each use so the settings index test can find them.
 
@@ -597,7 +597,7 @@ function ProviderModelsRow({ id, provider, settings }: { id: string; provider: T
     <SettingsRow
       id={id}
       title="Models"
-      description="What each tier runs on here. Set them, and which provider runs each operation, on the Models page."
+      description="What each tier runs on here. Set them, and which provider runs each operation, under Models and Operations."
       status={
         <span className="flex flex-wrap gap-x-3 gap-y-1">
           {providerTierModels(settings.modelTiers, provider).map((tier) => (

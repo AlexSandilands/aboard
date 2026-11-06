@@ -2,7 +2,6 @@ import { EMPTY_MODEL_TIERS, type ModelTierSetting } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   isT3DefaultKey,
-  modelItemId,
   modelItemOfTarget,
   modelSummary,
   preferredChoices,
@@ -10,7 +9,7 @@ import {
   selectedModelItem,
   t3PlaceholderLabel,
   withT3DefaultRows,
-} from "./agentsD.logic";
+} from "./agents.logic";
 
 describe("modelItemOfTarget", () => {
   it("names a tier or a custom model from its settings target", () => {
@@ -24,15 +23,6 @@ describe("modelItemOfTarget", () => {
     expect(modelItemOfTarget("agents.models")).toBeNull();
     expect(modelItemOfTarget("agents.providers.codex.models")).toBeNull();
     expect(modelItemOfTarget(null)).toBeNull();
-  });
-
-  it("round-trips through modelItemId", () => {
-    for (const item of [
-      { kind: "tier", tier: "light" },
-      { kind: "custom", id: "fast" },
-    ] as const) {
-      expect(modelItemOfTarget(modelItemId(item))).toEqual(item);
-    }
   });
 });
 

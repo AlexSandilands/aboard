@@ -11,7 +11,7 @@ import {
 
 export type TierProvider = "t3" | AgentHarness;
 
-/** Which providers the user added and switched on in Settings → Providers. */
+/** Which providers the user added and switched on in Settings → Agents → Providers. */
 export type TierProviderState = Partial<Record<TierProvider, boolean>>;
 
 export const TIER_PROVIDERS: ReadonlyArray<{ provider: TierProvider; label: string }> = [
@@ -23,7 +23,7 @@ export const TIER_PROVIDERS: ReadonlyArray<{ provider: TierProvider; label: stri
 
 /**
  * The providers whose fields the page shows: those added and switched on. A provider that isn't shows nowhere but
- * Settings → Providers, where adding it back brings its saved values back into view.
+ * Settings → Agents → Providers, where adding it back brings its saved values back into view.
  */
 export function visibleTierProviders(active: TierProviderState): TierProvider[] {
   return TIER_PROVIDERS.map(({ provider }) => provider).filter((provider) => active[provider] === true);

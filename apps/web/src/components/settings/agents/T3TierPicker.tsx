@@ -5,7 +5,7 @@ import { findModel, modelTraits, optionValue, setOption } from "~/components/han
 import { EffortColumn } from "~/components/models/EffortColumn";
 import { ModelPicker } from "~/components/models/ModelPicker";
 import { t3EffortColumn, t3PickerModel, t3SelectionForKey } from "~/components/models/t3Picker.logic";
-import { isT3DefaultKey, withT3DefaultRows } from "./agentsD.logic";
+import { isT3DefaultKey, withT3DefaultRows } from "./agents.logic";
 
 const DEFAULT_LABEL = "Default model";
 

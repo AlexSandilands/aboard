@@ -132,7 +132,7 @@ export function createSettingsAsker(deps: { services: () => Services; runAgent?:
           // With no model set for its tier or custom model the CLI's default runs, which can outspend Ask's budget.
           const hint =
             !resolved.model && /budget/i.test(why)
-              ? ` Ask ran on the CLI's default model: give the model Ask uses (the Light tier, unless you chose another) a ${driver.label} model in Settings → Models.`
+              ? ` Ask ran on the CLI's default model: give the model Ask uses (the Light tier, unless you chose another) a ${driver.label} model in Settings → Agents → Models.`
               : "";
           return { ok: false, error: `${driver.label} stopped: ${why}.${hint}` };
         }

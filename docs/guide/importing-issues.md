@@ -43,8 +43,8 @@ it a plan, put it in an epic, flagged it for Autopilot or marked it a priority.
 - The system's **import instructions** tell the run how to read its tickets and how to find an epic's children. The
   presets fill them in; edit them if your tracker differs (a custom field for epics, say).
 
-Both run the Claude Code CLI, the one named under **Settings → Providers → Claude Code** (it's `claude` from your PATH
-unless you set another), on the Light tier by default. Pick another under **Settings → Models → Operations →
+Both run the Claude Code CLI, the one named under **Settings → Agents → Providers → Claude Code** (it's `claude` from your PATH
+unless you set another), on the Light tier by default. Pick another under **Settings → Agents → Operations →
 Issue import**: a tier, a custom model, or a model with its effort.
 
 ## Settings

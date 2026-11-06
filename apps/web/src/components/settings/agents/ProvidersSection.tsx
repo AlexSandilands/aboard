@@ -1,5 +1,5 @@
-// Design A's Providers: ProvidersPage's master-detail (adapted from T3 Code, MIT, see NOTICE), with one calm card in
-// place of the split while no provider is added, and selecting a provider here also picks its tab under Models.
+// Settings → Agents → Providers: the list and editor (after T3 Code's ProviderSettingsPanel, MIT — see NOTICE) on the
+// shared split card, and one calm empty state before any is added.
 import { PROVIDERS, type AppSettings, type ProviderId, type ProviderStatus } from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { BotIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
@@ -20,8 +20,8 @@ import { Switch } from "~/components/ui/switch";
 import { cn } from "~/lib/utils";
 import { useRecheckProviders, useUpdateProviders } from "~/state/mutations";
 import { useIntegrationsStatus, useProviders } from "~/state/queries";
-import { ProviderEditor } from "../../ProviderEditors";
-import { ProviderIcon } from "../../ProvidersPage";
+import { ProviderEditor } from "../ProviderEditors";
+import { ProviderIcon } from "./ProviderIcon";
 import {
   addableProviders,
   detectionLabel,
@@ -32,44 +32,32 @@ import {
   selectedProvider,
   withoutProvider,
   withProvider,
-} from "../../providers.logic";
-import { SettingsGroup, SettingsSectionHeader, SettingsSubsection, StatusDot } from "../../settingsLayout";
+} from "../providers.logic";
+import { SettingsGroup, SettingsSectionHeader, SettingsSubsection, StatusDot } from "../settingsLayout";
+import { DetailBody, DetailHeader, SplitCard, SplitList, SplitListAction, SplitListItem } from "./SplitCard";
 
-export function ProvidersPanel({
-  settings,
-  adding,
-  onAddingChange,
-  onSelect,
-}: {
-  settings: AppSettings;
-  /** The Add provider dialog, open from here or from the page's other sections. */
-  adding: boolean;
-  onAddingChange: (open: boolean) => void;
-  /** A provider was picked in the list or added. */
-  onSelect: (id: ProviderId) => void;
-}) {
+export function ProvidersSection({ settings }: { settings: AppSettings }) {
   const providers = useProviders();
   const recheck = useRecheckProviders();
   const t3 = useIntegrationsStatus().data?.t3;
   const updateProviders = useUpdateProviders();
   const navigate = useNavigate();
   const requested = useSearch({ strict: false, select: (search) => search.provider });
+  const [adding, setAdding] = useState(false);
   const [confirm, setConfirm] = useState<{ id: ProviderId; action: "disable" | "remove" } | null>(null);
 
   const added = settings.providers;
   const selected = selectedProvider(added, requested);
   const statusOf = (id: ProviderId) => providers.data?.providers.find((p) => p.id === id);
-  const select = (id: ProviderId) => {
-    onSelect(id);
+  const select = (id: ProviderId) =>
     void navigate({ to: "/settings/$group", params: { group: "agents" }, search: { provider: id }, replace: true });
-  };
   // Each change is applied to the latest list when it runs (useUpdateProviders), not to the one this render saw.
   const save = (change: (current: AppSettings["providers"]) => AppSettings["providers"]) =>
     updateProviders.mutate(change);
 
   const add = (id: ProviderId) => {
     save((current) => withProvider(current, id));
-    onAddingChange(false);
+    setAdding(false);
     select(id);
   };
   const setEnabled = (id: ProviderId, enabled: boolean) => {
@@ -87,11 +75,10 @@ export function ProvidersPanel({
 
   const selectedSetting = added.find((p) => p.id === selected);
   const checked = providers.data ? new Date(providers.data.checkedAt) : null;
-  const addable = addableProviders(added);
 
   return (
     <SettingsSubsection id="agents.providers">
-      <section className="@container/providers space-y-2.5">
+      <section className="space-y-2.5">
         <SettingsSectionHeader
           title="Providers"
           headerAction={
@@ -118,114 +105,80 @@ export function ProvidersPanel({
           }
         />
         {added.length === 0 ? (
-          // Nothing added: one card, and nothing else on the page asks for anything until there is.
-          <SettingsGroup>
-            {selected === null ? (
-              <EmptyState onAdd={() => onAddingChange(true)} />
-            ) : (
-              <NotAdded id={selected} status={statusOf(selected)} onAdd={() => add(selected)} />
-            )}
-          </SettingsGroup>
+          <NoProviders onAdd={() => setAdding(true)} />
         ) : (
-          <SettingsGroup className="overflow-hidden @min-[46rem]/providers:grid @min-[46rem]/providers:grid-cols-[15rem_minmax(0,1fr)] [&>*+*]:border-t-0">
-            <div className="border-b border-border/60 bg-muted/10 @min-[46rem]/providers:border-e @min-[46rem]/providers:border-b-0">
-              <div role="listbox" aria-label="Added providers" className="divide-y divide-border/50">
+          <SplitCard
+            list={
+              <SplitList label="Added providers">
                 {added.map((setting) => {
                   const status = statusOf(setting.id);
                   const dot = providerDot(setting.id, status, setting, providers.isError);
-                  const subtitle = setting.enabled ? providerSubtitle(setting.id, status) : "Off";
-                  const isSelected = setting.id === selected;
                   return (
-                    <div
+                    <SplitListItem
                       key={setting.id}
-                      className={cn(
-                        "relative flex items-center gap-2 pe-3 transition-colors sm:pe-4",
-                        isSelected
-                          ? "bg-accent/60 before:absolute before:inset-y-2 before:start-0 before:w-0.5 before:rounded-full before:bg-primary"
-                          : "hover:bg-muted/25",
-                      )}
-                    >
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={isSelected}
-                        className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 py-2.5 ps-3 text-left outline-none focus-visible:bg-muted/25 sm:ps-4"
-                        onClick={() => select(setting.id)}
-                      >
-                        <ProviderIcon id={setting.id} className={cn(!setting.enabled && "opacity-50")} />
-                        <span className="min-w-0 flex-1">
-                          <span
-                            className={cn(
-                              "flex items-center gap-2 text-sm",
-                              setting.enabled ? "text-foreground" : "text-muted-foreground",
-                            )}
-                          >
-                            <span className="truncate">{PROVIDERS[setting.id].label}</span>
-                            <StatusDot tone={dot.tone} label={dot.label} />
-                          </span>
-                          {subtitle ? (
-                            <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>
-                          ) : null}
-                        </span>
-                      </button>
-                      <Switch
-                        size="sm"
-                        aria-label={`${PROVIDERS[setting.id].label} on`}
-                        checked={setting.enabled}
-                        onCheckedChange={(on) => setEnabled(setting.id, on)}
-                      />
-                    </div>
+                      icon={<ProviderIcon id={setting.id} className={cn(!setting.enabled && "opacity-50")} />}
+                      title={PROVIDERS[setting.id].label}
+                      badge={<StatusDot tone={dot.tone} label={dot.label} />}
+                      subtitle={setting.enabled ? providerSubtitle(setting.id, status) : "Off"}
+                      selected={setting.id === selected}
+                      onSelect={() => select(setting.id)}
+                      trailing={
+                        <Switch
+                          size="sm"
+                          aria-label={`${PROVIDERS[setting.id].label} on`}
+                          checked={setting.enabled}
+                          onCheckedChange={(on) => setEnabled(setting.id, on)}
+                        />
+                      }
+                    />
                   );
                 })}
-                {addable.length > 0 ? (
-                  <button
-                    type="button"
-                    className="flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left text-sm text-muted-foreground transition-colors outline-none hover:bg-muted/25 hover:text-foreground focus-visible:bg-muted/25 focus-visible:text-foreground sm:px-4"
-                    onClick={() => onAddingChange(true)}
-                  >
-                    <PlusIcon className="size-4 shrink-0" />
-                    Add provider
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            <div className="min-w-0">
-              {selected === null ? null : !selectedSetting ? (
-                <NotAdded id={selected} status={statusOf(selected)} onAdd={() => add(selected)} />
-              ) : (
-                <div className="space-y-5 py-4">
-                  <EditorHeader
-                    id={selected}
-                    enabled={selectedSetting.enabled}
-                    status={statusOf(selected)}
-                    failed={providers.isError}
-                    onEnable={() => setEnabled(selected, !selectedSetting.enabled)}
-                    onRemove={() => setConfirm({ id: selected, action: "remove" })}
+                {addableProviders(added).length > 0 ? (
+                  <SplitListAction
+                    icon={<PlusIcon className="size-4 shrink-0" />}
+                    label="Add provider"
+                    onClick={() => setAdding(true)}
                   />
-                  {selectedSetting.enabled ? (
-                    <ProviderEditor
-                      id={selected}
-                      settings={settings}
-                      status={statusOf(selected)}
-                      t3={t3}
-                      recheck={() => recheck.mutate()}
-                      rechecking={recheck.isPending}
-                    />
-                  ) : (
-                    <p className="px-3 text-sm text-muted-foreground sm:px-4">
-                      Switched off: the board offers it nowhere. Its settings are kept for when you switch it back on.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </SettingsGroup>
+                ) : null}
+              </SplitList>
+            }
+          >
+            {selected === null ? null : !selectedSetting ? (
+              <NotAdded id={selected} status={statusOf(selected)} onAdd={() => add(selected)} />
+            ) : (
+              <DetailBody>
+                <ProviderHeader
+                  id={selected}
+                  enabled={selectedSetting.enabled}
+                  status={statusOf(selected)}
+                  failed={providers.isError}
+                  onEnable={() => setEnabled(selected, !selectedSetting.enabled)}
+                  onRemove={() => setConfirm({ id: selected, action: "remove" })}
+                />
+                {selectedSetting.enabled ? (
+                  <ProviderEditor
+                    id={selected}
+                    settings={settings}
+                    status={statusOf(selected)}
+                    t3={t3}
+                    recheck={() => recheck.mutate()}
+                    rechecking={recheck.isPending}
+                  />
+                ) : (
+                  <p className="px-3 text-sm text-muted-foreground sm:px-4">
+                    {PROVIDERS[selected].label} is switched off: the board offers it nowhere. Its settings are kept for
+                    when you switch it back on.
+                  </p>
+                )}
+              </DetailBody>
+            )}
+          </SplitCard>
         )}
       </section>
       <AddProviderDialog
         open={adding}
-        onOpenChange={onAddingChange}
-        addable={addable}
+        onOpenChange={setAdding}
+        addable={addableProviders(added)}
         statusOf={statusOf}
         onAdd={add}
       />
@@ -265,8 +218,37 @@ export function ProvidersPanel({
   );
 }
 
+/**
+ * The whole of Settings → Agents before a provider is added: one card, one button, which lists every provider to pick
+ * from. It never offers just the one a link or an earlier selection names (`?provider=t3`).
+ */
+function NoProviders({ onAdd }: { onAdd: () => void }) {
+  return (
+    <SettingsGroup>
+      <Empty size="compact" className="min-h-0 py-10">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <BotIcon />
+          </EmptyMedia>
+          <EmptyTitle>No providers yet</EmptyTitle>
+          <EmptyDescription>
+            Add the coding agents on this machine to start sessions from tasks, run reviews and Autopilot, and pick
+            their models.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button size="sm" onClick={onAdd}>
+            <PlusIcon />
+            Add provider
+          </Button>
+        </EmptyContent>
+      </Empty>
+    </SettingsGroup>
+  );
+}
+
 /** The selected provider's name, state and actions, above its editor sections. */
-function EditorHeader({
+function ProviderHeader({
   id,
   enabled,
   status,
@@ -283,48 +265,26 @@ function EditorHeader({
 }) {
   const dot = providerDot(id, status, { enabled }, failed);
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-3 sm:px-4">
-      <div className="flex min-w-0 items-center gap-3">
-        <ProviderIcon id={id} className="size-6" />
-        <div className="min-w-0">
-          <h2 className="text-base font-medium text-foreground">{PROVIDERS[id].label}</h2>
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <StatusDot tone={dot.tone} label={dot.label} />
-            <span className="truncate">{dot.label}</span>
-          </p>
-        </div>
-      </div>
-      <div className="flex items-center gap-1">
-        <Button size="xs" variant="ghost-muted" onClick={onEnable}>
-          {enabled ? "Switch off" : "Switch on"}
-        </Button>
-        <Button size="xs" variant="ghost-destructive" onClick={onRemove}>
-          Remove
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function EmptyState({ onAdd }: { onAdd: () => void }) {
-  return (
-    <Empty size="compact" className="min-h-56">
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <BotIcon />
-        </EmptyMedia>
-        <EmptyTitle>No providers yet</EmptyTitle>
-        <EmptyDescription>
-          Add T3 Code or an agent CLI to start sessions from tasks, run reviews and Autopilot, and pick their models.
-        </EmptyDescription>
-      </EmptyHeader>
-      <EmptyContent>
-        <Button size="sm" onClick={onAdd}>
-          <PlusIcon />
-          Add provider
-        </Button>
-      </EmptyContent>
-    </Empty>
+    <DetailHeader
+      icon={<ProviderIcon id={id} className="size-6" />}
+      title={PROVIDERS[id].label}
+      subtitle={
+        <span className="flex items-center gap-1.5">
+          <StatusDot tone={dot.tone} label={dot.label} />
+          <span className="truncate">{dot.label}</span>
+        </span>
+      }
+      actions={
+        <>
+          <Button size="xs" variant="ghost-muted" onClick={onEnable}>
+            {enabled ? "Switch off" : "Switch on"}
+          </Button>
+          <Button size="xs" variant="ghost-destructive" onClick={onRemove}>
+            Remove
+          </Button>
+        </>
+      }
+    />
   );
 }
 
@@ -332,18 +292,16 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
 function NotAdded({ id, status, onAdd }: { id: ProviderId; status: ProviderStatus | undefined; onAdd: () => void }) {
   const detection = detectionLabel(id, status);
   return (
-    <div className="flex flex-col items-start gap-3 px-3 py-5 sm:px-4">
+    <div className="flex flex-col items-start gap-3 p-6">
       <div className="flex items-center gap-3">
         <ProviderIcon id={id} className="size-6" />
-        <div className="min-w-0">
-          <h2 className="text-base font-medium text-foreground">{PROVIDERS[id].label}</h2>
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <StatusDot tone={detection.tone} label={detection.label} />
-            {detection.label}
-          </p>
-        </div>
+        <h2 className="text-base font-medium text-foreground">{PROVIDERS[id].label}</h2>
       </div>
       <p className="max-w-md text-sm text-muted-foreground">{PROVIDERS[id].blurb}</p>
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <StatusDot tone={detection.tone} label={detection.label} />
+        {detection.label}
+      </p>
       <Button size="sm" onClick={onAdd}>
         <PlusIcon />
         Add {PROVIDERS[id].label}

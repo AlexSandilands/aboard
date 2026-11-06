@@ -175,7 +175,7 @@ export const AutopilotField = z.discriminatedUnion("kind", [
   z.object({ ...FieldBase, kind: z.literal("time") }),
   /**
    * Which model a run starts on (a ModelChoice): inherit (the board's setting for the operation, then the task's), a
-   * tier, a custom model from Settings → Models, or a model typed for one provider. The UI lists them live, greying
+   * tier, a custom model from Settings → Agents → Models, or a model typed for one provider. The UI lists them live, greying
    * out the providers that can't run `operation`.
    */
   z.object({

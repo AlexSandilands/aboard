@@ -1271,7 +1271,7 @@ the Copilot CLI when the run's model says so ([Headless drivers](#headless-drive
    also block `gh pr merge` and `gh api …merge…`. They match the command as written, so they are a guard rail,
    not a sandbox; the prompt states the same rules.
 5. The cost (`total_cost_usd`) is recorded even when the run stopped early (budget, turn limit). An early stop or
-   a timeout fails the run. The CLI is each provider's path (`harnessCliSetting`, Settings → Providers), else
+   a timeout fails the run. The CLI is each provider's path (`harnessCliSetting`, Settings → Agents → Providers), else
    its name on PATH.
 
 #### Headless drivers
@@ -1469,18 +1469,18 @@ each with what it needs from the provider and a default that is a tier or inheri
    the task.
 4. The operation's default.
 5. When everything inherits, a task-scoped operation takes the task's own model (`resolveTaskModel`): a custom model
-   one of its labels picks (**Settings → Models → Custom models**, the first in the list when several claim a
+   one of its labels picks (**Settings → Agents → Models → Custom models**, the first in the list when several claim a
    label), else its suggested tier, else the light tier. Anything else takes the light tier.
 
 A choice naming a custom model that was since deleted is passed over with a note, and the next level decides.
 
 **Which provider runs it** (`resolveOperationModel`, pure, so the web can show it too). Only providers the user added
-and switched on (Settings → Providers) that can do what the operation needs (`HEADLESS_CAPABILITIES`, and what the run
+and switched on (Settings → Agents → Providers) that can do what the operation needs (`HEADLESS_CAPABILITIES`, and what the run
 asks on top: `driverNeeds` in `integrations/headlessDrivers.ts`) count:
 
 - A typed model runs on its own provider, with its effort when that CLI takes it. If that provider isn't on, or can't
   do what the operation needs, the operation refuses.
-- A tier or custom model runs on its preferred provider (`ModelTierSetting.provider`, the **Preferred** radio on Settings → Models;
+- A tier or custom model runs on its preferred provider (`ModelTierSetting.provider`, the **Preferred** radio on Settings → Agents → Models;
   it has no default) when that counts; otherwise on the first provider in the Providers order that counts and has a
   model for it, else on the first that counts, on the CLI's default model. A CLI model comes with its effort; when a
   tier has no CLI model for a provider, its T3 model stands in when T3 files it under that provider
@@ -1488,7 +1488,7 @@ asks on top: `driverNeeds` in `integrations/headlessDrivers.ts`) count:
 - A provider that meets the needs only with a [warning](#capability-warnings) counts for a typed model on it and as
   the preferred provider of a tier or custom model chosen for the operation, never as a fallback or through a default.
 - No provider counts: the operation refuses with the reason ("Ask needs a provider that can return structured output
-  and run with no tools; add one in Settings → Providers"). It never runs something else quietly. The refusal is the
+  and run with no tools; add one in Settings → Agents → Providers"). It never runs something else quietly. The refusal is the
   Ask error, the issue-import failure, the board review round's error and the Autopilot run's failure.
 
 Every fallback (another provider, no model for it, a deleted custom model) goes in the run's detail, with a

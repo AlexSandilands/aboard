@@ -1,4 +1,4 @@
-// Pure helpers for Settings → Providers: what each provider's dot says, what the list and the Add provider dialog
+// Pure helpers for Settings → Agents → Providers: what each provider's dot says, what the list and the Add provider dialog
 // show, and the CLI checks the menus read. Detection comes from `GET /api/providers` (useProviders).
 import {
   AgentHarness,
@@ -193,8 +193,8 @@ export function askUnavailableReason(
 ): string | null {
   if (!settings) return null;
   const setting = settings.providers.find((p) => p.id === "claude-code");
-  if (!setting) return "Add Claude Code in Settings → Providers to ask in your own words.";
-  if (!setting.enabled) return "Claude Code is switched off in Settings → Providers.";
+  if (!setting) return "Add Claude Code in Settings → Agents → Providers to ask in your own words.";
+  if (!setting.enabled) return "Claude Code is switched off in Settings → Agents → Providers.";
   if (!claude?.cli || claude.cli.found) return null;
   return setting.cliPath
     ? `The Claude Code CLI wasn't found at ${setting.cliPath}.`

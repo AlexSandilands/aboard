@@ -94,7 +94,7 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
     }),
   );
 
-  // Asks each CLI which models it lists, for Settings → Models; `?refresh=1` skips the ten minutes' cache.
+  // Asks each CLI which models it lists, for Settings → Agents → Models; `?refresh=1` skips the ten minutes' cache.
   app.get(
     "/api/agent-models",
     handle(async (c) => {

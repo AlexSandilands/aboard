@@ -63,7 +63,7 @@ export const RUNNER_FIELDS: AutopilotField[] = [
     key: "modelChoice",
     label: "Model",
     kind: "model",
-    help: "Inherit: the board's model for this kind of run, else the task's (a custom model one of its labels picks, else its suggested tier). Set in Settings → Models.",
+    help: "Inherit: the board's model for this kind of run, else the task's (a custom model one of its labels picks, else its suggested tier). Set in Settings → Agents → Models.",
   },
   {
     key: "budgetUsd",

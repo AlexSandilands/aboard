@@ -114,7 +114,7 @@ Add the MCP server once for your user (Claude Code shown; [other agents](docs/gu
 claude mcp add --scope user --transport http aboard http://127.0.0.1:4317/mcp
 ```
 
-Then teach it the workflow: in **Settings → Providers**, add Claude Code, Copilot or Codex and turn on **Board
+Then teach it the workflow: in **Settings → Agents → Providers**, add Claude Code, Copilot or Codex and turn on **Board
 skills**. The board installs [`skills/aboard`](skills/aboard) (and [`skills/aboard-automations`](skills/aboard-automations),
 for writing custom automations) into that agent's skills folder and keeps them updated
 with the app, without overwriting a copy you edited. Other agents: copy the

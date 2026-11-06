@@ -7,8 +7,7 @@ import { BoardVariablesSection } from "~/components/autopilot/VariablesSection";
 import { NotificationsSection } from "~/components/notifications/NotificationsSection";
 import { VersionAndSocial } from "~/components/social/SocialSettings";
 import { useIntegrationsStatus, useSettings } from "~/state/queries";
-import { agentsVariant } from "../agentsVariants/registry";
-import { useAgentsVariant } from "../agentsVariants/VariantSelect";
+import { AgentsPage } from "../agents/AgentsPage";
 import { AppearanceSection } from "../AppearanceSection";
 import { ArchivedProjectsSection } from "../ArchivedProjectsSection";
 import { BackupSection } from "../BackupSection";
@@ -109,8 +108,7 @@ function TasksContent() {
 }
 
 function AgentsContent() {
-  const { Page } = agentsVariant(useAgentsVariant((s) => s.variant));
-  return <WithSettings>{(settings) => <Page settings={settings} />}</WithSettings>;
+  return <WithSettings>{(settings) => <AgentsPage settings={settings} />}</WithSettings>;
 }
 
 function IntegrationsContent() {
