@@ -205,7 +205,10 @@ ones. The code is `lib/boardMotion.ts` and the View Transition block in `index.c
 - **Sidebar:** `setOpen` (`ui/sidebar.tsx`) starts its own transition (`startSidebarTransition`, types `sidebar-open`
   and `sidebar-close`, the change applied in `flushSync`) and `useSidebarSlide` stands down. The change applies only
   once the old state is captured, so a second toggle before then starts from the state the first one asked for. The offcanvas sidebar is
-  there in both states, so its snapshot (`app-sidebar`) slides between its two places by itself. Only over the board
+  there in both states, so its snapshot (`app-sidebar`) slides between its two places by itself. An open task panel is
+  in both states too, at the same place, so it holds still: its slide-in and slide-out play only in `panel-open` and
+  `panel-close` transitions. Played in a sidebar transition as well, the old snapshot slid out while the new one slid in,
+  so the panel closed and opened again. Only over the board
   (`sidebarSnapshotMotion`, which also wants `[data-board-scroll]` mounted): other pages name nothing, so a transition
   would hold their main area at its old layout and then jump, and there the sidebar slides with `startSlide` as before.
 - **When:** `boardSnapshotMotion()`: the setting is on, Panel animations are on (so not at 0 ms or under reduced
@@ -223,15 +226,28 @@ costs: Chromium's setup grows with the square of the snapshots (on a full board,
   left side (`data-vt-left`) only move with the board's left edge, so they are named for the sidebar only.
 - **Frames** (an epic band, its header) get a name of their own (`vt-frame-N`) and stretch: their right edge moves
   while the left stays, and what they hold is named separately, so only a border and a fill stretch.
+- **Cards in a sidebar transition** (`data-task-card`, `data-epic-card`) also get names of their own (`vt-stretch-N`,
+  class `stretch`) and stretch in width, as a `scaleX` (below). Opening or closing the sidebar changes the columns' width (with the panel
+  closed; with it open they are usually at their minimum already), and a card that only moved sat at its new width from
+  the first frame, so every right edge jumped and then glided. Only cards: a column header or an epic title has no box to
+  stretch, only text, so those still only move, and a right-aligned part named apart from them keeps gliding with the
+  right edge.
 - Names live only during the transition: setting them under `html:active-view-transition-type()` restyled the whole
   page as it started. A transition started over a running one skips it and takes over its names, and the skipped one
   finishing leaves them alone.
 
 Once the animations exist:
 
-- `compositorOnly` drops width and height from every mover's keyframes. The browser animates both by default, on the
+- `compositorOnly` drops width and height from every snapshot's keyframes. The browser animates both by default, on the
   main thread, which restyled every snapshot every frame (30 fps on a full board). Movers sit at their new size and
-  clip their snapshots.
+  clip their snapshots. What stretches (frames, and cards in a sidebar transition) gets its size animation back as a
+  transform: the group sits at its new size and scales from its top left corner (`transform-origin: 0 0`), from the
+  old size over the new to 1, so the compositor still runs it. Frames scale in both directions (a band's height can
+  change); cards only in width. Frames used to keep their width and height animations, and cards in the first version
+  of the stretch did too: those groups ran on the main thread at a fraction of the frame rate, so their edges stuttered
+  while everything around them glided. As a transform the stretch costs no more main-thread style time than moving only
+  (measured on the `dense` seed in headless Chromium). The snapshot scales, so a card's text is a little squeezed or
+  widened while it stretches, as it was with the width.
 - A card's **new snapshot shows from the start and the old one not at all** (no cross-fade), so its text is at its new
   wrap as it moves and nothing shows twice. A cross-fade looked the same and took about twice the GPU and compositor
   work on a full board.

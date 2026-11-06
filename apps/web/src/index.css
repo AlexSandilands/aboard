@@ -677,9 +677,14 @@
   view-transition-class: board;
 }
 
-/* Frames (an epic band and its header) get their own names and stretch with their box instead of moving. */
+/* Frames (an epic band and its header) get their own names and stretch with their box instead of only moving. */
 [data-vt][data-vt-frame] {
   view-transition-class: frame;
+}
+
+/* Cards in a sidebar transition, which changes their width: they stretch too (STRETCH_NAME in lib/boardMotion.ts). */
+[data-vt][data-vt-stretch] {
+  view-transition-class: board stretch;
 }
 
 /* Named all the time: a name does nothing outside a transition. Offcanvas, the sidebar is there in both states, so its
@@ -739,18 +744,36 @@ html:active-view-transition-type(panel-close, sidebar-close)::view-transition-ol
   block-size: 100%;
 }
 
+/* What stretches (frames, and cards in a sidebar transition) scales from its top left corner (compositorOnly), so its
+   right edge glides instead of jumping to its new place. */
+::view-transition-group(.frame),
+::view-transition-group(.stretch) {
+  transform-origin: 0 0;
+}
+
 /* Above the board's snapshots: closing, the panel is only in the old state, which the browser stacks underneath. */
 ::view-transition-group(task-panel),
 ::view-transition-group(app-sidebar) {
   z-index: 1;
 }
 
-::view-transition-new(task-panel) {
+/* The panel slides only when it opens or closes. In a sidebar transition it is there in both states, at the same place,
+   so it holds still: sliding both snapshots would close it and open it again. */
+html:active-view-transition-type(panel-open, panel-close)::view-transition-new(task-panel) {
   animation: panel-slide-in var(--slide-duration) var(--slide-easing) both;
 }
 
-::view-transition-old(task-panel) {
+html:active-view-transition-type(panel-open, panel-close)::view-transition-old(task-panel) {
   animation: panel-slide-out var(--slide-duration) var(--slide-easing) both;
+}
+
+html:active-view-transition-type(sidebar-open, sidebar-close)::view-transition-new(task-panel) {
+  animation: none;
+}
+
+html:active-view-transition-type(sidebar-open, sidebar-close)::view-transition-old(task-panel) {
+  animation: none;
+  opacity: 0;
 }
 
 @keyframes panel-slide-in {
