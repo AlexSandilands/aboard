@@ -238,14 +238,16 @@ costs: Chromium's setup grows with the square of the snapshots (on a full board,
 
 Once the animations exist:
 
-- `compositorOnly` drops width and height from every mover's keyframes. The browser animates both by default, on the
+- `compositorOnly` drops width and height from every snapshot's keyframes. The browser animates both by default, on the
   main thread, which restyled every snapshot every frame (30 fps on a full board). Movers sit at their new size and
-  clip their snapshots. Stretching cards lose their width animation too, and it comes back as a transform: the group
-  sits at its new width and scales from its left edge (`transform-origin: 0 0`), `scaleX` going from the old width over
-  the new to 1, so the compositor still runs it. Animating the width itself (the first version) put every card back on
-  the main thread, and the sidebar slide stuttered as it had before `compositorOnly`. As a transform it costs no more
-  main-thread style time than moving only (measured on the `dense` seed in headless Chromium). The snapshot scales, so a
-  card's text is a little squeezed or widened while it stretches, as it was with the width.
+  clip their snapshots. What stretches (frames, and cards in a sidebar transition) gets its size animation back as a
+  transform: the group sits at its new size and scales from its top left corner (`transform-origin: 0 0`), from the
+  old size over the new to 1, so the compositor still runs it. Frames scale in both directions (a band's height can
+  change); cards only in width. Frames used to keep their width and height animations, and cards in the first version
+  of the stretch did too: those groups ran on the main thread at a fraction of the frame rate, so their edges stuttered
+  while everything around them glided. As a transform the stretch costs no more main-thread style time than moving only
+  (measured on the `dense` seed in headless Chromium). The snapshot scales, so a card's text is a little squeezed or
+  widened while it stretches, as it was with the width.
 - A card's **new snapshot shows from the start and the old one not at all** (no cross-fade), so its text is at its new
   wrap as it moves and nothing shows twice. A cross-fade looked the same and took about twice the GPU and compositor
   work on a full board.

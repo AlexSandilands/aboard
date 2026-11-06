@@ -677,7 +677,7 @@
   view-transition-class: board;
 }
 
-/* Frames (an epic band and its header) get their own names and stretch with their box instead of moving. */
+/* Frames (an epic band and its header) get their own names and stretch with their box instead of only moving. */
 [data-vt][data-vt-frame] {
   view-transition-class: frame;
 }
@@ -744,8 +744,9 @@ html:active-view-transition-type(panel-close, sidebar-close)::view-transition-ol
   block-size: 100%;
 }
 
-/* A stretching card's group scales from its left edge (compositorOnly), so its right edge glides instead of jumping to
-   its new place. */
+/* What stretches (frames, and cards in a sidebar transition) scales from its top left corner (compositorOnly), so its
+   right edge glides instead of jumping to its new place. */
+::view-transition-group(.frame),
 ::view-transition-group(.stretch) {
   transform-origin: 0 0;
 }
