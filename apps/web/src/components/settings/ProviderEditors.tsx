@@ -541,14 +541,6 @@ function CodexEditor(props: ProviderEditorProps) {
           settings={settings}
         />
       </EditorSection>
-      <EditorSection title="Hand-off menu">
-        <HandoffMenuRow
-          id="agents.providers.codex.handoff-menus"
-          target="codex"
-          what="New Codex session"
-          settings={settings}
-        />
-      </EditorSection>
       <EditorSection title="Models">
         <ProviderModelsRow id="agents.providers.codex.models" provider="codex" settings={props.settings} />
       </EditorSection>
@@ -621,7 +613,7 @@ function ProviderModelsRow({ id, provider, settings }: { id: string; provider: T
         </span>
       }
       control={
-        <Button size="sm" variant="outline" onClick={() => openSettings("agents.models.tiers")}>
+        <Button size="sm" variant="outline" onClick={() => openSettings("agents.models.tiers.list")}>
           Open Models
         </Button>
       }

@@ -343,7 +343,7 @@ export function choicePickerModel(input: ChoicePickerInput): PickerModel {
             disabledReason: null,
             notice: null,
             warning: null,
-            settingsTarget: "agents.models.tiers",
+            settingsTarget: "agents.models.tiers.list",
             typed: false,
           },
         ]

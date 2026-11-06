@@ -12,12 +12,15 @@ const DEFAULT_LABEL = "Default model";
 export function T3TierPicker({
   catalog,
   selection,
+  savedLabel,
   onChange,
   ariaLabel,
   className,
 }: {
   catalog: T3ModelCatalog;
   selection: T3ModelSelection | null;
+  /** The saved model's name, shown when T3 Code no longer lists it. */
+  savedLabel: string | null;
   /** Null when the default row is picked. */
   onChange: (selection: T3ModelSelection | null) => void;
   ariaLabel: string;
@@ -34,11 +37,13 @@ export function T3TierPicker({
     .join(", ");
   return (
     <ModelPicker
-      model={withT3DefaultRows(t3PickerModel(catalog, selection), DEFAULT_LABEL)}
+      model={withT3DefaultRows(t3PickerModel(catalog, selection), DEFAULT_LABEL, selection !== null)}
       ariaLabel={ariaLabel}
       size="sm"
       className={className}
-      triggerLabel={found?.model.name ?? DEFAULT_LABEL}
+      triggerLabel={
+        found ? found.model.name : selection ? `${savedLabel ?? "Saved model"} (not in T3 Code)` : DEFAULT_LABEL
+      }
       triggerIcon={found ? { kind: "t3", driver: found.provider.driver } : { kind: "t3code" }}
       triggerSuffix={suffix || null}
       onPick={(row) => {

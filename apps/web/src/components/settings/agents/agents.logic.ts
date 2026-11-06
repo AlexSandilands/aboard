@@ -59,9 +59,9 @@ export const isT3DefaultKey = (key: string): boolean => key.startsWith(T3_DEFAUL
 /**
  * The T3 picker's model with a "default" row first in each provider's tab, as the CLI pickers have: picking it
  * clears the tier's T3 model, so a thread starts on whatever T3 Code is set to. With nothing saved, the first
- * provider's default row is the selected one.
+ * provider's default row is the selected one; with a saved model the catalog lacks (`saved`), none is.
  */
-export function withT3DefaultRows(model: PickerModel, label: string): PickerModel {
+export function withT3DefaultRows(model: PickerModel, label: string, saved = false): PickerModel {
   const providerTabs = model.tabs.filter((tab) => tab.id !== FAVORITES_TAB);
   const defaults = providerTabs.map((tab): PickerRow => ({
     key: `${T3_DEFAULT_PREFIX}${tab.id}`,
@@ -80,7 +80,9 @@ export function withT3DefaultRows(model: PickerModel, label: string): PickerMode
     ...defaults.filter((row) => row.tab === tab.id),
     ...model.rows.filter((row) => row.tab === tab.id),
   ]);
-  return { tabs: model.tabs, rows, selectedKey: model.selectedKey ?? defaults[0]?.key ?? null };
+  // A saved model T3 Code no longer lists selects nothing: marking the default would say the tier runs it.
+  const fallback = saved ? null : (defaults[0]?.key ?? null);
+  return { tabs: model.tabs, rows, selectedKey: model.selectedKey ?? fallback };
 }
 
 /**

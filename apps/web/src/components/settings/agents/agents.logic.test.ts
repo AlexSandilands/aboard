@@ -110,6 +110,11 @@ describe("withT3DefaultRows", () => {
     expect(isT3DefaultKey("a1")).toBe(false);
   });
 
+  it("selects nothing for a saved model the catalog no longer lists", () => {
+    const model = { tabs: [tab("openai")], rows: [row("openai", "o1")], selectedKey: null };
+    expect(withT3DefaultRows(model, "Default model", true).selectedKey).toBeNull();
+  });
+
   it("keeps a saved selection", () => {
     const model = { tabs: [tab("openai")], rows: [row("openai", "o1")], selectedKey: "o1" };
     expect(withT3DefaultRows(model, "Default model").selectedKey).toBe("o1");

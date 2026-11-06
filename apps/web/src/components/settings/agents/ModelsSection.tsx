@@ -477,6 +477,7 @@ function T3Control({
       <T3TierPicker
         catalog={catalog}
         selection={selection}
+        savedLabel={setting.t3?.label ?? null}
         ariaLabel={`${name} T3 Code model`}
         className={CONTROL_PICKER}
         onChange={(next: T3ModelSelection | null) =>

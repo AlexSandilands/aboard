@@ -179,6 +179,7 @@ const MOVED_PROVIDER_ROWS: Record<string, string> = {
 const MOVED_TARGETS: ReadonlyArray<[string, string]> = [
   ["models.tiers.custom.", "models.custom."],
   ["models.tiers.custom", "models.custom.list"],
+  ["models.tiers", "models.tiers.list"],
   ["tasks.review.model", "models.operations.reviewer"],
   ["tasks.new-tasks.import-model", "models.operations.issueImport"],
   ["project.review-skill.model", "project.models.reviewer"],

@@ -195,6 +195,7 @@ describe("settingsPaletteEntries", () => {
 
   it("sends the model settings that moved to where they are now", () => {
     expect(redirectSettingsTarget("models.tiers.custom")).toBe("agents.models.custom.list");
+    expect(redirectSettingsTarget("models.tiers")).toBe("agents.models.tiers.list");
     expect(redirectSettingsTarget("models.tiers.custom.codex61")).toBe("agents.models.custom.codex61");
     expect(redirectSettingsTarget("tasks.review.model")).toBe("agents.operations.reviewer");
     expect(redirectSettingsTarget("tasks.new-tasks.import-model")).toBe("agents.operations.issueImport");
