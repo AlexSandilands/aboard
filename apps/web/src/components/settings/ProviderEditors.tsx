@@ -541,6 +541,14 @@ function CodexEditor(props: ProviderEditorProps) {
           settings={settings}
         />
       </EditorSection>
+      <EditorSection title="Hand-off menu">
+        <HandoffMenuRow
+          id="agents.providers.codex.handoff-menus"
+          target="codex"
+          what="New Codex session"
+          settings={settings}
+        />
+      </EditorSection>
       <EditorSection title="Models">
         <ProviderModelsRow id="agents.providers.codex.models" provider="codex" settings={props.settings} />
       </EditorSection>
