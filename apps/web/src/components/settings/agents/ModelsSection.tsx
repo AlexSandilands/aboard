@@ -48,7 +48,7 @@ import {
   type TierProvider,
 } from "../modelTiers.logic";
 import {
-  SETTINGS_TEXT_WIDTH,
+  SETTINGS_PICKER_WIDTH,
   SettingsLink,
   SettingsRow,
   SettingsSectionHeader,
@@ -237,7 +237,7 @@ function TierDetail({ tier, settings, providers }: { tier: ModelTier; settings: 
           control={
             <BlurInput
               size="sm"
-              className={cn("w-full", SETTINGS_TEXT_WIDTH)}
+              className={cn("w-full", SETTINGS_PICKER_WIDTH)}
               aria-label={`${label} tier description`}
               placeholder={setting.t3?.label ?? "e.g. Sonnet, medium"}
               value={setting.description ?? ""}
@@ -310,7 +310,7 @@ function CustomDetail({
           control={
             <BlurInput
               size="sm"
-              className={cn("w-full", SETTINGS_TEXT_WIDTH)}
+              className={cn("w-full", SETTINGS_PICKER_WIDTH)}
               aria-label="Model name"
               value={profile.name}
               onSave={(next) => change({ field: "name", value: next })}
@@ -336,7 +336,7 @@ function CustomDetail({
           control={
             <BlurInput
               size="sm"
-              className={cn("w-full", SETTINGS_TEXT_WIDTH)}
+              className={cn("w-full", SETTINGS_PICKER_WIDTH)}
               aria-label={`${profile.name} labels`}
               placeholder="e.g. codex61, fast-lane"
               value={profile.labels.join(", ")}
@@ -351,7 +351,7 @@ function CustomDetail({
           control={
             <BlurInput
               size="sm"
-              className={cn("w-full", SETTINGS_TEXT_WIDTH)}
+              className={cn("w-full", SETTINGS_PICKER_WIDTH)}
               aria-label={`${profile.name} description`}
               placeholder={profile.t3?.label ?? "e.g. Codex, high"}
               value={profile.description ?? ""}
@@ -438,7 +438,7 @@ function ModelRows({
                   if (harness.success) onChange({ field: "headless", value: harness.data });
                 }}
               >
-                <SelectTrigger size="sm" className={cn("w-full min-w-0", SETTINGS_TEXT_WIDTH)}>
+                <SelectTrigger size="sm" className={cn("w-full min-w-0", SETTINGS_PICKER_WIDTH)}>
                   <SelectValue placeholder="First that can" />
                 </SelectTrigger>
                 <SelectPopup alignItemWithTrigger={false}>
@@ -506,7 +506,7 @@ function T3Control({
   // The picker needs T3 Code's catalog, but clearing a saved model doesn't, so that stays possible while it's away.
   if (!setting.t3) return placeholder;
   return (
-    <span className={cn("flex w-full items-center gap-1", SETTINGS_TEXT_WIDTH)}>
+    <span className={cn("flex w-full items-center gap-1", SETTINGS_PICKER_WIDTH)}>
       <span className="min-w-0 flex-1 [&>*]:w-full">{placeholder}</span>
       <Button
         size="icon-xs"

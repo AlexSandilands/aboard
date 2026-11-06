@@ -18,13 +18,10 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/c
 import { Switch } from "~/components/ui/switch";
 import { api } from "~/lib/api";
 import { useUpdateProviders, useUpdateSettings } from "~/state/mutations";
-import { queryKeys, useAgentModels } from "~/state/queries";
-import { effortLabel } from "~/components/handoff/cliEffort.logic";
+import { queryKeys } from "~/state/queries";
 import { BlurInput } from "./BlurInput";
-import { providerTierModels, type TierProvider } from "./modelTiers.logic";
 import { patchProvider } from "./providers.logic";
 import { CommandSnippet, SettingsGroup, SettingsRow, StatusLine } from "./settingsLayout";
-import { useOpenSettings } from "./settingsNavigation";
 import { AgentsSnippetRow, BoardSkillRow } from "./SkillSyncRows";
 
 // The editor of one provider on Settings → Agents → Providers, in the same sections for each: Status, Connection, MCP & skill,
@@ -274,9 +271,6 @@ function T3Editor({ settings, t3: status }: ProviderEditorProps) {
           settings={settings}
         />
       </EditorSection>
-      <EditorSection title="Models">
-        <ProviderModelsRow id="agents.providers.t3-code.models" provider="t3" settings={settings} />
-      </EditorSection>
     </>
   );
 }
@@ -447,9 +441,6 @@ function ClaudeCodeEditor(props: ProviderEditorProps) {
           settings={settings}
         />
       </EditorSection>
-      <EditorSection title="Models">
-        <ProviderModelsRow id="agents.providers.claude-code.models" provider="claude-code" settings={props.settings} />
-      </EditorSection>
     </>
   );
 }
@@ -499,9 +490,6 @@ function CopilotEditor(props: ProviderEditorProps) {
           settings={settings}
         />
       </EditorSection>
-      <EditorSection title="Models">
-        <ProviderModelsRow id="agents.providers.copilot-cli.models" provider="copilot-cli" settings={props.settings} />
-      </EditorSection>
     </>
   );
 }
@@ -541,9 +529,6 @@ function CodexEditor(props: ProviderEditorProps) {
           settings={settings}
         />
       </EditorSection>
-      <EditorSection title="Models">
-        <ProviderModelsRow id="agents.providers.codex.models" provider="codex" settings={props.settings} />
-      </EditorSection>
     </>
   );
 }
@@ -580,57 +565,5 @@ function HandoffMenuRow({
         />
       }
     />
-  );
-}
-
-/**
- * The provider's models: what each tier runs on it, and for a CLI the models its scan lists. They are set on the
- * Models page, which the button opens.
- */
-function ProviderModelsRow({ id, provider, settings }: { id: string; provider: TierProvider; settings: AppSettings }) {
-  const openSettings = useOpenSettings();
-  const scanned = useAgentModels(provider !== "t3");
-  const listed = provider === "t3" ? [] : (scanned.data?.harnesses.find((h) => h.harness === provider)?.models ?? []);
-  // What a tier with no model runs, when the scan says (Codex's `isDefault`).
-  const fallback = listed.find((model) => model.isDefault);
-  return (
-    <SettingsRow
-      id={id}
-      title="Models"
-      description="What each tier runs on here. Set them, and which provider runs each operation, under Models and Operations."
-      status={
-        <span className="flex flex-wrap gap-x-3 gap-y-1">
-          {providerTierModels(settings.modelTiers, provider).map((tier) => (
-            <span key={tier.tier}>
-              {tier.label}:{" "}
-              <span className={tier.model ? "font-mono text-foreground/80" : undefined}>
-                {tier.model ?? (fallback ? `default (${fallback.value})` : "default")}
-              </span>
-              {tier.effort ? `, ${effortLabel(tier.effort).toLowerCase()}` : null}
-              {tier.preferred ? " (preferred)" : null}
-            </span>
-          ))}
-        </span>
-      }
-      control={
-        <Button size="sm" variant="outline" onClick={() => openSettings("agents.models.tiers.list")}>
-          Open Models
-        </Button>
-      }
-    >
-      {listed.length > 0 ? (
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          {listed.length} listed:{" "}
-          {listed.map((model, index) => (
-            <span key={model.value}>
-              {index > 0 ? ", " : null}
-              <span className="font-mono" title={model.description ?? undefined}>
-                {model.value}
-              </span>
-            </span>
-          ))}
-        </p>
-      ) : null}
-    </SettingsRow>
   );
 }

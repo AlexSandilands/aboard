@@ -100,7 +100,6 @@ reload opens it. On a narrow window the two stack. Each provider's settings come
 - **MCP & skill**: the command that registers the board's MCP server, whether it is registered, and **Board skills**.
 - **Hand-off menu**: **Show in hand-off menus**, to stop offering a new thread or session in that tool while keeping it
   added.
-- **Models**: what each tier runs on this provider, the models its CLI lists, and a link to Models.
 
 The dot is green when the CLI runs and the board's MCP server is registered with it (the board finds the server by its
 address, so it doesn't matter what you named it; `localhost` and `127.0.0.1` count as the same), or for T3 Code once a

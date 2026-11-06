@@ -103,8 +103,6 @@ export const AUTOMATION_ENTRIES: ReadonlyArray<{
 ];
 
 const MCP = `Register the ${BRAND.id} MCP server.`;
-const MODELS_PER_TIER =
-  "The model and effort each suggested tier starts a new session on are set under Settings → Agents → Models.";
 const BOARD_SKILL =
   "Install the board's skills, which teach agents the workflow and how to write custom automations, and keep them updated with the app. A copy you edited is never overwritten without asking.";
 const BOARD_SKILL_KEYWORDS = ["install", "sync", "update", "agents", "instructions", "workflow", "automations"];
@@ -415,14 +413,6 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Whether the board can reach the T3 Code app on this machine.",
     ["status", "detected", "running"],
   ),
-  draft("agents.providers.t3-code.models", "T3 Code models per tier", MODELS_PER_TIER, [
-    "model tier",
-    "light",
-    "standard",
-    "deep",
-    "t3 code model",
-    "effort",
-  ]),
   draft(
     "agents.providers.t3-code.open-links-in",
     "Open thread links in",
@@ -472,15 +462,6 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Offer “New Claude Code session…” on tasks and lanes. Off hides it from the board's menus.",
     ["hide", "show", "menu", "hand off", "handoff", "new thread", "new session", "disable", "start"],
   ),
-  draft("agents.providers.claude-code.models", "Claude Code models per tier", MODELS_PER_TIER, [
-    "model tier",
-    "light",
-    "standard",
-    "deep",
-    "--model",
-    "session model",
-    "new session",
-  ]),
   // Providers › GitHub Copilot, Codex
   draft("agents.providers.copilot-cli.mcp", "Copilot CLI MCP server", `${MCP} In ~/.copilot/mcp-config.json.`, [
     "add mcp",
@@ -510,28 +491,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Offer “New Copilot CLI session…” on tasks and lanes. Off hides it from the board's menus.",
     ["github copilot", "hide", "show", "menu", "hand off", "handoff", "new thread", "new session", "disable", "start"],
   ),
-  draft("agents.providers.copilot-cli.models", "Copilot models per tier", MODELS_PER_TIER, [
-    "github copilot",
-    "model tier",
-    "light",
-    "standard",
-    "deep",
-    "--model",
-    "session model",
-    "new session",
-  ]),
   draft("agents.providers.codex.mcp", "Codex MCP server", MCP, ["openai", "add mcp", "register", "command"]),
-  draft("agents.providers.codex.models", "Codex models per tier", MODELS_PER_TIER, [
-    "openai",
-    "model tier",
-    "light",
-    "standard",
-    "deep",
-    "--model",
-    "headless",
-    "session model",
-    "new session",
-  ]),
   draft(
     "agents.providers.codex.cli-path",
     "Codex CLI path",

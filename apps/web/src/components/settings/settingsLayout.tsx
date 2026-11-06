@@ -226,6 +226,8 @@ export function SettingsRow({
  */
 export const SETTINGS_NUMBER_WIDTH = "@min-[32rem]/settings-row:w-36";
 export const SETTINGS_TEXT_WIDTH = "@min-[32rem]/settings-row:w-56";
+/** Model pickers are wider than text fields: a catalog name plus its effort doesn't fit in w-56. */
+export const SETTINGS_PICKER_WIDTH = "@min-[32rem]/settings-row:w-72";
 
 /** A number field with its unit inside the field as a trailing addon (`[ 30 | minutes ]`), at the number width. */
 export function UnitInput({ unit, className, ...props }: InputProps & { unit?: string }) {

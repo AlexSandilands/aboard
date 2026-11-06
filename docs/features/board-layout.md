@@ -407,8 +407,7 @@ Old targets and URLs are read as they are now (`redirectSettingsTarget`, applied
 route's `beforeLoad`): `integrations.<provider>…` and `providers.…` go to `agents.providers.…`, and `models.tiers…`,
 `models.custom…` and `models.operations…` to their place on Agents (`MOVED_TO_AGENTS`).
 
-Each provider's editor has a **Models** row (`agents.providers.<provider>.models`): what each tier runs on that provider, the
-models its CLI lists, and a link to Models. The reviewer and issue-import models live only under Operations: their
+The reviewer and issue-import models live only under Operations: their
 old rows in Tasks show one line of what they resolve to with a **Change** link (`OperationModelLink`). A project's
 reviewer model is its own section (`project.models.reviewer`). Targets from before the page (`models.tiers.custom*`,
 `tasks.review.model`, `tasks.new-tasks.import-model`, `project.review-skill.model`) redirect to where they are now
