@@ -69,11 +69,13 @@ The scope survives a restart. The URL stays the source of truth while the app ru
 is also kept in this browser (`useProjectScope`, localStorage key `project-scope`, written by `useRememberProjectScope`
 in `AppFrame`). It follows the URL rather than each place that sets the scope, so the project menu, the palette, a saved
 view and Back all count, **All projects** forgets it, and ids of deleted projects are dropped once the board has loaded.
-The in-progress filter and other pages leave it alone. The desktop shell always loads the bare board URL, so before
-the first render (`main.tsx`) a bare `/` is replaced with the remembered `?project=` (`restoredProjectScope`). A URL's
-own `?project=` wins, and so does `?inprogress=`, which looks across every project. Later trips to `/` (the logo, a
-notification) are not rewritten, and they show, and so remember, the whole board. It is per browser, not a server
-setting, and the other filters still reset on restart.
+The in-progress filter and other pages leave it alone. The desktop shell always loads the bare board URL, so the first
+time the board is shown in a page load, a bare `/` is replaced with the remembered `?project=` (`createBoardRestorer`):
+before the first render when the app starts on the board (`main.tsx`), and on arriving at it when the app started on
+Settings or Stats (a reload there). A URL's own `?project=` wins, and so does `?inprogress=`, which looks across every
+project. After that the URL rules: moves inside the app keep their `?project=`, so only **All projects**, or opening
+a URL without one, forgets the scope. It is per browser, not a server setting, and the other filters still reset on
+restart.
 
 The project menu is the one place the scope is shown and changed: the board header keeps its "Board" title and the
 menu's button keeps its filter icon. The sidebar's Projects list shows only the ticked projects

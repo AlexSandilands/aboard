@@ -28,3 +28,17 @@ export function scopeToRemember(pathname: string, search: ScopeSearch, order?: R
   if (pathname !== "/" || search.inprogress) return null;
   return parseProjectScope(search.project, order);
 }
+
+/**
+ * A restorer that answers once: the first time the board is shown in this page load, with the scope to put on it
+ * (`restoredProjectScope`). The app can start on another page (a reload in Settings or Stats), and the board is then
+ * reached later as a bare `/`, which would otherwise read as All projects and forget the scope.
+ */
+export function createBoardRestorer(remembered: () => ReadonlyArray<string>) {
+  let boardSeen = false;
+  return (pathname: string, search: ScopeSearch): string | undefined => {
+    if (pathname !== "/" || boardSeen) return undefined;
+    boardSeen = true;
+    return restoredProjectScope(pathname, search, remembered());
+  };
+}

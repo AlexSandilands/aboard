@@ -1,6 +1,7 @@
-import { Outlet, useLocation, useSearch } from "@tanstack/react-router";
+import { Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { scopeToRemember } from "~/components/board/projectScope.logic";
+import { restoreBoardScope } from "~/components/board/projectScopeRestore";
 import { useProjectIds } from "~/state/queries";
 import { useProjectScope } from "~/state/ui";
 import { useCloseTask, useProjectFilter, useSelectedTaskId } from "~/components/board/boardNavigation";
@@ -67,10 +68,18 @@ function useRememberProjectScope() {
   const project = useSearch({ strict: false, select: (search) => search.project });
   const inprogress = useSearch({ strict: false, select: (search) => search.inprogress });
   const order = useProjectIds();
+  const navigate = useNavigate();
   useEffect(() => {
+    // The app started on another page and the board is reached now: it takes the remembered scope instead of
+    // overwriting it with the bare URL's (no scope).
+    const restored = restoreBoardScope(pathname, { project, inprogress });
+    if (restored) {
+      void navigate({ to: "/", replace: true, search: (prev) => ({ ...prev, project: restored }) });
+      return;
+    }
     const ids = scopeToRemember(pathname, { project, inprogress }, order);
     if (!ids) return;
     const { projectIds, setProjectIds } = useProjectScope.getState();
     if (ids.join(",") !== projectIds.join(",")) setProjectIds(ids);
-  }, [pathname, project, inprogress, order]);
+  }, [pathname, project, inprogress, order, navigate]);
 }

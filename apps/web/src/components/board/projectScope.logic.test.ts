@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { restoredProjectScope, scopeToRemember } from "./projectScope.logic";
+import { createBoardRestorer, restoredProjectScope, scopeToRemember } from "./projectScope.logic";
 
 describe("restoredProjectScope", () => {
   it("scopes a bare board to the remembered projects", () => {
@@ -41,5 +41,25 @@ describe("scopeToRemember", () => {
   it("leaves what is remembered alone off the board and under the in-progress filter", () => {
     expect(scopeToRemember("/settings/project", { project: "a" })).toBeNull();
     expect(scopeToRemember("/", { inprogress: true })).toBeNull();
+  });
+});
+
+describe("createBoardRestorer", () => {
+  it("restores the first bare board, even when the app started on another page", () => {
+    const restore = createBoardRestorer(() => ["a"]);
+    expect(restore("/settings/board", {})).toBeUndefined();
+    expect(restore("/", {})).toBe("a");
+  });
+
+  it("answers once, so a later bare board (All projects) is left alone", () => {
+    const restore = createBoardRestorer(() => ["a"]);
+    expect(restore("/", {})).toBe("a");
+    expect(restore("/", {})).toBeUndefined();
+  });
+
+  it("counts a first board that already has its own scope as the first", () => {
+    const restore = createBoardRestorer(() => ["a"]);
+    expect(restore("/", { project: "b" })).toBeUndefined();
+    expect(restore("/", {})).toBeUndefined();
   });
 });

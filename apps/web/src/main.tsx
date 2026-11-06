@@ -7,9 +7,8 @@ import { TooltipProvider } from "./components/ui/tooltip.tsx";
 import { initTheme } from "./hooks/useTheme.ts";
 import { captureTokenFromHash } from "./lib/api.ts";
 import { syncDocumentWindowControlsOverlayClass } from "./lib/windowControlsOverlay.ts";
-import { restoredProjectScope } from "./components/board/projectScope.logic.ts";
+import { restoreBoardScope } from "./components/board/projectScopeRestore.ts";
 import { router } from "./router.tsx";
-import { useProjectScope } from "./state/ui.ts";
 import { initAppearance } from "./theme/appearance.ts";
 import "./index.css";
 
@@ -22,11 +21,12 @@ restoreProjectScope();
 
 /**
  * The desktop shell always loads the bare board URL, so a restart would drop the project scope. Before the first
- * render, a bare board takes the scope remembered last time; after that the URL rules (`useRememberProjectScope`).
+ * render, a bare board takes the scope remembered last time; after that the URL rules (`useRememberProjectScope`, which
+ * also restores a board first reached from another page).
  */
 function restoreProjectScope() {
   const { pathname, search } = router.state.location;
-  const project = restoredProjectScope(pathname, search, useProjectScope.getState().projectIds);
+  const project = restoreBoardScope(pathname, search);
   if (!project) return;
   const params = new URLSearchParams(window.location.search);
   params.set("project", project);
