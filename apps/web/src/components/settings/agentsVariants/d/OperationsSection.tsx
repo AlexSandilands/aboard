@@ -1,7 +1,7 @@
 // Design D's Operations: the baseline's rows (ModelsPage.tsx), with the picker in the same field look as the rest of
 // the page. While no provider can run anything the rows are dimmed behind one notice instead of a warning on each.
 import { activeProviderIds, AGENT_HARNESSES, OPERATIONS, type AppSettings, type OperationId } from "@repo/contracts";
-import { CircleAlertIcon, PlusIcon, TerminalIcon } from "lucide-react";
+import { CircleAlertIcon, TerminalIcon } from "lucide-react";
 import { resolvesTo } from "~/components/models/choicePicker.logic";
 import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
 import {
@@ -12,8 +12,7 @@ import {
   OPERATION_GROUPS,
   operationTarget,
 } from "~/components/models/operations.logic";
-import { Button } from "~/components/ui/button";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { useUpdateSettings } from "~/state/mutations";
 import { SettingsRow, SettingsSection, SettingsSubsection } from "../../settingsLayout";
 import { CONTROL_PICKER } from "./SplitCard";
@@ -24,7 +23,7 @@ const HEADLESS_LABELS = Object.values(AGENT_HARNESSES).map((h) => h.label);
  * The model each operation runs on, at board level, with the line saying what that comes down to now. A project, a
  * task (for the reviewer) and an automation can pick their own; those are set where they live.
  */
-export function OperationsSection({ settings, onAddProvider }: { settings: AppSettings; onAddProvider: () => void }) {
+export function OperationsSection({ settings }: { settings: AppSettings }) {
   // Every operation runs headless on a CLI provider; with none switched on (T3 Code alone, or all off) each row would
   // carry the same "needs a provider" warning.
   const blocked = activeProviderIds(settings).length === 0;
@@ -53,18 +52,12 @@ export function OperationsSection({ settings, onAddProvider }: { settings: AppSe
                   <EmptyMedia variant="icon">
                     <TerminalIcon />
                   </EmptyMedia>
-                  <EmptyTitle>Operations need a CLI provider</EmptyTitle>
+                  <EmptyTitle>Finish setting up your providers</EmptyTitle>
                   <EmptyDescription>
-                    Reviews, Autopilot and the board's tools run headless on {listOr(HEADLESS_LABELS)}. Add one, or
-                    switch one on, to pick their models here.
+                    Reviews, Autopilot and the board's tools run on {listOr(HEADLESS_LABELS)}. Add or switch on one of
+                    them in Providers above.
                   </EmptyDescription>
                 </EmptyHeader>
-                <EmptyContent>
-                  <Button size="sm" onClick={onAddProvider}>
-                    <PlusIcon />
-                    Add provider
-                  </Button>
-                </EmptyContent>
               </Empty>
             </div>
           </div>

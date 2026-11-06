@@ -36,22 +36,14 @@ import {
 import { SettingsGroup, SettingsSectionHeader, SettingsSubsection, StatusDot } from "../../settingsLayout";
 import { DetailBody, DetailHeader, SplitCard, SplitList, SplitListAction, SplitListItem } from "./SplitCard";
 
-export function ProvidersSection({
-  settings,
-  adding,
-  onAddingChange: setAdding,
-}: {
-  settings: AppSettings;
-  /** The Add provider dialog is open; the page owns it so the Operations banner can open it too. */
-  adding: boolean;
-  onAddingChange: (open: boolean) => void;
-}) {
+export function ProvidersSection({ settings }: { settings: AppSettings }) {
   const providers = useProviders();
   const recheck = useRecheckProviders();
   const t3 = useIntegrationsStatus().data?.t3;
   const updateProviders = useUpdateProviders();
   const navigate = useNavigate();
   const requested = useSearch({ strict: false, select: (search) => search.provider });
+  const [adding, setAdding] = useState(false);
   const [confirm, setConfirm] = useState<{ id: ProviderId; action: "disable" | "remove" } | null>(null);
 
   const added = settings.providers;

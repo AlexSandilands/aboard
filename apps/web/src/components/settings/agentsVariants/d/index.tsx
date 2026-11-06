@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useIntegrationsStatus } from "~/state/queries";
 import type { AgentsVariant } from "../types";
 import { ModelsSection } from "./ModelsSection";
@@ -17,13 +16,12 @@ export const dVariant: AgentsVariant = {
   author: "Fable 5.1",
   Page: function AgentsPageD({ settings }) {
     const t3 = useIntegrationsStatus().data?.t3;
-    const [adding, setAdding] = useState(false);
     const any = settings.providers.length > 0;
     return (
       <>
-        <ProvidersSection settings={settings} adding={adding} onAddingChange={setAdding} />
+        <ProvidersSection settings={settings} />
         {any ? <ModelsSection settings={settings} t3={t3} /> : null}
-        {any ? <OperationsSection settings={settings} onAddProvider={() => setAdding(true)} /> : null}
+        {any ? <OperationsSection settings={settings} /> : null}
       </>
     );
   },
