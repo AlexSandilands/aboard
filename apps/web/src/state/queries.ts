@@ -1,4 +1,5 @@
 import type {
+  AgentHarness,
   AgentCliStatus,
   AgentModels,
   AppSettings,
@@ -80,7 +81,7 @@ export const queryKeys = {
   providerClis: ["providers", "cli"] as const,
   agentModels: ["agentModels"] as const,
   sessionLaunchOptions: (taskId: string) => ["sessionLaunchOptions", taskId] as const,
-  prFix: (linkId: string) => ["prFix", linkId] as const,
+  prFix: (linkId: string, harness: string | null) => ["prFix", linkId, harness] as const,
   templates: ["templates"] as const,
   /** Prefix of every project's recurring rules query. */
   recurring: ["recurring"] as const,
@@ -350,10 +351,15 @@ export function useAgentModels(enabled: boolean) {
 }
 
 /** What "Fix in →" starts a session with: the PR's branch and Fix PRs' prompt for its problems now. Read each time. */
-export function usePrFix(linkId: string | null) {
+/** A PR's fix prompt; `harness` is the CLI it starts in, as one that picks its own session id is told to link itself. */
+export function usePrFix(linkId: string | null, harness: AgentHarness | null = null) {
   return useQuery({
-    queryKey: queryKeys.prFix(linkId ?? ""),
-    queryFn: ({ signal }) => api<PrFixInfo>(`/api/links/${encodeURIComponent(linkId!)}/fix`, { signal }),
+    queryKey: queryKeys.prFix(linkId ?? "", harness),
+    queryFn: ({ signal }) =>
+      api<PrFixInfo>(
+        `/api/links/${encodeURIComponent(linkId!)}/fix${harness ? `?harness=${encodeURIComponent(harness)}` : ""}`,
+        { signal },
+      ),
     enabled: !!linkId,
     staleTime: 0,
     gcTime: 0,

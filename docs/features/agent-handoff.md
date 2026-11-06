@@ -195,7 +195,7 @@ header. It only shows on open work: not on Done or archived tasks.
 
 It offers "Copy prompt" and "Copy planning prompt", with the one that suits the task marked _Suggested_. An epic
 offers only "Copy prompt to start its tasks" (its orchestrating prompt), and its T3 dialog has no
-**Plan with me**. **New Claude Code session…** and **New Copilot CLI session…** follow T3's entry on any task but
+**Plan with me**. **New Claude Code session…**, **New Codex session…** and **New Copilot CLI session…** follow T3's entry on any task but
 an epic, when the provider is added and on in Settings → Providers and `GET /api/providers` finds its CLI
 ([agent sessions](agent-sessions.md#starting-a-session)).
 **New T3 Code thread…** is added at the top when all of these hold (`canStartT3Thread`):

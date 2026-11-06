@@ -46,6 +46,18 @@ describe("planTasksPrompt", () => {
     });
     expect(prompt).toContain("already linked it to every task");
     expect(prompt).not.toContain("link(task, t3Thread");
+    const codex = planTasksPrompt({
+      project,
+      tasks,
+      skill: { source: "builtin" },
+      boardUrl: "http://x",
+      linked: true,
+      harness: "codex",
+    });
+    expect(codex).toContain(
+      'link it to every task yourself first with link(task, agentSession: {harness: "codex", sessionId: $CODEX_THREAD_ID',
+    );
+    expect(codex).toContain('label: "Planning #3, #4, #7"');
   });
 
   it("speaks of one task in the singular", () => {
@@ -66,6 +78,9 @@ describe("planning helpers", () => {
     expect(short).toContain('get_handoff_prompt(tasks: ["#3", "#4", "#7"], mode: "plan")');
     expect(short).toContain("don't link it again");
     expect(short).not.toMatch(/[%\n]/);
+    const codex = planTasksShortPrompt(tasks, "codex");
+    expect(codex).toContain("$CODEX_THREAD_ID");
+    expect(codex).not.toMatch(/[%\n]/);
   });
 
   it("prints the plan before asking, and restates it last", () => {

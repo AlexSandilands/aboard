@@ -1,7 +1,7 @@
 import { tmpdir } from "node:os";
 import {
   AGENT_HARNESSES,
-  type AgentHarness,
+  AgentHarness,
   type AgentModel,
   type AgentModels,
   type AgentModelsStatus,
@@ -11,6 +11,7 @@ import {
 } from "@repo/contracts";
 import type { Services } from "../services/types.ts";
 import { claudeOutput, executableVersion, resolveExecutable, runClaude } from "./claudeCli.ts";
+import { codexModelPages } from "./codexAppServer.ts";
 import { messageOf } from "./github.ts";
 import type { TerminalHost } from "./terminal.ts";
 
@@ -23,6 +24,8 @@ const CACHE_MS = 10 * 60_000;
 /** Claude Code runs its SessionStart hooks before it answers, which can take a few seconds. */
 const CLAUDE_SCAN_TIMEOUT_MS = 45_000;
 const COPILOT_SCAN_TIMEOUT_MS = 15_000;
+/** `codex app-server` answers in well under a second; this leaves room for a slow first start. */
+const CODEX_SCAN_TIMEOUT_MS = 20_000;
 
 const REQUEST_ID = "models";
 
@@ -109,6 +112,41 @@ export function parseCopilotModels(helpText: string): AgentModel[] {
   return models;
 }
 
+/**
+ * The models in Codex's `model/list` pages (`codex app-server`): each entry's `model` is what `--model` takes, with its
+ * `displayName`, `description`, `supportedReasoningEfforts` (levels this board doesn't know are left out),
+ * `defaultReasoningEffort` and `isDefault`, the model Codex runs when none is given. Hidden models are left out, as
+ * Codex's own picker leaves them out. Throws when no page lists a model, so that reads as a failed scan.
+ */
+export function parseCodexModels(pages: readonly unknown[]): AgentModel[] {
+  const seen = new Set<string>();
+  const models = pages.flatMap((page) => {
+    const data = (page as { data?: unknown } | null)?.data;
+    return (Array.isArray(data) ? data : []).flatMap((entry): AgentModel[] => {
+      const model = (entry ?? {}) as Record<string, unknown>;
+      const value = textOf(model.model) ?? textOf(model.id);
+      if (!value || model.hidden === true || seen.has(value)) return [];
+      seen.add(value);
+      const efforts = Array.isArray(model.supportedReasoningEfforts)
+        ? model.supportedReasoningEfforts.map((option) => (option as { reasoningEffort?: unknown })?.reasoningEffort)
+        : null;
+      const defaultEffort = CliEffort.safeParse(model.defaultReasoningEffort);
+      return [
+        {
+          value,
+          label: textOf(model.displayName),
+          description: textOf(model.description),
+          effortLevels: effortLevelsOf(efforts),
+          ...(model.isDefault === true ? { isDefault: true } : {}),
+          ...(defaultEffort.success ? { defaultEffort: defaultEffort.data } : {}),
+        },
+      ];
+    });
+  });
+  if (!models.length) throw new Error("Codex listed no models");
+  return models;
+}
+
 /** What a scan runs: replaced in tests so no CLI is started. */
 export interface AgentModelProbes {
   /** The CLI's executable on this machine, or null. */
@@ -118,6 +156,8 @@ export interface AgentModelProbes {
   claudeInit: (exe: string, cwd: string) => Promise<string>;
   /** `copilot help config`'s stdout. */
   copilotHelp: (exe: string, cwd: string) => Promise<string>;
+  /** Each `model/list` page's result from `codex app-server`. */
+  codexModels: (exe: string, cwd: string) => Promise<readonly unknown[]>;
 }
 
 export interface AgentModelsService {
@@ -150,6 +190,7 @@ export function createAgentModels(deps: {
       }),
     copilotHelp: (exe, cwd) =>
       claudeOutput(exe, ["help", "config"], { timeoutMs: COPILOT_SCAN_TIMEOUT_MS, cwd, label: "Copilot CLI" }),
+    codexModels: (exe, cwd) => codexModelPages(exe, { cwd, timeoutMs: CODEX_SCAN_TIMEOUT_MS }),
     ...deps.probes,
   };
 
@@ -171,7 +212,10 @@ export function createAgentModels(deps: {
           error: null,
         };
       }
-      const models = parseCopilotModels(await probes.copilotHelp(exe, tmpdir()));
+      const models =
+        harness === "codex"
+          ? parseCodexModels(await probes.codexModels(exe, tmpdir()))
+          : parseCopilotModels(await probes.copilotHelp(exe, tmpdir()));
       return { harness, models, cliVersion, scannedAt: new Date(now()).toISOString(), error: null };
     } catch (error) {
       return { ...none, cliVersion, error: messageOf(error).slice(0, 200) };
@@ -209,9 +253,7 @@ export function createAgentModels(deps: {
   return {
     async status(refresh = false) {
       const settings = deps.services().settings.get();
-      const harnesses = await Promise.all(
-        (["claude-code", "copilot-cli"] as const).map((harness) => statusOf(harness, settings, refresh)),
-      );
+      const harnesses = await Promise.all(AgentHarness.options.map((harness) => statusOf(harness, settings, refresh)));
       return { harnesses };
     },
     harness: (harness, refresh = false) => statusOf(harness, deps.services().settings.get(), refresh),

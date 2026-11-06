@@ -1,4 +1,10 @@
-import { clampRuntimeMode, runtimeModesFor, type T3LaunchOptions, type T3LaunchProvider } from "@repo/contracts";
+import {
+  clampRuntimeMode,
+  DEFAULT_HANDOFF_MENUS,
+  runtimeModesFor,
+  type T3LaunchOptions,
+  type T3LaunchProvider,
+} from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   canStartProjectT3Thread,
@@ -132,7 +138,7 @@ describe("visibility", () => {
   const task = { status: "backlog" as const, archivedAt: null };
   const project = { t3ProjectId: null, workspaceRoot: ROOT };
   const t3 = { detected: true };
-  const added = (["t3-code", "claude-code", "copilot-cli"] as const).map((id) => ({
+  const added = (["t3-code", "claude-code", "codex", "copilot-cli"] as const).map((id) => ({
     id,
     enabled: true,
     cliPath: null,
@@ -192,7 +198,10 @@ describe("visibility", () => {
   });
 
   it("leaves out a target the user hid from the menus", () => {
-    const hidden = { ...settings, handoffMenus: { "t3-code": false, "claude-code": true, "copilot-cli": true } };
+    const hidden = {
+      ...settings,
+      handoffMenus: { "t3-code": false, "claude-code": true, codex: true, "copilot-cli": true },
+    };
     expect(canStartT3Thread(task, project, t3, hidden)).toBe(false);
     expect(canStartProjectT3Thread(project, t3, hidden)).toBe(false);
     const clis = [
@@ -204,6 +213,20 @@ describe("visibility", () => {
     ]);
     expect(handoffClis(clis, hidden)).toEqual(["claude-code", "copilot-cli"]);
     expect(handoffClis([{ harness: "claude-code", available: false, path: null }], undefined)).toEqual([]);
+  });
+
+  it("offers Codex like the other CLIs, though its session links itself", () => {
+    const clis = [
+      { harness: "claude-code" as const, available: true, path: null },
+      { harness: "codex" as const, available: true, path: null },
+      { harness: "copilot-cli" as const, available: false, path: null },
+    ];
+    expect(handoffClis(clis, settings)).toEqual(["claude-code", "codex"]);
+    expect(handoffClis(clis, { ...settings, handoffMenus: { ...DEFAULT_HANDOFF_MENUS, codex: false } })).toEqual([
+      "claude-code",
+    ]);
+    const noCodex = { ...settings, providers: added.filter((p) => p.id !== "codex") };
+    expect(handoffClis(clis, noCodex)).toEqual(["claude-code"]);
   });
 
   it("leaves out a provider that isn't added or is switched off", () => {

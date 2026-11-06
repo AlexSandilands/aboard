@@ -10,6 +10,7 @@ const EFFORT_LABELS: Record<CliEffort, string> = {
   high: "High",
   xhigh: "Extra high",
   max: "Max",
+  ultra: "Ultra",
 };
 
 /** A level as the pickers show it. */

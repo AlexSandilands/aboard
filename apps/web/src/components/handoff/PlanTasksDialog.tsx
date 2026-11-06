@@ -40,13 +40,15 @@ import { harnessLabel, modelError } from "./sessionLaunch.logic";
 /** The planning prompt for these tasks, with the skill the project (or the board) chose. */
 export function usePlanPrompt(project: Project, tasks: readonly TaskSummary[]) {
   const settings = useSettings().data;
-  return (linked: boolean) =>
+  // `harness`: the CLI a board-started session runs in; one that picks its own session id is told to link itself.
+  return (linked: boolean, harness?: AgentHarness) =>
     planTasksPrompt({
       project,
       tasks,
       skill: planSkillOf(project, settings),
       boardUrl: window.location.origin,
       linked,
+      ...(harness ? { harness } : {}),
     });
 }
 
@@ -199,7 +201,7 @@ function PlanSession({
 }) {
   const [tasks] = useState(initialTasks);
   const promptFor = usePlanPrompt(project, tasks);
-  const [prompt, setPrompt] = useState(() => promptFor(true));
+  const [prompt, setPrompt] = useState(() => promptFor(true, harness));
   // Planning keeps the CLI's default model: a task's suggested tier is about implementing it.
   const [model, setModel] = useState("");
   const [effort, setEffort] = useState<CliEffort | null>(null);

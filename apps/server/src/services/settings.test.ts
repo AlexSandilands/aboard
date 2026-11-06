@@ -125,17 +125,20 @@ describe("hidden hand-off targets", () => {
     expect(h.services.settings.get().handoffMenus).toEqual({
       "t3-code": true,
       "claude-code": true,
+      codex: true,
       "copilot-cli": true,
     });
     const patch = (json: unknown) => h.request("/api/settings", { method: "PATCH", json });
     await patch({ handoffMenus: { "copilot-cli": false } });
     await patch({ handoffMenus: { "t3-code": false } });
+    await patch({ handoffMenus: { codex: false } });
     expect(h.services.settings.get().handoffMenus).toEqual({
       "t3-code": false,
       "claude-code": true,
+      codex: false,
       "copilot-cli": false,
     });
-    expect((await patch({ handoffMenus: { codex: false } })).status).toBe(400);
+    expect((await patch({ handoffMenus: { cursor: false } })).status).toBe(400);
   });
 });
 

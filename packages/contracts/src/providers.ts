@@ -17,7 +17,7 @@ export interface ProviderInfo {
   cli: string | null;
   /** The harness its sessions are, for the CLI providers. */
   harness: AgentHarness | null;
-  /** The hand-off menu entry it offers, if any (Codex picks its own session id, so the board can't start one). */
+  /** The hand-off menu entry it offers, if any. */
   handoff: HandoffTarget | null;
   /** The command that registers the board's MCP server, or null when it is set up another way. */
   mcpCommand: ((name: string, url: string) => string) | null;
@@ -55,14 +55,14 @@ export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
   },
   codex: {
     label: "Codex",
-    blurb: "Headless Autopilot runs on a Codex model, and reopening Codex sessions.",
+    blurb: "New Codex sessions from a task, headless Autopilot runs on a Codex model, and reopening Codex sessions.",
     cli: "codex",
     harness: "codex",
-    handoff: null,
+    handoff: "codex",
     mcpCommand: (name, url) => `codex mcp add ${name} --url ${url}`,
     detectsMcp: true,
     skill: "codex",
-    scansModels: false,
+    scansModels: true,
   },
   "copilot-cli": {
     label: "GitHub Copilot",

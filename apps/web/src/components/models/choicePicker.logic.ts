@@ -112,6 +112,10 @@ export function choiceRowKey(value: ModelChoice | null, hasUnset = false, hasInh
 const scannedModels = (scanned: AgentModels | undefined, harness: AgentHarness): readonly AgentModel[] =>
   scanned?.harnesses.find((h) => h.harness === harness)?.models ?? [];
 
+/** The model the CLI runs when given none, when its scan says (Codex's `isDefault`). */
+export const scannedDefault = (scanned: AgentModels | undefined, harness: AgentHarness): AgentModel | undefined =>
+  scannedModels(scanned, harness).find((m) => m.isDefault);
+
 /** The scanned model by id, if the scan listed it. */
 export const findScanned = (
   scanned: AgentModels | undefined,
@@ -277,12 +281,17 @@ function providerRows(input: ChoicePickerInput, harness: AgentHarness): PickerRo
   };
   const rows: PickerRow[] = [];
   if (input.defaultLabel) {
+    // The scan may say which model that is; the CLI's own config can still pick another.
+    const fallback = scannedDefault(input.scanned, harness);
     rows.push({
       ...base,
       key: defaultRowKey(harness),
       name: input.defaultLabel,
       value: "",
-      detail: `Whatever ${harnessLabel(harness)} is set to use`,
+      detail: fallback
+        ? // Named first, as the row is narrow.
+          `${fallback.label ?? fallback.value}, unless ${harnessLabel(harness)} is set to another`
+        : `Whatever ${harnessLabel(harness)} is set to use`,
       disabledReason: null,
       closes: true,
     });
@@ -474,13 +483,18 @@ export function choiceEffortColumn(
   const levels = modelLevels(scanned, pick.provider, pick.model);
   if (levels.length === 0) return empty("This model takes no effort.");
   const shown = effort && !levels.includes(effort) ? [effort, ...levels] : levels;
+  // The level "Default" runs at, when the scan says (Codex's `defaultReasoningEffort`).
+  const fallback = findScanned(scanned, pick.provider, pick.model)?.defaultEffort ?? null;
   return {
     modelLabel,
     groups: [
       {
         id: "effort",
         label: "Effort",
-        options: [{ id: null, label: "Default" }, ...shown.map((level) => ({ id: level, label: effortLabel(level) }))],
+        options: [
+          { id: null, label: fallback ? `Default (${effortLabel(fallback)})` : "Default" },
+          ...shown.map((level) => ({ id: level, label: effortLabel(level) })),
+        ],
         value: effort,
       },
     ],

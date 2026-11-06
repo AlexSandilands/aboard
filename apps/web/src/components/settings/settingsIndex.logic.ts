@@ -522,12 +522,20 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "deep",
     "--model",
     "headless",
+    "session model",
+    "new session",
   ]),
   draft(
     "providers.codex.cli-path",
     "Codex CLI path",
-    "What headless Autopilot runs start for a model that runs on Codex. Leave empty to use codex from your PATH.",
-    ["openai", "executable", "binary", "headless", "autopilot"],
+    "What the board opens for a new Codex session, and what headless Autopilot runs start for a model that runs on Codex. Leave empty to use codex from your PATH.",
+    ["openai", "executable", "binary", "headless", "autopilot", "session"],
+  ),
+  draft(
+    "providers.codex.handoff-menus",
+    "Show Codex in hand-off menus",
+    "Offer “New Codex session…” on tasks and lanes. Off hides it from the board's menus.",
+    ["openai", "hide", "show", "menu", "hand off", "handoff", "new session", "disable", "start"],
   ),
   draft("providers.codex.skill", "Codex board skills", `${BOARD_SKILL} In ~/.codex/skills.`, [
     "openai",

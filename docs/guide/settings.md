@@ -61,7 +61,8 @@ and a click tries again.
 Every place you choose a model uses the same picker: the providers you added down the side, a search over their
 models, and the effort beside the list. Its first tab holds **Inherit** (where there is one, with what it comes down
 to), the three tiers and your custom models, each saying what it would run on. A provider that can't do what the job
-needs is greyed out; hover it to see why. A model a provider doesn't list (Codex lists none) can be typed in the
+needs is greyed out; hover it to see why. Claude Code, Codex and GitHub Copilot list the models their CLI offers (Codex
+also says which one it runs by default, and at which effort); a model a provider doesn't list can be typed in the
 search and used.
 
 - **Tiers**: one row per tier and one column per provider you added and switched on. Give each tier a description

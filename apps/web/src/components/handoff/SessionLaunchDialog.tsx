@@ -1,4 +1,5 @@
 import {
+  AGENT_HARNESSES,
   taskHandoffPrompt,
   taskWindowName,
   defaultHandoffMode,
@@ -47,8 +48,9 @@ const WHERE_ITEMS = [
 ] as const;
 
 /**
- * "New Claude Code / Copilot CLI session": the hand-off prompt to edit, a model and where to run, then the CLI opens
- * in a terminal with the prompt and the board links the session (useDialogs().openSessionLaunch). With a `fixLinkId`
+ * "New Claude Code / Codex / Copilot CLI session": the hand-off prompt to edit, a model and where to run, then the CLI
+ * opens in a terminal with the prompt and the board links the session, or, for Codex, the session links itself
+ * (useDialogs().openSessionLaunch). With a `fixLinkId`
  * ("Fix in →" on a PR) the prompt is Fix PRs' for the PR's problems and the session works on the PR's own branch.
  */
 export function SessionLaunchDialog() {
@@ -84,7 +86,7 @@ function SessionLaunch({
   onDone: () => void;
 }) {
   const options = useSessionLaunchOptions(task.id);
-  const fix = usePrFix(fixLinkId);
+  const fix = usePrFix(fixLinkId, harness);
   return (
     <>
       <DialogHeader>
@@ -155,7 +157,9 @@ export function announceSession(
     const toastId = toastManager.add({
       type: "success",
       title: `Started ${harnessLabel(harness)}`,
-      description: [result.shortReason, startedDescription(result, taskNumbers, copied)].filter(Boolean).join(" "),
+      description: [result.shortReason, startedDescription(result, harness, taskNumbers, copied)]
+        .filter(Boolean)
+        .join(" "),
       // The clipboard can refuse a write that comes after the request; a click is a fresh gesture.
       ...(result.shortPrompt && !copied
         ? {
@@ -211,6 +215,8 @@ function Composer({
           boardUrl: window.location.origin,
           mode: epic ? "orchestrate" : followup ? "followup" : plan ? "plan" : "work",
           linkedSession: true,
+          // Codex picks its own session id, so its prompt asks it to link itself.
+          sessionHarness: harness,
           epicBranch,
         });
   const [plan, setPlan] = useState(!fix && defaultHandoffMode(task) === "plan");
@@ -230,6 +236,8 @@ function Composer({
   const start = useStartSession({ silent: true });
   const images = useLaunchImages();
   const cli = options?.clis.find((c) => c.harness === harness);
+  // Codex can't be given a session id: the board can't link it, and its prompt asks it to link itself.
+  const selfLinks = !AGENT_HARNESSES[harness].presetSessionId;
 
   // A fix works on the PR's own branch, in a worktree of its own: there is no checkout to run it in.
   const workspace = !ready
@@ -417,8 +425,11 @@ function Composer({
             </span>
           ) : null}
           {options.namedWindow
-            ? `Opens in the Windows Terminal window ${taskWindowName(task.number)}, which the session's link brings back while it runs.`
+            ? `Opens in the Windows Terminal window ${taskWindowName(task.number)}${selfLinks ? "." : ", which the session's link brings back while it runs."}`
             : "Opens in the terminal chosen in Settings → Integrations → Terminal."}
+          {selfLinks
+            ? ` ${harnessLabel(harness)} picks its own session id, so the session links itself to the task once it starts.`
+            : null}
         </p>
       ) : null}
     </form>
