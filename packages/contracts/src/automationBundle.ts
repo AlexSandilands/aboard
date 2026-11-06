@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { BRAND } from "./brand.ts";
+import { INHERIT, readLegacyModelChoice } from "./modelProfiles.ts";
 import {
   AutomationInputDecl,
   AutomationSlotDecl,
@@ -122,6 +123,18 @@ export const AutomationBundle = z
   });
 export type AutomationBundle = z.infer<typeof AutomationBundle>;
 
+/**
+ * A file from before 041_operation_models names an agent's model as a `tier` (null for the task's): it becomes the
+ * `model` choice, read like any other old choice (readLegacyModelChoice).
+ */
+function withLegacyModel(json: unknown): unknown {
+  const action = (json as { action?: unknown }).action;
+  if (!action || typeof action !== "object" || !("tier" in action) || "model" in action) return json;
+  const { tier, ...rest } = action as Record<string, unknown>;
+  const model = tier === null || tier === undefined ? INHERIT : readLegacyModelChoice({ tier });
+  return { ...(json as object), action: { ...rest, ...(model ? { model } : {}) } };
+}
+
 const Header = z.object({ format: z.literal(AUTOMATION_BUNDLE_FORMAT), version: z.number().int().min(1) });
 
 /** The file's contents as a bundle, or what is wrong with it. A file from a newer version is refused as such. */
@@ -136,7 +149,7 @@ export function parseAutomationBundle(
       error: `This file is version ${header.data.version}, made by a newer ${BRAND.name}. Update to import it.`,
     };
   }
-  const parsed = AutomationBundle.safeParse(json);
+  const parsed = AutomationBundle.safeParse(withLegacyModel(json));
   if (parsed.success) return { ok: true, bundle: parsed.data };
   const issue = parsed.error.issues[0]!;
   const where = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";

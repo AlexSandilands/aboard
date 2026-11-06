@@ -7,8 +7,10 @@ import {
   customAutomationKey,
   CustomAction,
   inputEnvName,
-  MODEL_TIERS,
 } from "@repo/contracts";
+import { INHERIT, type ModelChoice, type OperationNeed } from "@repo/contracts";
+import { inheritDetail } from "~/components/models/choicePicker.logic";
+import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
 import {
   BotIcon,
   EyeIcon,
@@ -34,6 +36,7 @@ import { cn } from "~/lib/utils";
 import { useCreateCustomAutomation, useUpdateCustomAutomation } from "~/state/customAutomations";
 import { useBoard, useSettings } from "~/state/queries";
 import {
+  formAgentNeeds,
   customFormToInput,
   emptyFormSlots,
   formSampleTask,
@@ -417,15 +420,12 @@ export function CustomAutomationEditorForm({
                       onChange={(event) => patch({ skill: event.currentTarget.value })}
                     />
                   </Field>
-                  <Field label="Model tier">
-                    <Choice
-                      label="Model tier"
-                      value={form.tier}
-                      items={[
-                        { value: "", label: isSchedule ? "The default tier" : "The task's tier" },
-                        ...MODEL_TIERS.map((t) => ({ value: t.value, label: t.label })),
-                      ]}
-                      onChange={(tier) => patch({ tier })}
+                  <Field label="Model">
+                    <ActionModelPicker
+                      value={form.model}
+                      isSchedule={isSchedule}
+                      needs={formAgentNeeds(form)}
+                      onChange={(model) => patch({ model })}
                     />
                   </Field>
                 </div>
@@ -748,5 +748,35 @@ function ActionPicker({
         );
       })}
     </div>
+  );
+}
+
+/** The action's model: inherit (the board's model for the operation, then the task's), a tier, or any model. */
+function ActionModelPicker({
+  value,
+  isSchedule,
+  needs,
+  onChange,
+}: {
+  value: ModelChoice;
+  isSchedule: boolean;
+  /** What its runs ask beyond the operation (a schema, tools, untrusted items), so providers that can't grey out. */
+  needs: readonly OperationNeed[];
+  onChange: (model: ModelChoice) => void;
+}) {
+  const settings = useSettings().data;
+  if (!settings) return null;
+  const op = isSchedule ? "customDetached" : "customTask";
+  return (
+    <ModelChoicePicker
+      op={op}
+      needs={needs}
+      value={value}
+      inherit={{ label: "Inherit", detail: inheritDetail(op, { needs }, settings) }}
+      ariaLabel="Model"
+      size="sm"
+      className="w-full justify-between"
+      onChange={(next) => onChange(next ?? INHERIT)}
+    />
   );
 }

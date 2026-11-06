@@ -324,6 +324,7 @@ describe("Digest REST routes", () => {
     const h = createTestHarness({
       integrations: { runAgent: () => new Promise((resolve) => (release = resolve)) },
     });
+    h.services.settings.update({ providers: [{ id: "claude-code", enabled: true }] });
     const project = h.services.projects.create({ title: "P", workspaceRoot: "/work/p" });
     h.services.tasks.create({
       projectId: project.id,
@@ -355,7 +356,15 @@ describe("Digest REST routes", () => {
       epicScope: false,
       defaults: { mode: "plain", time: "09:00", weekdaysOnly: false },
     });
-    expect(entry.fields.map((f) => f.kind)).toEqual(["select", "time", "boolean", "skill", "number", "number", "text"]);
+    expect(entry.fields.map((f) => f.kind)).toEqual([
+      "select",
+      "time",
+      "boolean",
+      "skill",
+      "number",
+      "number",
+      "model",
+    ]);
 
     expect((await put(h, { time: "9am" })).status).toBe(400);
     expect((await put(h, { mode: "chatty" })).status).toBe(400);

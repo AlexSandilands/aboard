@@ -201,4 +201,220 @@ describe("migrations", () => {
       unused.close();
     });
   });
+  describe("providers (040)", () => {
+    const before = (setup: string): DatabaseSync => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const path = join(dir, "board.db");
+      const old = openDatabase(path, { migrateTo: "039_review_model.sql" });
+      old.exec(`
+        INSERT INTO projects (id, title, position, created_at, updated_at) VALUES ('p', 'P', 'a0', '', '');
+        INSERT INTO tasks (id, number, project_id, title, status, position, created_by, created_at, updated_at, status_changed_at)
+          VALUES ('t', 1, 'p', 'T', 'backlog', 'a0', 'user', '', '', '');
+        ${setup}
+      `);
+      old.close();
+      return openDatabase(path);
+    };
+    const setting = (db: DatabaseSync, key: string): unknown => {
+      const row = db.prepare("SELECT value_json FROM settings WHERE key = ?").get(key) as
+        | { value_json: string }
+        | undefined;
+      return row ? JSON.parse(row.value_json) : undefined;
+    };
+
+    it("adds nothing to a new install, and leaves it no detection to run", () => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const db = openDatabase(join(dir, "board.db"));
+      expect(setting(db, "providers")).toEqual([]);
+      expect(setting(db, "providersDetectSeed")).toBeUndefined();
+      db.close();
+    });
+
+    it("adds nothing for an install that set nothing, but leaves detection to look", () => {
+      const db = before("");
+      expect(setting(db, "providers")).toEqual([]);
+      expect(setting(db, "providersDetectSeed")).toBe(true);
+      db.close();
+    });
+
+    it("adds Claude Code alone with its CLI path when that is all that was used", () => {
+      const db = before(
+        `INSERT INTO settings (key, value_json) VALUES ('headlessReviewCli', '"/opt/claude"'), ('codexCli', 'null');`,
+      );
+      expect(setting(db, "providers")).toEqual([{ id: "claude-code", enabled: true, cliPath: "/opt/claude" }]);
+      expect(setting(db, "headlessReviewCli")).toBeUndefined();
+      expect(setting(db, "codexCli")).toBeUndefined();
+      db.close();
+    });
+
+    it("adds all four from paths, the token, models and linked sessions", () => {
+      const tiers = JSON.stringify({
+        light: { description: null, t3: { selection: { instanceId: "codex", model: "gpt-5" }, label: "GPT-5" } },
+        standard: { description: null, t3: null, cli: { "copilot-cli": "gpt-5.4" } },
+        deep: { description: null, t3: null },
+      });
+      const profiles = JSON.stringify([
+        { id: "fast", name: "Fast", labels: [], description: null, t3: null, headless: "codex" },
+      ]);
+      const db = before(`
+        INSERT INTO settings (key, value_json) VALUES
+          ('copilotCli', '"  /opt/copilot "'), ('t3Token', '"secret"'), ('modelTiers', '${tiers}'), ('modelProfiles', '${profiles}');
+        INSERT INTO task_links (id, task_id, kind, url, ref_json, created_at)
+          VALUES ('s', 't', 'agent_session', 'session://x', '{"harness":"claude-code","sessionId":"x","cwd":"/w"}', '');
+      `);
+      expect(setting(db, "providers")).toEqual([
+        { id: "t3-code", enabled: true, cliPath: null },
+        { id: "claude-code", enabled: true, cliPath: null },
+        { id: "codex", enabled: true, cliPath: null },
+        { id: "copilot-cli", enabled: true, cliPath: "/opt/copilot" },
+      ]);
+      expect(setting(db, "copilotCli")).toBeUndefined();
+      db.close();
+    });
+  });
+
+  describe("operation models (041)", () => {
+    const before = (setup: string): DatabaseSync => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const path = join(dir, "board.db");
+      const old = openDatabase(path, { migrateTo: "040_providers_settings" });
+      old.exec(`
+        INSERT INTO projects (id, title, position, created_at, updated_at, review_model_json)
+          VALUES ('p', 'P', 'a0', '', '', '{"tier":"deep"}');
+        INSERT INTO tasks (id, number, project_id, title, status, position, created_by, created_at, updated_at, status_changed_at, review_model_json)
+          VALUES ('t', 1, 'p', 'T', 'backlog', 'a0', 'user', '', '', '', '"opus"'),
+                 ('u', 2, 'p', 'U', 'backlog', 'a1', 'user', '', '', '', NULL);
+        ${setup}
+      `);
+      old.close();
+      return openDatabase(path);
+    };
+    const json = (db: DatabaseSync, sql: string, ...params: string[]): unknown => {
+      const row = db.prepare(sql).get(...params) as Record<string, string | null> | undefined;
+      const value = row ? Object.values(row)[0] : undefined;
+      return typeof value === "string" ? JSON.parse(value) : value;
+    };
+    const setting = (db: DatabaseSync, key: string) => json(db, "SELECT value_json FROM settings WHERE key = ?", key);
+    const config = (db: DatabaseSync, automation: string, scope = "board") =>
+      json(db, "SELECT config_json FROM autopilot_settings WHERE automation = ? AND scope_kind = ?", automation, scope);
+
+    it("moves the reviewer and import models into operationModels, as what they ran on", () => {
+      const db = before(`
+        INSERT INTO settings (key, value_json) VALUES ('reviewModel', '"sonnet"'), ('issueImportModel', '{"model":"haiku"}');
+      `);
+      expect(setting(db, "operationModels")).toEqual({
+        reviewer: { provider: "claude-code", model: "sonnet" },
+        boardReviewer: { provider: "claude-code", model: "sonnet" },
+        issueImport: { provider: "claude-code", model: "haiku" },
+      });
+      expect(setting(db, "reviewModel")).toBeUndefined();
+      expect(setting(db, "issueImportModel")).toBeUndefined();
+      db.close();
+    });
+
+    it("keeps a board reviewer model saved as From the task on the task's model", () => {
+      const db = before(`INSERT INTO settings (key, value_json) VALUES ('reviewModel', '{"from":"task"}');`);
+      expect(setting(db, "operationModels")).toEqual({ boardReviewer: "inherit" });
+      expect(setting(db, "reviewModel")).toBeUndefined();
+      db.close();
+    });
+
+    it("gives a reviewer model saved as none the new defaults", () => {
+      const db = before(`INSERT INTO settings (key, value_json) VALUES ('reviewModel', 'null');`);
+      expect(setting(db, "operationModels")).toBeUndefined();
+      db.close();
+    });
+
+    it("leaves defaults never saved to the operations' new defaults", () => {
+      const db = before("");
+      expect(setting(db, "operationModels")).toBeUndefined();
+      db.close();
+    });
+
+    it("rewrites project and task reviewer overrides", () => {
+      const db = before("");
+      expect(json(db, "SELECT review_model_json FROM projects WHERE id = 'p'")).toEqual({ tier: "deep" });
+      expect(json(db, "SELECT review_model_json FROM tasks WHERE id = 't'")).toEqual({
+        provider: "claude-code",
+        model: "opus",
+      });
+      expect(json(db, "SELECT review_model_json FROM tasks WHERE id = 'u'")).toBeNull();
+      db.close();
+    });
+
+    it("renames a tier's and a custom model's headless harness to its preferred provider", () => {
+      const db = before(`
+        INSERT INTO settings (key, value_json) VALUES
+          ('modelTiers', '{"light":{"description":null,"t3":null,"headless":"codex","cli":{"codex":"gpt-mini"}},"standard":{"description":null,"t3":null},"deep":{"description":null,"t3":null}}'),
+          ('modelProfiles', '[{"id":"c","name":"C","labels":[],"description":null,"t3":null,"headless":"copilot-cli"}]');
+      `);
+      expect(setting(db, "modelTiers")).toMatchObject({
+        light: { provider: "codex", cli: { codex: "gpt-mini" } },
+        standard: { description: null },
+      });
+      expect((setting(db, "modelTiers") as { light: object }).light).not.toHaveProperty("headless");
+      expect(setting(db, "modelProfiles")).toEqual([
+        { id: "c", name: "C", labels: [], description: null, t3: null, provider: "copilot-cli" },
+      ]);
+      db.close();
+    });
+
+    it("folds a typed model into the automation's choice, on the provider it ran on", () => {
+      const db = before(`
+        INSERT INTO settings (key, value_json) VALUES
+          ('modelTiers', '{"light":{"description":null,"t3":null},"standard":{"description":null,"t3":null},"deep":{"description":null,"t3":null,"headless":"codex"}}');
+        INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES
+          ('board', '', 'start_planned', 'on', '{"runner":"headless","modelChoice":{"tier":"deep"},"model":"gpt-5.5"}', ''),
+          ('project', 'p', 'start_planned', 'inherit', '{"modelChoice":{"from":"task"},"model":""}', ''),
+          ('board', '', 'review_prs', 'on', '{"modelChoice":{"tier":"deep"},"model":"opus"}', ''),
+          ('board', '', 'digest', 'on', '{"mode":"summarised","model":"haiku"}', ''),
+          ('board', '', 'fix_prs', 'on', '{"budgetUsd":3}', '');
+      `);
+      // The deep tier ran headless on Codex, so its typed model was a Codex model.
+      expect(config(db, "start_planned")).toEqual({
+        runner: "headless",
+        modelChoice: { provider: "codex", model: "gpt-5.5" },
+      });
+      expect(config(db, "start_planned", "project")).toEqual({ modelChoice: "inherit" });
+      // Codex can't review PRs headless, so Claude Code always ran them.
+      expect(config(db, "review_prs")).toEqual({ modelChoice: { provider: "claude-code", model: "opus" } });
+      expect(config(db, "digest")).toEqual({
+        mode: "summarised",
+        modelChoice: { provider: "claude-code", model: "haiku" },
+      });
+      expect(config(db, "fix_prs")).toEqual({ budgetUsd: 3 });
+      db.close();
+    });
+
+    it("turns a custom agent's tier into its model", () => {
+      const action = (tier: string | null) =>
+        JSON.stringify({ kind: "agent", prompt: "Go", skill: "", tier, onPrBranch: false, allowedTools: [] });
+      const db = before(`
+        INSERT INTO autopilot_custom (id, name, trigger_json, action_json, armed_at, created_at, updated_at) VALUES
+          ('a', 'A', '{"kind":"manual"}', '${action("deep")}', '', '', ''),
+          ('b', 'B', '{"kind":"manual"}', '${action(null)}', '', '', ''),
+          ('c', 'C', '{"kind":"manual"}', '{"kind":"shell","command":"ls"}', '', '', '');
+      `);
+      const actionOf = (id: string) => json(db, "SELECT action_json FROM autopilot_custom WHERE id = ?", id);
+      expect(actionOf("a")).toEqual({
+        kind: "agent",
+        prompt: "Go",
+        skill: "",
+        onPrBranch: false,
+        allowedTools: [],
+        model: { tier: "deep" },
+      });
+      expect(actionOf("b")).toMatchObject({ model: "inherit" });
+      expect(actionOf("b")).not.toHaveProperty("tier");
+      expect(actionOf("c")).toEqual({ kind: "shell", command: "ls" });
+      db.close();
+    });
+
+    it("adds autopilot_runs.model_json", () => {
+      const db = before("");
+      const columns = db.prepare("PRAGMA table_info(autopilot_runs)").all() as Array<{ name: string }>;
+      expect(columns.map((c) => c.name)).toContain("model_json");
+      db.close();
+    });
+  });
 });

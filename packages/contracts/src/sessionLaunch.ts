@@ -2,9 +2,9 @@ import { z } from "zod";
 import { AgentHarness, AGENT_HARNESSES } from "./agentSessions.ts";
 import { LaunchAttachmentIds } from "./attachments.ts";
 import { BRAND } from "./brand.ts";
-import { cliEffortFor, CliEffort, type ModelTier, type ModelTiers } from "./modelTiers.ts";
+import { cliEffortFor, CliEffort } from "./modelTiers.ts";
 
-// Starting a new Claude Code or Copilot CLI session on a task from the board: the CLI opens in a terminal with the
+// Starting a new Claude Code, Codex or Copilot CLI session on a task from the board: the CLI opens in a terminal with the
 // hand-off prompt, in a new worktree or the project's checkout. See docs/features/agent-sessions.md.
 
 /**
@@ -54,8 +54,8 @@ export const SessionLaunchOptions = z.object({
   /** The default branch, or the current one when there is no telling. */
   defaultBaseRef: z.string().nullable(),
   /**
-   * Each harness's model for the task's model (resolveRunModel: a custom model one of its labels picks, else its
-   * suggested tier), from Settings; null when none is set.
+   * Each harness's model for the model new sessions on the task start on (resolveOperationChoice("launch"): the
+   * board's setting, else a custom model one of its labels picks, else its suggested tier), from Settings; null when none is set.
    */
   models: z.record(AgentHarness, CliModel.nullable()),
   /** Each harness's effort for the same model, from Settings; null when none is set. Absent from older servers. */
@@ -89,7 +89,7 @@ export const StartSessionInput = z.object({
   attachmentIds: LaunchAttachmentIds.optional(),
   /** Null runs the CLI's own default. */
   model: CliModel.nullable(),
-  /** `--effort` / `--reasoning-effort`; null or absent runs the CLI's own default. */
+  /** `--effort`, `--reasoning-effort` or Codex's `model_reasoning_effort`; null or absent runs the CLI's own default. */
   effort: CliEffort.nullable().optional(),
   workspace: SessionWorkspace,
 });
@@ -112,7 +112,10 @@ export const StartSessionResult = z.object({
   shortPrompt: z.string().nullable(),
   /** Why the short prompt was used. */
   shortReason: z.string().nullable(),
-  /** The session link, when the session was linked (always, once launched). */
+  /**
+   * The session link the board made: always for a CLI that takes a session id; null for one that picks its own (Codex),
+   * whose session links itself once it runs.
+   */
   linkId: z.string().nullable(),
 });
 export type StartSessionResult = z.infer<typeof StartSessionResult>;
@@ -137,33 +140,37 @@ export const sessionLabel = (mode: StartSessionInput["mode"], taskNumber: number
 /**
  * The CLI's argv for a new session: its model and effort, its id, a name to find it by, and the first prompt as one
  * argument.
- * Copilot CLI takes the prompt with `-i` (interactive); Claude Code as its positional argument, after `--`.
+ * Copilot CLI takes the prompt with `-i` (interactive); Claude Code and Codex as their positional argument, after `--`.
+ * Codex takes neither a session id nor a name (it picks its own id, and the session links itself), and its effort is
+ * the config key `model_reasoning_effort` (checked on codex-cli 0.166.0).
  */
 export function newSessionArgv(input: {
   harness: AgentHarness;
-  sessionId: string;
+  /** The id the board picked; ignored for a harness that picks its own (`presetSessionId`). */
+  sessionId: string | null;
   model: string | null;
   effort?: CliEffort | null;
   name: string;
   prompt: string;
 }): string[] {
-  // An effort the CLI doesn't take (Codex has none) is left off rather than failing the session at once.
+  // An effort the CLI doesn't take is left off rather than failing the session at once.
   const effort = cliEffortFor(input.harness, input.effort);
-  const model = [
-    ...(input.model ? ["--model", input.model] : []),
-    ...(effort ? [input.harness === "claude-code" ? "--effort" : "--reasoning-effort", effort] : []),
-  ];
   const cli = AGENT_HARNESSES[input.harness].cli;
+  const model = input.model ? ["--model", input.model] : [];
+  if (input.harness === "codex") {
+    // `--` ends the options, so a prompt starting with "-" (a Markdown list item) isn't read as one.
+    return [cli, ...model, ...(effort ? ["-c", `model_reasoning_effort=${effort}`] : []), "--", input.prompt];
+  }
+  if (!input.sessionId) throw new Error(`${AGENT_HARNESSES[input.harness].label} needs a session id`);
+  const options = [
+    ...model,
+    ...(effort ? [input.harness === "claude-code" ? "--effort" : "--reasoning-effort", effort] : []),
+    "--session-id",
+    input.sessionId,
+    "--name",
+    input.name,
+  ];
   return input.harness === "claude-code"
-    ? // `--` ends the options, so a prompt starting with "-" (a Markdown list item) isn't read as one.
-      [cli, ...model, "--session-id", input.sessionId, "--name", input.name, "--", input.prompt]
-    : [cli, ...model, "--session-id", input.sessionId, "--name", input.name, "-i", input.prompt];
+    ? [cli, ...options, "--", input.prompt]
+    : [cli, ...options, "-i", input.prompt];
 }
-
-/** The model a harness's CLI runs for a tier, from Settings → Model tiers, or null for the CLI's default. */
-export const tierCliModel = (tiers: ModelTiers, tier: ModelTier | null, harness: AgentHarness): string | null =>
-  (tier && tiers[tier].cli?.[harness]?.trim()) || null;
-
-/** The effort that goes with a tier's CLI model, or null for the CLI's default. None without a model set, or one the CLI doesn't take. */
-export const tierCliEffort = (tiers: ModelTiers, tier: ModelTier | null, harness: AgentHarness): CliEffort | null =>
-  (tierCliModel(tiers, tier, harness) && tier && cliEffortFor(harness, tiers[tier].cliEffort?.[harness])) || null;

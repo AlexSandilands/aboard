@@ -21,7 +21,7 @@ to start new threads from a task:
 
 1. In T3 Code, open **Settings → Connections → Create link** and allow "View environment" and "Operate
    tasks".
-2. Paste the pairing link into the board's **Settings → Integrations → T3 Code** within 5 minutes. The board exchanges
+2. Paste the pairing link into the board's **Settings → Agents → Providers → T3 Code** (add T3 Code first) within 5 minutes. The board exchanges
    it for a 30-day token.
 
 If you have the `t3` CLI, you can paste a token from it instead:
@@ -33,6 +33,6 @@ t3 auth session issue --scope orchestration:read --scope orchestration:operate -
 `orchestration:read` alone is enough for thread status. With `orchestration:operate` too, the hand-off
 menu gets **New T3 Code thread…**, which opens a new thread for the task; you pick the model, access,
 worktree and branch in a dialog. To keep it out of the menu, turn off **Show in hand-off menus** under
-**Settings → Integrations → T3 Code**.
+**Settings → Agents → Providers → T3 Code**.
 
 More detail: [docs/features/agent-handoff.md](../features/agent-handoff.md).

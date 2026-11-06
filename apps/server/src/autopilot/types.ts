@@ -4,7 +4,7 @@ import type {
   AutopilotRun,
   MergeMethod,
   ModelChoice,
-  ModelTier,
+  OperationId,
   PrRef,
   Project,
   TaskLink,
@@ -18,6 +18,7 @@ import type {
   PrThreadState,
 } from "../integrations/github.ts";
 import type { AgentAccess } from "../integrations/headlessAgent.ts";
+import type { RunToolScope } from "../mcp/runTokens.ts";
 import type { Services } from "../services/types.ts";
 
 /** Config values keyed by field. */
@@ -69,7 +70,10 @@ export interface CheckContext<C> {
 
 /** What a runner recorded about an agent action. */
 export type RunPatch = Partial<
-  Pick<AutopilotRun, "runner" | "sessionId" | "threadUrl" | "worktreePath" | "costUsd" | "detail" | "exitCode">
+  Pick<
+    AutopilotRun,
+    "runner" | "sessionId" | "threadUrl" | "worktreePath" | "costUsd" | "detail" | "exitCode" | "model"
+  >
 >;
 
 /**
@@ -194,10 +198,10 @@ export interface RunnerRequest {
    */
   label?: string;
   /**
-   * The task's suggested tier, mapped to a model through the user's tier settings. A custom model one of the task's
-   * labels picks wins over it, and the automation's own Model setting over both (runner.ts runModel).
+   * What the run is, for its model (resolveOperationModel): the automation's Model setting, then `modelChoice`, then the
+   * board's setting for the operation and its default, then the task's own model (its labels, its suggested tier).
    */
-  tier: ModelTier | null;
+  operation: OperationId;
   /** The action's own choice of model (a custom automation's), below the automation's Model setting. */
   modelChoice?: ModelChoice | null;
   /** The automation's config; the runner reads its RunnerOptions fields (runner choice, budget, timeout, access). */
@@ -235,6 +239,12 @@ export interface RunnerRequest {
    * that works through the board (Orchestrate). Narrow the board's tools with `deniedTools`.
    */
   boardTools?: boolean;
+  /**
+   * Headless only: the board's run tools for this run (docs/decisions/0013-board-served-run-tools.md). The runner mints
+   * a token bound to the run and this scope before the agent starts, points the CLI at `/mcp/run` with it, and revokes
+   * it when the run ends. Only a provider that can use them is picked.
+   */
+  runTools?: RunToolScope;
   /**
    * Headless only: the commit the worktree must be at, checked before the agent starts. A worktree at another commit
    * throws `WorktreeHeadError`.

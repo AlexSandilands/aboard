@@ -1,11 +1,15 @@
-import { clampRuntimeMode, runtimeModesFor, type T3LaunchOptions, type T3LaunchProvider } from "@repo/contracts";
+import {
+  clampRuntimeMode,
+  DEFAULT_HANDOFF_MENUS,
+  runtimeModesFor,
+  type T3LaunchOptions,
+  type T3LaunchProvider,
+} from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   canStartProjectT3Thread,
   canStartT3Thread,
-  FAVORITES,
   handoffClis,
-  initialPickerTab,
   emptyPickState,
   initialPicks,
   pickBy,
@@ -14,7 +18,6 @@ import {
   launchModelSelection,
   modelTraits,
   optionValue,
-  pickerModels,
   refBadge,
   refDisabledReason,
   refLabel,
@@ -135,7 +138,12 @@ describe("visibility", () => {
   const task = { status: "backlog" as const, archivedAt: null };
   const project = { t3ProjectId: null, workspaceRoot: ROOT };
   const t3 = { detected: true };
-  const settings = { t3TokenSet: true };
+  const added = (["t3-code", "claude-code", "codex", "copilot-cli"] as const).map((id) => ({
+    id,
+    enabled: true,
+    cliPath: null,
+  }));
+  const settings = { t3TokenSet: true, providers: added };
 
   it("shows hand-off actions on Done tasks (a follow-up), but not on archived ones", () => {
     expect(showHandoffActions(task)).toBe(true);
@@ -178,7 +186,7 @@ describe("visibility", () => {
   it("offers a new T3 Code thread whenever T3 can take it, even with threads linked", () => {
     expect(canStartT3Thread(task, project, t3, settings)).toBe(true);
     expect(canStartT3Thread(task, project, { detected: false }, settings)).toBe(false);
-    expect(canStartT3Thread(task, project, t3, { t3TokenSet: false })).toBe(false);
+    expect(canStartT3Thread(task, project, t3, { ...settings, t3TokenSet: false })).toBe(false);
     expect(canStartT3Thread(task, { t3ProjectId: null, workspaceRoot: null }, t3, settings)).toBe(false);
     expect(canStartT3Thread(task, { t3ProjectId: "t3-p1", workspaceRoot: null }, t3, settings)).toBe(true);
   });
@@ -190,33 +198,52 @@ describe("visibility", () => {
   });
 
   it("leaves out a target the user hid from the menus", () => {
-    const hidden = { ...settings, handoffMenus: { "t3-code": false, "claude-code": true, "copilot-cli": true } };
+    const hidden = {
+      ...settings,
+      handoffMenus: { "t3-code": false, "claude-code": true, codex: true, "copilot-cli": true },
+    };
     expect(canStartT3Thread(task, project, t3, hidden)).toBe(false);
     expect(canStartProjectT3Thread(project, t3, hidden)).toBe(false);
     const clis = [
       { harness: "claude-code" as const, available: true, path: null },
       { harness: "copilot-cli" as const, available: true, path: null },
     ];
-    expect(handoffClis(clis, { handoffMenus: { ...hidden.handoffMenus, "copilot-cli": false } })).toEqual([
+    expect(handoffClis(clis, { ...hidden, handoffMenus: { ...hidden.handoffMenus, "copilot-cli": false } })).toEqual([
       "claude-code",
     ]);
     expect(handoffClis(clis, hidden)).toEqual(["claude-code", "copilot-cli"]);
     expect(handoffClis([{ harness: "claude-code", available: false, path: null }], undefined)).toEqual([]);
   });
+
+  it("offers Codex like the other CLIs, though its session links itself", () => {
+    const clis = [
+      { harness: "claude-code" as const, available: true, path: null },
+      { harness: "codex" as const, available: true, path: null },
+      { harness: "copilot-cli" as const, available: false, path: null },
+    ];
+    expect(handoffClis(clis, settings)).toEqual(["claude-code", "codex"]);
+    expect(handoffClis(clis, { ...settings, handoffMenus: { ...DEFAULT_HANDOFF_MENUS, codex: false } })).toEqual([
+      "claude-code",
+    ]);
+    const noCodex = { ...settings, providers: added.filter((p) => p.id !== "codex") };
+    expect(handoffClis(clis, noCodex)).toEqual(["claude-code"]);
+  });
+
+  it("leaves out a provider that isn't added or is switched off", () => {
+    const clis = [
+      { harness: "claude-code" as const, available: true, path: null },
+      { harness: "copilot-cli" as const, available: true, path: null },
+    ];
+    const onlyClaude = { ...settings, providers: [{ id: "claude-code" as const, enabled: true, cliPath: null }] };
+    expect(handoffClis(clis, onlyClaude)).toEqual(["claude-code"]);
+    expect(canStartT3Thread(task, project, t3, onlyClaude)).toBe(false);
+    const off = { ...settings, providers: added.map((p) => ({ ...p, enabled: p.id !== "t3-code" })) };
+    expect(canStartProjectT3Thread(project, t3, off)).toBe(false);
+    expect(handoffClis(clis, off)).toEqual(["claude-code", "copilot-cli"]);
+  });
 });
 
 describe("model picker", () => {
-  it("lists favorites, a provider's models with legacy split out, or search results across providers", () => {
-    expect(initialPickerTab(options, null)).toBe(FAVORITES);
-    expect(initialPickerTab({ ...options, favorites: [] }, options.defaults.modelSelection)).toBe("claudeAgent");
-    expect(pickerModels(options, FAVORITES, "").models.map((e) => e.model.slug)).toEqual(["gpt"]);
-    const tab = pickerModels(options, "claudeAgent", "");
-    expect(tab.models.map((e) => e.model.slug)).toEqual(["opus", "haiku"]);
-    expect(tab.legacy.map((e) => e.model.slug)).toEqual(["old"]);
-    expect(pickerModels(options, FAVORITES, "codex").models.map((e) => e.model.slug)).toEqual(["gpt"]);
-    expect(pickerModels(options, "codex", "OLD").models.map((e) => e.model.slug)).toEqual(["old"]);
-  });
-
   it("keeps compatible option values when switching models and defaults the rest", () => {
     const start = setOption(setOption(options.defaults.modelSelection!, "effort", "low"), "fastMode", true);
     expect(optionValue(start, effort)).toBe("low");

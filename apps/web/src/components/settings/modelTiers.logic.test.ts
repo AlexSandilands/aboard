@@ -1,6 +1,13 @@
 import { EMPTY_MODEL_TIERS, type ModelTiers } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { applyTierChange, createTierEdits, saveTierChange, visibleTierProviders } from "./modelTiers.logic";
+import {
+  applyTierChange,
+  createTierEdits,
+  providerTierModels,
+  saveTierChange,
+  tierProviderState,
+  visibleTierProviders,
+} from "./modelTiers.logic";
 
 const T3_MODEL = {
   selection: { instanceId: "codex", model: "gpt-5.4", options: [] },
@@ -10,29 +17,18 @@ const T3_MODEL = {
 const tiers = (patch: Partial<ModelTiers> = {}): ModelTiers => ({ ...EMPTY_MODEL_TIERS, ...patch });
 
 describe("visibleTierProviders", () => {
-  it("shows nothing before any integration is set up", () => {
-    expect(visibleTierProviders(tiers(), { t3Ready: false, cliFound: {} })).toEqual([]);
-    expect(visibleTierProviders(tiers(), { t3Ready: false, cliFound: { "claude-code": false } })).toEqual([]);
+  it("shows nothing before any provider is added", () => {
+    expect(visibleTierProviders(tierProviderState([]))).toEqual([]);
   });
 
-  it("shows T3 Code when connected and each CLI when found", () => {
-    expect(visibleTierProviders(tiers(), { t3Ready: true, cliFound: {} })).toEqual(["t3"]);
-    expect(visibleTierProviders(tiers(), { t3Ready: false, cliFound: { "claude-code": true } })).toEqual([
-      "claude-code",
+  it("shows the providers added and on, in the page's order", () => {
+    const state = tierProviderState([
+      { id: "copilot-cli", enabled: true, cliPath: null },
+      { id: "t3-code", enabled: true, cliPath: null },
+      { id: "claude-code", enabled: false, cliPath: null },
     ]);
-    expect(
-      visibleTierProviders(tiers(), { t3Ready: true, cliFound: { "claude-code": true, "copilot-cli": true } }),
-    ).toEqual(["t3", "claude-code", "copilot-cli"]);
-  });
-
-  it("keeps a provider with a saved value, so it can still be cleared", () => {
-    const saved = tiers({
-      standard: { description: null, t3: T3_MODEL, cli: { "copilot-cli": "gpt-5.4", "claude-code": null } },
-    });
-    expect(visibleTierProviders(saved, { t3Ready: false, cliFound: { "copilot-cli": false } })).toEqual([
-      "t3",
-      "copilot-cli",
-    ]);
+    expect(state).toEqual({ "copilot-cli": true, t3: true });
+    expect(visibleTierProviders(state)).toEqual(["t3", "copilot-cli"]);
   });
 });
 
@@ -135,10 +131,13 @@ describe("applyTierChange", () => {
     expect(applyTierChange(light, { field: "t3", value: null })).toEqual({ ...light, t3: null });
   });
 
-  it("sets the headless harness, storing Claude Code as no choice", () => {
+  it("sets the preferred provider, Claude Code included: unset is no longer Claude Code", () => {
     const codex = applyTierChange(current.light, { field: "headless", value: "codex" });
-    expect(codex).toEqual({ ...current.light, headless: "codex" });
-    expect(applyTierChange(codex, { field: "headless", value: "claude-code" })).toEqual(current.light);
+    expect(codex).toEqual({ ...current.light, provider: "codex" });
+    expect(applyTierChange(codex, { field: "headless", value: "claude-code" })).toEqual({
+      ...current.light,
+      provider: "claude-code",
+    });
   });
 
   it("changes one CLI's model and keeps the other's", () => {
@@ -204,5 +203,17 @@ describe("applyTierChange", () => {
       levels: ["low", "xhigh"],
     });
     expect(wider.cliEffort).toEqual({ "claude-code": "xhigh" });
+  });
+});
+
+describe("providerTierModels", () => {
+  it("lists each tier's model and effort on the provider, and whether it is preferred", () => {
+    const set = tiers();
+    set.deep = { ...set.deep, cli: { codex: "gpt-5.5" }, cliEffort: { codex: "high" }, provider: "codex" };
+    expect(providerTierModels(set, "codex").map((t) => [t.tier, t.model, t.effort, t.preferred])).toEqual([
+      ["light", null, null, false],
+      ["standard", null, null, false],
+      ["deep", "gpt-5.5", "high", true],
+    ]);
   });
 });

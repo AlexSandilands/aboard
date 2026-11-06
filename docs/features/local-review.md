@@ -76,21 +76,25 @@ keep counting across cycles.
 
 ### The reviewer model
 
-One setting says which model reviews, for the reviewer subagent and for the board reviewer alike. It is a
-`HeadlessModel` (a tier from Settings → Model tiers or a typed model id), or `null` for none. Three levels,
-the nearest wins: the task (Automation → Reviewer in the task panel, or `update_task(reviewModel)`: a tier name,
-a model id, or `null` to inherit), then the project (project settings → Local review), then the board
-(Settings → Tasks → Review → Reviewer model). `services.reviews.modelFor(taskId)` resolves it, next to `skillFor`.
+The reviewer subagent and the board reviewer are two operations (`reviewer`, `boardReviewer` in
+[Autopilot's Models](autopilot.md#models)), each with a `ModelChoice` (a tier, a custom model, a model typed for one
+provider, or inherit). The nearest level wins: the task (Automation → Reviewer in the task panel, or
+`update_task(reviewModel)`: a tier, a custom model's id, `provider:model`, or `null` to inherit), then the project
+(project settings → Reviewer model, `project.models.reviewer`), then the board (`operationModels.reviewer` and
+`.boardReviewer`, each its own row under Settings → Agents → Operations; Tasks → Review shows what they resolve to
+with a link there), then the operation's default. The task and
+project overrides apply to both reviewers.
 
-- **Subagent:** `reviewLoopInstructions` gets `reviewerModelLine(tiers, model)` as `modelLine` and adds it to
-  step 1: "Run the reviewer on the deep tier (Opus 5.5): in Claude Code pass `model: "opus"` to the Agent tool;
-  elsewhere pick that model if your harness lets you, else use your own." The Agent tool takes an alias, which
-  `claudeAgentAlias` reads from the tier's Claude Code model id (opus, sonnet, haiku or fable); an id that matches
-  none goes through as it is. A tier with no Claude Code model leaves out the Claude Code part. Every place that
-  builds the loop text passes it: `move_task` and `start_review`, the Copy prompt route and the T3 nudge.
-- **Board reviewer:** the same model sets `--model` and `--effort` (see [Fallbacks](#fallbacks-when-no-agent-runs-the-round)).
-- **None set:** the line is left out and nothing changes: the subagent follows the implementer's model, the
-  board reviewer the CLI's default.
+- **Subagent:** `services.reviews.modelLineFor(taskId)` gives `reviewLoopInstructions` the `reviewerModelLine` as
+  `modelLine`, added to step 1: "Run the reviewer on the deep tier (Opus 5.5): in Claude Code pass `model: "opus"` to
+  the Agent tool; elsewhere pick that model if your harness lets you, else use your own." The Agent tool takes an
+  alias, which `claudeAgentAlias` reads from the tier's Claude Code model id (opus, sonnet, haiku or fable); an id that
+  matches none goes through as it is. A tier with no Claude Code model leaves out the Claude Code part; a model typed
+  for another provider is named with its provider. Every place that builds the loop text passes it: `move_task` and
+  `start_review`, the Copy prompt route and the T3 nudge. Its default is inherit: with nothing set above the task's own
+  model the line is left out, and the subagent follows the implementer's model.
+- **Board reviewer:** `services.reviews.boardReviewerModel(taskId)` resolves it to a provider, model and effort (see
+  [Fallbacks](#fallbacks-when-no-agent-runs-the-round)); its default is the Standard tier.
 
 ### Review skills
 
@@ -142,7 +146,7 @@ fallbacks in order:
    starts a turn or queues it behind the running one). The command id is stable per round, so a retry
    doesn't post twice. It needs the `orchestration:operate` scope.
 3. **The board reviewer.** If it's on (Settings → Tasks → Review → Board reviewer), the board reviews the
-   round itself with Claude Code headless. If an agent's reviewer submits while it runs, the agent's review
+   round itself with a headless CLI on the board reviewer's provider. If an agent's reviewer submits while it runs, the agent's review
    stands and the board's is dropped. Moving the task to Review meanwhile isn't blocked; the running review
    covers it. When blocking or major findings are open and a T3 thread is linked,
    it posts a "fix these findings" prompt into the thread. When the loop is over with nothing to fix and no PR
@@ -152,8 +156,11 @@ fallbacks in order:
 
 #### The board reviewer
 
-The board runs `claude -p` in the task's checkout: the linked T3 thread's worktree when T3 reports one,
-else the project folder. One review runs at a time.
+The board runs a headless CLI in the task's checkout: the linked T3 thread's worktree when T3 reports one,
+else the project folder. One review runs at a time. It runs on the board reviewer's provider
+(`createHeadlessReviewer`): `claude -p` as below, or `codex exec` read-only and isolated
+([Headless drivers](autopilot.md#headless-drivers)). The task diff is the user's own, so it needs structured output
+and an isolated read-only run, not the untrusted lockdown.
 
 - **Read-only:** `--permission-mode dontAsk` with `--allowedTools` limited to Read, Grep, Glob and read-only
   git (`git diff`, `log`, `show`, `status`, `merge-base`, `rev-parse`). Edit, Write and NotebookEdit are
@@ -167,12 +174,17 @@ else the project folder. One review runs at a time.
   agent's reviewer the same, including a major finding when a UI task has no screenshots at all.
 - **Structured output:** `--json-schema` makes Claude Code return the summary and findings as JSON, which
   the board records under the actor "board reviewer". The round's summary shows what the review cost.
+- **On Codex:** `codex exec --sandbox read-only --ignore-user-config --ignore-rules -c web_search="disabled"
+  --disable apps --ephemeral --output-schema <file>`. The sandbox blocks writes and the shell's network; it reads any
+  file, so the screenshots need no extra folder. The findings schema goes in strict form (`strictSchema`). Codex
+  reports no cost and takes no budget: only the 20-minute timeout stops it.
 - **Windows shims:** a `claude.cmd` (npm install) runs through cmd.exe with its arguments escaped twice,
   because the shim expands them again; the schema and paths with spaces survive intact.
-- **Model:** the task's [reviewer model](#the-reviewer-model), a `HeadlessModel` like the issue import's (a tier
-  or a typed model, see [issue import](issue-import.md#settings)); `null` (the default) leaves `--model` off, so
-  the CLI's default runs. A tier with no Claude Code model set under Model tiers does the same. The setting was
-  `headlessReviewModel` before it also covered the subagent; migration 039 renames the stored key.
+- **Model:** the board reviewer's [model](#the-reviewer-model), resolved like any operation's: the Standard tier by
+  default, on a provider that can return structured output and run isolated read-only (Claude Code or Codex). A tier
+  with no model for that provider leaves `--model` off, so the CLI's default runs. With no such provider added the
+  round fails with the reason. The setting was `headlessReviewModel`, then `reviewModel` (039); 041_operation_models moved
+  it into `operationModels`.
 - **Capped:** `--max-budget-usd` (Settings, default $2) and a 20-minute timeout. `--no-session-persistence`
   keeps these runs out of your session history.
 
@@ -180,8 +192,8 @@ Git commands in the instructions are plain commands, one per step. `dontAsk` den
 substitutions, and an early version that used `git diff $(git merge-base …)` reviewed the files without
 the diff.
 
-Settings → Integrations → Claude Code shows the result of running `claude --version` with the configured path
-(empty means `claude` on PATH), next to **Re-check** ([agent sessions](agent-sessions.md#integration-status)).
+Settings → Agents → Providers → Claude Code shows the result of running `claude --version` with the configured path
+(empty means `claude` on PATH), next to **Re-check** ([agent sessions](agent-sessions.md#providers-and-detection)).
 
 ## Decisions
 
@@ -207,10 +219,10 @@ The board-run reviewer survives as fallback 3, where it fits: rounds nobody else
 
 ### Other decisions
 
-- **One reviewer model, not two.** The board reviewer already had a model setting, but the subagent, which
-  does nearly all the reviewing, inherited the implementer's tier: "Opus reviews everything" wasn't possible.
-  Rather than a second setting for the subagent, the existing one became the reviewer model and applies to
-  both. The cost is that the board reviewer can't differ from the subagent; nobody asked for that.
+- **One override for both reviewers.** The subagent, which does nearly all the reviewing, used to inherit the
+  implementer's tier, so "Opus reviews everything" wasn't possible; one reviewer model was added for both. Since
+  041 they are two operations on the board, so the board reviewer can differ, but a task's or project's override
+  still sets both: nobody asked for two there.
 
 - **No column.** A Local Review column between In Progress and Review was the original idea. The board is
   already short of width, and cards narrower than now get too busy, so review state is a badge.
@@ -244,13 +256,13 @@ The board-run reviewer survives as fallback 3, where it fits: rounds nobody else
 |---|---|
 | `packages/contracts/src/reviews.ts` | Schemas, `deriveReviewSummary` (the badge), severities, inputs |
 | `packages/contracts/src/reviewPrompt.ts` | The built-in skill, reviewer brief, loop and fix instructions |
-| `packages/contracts/src/headlessModel.ts` | `reviewerModelLine`, `claudeAgentAlias` (the model line of the loop) |
+| `packages/contracts/src/operations.ts` | `reviewerModelLine`, `claudeAgentAlias` (the model line of the loop) |
 | `apps/server/src/db/migrations/039_review_model.sql` | `review_model_json` on projects and tasks; renames the settings key |
 | `apps/server/src/db/migrations/004_local_review.sql` | `task_reviews`, `review_findings`, overrides |
 | `apps/server/src/services/reviews.ts` | Rounds, submissions, resolutions, effective settings (`skillFor`, `modelFor`) |
 | `apps/server/src/mcp/tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` |
 | `apps/server/src/skills.ts` | Skill discovery |
 | `apps/server/src/integrations/reviewFallbacks.ts` | The watchdog and fallback chain |
-| `apps/server/src/integrations/headlessReview.ts` | The board reviewer (`claude -p`) |
+| `apps/server/src/integrations/headlessReview.ts` | The board reviewer (`claude -p`, or another driver) |
 | `apps/web/src/components/review/` | Card badge and the panel's Local review section |
 | `apps/web/src/components/settings/ReviewSettingsSection.tsx` | Settings |

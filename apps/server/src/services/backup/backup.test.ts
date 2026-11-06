@@ -69,7 +69,7 @@ function seed() {
   );
   // The reviewer model overrides, so every round trip below carries both columns.
   s.projects.update(project.id, { reviewModel: { tier: "standard" } });
-  s.tasks.update(a.id, { reviewModel: { model: "claude-opus-5-5" } }, "agent");
+  s.tasks.update(a.id, { reviewModel: { provider: "claude-code", model: "claude-opus-5-5" } }, "agent");
   s.labels.setColor("ui", 120);
   // A recurring rule remembers the task it last made, so it must come back after the tasks.
   const weekly = s.templates.list({ projectId: project.id }).find((t) => t.name === "Weekly review")!;
@@ -587,9 +587,12 @@ describe("restore", () => {
         expect.objectContaining({ id: "jira", linkTemplate: "https://jira.example.com/browse/{key}" }),
       ]);
       expect(restored.prepare("SELECT key FROM settings WHERE key = 'jiraBaseUrl'").get()).toBeUndefined();
-      expect(restored.prepare("SELECT key, value_json FROM settings WHERE key LIKE '%eviewModel'").all()).toEqual([
-        { key: "reviewModel", value_json: '{"tier":"deep"}' },
-      ]);
+      // 039 renamed the old key, and 041 moved it into the reviewers' operation models.
+      expect(restored.prepare("SELECT key FROM settings WHERE key LIKE '%eviewModel'").all()).toEqual([]);
+      const ops = restored.prepare("SELECT value_json FROM settings WHERE key = 'operationModels'").get() as {
+        value_json: string;
+      };
+      expect(JSON.parse(ops.value_json)).toEqual({ reviewer: { tier: "deep" }, boardReviewer: { tier: "deep" } });
       expect(restored.prepare("SELECT max(name) AS v FROM migrations").get()).toEqual({
         v: dump.manifest.schemaVersion,
       });

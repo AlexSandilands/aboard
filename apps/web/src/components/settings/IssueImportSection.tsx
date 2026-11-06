@@ -2,7 +2,7 @@ import type { AppSettings } from "@repo/contracts";
 import { Switch } from "~/components/ui/switch";
 import { useUpdateSettings } from "~/state/mutations";
 import { BlurInput } from "./BlurInput";
-import { HeadlessModelRow } from "./HeadlessModelRow";
+import { OperationModelLink } from "./OperationModelLink";
 import { SettingsLink, SettingsRow, SettingsSection } from "./settingsLayout";
 
 /**
@@ -21,7 +21,7 @@ export function IssueImportSection({ settings }: { settings: AppSettings }) {
           <>
             Paste a ticket key or URL of a <SettingsLink to="integrations.tickets.status">ticket system</SettingsLink>,
             or a GitHub issue URL, as a new task&apos;s title. It uses the CLI set under{" "}
-            <SettingsLink to="integrations.claude-code.cli-path">Integrations › Claude Code</SettingsLink>. Without
+            <SettingsLink to="agents.providers.claude-code.cli-path">Providers › Claude Code</SettingsLink>. Without
             this, a GitHub issue is imported as written and a ticket can&apos;t be imported.
           </>
         }
@@ -35,18 +35,7 @@ export function IssueImportSection({ settings }: { settings: AppSettings }) {
       />
       {settings.issueImportEnabled ? (
         <>
-          <HeadlessModelRow
-            id="tasks.new-tasks.import-model"
-            title="Model"
-            description="A model tier, or a model passed to claude --model: an alias such as haiku, or a full name."
-            label="Import model"
-            tiers={settings.modelTiers}
-            value={settings.issueImportModel}
-            allowDefault={false}
-            onChange={(next) => {
-              if (next) updateSettings.mutate({ issueImportModel: next });
-            }}
-          />
+          <OperationModelLink ops={["issueImport"]} settings={settings} />
           <SettingsRow
             id="tasks.new-tasks.import-budget"
             title="Budget per import"

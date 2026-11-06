@@ -20,7 +20,7 @@ export function HeadlessReviewerRows({ settings }: { settings: AppSettings }) {
         info={
           <>
             It runs after a T3 thread was nudged, if there is one, and uses the CLI set under{" "}
-            <SettingsLink to="integrations.claude-code.cli-path">Integrations › Claude Code</SettingsLink>.
+            <SettingsLink to="agents.providers.claude-code.cli-path">Providers › Claude Code</SettingsLink>.
           </>
         }
         control={

@@ -37,7 +37,7 @@ either to see the image large. Big images are shrunk in your browser first, and 
 (`get_task`) get the image's file path, so they can open a screenshot of the bug. The images are part of
 the board's backups, and are deleted with the task.
 
-The dialogs that start a T3 Code thread or a Claude Code / Copilot CLI session take images too: paste or drop them
+The dialogs that start a T3 Code thread or a Claude Code, Codex or Copilot CLI session take images too: paste or drop them
 into the first message, or use the image button. They go with the first message (T3 Code passes them to the agent;
 a CLI session gets each image's file path) and are kept with the task.
 
@@ -70,9 +70,9 @@ A task can link to:
   a preset. Pasting a key or URL makes a link to it, and with **Link keys in titles** on, a key in a task's title is
   linked by itself. A key no system matches stays plain text.
 - **T3 Code threads**, one click back to the conversation (see [T3 Code](t3-code.md)).
-- **Claude Code and Copilot CLI sessions**, which agents link themselves. The card shows whether the
-  session is still running, and **Open in terminal** resumes it in its folder (or forks it, for Claude
-  Code, when it is still running). Choose the terminal in **Settings → Integrations → Terminal**; **Copy resume command**
+- **Claude Code, Codex and Copilot CLI sessions**, which agents link themselves. The card shows whether a
+  Claude Code or Copilot CLI session is still running (a Codex session's status is unknown), and **Open in
+  terminal** resumes it in its folder (or forks it, for Claude Code, when it is still running). Choose the terminal in **Settings → Integrations → Terminal**; **Copy resume command**
   works anywhere.
 - **Any URL.**
 
@@ -91,10 +91,10 @@ their own.
 ## Fixing a PR
 
 When a PR on a task has failing checks, a merge conflict or a review requesting changes, its row (in the task panel, and
-on the card as a wrench) offers **Fix in** instead of **Merge**: pick **T3 Code thread…**, **Claude Code session…** or
-**Copilot CLI session…**, or **Copy fix prompt** for any other agent. The usual launch dialog opens with the prompt
+on the card as a wrench) offers **Fix in** instead of **Merge**: pick **T3 Code thread…**, **Claude Code session…**,
+**Codex session…** or **Copilot CLI session…**, or **Copy fix prompt** for any other agent. The usual launch dialog opens with the prompt
 filled in with what is wrong and how to read it (the failed run's log, the review), ready to edit. The session works on
-the PR's own branch: a Claude Code or Copilot CLI session in a new worktree on it (never your checkout), a T3 thread in a
+the PR's own branch: a CLI session in a new worktree on it (never your checkout), a T3 thread in a
 new worktree that starts from it. It is told to push its commits to the PR's branch, to fix conflicts with a merge rather
 than a rebase, and never to force-push, push to the default branch or merge. The session is linked to the task like any
 other. While something needs fixing, **Merge** moves into the row's ⌄ menu.
@@ -126,7 +126,7 @@ start a blocked task.
 ## Suggested model
 
 The agent that plans a task suggests a model tier (light, standard or deep) for implementing it. Say what
-each tier means in **Settings → Model tiers**; copied prompts name it, and new T3 Code threads start on it. For
+each tier means in **Settings → Agents → Models**; copied prompts name it, and new T3 Code threads start on it. For
 Claude Code and Copilot CLI you choose the model from the list the CLI gives (or type one the list doesn't have) and
 how hard it thinks (its effort); new sessions and Autopilot's headless runs on that tier use both. **Rescan models**
 asks the CLIs again after you update them.
@@ -215,12 +215,12 @@ A task of an epic delivered through an integration branch (the branch button in 
 [Merge into epic branch](autopilot.md#merge-into-epic-branch)) is handed off to start from that branch: the prompt
 says to open its pull request against it, and the T3 dialog opens on a new worktree from it.
 
-When Claude Code or Copilot CLI is installed (on your PATH, or at the path set in **Settings → Integrations**),
-**New Claude Code session…** and **New Copilot CLI session…** open the CLI in a terminal with the task's prompt
-already typed in. The dialog lets you edit the prompt, switch to planning, pick a model (filled in from the task's
-suggested tier, set in **Settings → Model tiers**) and choose where it runs: a new git worktree
+When Claude Code, Codex or Copilot CLI is installed and added in **Settings → Agents → Providers** (on your PATH, or at the path
+set there), **New Claude Code session…**, **New Codex session…** and **New Copilot CLI session…** open the CLI in a
+terminal with the task's prompt already typed in. The dialog lets you edit the prompt, switch to planning, pick a model (filled in from the task's
+suggested tier, set in **Settings → Agents → Models**) and choose where it runs: a new git worktree
 from a branch you pick (the default), or the project's own folder. The board links the session to the task straight
-away. On Windows Terminal, a task's sessions open as tabs of one window named after the task, and
+away; a Codex session links itself once it starts, since Codex picks its own session id. On Windows Terminal, a task's sessions open as tabs of one window named after the task, and
 opening a session that is still running brings that window back to the front. On Windows a prompt with a `%` in it,
 or longer than about 8,000 characters, can't go on the command line: the session starts with a short pointer to the
 task instead, and the full prompt is on your clipboard to paste.
@@ -243,7 +243,7 @@ Esc or a plain click drops the pick.
 
 To plan a batch of tasks in one go, Ctrl-click (⌘-click on a Mac) their cards to pick them, then use **Plan tasks…**
 in the project's lane header (the button shows how many of the picked tasks can be planned; Esc or a plain click drops the pick). Choose a new
-T3 Code thread, a Claude Code or Copilot CLI session, or **Copy planning prompt**, tick the tasks you want in the list
+T3 Code thread, a Claude Code, Codex or Copilot CLI session, or **Copy planning prompt**, tick the tasks you want in the list
 (picked cards are already ticked), and continue. One agent then walks you through a plan for each task: it looks into
 the code, shows you its draft and asks its questions, lets you approve simple tasks together and goes through bigger
 ones one at a time, and saves each plan with its suggested model and labels. The thread or session is linked to every

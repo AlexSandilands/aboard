@@ -487,8 +487,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           .nullable()
           .optional()
           .describe(
-            "Which model reviews this task when local review runs: a tier (light, standard, deep) or a model id; " +
-              "null follows the project's, then the board's setting. Ask the user first; never set it on your own.",
+            "Which model reviews this task when local review runs: a tier (light, standard, deep), a custom model's " +
+              "id, or provider:model; null follows the project's, then the board's setting. Ask the user first; " +
+              "never set it on your own.",
           ),
         labels: labelsField.optional().describe("Replaces the whole label list; [] clears it."),
         suggestedModel: suggestedModelField.nullable().optional().describe("null clears it."),
@@ -523,7 +524,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
             ...(projectId ? { projectId } : {}),
             ...(args.archived !== undefined ? { archived: args.archived } : {}),
             ...(args.autoReview !== undefined ? { autoReview: args.autoReview } : {}),
-            ...(args.reviewModel !== undefined ? { reviewModel: reviewModelValue(args.reviewModel) } : {}),
+            ...(args.reviewModel !== undefined
+              ? { reviewModel: reviewModelValue(args.reviewModel, services.settings.get()) }
+              : {}),
             ...(args.labels !== undefined ? { labels: args.labels } : {}),
             ...(args.suggestedModel !== undefined ? { suggestedModel: args.suggestedModel } : {}),
             ...(args.autopilot !== undefined ? { autopilot: autopilotValue(args.autopilot) } : {}),

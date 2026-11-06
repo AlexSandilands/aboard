@@ -113,8 +113,29 @@ describe("agent sessions over MCP", () => {
     expect(detail).toContain("e.g. Orchestrating #N");
   });
 
+  it("asks Codex for $CODEX_THREAD_ID, without promising a live status", async () => {
+    // What codex-cli 0.166.0 sends; the stateless server reads the client from it on tool calls.
+    const { client, task } = await setup("codex-mcp-client/0.166.0");
+    const ask = () => client.callTool({ name: "get_task", arguments: { task: `#${task.number}` } });
+    const before = text(await ask());
+    expect(before).toContain(
+      `Your session: if you are the one working on this task, link(task: "#${task.number}", agentSession: {harness: "codex", sessionId: <$CODEX_THREAD_ID>`,
+    );
+    expect(before).toContain("so the user can reopen it in a terminal from the board");
+    expect(before).not.toContain("see it running");
+    await client.callTool({
+      name: "link",
+      arguments: {
+        task: `#${task.number}`,
+        agentSession: { harness: "codex", sessionId: ID, cwd: "/work/alpha" },
+        label: `Implementing #${task.number}`,
+      },
+    });
+    expect(text(await ask())).not.toContain("Your session:");
+  });
+
   it("doesn't ask other clients", async () => {
-    const { client, task } = await setup("codex/1.0");
+    const { client, task } = await setup("vscode/1.105.0");
     const detail = text(await client.callTool({ name: "get_task", arguments: { task: `#${task.number}` } }));
     expect(detail).not.toContain("Your session:");
   });
@@ -123,6 +144,8 @@ describe("agent sessions over MCP", () => {
     ["claude-code", "claude-code"],
     ["Claude Code", "claude-code"],
     ["github-copilot-cli", "copilot-cli"],
+    ["codex-mcp-client", "codex"],
+    ["Codex", null],
     ["Visual Studio Code", null],
     [undefined, null],
   ])("reads client %j as %j", (client, harness) => expect(harnessOfClient(client)).toBe(harness));

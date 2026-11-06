@@ -1,4 +1,4 @@
-import { BRAND, DigestMode, ReviewSkillRef, type AutopilotField } from "@repo/contracts";
+import { BRAND, DigestMode, INHERIT, ModelChoice, ReviewSkillRef, type AutopilotField } from "@repo/contracts";
 import { z } from "zod";
 
 // The digest automation's config (docs/features/autopilot.md#automations), apart from the automation so
@@ -21,8 +21,11 @@ export const DigestConfig = z.object({
     .int()
     .min(1)
     .max(24 * 60),
-  /** `claude --model`; blank takes the light tier's model when it maps to a Claude model. */
-  model: z.string(),
+  /**
+   * The summarising agent's model; inherit takes the board's model for the digest (the light tier by default). A typed
+   * `model` before 041_operation_models.
+   */
+  modelChoice: ModelChoice,
 });
 export type DigestConfig = z.infer<typeof DigestConfig>;
 
@@ -33,7 +36,7 @@ export const DIGEST_DEFAULTS: DigestConfig = {
   skill: { source: "builtin" },
   budgetUsd: 1,
   timeoutMinutes: 15,
-  model: "",
+  modelChoice: INHERIT,
 };
 
 export const DIGEST_FIELDS: AutopilotField[] = [
@@ -53,10 +56,10 @@ export const DIGEST_FIELDS: AutopilotField[] = [
   { key: "budgetUsd", label: "Agent budget", kind: "number", min: 0.1, max: 100, step: 0.1, unit: "USD" },
   { key: "timeoutMinutes", label: "Agent timeout", kind: "number", min: 1, max: 1440, unit: "minutes" },
   {
-    key: "model",
+    key: "modelChoice",
     label: "Agent model",
-    kind: "text",
-    placeholder: "The light tier's model",
-    help: "As claude --model takes it, e.g. haiku. Blank uses the light tier when it maps to a Claude model.",
+    kind: "model",
+    operation: "digest",
+    help: "Inherit: the board's model for the digest, by default the Light tier. It needs a provider that can run with no tools.",
   },
 ];

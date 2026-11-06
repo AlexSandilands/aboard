@@ -126,7 +126,7 @@ const IMPROVE = AutomationBundle.parse({
     kind: "agent",
     prompt: IMPROVE_PROMPT,
     skill: IMPROVE_SKILL_NAME,
-    tier: "deep",
+    model: { tier: "deep" },
     // A headless run is denied every tool it isn't allowed, and Skill isn't one by default.
     allowedTools: ["Skill"],
   },

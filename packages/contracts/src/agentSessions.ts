@@ -74,7 +74,7 @@ export interface HarnessInfo {
   forkArgs: ((sessionId: string) => string[]) | null;
   /**
    * Whether the CLI takes a session id it is given (`--session-id`), so the board can start a session and link it
-   * before it runs. Codex picks its own, so the board doesn't start Codex sessions in a terminal.
+   * before it runs. Codex picks its own: a Codex session the board starts is told to link itself (selfLinkLine).
    */
   presetSessionId: boolean;
 }
@@ -90,7 +90,8 @@ export const AGENT_HARNESSES: Record<AgentHarness, HarnessInfo> = {
   },
   codex: {
     label: "Codex",
-    // Codex puts the thread's id in its tools' environment. Unverified against a real Codex (#252).
+    // Codex puts the thread's id in its tools' environment: the id `codex exec --json` reports in `thread.started`
+    // (checked on codex-cli 0.166.0).
     idEnvVar: "CODEX_THREAD_ID",
     cli: "codex",
     resumeArgs: (id) => ["resume", id],
@@ -115,10 +116,40 @@ export function resumeArgv(ref: Pick<AgentSessionRef, "harness" | "sessionId">, 
   return [harness.cli, ...args];
 }
 
-/** The harnesses the board can start a new terminal session in. */
-export const LAUNCHABLE_HARNESSES: readonly AgentHarness[] = AgentHarness.options.filter(
-  (h) => AGENT_HARNESSES[h].presetSessionId,
-);
+/**
+ * The harnesses the board can start a new terminal session in: every one. One without `presetSessionId` can't be
+ * linked by the board, so its prompt tells it to link itself (selfLinkLine).
+ */
+export const LAUNCHABLE_HARNESSES: readonly AgentHarness[] = AgentHarness.options;
+
+/**
+ * What a session the board started is told about its link when the harness picks its own session id (Codex): the
+ * board couldn't link it, so it links itself, under the label the board would have given it.
+ */
+export function selfLinkLine(
+  harness: AgentHarness,
+  label: string,
+  target: "the task" | "the epic" | "every task" = "the task",
+): string {
+  const info = AGENT_HARNESSES[harness];
+  const call = target === "every task" ? "link(task, agentSession: " : "link(agentSession: ";
+  return (
+    `The board started this ${info.label} session but couldn't link it, as ${info.label} picks its own session id: ` +
+    `link it to ${target} yourself first with ${call}{harness: "${harness}", sessionId: $${info.idEnvVar}, ` +
+    `cwd: your working directory}, label: "${label}"), so it can be reopened from the board.`
+  );
+}
+
+/** What a session the board started is told about its link: linked already, or to link itself (selfLinkLine). */
+export function startedSessionLine(
+  harness: AgentHarness | null,
+  label: string,
+  target: "the task" | "the epic" | "every task" = "the task",
+): string {
+  return harness && !AGENT_HARNESSES[harness].presetSessionId
+    ? selfLinkLine(harness, label, target)
+    : `The board started this session and already linked it to ${target}; don't link it again.`;
+}
 
 export const canFork = (harness: AgentHarness): boolean => AGENT_HARNESSES[harness].forkArgs !== null;
 

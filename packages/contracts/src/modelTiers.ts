@@ -43,8 +43,8 @@ export const SuggestedModelInput = z.object({
 });
 export type SuggestedModelInput = z.infer<typeof SuggestedModelInput>;
 
-/** An effort level as `--effort` (Claude Code) or `--reasoning-effort` (Copilot CLI) takes it: the union of both. */
-export const CliEffort = z.enum(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
+/** An effort level as `--effort` (Claude Code), `--reasoning-effort` (Copilot CLI) or `model_reasoning_effort` (Codex) takes it: the union of them. */
+export const CliEffort = z.enum(["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]);
 export type CliEffort = z.infer<typeof CliEffort>;
 
 /**
@@ -53,12 +53,17 @@ export type CliEffort = z.infer<typeof CliEffort>;
  */
 export const CLI_EFFORTS: Record<AgentHarness, readonly CliEffort[]> = {
   "claude-code": ["low", "medium", "high", "xhigh", "max"],
-  // Codex has no effort of its own here: `codex exec` takes none on its command line.
-  codex: [],
+  // `model_reasoning_effort` in Codex's config (`-c model_reasoning_effort=<level>`): Codex's `ReasoningEffort`, which
+  // the models list in `model/list` (codex-cli 0.166.0) and which narrows them per model. Older models list `none` and
+  // `minimal`.
+  codex: ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"],
   "copilot-cli": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
 };
 
-/** The level, when the harness's CLI takes it: `none` and `minimal` are Copilot's, and `claude --effort` refuses them. */
+/**
+ * The level, when the harness's CLI takes it: `none` and `minimal` are Copilot's and Codex's and `ultra` is
+ * Codex's, and `claude --effort` refuses them.
+ */
 export const cliEffortFor = (harness: AgentHarness, effort: CliEffort | null | undefined): CliEffort | null =>
   effort && CLI_EFFORTS[harness].includes(effort) ? effort : null;
 
@@ -86,10 +91,11 @@ export const ModelTierSetting = z.object({
    */
   cliEffort: CliEfforts.optional(),
   /**
-   * The harness a headless Autopilot run on this model uses, with its `cli` model. Unset (and settings saved before it
-   * existed) is Claude Code.
+   * The provider a headless run on this model prefers, with its `cli` model. Used when it is added, switched on and
+   * can do what the operation needs; otherwise, and when unset, the first such provider in Settings → Agents → Providers runs it
+   * (resolveOperationModel). Stored as `headless` before 041_operation_models.
    */
-  headless: AgentHarness.optional(),
+  provider: AgentHarness.optional(),
 });
 export type ModelTierSetting = z.infer<typeof ModelTierSetting>;
 

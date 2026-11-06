@@ -43,6 +43,7 @@ function setup() {
       needsAttention: false,
       dismissedAt: null,
       output: null,
+      model: null,
       createdAt,
       startedAt: createdAt,
       finishedAt: createdAt,

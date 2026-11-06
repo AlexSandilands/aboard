@@ -1,4 +1,4 @@
-// Pure helpers for the Custom models list on the Model tiers page: adding, editing, reordering and removing a custom
+// Pure helpers for the Custom models list on the Models page: adding, editing, reordering and removing a custom
 // model, and the list one edit sends.
 import {
   LABEL_MAX_LENGTH,

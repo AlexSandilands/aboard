@@ -103,7 +103,8 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
               "linked|new_head|checks_failing|conflict|merged}, {kind: 'stale', status, hours}, {kind: " +
               "'blocker_finished'} or {kind: 'schedule', schedule: {kind: 'weekly', days: [0-6, 0 is Sunday], time: " +
               "'HH:MM'} | {kind: 'hourly', everyHours} | {kind: 'minutes', everyMinutes (5-1440)}}; filters: {labels} " +
-              "(not for a schedule); action, one of {kind: 'agent', prompt, skill?, tier?: light|standard|deep, " +
+              "(not for a schedule); action, one of {kind: 'agent', prompt, skill?, model?: {tier: light|standard|deep} " +
+              "(omit it to inherit the automation's Model setting, then the task's), " +
               "onPrBranch?, allowedTools?: ['mcp__server__tool'], check?: {language, body, timeoutSeconds?}, " +
               "untrustedItems?}, {kind: 'shell', command, timeoutSeconds?} or {kind: 'script', language: " +
               "python|node|powershell|sh, body, timeoutSeconds?}; inputs: [{name, label, type: text|number|boolean, " +

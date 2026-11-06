@@ -1,4 +1,5 @@
 import {
+  INHERIT,
   customAgentPrompt,
   effectiveVariables,
   type AutomationVariable,
@@ -119,7 +120,7 @@ function checkItems(stdout: string, input: Draft, values: CustomValues): NonNull
     kind: "agent",
     prompt: input.prompt,
     skill: input.skill,
-    tier: null,
+    model: INHERIT,
     onPrBranch: false,
     allowedTools: [],
     inputs: [],

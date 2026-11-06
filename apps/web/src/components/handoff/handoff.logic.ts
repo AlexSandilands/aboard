@@ -1,11 +1,12 @@
 import {
-  AGENT_HARNESSES,
   clampRuntimeMode,
   defaultBaseRef,
   type AgentCliStatus,
   type AgentHarness,
   type AppSettings,
   type PlanSkillRef,
+  providerActive,
+  providerOfHarness,
   type Project,
   type T3IntegrationStatus,
   type T3LaunchModel,
@@ -67,8 +68,8 @@ export const planSkillOf = (
 ): PlanSkillRef => project.planSkill ?? settings?.planSkill ?? { source: "builtin" };
 
 /**
- * A thread about a project as a whole (Suggest epics) needs the same: a running T3, a token, a folder. Either way the
- * user can hide T3 from the menus in settings.
+ * A thread about a project as a whole (Suggest epics) needs the same: T3 Code added and on in Settings → Agents → Providers, a
+ * running T3, a token, a folder. Either way the user can hide T3 from the menus in settings.
  */
 export function canStartProjectT3Thread(
   project: Pick<Project, "t3ProjectId" | "workspaceRoot"> | undefined,
@@ -78,24 +79,28 @@ export function canStartProjectT3Thread(
   return (
     t3.detected &&
     settings?.t3TokenSet === true &&
+    providerActive(settings, "t3-code") &&
     settings.handoffMenus?.["t3-code"] !== false &&
     !!(project?.t3ProjectId || project?.workspaceRoot)
   );
 }
 
-type HandoffSettings = Pick<AppSettings, "t3TokenSet"> & Partial<Pick<AppSettings, "handoffMenus">>;
+type HandoffSettings = Pick<AppSettings, "t3TokenSet" | "providers"> & Partial<Pick<AppSettings, "handoffMenus">>;
 
 /**
- * The CLIs the menus offer a new session in: the ones that run here and the board can start (not Codex), less those
- * the user hid in settings.
+ * The CLIs the menus offer a new session in: the providers added and on that run here, less those the user hid from
+ * the menus. Codex is one: it can't be given a session id, so its session links itself (selfLinkLine).
  */
 export const handoffClis = (
   clis: readonly AgentCliStatus[] | undefined,
-  settings: Partial<Pick<AppSettings, "handoffMenus">> | undefined,
+  settings: (Pick<AppSettings, "providers"> & Partial<Pick<AppSettings, "handoffMenus">>) | undefined,
 ): AgentHarness[] => {
   const menus: Partial<Record<AgentHarness, boolean>> | undefined = settings?.handoffMenus;
   return (clis ?? [])
-    .filter((cli) => cli.available && AGENT_HARNESSES[cli.harness].presetSessionId && menus?.[cli.harness] !== false)
+    .filter(
+      (cli) =>
+        cli.available && providerActive(settings, providerOfHarness(cli.harness)) && menus?.[cli.harness] !== false,
+    )
     .map((cli) => cli.harness);
 };
 
@@ -115,53 +120,9 @@ export function keepsCommandId(details: unknown): boolean {
 
 // ── Models ───────────────────────────────────────────────────────────────
 
-export const FAVORITES = "favorites";
-
 export interface PickerModel {
   provider: T3LaunchProvider;
   model: T3LaunchModel;
-}
-
-/** One entry per (provider, model), favorites first, mirroring T3's picker ordering. */
-function allModels(options: Pick<T3LaunchOptions, "providers">): PickerModel[] {
-  return options.providers.flatMap((provider) => provider.models.map((model) => ({ provider, model })));
-}
-
-const isFavorite = (options: Pick<T3LaunchOptions, "favorites">, entry: PickerModel) =>
-  options.favorites.some((f) => f.instanceId === entry.provider.instanceId && f.model === entry.model.slug);
-
-/**
- * The picker list for a rail tab ("favorites" or a provider id) and a search query. Searching spans every
- * provider. Legacy models of a provider tab are split out into their own collapsible section.
- */
-export function pickerModels(
-  options: Pick<T3LaunchOptions, "providers" | "favorites">,
-  tab: string,
-  query: string,
-): { models: PickerModel[]; legacy: PickerModel[] } {
-  const q = query.trim().toLowerCase();
-  const all = allModels(options);
-  if (q) {
-    const matches = all.filter(
-      (e) =>
-        e.model.name.toLowerCase().includes(q) ||
-        e.model.slug.toLowerCase().includes(q) ||
-        e.provider.displayName.toLowerCase().includes(q),
-    );
-    return { models: matches, legacy: [] };
-  }
-  if (tab === FAVORITES) return { models: all.filter((e) => isFavorite(options, e)), legacy: [] };
-  const own = all.filter((e) => e.provider.instanceId === tab);
-  return { models: own.filter((e) => !e.model.isLegacy), legacy: own.filter((e) => e.model.isLegacy) };
-}
-
-/** The rail tab the picker opens on: favorites when there are any, else the selected model's provider. */
-export function initialPickerTab(
-  options: Pick<T3LaunchOptions, "favorites" | "providers">,
-  selection: T3ModelSelection | null,
-) {
-  if (options.favorites.length > 0) return FAVORITES;
-  return selection?.instanceId ?? options.providers[0]?.instanceId ?? FAVORITES;
 }
 
 export function findModel(

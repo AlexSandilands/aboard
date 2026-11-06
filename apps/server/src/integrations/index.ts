@@ -12,18 +12,21 @@ import type { EventBus } from "../bus.ts";
 import { boardUrlOf, type Config } from "../config.ts";
 import { tasksToPlan } from "../services/planning.ts";
 import type { Services } from "../services/types.ts";
-import { createAgentIntegrations, type AgentIntegrationProbes } from "./agentIntegrations.ts";
 import { createAgentModels, type AgentModelProbes } from "./agentModels.ts";
 import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
 import { createBackupIntegration, defaultRunGit, type RunGit } from "./backup.ts";
 import { defaultRunGh, type RunGh } from "./gh.ts";
 import { createBackupSetup } from "./backupSetup.ts";
+import type { GitHost } from "./gitHost.ts";
+import { createRunTokens } from "../mcp/runTokens.ts";
+import { RUN_TOOLS_PATH, type RunToolsContext } from "../mcp/runTools.ts";
 import { createGithubIntegration, messageOf } from "./github.ts";
 import { mergeTaskPr } from "./mergeTaskPr.ts";
 import type { RunAgent } from "./headlessAgent.ts";
 import type { RunImport } from "./headlessImport.ts";
 import type { RunHeadless } from "./headlessReview.ts";
 import { createIssueImporter } from "./issueImport.ts";
+import { createProviders, type ProviderProbes } from "./providers.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
 import { createSessionLaunch } from "./sessionLaunch.ts";
 import { createSessionTranscriptReader } from "./sessionTranscript.ts";
@@ -64,14 +67,16 @@ export interface IntegrationOverrides {
   listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
   /** Git for reading project folders: session launch, and the stats' commits (read by the services, see createContext). */
   runGit?: RunGit;
-  /** What the agent integration checks run: the CLIs and the MCP config files. */
-  agentIntegrationProbes?: Partial<AgentIntegrationProbes>;
+  /** What provider detection runs: the CLIs and the MCP config files. */
+  providerProbes?: Partial<ProviderProbes>;
   agentModelProbes?: Partial<AgentModelProbes>;
   /** Process checks for agent sessions' status. */
   processProbe?: ProcessProbe;
   /** The machine "Open in terminal" runs on, and how it starts a terminal. */
   terminalHost?: () => TerminalHost;
   spawnTerminal?: SpawnTerminal;
+  /** What run tools read instead of GitHub. */
+  gitHost?: GitHost;
   /** Carries out Autopilot's agent actions; replaces the T3 and headless runners entirely. */
   autopilotRunner?: Runner;
   /** Git for Autopilot's worktrees (the runner and their cleanup). */
@@ -97,6 +102,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.githubFetch ? { fetch: overrides.githubFetch } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const runTools: RunToolsContext = { tokens: createRunTokens(), gitHost: overrides.gitHost ?? github.gitHost };
   const t3 = createT3Integration({
     t3Home: deps.config.t3Home,
     bus: deps.bus,
@@ -164,17 +170,19 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     },
     ...(overrides.log ? { log: overrides.log } : {}),
   });
-  const agentIntegrations = createAgentIntegrations({
-    services: deps.services,
-    mcpUrl: () => `http://127.0.0.1:${deps.config.port}/mcp`,
-    host: overrides.terminalHost ?? systemTerminalHost,
-    userHome: deps.config.userHome,
-    ...(overrides.agentIntegrationProbes ? { probes: overrides.agentIntegrationProbes } : {}),
-  });
   const agentModels = createAgentModels({
     services: deps.services,
     host: overrides.terminalHost ?? systemTerminalHost,
     ...(overrides.agentModelProbes ? { probes: overrides.agentModelProbes } : {}),
+  });
+  const providers = createProviders({
+    services: deps.services,
+    mcpUrl: () => `http://127.0.0.1:${deps.config.port}/mcp`,
+    host: overrides.terminalHost ?? systemTerminalHost,
+    userHome: deps.config.userHome,
+    t3Status: () => t3.status(),
+    models: (harness, refresh) => agentModels.harness(harness, refresh),
+    ...(overrides.providerProbes ? { probes: overrides.providerProbes } : {}),
   });
   // An Autopilot session's state comes from its run, which changes without the harness's files changing.
   const refreshSession = (sessionId: string) => {
@@ -192,6 +200,12 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       ...(overrides.runAgent ? { runAgent: overrides.runAgent } : {}),
       sessionLinked: refreshSession,
       boardMcp: () => ({ url: `http://127.0.0.1:${deps.config.port}/mcp`, token: deps.config.token ?? null }),
+      runTools: {
+        mint: (runId, scope, ttlMs) => {
+          const { token, revoke } = runTools.tokens.mint(runId, scope, ttlMs);
+          return { url: `http://127.0.0.1:${deps.config.port}${RUN_TOOLS_PATH}`, token, revoke };
+        },
+      },
       ...(overrides.log ? { log: overrides.log } : {}),
     });
   const autopilot = createAutopilotEngine({
@@ -221,6 +235,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     t3Status: () => t3.status(),
     githubStatus: () => github.status(),
     prHostHoldsTasks: (host) => github.holdsTasks(host),
+    runTools,
     start() {
       if (!deps.config.pollers || started) return;
       started = true;
@@ -231,6 +246,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       sessions.start();
       autopilot.start();
       worktrees.start();
+      providers.seedFromDetection().catch((error: unknown) => {
+        (overrides.log ?? console).warn(`[providers] couldn't add the providers detection found: ${messageOf(error)}`);
+      });
     },
     stop() {
       started = false;
@@ -243,7 +261,6 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       worktrees.stop();
     },
     sessionTranscript: (taskId, input) => transcripts.read(taskId, input),
-    settingsAskStatus: () => settingsAsker.status(),
     askSettings: (input) => settingsAsker.ask(input),
     startImport: (taskId) => importer.start(taskId),
     resumeImports: () => importer.resume(),
@@ -317,8 +334,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     resumeCommand: (linkId, mode) => sessions.resumeCommand(linkId, mode),
     resumeSession: (linkId, input) => sessions.resume(linkId, input),
     terminalInfo: () => sessions.terminalInfo(),
-    agentClis: () => sessionLaunch.clis(),
-    agentIntegrations: (refresh) => agentIntegrations.status(refresh),
+    providers: (refresh, parts) => providers.status(refresh, parts),
     agentModels: (refresh) => agentModels.status(refresh),
     sessionLaunchOptions: (taskId) => sessionLaunch.options(taskId),
     startSession: (taskId, input, actor) => sessionLaunch.start(taskId, input, actor),

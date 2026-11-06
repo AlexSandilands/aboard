@@ -26,7 +26,7 @@ and keeps to the same pause, dry run, caps and quiet hours.
      `{{task.id}}`, `{{task.status}}`, `{{pr.url}}`, `{{project.name}}`, `{{project.path}}`,
      `{{project.repo_url}}`, `{{automation.name}}`, your [variables](#variables) as `{{vars.name}}` and
      [inputs](#inputs-and-required-tools) as `{{inputs.name}}`; the task's title, labels, PR and description are added after it. Optionally name a
-     skill the agent should use, a model tier, and whether to work on the task's pull request branch. The runner,
+     skill the agent should use, a model (inherit, a tier, a custom model or any provider's model), and whether to work on the task's pull request branch. The runner,
      budget and timeout are the automation's settings in the Autopilot list, like any agent automation's
      ([Autopilot](autopilot.md#runners)). On a schedule the agent has no task: it runs headless in an empty
      temporary folder, not the project's own, and is told the project's name and folder (and not to edit the folder, which is only a request: nothing stops it); it can use the board's
@@ -362,7 +362,7 @@ and you get a notification and a link to the import page, where the draft opens 
 saying an agent wrote it and the agent's note to you. Read it with the same care, fill in its inputs and tools, and
 import it; it comes in off, like any import.
 
-With **Settings → Integrations → Board skills** on, the agent also has the `aboard-automations` skill, which tells it
+With **Settings → Agents → Providers → Board skills** on, the agent also has the `aboard-automations` skill, which tells it
 how to pick a trigger and action, use your variables, inputs and tool slots, write a script that fails loudly and
 treats what it reads as data, and test it before handing it over. Without it the agent still has the tool, just
 less guidance.

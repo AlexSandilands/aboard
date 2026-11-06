@@ -11,6 +11,7 @@ same services, so an agent's change reaches open browsers within a second.
         └──SSE /events◄── bus ◄────┤                     └── commit ─► BoardEvents ─► bus
  agents ──MCP POST /mcp────────────┘
  pollers (GitHub, T3 Code, review watchdog, Autopilot) ──► services/*
+ headless runs ──MCP POST /mcp/run (run token) ──► run tools ──► GitHost (read-only)
 ```
 
 ## Packages
@@ -64,6 +65,9 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 
 Settings changed in the UI (T3 token, polling, review options) live in the `settings` table, not in env
 vars. See `apps/server/src/services/settings.ts`. Backups and restore: [features/backup.md](features/backup.md).
+Which model each operation runs on is one of them, `operationModels` (`ModelChoice` per `OperationId`, resolved by
+`resolveOperationModel` in `packages/contracts/src/operations.ts`; see [Models](features/autopilot.md#models) and
+[ADR 0012](decisions/0012-provider-neutral-operation-models.md)).
 
 ## The guard
 
@@ -75,6 +79,10 @@ vars. See `apps/server/src/services/settings.ts`. Backups and restore: [features
 - **Token**, when configured: `/api/*` (except `/api/health`), `/mcp` and `/events` need
   `Authorization: Bearer <token>` or a `token` query parameter (EventSource can't send headers). Static
   files don't.
+- **Run tools:** `/mcp/run` isn't behind the board's token. Its credential is a run token, minted by the Autopilot
+  runner for one headless run and sent as `Authorization: Bearer`; it opens only that run's tool set, bound to its
+  target, and is revoked when the run ends ([ADR 0013](decisions/0013-board-served-run-tools.md)). The Host and
+  Origin checks apply as everywhere.
 
 ## How a change flows
 
@@ -98,7 +106,7 @@ Errors are `AppError`s (`errors.ts`) with a code: `NOT_FOUND` 404, `VALIDATION` 
 
 `BoardEvent` (`packages/contracts/src/schemas.ts`) is `project.upserted`, `project.deleted`,
 `task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`,
-`labels.colors_changed`, `autopilot.changed`, `notification.created`, `notifications.changed` and `suggestions.changed`. Every `task.upserted` comes with a `task.detail_changed`.
+`labels.colors_changed`, `autopilot.changed`, `notification.created`, `notifications.changed`, `suggestions.changed` and `providers.changed`. Every `task.upserted` comes with a `task.detail_changed`.
 
 ## Data model
 
@@ -155,7 +163,9 @@ on independent timers:
 - **GitHub:** batched GraphQL for PR links on GitHub hosts (every 20 seconds for PRs that are changing, down to
   every 30 minutes for finished ones), with the token `gh` holds,
   and merging on request ([ADR 0006](decisions/0006-github-graphql-via-gh-token.md)). See
-  [github-prs.md](features/github-prs.md).
+  [github-prs.md](features/github-prs.md). What headless runs read from GitHub goes through a `GitHost`
+  (`integrations/gitHost.ts`, GitHub's in `githubHost.ts`, REST with the same token), served to the run as its
+  [run tools](features/autopilot.md#run-tools).
 - **T3 Code:** discovery every 60 seconds from `~/.t3/userdata/server-runtime.json`, live thread status
   every 20 seconds while a browser is connected and a token is set, project import, and thread launches
   over T3's WebSocket RPC. See [agent-handoff.md](features/agent-handoff.md).

@@ -1,11 +1,12 @@
 # Agent sessions
 
-Board tasks: #69, #115 (starting sessions). Verified against Claude Code 2.1.301 and Copilot CLI 1.0.85 on Windows
-(October 2026).
+Board tasks: #69, #115 (starting sessions), #96 (Codex sessions and models). Verified against Claude Code 2.1.301 and
+Copilot CLI 1.0.85 on Windows (October 2026), and codex-cli 0.166.0 on Linux (November 2026).
 
-An agent in Claude Code or Copilot CLI links its own session to the task it works on, or the board starts the
-session itself from the hand-off menu and links it ([Starting a session](#starting-a-session)). The board then shows
-whether that session is still running and offers **Open in terminal**, which resumes it in a new terminal
+An agent in Claude Code, Codex or Copilot CLI links its own session to the task it works on, or the board starts a
+session itself from the hand-off menu: it links a Claude Code or Copilot CLI session, and a Codex session links itself
+([Starting a session](#starting-a-session)).
+The board then shows whether that session is still running (Codex excepted: see [Live status](#live-status)) and offers **Open in terminal**, which resumes it in a new terminal
 window in the session's folder, with **Copy resume command** as a fallback. T3 Code threads already link
 back to their conversation ([agent hand-off](agent-handoff.md)); this does the same for sessions run in a
 terminal, and gives a session inside T3 Code a way out to one.
@@ -20,13 +21,15 @@ var the agent reads with its shell:
 | Harness | `harness` | Id from | Resume | Fork |
 | --- | --- | --- | --- | --- |
 | Claude Code | `claude-code` | `$CLAUDE_CODE_SESSION_ID` | `claude --resume <id>` | `claude --resume <id> --fork-session` |
-| Codex | `codex` | `$CODEX_THREAD_ID` (unverified, #252) | `codex resume <id>` | none |
+| Codex | `codex` | `$CODEX_THREAD_ID` (checked on codex-cli 0.166.0: the same id as `thread.started`) | `codex resume <id>` | none |
 | Copilot CLI | `copilot-cli` | `$COPILOT_AGENT_SESSION_ID` | `copilot --resume=<id>` | none |
 
-Codex sessions are linked by Autopilot's headless runs ([autopilot](autopilot.md#headless-drivers)), which read
-the id from `codex exec`'s first event. Agents aren't asked to link their own Codex session yet: the env var is
-unverified. Codex picks its own session id, so the board can't start a Codex session in a terminal
-(`AGENT_HARNESSES.codex.presetSessionId` is false, and the hand-off menus leave it out); it can only resume one.
+Codex sessions are linked by agents running in Codex, like the other two, and by Autopilot's headless runs
+([autopilot](autopilot.md#headless-drivers)), which read the id from `codex exec`'s first event. Codex picks its own
+session id (`AGENT_HARNESSES.codex.presetSessionId` is false), so a Codex session the board starts from the hand-off
+menu can't be linked before it runs: its prompt tells it to link itself ([Starting a session](#starting-a-session)).
+The board resumes one with `codex resume <id>` and never forks it. A Codex session stays `unknown`
+([Live status](#live-status)).
 
 The link is an `agent_session` link stored under `agent-session://<harness>/<id>`, so linking the same
 session twice returns the first link; a different folder replaces the stored one (logged as `link_updated`),
@@ -37,8 +40,10 @@ absolute path, with trailing separators dropped (`AgentSessionRef`). The board l
 `services.links.add` with the same input; their folder can be a worktree outside the project.
 
 Agents are asked for it in three places: the `link` tool's description and the server instructions, the
-hand-off prompt, and `get_task`'s **Missing links**, which asks only when the MCP client is Claude Code or
-Copilot CLI (`harnessOfClient` in `apps/server/src/mcp/format.ts`).
+hand-off and planning prompts, and `get_task`'s **Missing links**, which asks only when the MCP client is Claude
+Code, Codex or Copilot CLI (`harnessOfClient` in `apps/server/src/mcp/format.ts`). Codex names itself
+`codex-mcp-client` in `initialize` and in its User-Agent (checked on codex-cli 0.166.0); the server is stateless, so
+tool calls read it from the User-Agent. The shipped skill and `AGENTS.md` snippet say the same.
 
 ### Live status
 
@@ -125,49 +130,80 @@ example session.
 The rules for starting processes are in [ADR 0009](../decisions/0009-board-starts-local-processes.md) and, for new
 sessions, [ADR 0010](../decisions/0010-board-starts-new-sessions.md).
 
-### Integration status
+### Providers and detection
 
-Settings → Integrations → Claude Code and GitHub Copilot show whether the harness is usable, from
-`GET /api/agent-integrations` (`createAgentIntegrations` in `integrations/agentIntegrations.ts`, `?refresh=1` skips
-its one-minute cache; Re-check sends it). Per harness it returns:
+A provider (T3 Code, Claude Code, Codex, GitHub Copilot: `PROVIDERS` in `packages/contracts/src/providers.ts`) is
+opt-in. The user adds it in **Settings → Agents → Providers**, and the `providers` setting keeps `{ id, enabled, cliPath }` for
+each one added. A provider that isn't added, or is switched off, shows nowhere else: not in the hand-off menus
+(`handoffClis`, `canStartProjectT3Thread`), the launch and plan dialogs opened from them, the Models page's columns, or the
+model pickers' provider tabs. Agents can't start T3 threads without T3 Code added (`t3LaunchBlocker`). Sessions
+and threads already linked to tasks still open whatever the list says. `harnessCliSetting` reads a CLI provider's
+path from the list (none looks the CLI's name up on PATH); the board reviewer, issue import, the settings Ask, new
+sessions, resumes and headless runs all use it. See [ADR 0011](../decisions/0011-opt-in-providers.md).
 
-- `cli`: the configured path (else the name on PATH) resolved, and whether `--version` ran.
+`GET /api/providers` (`createProviders` in `integrations/providers.ts`) is the one place the board detects them, for
+every provider whether added or not (the Add provider dialog shows what this machine has). Per provider it returns:
+
+- `cli`: the configured path (else the name on PATH) resolved, its version, or why it isn't usable. Null for T3 Code.
 - `mcp`: whether an entry with the board's MCP URL exists, its name and scope, and whether the harness says it
-  connects (`connected` is null when it can't tell).
+  connects (`connected` is null when it can't tell). Null for T3 Code.
+- `t3`: T3 Code's live status (detected, origin, label, `liveStatus`) and whether a token is saved.
+- `models`: what the models scan (`agentModels.ts`) found, only for the CLI providers while added and on,
+  since scanning starts the CLI.
 
-The entry is found by URL, not name: `sameMcpUrl` treats `localhost`, `127.0.0.1` and `[::1]` as one host, compares
+`?parts=cli` answers with the CLI checks and T3 Code only. The board's menus and session rows read that
+(`useAgentClis`), so they never wait on `claude mcp list` or a model scan; only Settings → Agents → Providers asks for the
+rest. The CLI checks are kept for a minute by their paths and shared by both answers; the MCP and model checks are
+kept for a minute, keyed by the enabled providers and the board's URL, so a new CLI path or a provider switched on
+asks again; `?refresh=1` (Re-check) skips the cache and a refresh while a check is
+running joins it. T3 Code's part is read fresh every time. A change to the list publishes `providers.changed`, which
+updates the settings cache in every window and refetches the detection.
+
+The MCP entry is found by URL, not name: `sameMcpUrl` treats `localhost`, `127.0.0.1` and `[::1]` as one host, compares
 the port and path, and ignores a trailing slash and the query (which may carry a token). Claude Code is asked with
 `claude mcp list` (and `mcp get` for the scope), run from the home folder, which doesn't list servers added to one
 project (local scope), so `~/.claude.json` is also read for those (reported as local scope, with a hint to use
 `--scope user`); if the CLI fails or times out, that file is all there is. Copilot CLI has no such command, so `~/.copilot/mcp-config.json` (or
 `$COPILOT_HOME/mcp-config.json`) is read, and for Codex `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`):
-`codexMcpEntries` reads only its `[mcp_servers.<name>]` headers and their `url` lines. Settings shows the Codex dot
-only once its CLI is found, as many use Codex only through T3 Code. Config files are only read for server names and `url` strings, never
-headers or env, and no URL or token is put in the result.
+`codexMcpEntries` reads only its `[mcp_servers.<name>]` headers and their `url` lines. Config files are only read for
+server names and `url` strings, never headers or env, and no URL or token is put in the result.
 
-The dot is green when the CLI runs and the MCP entry exists (a project-only entry, local scope that the CLI can't
-confirm, is amber: it is missing in other folders; a refresh while a check is running joins it); `connected: false` only adds a note, because a harness
-can report a server as down while it would connect when a session starts. `GET /api/agent-clis` is separate and only
-says whether the executable exists; the hand-off menus and a session's open and fork items use it.
+A provider's dot (`providerDot` in `settings/providers.logic.ts`) is grey while switched off, green when the CLI runs
+and the MCP entry exists (a project-only entry that the CLI can't confirm is amber: it is missing in other folders),
+and for T3 Code green once a saved token connects; `connected: false` only adds a note, because a harness can report
+a server as down while it would connect when a session starts.
+
+The page saves the list with `useUpdateProviders`: each change is a function applied to the latest cached list, and
+the calls share a mutation scope so they reach the server in order, so two quick switches can't undo each other.
+
+**Upgrading.** Migration `040_providers_settings` seeds the list from what an install already uses: a CLI path set, the
+T3 token, the board reviewer on, a tier or custom model with a model (or headless runs) for a provider, and sessions or
+T3 threads linked to tasks. It moves `headlessReviewCli`, `codexCli` and `copilotCli` into `cliPath`. What only the
+machine can tell is left to `seedFromDetection`, which runs once after start-up on an install that had data (the
+migration leaves a `providersDetectSeed` marker): it adds providers whose MCP entry is registered, and those whose
+hand-off entry the menus showed (the entry on and the CLI found).
 
 ### Starting a session
 
-The hand-off menu on a card and in the panel offers **New Claude Code session…** and **New Copilot CLI session…**
-on any open task, and on an epic (finished ones too), for each CLI `GET /api/agent-clis` finds: the path in Settings (the Claude Code CLI
-path the reviewer uses, or **Copilot CLI path**), else the name on PATH. The dialog (`SessionLaunchDialog`) reads
+The hand-off menu on a card and in the panel offers **New Claude Code session…**, **New Codex session…** and **New
+Copilot CLI session…** on any open task, and on an epic (finished ones too), for each CLI provider that is added, on, and found by
+`GET /api/providers`: the path set for it in Settings → Agents → Providers, else the name on PATH. The dialog (`SessionLaunchDialog`) reads
 `GET /api/tasks/:id/session-launch-options` (CLIs, the project folder, its branches and default branch, each CLI's
 model for the task's model, which model that is and what picked it (a label's custom model, else the tier:
 `resolveTaskModel`), and whether sessions get a named window) and offers:
 
 - the hand-off prompt, editable, with **Plan with me** swapping the work and planning prompts. It is the prompt
-  with `linkedSession`: the agent is told the board linked the session and has no suggested-model line. An epic's
+  with `linkedSession` and `sessionHarness`: the agent is told the board linked the session (`startedSessionLine`), or,
+  for Codex, to link it itself (`selfLinkLine`: `link(agentSession: {harness: "codex", sessionId: $CODEX_THREAD_ID,
+  cwd}, label)` with the label the board would have given it), and has no suggested-model line. An epic's
   is the orchestrating prompt (mode `orchestrate`, session label "Orchestrating #N") with no **Plan with me**, and
   the server refuses a mode that doesn't fit the task (`handoffModeError`);
-- a model, filled in from **Settings → Model tiers** (the custom model's or the tier's `cli[harness]`) for a work prompt; **Default
-  model**, and planning, use the CLI's default. It is the Model tiers page's picker (`CliModelPicker`, with
-  `defaultLabel`), listing the models the CLI's scan found (`GET /api/agent-models`); a name it doesn't list can be
-  typed. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
-- an effort next to it (`--effort` for Claude Code, `--reasoning-effort` for Copilot CLI; `CliEffortMenu`), filled in
+- a model, filled in from **Settings → Agents → Models** (the custom model's or the tier's `cli[harness]`) for a work prompt; **Default
+  model**, and planning, use the CLI's default. It is the shared model picker locked to the CLI (`CliModelPicker` in
+  `components/models/`, with `defaultLabel`), listing the models the CLI's scan found (`GET /api/agent-models`) with
+  the effort beside them; a name it doesn't list can be typed. Model names are `CliModel`: letters, digits and `. : @ / [ ] -`;
+- an effort next to it (`--effort` for Claude Code, `-c model_reasoning_effort=<level>` for Codex, `--reasoning-effort`
+  for Copilot CLI; `CliEffortMenu`), filled in
   from the same model's `cliEffort[harness]` (`options.efforts`) and followed by the plan toggle like the model. It
   offers the levels the scan lists for the model, else the CLI's own (`CLI_EFFORTS`), or "Default effort", which passes
   no flag; a model that takes no effort hides it, and picking a model that doesn't take the chosen level resets it to
@@ -194,13 +230,21 @@ server runs the options' three git calls (`rev-parse`, `for-each-ref`, the defau
 2. builds `claude [--model m] [--effort e] --session-id <uuid> --name "Implementing #N" -- <prompt>` (`--` so a
    prompt starting with `-` isn't read as an option), or Copilot's
    `copilot [--model m] [--reasoning-effort e] --session-id <uuid> --name … -i <prompt>`, with a session id the board
-   picks;
+   picks, or Codex's `codex [--model m] [-c model_reasoning_effort=e] -- <prompt>`, which takes neither an id nor a
+   name;
 3. opens it in the terminal setting's terminal. With Windows Terminal it goes to the window named for the task
    (`taskWindowName`, `<brand>-<task#>`): `wt -w <brand>-115 new-tab …` opens the window, or a tab of it when it is
    already open, whatever **Open in** says;
 4. links the session (label "Implementing #N", "Planning #N" or, for an epic, "Orchestrating #N", plus the window once the terminal has started), then
    reads its status. When the terminal won't start the result carries the command to run by hand; the session is
    linked all the same, since that command has its id and its prompt says the board linked it.
+
+   A Codex session isn't linked here (`linkId` is null): the board has no id for it. Its prompt, short prompt and the
+   fix prompt (`GET /api/links/:id/fix?harness=codex`) tell it to link itself with `$CODEX_THREAD_ID`, under the same
+   label, and the dialog and the toast say so. The launcher doesn't try to find the id afterwards: Codex's rollout files
+   would have to be matched by folder and time, which two sessions in one folder would get wrong, and the agent's own
+   link is the one the other harnesses rely on too. So a Codex session shows on the card once its agent has linked it,
+   and has no named window to bring back (only the board records one).
 
 A lane's **Plan tasks…** starts a session that plans several tasks (`POST /api/projects/:id/plan-session`,
 [agent-handoff.md](agent-handoff.md#plan-tasks-several-tasks-at-once)). It always runs in the project's checkout, starts
@@ -290,7 +334,7 @@ behind kills a session whose messages contain a credential-shaped string.
 ### On the card and in the panel
 
 A card shows each session as a chip with the harness's mark and a status dot; its menu opens, forks or copies
-the command. Open and fork are left out (and the panel row's click is disabled) when `GET /api/agent-clis` doesn't
+the command. Open and fork are left out (and the panel row's click is disabled) when `GET /api/providers` doesn't
 find that harness's CLI; the copy commands stay. Resuming or forking runs the CLI path set in Settings, as a new
 session does, and the copied command carries it too. A task with a T3 thread shows no session chips, since the thread runs a Claude session
 underneath and would show twice. The task panel lists every session by name, with its folder (secondary) and status, in the panel's
@@ -320,16 +364,17 @@ Copilot CLI support is unit-tested only.
 
 ## Choosing a CLI's model
 
-**Settings → Model tiers** picks each tier's (and each custom model's) Claude Code and Copilot CLI model from a list
-the CLI itself gives, so a model isn't typed from memory. The row looks like the T3 Code one above it, on the same
-`ComposerControl`: a button with the CLI's mark and the model's name (`CliModelPicker`) opens a searchable list of
-the models, each with its name, its value and what the CLI says about it. Search text the list doesn't have can be
-used as typed (`claude-opus-5-5`, `sonnet[1m]`; checked as a `CliModel`). A saved model the scan doesn't list still
-shows. Beside it are the effort menu (`CliEffortMenu`) and a button that clears the model, which means the CLI's
-default. A model is saved as soon as it is picked.
+**Settings → Agents → Models** picks each tier's (and each custom model's) CLI model from a list the CLI itself gives, so a
+model isn't typed from memory. Each cell is the shared model picker ([board-layout.md](board-layout.md#the-model-picker))
+locked to the CLI: a button with the CLI's mark, the model's name and its effort opens a searchable list of the
+models, each with its name, its value and what the CLI says about it, and the effort column beside it. Search text the
+list doesn't have can be used as typed (`claude-opus-5-5`, `sonnet[1m]`; checked as a `CliModel`). A saved model the
+scan doesn't list still shows. Beside the cell is a button that clears the model, which means the CLI's default. A
+model is saved as soon as it is picked.
 
-`GET /api/agent-models` (`integrations/agentModels.ts`, kept apart from `/api/agent-integrations` so that check stays
-fast) asks each CLI, and only the Model tiers page does, once a CLI's field is shown (`useAgentModels`):
+`GET /api/agent-models` (`integrations/agentModels.ts`) asks each CLI, and only where a picker needs it, once a CLI's
+cell or tab is shown (`useAgentModels`); `GET /api/providers` reuses the same cache for its model counts (for the
+providers added and on, `PROVIDERS[id].scansModels`):
 
 - **Claude Code:** `claude -p --input-format stream-json --output-format stream-json --verbose` is given one
   `initialize` control request on stdin, then stdin closes. The CLI answers with `models[]` (`value`, `displayName`,
@@ -337,6 +382,18 @@ fast) asks each CLI, and only the Model tiers page does, once a CLI's field is s
   run, which is most of the few seconds a scan takes. The `default` entry is left out, as an empty field already means it.
 - **Copilot CLI:** the `model` list in `copilot help config`. It names no models and no per-model efforts, so every
   model offers the CLI's `--reasoning-effort` levels.
+- **Codex:** `codex app-server`, the JSON-RPC server Codex's own clients and T3 Code list models with
+  (`integrations/codexAppServer.ts`). One JSON message per line: `initialize` (as the board), the `initialized`
+  notification, then `model/list`, following `nextCursor` (at most 20 pages). Each entry's `model` is the `--model`
+  value, with `displayName`, `description`, `supportedReasoningEfforts` (levels the board doesn't know are dropped),
+  `defaultReasoningEffort` (stored as `defaultEffort`) and `isDefault`, the model Codex runs when given none; hidden
+  models are left out, as Codex's picker leaves them out. The server doesn't exit once it has answered, and on codex-cli
+  0.166.0 it exits at the end of stdin before answering a request still queued, so stdin stays open until the last page
+  is in and the process tree is then ended, as it is after 20 seconds without an answer. It takes about 0.4 seconds and
+  sends no prompt. The pickers name the default model on their **Default model** row ("unless Codex is set to
+  another": Codex's `config.toml` can pick another) and the default level on the effort column's **Default**; the provider page shows
+  it for a tier with no Codex model. Tested on a recorded reply (`fixtures/codex/model-list.json`) and against a stand-in
+  server, so the tests don't need Codex.
 
 Each harness's answer is kept for ten minutes, by the CLI path it came from (a changed path rescans); a scan that failed
 isn't kept. `?refresh=1`, the **Rescan models** button, rescans, and joins a scan already running. A CLI that is
@@ -349,25 +406,29 @@ the CLI's own. Clearing the model clears its effort, and so does choosing a mode
 drops an effort for a harness with no model. The effort goes everywhere the model does:
 
 - a new session (`newSessionArgv`; the dialog prefills it);
-- headless `claude -p` runs that resolve to a tier or custom model: Autopilot's headless agent (`headlessModel` in the
-  runner returns it with the model; a typed **Headless model override**, or a T3 model standing in for the Claude Code
-  one, carries none), the board reviewer and the issue import (`resolveHeadlessEffort`; a typed model carries none).
+- headless runs that resolve to a tier or custom model (`resolveOperationModel` returns it with the model): Autopilot's
+  headless agent, the board reviewer, the issue import and Ask. A T3 model standing in for a CLI model carries none; a
+  typed model carries its own.
 
 ## Code map
 
 | File | What it does |
 | --- | --- |
-| `packages/contracts/src/agentSessions.ts` | `AgentSessionRef`, snapshot, `AGENT_HARNESSES` and resume commands, `TerminalSetting`, REST shapes |
+| `packages/contracts/src/agentSessions.ts` | `AgentSessionRef`, snapshot, `AGENT_HARNESSES` and resume commands, `startedSessionLine` / `selfLinkLine`, `TerminalSetting`, REST shapes |
 | `apps/server/src/integrations/agentSessions.ts` | The status reader, process probe, poller (and the run-based state of Autopilot sessions), resume and terminal info |
 | `apps/server/src/integrations/terminal.ts` | Quoting (and `textArgument` for free text), Windows Terminal detection, the launch for each terminal and shell, named windows, spawning |
 | `packages/contracts/src/sessionLaunch.ts` | `CliModel`, launch options and input, `newSessionArgv`, `taskWindowName`, `sessionLabel` |
 | `packages/contracts/src/agentModels.ts`, `modelTiers.ts` | The scan's shape (`AgentModels`); `CliEffort`, `CLI_EFFORTS` and `cliEffort` on a tier |
 | `apps/server/src/integrations/agentModels.ts` | The model scans, their parsers and the cache (tested on recorded output) |
-| `apps/server/src/integrations/sessionLaunch.ts` | Which CLIs are installed, the launch options, starting and linking a session (`start`, and `startPlanning` for several tasks) |
-| `apps/server/src/integrations/agentIntegrations.ts` | The CLI and MCP checks behind the settings dots (tested) |
-| `apps/web/src/components/settings/CliModelPicker.tsx` | The model picker and effort menu of the Model tiers page and the new-session and planning dialogs (`cliModelPicker.logic.ts` is tested) |
+| `apps/server/src/integrations/codexAppServer.ts` | Codex's `model/list` over `codex app-server` (tested against a stand-in server) |
+| `apps/server/src/integrations/sessionLaunch.ts` | The launch options, starting and linking a session (`start`, and `startPlanning` for several tasks) |
+| `packages/contracts/src/providers.ts` | `ProviderId`, `PROVIDERS`, the `providers` setting, `ProvidersStatus`, `harnessCliSetting`, `providerActive` |
+| `apps/server/src/integrations/providers.ts` | `GET /api/providers`: CLI, MCP, T3 and models checks, their cache, and the seed from detection (tested) |
+| `apps/server/src/db/codeMigrations.ts` | `040_providers_settings`: seeds the list and moves the CLI paths (tested in `database.test.ts`) |
+| `apps/web/src/components/settings/agents/ProvidersSection.tsx`, `ProviderEditors.tsx` | Settings → Agents → Providers: the list, the Add provider dialog and each provider's editor (`providers.logic.ts` is tested) |
+| `apps/web/src/components/models/` | The shared model picker of the Models page, the new-session and planning dialogs and every other model control (`*.logic.ts` tested) |
 | `apps/server/src/db/migrations/015_agent_session_links.sql` | Adds the `agent_session` link kind |
-| `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/agent-clis`, `/api/agent-integrations`, `/api/agent-models` |
+| `apps/server/src/http/routes/system.ts` | `/api/links/:id/resume`, `/api/links/:id/resume-command`, `/api/terminal`, `/api/providers`, `/api/agent-models` |
 | `apps/server/src/http/routes/tasks.ts` | `/api/tasks/:id/session-launch-options`, `/api/tasks/:id/sessions` |
 | `apps/server/src/http/routes/projects.ts` | `/api/projects/:id/plan-session` and `/api/projects/:id/plan-thread` |
 | `apps/server/src/mcp/tools/links.ts` | `link` with `agentSession` |

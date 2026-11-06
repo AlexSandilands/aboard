@@ -72,6 +72,20 @@ describe("automation bundles", () => {
     });
   });
 
+  it("reads an old file's agent tier as its model", () => {
+    const file = JSON.parse(JSON.stringify(automationBundle(definition()))) as { action: Record<string, unknown> };
+    const { model: _model, ...action } = file.action;
+    for (const [tier, model] of [
+      ["deep", { tier: "deep" }],
+      [null, "inherit"],
+    ] as const) {
+      const parsed = parseAutomationBundle({ ...file, action: { ...action, tier } });
+      if (!parsed.ok) throw new Error(parsed.error);
+      expect(parsed.bundle.action).toMatchObject({ kind: "agent", model });
+      expect(parsed.bundle.action).not.toHaveProperty("tier");
+    }
+  });
+
   it("comes in with empty slots and default inputs unless filled", () => {
     const parsed = parseAutomationBundle(automationBundle(definition()));
     if (!parsed.ok) throw new Error(parsed.error);

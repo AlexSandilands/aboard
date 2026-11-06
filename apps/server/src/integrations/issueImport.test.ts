@@ -39,7 +39,7 @@ function setup(
   const h = createTestHarness();
   const s = h.services;
   const project = s.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
-  s.settings.update({ ticketSystems: [JIRA] });
+  s.settings.update({ ticketSystems: [JIRA], providers: [{ id: "claude-code", enabled: true }] });
   const jobs: ImportJob[] = [];
   const listed: string[] = [];
   const warnings: string[] = [];
@@ -82,7 +82,8 @@ describe("issue import", () => {
     expect(done.links[0]).toMatchObject({ kind: "issue", snapshot: { state: "open", title: issue.title } });
     expect(jobs).toHaveLength(1);
     expect(jobs[0]).toMatchObject({
-      model: "haiku",
+      // The light tier, which has no model set here: the CLI's default.
+      model: null,
       cwd: tmpdir(),
       boardLabels: ["ux"],
       source: { kind: "issue", repo: "acme/app", number: 45, title: issue.title },
@@ -93,7 +94,7 @@ describe("issue import", () => {
     const { s, create, run, jobs } = setup();
     const tier = (cli?: Record<string, string>) => ({ description: null, t3: null, ...(cli ? { cli } : {}) });
     s.settings.update({
-      issueImportModel: { tier: "light" },
+      operationModels: { issueImport: { tier: "light" } },
       modelTiers: {
         light: {
           ...tier({ "claude-code": "sonnet", "copilot-cli": "gpt-5-mini" }),
@@ -106,7 +107,7 @@ describe("issue import", () => {
     expect(jobs.at(-1)?.model).toBe("sonnet");
     expect(jobs.at(-1)?.effort).toBe("medium");
 
-    s.settings.update({ issueImportModel: { tier: "standard" } });
+    s.settings.update({ operationModels: { issueImport: { tier: "standard" } } });
     await run(create("https://github.com/acme/app/issues/46").id);
     expect(jobs.at(-1)?.model).toBeNull();
     expect(jobs.at(-1)?.effort).toBeNull();
@@ -190,11 +191,43 @@ describe("issue import", () => {
   it("runs a ticket import on the chosen tier's model too", async () => {
     const { s, create, run, jobs } = setup();
     s.settings.update({
-      issueImportModel: { tier: "deep" },
+      operationModels: { issueImport: { tier: "deep" } },
       modelTiers: { deep: { description: null, t3: null, cli: { "claude-code": "opus" } } },
     });
     await run(create("PROJ-8").id);
     expect(jobs[0]).toMatchObject({ source: { kind: "ticket" }, model: "opus" });
+  });
+
+  it("fails a ticket import, and keeps a GitHub issue as written, when no provider can run it", async () => {
+    const { s, create, run, jobs, warnings } = setup();
+    s.settings.update({ providers: [{ id: "codex", enabled: true }] });
+    const ticket = await run(create("PROJ-9").id);
+    expect(ticket.import).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("Issue import needs a provider that can return structured output"),
+    });
+    const issueTask = await run(create(GH_URL).id);
+    expect(issueTask).toMatchObject({ title: issue.title, import: { status: "done" } });
+    expect(jobs).toHaveLength(0);
+    expect(warnings.some((w) => w.includes("Settings → Agents → Providers"))).toBe(true);
+  });
+
+  it("summarises a GitHub issue on Codex when it is chosen, with the warning, but reads no ticket there", async () => {
+    const { s, create, run, jobs, warnings } = setup();
+    s.settings.update({
+      providers: [{ id: "codex", enabled: true, cliPath: "/opt/codex" }],
+      operationModels: { issueImport: { provider: "codex", model: "gpt-mini" } },
+    });
+    const done = await run(create(GH_URL).id);
+    expect(done).toMatchObject({ title: outcome.title, import: { status: "done" } });
+    expect(jobs[0]).toMatchObject({ provider: "codex", cli: "/opt/codex", model: "gpt-mini" });
+    expect(warnings.some((w) => w.includes("Codex can't confine its file reads"))).toBe(true);
+    const ticket = await run(create("PROJ-9").id);
+    expect(ticket.import).toMatchObject({
+      status: "failed",
+      error: "Issue import is set to run on Codex, which can't follow tool rules of its own.",
+    });
+    expect(jobs).toHaveLength(1);
   });
 
   it("asks which servers are connected once for several imports", async () => {

@@ -1,8 +1,8 @@
 import { z } from "zod";
-import type { AgentHarness } from "./agentSessions.ts";
+import { AGENT_HARNESSES, AgentHarness } from "./agentSessions.ts";
 import { LABEL_MAX_LENGTH, normalizeLabel } from "./labels.ts";
 import {
-  type CliEffort,
+  CliEffort,
   cliEffortFor,
   MODEL_TIERS,
   ModelTier,
@@ -11,9 +11,10 @@ import {
   type ModelTiers,
   type SuggestedModel,
 } from "./modelTiers.ts";
+import { CliModel } from "./sessionLaunch.ts";
 
-// Named models beyond the three tiers, and the one rule that picks the model a run or a session starts on. See
-// docs/features/autopilot.md#models.
+// Named models beyond the three tiers, and the one way to say which model something runs on (ModelChoice). Which
+// choice applies to an operation, and which provider runs it, is operations.ts. See docs/features/autopilot.md#models.
 
 export const MODEL_PROFILES_MAX = 20;
 export const MODEL_PROFILE_NAME_MAX = 60;
@@ -51,21 +52,75 @@ export const ModelProfiles = z
 export type ModelProfiles = z.output<typeof ModelProfiles>;
 
 /**
- * Which model an automation runs on: the task's (its labels, else its suggested tier), a tier, or a custom model by
- * id. Saved in an automation's config.
+ * Which model something runs on, the one shape every setting uses (operations, automations, reviewer overrides):
+ * - `"inherit"`: no choice here, the next setting down decides (operations.ts has the order);
+ * - a tier, or a custom model by id, which the resolver maps to a provider the user has added;
+ * - a model typed for one provider, with an optional effort.
  */
+export const INHERIT = "inherit";
+
+export const ExplicitModel = z.object({
+  provider: AgentHarness,
+  model: CliModel,
+  effort: CliEffort.optional(),
+});
+export type ExplicitModel = z.infer<typeof ExplicitModel>;
+
 export const ModelChoice = z.union([
-  z.object({ from: z.literal("task") }),
+  z.literal(INHERIT),
   z.object({ tier: ModelTier }),
   z.object({ profile: z.string().min(1) }),
+  ExplicitModel,
 ]);
 export type ModelChoice = z.infer<typeof ModelChoice>;
 
-export const FROM_TASK: ModelChoice = { from: "task" };
+/** A stored choice, or null when it is none of the shapes (a hand-edited database). */
+export const parseModelChoice = (value: unknown): ModelChoice | null => {
+  const parsed = ModelChoice.safeParse(value);
+  return parsed.success ? parsed.data : null;
+};
 
-/** "task", "tier:deep" or "profile:codex61": a choice as one string, for a `<select>`. */
-export const modelChoiceKey = (choice: ModelChoice): string =>
-  "tier" in choice ? `tier:${choice.tier}` : "profile" in choice ? `profile:${choice.profile}` : "task";
+/**
+ * A choice in any shape the board ever saved, for migrations and importing an old automation bundle only: the current
+ * shape; `{from: "task"}` (an automation's "From the task") and null as inherit; `{tier}`; and a typed model, bare or
+ * as `{model}`, as that model on `typedOn`, the provider it ran on (Claude Code for every setting that took one).
+ * Anything else is null.
+ */
+export function readLegacyModelChoice(value: unknown, typedOn: AgentHarness = "claude-code"): ModelChoice | null {
+  const current = parseModelChoice(value);
+  if (current) return current;
+  if (value === null || value === undefined) return INHERIT;
+  const typed = (model: unknown): ModelChoice | null => {
+    const parsed = CliModel.safeParse(model);
+    return parsed.success ? { provider: typedOn, model: parsed.data } : null;
+  };
+  if (typeof value === "string") return value.trim() ? typed(value) : INHERIT;
+  if (typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (record.from === "task") return INHERIT;
+  if (typeof record.model === "string") return record.model.trim() ? typed(record.model) : INHERIT;
+  return null;
+}
+
+export const isInherit = (choice: ModelChoice | null | undefined): boolean => !choice || choice === INHERIT;
+
+/** A reviewer override as stored on a project or task: inherit is stored as none. */
+export const overrideValue = (choice: ModelChoice | null | undefined): ModelChoice | null =>
+  isInherit(choice) ? null : choice!;
+
+export const sameModelChoice = (a: ModelChoice | null | undefined, b: ModelChoice | null | undefined): boolean =>
+  modelChoiceKey(a ?? INHERIT) === modelChoiceKey(b ?? INHERIT);
+
+/**
+ * "inherit", "tier:deep", "profile:codex61" or "model:codex:gpt-5.5:high": a choice as one string, for a `<select>`.
+ * A model can't hold a space, so the parts split back cleanly from the left (a model may hold a colon).
+ */
+export function modelChoiceKey(choice: ModelChoice): string {
+  if (choice === INHERIT) return INHERIT;
+  if ("tier" in choice) return `tier:${choice.tier}`;
+  if ("profile" in choice) return `profile:${choice.profile}`;
+  return `model:${choice.provider}:${choice.model}${choice.effort ? ` ${choice.effort}` : ""}`;
+}
 
 export function parseModelChoiceKey(key: string): ModelChoice {
   if (key.startsWith("tier:")) {
@@ -73,7 +128,17 @@ export function parseModelChoiceKey(key: string): ModelChoice {
     if (tier.success) return { tier: tier.data };
   }
   if (key.startsWith("profile:") && key.length > 8) return { profile: key.slice(8) };
-  return FROM_TASK;
+  if (key.startsWith("model:")) {
+    const [rest = "", effort] = key.slice(6).split(" ");
+    const at = rest.indexOf(":");
+    const parsed = ExplicitModel.safeParse({
+      provider: rest.slice(0, at),
+      model: rest.slice(at + 1),
+      ...(effort ? { effort } : {}),
+    });
+    if (at > 0 && parsed.success) return parsed.data;
+  }
+  return INHERIT;
 }
 
 /** A tier or a custom model, as the resolver hands it out. */
@@ -86,16 +151,23 @@ export interface RunProfile {
   setting: ModelTierSetting;
 }
 
-/** Where a run's model came from, in resolution order. */
-export type RunModelSource = "automation" | "label" | "tier" | "default";
+/**
+ * Where a model came from, most specific first: a task's or project's reviewer override, the automation's config (or
+ * its action's own choice), the board's setting for the operation, the operation's default; then, when all of those
+ * inherit, the task's own model (a custom model its label picks, its suggested tier) and last the light tier.
+ */
+export type RunModelSource = "task" | "project" | "automation" | "board" | "default" | "label" | "tier" | "fallback";
 
+/** The choice that applies, before a provider is picked for it: a tier or custom model, or a typed model. */
 export interface RunModel {
-  /** Null runs the harness's own default. */
+  /** The tier or custom model; null for a typed model. */
   profile: RunProfile | null;
+  /** The typed model; null for a profile. */
+  explicit: ExplicitModel | null;
   source: RunModelSource;
   /** The task label that picked the model, when `source` is "label". */
   label: string | null;
-  /** Why an automation's choice was passed over (its custom model was deleted), else null. */
+  /** Why a setting was passed over (its custom model was deleted), else null. */
   note: string | null;
 }
 
@@ -111,7 +183,7 @@ export const tierProfile = (tiers: ModelTiers, tier: ModelTier): RunProfile => (
   setting: tiers[tier],
 });
 
-const customProfile = (profile: ModelProfile): RunProfile => ({
+export const customProfile = (profile: ModelProfile): RunProfile => ({
   id: profile.id,
   name: profile.name,
   tier: null,
@@ -125,46 +197,24 @@ export const runProfiles = (settings: ModelSettings): RunProfile[] => [
 ];
 
 /**
- * The model a run or a session starts on:
- * 1. the automation's explicit choice;
- * 2. a custom model one of the task's labels picks (the first in the user's order when several do);
- * 3. the task's suggested tier;
- * 4. the harness's default.
+ * A task's own model, what `inherit` comes down to for an operation on a task: a custom model one of its labels picks
+ * (the first in the user's order when several do), else its suggested tier, else the light tier.
  */
-export function resolveRunModel(
-  input: {
-    labels?: readonly string[] | undefined;
-    tier: ModelTier | null | undefined;
-    choice?: ModelChoice | null | undefined;
-  },
+export function resolveTaskModel(
+  task: { labels: readonly string[]; suggestedModel: SuggestedModel | null } | null,
   settings: ModelSettings,
+  note: string | null = null,
 ): RunModel {
-  let note: string | null = null;
-  const choice = input.choice;
-  if (choice && "tier" in choice) {
-    return { profile: tierProfile(settings.modelTiers, choice.tier), source: "automation", label: null, note };
-  }
-  if (choice && "profile" in choice) {
-    const profile = settings.modelProfiles.find((p) => p.id === choice.profile);
-    if (profile) return { profile: customProfile(profile), source: "automation", label: null, note };
-    note = `The automation's model "${choice.profile}" no longer exists in Settings → Model tiers, so the task's was used.`;
-  }
-  const labels = new Set((input.labels ?? []).map(normalizeLabel));
+  const labels = new Set((task?.labels ?? []).map(normalizeLabel));
   for (const profile of settings.modelProfiles) {
     const label = profile.labels.find((l) => labels.has(l));
-    if (label) return { profile: customProfile(profile), source: "label", label, note };
+    if (label) return { profile: customProfile(profile), explicit: null, source: "label", label, note };
   }
-  if (input.tier) {
-    return { profile: tierProfile(settings.modelTiers, input.tier), source: "tier", label: null, note };
-  }
-  return { profile: null, source: "default", label: null, note };
+  const tier = task?.suggestedModel?.tier;
+  if (tier)
+    return { profile: tierProfile(settings.modelTiers, tier), explicit: null, source: "tier", label: null, note };
+  return { profile: tierProfile(settings.modelTiers, "light"), explicit: null, source: "fallback", label: null, note };
 }
-
-/** The same for a task: its labels and suggested tier, with no automation choosing. */
-export const resolveTaskModel = (
-  task: { labels: readonly string[]; suggestedModel: SuggestedModel | null },
-  settings: ModelSettings,
-): RunModel => resolveRunModel({ labels: task.labels, tier: task.suggestedModel?.tier ?? null }, settings);
 
 /** The `--model` a harness's CLI takes for a profile, or null when it has none set. */
 export const profileCliModel = (profile: RunProfile | null, harness: AgentHarness): string | null =>
@@ -174,53 +224,31 @@ export const profileCliModel = (profile: RunProfile | null, harness: AgentHarnes
 export const profileCliEffort = (profile: RunProfile | null, harness: AgentHarness): CliEffort | null =>
   (profileCliModel(profile, harness) && cliEffortFor(harness, profile?.setting.cliEffort?.[harness])) || null;
 
-/**
- * The `--model` a headless `claude -p` run takes for a profile: its Claude Code model, else its T3 model when that is a
- * Claude model `claude` accepts, else null for the CLI's default. Its effort is `profileCliEffort`, which only goes with
- * the Claude Code model.
- */
-export function profileHeadlessModel(profile: RunProfile | null): string | null {
-  const cli = profileCliModel(profile, "claude-code");
-  if (cli) return cli;
-  const t3 = profile?.setting.t3?.selection.model;
-  return t3 && isClaudeModel(t3) ? t3 : null;
-}
-
-/** Whether `claude --model` takes a model: an id (`claude-…`) or one of its aliases. */
-export const isClaudeModel = (model: string): boolean => /^(claude-|opus|sonnet|haiku)/i.test(model);
-
-/** The harness and `--model` a headless Autopilot run takes. */
-export interface HeadlessRunModel {
-  harness: AgentHarness;
-  /** Null runs the CLI's default. */
-  model: string | null;
-}
-
-/**
- * What a headless run on a profile runs: the harness the profile names (Claude Code when it names none, or there is no
- * profile) and that harness's model. Claude Code also takes the profile's T3 model when it is a Claude model.
- */
-export function profileHeadless(profile: RunProfile | null): HeadlessRunModel {
-  const harness = profile?.setting.headless ?? "claude-code";
-  return {
-    harness,
-    model: harness === "claude-code" ? profileHeadlessModel(profile) : profileCliModel(profile, harness),
-  };
-}
-
-/** How a person is told where a model came from: "Codex 6.1 (from label codex61)". */
-export function describeRunModel(model: RunModel): string | null {
+/** "the Deep tier (Opus, high effort)", "Codex 6.1", "`gpt-5.5` on Codex": a model as a person reads it. */
+export function describeChoice(model: Pick<RunModel, "profile" | "explicit">): string | null {
+  if (model.explicit) {
+    const effort = model.explicit.effort ? `, ${model.explicit.effort} effort` : "";
+    return `${model.explicit.model} on ${AGENT_HARNESSES[model.explicit.provider].label}${effort}`;
+  }
   const { profile } = model;
   if (!profile) return null;
   const what = profile.tier ? `${profile.name} tier` : profile.name;
   const detail = profile.setting.description?.trim() || profile.setting.t3?.label || null;
-  const named = detail && detail !== profile.name ? `${what} (${detail})` : what;
-  switch (model.source) {
-    case "label":
-      return `${named}, from label ${model.label}`;
-    case "automation":
-      return `${named}, the automation's choice`;
-    default:
-      return named;
-  }
+  return detail && detail !== profile.name ? `${what} (${detail})` : what;
+}
+
+const SOURCE_WORDS: Partial<Record<RunModelSource, string>> = {
+  task: "the task's reviewer model",
+  project: "the project's reviewer model",
+  automation: "the automation's choice",
+  board: "the board's setting",
+};
+
+/** How a person is told where a model came from: "Codex 6.1, from label codex61". */
+export function describeRunModel(model: RunModel): string | null {
+  const named = describeChoice(model);
+  if (!named) return null;
+  if (model.source === "label") return `${named}, from label ${model.label}`;
+  const words = SOURCE_WORDS[model.source];
+  return words ? `${named}, ${words}` : named;
 }

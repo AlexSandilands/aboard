@@ -8,6 +8,7 @@ import {
   FIX_GAVE_UP_KEY_PREFIX,
   FIX_RESOLVE_KEY_PREFIX,
   RETRIED_PREFIX,
+  RunModelRecord,
   type AutopilotRun,
   type AutopilotRunFilter,
   type AutopilotRunStatus,
@@ -35,6 +36,7 @@ interface RunRow {
   needs_attention: number;
   dismissed_at: string | null;
   output_json: string | null;
+  model_json: string | null;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
@@ -61,6 +63,7 @@ const toRun = (r: RunRow): AutopilotRun => ({
   needsAttention: r.needs_attention === 1,
   dismissedAt: r.dismissed_at,
   output: parseJson<Record<string, unknown>>(r.output_json),
+  model: RunModelRecord.safeParse(parseJson(r.model_json)).data ?? null,
   createdAt: r.created_at,
   startedAt: r.started_at,
   finishedAt: r.finished_at,
@@ -87,6 +90,7 @@ const toRow = (r: AutopilotRun) => ({
   needs_attention: r.needsAttention ? 1 : 0,
   dismissed_at: r.dismissedAt,
   output_json: r.output ? JSON.stringify(r.output) : null,
+  model_json: r.model ? JSON.stringify(r.model) : null,
   created_at: r.createdAt,
   started_at: r.startedAt,
   finished_at: r.finishedAt,

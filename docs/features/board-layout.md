@@ -230,7 +230,7 @@ today, red overdue. A change logs `updated` with `fields: ["dueDate"]`. Agents s
 
 The task's own automation settings live in one place (`AutomationSection`, #168): **Autopilot** (Default / On / Off,
 whether Start planned tasks may start it), **Auto-review** (Default / On / Off, whether moving to Review opens a local
-review round), **Reviewer** (Inherit / a tier / a custom model id, the task's [reviewer model](local-review.md#the-reviewer-model); shown only while auto-review is effectively on), **Auto-merge** (Default / On / Off, whether `merge_task_pr` may merge its PR; Default reads as off) and a
+review round), **Reviewer** (the task's [reviewer model](local-review.md#the-reviewer-model) in the shared model picker: Inherit, which names what the project's or board's comes down to, a tier, a custom model or a provider's model; shown only while auto-review is effectively on), **Auto-merge** (Default / On / Off, whether `merge_task_pr` may merge its PR; Default reads as off) and a
 **Priority** switch. Each saves through `useUpdateTask` as soon as it changes. The actions menu's "Mark as priority" and the
 card's star stay as shortcuts to the same field. Local review's header only shows whether auto-review is on, as plain text; with Automation hidden, show it again from **Customize sections** to change it. Each row's hint is a tooltip and also its group's description, so screen readers read it.
 An epic has none of these (no plan to start, no PR, no priority), so the panel leaves the section out for it, like Plan and
@@ -375,10 +375,44 @@ and end in one summary toast ("Moved 2 tasks to Review, 1 skipped (no plan)"). T
 
 ### The settings page
 
-Settings is a route, `/settings/<group>` with group `board`, `tasks`, `models`, `autopilot`, `integrations` or `project`
-(`/settings` and unknown groups redirect to `board`). `models` is the Model tiers page: one row per tier
-(`models.tiers.<tier>`) with its description and each set-up provider's model; the integration sections link to it
-with a **Models per tier** row (`integrations.<section>.models`). The editors are sub-routes: `tasks/templates/<id>`,
+Settings is a route, `/settings/<group>` with group `board`, `keybindings`, `tasks`, `agents`, `autopilot`,
+`integrations` or `project` (`/settings` and unknown groups redirect to `board`). `agents` is one page
+(`agents/AgentsPage.tsx`) with three sections, the first two on the same split card (`agents/SplitCard.tsx`: a list on
+the left and the selected item's settings on the right, side by side from a 48rem container and stacked below it), so
+providers, tiers and custom models are each a row in a list, however many there are:
+
+- **Providers** (`agents.providers`, `agents/ProvidersSection.tsx`, after T3 Code's provider settings): the added
+  providers on the left (a dot, the version, an on/off switch and **Add provider**) and the selected one's editor on
+  the right (`ProviderEditors.tsx`: Status, Connection, MCP & skill, Hand-off menu, Models). The selected provider is
+  `?provider=`, and an `agents.providers.<id>.<row>` target selects `<id>`. Before any provider is added the page is
+  one empty card with **Add provider** (which lists them all), and the sidebar shows only Providers
+  (`visibleSections`).
+- **Models** (`agents.models`, `agents/ModelsSection.tsx`): the tiers, then the custom models, on the left
+  (`agents.models.tiers.<tier>`, `agents.models.custom.<id>`), each with its description or the models it runs
+  (`modelSummary`); **Add model** adds a custom model. On the right: the description (and a custom model's name and
+  labels), one row per provider added and switched on with its model and effort in the shared model picker (T3 Code's
+  in `agents/T3TierPicker.tsx`, which adds a **Default model** row), and **Preferred provider**, the CLI headless runs
+  on the tier try first (`ModelTierSetting.provider`), left out with fewer than two CLIs. **Rescan models** asks the
+  CLIs again. Which item a target names and what the list says is `agents/agents.logic.ts`.
+- **Operations** (`agents.operations`, `agents/OperationsSection.tsx`): the board's model for each operation in
+  `OPERATIONS`, in cards for Review, Autopilot and Board tools (`OPERATION_GROUPS`, `operations.logic.ts`), a row each
+  (`agents.operations.<op>`), whose one line is what it resolves to, with what the operation is behind its ⓘ. The picker offers **Default** (nothing saved: the operation's default), the task's own
+  model where that differs from the default (saved as `inherit`), the tiers, the custom models and any provider's
+  model. The line under it is the resolver run in the browser (`resolvesTo`): what runs it now and why, the resolver's
+  notes, or why nothing can. With no CLI provider added and switched on (`activeProviderIds`) nothing can run, so the
+  rows are dimmed and inert under one notice instead of each carrying the same reason.
+
+Models and Operations show only once a provider is added. `integrations` keeps GitHub, Ticket systems and Terminal.
+Old targets and URLs are read as they are now (`redirectSettingsTarget`, applied by `parseSettingsTarget` and the
+route's `beforeLoad`): `integrations.<provider>…` and `providers.…` go to `agents.providers.…`, and `models.tiers…`,
+`models.custom…` and `models.operations…` to their place on Agents (`MOVED_TO_AGENTS`).
+
+Each provider's editor has a **Models** row (`agents.providers.<provider>.models`): what each tier runs on that provider, the
+models its CLI lists, and a link to Models. The reviewer and issue-import models live only under Operations: their
+old rows in Tasks show one line of what they resolve to with a **Change** link (`OperationModelLink`). A project's
+reviewer model is its own section (`project.models.reviewer`). Targets from before the page (`models.tiers.custom*`,
+`tasks.review.model`, `tasks.new-tasks.import-model`, `project.review-skill.model`) redirect to where they are now
+(`MOVED_TARGETS`). The editors are sub-routes: `tasks/templates/<id>`,
 `autopilot/custom/<id>` and `project/recurring/<id>`, with `new` for one not saved yet. The project page and the
 rule editor take `?project=`; without it the page shows the project the board was scoped to, else the first.
 
@@ -389,7 +423,7 @@ rule editor take `?project=`; without it the page shows the project the board wa
   page and a page for the board; Back and Esc restore the board's search as it was (`boardReturn`).
 - **Ids.** `SETTINGS_GROUPS` (`settingsNav.logic.ts`) lists the groups and their sections. A section's id is
   `<group>.<section>` (`tasks.review`); the groups and rows inside carry `<group>.<section>.<row>` ids
-  (`integrations.claude-code.cli-path`). The ids are element ids and URL hashes, and are stable: settings search
+  (`providers.claude-code.cli-path`). The ids are element ids and URL hashes, and are stable: settings search
   targets them.
 - **Rows.** The column is `max-w-4xl` (as T3's readable page width). A `SettingsRow` (`settingsLayout.tsx`) is a
   title, at most one short line of description (or none when the title says it), and the control on the right.
@@ -429,16 +463,18 @@ rule editor take `?project=`; without it the page shows the project the board wa
   question to Claude Code. It starts highlighted when `looksLikeQuestion` says the text is one (a `?`, or a question
   word and at least four words), else the best result is. `POST /api/settings/ask` (`integrations/settingsAsk.ts`)
   takes the question and the index as `askEntries` sends it, since the web app owns the index. It runs `claude -p`
-  through the shared headless runner (`agentArgs` with `access: "none"`, the CLI from `headlessReviewCli`) on
-  `haiku`, with a $0.05 budget and a 60 s timeout, in an empty temp folder, and asks for `{ settingId | null,
+  through the shared headless runner (`agentArgs` with `access: "none"`, the Claude Code provider's CLI path, `harnessCliSetting`) on
+  the Ask operation's model (the light tier unless set; `resolveOperationModel`, which refuses with the reason when no
+  added provider can return structured output with no tools), with a $0.05 budget and a 60 s timeout, in an empty temp folder, and asks for `{ settingId | null,
   answer }`. The question and the index are fenced as data with a random fence. A `settingId` that isn't one of the
   request's ids becomes null (the answer stays). Only one question runs at a time (the page discards an edited pending question but can't stop its run), so a second
   one meanwhile gets "Another question is still being answered". A failed run, a timeout or an answer of the wrong shape comes back
-  as `{ ok: false, error }` with status 200, like the CLI test, so the row can show the message. The row holds the
+  as `{ ok: false, error }` with status 200, so the row can show the message. The row holds the
   whole exchange: thinking, then the answer with **Go there** (the same jump and highlight as a result), or the
-  error with "Click to try again". `GET /api/settings/ask` says whether the CLI resolves (not whether it is signed
-  in; that shows as the run's error); when it doesn't, the row is disabled with the reason and **Set up Claude
-  Code**, which opens `integrations.claude-code.cli-path`. Copilot as a second engine isn't built.
+  error with "Click to try again". `askUnavailableReason` says whether it can run, from the
+  providers list and `GET /api/providers` (Claude Code added, on, and its CLI found; not whether it is signed in, which
+  shows as the run's error); when it can't, the row is disabled with the reason and **Set up Claude Code**, which
+  opens `providers.claude-code.cli-path`. Copilot as a second engine isn't built.
 - **Scroll-spy.** `SettingsScroller` reads the tops of the `SettingsSubsection` anchors on scroll and resize, and
   `activeSectionId` picks the last whose top has passed a line near the top (the last one when scrolled to the
   bottom). The list highlights that section.
@@ -450,6 +486,32 @@ rule editor take `?project=`; without it the page shows the project the board wa
   leave an editor for the section listing what it edits (`editorListSection`, `useLeaveEditor`): opened from that
   list (the `settingsEditorFromList` history state), it steps back in history, so the browser's Back doesn't
   repeat the page; opened from a link or a reload, it opens the list as a new entry.
+
+### The model picker
+
+Every model control is one picker (`components/models/`), ported from T3 Code's composer picker
+(`ProviderModelPicker`, `ModelPickerContent`, `ModelPickerSidebar`, `ModelListRow`, `modelPickerSearch`, and the
+effort column of `ComposerModelEffort`). A trigger opens a popup with a rail of tabs (a Base UI `Toolbar`), a search
+over a virtualised list (`LegendList` inside a Base UI `Combobox`), and an effort column docked beside them.
+
+- **Adapters.** `ModelChoicePicker` picks a `ModelChoice` for an operation: a **Tiers and custom models** tab (inherit
+  with what it comes down to, each tier and custom model with what it resolves to for the operation), then one tab per
+  added CLI with the models `/api/agent-models` lists. `CliModelPicker` is the same locked to one CLI, with **Default
+  model** first (the tier cells, the session and planning dialogs). `T3ModelPicker` lists T3 Code's catalog,
+  Favorites first, legacy models folded under **Show more**, with the model's reasoning levels and fast mode in the
+  column (a tier's T3 Code cell, the T3 launch dialog).
+- **Greyed providers.** A provider that isn't added, is switched off, or can't do what the operation needs
+  (`missingNeeds` over `OPERATIONS[op].needs`) is greyed out in the rail, its reason in a tooltip and on its rows
+  (`providerDisabledReason`). Each tab's footer links to that provider's settings and says when its scan failed.
+- **Typing.** A search that is a valid model name and isn't listed is offered as **Use `<model>`** on each CLI that can
+  run it (only the open tab's when a CLI's tab is open), so a model the scan doesn't list and a failed scan still work.
+- **Defaults.** When the scan says which model the CLI runs with none given (Codex's `isDefault`), the **Default
+  model** row names it ("GPT-6.1-Sol, unless Codex is set to another": the CLI's own config can pick another), and the effort
+  column's **Default** names the level the model runs at (`defaultEffort`).
+- **Effort.** Picking a model with levels keeps the popup open and moves focus to the column; a tier, inherit, or a
+  model with no levels closes it. A saved level the new model doesn't take is dropped.
+- **Keys.** Left from an empty search goes to the rail, Right at its end to the column, Ctrl+[ and Ctrl+] change tab,
+  Enter picks the highlighted row.
 
 ### Keyboard shortcuts
 
@@ -563,4 +625,8 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/settings/SettingsAskRow.tsx`, `apps/server/src/integrations/settingsAsk.ts` | The settings Ask: its row in the results, and the endpoint that asks Claude Code (server tested) |
 | `apps/web/src/components/settings/settingsNavigation.ts` | `useOpenSettings`, `useLeaveSettings`                            |
 | `apps/web/src/components/settings/pages/`              | The group pages, the project page and the editor sub-pages      |
-| `apps/web/src/components/settings/integrations.logic.ts` | The integrations' status dots (tested)                          |
+| `apps/web/src/components/settings/integrations.logic.ts` | GitHub's and the terminal's status dots (tested)                |
+| `apps/web/src/components/settings/agents/` | Settings → Agents: the page, the split card, Providers (list, Add provider dialog, empty state), Models (tiers, custom models) and Operations; `agents.logic.ts` is tested |
+| `apps/web/src/components/settings/ProviderEditors.tsx`, `providers.logic.ts` | Each provider's editor, its dots and the selected provider (logic tested) |
+| `apps/web/src/components/settings/OperationModelLink.tsx`, `ProjectModelsSection.tsx` | The one-line links to an operation's row, and a project's reviewer model |
+| `apps/web/src/components/models/` | The shared model picker and its adapters (`ModelChoicePicker`, `CliModelPicker`, `T3ModelPicker`); options, search, disabled reasons, effort and the Operations list in `*.logic.ts` (tested) |

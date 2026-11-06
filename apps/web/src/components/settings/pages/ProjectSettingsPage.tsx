@@ -24,6 +24,7 @@ import { useSettingsNav } from "~/state/ui";
 import { FolderPicker } from "../FolderPicker";
 import { ProjectPlanSkillSection } from "../PlanSkillSection";
 import { ProjectReviewSection } from "../ProjectReviewSection";
+import { ProjectModelsSection } from "../ProjectModelsSection";
 import { SettingsLink, SettingsRow, SettingsSection, SettingsSubsection } from "../settingsLayout";
 import { resolveSettingsProject } from "../settingsNav.logic";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
@@ -269,6 +270,9 @@ function ProjectSections({ project }: { project: Project }) {
       </SettingsSubsection>
       <SettingsSubsection id="project.review-skill">
         <ProjectReviewSection project={project} />
+      </SettingsSubsection>
+      <SettingsSubsection id="project.models">
+        <ProjectModelsSection project={project} />
       </SettingsSubsection>
       <SettingsSubsection id="project.autopilot">
         <ProjectAutopilotSection projectId={project.id} />

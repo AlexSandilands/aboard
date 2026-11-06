@@ -3,7 +3,6 @@ import {
   type AutomationBundle,
   customAllowedTools,
   describeCustomTrigger,
-  MODEL_TIERS,
   type AutomationExample,
 } from "@repo/contracts";
 import { BotIcon, FileUpIcon, TriangleAlertIcon } from "lucide-react";
@@ -25,6 +24,7 @@ import {
   readBundle,
   type ImportDraft,
 } from "./customAutomationImport.logic";
+import { actionModelLabel } from "./customAutomations.logic";
 import { InputValueControl } from "./InputsAndSlots";
 import { ScriptWarning } from "./ScriptWarning";
 import { VariableNeedsList } from "./VariablesEditor";
@@ -83,7 +83,8 @@ export function CustomAutomationImportForm({
   const [fromDraft, setFromDraft] = useState<string | null>(null);
   const opened = useRef<string | null>(null);
   const projects = board?.projects.filter((p) => p.archivedAt === null) ?? [];
-  const boardVariables = useSettings().data?.automationVariables ?? [];
+  const settings = useSettings().data;
+  const boardVariables = settings?.automationVariables ?? [];
   const needs =
     bundle && draft
       ? variableNeeds(
@@ -233,7 +234,7 @@ export function CustomAutomationImportForm({
               <>
                 <Section
                   title="Prompt the agent starts with"
-                  hint={`Model tier: ${MODEL_TIERS.find((t) => t.value === action.tier)?.label ?? "the default"}.${action.onPrBranch ? " Works on the pull request's branch." : ""}${action.skill && !bundle.skill ? ` It is told to use a skill called ${action.skill}, which isn't in the file: you need it installed already.` : ""}`}
+                  hint={`Model: ${actionModelLabel(action.model, settings?.modelProfiles ?? [], bundle.trigger.kind === "schedule")}.${action.onPrBranch ? " Works on the pull request's branch." : ""}${action.skill && !bundle.skill ? ` It is told to use a skill called ${action.skill}, which isn't in the file: you need it installed already.` : ""}`}
                 >
                   <Code tall>{action.prompt}</Code>
                 </Section>

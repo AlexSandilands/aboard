@@ -5,7 +5,7 @@ import type {
   CreateProjectInput,
   CreateTaskInput,
   EpicDelivery,
-  HeadlessModel,
+  OperationResolution,
   CreateTemplateInput,
   IssueSnapshot,
   LinkInput,
@@ -325,6 +325,9 @@ export interface SettingsService {
   update(input: UpdateSettingsInput): AppSettings;
   /** The stored T3 token (server-side only). */
   t3Token(): string | null;
+  /** Whether an upgraded install still has providers to add from detection (providers.ts seedFromDetection). */
+  providersSeedPending(): boolean;
+  clearProvidersSeed(): void;
 }
 
 export interface OpenRoundOptions {
@@ -341,9 +344,9 @@ export interface ReviewsService {
   effectiveAutoReview(taskId: string): boolean;
   /** The project's override, else the global setting. */
   skillFor(taskId: string): ReviewSkillRef;
-  /** The task's override, else the project's, else the global setting; null leaves the reviewer on its own default. */
-  modelFor(taskId: string): HeadlessModel | null;
-  /** What the review brief says about `modelFor`'s model, or null while none is set. */
+  /** The board reviewer's model and provider for the task (its override, the project's, the board's), or a refusal. */
+  boardReviewerModel(taskId: string): OperationResolution;
+  /** What the review brief says about the reviewer subagent's model, or null while nothing above the task's sets one. */
   modelLineFor(taskId: string): string | null;
   /**
    * Opens the next round as pending. An unfinished latest round is reused: a pending one is returned as is

@@ -2,14 +2,15 @@ import { z } from "zod";
 import { AutopilotStatus } from "./autopilot.ts";
 import { KeybindingOverrides } from "./keybindings.ts";
 import { LabelHue } from "./labels.ts";
-import type { AgentHarness } from "./agentSessions.ts";
 import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
 import { AutomationVariables } from "./automationVariables.ts";
 import { BackupSettings, MachineName } from "./backup.ts";
-import { HeadlessModel } from "./headlessModel.ts";
+import { ModelChoice } from "./modelProfiles.ts";
+import { OperationId, OperationModels } from "./operations.ts";
 import { ModelProfiles } from "./modelProfiles.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
 import { InboxNotification, NotificationSettings, UpdateNotificationSettingsInput } from "./notifications.ts";
+import { ProviderSettings } from "./providers.ts";
 import { PlanSkillRef, ReviewSkillRef, TaskReview, TaskReviewSummary } from "./reviews.ts";
 import { SavedViews } from "./savedViews.ts";
 import { TicketRef, TicketSystem, TicketSystems } from "./ticketSystems.ts";
@@ -146,8 +147,8 @@ export const Project = z.object({
   t3ProjectId: z.string().nullable(),
   /** Overrides the global review skill for this project's tasks; null inherits it. */
   reviewSkill: ReviewSkillRef.nullable(),
-  /** Overrides the board's reviewer model for this project's tasks; null inherits it. */
-  reviewModel: HeadlessModel.nullable(),
+  /** Overrides the board's reviewer models (the subagent's and the board reviewer's) for this project's tasks; null inherits them. */
+  reviewModel: ModelChoice.nullable(),
   /** Overrides the global planning skill for this project's bulk-planning sessions; null inherits it. */
   planSkill: PlanSkillRef.nullable(),
   /** Overrides of the board's automation variables in this project (effectiveVariables). */
@@ -567,7 +568,7 @@ export const TaskSummary = z.object({
   /** Per-task auto-review override; null inherits the global setting. */
   autoReview: z.boolean().nullable(),
   /** Per-task reviewer model override; null inherits the project's, then the board's. */
-  reviewModel: HeadlessModel.nullable(),
+  reviewModel: ModelChoice.nullable(),
   /** Per-task Autopilot flag: null is Default, true is On, false is Off. Start planned tasks only starts tasks flagged On. */
   autopilot: z.boolean().nullable(),
   /**
@@ -663,6 +664,8 @@ export const BoardEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("notifications.changed"), unread: z.number() }),
   /** A suggested change was made, accepted, rejected or went stale; Settings refetches. `open` counts the open ones. */
   z.object({ type: z.literal("suggestions.changed"), open: z.number() }),
+  /** Providers were added, removed, switched or given a new CLI path. Sent whole: the list is short. */
+  z.object({ type: z.literal("providers.changed"), providers: ProviderSettings }),
   /** The whole board was replaced (restored from a backup); clients refetch everything. */
   z.object({ type: z.literal("board.reset") }),
 ]);
@@ -710,7 +713,8 @@ export const UpdateProjectInput = z.object({
   collapsed: z.boolean().optional(),
   archived: z.boolean().optional(),
   reviewSkill: ReviewSkillRef.nullable().optional(),
-  reviewModel: HeadlessModel.nullable().optional(),
+  /** null (or inherit) inherits the board's reviewer models. */
+  reviewModel: ModelChoice.nullable().optional(),
   planSkill: PlanSkillRef.nullable().optional(),
   /** Replaces the project's automation variable overrides. */
   variables: AutomationVariables.optional(),
@@ -723,7 +727,7 @@ export const LinkInput = z.object({
   kind: LinkKind.optional(),
   label: z.string().optional(),
   t3Thread: T3ThreadRef.optional(),
-  /** A Claude Code or Copilot CLI session, so the board can show its status and resume it in a terminal. */
+  /** A Claude Code, Codex or Copilot CLI session, so the board can resume it in a terminal (and show its status, for all but Codex). */
   agentSession: AgentSessionRef.optional(),
 });
 export type LinkInput = z.infer<typeof LinkInput>;
@@ -791,8 +795,8 @@ export const UpdateTaskInput = z.object({
   archived: z.boolean().optional(),
   /** null inherits the global auto-review setting. */
   autoReview: z.boolean().nullable().optional(),
-  /** null inherits the project's reviewer model, then the board's. */
-  reviewModel: HeadlessModel.nullable().optional(),
+  /** null (or inherit) inherits the project's reviewer model, then the board's. */
+  reviewModel: ModelChoice.nullable().optional(),
   /** null is Default: Start planned tasks never starts the task. */
   autopilot: z.boolean().nullable().optional(),
   /** null is Default: merge_task_pr refuses to merge the task's PR, as for false. */
@@ -849,11 +853,8 @@ export const StepPatch = z.object({
 });
 export type StepPatch = z.infer<typeof StepPatch>;
 
-/**
- * What the board's hand-off menus can start: a T3 Code thread, or a session of a CLI harness the board can start
- * (LAUNCHABLE_HARNESSES: not Codex, which picks its own session id).
- */
-export const HandoffTarget = z.enum(["t3-code", "claude-code", "copilot-cli"]);
+/** What the board's hand-off menus can start: a T3 Code thread, or a session of a CLI harness (LAUNCHABLE_HARNESSES). */
+export const HandoffTarget = z.enum(["t3-code", "claude-code", "codex", "copilot-cli"]);
 export type HandoffTarget = z.infer<typeof HandoffTarget>;
 
 /** Every target shown, as a target added later starts. */
@@ -884,27 +885,24 @@ export const AppSettings = z
     reviewMaxRounds: z.number().int().min(1).max(10),
     /** Let the board run a headless reviewer when no agent picks a round up. */
     headlessReviewEnabled: z.boolean(),
-    /** The Claude Code CLI to run; null looks up `claude` on PATH. New Claude Code sessions start it too. */
-    headlessReviewCli: z.string().nullable(),
-    /** The Copilot CLI new Copilot sessions start; null looks up `copilot` on PATH. */
-    copilotCli: z.string().nullable(),
-    /** The Codex CLI headless runs and resumed Codex sessions start; null looks up `codex` on PATH. */
-    codexCli: z.string().nullable(),
+    /**
+     * The providers the user added (Settings → Agents → Providers), each with its switch and CLI path. One that isn't here is
+     * offered nowhere but the Add provider dialog.
+     */
+    providers: ProviderSettings,
     /**
      * Whether the hand-off menus offer each target when it can start here; false hides it. Existing sessions still
      * reopen, and agents can still start threads (agentT3Threads).
      */
     handoffMenus: z.record(HandoffTarget, z.boolean()),
     headlessReviewBudgetUsd: z.number().positive().max(100),
-    /** The model the board reviewer runs; null keeps the CLI's own default. */
-    reviewModel: HeadlessModel.nullable(),
     /** Fill in tasks created from a ticket or a GitHub issue URL in the background. */
     issueImportEnabled: z.boolean(),
     /**
-     * The model `claude -p` runs for an import: a model tier, or a model as `--model` takes it (an alias like "haiku"
-     * or a full id). Saved as a bare string before tiers were an option; always returned in the object form.
+     * The model each operation runs on (operations.ts); one left out takes its default, a tier or the task's own.
+     * Replaced reviewModel and issueImportModel in 041_operation_models.
      */
-    issueImportModel: HeadlessModel,
+    operationModels: OperationModels,
     issueImportBudgetUsd: z.number().positive().max(100),
     /** What each suggested model tier means: a description for prompts and an optional T3 Code model. */
     modelTiers: ModelTiers,
@@ -929,15 +927,6 @@ export const AppSettings = z
 
 export type AppSettings = z.infer<typeof AppSettings>;
 
-/** The CLI path set in Settings for a harness, or null to look its name up on PATH. */
-export const harnessCliSetting = (
-  settings: Pick<AppSettings, "headlessReviewCli" | "copilotCli" | "codexCli">,
-  harness: AgentHarness,
-): string | null =>
-  ({ "claude-code": settings.headlessReviewCli, codex: settings.codexCli, "copilot-cli": settings.copilotCli })[
-    harness
-  ]?.trim() || null;
-
 export const UpdateSettingsInput = z.object({
   /** Replaces the whole list. */
   ticketSystems: TicketSystems.optional(),
@@ -949,16 +938,14 @@ export const UpdateSettingsInput = z.object({
   planSkill: PlanSkillRef.optional(),
   reviewMaxRounds: z.number().int().min(1).max(10).optional(),
   headlessReviewEnabled: z.boolean().optional(),
-  headlessReviewCli: z.string().trim().nullable().optional(),
-  copilotCli: z.string().trim().nullable().optional(),
-  codexCli: z.string().trim().nullable().optional(),
+  /** Replaces the whole list of added providers. */
+  providers: ProviderSettings.optional(),
   /** Merges into the switches: targets left out keep theirs. */
   handoffMenus: z.partialRecord(HandoffTarget, z.boolean()).optional(),
   headlessReviewBudgetUsd: z.number().positive().max(100).optional(),
   issueImportEnabled: z.boolean().optional(),
-  /** A tier, a model, or null for the CLI's default. A bare string is a model. */
-  reviewModel: HeadlessModel.nullable().optional(),
-  issueImportModel: HeadlessModel.optional(),
+  /** Merges into the operations' models: one left out keeps its model, and null puts one back to its default. */
+  operationModels: z.partialRecord(OperationId, ModelChoice.nullable()).optional(),
   issueImportBudgetUsd: z.number().positive().max(100).optional(),
   /** Replaces the tiers given; tiers left out keep their setting. */
   modelTiers: ModelTiers.partial().optional(),

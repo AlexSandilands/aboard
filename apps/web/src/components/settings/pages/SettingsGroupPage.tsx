@@ -7,13 +7,13 @@ import { BoardVariablesSection } from "~/components/autopilot/VariablesSection";
 import { NotificationsSection } from "~/components/notifications/NotificationsSection";
 import { VersionAndSocial } from "~/components/social/SocialSettings";
 import { useIntegrationsStatus, useSettings } from "~/state/queries";
+import { AgentsPage } from "../agents/AgentsPage";
 import { AppearanceSection } from "../AppearanceSection";
 import { ArchivedProjectsSection } from "../ArchivedProjectsSection";
 import { BackupSection } from "../BackupSection";
-import { ClaudeCodeSection, CodexSection, CopilotSection, GithubSection, T3Section } from "../IntegrationsSections";
+import { GithubSection } from "../IntegrationsSections";
 import { IssueImportSection } from "../IssueImportSection";
 import { KeybindingsSection } from "../KeybindingsSection";
-import { ModelTiersSection } from "../ModelTiersSection";
 import { PlanSkillSection } from "../PlanSkillSection";
 import { ReviewSettingsSection } from "../ReviewSettingsSection";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
@@ -68,8 +68,8 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
       return <WithSettings>{(settings) => <KeybindingsSection settings={settings} />}</WithSettings>;
     case "tasks":
       return <TasksContent />;
-    case "models":
-      return <ModelsContent />;
+    case "agents":
+      return <AgentsContent />;
     case "autopilot":
       return (
         <>
@@ -107,31 +107,14 @@ function TasksContent() {
   );
 }
 
-function ModelsContent() {
-  const integrations = useIntegrationsStatus();
-  return (
-    <SettingsSubsection id="models.tiers">
-      <WithSettings>{(settings) => <ModelTiersSection settings={settings} t3={integrations.data?.t3} />}</WithSettings>
-    </SettingsSubsection>
-  );
+function AgentsContent() {
+  return <WithSettings>{(settings) => <AgentsPage settings={settings} />}</WithSettings>;
 }
 
 function IntegrationsContent() {
   const integrations = useIntegrationsStatus();
   return (
     <>
-      <SettingsSubsection id="integrations.t3-code">
-        <WithSettings>{(settings) => <T3Section settings={settings} status={integrations.data?.t3} />}</WithSettings>
-      </SettingsSubsection>
-      <SettingsSubsection id="integrations.claude-code">
-        <WithSettings>{(settings) => <ClaudeCodeSection settings={settings} />}</WithSettings>
-      </SettingsSubsection>
-      <SettingsSubsection id="integrations.copilot">
-        <WithSettings>{(settings) => <CopilotSection settings={settings} />}</WithSettings>
-      </SettingsSubsection>
-      <SettingsSubsection id="integrations.codex">
-        <WithSettings>{(settings) => <CodexSection settings={settings} />}</WithSettings>
-      </SettingsSubsection>
       <SettingsSubsection id="integrations.github">
         <WithSettings>
           {(settings) => <GithubSection settings={settings} status={integrations.data?.github} />}

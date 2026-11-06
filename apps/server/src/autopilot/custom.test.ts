@@ -292,7 +292,7 @@ describe("custom automations: triggers", () => {
       // Headless whatever the automation's runner option says, with the push guard aimed at the project's checkout.
       expect(request.options).toMatchObject({ runner: "headless" });
       expect(request.repo).toBe("/work/alpha");
-      expect(request.tier).toBeNull();
+      expect(request).toMatchObject({ operation: "customDetached", modelChoice: "inherit" });
       expect(runsOf()[0]).toMatchObject({
         automation: customAutomationKey(custom.id),
         taskId: null,
@@ -302,17 +302,17 @@ describe("custom automations: triggers", () => {
       expect(runsOf(other.id)).toHaveLength(0);
     });
 
-    it("passes the action's tier, and starts headless even when the runner option says T3 only", async () => {
+    it("passes the action's model, and starts headless even when the runner option says T3 only", async () => {
       const { s, define, pass, agentRuns, project } = setup();
       const custom = define({
         name: "Watch",
         trigger: minutes(5),
         filters: { projectIds: [project.id] },
-        action: { ...agent, tier: "light" },
+        action: { ...agent, model: { tier: "light" } },
       });
       s.autopilot.setScope("board", null, customAutomationKey(custom.id), { mode: "on", config: { runner: "t3" } });
       await pass(5 * 60_000);
-      expect(agentRuns[0]).toMatchObject({ tier: "light", options: { runner: "headless" } });
+      expect(agentRuns[0]).toMatchObject({ modelChoice: { tier: "light" }, options: { runner: "headless" } });
     });
 
     it("gives a scheduled agent the extra tools the action allows", async () => {
@@ -806,7 +806,7 @@ describe("custom automations: actions", () => {
         kind: "agent",
         prompt: "Fix #{{task.number}} {{task.title}} at {{pr.url}} in {{project.path}}",
         skill: "fix-ci",
-        tier: "light",
+        model: { tier: "light" },
         onPrBranch: true,
       },
     });

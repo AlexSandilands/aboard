@@ -1,15 +1,15 @@
-import type { AgentIntegrations } from "@repo/contracts";
+import type { AgentModelsStatus, ProviderSetting, ProvidersStatus, T3IntegrationStatus } from "@repo/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import {
-  createAgentIntegrations,
+  createProviders,
   codexMcpEntries,
   mcpEntriesOf,
   parseClaudeMcpList,
   parseClaudeMcpScope,
   sameMcpUrl,
-  type AgentIntegrationProbes,
-} from "./agentIntegrations.ts";
+  type ProviderProbes,
+} from "./providers.ts";
 import type { TerminalHost } from "./terminal.ts";
 
 const LIST = [
@@ -121,20 +121,50 @@ const host = (env: Record<string, string> = {}): TerminalHost => ({
   which: () => null,
 });
 
+const T3_OFF: T3IntegrationStatus = {
+  detected: false,
+  origin: null,
+  environmentId: null,
+  label: null,
+  liveStatus: "off",
+  error: null,
+};
+
 function service(
-  probes: Partial<AgentIntegrationProbes>,
-  opts: { now?: () => number; env?: Record<string, string> } = {},
+  probes: Partial<ProviderProbes>,
+  opts: {
+    now?: () => number;
+    env?: Record<string, string>;
+    t3?: T3IntegrationStatus;
+    models?: (harness: string, refresh: boolean) => Promise<AgentModelsStatus>;
+  } = {},
 ) {
   const settings = {
-    headlessReviewCli: null as string | null,
-    copilotCli: null as string | null,
-    codexCli: null as string | null,
+    providers: [] as ProviderSetting[],
+    t3TokenSet: false,
+    handoffMenus: { "t3-code": true, "claude-code": true, codex: true, "copilot-cli": true },
   };
-  const svc = createAgentIntegrations({
-    services: () => ({ settings: { get: () => settings } }) as never,
+  let seedPending = false;
+  const update = vi.fn<(input: { providers?: ProviderSetting[] }) => void>((input) => {
+    if (input.providers) settings.providers = input.providers;
+  });
+  const svc = createProviders({
+    services: () =>
+      ({
+        settings: {
+          get: () => settings,
+          update,
+          providersSeedPending: () => seedPending,
+          clearProvidersSeed: () => {
+            seedPending = false;
+          },
+        },
+      }) as never,
     mcpUrl: () => BOARD,
     host: () => host(opts.env),
     userHome: "/home/u",
+    t3Status: () => opts.t3 ?? T3_OFF,
+    ...(opts.models ? { models: opts.models } : {}),
     probes: {
       resolve: (command) => `/bin/${command}`,
       version: () => Promise.resolve("2.0.0"),
@@ -144,13 +174,22 @@ function service(
     },
     ...(opts.now ? { now: opts.now } : {}),
   });
-  return { svc, settings };
+  return {
+    svc,
+    settings,
+    update,
+    pendSeed: () => {
+      seedPending = true;
+    },
+    seedPending: () => seedPending,
+  };
 }
 
-const claudeOf = (r: AgentIntegrations) => r.harnesses.find((h) => h.harness === "claude-code")!;
-const copilotOf = (r: AgentIntegrations) => r.harnesses.find((h) => h.harness === "copilot-cli")!;
+const providerOf = (r: ProvidersStatus, id: string) => r.providers.find((p) => p.id === id)!;
+const claudeOf = (r: ProvidersStatus) => providerOf(r, "claude-code");
+const copilotOf = (r: ProvidersStatus) => providerOf(r, "copilot-cli");
 
-describe("agent integrations: Claude Code", () => {
+describe("providers: Claude Code", () => {
   it("finds the board's server by its URL under any name", async () => {
     const { svc } = service({});
     const claude = claudeOf(await svc.status());
@@ -196,8 +235,8 @@ describe("agent integrations: Claude Code", () => {
       path: null,
       error: "claude isn't on PATH",
     });
-    settings.headlessReviewCli = "/opt/claude";
-    expect(claudeOf(await svc.status(true)).cli.error).toBe("Not found at /opt/claude");
+    settings.providers = [{ id: "claude-code", enabled: true, cliPath: "/opt/claude" }];
+    expect(claudeOf(await svc.status(true)).cli?.error).toBe("Not found at /opt/claude");
 
     const failing = service({
       version: () => Promise.reject(new Error("boom")),
@@ -234,13 +273,13 @@ describe("agent integrations: Claude Code", () => {
       scope: "user",
       name: "aboard",
     });
-    expect(claude.mcp.detail).toContain("timed out");
-    expect(claude.mcp.detail).not.toContain("Bearer");
+    expect(claude.mcp?.detail).toContain("timed out");
+    expect(claude.mcp?.detail).not.toContain("Bearer");
     expect(files.some((f) => f.replace(/\\/g, "/") === "/home/u/.claude.json")).toBe(true);
   });
 });
 
-describe("agent integrations: Claude Code local scope", () => {
+describe("providers: Claude Code local scope", () => {
   const stored = JSON.stringify({
     mcpServers: {},
     projects: {
@@ -257,12 +296,12 @@ describe("agent integrations: Claude Code local scope", () => {
     });
     const mcp = claudeOf(await svc.status()).mcp;
     expect(mcp).toMatchObject({ registered: true, connected: null, scope: "local", name: "aboard" });
-    expect(mcp.detail).toContain("--scope user");
+    expect(mcp?.detail).toContain("--scope user");
     expect(JSON.stringify(mcp)).not.toContain("secret");
   });
 });
 
-describe("agent integrations: Copilot CLI", () => {
+describe("providers: Copilot CLI", () => {
   const config = (url: string) =>
     JSON.stringify({
       mcpServers: { aboard: { type: "http", url, tools: ["*"] } },
@@ -287,7 +326,7 @@ describe("agent integrations: Copilot CLI", () => {
       p.replace(/\\/g, "/") === "/c/mcp-config.json" ? config(BOARD) : null,
     );
     const { svc } = service({ readFile: read }, { env: { COPILOT_HOME: "/c" } });
-    expect(copilotOf(await svc.status()).mcp.registered).toBe(true);
+    expect(copilotOf(await svc.status()).mcp?.registered).toBe(true);
   });
 
   it("is not registered without a config or without the board's entry", async () => {
@@ -301,7 +340,7 @@ describe("agent integrations: Copilot CLI", () => {
   });
 });
 
-describe("agent integrations: Codex", () => {
+describe("providers: Codex", () => {
   const TOML = [
     'model = "gpt-5.5"',
     "[mcp_servers.other]",
@@ -323,15 +362,15 @@ describe("agent integrations: Codex", () => {
   it("finds the board in config.toml under CODEX_HOME", async () => {
     const read = (p: string) => (p.replace(/\\/g, "/") === "/x/config.toml" ? TOML : null);
     const { svc } = service({ readFile: read }, { env: { CODEX_HOME: "/x" } });
-    const codex = (await svc.status()).harnesses.find((h) => h.harness === "codex")!;
+    const codex = providerOf(await svc.status(), "codex");
     expect(codex.cli).toMatchObject({ found: true, path: "/bin/codex" });
     expect(codex.mcp).toMatchObject({ registered: true, name: "my board", scope: "user" });
-    const none = (await service({}).svc.status()).harnesses.find((h) => h.harness === "codex")!;
+    const none = providerOf(await service({}).svc.status(), "codex");
     expect(none.mcp).toMatchObject({ registered: false, detail: "No Codex config yet" });
   });
 });
 
-describe("agent integrations: refresh", () => {
+describe("providers: refresh", () => {
   it("joins a check that is still running instead of starting another", async () => {
     let release: (() => void) | undefined;
     const claudeMcp = vi.fn<(exe: string, args: string[]) => Promise<string>>((_exe, args) =>
@@ -354,7 +393,7 @@ describe("agent integrations: refresh", () => {
   });
 });
 
-describe("agent integrations: cache", () => {
+describe("providers: cache", () => {
   it("reuses an answer for a minute, until refreshed or a CLI path changes", async () => {
     let time = 0;
     const version = vi.fn<(exe: string) => Promise<string>>(() => Promise.resolve("2.0.0"));
@@ -367,18 +406,95 @@ describe("agent integrations: cache", () => {
     expect(version).toHaveBeenCalledTimes(6);
     await svc.status(true);
     expect(version).toHaveBeenCalledTimes(9);
-    settings.copilotCli = "/opt/copilot";
+    settings.providers = [{ id: "copilot-cli", enabled: true, cliPath: "/opt/copilot" }];
     await svc.status();
     expect(version).toHaveBeenCalledTimes(12);
   });
 });
 
-describe("GET /api/agent-integrations", () => {
+describe("providers: T3 Code and models", () => {
+  it("lists every provider in order, with T3 Code's live status and whether a token is saved", async () => {
+    const { svc, settings } = service(
+      {},
+      { t3: { ...T3_OFF, detected: true, origin: "http://127.0.0.1:3773", liveStatus: "ok" } },
+    );
+    settings.t3TokenSet = true;
+    const result = await svc.status();
+    expect(result.providers.map((p) => p.id)).toEqual(["t3-code", "claude-code", "codex", "copilot-cli"]);
+    expect(providerOf(result, "t3-code")).toMatchObject({
+      cli: null,
+      mcp: null,
+      models: null,
+      t3: { detected: true, origin: "http://127.0.0.1:3773", liveStatus: "ok", tokenSet: true },
+    });
+  });
+
+  it("scans models only for providers added and on", async () => {
+    const models = vi.fn<(harness: string) => Promise<AgentModelsStatus>>((harness) =>
+      Promise.resolve({
+        harness,
+        models: [{ id: "opus", label: "Opus", efforts: null }],
+        cliVersion: "2.0.0",
+        scannedAt: "2026-11-03T00:00:00.000Z",
+        error: null,
+      } as unknown as AgentModelsStatus),
+    );
+    const { svc, settings } = service({}, { models });
+    expect(claudeOf(await svc.status()).models).toBeNull();
+    expect(models).not.toHaveBeenCalled();
+    settings.providers = [
+      { id: "claude-code", enabled: true, cliPath: null },
+      { id: "copilot-cli", enabled: false, cliPath: null },
+    ];
+    const result = await svc.status();
+    expect(claudeOf(result).models).toEqual({ count: 1, scannedAt: "2026-11-03T00:00:00.000Z", error: null });
+    expect(copilotOf(result).models).toBeNull();
+    expect(models.mock.calls.map(([harness]) => harness)).toEqual(["claude-code"]);
+  });
+});
+
+describe("providers: seeding from detection", () => {
+  it("adds, once, the providers whose MCP server is registered or whose hand-off entry showed", async () => {
+    const { svc, settings, pendSeed, seedPending } = service({
+      // Claude Code's and Copilot's CLIs run; Codex's doesn't, but its config has the board.
+      resolve: (command) => (command === "codex" ? null : `/bin/${command}`),
+      readFile: (path) =>
+        path.replace(/\\/g, "/").endsWith("config.toml")
+          ? '[mcp_servers.board]\nurl = "http://127.0.0.1:4317/mcp"'
+          : null,
+    });
+    settings.providers = [{ id: "claude-code", enabled: false, cliPath: "/opt/claude" }];
+    settings.handoffMenus["copilot-cli"] = true;
+    expect(await svc.seedFromDetection()).toEqual([]);
+    pendSeed();
+    expect(await svc.seedFromDetection()).toEqual(["codex", "copilot-cli"]);
+    expect(settings.providers).toEqual([
+      { id: "claude-code", enabled: false, cliPath: "/opt/claude" },
+      { id: "codex", enabled: true, cliPath: null },
+      { id: "copilot-cli", enabled: true, cliPath: null },
+    ]);
+    expect(seedPending()).toBe(false);
+  });
+
+  it("leaves out a CLI the user hid from the hand-off menus, T3 Code without a token, and Codex", async () => {
+    const { svc, settings, pendSeed, update } = service(
+      { claudeMcp: () => Promise.resolve("") },
+      { t3: { ...T3_OFF, detected: true } },
+    );
+    // Codex had no hand-off entry before providers were opt-in, so its CLI alone doesn't add it.
+    settings.handoffMenus = { "t3-code": true, "claude-code": false, codex: true, "copilot-cli": false };
+    pendSeed();
+    expect(await svc.seedFromDetection()).toEqual([]);
+    expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/providers", () => {
   it("serves the status and refreshes on request", async () => {
     const version = vi.fn<(exe: string) => Promise<string>>(() => Promise.resolve("2.0.0"));
     const h = createTestHarness({
       integrations: {
-        agentIntegrationProbes: {
+        providerProbes: {
           resolve: (command) => `/bin/${command}`,
           version,
           claudeMcp: () => Promise.resolve("aboard: http://127.0.0.1:4317/mcp (HTTP) - ✓ Connected"),
@@ -386,13 +502,35 @@ describe("GET /api/agent-integrations", () => {
         },
       },
     });
-    const first = await h.request("/api/agent-integrations");
-    const body = (await first.json()) as AgentIntegrations;
-    expect(body.harnesses.map((x) => x.harness)).toEqual(["claude-code", "codex", "copilot-cli"]);
+    const first = await h.request("/api/providers");
+    const body = (await first.json()) as ProvidersStatus;
+    expect(body.providers.map((x) => x.id)).toEqual(["t3-code", "claude-code", "codex", "copilot-cli"]);
     expect(body.mcpUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
-    await h.request("/api/agent-integrations");
+    await h.request("/api/providers");
     const calls = version.mock.calls.length;
-    await h.request("/api/agent-integrations?refresh=1");
+    await h.request("/api/providers?refresh=1");
     expect(version.mock.calls.length).toBe(calls + 3);
+  });
+});
+
+describe("providers: the CLI-only answer", () => {
+  it("runs no MCP check or model scan, and shares the CLI checks with the full answer", async () => {
+    const claudeMcp = vi.fn<ProviderProbes["claudeMcp"]>(() => Promise.resolve(LIST));
+    const models = vi.fn<(harness: string) => Promise<AgentModelsStatus>>(() =>
+      Promise.reject(new Error("not scanned")),
+    );
+    const version = vi.fn<(exe: string) => Promise<string>>(() => Promise.resolve("2.0.0"));
+    const { svc, settings } = service({ claudeMcp, version }, { models });
+    settings.providers = [{ id: "claude-code", enabled: true, cliPath: null }];
+    const quick = await svc.status(false, "cli");
+    expect(claudeOf(quick)).toMatchObject({ cli: { found: true, version: "2.0.0" }, mcp: null, models: null });
+    expect(quick.providers.map((p) => p.id)).toEqual(["t3-code", "claude-code", "codex", "copilot-cli"]);
+    expect(claudeMcp).not.toHaveBeenCalled();
+    expect(models).not.toHaveBeenCalled();
+    expect(version).toHaveBeenCalledTimes(3);
+    // The full answer reuses the minute's CLI checks.
+    await svc.status();
+    expect(version).toHaveBeenCalledTimes(3);
+    expect(claudeMcp).toHaveBeenCalled();
   });
 });

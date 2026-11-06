@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { AgentJob } from "./headlessAgent.ts";
 import {
+  createIssueImporter,
   importArgs,
   importEnv,
   importSettings,
@@ -251,5 +253,56 @@ describe("finding MCP servers", () => {
     const rules = writeToolDenyRules(["corp"], ["mcp__corp__send_status_read"]);
     expect(rules).not.toContain("mcp__corp__send*");
     expect(rules).toContain("mcp__corp__create*");
+  });
+
+  it("summarises a GitHub issue on Codex, read-only and isolated, in the import's schema", async () => {
+    const jobs: AgentJob[] = [];
+    const answer = { found: true, reason: null, title: "Fix export", description: "It crashes.", labels: ["bug"] };
+    const run = createIssueImporter(async (job) => {
+      jobs.push(job);
+      return [
+        JSON.stringify({ type: "thread.started", thread_id: "0199a213-81c0-7800-8aa1-bbab2a035a53" }),
+        JSON.stringify({
+          type: "item.completed",
+          item: { id: "i", type: "agent_message", text: JSON.stringify(answer) },
+        }),
+        JSON.stringify({ type: "turn.completed" }),
+      ].join("\n");
+    });
+    const job = {
+      provider: "codex" as const,
+      cli: null,
+      cwd: "/tmp",
+      model: "gpt-mini",
+      budgetUsd: 0.1,
+      boardLabels: [],
+      importTools: [],
+      denyTools: [],
+    };
+    expect(await run({ ...job, source: github })).toEqual({
+      title: "Fix export",
+      description: "It crashes.",
+      labels: ["bug"],
+      costUsd: null,
+    });
+    expect(jobs[0]!.command).toBe("codex");
+    // Its own empty folder, not the shared temp folder, where anything could leave an AGENTS.md.
+    expect(jobs[0]!.cwd).not.toBe("/tmp");
+    expect(jobs[0]!.cwd).toContain("-import-");
+    expect(jobs[0]!.args).toEqual(
+      expect.arrayContaining(["--sandbox", "read-only", "--ignore-user-config", "--ephemeral", "--output-schema"]),
+    );
+    expect(jobs[0]!.prompt).toContain("untrusted data");
+    // A ticket is read through the user's MCP servers, which only Claude Code's tool rules hold to the system's tools.
+    const jiraTicket: IssueSource = {
+      kind: "ticket",
+      key: "PROJ-1",
+      url: "x",
+      system: { name: "Jira", importInstructions: "" },
+    };
+    await expect(run({ ...job, source: jiraTicket })).rejects.toThrow(
+      "Importing a ticket needs Claude Code, not Codex",
+    );
+    expect(jobs).toHaveLength(1);
   });
 });

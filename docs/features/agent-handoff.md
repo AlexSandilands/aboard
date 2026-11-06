@@ -143,7 +143,7 @@ plans a task suggests a **model tier** for implementing it, and hand-offs use it
   null. Agents set it with `set_plan`, `create_task` or `update_task` (`null` clears it), and never need to
   know any harness's model names. The user can change or clear it under Details in the task panel. A change
   is logged as `suggested_model_changed`.
-- **Settings → Model tiers** says what each tier means for you, one row per tier: a free-text description (e.g.
+- **Settings → Agents → Models** says what each tier means for you, one row per tier: a free-text description (e.g.
   "Sonnet 5.5, medium effort") for any harness; when T3 Code is connected, a T3 model with its effort and fast
   mode; and a `--model` and `--effort` for each CLI found (Claude Code, Copilot CLI; `modelTiers[tier].cli` and
   `cliEffort`), picked from the models the CLI lists, see [agent-sessions.md](agent-sessions.md#choosing-a-clis-model). A provider that
@@ -155,7 +155,7 @@ plans a task suggests a **model tier** for implementing it, and hand-offs use it
 - **Custom models.** Under the tiers, **Custom models** (`modelProfiles`, `services/settings.ts` stores the whole
   list; `modelProfiles.logic.ts` builds each edit on the one still saving) are named models with a tier's fields
   plus task labels. A task carrying one of a model's labels runs on it instead of its tier everywhere a model is
-  picked (`resolveRunModel`; the first model in the list wins a label several claim): the copied prompt names it
+  picked (`resolveTaskModel`, under any choice an operation's settings make, see [Models](autopilot.md#models); the first model in the list wins a label several claim): the copied prompt names it
   (`Model: Codex 6.1 (…), picked by the task's label codex61.`), the T3 dialog starts on its T3 model, the session
   dialog fills in its CLI model, the task panel's Details says "Runs on …", and `get_task` / `epic_overview` show
   **Runs on**. Autopilot uses the same rule, under an automation's own Model setting
@@ -181,7 +181,7 @@ The board needs a T3 session token with two scopes:
 t3 auth session issue --scope orchestration:read --scope orchestration:operate --token-only
 ```
 
-Paste it in Settings → Integrations → T3 Code. `orchestration:read` powers live thread status and the launch dialog's
+Paste it in Settings → Agents → Providers → T3 Code. `orchestration:read` powers live thread status and the launch dialog's
 options. `orchestration:operate` allows starting threads. The token is stored in the board's local
 database and never sent to the browser.
 
@@ -195,15 +195,17 @@ header. It only shows on open work: not on Done or archived tasks.
 
 It offers "Copy prompt" and "Copy planning prompt", with the one that suits the task marked _Suggested_. An epic
 offers only "Copy prompt to start its tasks" (its orchestrating prompt), and its T3 dialog has no
-**Plan with me**. **New Claude Code session…** and **New Copilot CLI session…** follow T3's entry on any task but
-an epic, when `GET /api/agent-clis` finds the CLI ([agent sessions](agent-sessions.md#starting-a-session)).
+**Plan with me**. **New Claude Code session…**, **New Codex session…** and **New Copilot CLI session…** follow T3's entry on any task but
+an epic, when the provider is added and on in Settings → Agents → Providers and `GET /api/providers` finds its CLI
+([agent sessions](agent-sessions.md#starting-a-session)).
 **New T3 Code thread…** is added at the top when all of these hold (`canStartT3Thread`):
 
+- T3 Code is added and on in Settings → Agents → Providers;
 - T3 Code is running (auto-detected from `~/.t3/userdata/server-runtime.json`);
 - a token is set;
 - the project has a T3 project id or a workspace folder T3 could know.
 
-Each of these entries also has a **Show in hand-off menus** switch in Settings → Integrations (T3 Code, Claude Code,
+Each of these entries also has a **Show in hand-off menus** switch in Settings → Agents → Providers (T3 Code, Claude Code,
 Copilot), stored as `handoffMenus` (each switch merges in, like notification kinds). Turning one off takes it out of the hand-off, Plan tasks, Suggest epics
 and Fix PR menus (`canStartProjectT3Thread`, `handoffClis`), for someone who has the tool but doesn't want it offered.
 Sessions and threads already linked still open, and agents can still start threads (`agentT3Threads`).
@@ -275,7 +277,7 @@ own web client uses:
 2. Connect to `ws://<t3-origin>/ws?orchestrationProtocol=2&wsTicket=<ticket>`.
 3. Send Effect-RPC JSON requests and wait for each reply:
    - `server.getConfig` (providers, models, settings) and `vcs.listRefs` (branches) fill the dialog, and
-     `server.getConfig` alone fills the model pickers in Settings → Model tiers;
+     `server.getConfig` alone fills the model pickers in Settings → Agents → Models;
    - for each pasted image, `attachments.createUploadUrl` (`{type: "image", name, mimeType, sizeBytes}`) returns a
      pending attachment id and a signed `relativeUrl`; the server `POST`s the image's bytes to `<t3-origin><relativeUrl>`
      (no token: the URL carries its own, valid for 10 minutes). A refused upload stops the launch before anything starts;
@@ -324,7 +326,7 @@ The workspace and branch choices map to T3's `workspaceStrategy`:
 
 ### Linking an existing thread
 
-(Sessions run in a terminal, in Claude Code or Copilot CLI, link themselves with `agentSession` instead; see
+(Sessions run in a terminal, in Claude Code, Codex or Copilot CLI, link themselves with `agentSession` instead; see
 [agent sessions](agent-sessions.md).)
 
 **Add link** (panel) and `link` (MCP) accept what T3 gives you for a thread, besides `t3code://threads/…`:
@@ -398,11 +400,11 @@ the user turns on **Let agents start threads** ([epics.md](epics.md#t3-code-thre
 | `packages/contracts/src/planPrompt.ts` | Plan tasks: the built-in planning skill, `planTasksPrompt` and its short CLI prompt, which tasks can be planned, the launch inputs |
 | `apps/server/src/services/planning.ts` | Checks a planning session's tasks (`tasksToPlan`) and resolves the project's planning skill |
 | `packages/contracts/src/modelTiers.ts` | Model tiers, the task's `suggestedModel` and the tier settings |
-| `packages/contracts/src/modelProfiles.ts` | Custom models, `ModelChoice` and `resolveRunModel`, the rule that picks a run's or session's model (tested) |
+| `packages/contracts/src/modelProfiles.ts` | Custom models, `ModelChoice` and `resolveTaskModel`, a task's own model; `operations.ts` resolves an operation's (tested) |
 | `packages/contracts/src/t3Launch.ts` | Launch options and launch input schemas, runtime modes and clamping, the default base ref |
 | `apps/server/src/integrations/t3Rpc.ts` | Minimal Effect-RPC client: ticket, socket, request/Exit frames, error mapping |
 | `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, the suggested tier's model (`resolveSuggestion`), workspace → `workspaceStrategy`, a launch without the dialog (`autoLaunchSettings`) |
 | `apps/server/src/integrations/t3.ts` | `launchOptions`, `startThread` and `launchTaskThread`, and linking the new thread to the task; `startProjectThread` for a project's Suggest epics |
 | `apps/web/src/components/handoff/` | Buttons, the dialog (for a task, a project or a set of tasks to plan) and its pickers, `PlanTasksDialog`; pasted images (`LaunchImages.tsx`, `launchImages.logic.ts`); pure logic in `handoff.logic.ts` |
 | `apps/web/src/components/board/boardSelection.logic.ts` | Ctrl/⌘-click picking of cards, and which of them a planning session can take |
-| `apps/web/src/components/settings/ModelTiersSection.tsx`, `modelTiers.logic.ts` | Settings → Model tiers; which providers' fields show and the per-tier update (`modelTiers.logic.ts` is tested) |
+| `apps/web/src/components/settings/agents/ModelsSection.tsx`, `modelTiers.logic.ts` | Settings → Agents → Models; which providers' rows show and the per-tier update (`modelTiers.logic.ts` is tested) |

@@ -327,6 +327,7 @@ describe("local review loop over MCP", () => {
       needsAttention: false,
       dismissedAt: null,
       output: { kind: "pr_review", handoff: "clean", counts: { blocking: 0, major: 0, minor: 0, nit: 0 } },
+      model: null,
       createdAt: start,
       startedAt: start,
       finishedAt: start,
@@ -347,7 +348,7 @@ describe("local review loop over MCP", () => {
 
   it("names the reviewer's model in the loop once update_task sets one", async () => {
     h.services.settings.update({ autoReview: true });
-    await call(agent, "update_task", { task: taskRef, reviewModel: "claude-opus-5-5" });
+    await call(agent, "update_task", { task: taskRef, reviewModel: "claude-code:claude-opus-5-5" });
     const moved = await call(agent, "move_task", { task: taskRef, status: "review" });
     expect(moved.text).toContain('Run the reviewer on `claude-opus-5-5`: in Claude Code pass `model: "opus"`');
     await call(agent, "update_task", { task: taskRef, reviewModel: "deep" });
@@ -355,6 +356,25 @@ describe("local review loop over MCP", () => {
     await call(agent, "update_task", { task: taskRef, reviewModel: null });
     expect(h.services.tasks.summary(h.services.tasks.resolveId(taskRef)).reviewModel).toBeNull();
     expect((await call(agent, "update_task", { task: taskRef, reviewModel: "a b" })).isError).toBe(true);
+  });
+
+  it("refuses a bare model id for reviewModel, naming the added providers to put in front of it", async () => {
+    h.services.settings.update({
+      providers: [
+        { id: "claude-code", enabled: true },
+        { id: "codex", enabled: true },
+        { id: "copilot-cli", enabled: false },
+      ],
+      modelProfiles: [{ id: "fast", name: "Fast", labels: [], description: null, t3: null }],
+    });
+    const bare = await call(agent, "update_task", { task: taskRef, reviewModel: "gpt-5.5" });
+    expect(bare.isError).toBe(true);
+    expect(bare.text).toContain('name its provider: "claude-code:gpt-5.5" or "codex:gpt-5.5"');
+    await call(agent, "update_task", { task: taskRef, reviewModel: "codex:gpt-5.5" });
+    const id = h.services.tasks.resolveId(taskRef);
+    expect(h.services.tasks.summary(id).reviewModel).toEqual({ provider: "codex", model: "gpt-5.5" });
+    await call(agent, "update_task", { task: taskRef, reviewModel: "fast" });
+    expect(h.services.tasks.summary(id).reviewModel).toEqual({ profile: "fast" });
   });
 
   it("doesn't open a round when merged PRs finish the task on entering Review", async () => {

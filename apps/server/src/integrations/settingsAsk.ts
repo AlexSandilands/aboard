@@ -2,17 +2,25 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRAND, type AskSettingsInput, type AskSettingsResult, type SettingsAskStatus } from "@repo/contracts";
+import {
+  BRAND,
+  harnessCliSetting,
+  resolveOperationModel,
+  type AskSettingsInput,
+  type AskSettingsResult,
+} from "@repo/contracts";
 import { z } from "zod";
 import type { Services } from "../services/types.ts";
 import { resolveExecutable } from "./claudeCli.ts";
-import { agentArgs, parseAgentOutput, runHeadlessAgent, type RunAgent } from "./headlessAgent.ts";
+import { runHeadlessAgent, type RunAgent } from "./headlessAgent.ts";
+import { headlessDriverFor, withDriverArgs } from "./headlessDrivers.ts";
 import { messageOf } from "./github.ts";
 
-// The settings "Ask": answers "how do I…?" with Claude Code headless (`claude -p`) on a small model, and names the
-// setting to jump to. It has no tools (the index is in the prompt), a small budget and a short timeout.
+// The settings "Ask": answers "how do I…?" with a headless run on the Ask operation's model (the light tier by
+// default) and its provider, and names the setting to jump to. Everything it needs is in the prompt, so it runs in an
+// empty folder with no tools where the CLI allows that (Claude Code), else read-only and held apart from the user's
+// setup (Codex). A small budget where the CLI takes one, and a short timeout.
 
-const ASK_MODEL = "haiku";
 const ASK_BUDGET_USD = 0.05;
 const ASK_TIMEOUT_MS = 60_000;
 
@@ -63,62 +71,75 @@ export function askPrompt(input: AskSettingsInput, fence: string = randomBytes(8
 }
 
 export interface SettingsAsker {
-  status(): SettingsAskStatus;
   ask(input: AskSettingsInput): Promise<AskSettingsResult>;
-}
-
-/** Whether `cli` (the Claude Code CLI setting; null means `claude` on PATH) is there to run. */
-export function askStatus(cli: string | null): SettingsAskStatus {
-  const configured = cli?.trim() || null;
-  if (resolveExecutable(configured ?? "claude")) return { available: true, reason: null };
-  return {
-    available: false,
-    reason: configured
-      ? `The Claude Code CLI wasn't found at ${configured}.`
-      : "The Claude Code CLI (claude) wasn't found on your PATH.",
-  };
 }
 
 export function createSettingsAsker(deps: { services: () => Services; runAgent?: RunAgent }): SettingsAsker {
   const runAgent = deps.runAgent ?? runHeadlessAgent;
-  const cliOf = () => deps.services().settings.get().headlessReviewCli;
   // One run at a time: a question edited while it is pending is discarded by the page, not stopped, so without this
   // a few Enters would pile up paid runs.
   let running = false;
   return {
-    status: () => askStatus(cliOf()),
     async ask(input) {
-      const cli = cliOf();
-      const status = askStatus(cli);
+      const settings = deps.services().settings.get();
+      const resolved = resolveOperationModel("ask", {}, settings);
+      if (!resolved.ok) return { ok: false, error: resolved.reason };
+      const driver = headlessDriverFor(resolved.provider);
+      const cli = harnessCliSetting(settings, resolved.provider);
       // A fake runner (tests) stands in for the CLI, so only a real run needs it to exist.
-      if (!status.available && !deps.runAgent)
-        return { ok: false, error: status.reason ?? "Claude Code isn't available" };
+      if (!deps.runAgent && !resolveExecutable(cli ?? driver.command)) {
+        return {
+          ok: false,
+          error: cli
+            ? `The ${driver.label} CLI wasn't found at ${cli}.`
+            : `The ${driver.label} CLI (${driver.command}) wasn't found on your PATH.`,
+        };
+      }
       if (running) return { ok: false, error: "Another question is still being answered. Try again in a moment." };
       running = true;
       let cwd: string | null = null;
       try {
         // The run needs a folder to start in, and none of the project settings a real checkout carries.
         cwd = await mkdtemp(join(tmpdir(), `${BRAND.id}-ask-`));
-        const stdout = await runAgent({
-          cli,
-          cwd,
-          prompt: askPrompt(input),
-          timeoutMs: ASK_TIMEOUT_MS,
-          args: agentArgs({
-            access: "none",
+        const folder = cwd;
+        const stdout = await withDriverArgs(
+          driver,
+          {
+            access: driver.capabilities.noTools ? "none" : "read-only",
+            isolated: true,
+            ephemeral: true,
             budgetUsd: ASK_BUDGET_USD,
             sessionId: randomUUID(),
-            model: ASK_MODEL,
+            model: resolved.model,
+            effort: resolved.effort,
             defaultBranch: null,
             outputSchema: ASK_OUTPUT_SCHEMA,
-          }),
-        });
-        const outcome = parseAgentOutput(stdout, true);
-        if (!outcome.ok) return { ok: false, error: `Claude Code stopped: ${outcome.error ?? "unknown error"}` };
+          },
+          (args) =>
+            runAgent({
+              cli,
+              command: driver.command,
+              label: driver.label,
+              cwd: folder,
+              prompt: askPrompt(input),
+              timeoutMs: ASK_TIMEOUT_MS,
+              args,
+            }),
+        );
+        const outcome = driver.parse(stdout, ASK_OUTPUT_SCHEMA);
+        if (!outcome.ok) {
+          const why = (outcome.error ?? "unknown error").replace(/[.\s]+$/, "");
+          // With no model set for its tier or custom model the CLI's default runs, which can outspend Ask's budget.
+          const hint =
+            !resolved.model && /budget/i.test(why)
+              ? ` Ask ran on the CLI's default model: give the model Ask uses (the Light tier, unless you chose another) a ${driver.label} model in Settings → Agents → Models.`
+              : "";
+          return { ok: false, error: `${driver.label} stopped: ${why}.${hint}` };
+        }
         const output = AskOutput.safeParse(outcome.output);
-        if (!output.success) return { ok: false, error: "Claude Code's answer wasn't in the expected shape" };
+        if (!output.success) return { ok: false, error: `${driver.label}'s answer wasn't in the expected shape` };
         const answer = output.data.answer.trim();
-        if (!answer) return { ok: false, error: "Claude Code returned no answer" };
+        if (!answer) return { ok: false, error: `${driver.label} returned no answer` };
         // Only an id from the request's own list can be jumped to; anything else is the model guessing.
         const known = new Set(input.entries.map((entry) => entry.id));
         const settingId = output.data.settingId && known.has(output.data.settingId) ? output.data.settingId : null;

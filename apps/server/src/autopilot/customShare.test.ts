@@ -382,7 +382,7 @@ describe("the Improve example", () => {
     expect(res.status).toBe(201);
     const { automation } = await s.json<{ automation: CustomAutomation }>(res);
     const skill = `${BRAND.id}-improve`;
-    expect(automation.action).toMatchObject({ skill, tier: "deep" });
+    expect(automation.action).toMatchObject({ skill, model: { tier: "deep" } });
     expect(readFileSync(join(s.skillDir(skill), "SKILL.md"), "utf8")).toContain(`name: ${skill}`);
 
     s.services.autopilot.setScope("board", null, customAutomationKey(automation.id), { mode: "on" });
@@ -390,7 +390,7 @@ describe("the Improve example", () => {
     await s.engine.idle();
     expect(s.agentRuns).toHaveLength(1);
     const request = s.agentRuns[0]!;
-    expect(request.tier).toBe("deep");
+    expect(request.modelChoice).toEqual({ tier: "deep" });
     expect(request.tools).toEqual(["Skill"]);
     expect(request.prompt).toContain(`Use the ${skill} skill.`);
     expect(request.prompt).toContain('since "7d"');

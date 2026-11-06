@@ -1,6 +1,4 @@
 import type {
-  AgentCliStatus,
-  AgentIntegrations,
   AgentModels,
   AskSettingsInput,
   AskSettingsResult,
@@ -19,6 +17,7 @@ import type {
   MergeMethod,
   MergePrInput,
   Project,
+  ProvidersStatus,
   ResumeCommand,
   ResumeMode,
   ResumeResult,
@@ -35,7 +34,6 @@ import type {
   StartPlanningThreadInput,
   StartSessionInput,
   StartSessionResult,
-  SettingsAskStatus,
   StartT3ThreadInput,
   T3IntegrationStatus,
   T3LaunchOptions,
@@ -47,6 +45,7 @@ import type {
   TerminalInfo,
 } from "@repo/contracts";
 import type { DigestStart } from "../autopilot/digest.ts";
+import type { RunToolsContext } from "../mcp/runTools.ts";
 import type { MergeTaskPrResult } from "./mergeTaskPr.ts";
 import type { SessionTranscript } from "./sessionTranscript.ts";
 import type { TaskThreadInput, TaskThreadLaunch, ThreadLink } from "./t3.ts";
@@ -57,6 +56,8 @@ export interface Integrations {
   githubStatus(): GithubStatus;
   /** Whether an unfinished PR on the host keeps a Review task from Done (see GithubIntegration.holdsTasks). */
   prHostHoldsTasks(host: string): boolean;
+  /** Board-served run tools: the live run tokens and the git host their tools read (`/mcp/run`). */
+  readonly runTools: RunToolsContext;
   /** Starts background discovery/pollers. */
   start(): void;
   stop(): void;
@@ -119,11 +120,9 @@ export interface Integrations {
   resumeSession(linkId: string, input: ResumeSessionInput): Promise<ResumeResult>;
   /** What "Open in terminal" runs on this machine, for settings. */
   terminalInfo(): TerminalInfo;
-  /** Whether the board can start Claude Code and Copilot CLI here, for the hand-off menu. */
-  agentClis(): AgentCliStatus[];
-  /** Whether each harness's CLI runs and has the board's MCP registered, for Settings → Integrations. */
-  agentIntegrations(refresh?: boolean): Promise<AgentIntegrations>;
-  /** The models each CLI lists, for the pickers in Settings → Model tiers. */
+  /** Every provider as detected here (CLI, MCP registration, T3 Code, models scan), for Settings → Agents → Providers and the menus. */
+  providers(refresh?: boolean, parts?: "all" | "cli"): Promise<ProvidersStatus>;
+  /** The models each CLI lists, for the pickers in Settings → Agents → Models. */
   agentModels(refresh?: boolean): Promise<AgentModels>;
   /** What the new-session dialog offers for a task (see SessionLaunchIntegration). */
   sessionLaunchOptions(taskId: string): Promise<SessionLaunchOptions>;
@@ -136,8 +135,6 @@ export interface Integrations {
     taskId: string,
     input: { session?: string | undefined; offset?: number | undefined },
   ): Promise<SessionTranscript>;
-  /** Whether the settings "Ask" can run: the Claude Code CLI is found. */
-  settingsAskStatus(): SettingsAskStatus;
   /** Answers a settings question with Claude Code headless on a small model, naming the setting to jump to. */
   askSettings(input: AskSettingsInput): Promise<AskSettingsResult>;
   /** Starts an Autopilot pass now, when the engine runs (pollers on); for Run now, so it doesn't wait for the tick. */

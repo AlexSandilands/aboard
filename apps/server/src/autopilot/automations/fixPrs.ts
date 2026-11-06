@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
+  AGENT_HARNESSES,
   AUTOPILOT_FIX_PRS,
   AUTOPILOT_REVIEW_PRS,
+  sessionLabel,
   BRAND,
   ReviewSkillRef,
+  selfLinkLine,
   implementingThread,
   currentPrReview,
   describeCounts,
@@ -17,6 +20,7 @@ import {
   prFixedReply,
   prProblems,
   prReviewOutput,
+  type AgentHarness,
   type AutopilotField,
   type AutopilotRun,
   type PrFixInfo,
@@ -30,7 +34,7 @@ import { AppError } from "../../errors.ts";
 import { shQuote } from "../../integrations/terminal.ts";
 import { messageOf } from "../../integrations/github.ts";
 import type { Services } from "../../services/types.ts";
-import { RUNNER_DEFAULTS, RUNNER_FIELDS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
+import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE, runnerFields } from "../runnerOptions.ts";
 import { threadSeen } from "../threads.ts";
 import {
   RunAbandonedError,
@@ -274,6 +278,11 @@ export interface FixPromptInput {
    * its replies carry no Autopilot marker. It runs in a worktree of its own, so the prompt says how to push the PR's branch.
    */
   manual?: boolean;
+  /**
+   * With `manual`, the CLI the session runs in. One that picks its own session id (Codex) isn't linked by the board,
+   * so the prompt tells it to link itself.
+   */
+  harness?: AgentHarness;
 }
 
 /** What to fix, one section per trigger, and the rules every fix follows. */
@@ -289,13 +298,14 @@ export function fixPrompt({
   stillOpen,
   skill,
   manual = false,
+  harness,
 }: FixPromptInput): string {
   const url = prUrl(pr);
   const api = `repos/${pr.repo}/pulls/${pr.number}`;
   const flag = hostFlag(pr);
   const lines = [
     manual
-      ? `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task #${task.number} "${task.title}". The user asked you to fix what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. ${BRAND.name} started this session and already linked it to the task, so don't link it yourself.`
+      ? `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task #${task.number} "${task.title}". The user asked you to fix what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. ${harness && !AGENT_HARNESSES[harness].presetSessionId ? selfLinkLine(harness, sessionLabel("fix", task.number)) : `${BRAND.name} started this session and already linked it to the task, so don't link it yourself.`}`
       : `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task #${task.number} "${task.title}". ${BRAND.name} Autopilot sent you because of what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. This is ${budget === "conflicts" ? "conflict-only fix attempt" : budget === "comments" ? "review-comment fix attempt" : "fix attempt"} ${round} of at most ${maxRounds} on this PR.`,
     "",
     "## What needs fixing",
@@ -443,7 +453,7 @@ const FIELDS: AutopilotField[] = [
     builtinLabel: "Fix prompt only",
     help: "What the agent follows on top of the fix prompt.",
   },
-  ...RUNNER_FIELDS,
+  ...runnerFields("prFix"),
 ];
 
 /** What a finished fix attempt leaves on its run. */
@@ -702,7 +712,7 @@ export const fixPrs = defineAutomation({
         run,
         label: `Fix PRs · PR #${data.number}`,
         prompt,
-        tier: task.suggestedModel?.tier ?? null,
+        operation: "prFix",
         options: config,
         stillWanted,
         ...(thread ? { kind: "nudge" as const } : { workspace: { branch: data.headRef }, expectHead: data.headOid }),
@@ -801,7 +811,7 @@ async function resolveFixedThreads(
  * and Autopilot's review aren't listed (the user points the agent at those). The Fix skill of the task's scope is
  * followed when one is chosen, as it is for Autopilot's own attempts.
  */
-export function manualFix(services: Services, linkId: string): PrFixInfo {
+export function manualFix(services: Services, linkId: string, harness?: AgentHarness): PrFixInfo {
   const link = services.links.get(linkId);
   if (link.kind !== "pr" || !link.ref || !link.snapshot) {
     throw new AppError("VALIDATION", "Only a pull request that has been read from GitHub can be fixed");
@@ -840,6 +850,7 @@ export function manualFix(services: Services, linkId: string): PrFixInfo {
     stillOpen: [],
     skill: skill?.success ? skill.data : { source: "builtin" },
     manual: true,
+    ...(harness ? { harness } : {}),
   });
   return { branch: headRef, headOid, number: ref.number, problems, prompt };
 }

@@ -124,11 +124,13 @@ export function modelError(model: string): string | null {
 }
 
 /**
- * The success toast for a started session: what was linked, where it runs, and, when the CLI got the short prompt,
- * where the full one is (`copied`: the clipboard took it).
+ * The success toast for a started session: what was linked (or, for a CLI that picks its own session id, that the
+ * session links itself), where it runs, and, when the CLI got the short prompt, where the full one is (`copied`: the
+ * clipboard took it).
  */
 export function startedDescription(
-  result: Pick<StartSessionResult, "branch" | "shortPrompt">,
+  result: Pick<StartSessionResult, "branch" | "shortPrompt" | "linkId">,
+  harness: AgentHarness,
   /** The tasks the session is linked to: one, or several for a planning session. */
   taskNumbers: readonly number[],
   copied: boolean,
@@ -139,8 +141,12 @@ export function startedDescription(
     : copied
       ? " The full prompt is on your clipboard: paste it into the session."
       : " Copy the full prompt and paste it into the session.";
-  const linked = `${taskNumberList(taskNumbers.map((number) => ({ number })))} ${taskNumbers.length === 1 ? "is" : "are"}`;
-  return `${linked} linked to the new session.${where}${short}`;
+  const tasks = taskNumberList(taskNumbers.map((number) => ({ number })));
+  if (!result.linkId) {
+    // Nothing to link yet: the prompt asks the session to link itself, which shows on the card once it has.
+    return `The session links itself to ${tasks} once ${harnessLabel(harness)} starts.${where}${short}`;
+  }
+  return `${tasks} ${taskNumbers.length === 1 ? "is" : "are"} linked to the new session.${where}${short}`;
 }
 
 export const harnessLabel = (harness: AgentHarness): string => AGENT_HARNESSES[harness].label;

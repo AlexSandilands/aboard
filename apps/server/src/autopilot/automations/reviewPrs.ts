@@ -32,6 +32,7 @@ import {
   type ReviewThreadDetail,
 } from "../../integrations/github.ts";
 import { isTransientGithubError } from "../../integrations/githubApi.ts";
+import { RUN_SERVER_NAME } from "../../mcp/runTokens.ts";
 import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
 import {
   WorktreeHeadError,
@@ -88,24 +89,6 @@ export const hostFlag = (pr: PrTarget) => (pr.host.toLowerCase() === "github.com
 /** The PR's canonical URL: `gh pr` takes it for any repository and host, so it needs no `-R` and no guess at the cwd. */
 export const prUrl = (pr: PrTarget): string => `https://${pr.host}/${pr.repo}/pull/${pr.number}`;
 
-/**
- * What the reviewer may run on top of its file tools: read this one PR. Every command is exact, with no wildcard, so
- * no flag can point it at another repository (`-R`), open a browser (`--web`) or make a `gh api` call a write (`-f`,
- * `--method`): such a command matches no rule. Nothing here posts: the findings are returned and the server posts them.
- */
-export function reviewTools(pr: PrTarget): string[] {
-  const url = prUrl(pr);
-  const endpoint = `repos/${pr.repo}/pulls/${pr.number}`;
-  return [
-    `Bash(gh pr view ${url})`,
-    `Bash(gh pr view ${url} --comments)`,
-    `Bash(gh pr diff ${url})`,
-    `Bash(gh pr diff ${url} --name-only)`,
-    `Bash(gh api ${endpoint}/comments${hostFlag(pr)})`,
-    `Bash(gh api ${endpoint}/reviews${hostFlag(pr)})`,
-  ];
-}
-
 /** The skill's text without its frontmatter, or null when the file can't be read. */
 function readSkillBody(path: string): string | null {
   try {
@@ -145,7 +128,7 @@ export function reviewPrompt({ task, pr, round, maxRounds, threshold, earlier, s
     "",
     "## How to review",
     "",
-    `The skill below was written for reviewing a branch before its pull request exists. Here the change is the pull request: read it with \`gh pr view ${prUrl(pr)}\` and \`gh pr diff ${prUrl(pr)}\`, and the code around it with your file tools in the checkout (\`git log --oneline -20\` shows its history; no other git command is available, so ignore the skill's git diff steps). Run these commands exactly as written: any other form (other flags, other repositories, a different quoting) is refused. A long diff is cut off in your output: then list the changed files with \`gh pr diff ${prUrl(pr)} --name-only\`, read them with your file tools, and say in your summary what you could not see. Follow the skill for what to look for and how to rate it. Where it says to record findings anywhere, ignore that: return them as your answer, as described below.`,
+    `The skill below was written for reviewing a branch before its pull request exists. Here the change is the pull request, and you read it through the \`${RUN_SERVER_NAME}\` MCP server's tools, which are bound to this pull request and read nothing else: \`pr_overview\` (title, description, branches, head commit), \`pr_files\` (every changed file, and how many diff pages each takes), \`pr_diff\` (the diff in pages: call it with no path for the whole diff in order, or with a \`path\` for one file, and follow each result's "Next" call until the last page) and \`pr_comments\`. Read the whole diff, whatever its size: it is never cut off, only paged. Read the code around it with your file tools in the checkout (\`git log --oneline -20\` shows its history; no other git command is available, so ignore the skill's git diff steps). There is no \`gh\` and no network. Follow the skill for what to look for and how to rate it. Where it says to record findings anywhere, ignore that: return them as your answer, as described below.`,
     "",
     ...skillSection(skill),
     "",
@@ -161,11 +144,11 @@ export function reviewPrompt({ task, pr, round, maxRounds, threshold, earlier, s
           `- Round ${e.round}, at ${shortSha(e.headOid)}: ${e.reviewUrl}${e.reviewId !== null ? ` (review id ${e.reviewId})` : ""}: ${describeCounts(e.counts)}${e.fyi > 0 ? `, ${e.fyi} FYI` : ""}`,
       ),
       "",
-      `Read them and the replies to them (\`gh api repos/${pr.repo}/pulls/${pr.number}/reviews${hostFlag(pr)}\`, \`gh api repos/${pr.repo}/pulls/${pr.number}/comments${hostFlag(pr)}\`, \`gh pr view ${prUrl(pr)} --comments\`). Then:`,
+      "Read them and the replies to them with `pr_comments`. Then:",
       "- Focus on regressions in the commits since, and on earlier points that are still not fixed.",
       "- Don't raise again a point that was fixed or that the author declined with a reason (unless the reason is wrong).",
       "- New minor and nit points are FYI (no action needed): mark them `fyi: true`.",
-      `- For each inline comment of those earlier reviews (their comments start with "${prReviewMarker()}") whose point is fixed at this commit, put its comment \`id\` (from the comments API) in \`fixed\`: Autopilot resolves its thread. Leave out a point that is still open or only partly fixed.`,
+      `- For each inline comment of those earlier reviews (their comments start with "${prReviewMarker()}") whose point is fixed at this commit, put its comment \`id\` (the number \`pr_comments\` shows for an inline comment) in \`fixed\`: Autopilot resolves its thread. Leave out a point that is still open or only partly fixed.`,
       "",
     );
   }
@@ -348,24 +331,18 @@ export const reviewPrs = defineAutomation({
       help: "A review runs headless: it must be held to read-only.",
       options: [
         { value: "auto", label: "Auto (headless)" },
-        { value: "headless", label: "Headless (claude -p in a worktree)" },
+        { value: "headless", label: "Headless (a CLI in a worktree)" },
       ],
     },
     {
       key: "modelChoice",
       label: "Model",
       kind: "model",
-      help: "From the task: a custom model one of its labels picks, else its suggested tier. The reviewer runs its Claude Code model.",
+      operation: "prReview",
+      help: "Inherit: the board's model for PR review, by default the Standard tier. It runs on a provider that can lock a run down to read untrusted input; Codex runs it only when you choose it, with a warning that it can read local files.",
     },
     { key: "budgetUsd", label: "Budget", kind: "number", min: 0.5, max: 100, step: 0.5, unit: "USD" },
     { key: "timeoutMinutes", label: "Timeout", kind: "number", min: 1, max: 1440, unit: "minutes" },
-    {
-      key: "model",
-      label: "Model override",
-      kind: "text",
-      placeholder: "The model above",
-      help: "As claude --model takes it, e.g. sonnet. Blank uses the Claude Code model of the model above.",
-    },
   ],
   defaults: {
     ...RUNNER_DEFAULTS,
@@ -464,10 +441,14 @@ export const reviewPrs = defineAutomation({
           earlier: data.earlier,
           skill: config.skill,
         }),
-        tier: task.suggestedModel?.tier ?? null,
+        operation: "prReview",
         options: config,
         access: "read-only",
-        tools: reviewTools(data),
+        // The PR is read through the board's run tools, bound to this one PR; the agent gets no gh and no network.
+        runTools: {
+          toolSet: "prReview",
+          target: { kind: "pr", host: data.host, repo: data.repo, number: data.number },
+        },
         untrustedInput: true,
         // Checked before the agent starts: it reads the commit this run is about, or nothing.
         expectHead: data.headOid,

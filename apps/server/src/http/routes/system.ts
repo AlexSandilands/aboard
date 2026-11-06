@@ -1,4 +1,5 @@
 import {
+  AgentHarness,
   AskSettingsInput,
   ConnectT3Input,
   MergePrInput,
@@ -59,7 +60,11 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
 
   app.get(
     "/api/links/:id/fix",
-    handle((c) => c.json(manualFix(services, idParam(c)))),
+    // `harness`: the CLI the fix starts in, as one that picks its own session id is told to link itself.
+    handle((c) => {
+      const { harness } = parseQuery(c, z.object({ harness: AgentHarness.optional() }));
+      return c.json(manualFix(services, idParam(c), harness));
+    }),
   );
   app.get(
     "/api/links/:id/resume-command",
@@ -76,20 +81,20 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
     "/api/terminal",
     handle((c) => c.json(integrations.terminalInfo())),
   );
+  // Every provider as detected here: CLI, MCP registration, T3 Code and the models scan. `?refresh=1` skips the
+  // minute's cache; `?parts=cli` answers with the CLIs and T3 Code only, without the slow MCP checks and scans.
   app.get(
-    "/api/agent-clis",
-    handle((c) => c.json(integrations.agentClis())),
-  );
-  // Runs each CLI and asks it about the board's MCP server; `?refresh=1` skips the minute's cache.
-  app.get(
-    "/api/agent-integrations",
+    "/api/providers",
     handle(async (c) => {
-      const { refresh } = parseQuery(c, z.object({ refresh: z.string().optional() }));
-      return c.json(await integrations.agentIntegrations(refresh === "1"));
+      const { refresh, parts } = parseQuery(
+        c,
+        z.object({ refresh: z.string().optional(), parts: z.enum(["all", "cli"]).optional() }),
+      );
+      return c.json(await integrations.providers(refresh === "1", parts));
     }),
   );
 
-  // Asks each CLI which models it lists, for Settings → Model tiers; `?refresh=1` skips the ten minutes' cache.
+  // Asks each CLI which models it lists, for Settings → Agents → Models; `?refresh=1` skips the ten minutes' cache.
   app.get(
     "/api/agent-models",
     handle(async (c) => {
@@ -107,10 +112,6 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
     handle(async (c) => c.json(services.settings.update(await parseBody(c, UpdateSettingsInput)))),
   );
 
-  app.get(
-    "/api/settings/ask",
-    handle((c) => c.json(integrations.settingsAskStatus())),
-  );
   app.post(
     "/api/settings/ask",
     handle(async (c) => c.json(await integrations.askSettings(await parseBody(c, AskSettingsInput)))),

@@ -1,8 +1,8 @@
-import type { AskSettingsInput, AskSettingsResult, SettingsAskStatus } from "@repo/contracts";
+import type { AskSettingsInput, AskSettingsResult } from "@repo/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import type { AgentJob, RunAgent } from "./headlessAgent.ts";
-import { askPrompt, askStatus } from "./settingsAsk.ts";
+import { askPrompt } from "./settingsAsk.ts";
 
 const ENTRIES: AskSettingsInput["entries"] = [
   {
@@ -32,7 +32,12 @@ const cliResult = (structured: unknown, extra: Record<string, unknown> = {}) =>
   });
 
 function setup(runAgent: RunAgent) {
-  return createTestHarness({ integrations: { runAgent } });
+  const h = createTestHarness({ integrations: { runAgent } });
+  h.services.settings.update({
+    providers: [{ id: "claude-code", enabled: true }],
+    modelTiers: { light: { description: null, t3: null, cli: { "claude-code": "haiku" } } },
+  });
+  return h;
 }
 
 const ask = async (h: ReturnType<typeof setup>, question = "How do I stop Autopilot at night?") => {
@@ -56,6 +61,7 @@ describe("settings Ask", () => {
     });
     const [job] = jobs;
     const args = job!.args;
+    // The Ask operation's model: the light tier's Claude Code model.
     expect(args[args.indexOf("--model") + 1]).toBe("haiku");
     expect(args[args.indexOf("--tools") + 1]).toBe("");
     expect(args).toContain("--strict-mcp-config");
@@ -80,7 +86,15 @@ describe("settings Ask", () => {
     const failed = setup(() =>
       Promise.resolve(cliResult(undefined, { is_error: true, subtype: "error_max_budget_usd", result: "x" })),
     );
-    expect(await ask(failed)).toEqual({ ok: false, error: "Claude Code stopped: error max budget usd" });
+    expect(await ask(failed)).toEqual({ ok: false, error: "Claude Code stopped: error max budget usd." });
+    // On the CLI's default model (no model for the tier), the error says where to set one.
+    failed.services.settings.update({ modelTiers: { light: { description: null, t3: null } } });
+    expect(await ask(failed)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining(
+        "(the Light tier, unless you chose another) a Claude Code model in Settings → Agents → Models",
+      ),
+    });
 
     const slow = setup(() => Promise.reject(new Error("Claude Code didn't finish within 60 seconds")));
     expect(await ask(slow)).toEqual({ ok: false, error: "Claude Code didn't finish within 60 seconds" });
@@ -130,21 +144,53 @@ describe("settings Ask", () => {
     expect(none.status).toBe(400);
   });
 
-  it("says why it can't run when the CLI isn't found", async () => {
-    const h = setup(() => Promise.reject(new Error("not run")));
-    h.services.settings.update({ headlessReviewCli: "/nonexistent/claude" });
-    const res = await h.request("/api/settings/ask");
-    expect((await res.json()) as SettingsAskStatus).toEqual({
-      available: false,
-      reason: "The Claude Code CLI wasn't found at /nonexistent/claude.",
+  it("answers with the reason, without running anything, when no provider can answer", async () => {
+    const jobs: AgentJob[] = [];
+    const h = setup((job) => {
+      jobs.push(job);
+      return Promise.resolve(cliResult({ settingId: null, answer: "x" }));
     });
-    expect(askStatus(null).available).toBeTypeOf("boolean");
+    h.services.settings.update({ providers: [{ id: "copilot-cli", enabled: true }] });
+    expect(await ask(h)).toEqual({
+      ok: false,
+      error:
+        "Ask needs a provider that can return structured output and run read-only, apart from your own setup; add one in Settings → Agents → Providers.",
+    });
+    expect(jobs).toHaveLength(0);
+  });
+
+  it("answers on Codex, read-only and isolated in its empty folder, naming Codex when it fails", async () => {
+    const jobs: AgentJob[] = [];
+    let answer = JSON.stringify({ settingId: "autopilot.engine.quiet-hours", answer: "Pick a theme." });
+    const h = setup((job) => {
+      jobs.push(job);
+      return Promise.resolve(
+        [
+          JSON.stringify({ type: "thread.started", thread_id: "0199a213-81c0-7800-8aa1-bbab2a035a53" }),
+          JSON.stringify({ type: "item.completed", item: { id: "i", type: "agent_message", text: answer } }),
+          JSON.stringify({ type: "turn.completed" }),
+        ].join("\n"),
+      );
+    });
+    h.services.settings.update({ providers: [{ id: "codex", enabled: true, cliPath: "/opt/codex" }] });
+    const out = await ask(h);
+    expect(out).toMatchObject({ ok: true, answer: "Pick a theme.", costUsd: null });
+    const job = jobs[0]!;
+    expect(job).toMatchObject({ cli: "/opt/codex", command: "codex", label: "Codex" });
+    expect(job.args).toEqual(
+      expect.arrayContaining(["--sandbox", "read-only", "--ignore-user-config", "--ephemeral", "--output-schema"]),
+    );
+    answer = "not json";
+    expect(await ask(h)).toEqual({
+      ok: false,
+      error: "Codex stopped: its answer wasn't the JSON its output schema asks for.",
+    });
   });
 
   it("answers with the reason, without spawning anything, when the CLI isn't found", async () => {
     // No fake runner: the real one would spawn, so reaching it would throw instead of returning the reason.
     const h = createTestHarness({ integrations: { runAgent: undefined as unknown as RunAgent } });
-    h.services.settings.update({ headlessReviewCli: "/nonexistent/claude" });
+    h.services.settings.update({ providers: [{ id: "claude-code", enabled: true, cliPath: "/nonexistent/claude" }] });
     expect(await ask(h)).toEqual({ ok: false, error: "The Claude Code CLI wasn't found at /nonexistent/claude." });
   });
 

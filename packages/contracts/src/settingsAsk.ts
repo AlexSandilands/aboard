@@ -38,7 +38,3 @@ export const AskSettingsResult = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(false), error: z.string() }),
 ]);
 export type AskSettingsResult = z.infer<typeof AskSettingsResult>;
-
-/** Whether the Ask can run now: the Claude Code CLI is found. */
-export const SettingsAskStatus = z.object({ available: z.boolean(), reason: z.string().nullable() });
-export type SettingsAskStatus = z.infer<typeof SettingsAskStatus>;

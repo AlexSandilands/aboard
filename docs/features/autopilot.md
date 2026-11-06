@@ -393,10 +393,9 @@ as comments only.
   - git in three exact commands only (`rev-parse HEAD`, `status --short`, `log --oneline -20`), because `git diff`,
     `show` and `log` take any path, so read any file (a path outside the work tree makes `diff` compare files) and
     write any file (`--output=`);
-  - `gh` in exact commands only: `gh pr view <url>` (also with `--comments`), `gh pr diff <url>` (also with `--name-only`, for a diff too long for
-    one command output) and two reads of
-    the PR's comments and reviews with `gh api`. The PR is named by its URL, so there is no `-R` to point it at
-    another repository, and no wildcard for `--web`, `-f` or `--method` to ride on.
+  - the PR itself only through its [run tools](#run-tools) (`runTools: {toolSet: "prReview", target}`): `pr_overview`,
+    `pr_files`, `pr_diff` and `pr_comments`, bound to this one PR, served by the board and paged so a diff of any size
+    is read in full. No `gh` and no network: the run tools' server is its one MCP server.
 
   Before the agent starts the runner checks the worktree is at the commit the run is about (`expectHead`,
   `WorktreeHeadError`) and, when it isn't, removes the worktree and its branch (the run records neither). A branch
@@ -639,7 +638,7 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   (`RunnerRequest.deniedTools`), so it can't create or flag a task for auto-merge, link a PR, mark review findings away,
   or move, close, archive or delete tasks. `mcp.test.ts` checks every registered tool is on one list or the other. It never starts a Planned task: that is Start planned's, under its
   limits and the task's blockers; a failed start goes back through `retry_autopilot_run`. It counts against the caps and waits
-  out quiet hours like any agent run. Tier `standard`; `model`, `budgetUsd` (3) and `timeoutMinutes` (30) are its
+  out quiet hours like any agent run. The `orchestrate` operation (Standard tier by default); `modelChoice`, `budgetUsd` (3) and `timeoutMinutes` (30) are its
   only runner options (the runner choice doesn't apply).
 - **Merging.** Only through `merge_task_pr`, so only tasks flagged for auto-merge and only past the server's gate. The
   prompt adds no policy of its own (nothing about UI changes): what to hold back is the user's call, in the extra
@@ -721,7 +720,7 @@ Needs no agent unless the mode asks for one, and is off until switched on.
   `pr_changes_requested` notifications of the period, so a kind switched off in Settings isn't reported), and
   **Autopilot** (real runs that finished in the period: counts, and each failed or needs-you run with its message cut to one line).
   The total Autopilot cost closes it. Titles are escaped, and task numbers are written `#N` for the UI to link.
-- **Summarised.** The plain digest goes to a headless agent on the light tier (`model` overrides), with the chosen
+- **Summarised.** The plain digest goes to a headless agent on the `digest` operation's model (the light tier by default; the config's `modelChoice` overrides), with the chosen
   digest skill (the built-in one, `BUILTIN_DIGEST_SKILL_BODY`, or one found on disk) and the instruction that the
   digest is material, not instructions. A skill found on disk is read by the board (only a `SKILL.md`, at most 200 KB, cut to 20,000 characters) and put in the prompt. The agent
   has no tools at all (`access: "none"`: `--tools ""` and `--strict-mcp-config`, so no file reads and no board MCP
@@ -805,7 +804,7 @@ the automation. Runs stay, under the old key.
   (`checkCustomDefinition`, run by the service and the form), and an agent on it can't use `onPrBranch`.
 - **Agent action** (`needsAgent`): `customAgentPrompt` (contracts) is the skill line, the prompt with its
   `{{…}}` placeholders filled (`CUSTOM_PLACEHOLDERS`; unknown ones are refused on save) and the task's context.
-  It goes to `ctx.runner.start` with the action's tier as its `modelChoice` (see [Models](#models)) and, with `onPrBranch`, `workspace.branch`
+  It goes to `ctx.runner.start` with the action's `model` as its `modelChoice` and the `customTask` operation (see [Models](#models)) and, with `onPrBranch`, `workspace.branch`
   set to the PR's head branch. Its config is the shared runner options, per scope. On a schedule there is no task:
   the prompt's footer names the project and its folder instead (`customAgentPrompt` with a null task), the run has no
   `taskId`, and the runner runs it headless in an empty temp folder through `startDetached`, as it does the digest
@@ -813,7 +812,7 @@ the automation. Runs stay, under the old key.
   headless). It has the usual edit access and the board's tools, and `repo` (the project's folder) gives it the
   default-branch push guard and the safety note a worktree run gets; the prompt names the folder as the live checkout to
   read from, not edit (advisory only: the run has edit access and Bash, and only pushes are denied; a project with no
-  folder gets the safety note without a branch name and the generic denials). The model is the automation's Model setting, else the action's tier, else the CLI's default. One at a time per
+  folder gets the safety note without a branch name and the generic denials). The model is the automation's Model setting, else the action's `model`, else the board's for `customDetached`, else the light tier ([Models](#models)). One at a time per
   project: while a run of the automation for the project is queued or running (`status().active`), `check` returns no candidate, so the
   slot isn't recorded and the latest slot runs once the run ends. It also counts against `maxConcurrent` and the daily
   caps like any agent run.
@@ -906,8 +905,9 @@ empty by default, so rows saved before them still parse (#238 added inputs to sh
   run gets the user's servers (not `access: "none"`, nor read-only and untrusted, which use `--strict-mcp-config`), the
   runner adds `MCP_CONNECTION_NONBLOCKING=false` to the agent's environment beside the push guard's (`mcpWaitEnv`), so
   Claude Code connects them first. Such a run waits for every user server, up to Claude Code's MCP timeout, within the
-  run's own timeout; runs that need only the board's server don't wait. Same cause as ticket imports
-  ([issue-import.md](issue-import.md#the-job)).
+  run's own timeout; runs that need only the board's server don't wait. A run with [run tools](#run-tools) waits too,
+  locked down or not: its only way to read its target is that server, and a locked-down run has no ToolSearch to find
+  a late one. Same cause as ticket imports ([issue-import.md](issue-import.md#the-job)).
 - **Blocked.** While a slot has no tools, `customBlockedReason` gives "Won't work until you fill in: Jira tools". The
   catalogue entry carries it as `Automation.blocked` (`AutopilotAutomation.blocked` in the API): `setScope` refuses
   `mode: "on"` with that message (`VALIDATION`), the UI shows it in orange and disables On, and the automation's `check`
@@ -1168,7 +1168,7 @@ on the REST writes is unchanged, so this opens no path to setting up a command o
 
 ### Runners
 
-An agent action calls `ctx.runner.start({ run, prompt, tier, options, … })` (`autopilot/runner.ts`). The engine
+An agent action calls `ctx.runner.start({ run, prompt, operation, options, … })` (`autopilot/runner.ts`); `operation` is what the run's model is resolved for ([Models](#models)). The engine
 binds the run's `update` into it, so the session, thread or worktree is on the run as soon as it exists, and a
 run that fails afterwards still shows it. A runner throws when the work couldn't be done, and the run fails
 with that error.
@@ -1215,7 +1215,8 @@ with that error.
   (`Bash(gh pr review *)`), **`deniedTools`** to deny more (Orchestrate with May merge off), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
   can't be held to these, so a request with any of them runs headless under Auto, and fails under T3 only.
   Also headless only: **`untrustedInput`** for a read-only agent that reads text anyone can write (no MCP servers or
-  checkout settings, file tools limited to the worktree, only exact git commands) and **`expectHead`**, the commit the worktree must be at, checked before the
+  checkout settings, file tools limited to the worktree, only exact git commands), **`runTools`**, the board-served
+  tools the run reads its target through ([Run tools](#run-tools)), and **`expectHead`**, the commit the worktree must be at, checked before the
   agent starts (`WorktreeHeadError`, with `moved` when the branch is ahead of it).
 
 Every agent automation spreads the shared runner options into its config (`autopilot/runnerOptions.ts`:
@@ -1226,8 +1227,7 @@ Every agent automation spreads the shared runner options into its config (`autop
 | `runner`         | auto    | auto, t3 or headless                                                             |
 | `budgetUsd`      | 5       | Headless: `--max-budget-usd`                                                     |
 | `timeoutMinutes` | 60      | Headless: the agent, and everything it started, is killed after this long        |
-| `modelChoice`    | task    | The model runs start on: the task's, a tier or a custom model ([Models](#models)) |
-| `model`          | blank   | Headless: a typed `--model` that wins over `modelChoice`                         |
+| `modelChoice`    | inherit | The model runs start on: inherit, a tier, a custom model or a typed model ([Models](#models)) |
 | `t3Access`       | default | T3: the most access a thread gets. Never more than T3's own default              |
 
 **T3 thread.** `launchTaskThread` with the command id `autopilot-<runId>` (T3 de-duplicates by it), in work mode,
@@ -1275,45 +1275,150 @@ the Copilot CLI when the run's model says so ([Headless drivers](#headless-drive
    also block `gh pr merge` and `gh api …merge…`. They match the command as written, so they are a guard rail,
    not a sandbox; the prompt states the same rules.
 5. The cost (`total_cost_usd`) is recorded even when the run stopped early (budget, turn limit). An early stop or
-   a timeout fails the run. The CLI is the one set for the board's reviewer (`headlessReviewCli`); Codex's is
-   `codexCli` and Copilot's `copilotCli` (Settings → Integrations).
+   a timeout fails the run. The CLI is each provider's path (`harnessCliSetting`, Settings → Agents → Providers), else
+   its name on PATH.
 
 #### Headless drivers
 
 Each harness has a `HeadlessDriver` (`integrations/headlessAgent.ts` for Claude Code, `integrations/headlessDrivers.ts`
 for the others): the argv, a parser that turns its output into an outcome, and what it can be held to.
 
-| Capability                             | Claude Code | Codex | Copilot CLI |
-| -------------------------------------- | ----------- | ----- | ----------- |
-| Structured output (`outputSchema`)     | yes         | no    | no          |
-| Untrusted-input lockdown               | yes         | no    | no          |
-| No tools (`access: "none"`)            | yes         | no    | no          |
-| Extra tool rules (`tools`, `deniedTools`) | yes      | no    | no          |
-| Spending cap (`budgetUsd`) and cost    | yes         | no    | no          |
-| Session id given up front              | yes         | no    | yes         |
+| Capability                                        | Claude Code | Codex          | Copilot CLI |
+| ------------------------------------------------- | ----------- | -------------- | ----------- |
+| Structured output (`outputSchema`)                | yes         | yes            | no          |
+| Isolated read-only run (`readOnly`)               | yes         | yes            | no          |
+| Untrusted-input lockdown (`untrusted`)            | yes         | no, warns      | no          |
+| No tools (`access: "none"`)                       | yes         | no             | no          |
+| Extra tool rules (`tools`, `deniedTools`)         | yes         | no             | no          |
+| Board-served [run tools](#run-tools) (`runTools`) | yes         | yes            | no          |
+| Spending cap (`budgetUsd`) and cost               | yes         | no             | no          |
+| Session id given up front                         | yes         | no             | yes         |
 
-- **Which one.** The run's model ([Models](#models)) names the harness: a tier or custom model's **Headless runs**
-  setting (`ModelTierSetting.headless`, unset is Claude Code), with that harness's model from the same tier or model
-  (`profileHeadless`).
-- **Falling back.** A run that needs something its harness can't do (a reviewer's structured verdict, the untrusted
-  lockdown, a no-tools digest, or an editing run with no task, which has no worktree and so no push guard) runs on
-  Claude Code instead, and the run's detail says why (`headlessDriverFor`) and which model ran: a typed override that
-  is a Claude model, else the model's Claude Code model (`profileHeadlessModel`), else the CLI's default. So in practice only edit and plain read-only runs (Start planned, Fix PRs, Unstick, custom
-  agent actions without tool rules) run on Codex or Copilot.
-- **Codex:** `codex exec --json --skip-git-repo-check --sandbox danger-full-access [--model <m>] -` (read-only runs
-  use `--sandbox read-only`), prompt on stdin. Edit runs leave Codex's sandbox off because its `workspace-write`
-  keeps git's folders read-only, and a worktree's git dir lies outside it anyway, so the agent couldn't commit or
-  push. That is the access a Claude Code edit run has (Bash allowed outright); the push guard still applies. The parser reads `thread.started` (the session id), the last completed `agent_message` item (the answer)
-  and `turn.failed` or `error`; a run with no `turn.completed` failed. Written from Codex's docs and source, not
-  checked against a real Codex yet (#252).
+Each "yes" for Codex was checked against codex-cli 0.166.0; the findings are below. "No, warns": Codex has every other
+part of the lockdown but can't confine its file reads, so an operation that reads text anyone can write runs on it only
+when the user chose it, with a warning ([Warnings](#capability-warnings)).
+
+- **Which one.** The provider the run's operation resolves to ([Models](#models)): the chosen model's preferred
+  provider when it can do what the run needs, else the first in the user's Providers order that can. A run that needs
+  what only Claude Code can do (a no-tools digest, tool rules, the full untrusted lockdown, or an editing run with no
+  task, which has no worktree and so no push guard) runs on Claude Code, and its detail says why; with Claude Code not
+  added, it fails with the reason instead. Codex also runs the structured operations on the user's own input (the
+  [board reviewer](local-review.md#the-board-reviewer), the settings Ask) and, when the user chooses it, those that read
+  text anyone can write (PR review, GitHub [issue import](issue-import.md)), with a [warning](#capability-warnings).
+  The Copilot CLI runs only edit and plain read-only runs. Every operation goes through `headlessDriverFor`: the
+  Autopilot runner, the board reviewer (`headlessReview.ts`), Ask (`settingsAsk.ts`) and issue import
+  (`headlessImport.ts`, through `structuredRun.ts`).
+- **Needs.** Each operation's needs are in `OPERATIONS` (contracts `operations.ts`): the board reviewer and Ask need
+  `outputSchema` and `readOnly` (isolated read-only, for the user's own diff or question); PR review needs
+  `outputSchema`, `untrusted` and `runTools`; issue import needs `outputSchema` and `untrusted` for a GitHub issue (its
+  text is in the prompt) and `toolRules` on top for a ticket (`IMPORT_TICKET_NEEDS`: it reads through the user's own
+  MCP servers). `checkNeeds(harness, needs)` sorts what a CLI lacks into *missing* (it can't run it) and *warned*.
+- **Structured output on Codex:** `--output-schema <file>`. Checked on codex-cli 0.166.0: Codex sends the schema as an
+  OpenAI strict response format and holds the answer to it (asked for an enum value outside the schema and extra
+  fields, it returned a conforming object). Strict mode refuses a schema whose objects don't say
+  `additionalProperties: false` (a 400 in `turn.failed`) and wants every property required, so `strictSchema()`
+  (`integrations/strictSchema.ts`) closes every object and makes an optional field nullable, and `fromStrict()` drops
+  the nulls the model then writes for them before the caller's zod schema reads it. `withDriverArgs` writes the
+  converted schema to a temp folder outside the run's working folder and removes it when the run ends. The answer is
+  the last `agent_message` item's text, parsed as JSON; one that isn't fails the run.
+- **Isolated read-only on Codex** (`readOnly`, and every untrusted run): `--sandbox read-only --ignore-user-config
+  --ignore-rules -c web_search="disabled" --disable apps`, plus `--ephemeral` for a run with nothing to resume (the
+  board reviewer, Ask, import). Checked on codex-cli 0.166.0: the sandbox refused a write in the working folder
+  ("Read-only file system", and `apply_patch` was rejected) and the shell had no network (`curl` couldn't resolve a
+  host that the machine could). Two things sit outside the sandbox and are turned off: the model's hosted web search
+  (`web__run`) and, once the shell is off, the hosted `codex_apps` connector. Claude Code's isolated read-only run is
+  its reviewer's read-only tool list without the board, `--strict-mcp-config` and `--setting-sources user`.
+- **Codex can't confine reads,** so it lacks `untrusted`. Its read-only sandbox read a file outside the working folder.
+  `--disable shell_tool --disable unified_exec` does remove the shell, but the run keeps code-mode `exec`,
+  `spawn_agent` subagents and `view_image`, several of the features involved are marked under development, and what
+  the model lists as its tools changed from run to run, so no reliable confinement was found.
+- **Codex:** `codex exec --json --skip-git-repo-check --sandbox danger-full-access [--model <m>] [-c
+  model_reasoning_effort=<effort>] -` (read-only runs use `--sandbox read-only`), prompt on stdin. Checked against
+  codex-cli 0.166.0 (recorded output is in `integrations/fixtures/codex/`). Edit runs leave Codex's sandbox off. Its
+  `workspace-write` sandbox does work for git when both the worktree's git dir and the repository's common git dir are
+  added as writable roots (`-c sandbox_workspace_write.writable_roots=[…]`, with `-c
+  sandbox_workspace_write.network_access=true`): `add`, `commit` (the repository's hooks run) and an HTTPS `push` to
+  GitHub all succeeded. Without the roots `git add` fails (`Unable to create '…/index.lock': Read-only file system`).
+  But only the worktree, those roots and temp folders are writable then; `mkdir ~/.cache/x` and
+  `mkdir ~/.local/share/x` fail with `Read-only file system`, which is where a package manager keeps its store and
+  caches, so an edit run that installs or tests would fail. SSH pushes weren't tried. So the access is the one a Claude
+  Code edit run has (Bash allowed outright); the push guard still applies, and the guard refused a force-push, a branch
+  delete and a push to the default branch from a real Codex run. The effort is the config key (`codex exec` has no
+  flag for it): the model's Codex effort (`none` to `ultra`, as Codex's `model/list` names them) goes through when the profile sets one;
+  Codex's own session file confirmed the model, effort and sandbox of a run. A bad value isn't refused by the CLI but by
+  the API (the run ends with `error` and `turn.failed`). The parser reads `thread.started` (the session id), the last
+  completed `agent_message` item (the answer) and `turn.failed` or `error`; a run with no `turn.completed` failed. A
+  refusal from the API arrives as its response body in `message`, and the parser shows the error inside it. Items of
+  type `error` are warnings (an unknown model's metadata) and are ignored. The agent's shell has `CODEX_THREAD_ID`,
+  the same id as `thread.started`'s.
 - **Copilot CLI:** `copilot --output-format json --no-ask-user --session-id <id> --allow-tool write --allow-tool shell
   --allow-tool <board> --deny-tool 'shell(gh pr merge)' [--model <m>] [--name <name>]`, prompt on stdin. Read-only
   runs allow only `git status`, `log`, `diff`, `show` and `rev-parse` and deny `write`. The parser takes the last
   `assistant.message` or `session.task_complete` summary as the answer, and `session.error` or a printed `Error:`
   line as the failure. Copilot's rules match a command's first-level subcommand (`git push`), so they can refuse
   merging but not a force-push alone: the push guard does that.
+- **Run tools:** Claude Code gets `--mcp-config <file>` naming only the run's server (`aboard-run`, `RUN_SERVER_NAME`)
+  with its token in a header, and `mcp__<server>` allowed; a locked-down run keeps `--strict-mcp-config`, any other
+  keeps the user's servers too. Codex gets `--ignore-user-config -c mcp_servers.<server>.url="…" -c
+  mcp_servers.<server>.bearer_token_env_var="<RUN_TOKEN_ENV>" -c
+  mcp_servers.<server>.default_tools_approval_mode="approve"`, with the token in that variable. The approval mode
+  matters in the read-only sandbox: there Codex asks before calling a tool without `readOnlyHint`, and with nobody to
+  answer the call fails ("MCP tool call requires approval, but approval policy is never"; a tool with the hint ran,
+  checked on 0.166.0). The run tools all carry the hint, and the endpoint serves only the tools the run may use. Checked on
+  codex-cli 0.166.0: a `codex exec` pointed at a run endpoint called `pr_overview` and `pr_diff` (`mcp_tool_call`
+  items, no approval asked) and answered from the diff; and with `--ignore-user-config` a stdio server named in a
+  `config.toml` was not started, while without it it was. The login under `CODEX_HOME` still applies. The Copilot
+  CLI can't yet be held to one given MCP server, so it lacks the capability.
 - **Cost:** Codex and Copilot report none and take no cap. Only `timeoutMinutes` stops them, the run records no cost,
   and the spend cap doesn't count them.
+
+#### Capability warnings
+
+A provider that has the isolated read-only run but not the untrusted lockdown (Codex) meets `untrusted` with a
+warning rather than not at all (`checkNeeds` puts it under `warned`, `needsWarning` gives the text: it can't confine
+its file reads, so text anyone can write could make it leak local files into what it returns, such as a review the
+board then posts):
+
+- **Never a fallback.** `resolveOperationModel` falls back only to providers with nothing missing and nothing warned.
+  With none, it refuses, and says which provider could run it with a warning if the user chose it.
+- **Only when chosen for the operation:** a typed model on that provider, at any level, or a tier or custom model
+  whose preferred provider it is, set for this operation (on the task, the project, the automation or the Models
+  page). A tier that is only the operation's default, or the task's own model, was chosen for other work: its
+  preferred provider is passed over like any other with a warning, and the note says why.
+- **Said where it runs:** `ResolvedModel.warning`, also appended to `note`, so a run's detail repeats it; an import
+  logs it. The [picker](#models) shows the provider with a warning dot and its tooltip, the warning under its list, and
+  ", with a warning" on a tier that resolves to it; a provider with a need missing stays greyed out with the reason.
+
+#### Run tools
+
+A headless run that reads a git host gets that host's reads as tools the board serves for it alone, instead of `gh`
+and tool rules only Claude Code can follow ([ADR 0013](../decisions/0013-board-served-run-tools.md)):
+
+- **The scope.** `RunnerRequest.runTools` is `{toolSet, target}` (`mcp/runTokens.ts`): one tool set per kind of
+  operation and the one thing it reads. Today the set is `prReview` and the target a PR.
+- **The token.** `runOnDriver` mints one before the agent starts (`RunTokens.mint`, through the runner's `runTools`
+  dep): 32 random bytes, kept in memory by its SHA-256 only, alive for the run's timeout plus five minutes and never
+  more than a day (`RUN_TOKEN_MAX_TTL_MS`). It writes the MCP config (`runToolsMcpConfig`) to a temp folder of its own
+  outside the worktree, mode 0600, and in a `finally` revokes the token and removes the folder, however the run
+  ended. Only a driver that reads the token from its environment (`runTokenFromEnv`: Codex) gets it there, in
+  `RUN_TOKEN_ENV`. The token is never logged, never in a URL, never on a command line.
+- **The endpoint.** `POST /mcp/run` with `Authorization: Bearer <run token>` (`mcp/runTools.ts`): stateless
+  streamable HTTP like `/mcp`, but each request gets a server with only its grant's tools. A missing, unknown,
+  revoked or expired token gets 401 without the token in the answer; the board's own API token is neither needed nor
+  accepted. The localhost guard applies.
+- **The PR review set.** `pr_overview`, `pr_files`, `pr_diff(path?, page?)` and `pr_comments(page?)`. None takes a
+  target: each reads the grant's PR, so arguments naming another one are dropped, and a path the PR doesn't change is
+  refused. The diff comes in pages of at most 400 lines and 20,000 characters (`PAGE_LIMITS`, small enough that Codex
+  shows a result whole), by file or for the whole PR in order; a file split across pages repeats its header with
+  `(continued)`, each result names its page, the count and the next call, and only a line longer than half a page is
+  cut, with a marker. The file list is read once per run (`RunGrant.cache`) however many pages follow. Results mark
+  the PR's own text as untrusted.
+- **What they read through.** A `GitHost` (`integrations/gitHost.ts`): `getPr`, `listFiles` (with each file's patch),
+  `getDiff(path, page)`, `getComments` (conversation comments, review bodies and inline comments with their ids,
+  oldest first) and `getIssue`. GitHub's (`integrations/githubHost.ts`) reads REST (`GithubApi.rest`) with the `gh`
+  token, 100 a page up to 30 pages; a file GitHub serves no patch for (binary, too large) says so.
+- **Which providers.** The `runTools` capability: Claude Code and Codex. A run with `runTools` adds the `runTools`
+  need, so the resolver never picks the Copilot CLI for it, and it runs headless only.
 
 #### The push guard
 
@@ -1323,7 +1428,7 @@ Codex and Copilot can't be given Claude Code's deny rules, so git refuses the pu
 `core.hooksPath` in `GIT_CONFIG_PARAMETERS` (how `git -c` passes config on, `pushGuardEnv`), so every git the agent
 runs uses it and no config file changes: not the repository's (turning on `extensions.worktreeConfig` would break
 a bare repository's worktrees), not the user's. `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0` would be the documented way,
-but Codex drops variables with `KEY` in their name from its shell, and git then fails outright. Its `pre-push`
+but a Codex shell was only seen keeping them in a read-only run, and a tool that drops variables with `KEY` in their name would break git outright; `GIT_CONFIG_PARAMETERS` has no such risk. Its `pre-push`
 refuses a delete, a push to `refs/heads/<default branch>`, and a push whose remote commit isn't an ancestor of the
 local one (a force-push; a remote commit the worktree hasn't fetched is refused too, as it can't be told apart). It
 then runs the repository's own `pre-push`; every other hook just runs the repository's own (where git would look:
@@ -1339,29 +1444,67 @@ without `--force`, so a worktree with uncommitted changes is kept and logged onc
 
 ### Models
 
-Which model a run starts on is decided by one rule, `resolveRunModel` (`packages/contracts/src/modelProfiles.ts`),
-which the T3 launch dialog and the terminal session launcher use too:
+Every operation that runs a model has one model choice, `ModelChoice` (`packages/contracts/src/modelProfiles.ts`):
+`"inherit"`, a tier (`{tier}`), a custom model (`{profile}`), or a model typed for one provider
+(`{provider, model, effort?}`). The operations are the `OPERATIONS` registry (`packages/contracts/src/operations.ts`),
+each with what it needs from the provider and a default that is a tier or inherit, never a provider's model:
 
-1. **The automation's choice.** Every agent automation has a **Model** field (kind `model`, config key
-   `modelChoice`: `{from: "task"} | {tier} | {profile}`; default From the task). A custom agent action's own tier
-   comes next (`RunnerRequest.modelChoice`), and Orchestrate and the digest pass a fixed tier.
-2. **A task label.** **Settings → Model tiers → Custom models** (`modelProfiles`) are named models with a tier's
-   fields (description, T3 model, CLI models) and labels. A task carrying one of a model's labels runs on it, whatever
-   its tier; when several models claim a label, the first in the list wins.
-3. **The task's suggested tier.**
-4. **The harness's default.**
+| Operation (`OperationId`)                    | Default | Needs                                    |
+| -------------------------------------------- | ------- | ---------------------------------------- |
+| Task runs (`taskRun`), PR fix (`prFix`)      | inherit | edit                                     |
+| New sessions, terminal and T3 (`launch`)     | inherit | nothing                                  |
+| Reviewer subagent (`reviewer`)               | inherit | nothing (it is a line in the brief)      |
+| Board reviewer (`boardReviewer`)             | standard | structured output, tool rules           |
+| PR review (`prReview`)                       | standard | structured output, untrusted lockdown, run tools |
+| Orchestrate (`orchestrate`)                  | standard | untrusted lockdown, tool rules          |
+| Digest (`digest`)                            | light   | no tools                                 |
+| Custom agents on a task (`customTask`)       | inherit | edit                                     |
+| Custom agents without a task (`customDetached`) | light | nothing                                 |
+| Issue import (`issueImport`)                 | light   | structured output, tool rules            |
+| Ask (`ask`)                                  | light   | structured output, no tools              |
 
-A **headless** run runs on the chosen model's **Headless runs** harness (Claude Code unless set; see
-[Headless drivers](#headless-drivers)) and takes, in order: a model typed in the automation's **Headless model
-override**, the chosen model's model for that harness (for Claude Code also its T3 model when that is a Claude model
-`claude` accepts, `profileHeadlessModel`), else the CLI's default. A model with none for its harness falls back to the
-CLI's default, and the run's detail says so; otherwise the detail names the model, what picked it and, off Claude
-Code, the harness. The model's effort for that harness (`cliEffort`, `--effort` or `--reasoning-effort`; Codex has
-none) goes with its model: a typed override, or a T3 model standing in for the Claude Code one, runs at the CLI's
-default effort. A **T3** launch passes an automation's choice on to
-`launchTaskThread` (`modelChoice`), which resolves it with the task's labels and tier against T3's providers
-(`resolveSuggestion`). A choice naming a custom model that was since deleted is passed over with a note, and the
-task's model is used.
+**Which choice applies** (`resolveOperationChoice`), most specific first; `inherit` defers to the next:
+
+1. The task's reviewer override, then the project's (`reviewModel`; the two reviewer operations only).
+2. The automation's **Model** field (kind `model`, config key `modelChoice`, default inherit) at its scope, then a
+   custom agent action's own `model` (`RunnerRequest.modelChoice`).
+3. The board's setting for the operation (`AppSettings.operationModels[op]`). Set to inherit on an operation on a
+   task, it skips the default and takes the task's own model (step 5), so PR review or the board reviewer can follow
+   the task.
+4. The operation's default.
+5. When everything inherits, a task-scoped operation takes the task's own model (`resolveTaskModel`): a custom model
+   one of its labels picks (**Settings → Agents → Models → Custom models**, the first in the list when several claim a
+   label), else its suggested tier, else the light tier. Anything else takes the light tier.
+
+A choice naming a custom model that was since deleted is passed over with a note, and the next level decides.
+
+**Which provider runs it** (`resolveOperationModel`, pure, so the web can show it too). Only providers the user added
+and switched on (Settings → Agents → Providers) that can do what the operation needs (`HEADLESS_CAPABILITIES`, and what the run
+asks on top: `driverNeeds` in `integrations/headlessDrivers.ts`) count:
+
+- A typed model runs on its own provider, with its effort when that CLI takes it. If that provider isn't on, or can't
+  do what the operation needs, the operation refuses.
+- A tier or custom model runs on its preferred provider (`ModelTierSetting.provider`, the **Preferred** radio on Settings → Agents → Models;
+  it has no default) when that counts; otherwise on the first provider in the Providers order that counts and has a
+  model for it, else on the first that counts, on the CLI's default model. A CLI model comes with its effort; when a
+  tier has no CLI model for a provider, its T3 model stands in when T3 files it under that provider
+  (`t3InstanceHarness`), with no effort.
+- A provider that meets the needs only with a [warning](#capability-warnings) counts for a typed model on it and as
+  the preferred provider of a tier or custom model chosen for the operation, never as a fallback or through a default.
+- No provider counts: the operation refuses with the reason ("Ask needs a provider that can return structured output
+  and run with no tools; add one in Settings → Agents → Providers"). It never runs something else quietly. The refusal is the
+  Ask error, the issue-import failure, the board review round's error and the Autopilot run's failure.
+
+Every fallback (another provider, no model for it, a deleted custom model) goes in the run's detail, with a
+`Model: …` line naming the model, what picked it and the provider. The run records what it ran on in
+`AutopilotRun.model` (`autopilot_runs.model_json`: `{provider, model, effort, source}`). A **T3** launch passes the
+tier or custom model the run's operation resolved to on to `launchTaskThread` (`modelChoice`), whatever picked it, so
+the board's model for new sessions (`launch`) never replaces it; there it is checked against T3's providers
+(`resolveSuggestion`). A model typed for a CLI provider, or the light fallback, has no T3 model: the launch gets
+`defaultModel` and T3's default runs. The run records `{provider: "t3-code", model}` with the T3 model it asked for
+(null when T3 couldn't use it, or there was none).
+
+041_operation_models moved what was saved before into this shape: see [ADR 0012](../decisions/0012-provider-neutral-operation-models.md).
 
 ### Writing an automation
 
@@ -1467,6 +1610,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/repoGate.ts` | One `git fetch` per repository at a time: Autopilot's T3 launches and headless worktrees |
 | `apps/server/src/integrations/headlessAgent.ts` | `claude -p` arguments for agent runs, the push deny rules, the outcome, the driver interface |
 | `apps/server/src/integrations/headlessDrivers.ts` | The Codex and Copilot CLI drivers, capabilities and the fallback to Claude Code |
+| `apps/server/src/mcp/runTokens.ts`, `mcp/runTools.ts` | Run tools: the tokens, `/mcp/run` and the tool sets |
+| `apps/server/src/integrations/gitHost.ts`, `githubHost.ts` | `GitHost`, the paging helpers, and GitHub's implementation |
 | `apps/server/src/autopilot/engine.ts` | The pass, the event and tick wiring |
 | `apps/server/src/autopilot/limits.ts` | `agentHold`: quiet hours, concurrency and the daily caps, for the engine and Orchestrate's state |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |

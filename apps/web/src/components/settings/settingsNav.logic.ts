@@ -1,11 +1,13 @@
-// Pure helpers for the settings page: its groups and sub-sections, scroll-spy and the project it shows.
+// Pure helpers for the settings page: its groups and sub-sections, scroll-spy, the project it shows and the provider
+// its Providers page edits.
+import { ProviderId } from "@repo/contracts";
 import { keybindingGroups } from "./keybindings.logic";
 
 export const SETTINGS_GROUP_IDS = [
   "board",
   "keybindings",
   "tasks",
-  "models",
+  "agents",
   "autopilot",
   "integrations",
   "project",
@@ -62,10 +64,26 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     ],
   },
   {
-    id: "models",
-    label: "Model tiers",
+    id: "agents",
+    label: "Agents",
+    // Providers come first: until one is added, the other sections have nothing to set and are hidden.
     sections: [
-      section("models.tiers", "Model tiers", [
+      section("agents.providers", "Providers", [
+        "t3 code",
+        "claude code",
+        "codex",
+        "copilot",
+        "mcp",
+        "skill",
+        "cli",
+        "session",
+        "pairing",
+        "threads",
+        "openai",
+        "vs code",
+        "add provider",
+      ]),
+      section("agents.models", "Models", [
         "light",
         "standard",
         "deep",
@@ -76,7 +94,27 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
         "t3 code",
         "claude code",
         "copilot",
+        "codex",
         "effort",
+        "preferred provider",
+        "model tiers",
+        "custom model",
+        "profile",
+        "label",
+        "model per label",
+      ]),
+      section("agents.operations", "Operations", [
+        "operation",
+        "reviewer model",
+        "board reviewer",
+        "pr review",
+        "fix prs",
+        "orchestrate",
+        "digest",
+        "issue import",
+        "ask",
+        "headless",
+        "automation model",
       ]),
     ],
   },
@@ -92,10 +130,6 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     id: "integrations",
     label: "Integrations",
     sections: [
-      section("integrations.t3-code", "T3 Code", ["pairing", "threads", "connection"]),
-      section("integrations.claude-code", "Claude Code", ["mcp", "skill", "cli", "session"]),
-      section("integrations.copilot", "GitHub Copilot", ["mcp", "vs code", "cli", "session"]),
-      section("integrations.codex", "Codex", ["mcp"]),
       section("integrations.github", "GitHub", ["gh", "pull requests", "enterprise"]),
       section("integrations.tickets", "Ticket systems", ["jira", "linear", "issue keys", "presets"]),
       section("integrations.terminal", "Terminal", ["open in terminal", "windows terminal", "sessions"]),
@@ -108,6 +142,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
       section("project.general", "General", ["name", "icon", "folder", "workspace"]),
       section("project.plan-skill", "Planning skill"),
       section("project.review-skill", "Review skill"),
+      section("project.models", "Reviewer model", ["models", "review model", "board reviewer"]),
       section("project.autopilot", "Autopilot overrides", ["automations"]),
       section("project.recurring", "Recurring tasks", ["schedule", "rules"]),
       section("project.danger-zone", "Danger zone", ["archive", "delete"]),
@@ -123,15 +158,101 @@ export function settingsGroup(id: SettingsGroupId): SettingsGroupDef {
   return SETTINGS_GROUPS.find((group) => group.id === id)!;
 }
 
+/** The provider sections that moved out of Integrations, by their old id. */
+const MOVED_PROVIDER_SECTIONS: Record<string, ProviderId> = {
+  "integrations.t3-code": "t3-code",
+  "integrations.claude-code": "claude-code",
+  "integrations.copilot": "copilot-cli",
+  "integrations.codex": "codex",
+};
+
+/** Rows that were renamed when they moved, by their old id after the section. */
+const MOVED_PROVIDER_ROWS: Record<string, string> = {
+  "providers.t3-code.connection": "providers.t3-code.status",
+  "providers.copilot-cli.cli": "providers.copilot-cli.mcp",
+};
+
+/**
+ * Targets that moved to the Models page, or to their own section, by their old id; one ending in "." moves every row
+ * under it.
+ */
+const MOVED_TARGETS: ReadonlyArray<[string, string]> = [
+  ["models.tiers.custom.", "models.custom."],
+  ["models.tiers.custom", "models.custom.list"],
+  ["models.tiers", "models.tiers.list"],
+  ["tasks.review.model", "models.operations.reviewer"],
+  ["tasks.new-tasks.import-model", "models.operations.issueImport"],
+  ["project.review-skill.model", "project.models.reviewer"],
+];
+
+/**
+ * The Providers and Models pages, merged into Agents: their old targets by prefix (the longest that matches wins), so
+ * bookmarks and links into either keep working.
+ */
+const MOVED_TO_AGENTS: ReadonlyArray<[string, string]> = [
+  ["providers", "agents.providers"],
+  ["models.operations", "agents.operations"],
+  ["models.tiers", "agents.models.tiers"],
+  ["models.custom", "agents.models.custom"],
+  ["models", "agents.models"],
+];
+
+function movedToAgents(target: string): string {
+  for (const [old, moved] of MOVED_TO_AGENTS) {
+    if (target === old || target.startsWith(`${old}.`)) return moved + target.slice(old.length);
+  }
+  return target;
+}
+
+/**
+ * A target from before it moved: a provider's from before providers had their own page
+ * (`integrations.claude-code.cli-path`, a bookmark or an old link) and anything on the old Providers and Models pages
+ * as it is now on Agents (`agents.providers.claude-code.cli-path`), and the model settings that moved to the Models
+ * page. Any other target as it is.
+ */
+export function redirectSettingsTarget(target: string): string {
+  for (const [old, moved] of MOVED_TARGETS) {
+    if (old.endsWith(".") ? target.startsWith(old) : target === old) {
+      return movedToAgents(old.endsWith(".") ? moved + target.slice(old.length) : moved);
+    }
+  }
+  for (const [old, provider] of Object.entries(MOVED_PROVIDER_SECTIONS)) {
+    if (target !== old && !target.startsWith(`${old}.`)) continue;
+    const moved = `providers.${provider}${target.slice(old.length)}`;
+    return movedToAgents(MOVED_PROVIDER_ROWS[moved] ?? moved);
+  }
+  return movedToAgents(MOVED_PROVIDER_ROWS[target] ?? target);
+}
+
 /**
  * Where a settings target lives: a group (`"tasks"`), a section (`"tasks.review"`) or a row
- * (`"integrations.claude-code.cli-path"`). The group is the first segment; anything longer is the anchor to scroll
- * to. Null when the first segment isn't a group.
+ * (`"agents.providers.claude-code.cli-path"`). The group is the first segment; anything longer is the anchor to scroll
+ * to. Null when the first segment isn't a group. An old target is read as the one it moved to.
  */
 export function parseSettingsTarget(target: string): { group: SettingsGroupId; anchor: string | null } | null {
-  const group = target.split(".")[0];
+  const current = redirectSettingsTarget(target);
+  const group = current.split(".")[0];
   if (!isSettingsGroup(group)) return null;
-  return { group, anchor: target === group ? null : target };
+  return { group, anchor: current === group ? null : current };
+}
+
+/** The provider a Providers target is about (`agents.providers.codex.cli-path` → codex), or null. */
+export function providerOfTarget(target: string | null | undefined): ProviderId | null {
+  const [group, page, id] = (target ?? "").split(".");
+  const parsed = ProviderId.safeParse(id);
+  return group === "agents" && page === "providers" && parsed.success ? parsed.data : null;
+}
+
+/**
+ * The sub-sections the list shows for a group: on Agents only Providers until the user adds one, since Models and
+ * Operations have nothing to set without one.
+ */
+export function visibleSections(
+  group: SettingsGroupDef,
+  added: ReadonlyArray<{ id: ProviderId }> | undefined,
+): ReadonlyArray<SettingsSectionDef> {
+  if (group.id !== "agents" || (added?.length ?? 0) > 0) return group.sections;
+  return group.sections.filter((entry) => entry.id === "agents.providers");
 }
 
 /** The sidebar section that holds an anchor (a section id, or a row id under one). */

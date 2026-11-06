@@ -1,9 +1,10 @@
 import {
-  modelEffortLevels,
+  AGENT_HARNESSES,
   taskHandoffPrompt,
   taskWindowName,
   defaultHandoffMode,
   type AgentHarness,
+  type CliEffort,
   type PrFixInfo,
   type SessionLaunchOptions,
   type StartSessionResult,
@@ -12,8 +13,8 @@ import {
 import { ArrowUpIcon, LightbulbIcon } from "lucide-react";
 import { useState } from "react";
 import { HarnessIcon } from "~/components/sessions/SessionParts";
-import { CliEffortMenu, CliModelPicker } from "~/components/settings/CliModelPicker";
-import { findSuggestion } from "~/components/settings/cliModelPicker.logic";
+import { CliModelPicker } from "~/components/models/ModelChoicePicker";
+import { modelLevels } from "~/components/models/choicePicker.logic";
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
@@ -47,8 +48,9 @@ const WHERE_ITEMS = [
 ] as const;
 
 /**
- * "New Claude Code / Copilot CLI session": the hand-off prompt to edit, a model and where to run, then the CLI opens
- * in a terminal with the prompt and the board links the session (useDialogs().openSessionLaunch). With a `fixLinkId`
+ * "New Claude Code / Codex / Copilot CLI session": the hand-off prompt to edit, a model and where to run, then the CLI
+ * opens in a terminal with the prompt and the board links the session, or, for Codex, the session links itself
+ * (useDialogs().openSessionLaunch). With a `fixLinkId`
  * ("Fix in →" on a PR) the prompt is Fix PRs' for the PR's problems and the session works on the PR's own branch.
  */
 export function SessionLaunchDialog() {
@@ -84,7 +86,7 @@ function SessionLaunch({
   onDone: () => void;
 }) {
   const options = useSessionLaunchOptions(task.id);
-  const fix = usePrFix(fixLinkId);
+  const fix = usePrFix(fixLinkId, harness);
   return (
     <>
       <DialogHeader>
@@ -155,7 +157,9 @@ export function announceSession(
     const toastId = toastManager.add({
       type: "success",
       title: `Started ${harnessLabel(harness)}`,
-      description: [result.shortReason, startedDescription(result, taskNumbers, copied)].filter(Boolean).join(" "),
+      description: [result.shortReason, startedDescription(result, harness, taskNumbers, copied)]
+        .filter(Boolean)
+        .join(" "),
       // The clipboard can refuse a write that comes after the request; a click is a fresh gesture.
       ...(result.shortPrompt && !copied
         ? {
@@ -211,6 +215,8 @@ function Composer({
           boardUrl: window.location.origin,
           mode: epic ? "orchestrate" : followup ? "followup" : plan ? "plan" : "work",
           linkedSession: true,
+          // Codex picks its own session id, so its prompt asks it to link itself.
+          sessionHarness: harness,
           epicBranch,
         });
   const [plan, setPlan] = useState(!fix && defaultHandoffMode(task) === "plan");
@@ -227,10 +233,11 @@ function Composer({
   const ready = options && synced.picks ? { options, ...synced.picks } : null;
   // The models the CLI lists, for the picker; anything else can still be typed while the scan runs or if it fails.
   const scanned = useAgentModels(true);
-  const models = scanned.data?.harnesses.find((h) => h.harness === harness)?.models ?? [];
   const start = useStartSession({ silent: true });
   const images = useLaunchImages();
   const cli = options?.clis.find((c) => c.harness === harness);
+  // Codex can't be given a session id: the board can't link it, and its prompt asks it to link itself.
+  const selfLinks = !AGENT_HARNESSES[harness].presetSessionId;
 
   // A fix works on the PR's own branch, in a worktree of its own: there is no checkout to run it in.
   const workspace = !ready
@@ -241,7 +248,7 @@ function Composer({
         : null
       : toSessionWorkspace(ready.where);
   const model = ready?.model ?? "";
-  const levels = modelEffortLevels(harness, findSuggestion(models, model));
+  const levels = modelLevels(scanned.data, harness, model.trim() || null);
   const badModel = modelError(model);
   const blocker = !ready
     ? failure
@@ -258,12 +265,12 @@ function Composer({
           : (badModel ?? images.blocker);
 
   const pick = (change: (picks: SessionPicks) => SessionPicks) => setPickState((state) => pickSessionBy(state, change));
-  const pickModel = (next: string) =>
+  const pickModel = (next: string | null, nextLevels: readonly CliEffort[]) =>
     pick((picks) => ({
       ...picks,
-      model: next,
+      model: next ?? "",
       // The effort goes with the model: kept while the new one takes it.
-      effort: effortAfterModelChange(picks.effort, modelEffortLevels(harness, findSuggestion(models, next))),
+      effort: effortAfterModelChange(picks.effort, nextLevels),
     }));
 
   const togglePlan = () => {
@@ -334,24 +341,15 @@ function Composer({
             <>
               <CliModelPicker
                 harness={harness}
-                cliName={harnessLabel(harness)}
-                label="Model"
+                ariaLabel="Model"
                 defaultLabel="Default model"
-                value={ready.model}
-                models={models}
-                loading={scanned.isFetching}
+                model={ready.model}
+                effort={ready.effort}
                 // The one toolbar control that may shrink, so the submit arrow stays inside the composer.
                 className="max-w-80 shrink"
-                onSave={pickModel}
+                onModel={pickModel}
+                onEffort={(effort) => pick((picks) => ({ ...picks, effort }))}
               />
-              {levels.length > 0 ? (
-                <CliEffortMenu
-                  label="Effort"
-                  value={ready.effort}
-                  levels={levels}
-                  onChange={(effort) => pick((picks) => ({ ...picks, effort }))}
-                />
-              ) : null}
             </>
           ) : failure ? null : (
             <ToolbarSkeleton />
@@ -423,12 +421,15 @@ function Composer({
               </span>
               {options.models[harness]
                 ? null
-                : ` · no ${harnessLabel(harness)} model is set for ${options.model.source === "label" ? "it" : "this tier"} in Settings → Model tiers`}
+                : ` · no ${harnessLabel(harness)} model is set for ${options.model.source === "label" ? "it" : "this tier"} in Settings → Agents → Models`}
             </span>
           ) : null}
           {options.namedWindow
-            ? `Opens in the Windows Terminal window ${taskWindowName(task.number)}, which the session's link brings back while it runs.`
+            ? `Opens in the Windows Terminal window ${taskWindowName(task.number)}${selfLinks ? "." : ", which the session's link brings back while it runs."}`
             : "Opens in the terminal chosen in Settings → Integrations → Terminal."}
+          {selfLinks
+            ? ` ${harnessLabel(harness)} picks its own session id, so the session links itself to the task once it starts.`
+            : null}
         </p>
       ) : null}
     </form>

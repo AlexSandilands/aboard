@@ -69,7 +69,7 @@ files under each app.
 - [Ticket systems](features/ticket-systems.md): configured issue trackers, ticket links, key patterns, presets
 - [Issue import](features/issue-import.md): a task from a ticket or a GitHub issue URL, filled in by Claude Code
 - [Agent hand-off](features/agent-handoff.md): copy a prompt, or start a T3 Code thread
-- [Agent sessions](features/agent-sessions.md): linked Claude Code and Copilot CLI sessions, their status, resuming them in a terminal
+- [Agent sessions](features/agent-sessions.md): linked Claude Code, Codex and Copilot CLI sessions, their status, resuming them in a terminal
 - [Local review](features/local-review.md): the review loop before a PR
 - [Desktop app](features/desktop.md): the Electron shell
 - [Releases](features/releases.md): cutting a release, the installers and the pacman repo CI builds for it
@@ -95,6 +95,9 @@ files under each app.
 - [0008 Autopilot is a deterministic rule engine inside the server](decisions/0008-autopilot-engine.md)
 - [0009 The board may start a terminal, from a stored link only](decisions/0009-board-starts-local-processes.md)
 - [0010 The board may start a new agent session with the user's prompt](decisions/0010-board-starts-new-sessions.md)
+- [0011 Providers are opt-in, with one detection source](decisions/0011-opt-in-providers.md)
+- [0012 One model choice per operation, with no provider assumed](decisions/0012-provider-neutral-operation-models.md)
+- [0013 The board serves a headless run its tools](decisions/0013-board-served-run-tools.md)
 
 ### Reference
 

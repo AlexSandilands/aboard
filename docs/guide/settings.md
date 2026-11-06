@@ -24,8 +24,8 @@ If you don't know what a setting is called, ask. The first row of the results is
 selected when what you typed reads as a question ("How do I stop agents running at night?"), so Enter asks it. Claude
 Code answers in a sentence or two and names the setting, and **Go there** (or Enter) opens it and marks it, like a
 result. If no one setting fits, you get the answer without a button. It uses the Claude Code CLI under
-Integrations › Claude Code, on a small model (Haiku) with no tools and a few cents of budget per question, so
-nothing but the question and the list of settings is sent. When the CLI can't be found the row says so and **Set up
+Agents › Providers › Claude Code, on a small model (Haiku) with no tools and a few cents of budget per question, so
+nothing but the question and the list of settings is sent. Without Claude Code added, or when its CLI can't be found, the row says so and **Set up
 Claude Code** takes you to its setting; if it can't answer (not signed in, over budget, too slow) the row shows why,
 and a click tries again.
 
@@ -36,10 +36,10 @@ and a click tries again.
 | **Board**        | [Appearance](#appearance) (colors & themes, contrast, glass, sidebar banner, priority lane and its pinned height, scroll to a task, panel animations, fonts), Notifications, Data (backup to git, archived projects) |
 | **Keybindings**  | [Shortcuts](using-the-board.md#keyboard) by group (General, Navigation), with a search box |
 | **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), [Suggestions](#suggested-changes) |
-| **Model tiers**  | What Light, Standard and Deep mean: a description for prompts, and the model each provider starts on (T3 Code, Claude Code, Copilot CLI), picked from the models each lists, with an effort for the CLIs. **Custom models** add named models picked by a task label |
+| **Agents**       | [Providers](#providers) (T3 Code, Claude Code, Codex and GitHub Copilot, once you add them: [connecting agents](connect-agents.md), [T3 Code](t3-code.md)), [Models](#models) (the Light, Standard and Deep tiers and custom models picked by a task label), Operations (the model each kind of run uses) |
 | **Autopilot**    | [Autopilot](autopilot.md) (pause, limits, quiet hours, then each automation), [Custom automations](custom-automations.md) |
-| **Integrations** | [T3 Code](t3-code.md), Claude Code, GitHub Copilot, Codex ([connecting agents](connect-agents.md)), GitHub, Ticket systems, Terminal |
-| **Project**      | General (name, icon, folder), Planning skill, Review skill and reviewer model, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
+| **Integrations** | GitHub, Ticket systems, Terminal |
+| **Project**      | General (name, icon, folder), Planning skill, Review skill, Reviewer model, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
 
 - **Project → General → Choose icon → Image** lists the images already in the project's folder under **Found in
   project**: PNG, JPEG, WebP, GIF, SVG and ICO files under 2 MB, up to 60, with names like `favicon` and `logo` first,
@@ -47,31 +47,68 @@ and a click tries again.
   are left out; any other folder is searched four levels deep. Click one to preview it, then **Save icon**: it is
   resized to a small square like an uploaded image, so the file itself isn't kept or linked. The list is empty for
   General and for a project with no folder.
-- Each integration has a dot by its name: green when it is working, amber when something needs fixing, grey
-  when it isn't set up or the board can't tell (Codex's stays grey until its CLI is found, since many use it only through T3 Code).
-- Claude Code, GitHub Copilot and Codex (once its CLI is found) are green only when their CLI runs (`--version`) and the board's MCP server is
-  registered with them. The board finds the server by its address (`localhost` and `127.0.0.1` count as the same,
-  the port must match), so it doesn't matter what you named it. Hover the dot for the reason when it's amber.
-  The rows beside it show the CLI's version and path and where the MCP server was found; **Re-check** runs it all
-  again (the board remembers an answer for a minute).
-- The Claude Code CLI the board runs for the board reviewer, issue import and Claude Code sessions is set under
-  **Integrations → Claude Code**. **Integrations → GitHub Copilot** has the Copilot CLI Copilot sessions start.
-  The model a new session starts on for each suggested tier is set on the **Model tiers** page (empty leaves the
-  CLI's default); each of T3 Code, Claude Code and GitHub Copilot has a **Models per tier** row that opens it.
-  A provider's field shows there once it is set up: T3 Code connected, or the CLI found (a value already saved
-  stays visible).
-- T3 Code, Claude Code and GitHub Copilot each have a **Show in hand-off menus** switch. Turn it off to stop the
-  board offering a new thread or session in that tool on tasks and lanes, even though it is installed. Sessions and
-  threads already linked to a task still open.
-- The issue import and the board reviewer can run on a tier too: their **Model** rows take a tier (Light, Standard
-  or Deep) or a model you type. A tier runs its Claude Code model from the Model tiers page; if it has none, the
-  CLI's default runs, and the row says so with a link to the tier. The board reviewer's default is the CLI's own
-  model.
+- GitHub, Ticket systems and Terminal each have a dot by their name: green when working, amber when something needs
+  fixing.
 - A session whose CLI isn't available here has no **Open in terminal** or **Fork in terminal** in its menus, only
   the copy commands.
 - On the Autopilot page each automation is folded: its On / Off switch is in the header, and opening it
   shows what it does and its settings. Only a project's or epic's switch has Inherit.
 - The Project page has a picker at the top. It starts on the project the board was showing, else the first one.
+
+## Models
+
+Every place you choose a model uses the same picker: the providers you added down the side, a search over their
+models, and the effort beside the list. Its first tab holds **Inherit** (where there is one, with what it comes down
+to), the three tiers and your custom models, each saying what it would run on. A provider that can't do what the job
+needs is greyed out; hover it to see why. Claude Code, Codex and GitHub Copilot list the models their CLI offers (Codex
+also says which one it runs by default, and at which effort); a model a provider doesn't list can be typed in the
+search and used.
+
+On **Agents › Models** the tiers and your custom models are listed on the left, like the providers above them, each
+with its description or the models it runs; pick one to edit it on the right. **Rescan models** asks the CLIs again.
+
+- **Tiers**: a description (named in copied prompts), then one row per provider you added and switched on with the
+  model and effort a session starts on when a task suggests that tier (**Default model** leaves the provider's
+  default). **Preferred provider** is the one headless runs on that tier try first; with **First that can**, or when it
+  can't do the job, the first able provider in your Providers list runs it.
+- **Custom models**: **Add model** adds one: a name, the task labels that pick it whatever the task's tier, and the
+  same per-provider rows.
+- **Operations**: the model for each kind of run, in three groups: Review (the reviewer subagent, the board reviewer,
+  PR review and fixes), Autopilot (task runs, Orchestrate, the digest, custom automations) and Board tools (new
+  sessions, issue import, Ask). **Default** keeps the built-in choice. Under each row is what it resolves to right now,
+  on which provider and why, or why nothing can run it. Until a Claude Code, Codex or Copilot CLI provider is added and
+  switched on, nothing here can run, so the rows are greyed out under one note saying so. A project and a task can still pick their own reviewer, and
+  each automation its own Model.
+
+## Providers
+
+The board only offers the tools you add here. On a new install **Agents** shows only an empty Providers card:
+**Add provider** lists T3 Code,
+Claude Code, Codex and GitHub Copilot with what this machine has (installed and its version, running, or not found),
+and picking one adds it and opens it. Until you add a provider it appears nowhere else: not in the hand-off menus,
+the launch and planning dialogs, or Models and Operations, which appear once you add one. An upgraded board starts with the
+providers you were already using.
+
+The list on the left shows each provider you added with a dot, its version (or T3 Code's name) and an on/off switch;
+the selected one's settings are on the right, and its name is in the address (`?provider=claude-code`), so a link or a
+reload opens it. On a narrow window the two stack. Each provider's settings come in the same parts:
+
+- **Status**: whether the CLI runs, its version and path, and how many models it lists; **Re-check** runs every check
+  again (the board remembers an answer for a minute). For T3 Code, whether the app is running.
+- **Connection**: the CLI path the board runs (empty uses the name on your PATH), or T3 Code's pairing link, where its
+  links open and whether agents may start threads.
+- **MCP & skill**: the command that registers the board's MCP server, whether it is registered, and **Board skills**.
+- **Hand-off menu**: **Show in hand-off menus**, to stop offering a new thread or session in that tool while keeping it
+  added.
+- **Models**: what each tier runs on this provider, the models its CLI lists, and a link to Models.
+
+The dot is green when the CLI runs and the board's MCP server is registered with it (the board finds the server by its
+address, so it doesn't matter what you named it; `localhost` and `127.0.0.1` count as the same), or for T3 Code once a
+saved token connects. Amber says what to fix (hover it); grey means switched off or not set up.
+
+**Switch off** keeps a provider's settings and hides it everywhere; **Remove** also forgets its CLI path. Both say what
+stops working first. Sessions and threads already linked to a task still open either way. Old links to
+**Integrations → Claude Code**, **Providers** and **Models** (the pages before Agents) open the same setting here.
 
 Editing a template, a custom automation or a recurring rule opens it as a page of its own; the top bar shows where
 you are (**Settings / Tasks / Template: Bug**), and **Esc** or **Cancel** goes back to the list.

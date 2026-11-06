@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FindingSeverity } from "./reviews.ts";
+import { OperationId, OperationNeed, RunModelRecord } from "./operations.ts";
 import type { TaskSummary } from "./schemas.ts";
 
 // Autopilot: a rule engine in the server that runs a catalogue of automations (docs/decisions/0008-autopilot-engine.md).
@@ -173,10 +174,17 @@ export const AutopilotField = z.discriminatedUnion("kind", [
   /** A time of day, "HH:MM" on a 24-hour clock in the server's local time. */
   z.object({ ...FieldBase, kind: z.literal("time") }),
   /**
-   * Which model a run starts on (a ModelChoice): the task's, a tier or a custom model from Settings → Model tiers. The
-   * UI lists them live.
+   * Which model a run starts on (a ModelChoice): inherit (the board's setting for the operation, then the task's), a
+   * tier, a custom model from Settings → Agents → Models, or a model typed for one provider. The UI lists them live, greying
+   * out the providers that can't run `operation`.
    */
-  z.object({ ...FieldBase, kind: z.literal("model") }),
+  z.object({
+    ...FieldBase,
+    kind: z.literal("model"),
+    operation: OperationId.optional(),
+    /** What its runs ask beyond the operation's needs (a custom agent's tools or schema), greyed out the same way. */
+    needs: z.array(OperationNeed).optional(),
+  }),
   /** A skill reference, picked the way the review skill is. */
   z.object({
     ...FieldBase,
@@ -298,6 +306,8 @@ export const AutopilotRun = z.object({
   dismissedAt: z.string().nullable(),
   /** A structured result the action left for later automations to read (the PR review's verdict); null when none. */
   output: z.record(z.string(), z.unknown()).nullable(),
+  /** What an agent run ran on: provider, model, effort and where the choice came from; null for other runs and older ones. */
+  model: RunModelRecord.nullable(),
   createdAt: z.string(),
   startedAt: z.string().nullable(),
   finishedAt: z.string().nullable(),

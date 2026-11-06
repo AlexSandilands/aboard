@@ -1,4 +1,4 @@
-import { MovedTo, parseHeadlessModel, type HeadlessModel } from "@repo/contracts";
+import { MovedTo, overrideValue, parseModelChoice, type ModelChoice } from "@repo/contracts";
 import type {
   AttentionRequest,
   EpicDelivery,
@@ -39,7 +39,7 @@ export interface TaskRecord {
   /** null inherits the global auto-review setting. */
   autoReview: boolean | null;
   /** Reviewer model override: null inherits the project's, then the board's. */
-  reviewModel: HeadlessModel | null;
+  reviewModel: ModelChoice | null;
   /** Autopilot flag: null is Default, which never auto-starts the task. */
   autopilot: boolean | null;
   /** Auto-merge flag: null is Default, which, like false, never lets merge_task_pr merge the task's PR. */
@@ -121,7 +121,7 @@ const toRecord = (r: TaskRow): TaskRecord => ({
   resolution: r.resolution,
   resolvedByTaskId: r.resolved_by_task_id,
   autoReview: r.auto_review === null ? null : r.auto_review !== 0,
-  reviewModel: parseHeadlessModel(parseJson(r.review_model_json)),
+  reviewModel: overrideValue(parseModelChoice(parseJson(r.review_model_json))),
   autopilot: r.autopilot === null ? null : r.autopilot !== 0,
   autoMerge: r.auto_merge === null ? null : r.auto_merge !== 0,
   priority: r.priority !== 0,
@@ -158,7 +158,7 @@ const toRow = (t: TaskRecord): TaskRow => ({
   resolution: t.resolution,
   resolved_by_task_id: t.resolvedByTaskId,
   auto_review: t.autoReview === null ? null : t.autoReview ? 1 : 0,
-  review_model_json: t.reviewModel ? JSON.stringify(t.reviewModel) : null,
+  review_model_json: overrideValue(t.reviewModel) ? JSON.stringify(t.reviewModel) : null,
   autopilot: t.autopilot === null ? null : t.autopilot ? 1 : 0,
   auto_merge: t.autoMerge === null ? null : t.autoMerge ? 1 : 0,
   priority: t.priority ? 1 : 0,

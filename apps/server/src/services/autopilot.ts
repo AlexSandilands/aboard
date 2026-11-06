@@ -666,6 +666,7 @@ export function createAutopilotService(
         needsAttention: false,
         dismissedAt: null,
         output: null,
+        model: null,
         createdAt: at,
         startedAt: null,
         finishedAt: dryRun ? at : null,

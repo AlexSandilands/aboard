@@ -4,7 +4,7 @@ import {
   type ModelTier,
   type ModelTiers,
   type Project,
-  resolveRunModel,
+  resolveTaskModel,
 } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import type { ShellSnapshot } from "./t3.ts";
@@ -82,7 +82,11 @@ const taskModel = (
   tier: ModelTier | null,
   modelTiers: ModelTiers,
   { labels = [], profiles = [] }: { labels?: string[]; profiles?: ModelProfile[] } = {},
-) => resolveRunModel({ labels, tier }, { modelTiers, modelProfiles: profiles });
+) =>
+  resolveTaskModel(
+    { labels, suggestedModel: tier ? { tier, reason: null } : null },
+    { modelTiers, modelProfiles: profiles },
+  );
 
 const repo: WireRefs = { isRepo: true, refs: [{ name: "main", current: true, isDefault: true, worktreePath: null }] };
 
@@ -210,7 +214,7 @@ describe("resolveSuggestion", () => {
   it("says why when the tier has no model, its provider isn't ready or the model is gone", () => {
     const why = (t3: ModelTiers["deep"]["t3"]) =>
       resolveSuggestion(taskModel("deep", tiers(t3)), null, providers)?.unavailable;
-    expect(why(null)).toBe("No T3 Code model is set for the deep tier in Settings → Model tiers.");
+    expect(why(null)).toBe("No T3 Code model is set for the deep tier in Settings → Agents → Models.");
     expect(why({ selection: { instanceId: "codex", model: "gpt", options: [] }, label: "GPT" })).toBe(
       "Codex isn't ready in T3 Code.",
     );
@@ -244,7 +248,7 @@ describe("resolveSuggestion", () => {
     expect(
       resolveSuggestion(taskModel(null, tiers(sonnet), { labels: ["codex61"], profiles: [bare] }), null, providers)
         ?.unavailable,
-    ).toBe("No T3 Code model is set for Codex 6.1 in Settings → Model tiers.");
+    ).toBe("No T3 Code model is set for Codex 6.1 in Settings → Agents → Models.");
   });
 
   it("is part of the launch options, leaving T3's default alone", () => {
@@ -352,6 +356,11 @@ describe("autoLaunchSettings", () => {
         workspace: { mode: "new_worktree", baseRef: "main", startFromOrigin: true },
       },
     });
+  });
+
+  it("works on T3's default model when the run has no T3 model of its own", () => {
+    const result = autoLaunchSettings(options({ suggest: true }), { work: true, defaultModel: true });
+    expect(result.ok && result.launch.modelSelection).not.toEqual(sonnet.selection);
   });
 
   it("plans on T3's default model, and never takes more access than T3's default", () => {

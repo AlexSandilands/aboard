@@ -1,4 +1,12 @@
-import { FROM_TASK, ModelChoice, T3_RUNTIME_MODES, T3RuntimeMode, type AutopilotField } from "@repo/contracts";
+import {
+  INHERIT,
+  ModelChoice,
+  T3_RUNTIME_MODES,
+  T3RuntimeMode,
+  type AutopilotField,
+  type OperationId,
+  type OperationNeed,
+} from "@repo/contracts";
 import { z } from "zod";
 
 // The config fields every agent automation shares: which runner, and its limits. An automation spreads
@@ -20,12 +28,11 @@ export const RUNNER_OPTION_SHAPE = {
     .min(1)
     .max(24 * 60),
   /**
-   * The model the run starts on: the task's (a custom model one of its labels picks, else its suggested tier), a tier,
-   * or a custom model (resolveRunModel). Configs saved before it existed take the task's.
+   * The model the run starts on (resolveOperationChoice): inherit takes the board's setting for the operation, then
+   * the task's own; or a tier, a custom model, or a model typed for one provider. Before 041_operation_models a typed
+   * `model` sat beside it; that migration folded it in.
    */
   modelChoice: ModelChoice,
-  /** Headless: a `--model` typed here wins over `modelChoice`; blank takes the chosen model's model for its harness. */
-  model: z.string(),
   /** T3: the most access a thread gets; "default" is T3's own default, which is also the ceiling. */
   t3Access: z.union([z.literal("default"), T3RuntimeMode]),
 };
@@ -37,8 +44,7 @@ export const RUNNER_DEFAULTS: RunnerOptions = {
   runner: "auto",
   budgetUsd: 5,
   timeoutMinutes: 60,
-  modelChoice: FROM_TASK,
-  model: "",
+  modelChoice: INHERIT,
   t3Access: "default",
 };
 
@@ -57,7 +63,7 @@ export const RUNNER_FIELDS: AutopilotField[] = [
     key: "modelChoice",
     label: "Model",
     kind: "model",
-    help: "From the task: a custom model one of its labels picks, else its suggested tier. Set in Settings → Model tiers.",
+    help: "Inherit: the board's model for this kind of run, else the task's (a custom model one of its labels picks, else its suggested tier). Set in Settings → Agents → Models.",
   },
   {
     key: "budgetUsd",
@@ -71,13 +77,6 @@ export const RUNNER_FIELDS: AutopilotField[] = [
   },
   { key: "timeoutMinutes", label: "Headless timeout", kind: "number", min: 1, max: 1440, unit: "minutes" },
   {
-    key: "model",
-    label: "Headless model override",
-    kind: "text",
-    placeholder: "The model above",
-    help: "As the headless CLI's --model takes it, e.g. sonnet. Blank uses the model above's model for the harness it runs headless on.",
-  },
-  {
     key: "t3Access",
     label: "T3 Code access",
     kind: "select",
@@ -88,6 +87,15 @@ export const RUNNER_FIELDS: AutopilotField[] = [
     ],
   },
 ];
+
+/**
+ * The runner fields for an automation whose runs are `operation` (asking `needs` beyond it), so its Model field greys
+ * out the providers that can't run them.
+ */
+export const runnerFields = (operation: OperationId, needs: readonly OperationNeed[] = []): AutopilotField[] =>
+  RUNNER_FIELDS.map((field) =>
+    field.kind === "model" ? { ...field, operation, ...(needs.length > 0 ? { needs: [...needs] } : {}) } : field,
+  );
 
 /** The runner options in an automation's config; anything missing or invalid takes its default. */
 export function readRunnerOptions(config: Record<string, unknown>): RunnerOptions {

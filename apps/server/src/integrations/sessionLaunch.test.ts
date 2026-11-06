@@ -172,7 +172,7 @@ describe("starting a session from the board", () => {
   it("starts the CLI set in Settings rather than the one on PATH", async () => {
     const app = appWith({ host: { platform: "linux", which: () => "/usr/bin/xterm", readFile: () => null } });
     const own = join(app.root, "bin", "claude");
-    app.services.settings.update({ headlessReviewCli: own });
+    app.services.settings.update({ providers: [{ id: "claude-code", enabled: true, cliPath: own }] });
     await app.start({});
     expect(app.spawned[0]!.args.at(-1)).toContain(`${shQuote(own)} --session-id`);
   });
@@ -187,20 +187,20 @@ describe("starting a session from the board", () => {
   });
 
   it("points an epic's short prompt at its orchestrating prompt", () => {
-    const text = shortPrompt("orchestrate", { id: "epic-1", number: 7 }, "linux");
+    const text = shortPrompt("orchestrate", { id: "epic-1", number: 7 }, "claude-code", "linux");
     expect(text).toContain("Let's run the epic #7");
     expect(text).toContain('get_handoff_prompt(task: "epic-1", mode: "orchestrate")');
-    const followup = shortPrompt("followup", { id: "t-1", number: 8 }, "linux");
+    const followup = shortPrompt("followup", { id: "t-1", number: 8 }, "claude-code", "linux");
     expect(followup).toContain("Let's follow up on #8");
     expect(followup).toContain('get_handoff_prompt(task: "t-1", mode: "followup")');
-    expect(shortPrompt("work", { id: "t-1", number: 8 }, "linux")).toContain('get_task("t-1")');
+    expect(shortPrompt("work", { id: "t-1", number: 8 }, "claude-code", "linux")).toContain('get_task("t-1")');
   });
 
   it("falls back to a short prompt when the prompt can't go on a Windows command line", async () => {
     const app = appWith();
     const { body } = await app.start({ prompt: "Use %PATH% here" });
     expect(body.shortReason).toMatch(/contains %/);
-    expect(body.shortPrompt).toBe(shortPrompt("work", app.task, "win32"));
+    expect(body.shortPrompt).toBe(shortPrompt("work", app.task, "claude-code", "win32"));
     // Windows Terminal is given every `;` as `\;`, which it passes on as `;`.
     expect(app.spawned[0]!.args.at(-1)).toBe(body.shortPrompt!.replaceAll(";", "\\;"));
     expect(body.shortPrompt).not.toContain('"');
@@ -317,21 +317,40 @@ describe("starting a session from the board", () => {
     expect(app.spawned).toHaveLength(1);
   });
 
-  it("lists which CLIs are installed", async () => {
-    const app = appWith({ copilot: false });
-    const res = await app.request("/api/agent-clis");
-    expect(await res.json()).toEqual([
-      { harness: "claude-code", available: true, path: join(app.root, "bin", "claude") },
-      { harness: "codex", available: false, path: null },
-      { harness: "copilot-cli", available: false, path: null },
-    ]);
+  it("starts Codex with its model and effort and the prompt after --, and leaves the link to the session", async () => {
+    const app = appWith({ host: { platform: "linux", which: () => "/usr/bin/xterm", readFile: () => null } });
+    writeFileSync(join(app.root, "bin", "codex"), "");
+    const { status, body } = await app.start({
+      harness: "codex",
+      model: "gpt-6.1-sol",
+      effort: "ultra",
+      prompt: "- Work on #1",
+    });
+    expect(status).toBe(201);
+    // Codex picks its own session id, so the board has nothing to link: the prompt asks the session to.
+    expect(body).toMatchObject({ launched: true, linkId: null, error: null });
+    expect(app.sessionLinks()).toEqual([]);
+    expect(body.command).toBe(
+      `cd ${shQuote(app.root)} && codex --model gpt-6.1-sol -c model_reasoning_effort=ultra -- '- Work on #1'`,
+    );
+    // The levels older Codex models list reach the argv too.
+    const minimal = await app.start({ harness: "codex", model: "gpt-old", effort: "minimal", prompt: "go" });
+    expect(minimal.status).toBe(201);
+    expect(minimal.body.command).toContain("-c model_reasoning_effort=minimal");
+    expect(app.spawned).toHaveLength(2);
   });
 
-  it("refuses to start a Codex session, which picks its own id", async () => {
-    const app = appWith();
-    const res = await app.start({ harness: "codex" });
-    expect(res.status).toBe(400);
-    expect(JSON.stringify(res.body)).toContain("picks its own session id");
+  it("tells a Codex session in a short prompt to link itself, under the label the board would give it", () => {
+    const text = shortPrompt("work", { id: "t-1", number: 8 }, "codex", "linux");
+    expect(text).toContain('harness: "codex", sessionId: $CODEX_THREAD_ID');
+    expect(text).toContain('label: "Implementing #8"');
+    expect(text).not.toContain("already linked");
+    expect(shortPrompt("orchestrate", { id: "e-1", number: 9 }, "codex", "linux")).toContain(
+      'link it to the epic yourself first with link(agentSession: {harness: "codex"',
+    );
+    expect(shortPrompt("work", { id: "t-1", number: 8 }, "claude-code", "linux")).toContain(
+      "already linked it to the task; don't link it again",
+    );
   });
 
   it("offers the tier's CLI model and the checkout when the folder isn't a repository", async () => {
@@ -462,6 +481,30 @@ describe("starting a session in a new worktree", { timeout: PROCESS_TEST_TIMEOUT
     }
   });
 
+  it("names a Codex session's worktree by its run, with no session to link", async () => {
+    const repo = createGitFixture();
+    try {
+      const app = appWith({
+        repo: repo.checkout,
+        worktrees: repo.worktrees,
+        host: { platform: "linux", which: () => "/usr/bin/xterm", readFile: () => null },
+      });
+      writeFileSync(join(app.root, "bin", "codex"), "");
+      const { status, body } = await app.start({
+        harness: "codex",
+        workspace: { mode: "new_worktree", baseRef: "origin/main" },
+      });
+      expect(status).toBe(201);
+      expect(body).toMatchObject({ launched: true, linkId: null, error: null });
+      expect(body.branch).toMatch(new RegExp(`^${BRAND.id}/1-[0-9a-f]{8}$`));
+      expect(existsSync(body.cwd)).toBe(true);
+      expect(app.spawned[0]!.cwd).toBe(body.cwd);
+      expect(app.sessionLinks()).toEqual([]);
+    } finally {
+      repo.cleanup();
+    }
+  });
+
   it("works on a pull request's own branch to fix it, and only on a branch the task's open PR has", async () => {
     const repo = createGitFixture();
     try {
@@ -517,7 +560,7 @@ describe("starting a session in a new worktree", { timeout: PROCESS_TEST_TIMEOUT
 
 describe("shortPrompt for a fix", () => {
   it("names the PR's branch and keeps the safety rules", () => {
-    const text = shortPrompt("fix", { id: "t-1", number: 78 }, "linux", "feat/x");
+    const text = shortPrompt("fix", { id: "t-1", number: 78 }, "claude-code", "linux", "feat/x");
     expect(text).toContain("fix the pull request on branch feat/x of #78");
     expect(text).toContain(`get_task("t-1")`);
     expect(text).toContain("Never force-push, never push to the default branch and never merge");
@@ -576,6 +619,21 @@ describe("starting a planning session from the board", () => {
     // Windows command lines get single quotes for double ones.
     expect(body.shortPrompt).toContain("get_handoff_prompt(tasks: ['#1'], mode: 'plan')");
     expect(sessionLinksOf(app, app.task.id)).toHaveLength(1);
+  });
+
+  it("makes no links for a Codex planning session, and its short prompt asks it to link itself", async () => {
+    const app = appWith();
+    writeFileSync(join(app.root, "bin", "codex"), "");
+    const { status, body } = await plan(app, { harness: "codex", taskIds: [app.task.id] });
+    expect(status).toBe(201);
+    expect(body).toMatchObject({ launched: true, linkId: null, shortPrompt: null });
+    expect(sessionLinksOf(app, app.task.id)).toEqual([]);
+
+    const short = await plan(app, { harness: "codex", taskIds: [app.task.id], prompt: "word ".repeat(2000) });
+    expect(short.body.linkId).toBeNull();
+    // Windows command lines get single quotes for double ones.
+    expect(short.body.shortPrompt).toContain("harness: 'codex', sessionId: $CODEX_THREAD_ID");
+    expect(sessionLinksOf(app, app.task.id)).toEqual([]);
   });
 
   it("points at pasted images where they wait, without giving them to any task", async () => {
