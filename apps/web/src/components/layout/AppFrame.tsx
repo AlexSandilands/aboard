@@ -1,5 +1,7 @@
-import { Outlet, useLocation } from "@tanstack/react-router";
+import { Outlet, useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
+import { restoredProjectScope } from "~/components/board/projectScope.logic";
+import { useProjectScope } from "~/state/ui";
 import { useCloseTask, useProjectFilter, useSelectedTaskId } from "~/components/board/boardNavigation";
 import { SettingsSidebar, useSettingsBack } from "~/components/settings/SettingsShell";
 import { useInStats, useLeaveStats } from "~/components/stats/useOpenStats";
@@ -14,6 +16,7 @@ import { AppShell } from "./AppShell";
  * what Esc does change.
  */
 export function AppFrame() {
+  useRestoreProjectScope();
   const inSettings = useLocation({ select: (location) => location.pathname.startsWith("/settings") });
   const taskId = useSelectedTaskId();
   const closeTask = useCloseTask();
@@ -51,4 +54,24 @@ function CloseSheetOnSwitch({ inSettings }: { inSettings: boolean }) {
     setOpenMobile(false);
   }, [inSettings, setOpenMobile]);
   return null;
+}
+
+/** Whether this page load has already had its chance to restore the remembered scope. */
+let scopeRestoreTried = false;
+
+/**
+ * On the first load only, a bare board URL takes the project scope remembered last time: the desktop shell always
+ * starts on it, so without this every restart would drop the scope. After that the URL rules, so a later trip to
+ * "/" (the logo, a notification) is not rewritten.
+ */
+function useRestoreProjectScope() {
+  const router = useRouter();
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (scopeRestoreTried) return;
+    scopeRestoreTried = true;
+    const { pathname, search } = router.state.location;
+    const project = restoredProjectScope(pathname, search, useProjectScope.getState().projectIds);
+    if (project) void navigate({ to: "/", replace: true, search: (prev) => ({ ...prev, project }) });
+  }, [router, navigate]);
 }
