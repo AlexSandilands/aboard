@@ -69,8 +69,8 @@ section shows the intended list while edits are in flight.
 ### UI state
 
 State that isn't server data lives in zustand stores in `state/ui.ts`: board filters (not the search),
-column collapse, appearance, pinned panel actions, the panel's section layout and the palette's last
-project are persisted under `storageKey(...)`; dialogs and panel requests aren't. The label and project
+column collapse, appearance, pinned panel actions, the panel's section layout, the palette's last
+project and the last project scope are persisted under `storageKey(...)`; dialogs and panel requests aren't. The label and project
 filters live in the URL (`?labels=`, `?project=`). See [board-layout.md](board-layout.md).
 
 ## Decisions
