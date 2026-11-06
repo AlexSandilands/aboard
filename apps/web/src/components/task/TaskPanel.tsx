@@ -66,11 +66,14 @@ let handledPlanEditorRequest = 0;
 export function TaskPanel({
   taskId,
   closing = false,
+  slideIn = true,
   onClose,
   onClosed,
 }: {
   taskId: string;
   closing?: boolean;
+  /** False for a panel that is restored, not opened (see `panelRestored`): it appears in place. Closing still slides. */
+  slideIn?: boolean;
   onClose: () => void;
   onClosed?: () => void;
 }) {
@@ -85,7 +88,7 @@ export function TaskPanel({
 
   const asideRef = useRef<HTMLElement>(null);
   const contentsRef = useRef<HTMLDivElement>(null);
-  usePanelSlide(asideRef, contentsRef, closing, onClosed);
+  usePanelSlide(asideRef, contentsRef, closing, slideIn, onClosed);
 
   return (
     <aside
@@ -120,13 +123,19 @@ function usePanelSlide(
   asideRef: RefObject<HTMLElement | null>,
   contentsRef: RefObject<HTMLElement | null>,
   closing: boolean,
+  slideIn: boolean,
   onClosed?: () => void,
 ) {
   const closed = useEffectEvent(() => onClosed?.());
+  // Only the mount's value counts: the opening is the one slide a restored panel skips.
+  const [skipOpening] = useState(!slideIn);
   useLayoutEffect(() => {
     const aside = asideRef.current;
     const contents = contentsRef.current;
     if (!aside || !contents) return;
+    // Only the mount's opening is skipped: a slide already running or held (the panel closing, then reopened before it
+    // left) is turned around as usual.
+    if (skipOpening && !closing && slidesOn(contents, aside).length === 0) return;
     // In a board transition the router's View Transition moves the panel and the board (index.css).
     const duration = boardTransitionRunning() ? 0 : slideDuration();
     if (duration === 0) {
@@ -150,7 +159,7 @@ function usePanelSlide(
       fill: closing,
     });
     if (closing) slide.addEventListener("finish", () => closed());
-  }, [asideRef, contentsRef, closing]);
+  }, [asideRef, contentsRef, closing, skipOpening]);
 }
 
 // Adapted from T3 Code (preview/RightPanelResizeHandle.tsx), MIT — see NOTICE.

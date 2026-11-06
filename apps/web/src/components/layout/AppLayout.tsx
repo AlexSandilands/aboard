@@ -6,6 +6,11 @@ import { TaskPanel } from "~/components/task/TaskPanel";
 import { boardTransitionRunning } from "~/lib/boardMotion";
 import { useMarkTaskNotificationsRead } from "~/state/mutations";
 import { useSettingsNav } from "~/state/ui";
+import { panelRestored } from "./panelRestore.logic";
+
+/** The app loaded on the board itself (not on Settings or Stats), so its first board mount is a load, not a return. */
+const loadedOnBoard = typeof window !== "undefined" && window.location.pathname === "/";
+let boardMounted = false;
 
 /**
  * Whether a closing panel stays mounted to slide out. Read from <html>, where the Appearance prefs and reduced motion
@@ -30,12 +35,21 @@ export function AppLayout() {
   useEffect(() => useSettingsNav.getState().setBoardReturn(search), [search]);
   // With panel animations on, the panel stays mounted on the task it closed on until it has slid out.
   const [shownId, setShownId] = useState(taskId);
+  // Decided on the first render only: a panel restored from Settings or on load appears in place, later opens slide.
+  const [restored, setRestored] = useState(() => {
+    const firstLoad = loadedOnBoard && !boardMounted;
+    return panelRestored(taskId, useSettingsNav.getState().boardReturn.task, firstLoad);
+  });
   const [closingId, setClosingId] = useState<string | null>(null);
   if (taskId !== shownId) {
     setShownId(taskId);
+    setRestored(false);
     setClosingId(!taskId && shownId && panelSlidesOut() ? shownId : null);
   }
   const panelId = taskId ?? closingId;
+  useEffect(() => {
+    boardMounted = true;
+  }, []);
 
   return (
     <>
@@ -45,6 +59,7 @@ export function AppLayout() {
         <TaskPanel
           taskId={panelId}
           closing={!taskId}
+          slideIn={!restored}
           onClose={() => void closeTask()}
           onClosed={() => setClosingId(null)}
         />
