@@ -744,11 +744,10 @@ html:active-view-transition-type(panel-close, sidebar-close)::view-transition-ol
   block-size: 100%;
 }
 
-/* A stretching card's group keeps its width animation, and its snapshot fills it like a frame's, so its right edge
-   glides instead of jumping to its new place. Its height doesn't animate, so only its width stretches. */
-::view-transition-new(.board.stretch) {
-  inline-size: 100%;
-  block-size: 100%;
+/* A stretching card's group scales from its left edge (compositorOnly), so its right edge glides instead of jumping to
+   its new place. */
+::view-transition-group(.stretch) {
+  transform-origin: 0 0;
 }
 
 /* Above the board's snapshots: closing, the panel is only in the old state, which the browser stacks underneath. */

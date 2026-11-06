@@ -61,9 +61,9 @@ const LEFT_EDGE = "[data-vt-left]";
 const FRAME_NAME = "vt-frame-";
 /**
  * Cards change width when the sidebar opens or closes (with the panel closed), and a card that only moved sat at its new
- * width from the first frame: its right edge jumped, then glided. In a sidebar transition they stretch instead, keeping
- * their width animation (`compositorOnly`) under names of their own. Only cards: other movers (a column header, an epic
- * title) have no box of their own to stretch, only text, which would stretch with it.
+ * width from the first frame: its right edge jumped, then glided. In a sidebar transition they stretch instead, under
+ * names of their own, with a `scaleX` that `compositorOnly` turns their width animation into. Only cards: other movers
+ * (a column header, an epic title) have no box of their own to stretch, only text, which would stretch with it.
  */
 const CARDS = "[data-task-card], [data-epic-card]";
 const STRETCH_NAME = "vt-stretch-";
@@ -165,7 +165,11 @@ function animate(transition: ViewTransition) {
  * The browser animates each snapshot's width and height as well as its transform, and width and height run on the main
  * thread: with dozens of cards that restyles every snapshot every frame, slower than laying the board out. Keeping only
  * the transform lets the compositor run it; the groups keep their new size and clip their snapshots (index.css). Frames
- * keep theirs, since they stretch, and cards in a sidebar transition keep their width (see STRETCH_NAME).
+ * keep theirs, since they stretch.
+ *
+ * Cards in a sidebar transition (STRETCH_NAME) stretch too, but as a transform: the group sits at its new width and a
+ * `scaleX` from old width over new to 1 takes the width animation's place, so the compositor still runs it. Animating
+ * the width itself put every card back on the main thread, and the sidebar slide stuttered as it did before.
  */
 function compositorOnly(animations: Animation[]) {
   // Every keyframe read first, then every write: a read after a write restyles every snapshot again, which made this
@@ -177,12 +181,16 @@ function compositorOnly(animations: Animation[]) {
     if (!pseudo.startsWith("::view-transition-group(") || pseudo.includes(`(${FRAME_NAME}`)) continue;
     const frames = effect.getKeyframes();
     if (!frames.some((frame) => "width" in frame || "height" in frame)) continue;
-    const stretches = pseudo.includes(`(${STRETCH_NAME}`);
+    const end = parseFloat(String(frames.at(-1)?.width));
+    const stretches = pseudo.includes(`(${STRETCH_NAME}`) && end > 0;
     rewrites.push([
       effect,
-      frames.map(({ offset, easing, transform, width }) =>
-        stretches ? { offset, easing, transform, width } : { offset, easing, transform },
-      ),
+      frames.map(({ offset, easing, transform, width }) => {
+        if (!stretches) return { offset, easing, transform };
+        // Same functions in every keyframe, so they interpolate one by one rather than as matrices.
+        const scale = `scaleX(${parseFloat(String(width)) / end})`;
+        return { offset, easing, transform: transform && transform !== "none" ? `${transform} ${scale}` : scale };
+      }),
     ]);
   }
   for (const [effect, frames] of rewrites) effect.setKeyframes(frames);
