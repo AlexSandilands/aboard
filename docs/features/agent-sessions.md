@@ -391,8 +391,7 @@ providers added and on, `PROVIDERS[id].scansModels`):
   0.166.0 it exits at the end of stdin before answering a request still queued, so stdin stays open until the last page
   is in and the process tree is then ended, as it is after 20 seconds without an answer. It takes about 0.4 seconds and
   sends no prompt. The pickers name the default model on their **Default model** row ("unless Codex is set to
-  another": Codex's `config.toml` can pick another) and the default level on the effort column's **Default**; the provider page shows
-  it for a tier with no Codex model. Tested on a recorded reply (`fixtures/codex/model-list.json`) and against a stand-in
+  another": Codex's `config.toml` can pick another) and the default level on the effort column's **Default**. Tested on a recorded reply (`fixtures/codex/model-list.json`) and against a stand-in
   server, so the tests don't need Codex.
 
 Each harness's answer is kept for ten minutes, by the CLI path it came from (a changed path rescans); a scan that failed

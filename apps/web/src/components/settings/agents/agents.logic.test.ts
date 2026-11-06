@@ -21,7 +21,7 @@ describe("modelItemOfTarget", () => {
     expect(modelItemOfTarget("agents.models.tiers.list")).toBeNull();
     expect(modelItemOfTarget("agents.models.tiers")).toBeNull();
     expect(modelItemOfTarget("agents.models")).toBeNull();
-    expect(modelItemOfTarget("agents.providers.codex.models")).toBeNull();
+    expect(modelItemOfTarget("agents.providers.codex.mcp")).toBeNull();
     expect(modelItemOfTarget(null)).toBeNull();
   });
 });

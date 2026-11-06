@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   applyTierChange,
   createTierEdits,
-  providerTierModels,
   saveTierChange,
   tierProviderState,
   visibleTierProviders,
@@ -203,17 +202,5 @@ describe("applyTierChange", () => {
       levels: ["low", "xhigh"],
     });
     expect(wider.cliEffort).toEqual({ "claude-code": "xhigh" });
-  });
-});
-
-describe("providerTierModels", () => {
-  it("lists each tier's model and effort on the provider, and whether it is preferred", () => {
-    const set = tiers();
-    set.deep = { ...set.deep, cli: { codex: "gpt-5.5" }, cliEffort: { codex: "high" }, provider: "codex" };
-    expect(providerTierModels(set, "codex").map((t) => [t.tier, t.model, t.effort, t.preferred])).toEqual([
-      ["light", null, null, false],
-      ["standard", null, null, false],
-      ["deep", "gpt-5.5", "high", true],
-    ]);
   });
 });

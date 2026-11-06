@@ -1,7 +1,6 @@
 // Pure helpers for the tiers and custom models on the Models page: which providers' fields a tier row shows, and the tier one edit sends.
 import type { AgentHarness } from "@repo/contracts";
 import {
-  MODEL_TIERS,
   type CliEffort,
   type ModelTier,
   type ModelTierSetting,
@@ -130,33 +129,4 @@ export function saveTierChange(
     () => edits.settle(tier),
     () => edits.settle(tier),
   );
-}
-
-/** What one tier is set to on one provider, for that provider's own page. */
-export interface ProviderTierModel {
-  tier: ModelTier;
-  label: string;
-  /** The model's name (T3 Code's label, or the CLI's `--model`), or null for the provider's default. */
-  model: string | null;
-  effort: CliEffort | null;
-  /** Headless runs on this tier prefer this provider. */
-  preferred: boolean;
-}
-
-/** Each tier's model on a provider, light to deep. */
-export function providerTierModels(tiers: ModelTiers, provider: TierProvider): ProviderTierModel[] {
-  return MODEL_TIERS.map(({ value, label }) => {
-    const setting = tiers[value];
-    if (provider === "t3") {
-      return { tier: value, label, model: setting.t3?.label ?? null, effort: null, preferred: false };
-    }
-    const model = setting.cli?.[provider]?.trim() || null;
-    return {
-      tier: value,
-      label,
-      model,
-      effort: model ? (setting.cliEffort?.[provider] ?? null) : null,
-      preferred: setting.provider === provider,
-    };
-  });
 }

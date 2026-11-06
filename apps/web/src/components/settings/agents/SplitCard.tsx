@@ -3,7 +3,7 @@
 // providers or models there are: each is a row in a list, never a column.
 import type { ReactNode } from "react";
 import { cn } from "~/lib/utils";
-import { SettingsGroup } from "../settingsLayout";
+import { SETTINGS_PICKER_WIDTH, SettingsGroup } from "../settingsLayout";
 
 /**
  * The look of a model picker as a settings control: the field border every other control in a row has, but wider
@@ -12,7 +12,7 @@ import { SettingsGroup } from "../settingsLayout";
  */
 export const CONTROL_PICKER = cn(
   "w-full max-w-none justify-between rounded-lg border-input bg-background font-normal text-foreground shadow-xs/5 dark:bg-input/32",
-  "@min-[32rem]/settings-row:w-72",
+  SETTINGS_PICKER_WIDTH,
 );
 
 export function SplitCard({ list, children }: { list: ReactNode; children: ReactNode }) {
