@@ -120,9 +120,9 @@ export interface Integrations {
   resumeSession(linkId: string, input: ResumeSessionInput): Promise<ResumeResult>;
   /** What "Open in terminal" runs on this machine, for settings. */
   terminalInfo(): TerminalInfo;
-  /** Every provider as detected here (CLI, MCP registration, T3 Code, models scan), for Settings → Providers and the menus. */
+  /** Every provider as detected here (CLI, MCP registration, T3 Code, models scan), for Settings → Agents → Providers and the menus. */
   providers(refresh?: boolean, parts?: "all" | "cli"): Promise<ProvidersStatus>;
-  /** The models each CLI lists, for the pickers in Settings → Models. */
+  /** The models each CLI lists, for the pickers in Settings → Agents → Models. */
   agentModels(refresh?: boolean): Promise<AgentModels>;
   /** What the new-session dialog offers for a task (see SessionLaunchIntegration). */
   sessionLaunchOptions(taskId: string): Promise<SessionLaunchOptions>;

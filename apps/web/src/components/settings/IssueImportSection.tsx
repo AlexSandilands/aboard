@@ -21,8 +21,8 @@ export function IssueImportSection({ settings }: { settings: AppSettings }) {
           <>
             Paste a ticket key or URL of a <SettingsLink to="integrations.tickets.status">ticket system</SettingsLink>,
             or a GitHub issue URL, as a new task&apos;s title. It uses the CLI set under{" "}
-            <SettingsLink to="providers.claude-code.cli-path">Providers › Claude Code</SettingsLink>. Without this, a
-            GitHub issue is imported as written and a ticket can&apos;t be imported.
+            <SettingsLink to="agents.providers.claude-code.cli-path">Providers › Claude Code</SettingsLink>. Without
+            this, a GitHub issue is imported as written and a ticket can&apos;t be imported.
           </>
         }
         control={

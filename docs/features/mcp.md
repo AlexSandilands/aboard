@@ -263,7 +263,7 @@ either differs from its folder (`skills/aboard/`, `skills/aboard-automations/`).
 
 **Skill sync** (`apps/server/src/services/skillSync.ts`, routes under `/api/skill-sync`) installs those texts as
 `<harness folder>/skills/<BRAND.id>/SKILL.md` and `<harness folder>/skills/<BRAND.id>-automations/SKILL.md` for each
-harness the user turns on in Settings → Providers (one switch, **Board skills**, for all of them). The
+harness the user turns on in Settings → Agents → Providers (one switch, **Board skills**, for all of them). The
 harness folder is the one the harness itself reads: `CLAUDE_CONFIG_DIR`, `COPILOT_HOME` or `CODEX_HOME` when set,
 else `~/.claude`, `~/.copilot` or `~/.codex` (`harnessHomesFrom`, read once into `config.harnessHomes`). It is off
 by default, and per machine: its `skillSync` settings key isn't in backups.

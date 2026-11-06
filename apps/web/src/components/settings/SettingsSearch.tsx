@@ -16,7 +16,7 @@ import { askEntries, initialActive, isSearchShortcut, moveResult, searchSettings
 
 const ENTRIES = settingsIndex();
 const ASK_ENTRIES = askEntries(ENTRIES);
-const CLI_SETTING = ENTRIES.find((entry) => entry.id === "providers.claude-code.cli-path");
+const CLI_SETTING = ENTRIES.find((entry) => entry.id === "agents.providers.claude-code.cli-path");
 
 /**
  * The settings list with a search box above it. While something is typed the results take the list's place: the

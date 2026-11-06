@@ -92,7 +92,7 @@ export const ModelTierSetting = z.object({
   cliEffort: CliEfforts.optional(),
   /**
    * The provider a headless run on this model prefers, with its `cli` model. Used when it is added, switched on and
-   * can do what the operation needs; otherwise, and when unset, the first such provider in Settings → Providers runs it
+   * can do what the operation needs; otherwise, and when unset, the first such provider in Settings → Agents → Providers runs it
    * (resolveOperationModel). Stored as `headless` before 041_operation_models.
    */
   provider: AgentHarness.optional(),

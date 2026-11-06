@@ -44,7 +44,7 @@ export const OPERATION_DESCRIPTIONS: Record<OperationId, string> = {
 };
 
 /** The settings target of an operation's row. */
-export const operationTarget = (op: OperationId) => `models.operations.${op}`;
+export const operationTarget = (op: OperationId) => `agents.operations.${op}`;
 
 /** The board's models without one operation's, so its default shows through. */
 const withoutBoard = (settings: OperationSettings, op: OperationId): OperationSettings => {

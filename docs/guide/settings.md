@@ -24,7 +24,7 @@ If you don't know what a setting is called, ask. The first row of the results is
 selected when what you typed reads as a question ("How do I stop agents running at night?"), so Enter asks it. Claude
 Code answers in a sentence or two and names the setting, and **Go there** (or Enter) opens it and marks it, like a
 result. If no one setting fits, you get the answer without a button. It uses the Claude Code CLI under
-Providers › Claude Code, on a small model (Haiku) with no tools and a few cents of budget per question, so
+Agents › Providers › Claude Code, on a small model (Haiku) with no tools and a few cents of budget per question, so
 nothing but the question and the list of settings is sent. Without Claude Code added, or when its CLI can't be found, the row says so and **Set up
 Claude Code** takes you to its setting; if it can't answer (not signed in, over budget, too slow) the row shows why,
 and a click tries again.
@@ -36,8 +36,7 @@ and a click tries again.
 | **Board**        | [Appearance](#appearance) (colors & themes, contrast, glass, sidebar banner, priority lane and its pinned height, scroll to a task, panel animations, fonts), Notifications, Data (backup to git, archived projects) |
 | **Keybindings**  | [Shortcuts](using-the-board.md#keyboard) by group (General, Navigation), with a search box |
 | **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), [Suggestions](#suggested-changes) |
-| **Providers**    | [Providers](#providers): T3 Code, Claude Code, Codex and GitHub Copilot, once you add them ([connecting agents](connect-agents.md), [T3 Code](t3-code.md)) |
-| **Models**       | [Models](#models): **Tiers** (what Light, Standard and Deep mean on each provider you added), **Custom models** (named models picked by a task label), **Operations** (the model each kind of run uses) |
+| **Agents**       | [Providers](#providers) (T3 Code, Claude Code, Codex and GitHub Copilot, once you add them: [connecting agents](connect-agents.md), [T3 Code](t3-code.md)), [Models](#models) (the Light, Standard and Deep tiers and custom models picked by a task label), Operations (the model each kind of run uses) |
 | **Autopilot**    | [Autopilot](autopilot.md) (pause, limits, quiet hours, then each automation), [Custom automations](custom-automations.md) |
 | **Integrations** | GitHub, Ticket systems, Terminal |
 | **Project**      | General (name, icon, folder), Planning skill, Review skill, Reviewer model, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
@@ -65,23 +64,29 @@ needs is greyed out; hover it to see why. Claude Code, Codex and GitHub Copilot 
 also says which one it runs by default, and at which effort); a model a provider doesn't list can be typed in the
 search and used.
 
-- **Tiers**: one row per tier and one column per provider you added and switched on. Give each tier a description
-  (named in copied prompts) and, per provider, the model and effort a session starts on when a task suggests that
-  tier (empty leaves the provider's default). **Preferred** marks the provider headless runs on that tier try first;
-  without one, or when it can't do the job, the first able provider in your Providers list runs it.
-- **Custom models**: the same row for a named model, with the task labels that pick it whatever the task's tier.
+On **Agents › Models** the tiers and your custom models are listed on the left, like the providers above them, each
+with its description or the models it runs; pick one to edit it on the right. **Rescan models** asks the CLIs again.
+
+- **Tiers**: a description (named in copied prompts), then one row per provider you added and switched on with the
+  model and effort a session starts on when a task suggests that tier (**Default model** leaves the provider's
+  default). **Preferred provider** is the one headless runs on that tier try first; with **First that can**, or when it
+  can't do the job, the first able provider in your Providers list runs it.
+- **Custom models**: **Add model** adds one: a name, the task labels that pick it whatever the task's tier, and the
+  same per-provider rows.
 - **Operations**: the model for each kind of run, in three groups: Review (the reviewer subagent, the board reviewer,
   PR review and fixes), Autopilot (task runs, Orchestrate, the digest, custom automations) and Board tools (new
   sessions, issue import, Ask). **Default** keeps the built-in choice. Under each row is what it resolves to right now,
-  on which provider and why, or why nothing can run it. A project and a task can still pick their own reviewer, and
+  on which provider and why, or why nothing can run it. Until a Claude Code, Codex or Copilot CLI provider is added and
+  switched on, nothing here can run, so the rows are greyed out under one note saying so. A project and a task can still pick their own reviewer, and
   each automation its own Model.
 
 ## Providers
 
-The board only offers the tools you add here. On a new install the page is empty: **Add provider** lists T3 Code,
+The board only offers the tools you add here. On a new install **Agents** shows only an empty Providers card:
+**Add provider** lists T3 Code,
 Claude Code, Codex and GitHub Copilot with what this machine has (installed and its version, running, or not found),
 and picking one adds it and opens it. Until you add a provider it appears nowhere else: not in the hand-off menus,
-the launch and planning dialogs, or the Models page. An upgraded board starts with the
+the launch and planning dialogs, or Models and Operations, which appear once you add one. An upgraded board starts with the
 providers you were already using.
 
 The list on the left shows each provider you added with a dot, its version (or T3 Code's name) and an on/off switch;
@@ -95,7 +100,7 @@ reload opens it. On a narrow window the two stack. Each provider's settings come
 - **MCP & skill**: the command that registers the board's MCP server, whether it is registered, and **Board skills**.
 - **Hand-off menu**: **Show in hand-off menus**, to stop offering a new thread or session in that tool while keeping it
   added.
-- **Models**: what each tier runs on this provider, the models its CLI lists, and a link to the Models page.
+- **Models**: what each tier runs on this provider, the models its CLI lists, and a link to Models.
 
 The dot is green when the CLI runs and the board's MCP server is registered with it (the board finds the server by its
 address, so it doesn't matter what you named it; `localhost` and `127.0.0.1` count as the same), or for T3 Code once a
@@ -103,7 +108,7 @@ saved token connects. Amber says what to fix (hover it); grey means switched off
 
 **Switch off** keeps a provider's settings and hides it everywhere; **Remove** also forgets its CLI path. Both say what
 stops working first. Sessions and threads already linked to a task still open either way. Old links to
-**Integrations → Claude Code** and the like now open the provider here.
+**Integrations → Claude Code**, **Providers** and **Models** (the pages before Agents) open the same setting here.
 
 Editing a template, a custom automation or a recurring rule opens it as a page of its own; the top bar shows where
 you are (**Settings / Tasks / Template: Bug**), and **Esc** or **Cancel** goes back to the list.

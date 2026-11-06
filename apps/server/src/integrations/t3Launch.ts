@@ -233,7 +233,7 @@ export function resolveSuggestion(
   const binding = profile.setting.t3;
   if (!binding) {
     const which = profile.tier ? `the ${profile.tier} tier` : profile.name;
-    return unavailable(`No T3 Code model is set for ${which} in Settings → Models.`);
+    return unavailable(`No T3 Code model is set for ${which} in Settings → Agents → Models.`);
   }
   const provider = providers.find((p) => p.instanceId === binding.selection.instanceId);
   if (!provider) return unavailable(`${binding.label} isn't offered by T3 Code right now.`);

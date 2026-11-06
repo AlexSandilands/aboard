@@ -4,12 +4,11 @@ import { Outlet, useLocation, useSearch } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
   BlocksIcon,
-  CpuIcon,
+  BotIcon,
   FolderIcon,
   KeyboardIcon,
   ListTodoIcon,
   type LucideIcon,
-  PlugIcon,
   SquareKanbanIcon,
   ZapIcon,
 } from "lucide-react";
@@ -49,8 +48,7 @@ const GROUP_ICONS: Record<SettingsGroupId, LucideIcon> = {
   board: SquareKanbanIcon,
   keybindings: KeyboardIcon,
   tasks: ListTodoIcon,
-  providers: PlugIcon,
-  models: CpuIcon,
+  agents: BotIcon,
   autopilot: ZapIcon,
   integrations: BlocksIcon,
   project: FolderIcon,

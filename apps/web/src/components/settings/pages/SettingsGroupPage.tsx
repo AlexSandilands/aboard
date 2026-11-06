@@ -7,15 +7,14 @@ import { BoardVariablesSection } from "~/components/autopilot/VariablesSection";
 import { NotificationsSection } from "~/components/notifications/NotificationsSection";
 import { VersionAndSocial } from "~/components/social/SocialSettings";
 import { useIntegrationsStatus, useSettings } from "~/state/queries";
+import { AgentsPage } from "../agents/AgentsPage";
 import { AppearanceSection } from "../AppearanceSection";
 import { ArchivedProjectsSection } from "../ArchivedProjectsSection";
 import { BackupSection } from "../BackupSection";
 import { GithubSection } from "../IntegrationsSections";
 import { IssueImportSection } from "../IssueImportSection";
 import { KeybindingsSection } from "../KeybindingsSection";
-import { ModelsPage } from "../ModelsPage";
 import { PlanSkillSection } from "../PlanSkillSection";
-import { ProvidersPage } from "../ProvidersPage";
 import { ReviewSettingsSection } from "../ReviewSettingsSection";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
 import { SettingsSubsection } from "../settingsLayout";
@@ -69,8 +68,8 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
       return <WithSettings>{(settings) => <KeybindingsSection settings={settings} />}</WithSettings>;
     case "tasks":
       return <TasksContent />;
-    case "models":
-      return <ModelsContent />;
+    case "agents":
+      return <AgentsContent />;
     case "autopilot":
       return (
         <>
@@ -83,8 +82,6 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
           </SettingsSubsection>
         </>
       );
-    case "providers":
-      return <WithSettings>{(settings) => <ProvidersPage settings={settings} />}</WithSettings>;
     case "integrations":
       return <IntegrationsContent />;
   }
@@ -110,9 +107,8 @@ function TasksContent() {
   );
 }
 
-function ModelsContent() {
-  const integrations = useIntegrationsStatus();
-  return <WithSettings>{(settings) => <ModelsPage settings={settings} t3={integrations.data?.t3} />}</WithSettings>;
+function AgentsContent() {
+  return <WithSettings>{(settings) => <AgentsPage settings={settings} />}</WithSettings>;
 }
 
 function IntegrationsContent() {

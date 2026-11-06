@@ -85,7 +85,7 @@ describe("choicePickerModel", () => {
     expect(codex.disabledReason).toBe("Codex can't follow tool rules of its own, which Orchestrate needs.");
     expect(codex.warning).toBeNull();
     expect(codex.notice).toContain("codex isn't scanned");
-    expect(codex.settingsTarget).toBe("providers.codex");
+    expect(codex.settingsTarget).toBe("agents.providers.codex.cli-path");
     expect(choicePickerModel(input({ op: "taskRun" })).tabs.find((t) => t.id === "codex")!.disabledReason).toBeNull();
   });
 
@@ -113,7 +113,7 @@ describe("choicePickerModel", () => {
   it("keeps a saved model the scan doesn't list, and a saved model's provider that isn't added", () => {
     const model = choicePickerModel(input({ op: "taskRun", value: { provider: "copilot-cli", model: "gpt-x" } }));
     expect(model.tabs.at(-1)!.id).toBe("copilot-cli");
-    expect(model.tabs.at(-1)!.disabledReason).toBe("Copilot CLI isn't added. Add it in Settings → Providers.");
+    expect(model.tabs.at(-1)!.disabledReason).toBe("Copilot CLI isn't added. Add it in Settings → Agents → Providers.");
     expect(model.selectedKey).toBe("model:copilot-cli:gpt-x");
     expect(
       rowDisabledReason(
@@ -144,7 +144,7 @@ describe("choicePickerModel", () => {
   it("names a provider switched off, and one another provider is locked out by", () => {
     const off = settings({ providers: [{ id: "claude-code", enabled: false }] });
     expect(providerDisabledReason("claude-code", { settings: off, op: null, lockedProvider: null })).toBe(
-      "Claude Code is switched off in Settings → Providers.",
+      "Claude Code is switched off in Settings → Agents → Providers.",
     );
     expect(providerDisabledReason("codex", { settings: settings(), op: null, lockedProvider: "claude-code" })).toBe(
       "Only Claude Code models can be picked here.",
@@ -305,7 +305,7 @@ describe("resolvesTo", () => {
       "Resolves to Claude Code · sonnet, from the Standard tier (the default).",
     );
     const typed = settings({ operationModels: { digest: { provider: "claude-code", model: "opus", effort: "max" } } });
-    expect(resolvesTo("digest", {}, typed).text).toBe("Resolves to Claude Code · opus (max), set on the Models page.");
+    expect(resolvesTo("digest", {}, typed).text).toBe("Resolves to Claude Code · opus (max), set under Operations.");
   });
 
   it("passes on the resolver's note and its refusal", () => {

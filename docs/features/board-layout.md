@@ -375,31 +375,40 @@ and end in one summary toast ("Moved 2 tasks to Review, 1 skipped (no plan)"). T
 
 ### The settings page
 
-Settings is a route, `/settings/<group>` with group `board`, `keybindings`, `tasks`, `providers`, `models`,
-`autopilot`, `integrations` or `project` (`/settings` and unknown groups redirect to `board`). `providers` is the
-Providers page (`ProvidersPage.tsx`, after T3 Code's provider settings): one card with the added providers on the left
-(a dot, the version, an on/off switch and **Add provider**) and the selected one's editor on the right
-(`ProviderEditors.tsx`: Status, Connection, MCP & skill, Hand-off menu, Models), side by side from a 48rem container
-and stacked below it. The selected provider is `?provider=`; the list's sidebar entries are only the providers added
-(`visibleSections`), and a `providers.<id>.<row>` target selects `<id>`. `integrations` keeps GitHub, Ticket systems
-and Terminal; an old `integrations.<provider>…` target or URL hash is read as `providers.<provider>…`
-(`redirectSettingsTarget`, applied by `parseSettingsTarget` and the route's `beforeLoad`). `models` is the Models page
-(`ModelsPage.tsx`), in three sections:
+Settings is a route, `/settings/<group>` with group `board`, `keybindings`, `tasks`, `agents`, `autopilot`,
+`integrations` or `project` (`/settings` and unknown groups redirect to `board`). `agents` is one page
+(`agents/AgentsPage.tsx`) with three sections, the first two on the same split card (`agents/SplitCard.tsx`: a list on
+the left and the selected item's settings on the right, side by side from a 48rem container and stacked below it), so
+providers, tiers and custom models are each a row in a list, however many there are:
 
-- **Tiers** (`models.tiers`): a grid with a row per tier (`models.tiers.<tier>`) and a column per provider added and
-  switched on (T3 Code included). The first cell holds the tier's description; each provider's cell its model and
-  effort in the shared model picker, and for a CLI a **Preferred** radio, the provider headless runs on the tier try
-  first (`ModelTierSetting.provider`). **Rescan models** asks the CLIs again.
-- **Custom models** (`models.custom`): the same grid, a row per custom model (`models.custom.<id>`) with its name,
-  labels and description in the first cell.
-- **Operations** (`models.operations`): the board's model for each operation in `OPERATIONS`, in cards for Review,
-  Autopilot and Board tools (`OPERATION_GROUPS`, `operations.logic.ts`), a row each (`models.operations.<op>`). The
-  picker offers **Default** (nothing saved: the operation's default), the task's own model where that differs from
-  the default (saved as `inherit`), the tiers, the custom models and any provider's model. The line under it is the
-  resolver run in the browser (`resolvesTo`): what runs it now and why, the resolver's notes, or why nothing can.
+- **Providers** (`agents.providers`, `agents/ProvidersSection.tsx`, after T3 Code's provider settings): the added
+  providers on the left (a dot, the version, an on/off switch and **Add provider**) and the selected one's editor on
+  the right (`ProviderEditors.tsx`: Status, Connection, MCP & skill, Hand-off menu, Models). The selected provider is
+  `?provider=`, and an `agents.providers.<id>.<row>` target selects `<id>`. Before any provider is added the page is
+  one empty card with **Add provider** (which lists them all), and the sidebar shows only Providers
+  (`visibleSections`).
+- **Models** (`agents.models`, `agents/ModelsSection.tsx`): the tiers, then the custom models, on the left
+  (`agents.models.tiers.<tier>`, `agents.models.custom.<id>`), each with its description or the models it runs
+  (`modelSummary`); **Add model** adds a custom model. On the right: the description (and a custom model's name and
+  labels), one row per provider added and switched on with its model and effort in the shared model picker (T3 Code's
+  in `agents/T3TierPicker.tsx`, which adds a **Default model** row), and **Preferred provider**, the CLI headless runs
+  on the tier try first (`ModelTierSetting.provider`), left out with fewer than two CLIs. **Rescan models** asks the
+  CLIs again. Which item a target names and what the list says is `agents/agents.logic.ts`.
+- **Operations** (`agents.operations`, `agents/OperationsSection.tsx`): the board's model for each operation in
+  `OPERATIONS`, in cards for Review, Autopilot and Board tools (`OPERATION_GROUPS`, `operations.logic.ts`), a row each
+  (`agents.operations.<op>`), whose one line is what it resolves to, with what the operation is behind its ⓘ. The picker offers **Default** (nothing saved: the operation's default), the task's own
+  model where that differs from the default (saved as `inherit`), the tiers, the custom models and any provider's
+  model. The line under it is the resolver run in the browser (`resolvesTo`): what runs it now and why, the resolver's
+  notes, or why nothing can. With no CLI provider added and switched on (`activeProviderIds`) nothing can run, so the
+  rows are dimmed and inert under one notice instead of each carrying the same reason.
 
-Each provider's editor has a **Models** row (`providers.<provider>.models`): what each tier runs on that provider, the
-models its CLI lists, and a link to the Tiers. The reviewer and issue-import models live only on the Models page: their
+Models and Operations show only once a provider is added. `integrations` keeps GitHub, Ticket systems and Terminal.
+Old targets and URLs are read as they are now (`redirectSettingsTarget`, applied by `parseSettingsTarget` and the
+route's `beforeLoad`): `integrations.<provider>…` and `providers.…` go to `agents.providers.…`, and `models.tiers…`,
+`models.custom…` and `models.operations…` to their place on Agents (`MOVED_TO_AGENTS`).
+
+Each provider's editor has a **Models** row (`agents.providers.<provider>.models`): what each tier runs on that provider, the
+models its CLI lists, and a link to Models. The reviewer and issue-import models live only under Operations: their
 old rows in Tasks show one line of what they resolve to with a **Change** link (`OperationModelLink`). A project's
 reviewer model is its own section (`project.models.reviewer`). Targets from before the page (`models.tiers.custom*`,
 `tasks.review.model`, `tasks.new-tasks.import-model`, `project.review-skill.model`) redirect to where they are now
@@ -617,6 +626,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/settings/settingsNavigation.ts` | `useOpenSettings`, `useLeaveSettings`                            |
 | `apps/web/src/components/settings/pages/`              | The group pages, the project page and the editor sub-pages      |
 | `apps/web/src/components/settings/integrations.logic.ts` | GitHub's and the terminal's status dots (tested)                |
-| `apps/web/src/components/settings/ProvidersPage.tsx`, `ProviderEditors.tsx`, `providers.logic.ts` | Settings → Providers: the list, Add provider dialog, editors, dots and selection (logic tested) |
-| `apps/web/src/components/settings/ModelsPage.tsx`, `OperationModelLink.tsx`, `ProjectModelsSection.tsx` | Settings → Models (tiers, custom models, operations), the one-line links to it, and a project's reviewer model |
+| `apps/web/src/components/settings/agents/` | Settings → Agents: the page, the split card, Providers (list, Add provider dialog, empty state), Models (tiers, custom models) and Operations; `agents.logic.ts` is tested |
+| `apps/web/src/components/settings/ProviderEditors.tsx`, `providers.logic.ts` | Each provider's editor, its dots and the selected provider (logic tested) |
+| `apps/web/src/components/settings/OperationModelLink.tsx`, `ProjectModelsSection.tsx` | The one-line links to an operation's row, and a project's reviewer model |
 | `apps/web/src/components/models/` | The shared model picker and its adapters (`ModelChoicePicker`, `CliModelPicker`, `T3ModelPicker`); options, search, disabled reasons, effort and the Operations list in `*.logic.ts` (tested) |

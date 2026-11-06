@@ -27,9 +27,9 @@ import { CommandSnippet, SettingsGroup, SettingsRow, StatusLine } from "./settin
 import { useOpenSettings } from "./settingsNavigation";
 import { AgentsSnippetRow, BoardSkillRow } from "./SkillSyncRows";
 
-// The editor of one provider on Settings → Providers, in the same sections for each: Status, Connection, MCP & skill,
+// The editor of one provider on Settings → Agents → Providers, in the same sections for each: Status, Connection, MCP & skill,
 // Hand-off menu and Models. A section that doesn't apply to the provider is left out. Row ids are
-// `providers.<provider>.<row>`, written out at each use so the settings index test can find them.
+// `agents.providers.<provider>.<row>`, written out at each use so the settings index test can find them.
 
 /** The MCP endpoint as agents should reach it. In dev, Vite (5317) proxies to the server on 4317. */
 export function mcpUrl(): string {
@@ -135,7 +135,7 @@ function T3Editor({ settings, t3: status }: ProviderEditorProps) {
     <>
       <EditorSection title="Status">
         <SettingsRow
-          id="providers.t3-code.status"
+          id="agents.providers.t3-code.status"
           title="T3 Code app"
           description={
             status !== undefined && !detected ? "Start T3 Code to enable thread links and import." : undefined
@@ -161,7 +161,7 @@ function T3Editor({ settings, t3: status }: ProviderEditorProps) {
       </EditorSection>
       <EditorSection title="Connection">
         <SettingsRow
-          id="providers.t3-code.pairing"
+          id="agents.providers.t3-code.pairing"
           title="Pairing"
           description="Live thread status and starting threads from a task."
           info={<PairingHelp />}
@@ -227,7 +227,7 @@ function T3Editor({ settings, t3: status }: ProviderEditorProps) {
           </div>
         </SettingsRow>
         <SettingsRow
-          id="providers.t3-code.open-links-in"
+          id="agents.providers.t3-code.open-links-in"
           title="Open thread links in"
           description="Where “Open in T3 Code” goes."
           info="The other target stays in the link's menu."
@@ -253,7 +253,7 @@ function T3Editor({ settings, t3: status }: ProviderEditorProps) {
           }
         />
         <SettingsRow
-          id="providers.t3-code.agent-threads"
+          id="agents.providers.t3-code.agent-threads"
           title="Let agents start threads"
           description="Let an agent orchestrating an epic start its tasks in new T3 threads."
           info="Each thread gets a new worktree, the task's suggested model or T3's default, and no more access than T3's default. The agent may also message them in your name. Off: it uses subagents or gives you prompts to paste."
@@ -268,14 +268,14 @@ function T3Editor({ settings, t3: status }: ProviderEditorProps) {
       </EditorSection>
       <EditorSection title="Hand-off menu">
         <HandoffMenuRow
-          id="providers.t3-code.handoff-menus"
+          id="agents.providers.t3-code.handoff-menus"
           target="t3-code"
           what="New T3 Code thread"
           settings={settings}
         />
       </EditorSection>
       <EditorSection title="Models">
-        <ProviderModelsRow id="providers.t3-code.models" provider="t3" settings={settings} />
+        <ProviderModelsRow id="agents.providers.t3-code.models" provider="t3" settings={settings} />
       </EditorSection>
     </>
   );
@@ -331,7 +331,7 @@ function CliStatusRow({ id, status, recheck, rechecking }: ProviderEditorProps &
   const info = PROVIDERS[id];
   return (
     <SettingsRow
-      id={`providers.${id}.status`}
+      id={`agents.providers.${id}.status`}
       title={`${info.label} CLI`}
       status={status ? <CliStatus cli={status.cli} /> : "Checking…"}
       control={
@@ -429,26 +429,26 @@ function ClaudeCodeEditor(props: ProviderEditorProps) {
       <EditorSection title="Connection">
         <CliPathRow
           id="claude-code"
-          rowId="providers.claude-code.cli-path"
+          rowId="agents.providers.claude-code.cli-path"
           title="Claude Code CLI path"
           info="The board runs it headless for the board reviewer, issue import and the settings Ask, and opens it for a new Claude Code session."
           settings={settings}
         />
       </EditorSection>
       <EditorSection title="MCP & skill">
-        <McpRow id="claude-code" rowId="providers.claude-code.mcp" title="MCP server" status={status} />
-        <BoardSkillRow id="providers.claude-code.skill" harness="claude" title="Claude Code" />
+        <McpRow id="claude-code" rowId="agents.providers.claude-code.mcp" title="MCP server" status={status} />
+        <BoardSkillRow id="agents.providers.claude-code.skill" harness="claude" title="Claude Code" />
       </EditorSection>
       <EditorSection title="Hand-off menu">
         <HandoffMenuRow
-          id="providers.claude-code.handoff-menus"
+          id="agents.providers.claude-code.handoff-menus"
           target="claude-code"
           what="New Claude Code session"
           settings={settings}
         />
       </EditorSection>
       <EditorSection title="Models">
-        <ProviderModelsRow id="providers.claude-code.models" provider="claude-code" settings={props.settings} />
+        <ProviderModelsRow id="agents.providers.claude-code.models" provider="claude-code" settings={props.settings} />
       </EditorSection>
     </>
   );
@@ -465,7 +465,7 @@ function CopilotEditor(props: ProviderEditorProps) {
       <EditorSection title="Connection">
         <CliPathRow
           id="copilot-cli"
-          rowId="providers.copilot-cli.cli-path"
+          rowId="agents.providers.copilot-cli.cli-path"
           title="Copilot CLI path"
           info="What the board opens for a new Copilot CLI session."
           settings={settings}
@@ -474,13 +474,13 @@ function CopilotEditor(props: ProviderEditorProps) {
       <EditorSection title="MCP & skill">
         <McpRow
           id="copilot-cli"
-          rowId="providers.copilot-cli.mcp"
+          rowId="agents.providers.copilot-cli.mcp"
           title="Copilot CLI"
           info="Adds it to ~/.copilot/mcp-config.json."
           status={status}
         />
         <SettingsRow
-          id="providers.copilot-cli.vscode"
+          id="agents.providers.copilot-cli.vscode"
           title="VS Code"
           description="Add the MCP server to your VS Code user profile."
           info={'Or put the same entry under "servers" in .vscode/mcp.json.'}
@@ -489,18 +489,18 @@ function CopilotEditor(props: ProviderEditorProps) {
             <CommandSnippet command={`code --add-mcp '{"name":"${BRAND.id}","type":"http","url":"${url}"}'`} />
           </div>
         </SettingsRow>
-        <BoardSkillRow id="providers.copilot-cli.skill" harness="copilot" title="Copilot" />
+        <BoardSkillRow id="agents.providers.copilot-cli.skill" harness="copilot" title="Copilot" />
       </EditorSection>
       <EditorSection title="Hand-off menu">
         <HandoffMenuRow
-          id="providers.copilot-cli.handoff-menus"
+          id="agents.providers.copilot-cli.handoff-menus"
           target="copilot-cli"
           what="New Copilot CLI session"
           settings={settings}
         />
       </EditorSection>
       <EditorSection title="Models">
-        <ProviderModelsRow id="providers.copilot-cli.models" provider="copilot-cli" settings={props.settings} />
+        <ProviderModelsRow id="agents.providers.copilot-cli.models" provider="copilot-cli" settings={props.settings} />
       </EditorSection>
     </>
   );
@@ -516,7 +516,7 @@ function CodexEditor(props: ProviderEditorProps) {
       <EditorSection title="Connection">
         <CliPathRow
           id="codex"
-          rowId="providers.codex.cli-path"
+          rowId="agents.providers.codex.cli-path"
           title="Codex CLI path"
           info="What the board opens for a new Codex session, what headless Autopilot runs start for a model that runs on Codex, and what Open in terminal resumes a Codex session with."
           settings={settings}
@@ -525,24 +525,24 @@ function CodexEditor(props: ProviderEditorProps) {
       <EditorSection title="MCP & skill">
         <McpRow
           id="codex"
-          rowId="providers.codex.mcp"
+          rowId="agents.providers.codex.mcp"
           title="MCP server"
           info="Adds it to ~/.codex/config.toml."
           status={status}
         />
-        <BoardSkillRow id="providers.codex.skill" harness="codex" title="Codex" />
-        <AgentsSnippetRow id="providers.codex.snippet" />
+        <BoardSkillRow id="agents.providers.codex.skill" harness="codex" title="Codex" />
+        <AgentsSnippetRow id="agents.providers.codex.snippet" />
       </EditorSection>
       <EditorSection title="Hand-off menu">
         <HandoffMenuRow
-          id="providers.codex.handoff-menus"
+          id="agents.providers.codex.handoff-menus"
           target="codex"
           what="New Codex session"
           settings={settings}
         />
       </EditorSection>
       <EditorSection title="Models">
-        <ProviderModelsRow id="providers.codex.models" provider="codex" settings={props.settings} />
+        <ProviderModelsRow id="agents.providers.codex.models" provider="codex" settings={props.settings} />
       </EditorSection>
     </>
   );
@@ -597,7 +597,7 @@ function ProviderModelsRow({ id, provider, settings }: { id: string; provider: T
     <SettingsRow
       id={id}
       title="Models"
-      description="What each tier runs on here. Set them, and which provider runs each operation, on the Models page."
+      description="What each tier runs on here. Set them, and which provider runs each operation, under Models and Operations."
       status={
         <span className="flex flex-wrap gap-x-3 gap-y-1">
           {providerTierModels(settings.modelTiers, provider).map((tier) => (
@@ -613,7 +613,7 @@ function ProviderModelsRow({ id, provider, settings }: { id: string; provider: T
         </span>
       }
       control={
-        <Button size="sm" variant="outline" onClick={() => openSettings("models.tiers")}>
+        <Button size="sm" variant="outline" onClick={() => openSettings("agents.models.tiers.list")}>
           Open Models
         </Button>
       }

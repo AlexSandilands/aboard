@@ -886,7 +886,7 @@ export const AppSettings = z
     /** Let the board run a headless reviewer when no agent picks a round up. */
     headlessReviewEnabled: z.boolean(),
     /**
-     * The providers the user added (Settings → Providers), each with its switch and CLI path. One that isn't here is
+     * The providers the user added (Settings → Agents → Providers), each with its switch and CLI path. One that isn't here is
      * offered nowhere but the Add provider dialog.
      */
     providers: ProviderSettings,

@@ -68,7 +68,7 @@ export const planSkillOf = (
 ): PlanSkillRef => project.planSkill ?? settings?.planSkill ?? { source: "builtin" };
 
 /**
- * A thread about a project as a whole (Suggest epics) needs the same: T3 Code added and on in Settings → Providers, a
+ * A thread about a project as a whole (Suggest epics) needs the same: T3 Code added and on in Settings → Agents → Providers, a
  * running T3, a token, a folder. Either way the user can hide T3 from the menus in settings.
  */
 export function canStartProjectT3Thread(

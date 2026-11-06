@@ -270,7 +270,7 @@ describe("resolveOperationModel: picking a provider", () => {
     expect(resolveOperationModel("prReview", {}, settings({ providers: on("codex") }))).toEqual({
       ok: false,
       reason:
-        "PR review needs a provider that can return structured output, lock a run down to read untrusted input and use the board's run tools; add one in Settings → Providers. Codex can run it with a warning if you choose it for PR review on the Models page.",
+        "PR review needs a provider that can return structured output, lock a run down to read untrusted input and use the board's run tools; add one in Settings → Agents → Providers. Codex can run it with a warning if you choose it for PR review under Settings → Agents → Operations.",
     });
     // A tier that is only the operation's default (or the task's own model) was chosen for other work: its preferred
     // provider doesn't get untrusted text, and the note says why.
@@ -377,18 +377,18 @@ describe("resolveOperationModel: picking a provider", () => {
     expect(r).toEqual({
       ok: false,
       reason:
-        "Custom automations on a task needs a provider that can follow tool rules of its own; add one in Settings → Providers.",
+        "Custom automations on a task needs a provider that can follow tool rules of its own; add one in Settings → Agents → Providers.",
     });
   });
 
   it("refuses, with the reason, when no provider can run it", () => {
     expect(resolveOperationModel("digest", {}, settings({ providers: on("codex", "copilot-cli") }))).toEqual({
       ok: false,
-      reason: "Digest needs a provider that can run with no tools; add one in Settings → Providers.",
+      reason: "Digest needs a provider that can run with no tools; add one in Settings → Agents → Providers.",
     });
     expect(resolveOperationModel("launch", {}, settings({ providers: [] }))).toEqual({
       ok: false,
-      reason: "New sessions needs a provider; add one in Settings → Providers.",
+      reason: "New sessions needs a provider; add one in Settings → Agents → Providers.",
     });
   });
 
@@ -418,7 +418,7 @@ describe("resolveOperationModel: picking a provider", () => {
     expect(resolveOperationModel("orchestrate", {}, typed({ provider: "copilot-cli", model: "gpt-5.5" }))).toEqual({
       ok: false,
       reason:
-        "Orchestrate is set to run gpt-5.5 on Copilot CLI, which isn't added and switched on in Settings → Providers.",
+        "Orchestrate is set to run gpt-5.5 on Copilot CLI, which isn't added and switched on in Settings → Agents → Providers.",
     });
   });
 });

@@ -328,7 +328,7 @@ export function resolveOperationChoice(
       const profile = settings.modelProfiles.find((p) => p.id === choice.profile);
       if (profile) return { profile: customProfile(profile), explicit: null, source, label: null, note: note() };
       notes.push(
-        `The model "${choice.profile}" set for ${info.label} no longer exists in Settings → Models, so the next setting was used.`,
+        `The model "${choice.profile}" set for ${info.label} no longer exists in Settings → Agents → Models, so the next setting was used.`,
       );
       continue;
     }
@@ -463,7 +463,7 @@ export function resolveOperationModel(
     if (!active.includes(provider)) {
       return {
         ok: false,
-        reason: `${info.label} is set to run ${model} on ${harnessLabel(provider)}, which isn't added and switched on in Settings → Providers.`,
+        reason: `${info.label} is set to run ${model} on ${harnessLabel(provider)}, which isn't added and switched on in Settings → Agents → Providers.`,
       };
     }
     const missing = missingNeeds(provider, needs);
@@ -496,11 +496,11 @@ export function resolveOperationModel(
     const warned = active.filter((h) => meets(h));
     const withWarning =
       warned.length > 0
-        ? ` ${listWords(warned.map(harnessLabel))} can run it with a warning if you choose ${warned.length === 1 ? "it" : "one"} for ${info.label} on the Models page.`
+        ? ` ${listWords(warned.map(harnessLabel))} can run it with a warning if you choose ${warned.length === 1 ? "it" : "one"} for ${info.label} under Settings → Agents → Operations.`
         : "";
     return {
       ok: false,
-      reason: `${info.label} needs a provider${can}; add one in Settings → Providers.${withWarning}`,
+      reason: `${info.label} needs a provider${can}; add one in Settings → Agents → Providers.${withWarning}`,
     };
   }
 
@@ -511,7 +511,7 @@ export function resolveOperationModel(
     if (preferred) {
       const missing = missingNeeds(preferred, needs);
       const why = !active.includes(preferred)
-        ? "isn't added and switched on in Settings → Providers"
+        ? "isn't added and switched on in Settings → Agents → Providers"
         : missing.length > 0
           ? `can't ${listWords(missing.map((n) => NEED_WORDS[n]))}`
           : `can't fully ${listWords((checks.get(preferred)?.warned ?? []).map((n) => NEED_WORDS[n]))} and wasn't chosen for ${info.label}`;
@@ -520,7 +520,9 @@ export function resolveOperationModel(
   }
   const on = profileModelOn(profile, provider);
   if (!on && (profile.setting.t3 || Object.values(profile.setting.cli ?? {}).some(Boolean))) {
-    notes.push(`${named} has no ${harnessLabel(provider)} model in Settings → Models, so the CLI's default ran.`);
+    notes.push(
+      `${named} has no ${harnessLabel(provider)} model in Settings → Agents → Models, so the CLI's default ran.`,
+    );
   }
   return done(provider, on?.model ?? null, on?.effort ?? null);
 }

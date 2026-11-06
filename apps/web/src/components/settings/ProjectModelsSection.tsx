@@ -7,7 +7,7 @@ import { SettingsLink, SettingsRow, SettingsSection } from "./settingsLayout";
 
 /**
  * The project's own models: its reviewer, for the reviewer subagent and the board reviewer, instead of the board's
- * (Settings → Models › Operations). A task can pick its own in its panel.
+ * (Settings → Agents → Operations). A task can pick its own in its panel.
  */
 export function ProjectModelsSection({ project }: { project: Project }) {
   const updateProject = useUpdateProject();
@@ -23,7 +23,7 @@ export function ProjectModelsSection({ project }: { project: Project }) {
         info={
           <>
             Inherit uses the board's, set under{" "}
-            <SettingsLink to="models.operations.reviewer">Models › Operations</SettingsLink>. The board reviewer needs a
+            <SettingsLink to="agents.operations.reviewer">Agents › Operations</SettingsLink>. The board reviewer needs a
             provider that can return structured output.
           </>
         }

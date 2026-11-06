@@ -3,7 +3,7 @@ import type { AgentHarness } from "./agentSessions.ts";
 import type { HandoffTarget, T3IntegrationStatus } from "./schemas.ts";
 
 // The providers the board works with: T3 Code and the CLI harnesses it starts. A provider is opt-in: the user adds it
-// in Settings → Providers, and one that isn't added shows nowhere else. Detection (CLI, MCP, T3, models) has one
+// in Settings → Agents → Providers, and one that isn't added shows nowhere else. Detection (CLI, MCP, T3, models) has one
 // source, `GET /api/providers`. See docs/features/agent-sessions.md and ADR 0011.
 
 export const ProviderId = z.enum(["t3-code", "claude-code", "codex", "copilot-cli"]);
@@ -104,7 +104,7 @@ export const providerSetting = (settings: WithProviders, id: ProviderId): Provid
 export const providerActive = (settings: WithProviders | undefined, id: ProviderId): boolean =>
   settings?.providers.some((p) => p.id === id && p.enabled) ?? false;
 
-/** The CLI path set for a harness in Settings → Providers, or null to look its name up on PATH. */
+/** The CLI path set for a harness in Settings → Agents → Providers, or null to look its name up on PATH. */
 export const harnessCliSetting = (settings: WithProviders, harness: AgentHarness): string | null =>
   providerSetting(settings, providerOfHarness(harness))?.cliPath?.trim() || null;
 

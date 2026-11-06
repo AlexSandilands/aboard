@@ -10,7 +10,7 @@ export const FROM_SETTINGS_LIST = { settingsEditorFromList: true } as const;
 /**
  * Opens Settings at a target: a group (`"autopilot"`), a section (`"project.recurring"`) or a row
  * (`"autopilot.engine.quiet-hours"`). `project` picks the project page's project; a Providers target
- * (`"providers.codex.cli-path"`) picks the provider. The anchor goes in the URL hash
+ * (`"agents.providers.codex.cli-path"`) picks the provider. The anchor goes in the URL hash
  * and is scrolled to once it renders, which the router can't do for content still loading. `highlight` flashes it
  * once it is in view.
  */

@@ -209,7 +209,7 @@ describe("issue import", () => {
     const issueTask = await run(create(GH_URL).id);
     expect(issueTask).toMatchObject({ title: issue.title, import: { status: "done" } });
     expect(jobs).toHaveLength(0);
-    expect(warnings.some((w) => w.includes("Settings → Providers"))).toBe(true);
+    expect(warnings.some((w) => w.includes("Settings → Agents → Providers"))).toBe(true);
   });
 
   it("summarises a GitHub issue on Codex when it is chosen, with the warning, but reads no ticket there", async () => {
