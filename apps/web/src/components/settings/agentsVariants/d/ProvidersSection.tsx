@@ -36,14 +36,22 @@ import {
 import { SettingsGroup, SettingsSectionHeader, SettingsSubsection, StatusDot } from "../../settingsLayout";
 import { DetailBody, DetailHeader, SplitCard, SplitList, SplitListAction, SplitListItem } from "./SplitCard";
 
-export function ProvidersSection({ settings }: { settings: AppSettings }) {
+export function ProvidersSection({
+  settings,
+  adding,
+  onAddingChange: setAdding,
+}: {
+  settings: AppSettings;
+  /** The Add provider dialog is open; the page owns it so the Operations banner can open it too. */
+  adding: boolean;
+  onAddingChange: (open: boolean) => void;
+}) {
   const providers = useProviders();
   const recheck = useRecheckProviders();
   const t3 = useIntegrationsStatus().data?.t3;
   const updateProviders = useUpdateProviders();
   const navigate = useNavigate();
   const requested = useSearch({ strict: false, select: (search) => search.provider });
-  const [adding, setAdding] = useState(false);
   const [confirm, setConfirm] = useState<{ id: ProviderId; action: "disable" | "remove" } | null>(null);
 
   const added = settings.providers;
@@ -105,11 +113,7 @@ export function ProvidersSection({ settings }: { settings: AppSettings }) {
           }
         />
         {added.length === 0 ? (
-          <NoProviders
-            offered={selected}
-            status={selected ? statusOf(selected) : undefined}
-            onAdd={() => (selected ? add(selected) : setAdding(true))}
-          />
+          <NoProviders onAdd={() => setAdding(true)} />
         ) : (
           <SplitCard
             list={
@@ -223,43 +227,27 @@ export function ProvidersSection({ settings }: { settings: AppSettings }) {
 }
 
 /**
- * The whole of Settings → Agents before a provider is added: one card, one button. A link that names a provider
- * (`?provider=codex`) offers that one.
+ * The whole of Settings → Agents before a provider is added: one card, one button, which lists every provider to pick
+ * from. It never offers just the one a link or an earlier selection names (`?provider=t3`).
  */
-function NoProviders({
-  offered,
-  status,
-  onAdd,
-}: {
-  offered: ProviderId | null;
-  status: ProviderStatus | undefined;
-  onAdd: () => void;
-}) {
-  const detection = offered ? detectionLabel(offered, status) : null;
+function NoProviders({ onAdd }: { onAdd: () => void }) {
   return (
     <SettingsGroup>
       <Empty size="compact" className="min-h-0 py-10">
         <EmptyHeader>
           <EmptyMedia variant="icon">
-            {offered ? <ProviderIcon id={offered} className="size-4.5" /> : <BotIcon />}
+            <BotIcon />
           </EmptyMedia>
-          <EmptyTitle>{offered ? `${PROVIDERS[offered].label} isn't added yet` : "No providers yet"}</EmptyTitle>
+          <EmptyTitle>No providers yet</EmptyTitle>
           <EmptyDescription>
-            {offered
-              ? PROVIDERS[offered].blurb
-              : "Add the coding agents on this machine to start sessions from tasks, run reviews and Autopilot, and pick their models."}
+            Add the coding agents on this machine to start sessions from tasks, run reviews and Autopilot, and pick
+            their models.
           </EmptyDescription>
-          {detection ? (
-            <EmptyDescription className="flex items-center gap-1.5 text-xs">
-              <StatusDot tone={detection.tone} label={detection.label} />
-              {detection.label}
-            </EmptyDescription>
-          ) : null}
         </EmptyHeader>
         <EmptyContent>
           <Button size="sm" onClick={onAdd}>
             <PlusIcon />
-            {offered ? `Add ${PROVIDERS[offered].label}` : "Add provider"}
+            Add provider
           </Button>
         </EmptyContent>
       </Empty>

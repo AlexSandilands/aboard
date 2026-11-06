@@ -439,7 +439,7 @@ function ModelRows({
                 <SelectTrigger size="sm" className={cn("w-full min-w-0", SETTINGS_TEXT_WIDTH)}>
                   <SelectValue placeholder="First that can" />
                 </SelectTrigger>
-                <SelectPopup>
+                <SelectPopup alignItemWithTrigger={false}>
                   {choices.map((harness) => (
                     <SelectItem key={harness} value={harness}>
                       <span className="flex items-center gap-2">
