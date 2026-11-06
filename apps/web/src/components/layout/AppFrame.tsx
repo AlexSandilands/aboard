@@ -1,5 +1,9 @@
-import { Outlet, useLocation } from "@tanstack/react-router";
+import { Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
+import { scopeToRemember } from "~/components/board/projectScope.logic";
+import { restoreBoardScope } from "~/components/board/projectScopeRestore";
+import { useProjectIds } from "~/state/queries";
+import { useProjectScope } from "~/state/ui";
 import { useCloseTask, useProjectFilter, useSelectedTaskId } from "~/components/board/boardNavigation";
 import { SettingsSidebar, useSettingsBack } from "~/components/settings/SettingsShell";
 import { useInStats, useLeaveStats } from "~/components/stats/useOpenStats";
@@ -14,6 +18,7 @@ import { AppShell } from "./AppShell";
  * what Esc does change.
  */
 export function AppFrame() {
+  useRememberProjectScope();
   const inSettings = useLocation({ select: (location) => location.pathname.startsWith("/settings") });
   const taskId = useSelectedTaskId();
   const closeTask = useCloseTask();
@@ -51,4 +56,30 @@ function CloseSheetOnSwitch({ inSettings }: { inSettings: boolean }) {
     setOpenMobile(false);
   }, [inSettings, setOpenMobile]);
   return null;
+}
+
+/**
+ * Keeps the project scope the URL shows for the next start (see `restoredProjectScope`, applied in main.tsx). Reading
+ * the URL rather than hooking each place that sets the scope covers the project menu, the palette, saved views and
+ * Back alike.
+ */
+function useRememberProjectScope() {
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const project = useSearch({ strict: false, select: (search) => search.project });
+  const inprogress = useSearch({ strict: false, select: (search) => search.inprogress });
+  const order = useProjectIds();
+  const navigate = useNavigate();
+  useEffect(() => {
+    // The app started on another page and the board is reached now: it takes the remembered scope instead of
+    // overwriting it with the bare URL's (no scope).
+    const restored = restoreBoardScope(pathname, { project, inprogress });
+    if (restored) {
+      void navigate({ to: "/", replace: true, search: (prev) => ({ ...prev, project: restored }) });
+      return;
+    }
+    const ids = scopeToRemember(pathname, { project, inprogress }, order);
+    if (!ids) return;
+    const { projectIds, setProjectIds } = useProjectScope.getState();
+    if (ids.join(",") !== projectIds.join(",")) setProjectIds(ids);
+  }, [pathname, project, inprogress, order, navigate]);
 }

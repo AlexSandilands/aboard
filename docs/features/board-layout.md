@@ -86,6 +86,7 @@ is on ([saved-views.md](saved-views.md#the-project-scope)) it lists only the tic
 lane to scroll to; In progress, all projects suspends the scope, and every project is listed again. Dragging in a short
 list still saves the order of the whole board: the listed projects trade the places they already hold and the hidden ones
 stay where they were (`moveAmongVisible`).
+The scope itself is remembered across restarts, so the list is still narrowed after the app reopens.
 
 ### Collapsing columns
 
@@ -578,6 +579,8 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 - `task-panel` holds pinned actions and the section layout. Read the layout through `useSectionLayout`,
   which validates it and keeps it referentially stable. It is at version 1: `migrateTaskPanelPrefs` pins `jump` for
   saves from before it existed. New browsers start with `["jump"]` (`DEFAULT_PINS`); unpinning it sticks.
+- `project-scope` holds the last project scope (a list of project ids) so a restart can put it back
+  ([saved-views.md](saved-views.md#the-project-scope)). The URL's `?project=` stays the source of truth while the app runs.
 
 ## Decisions
 

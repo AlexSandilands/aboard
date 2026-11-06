@@ -307,6 +307,35 @@ export const usePalette = create<PaletteState>()(
   ),
 );
 
+/**
+ * The board's last project scope, so a restart (the desktop shell always loads the bare board URL) can put it back.
+ * The URL's `?project=` stays the source of truth while the app runs; this only seeds it on the first load. Empty is
+ * every project. Per browser, like the other persisted view state.
+ */
+interface ProjectScopeState {
+  projectIds: ReadonlyArray<string>;
+  setProjectIds: (projectIds: ReadonlyArray<string>) => void;
+}
+
+export const useProjectScope = create<ProjectScopeState>()(
+  persist(
+    (set) => ({
+      projectIds: [],
+      setProjectIds: (projectIds) => set({ projectIds }),
+    }),
+    {
+      name: storageKey("project-scope"),
+      // Stored data is untrusted: anything but a list of strings is no scope.
+      merge: (persisted, current) => {
+        const ids = (persisted as Partial<ProjectScopeState> | undefined)?.projectIds;
+        const valid = Array.isArray(ids) && ids.every((id) => typeof id === "string");
+        return { ...current, projectIds: valid ? ids : [] };
+      },
+      partialize: ({ projectIds }) => ({ projectIds }),
+    },
+  ),
+);
+
 /** App-level dialogs opened from anywhere (header buttons, palette, panel menus). */
 interface DialogsState {
   /** The Autopilot digest panel, from the header button or the palette. */
