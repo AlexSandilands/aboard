@@ -197,9 +197,11 @@ export function ModelsSection({ settings, t3 }: { settings: AppSettings; t3: T3I
           }
         >
           {selected.kind === "tier" ? (
-            <TierDetail tier={selected.tier} settings={settings} providers={providers} />
+            // Keyed per item, so a field left mid-edit doesn't carry its draft into the next item's field.
+            <TierDetail key={selected.tier} tier={selected.tier} settings={settings} providers={providers} />
           ) : (
             <CustomDetail
+              key={selected.id}
               profile={profiles.find((p) => p.id === selected.id)!}
               profiles={profiles}
               providers={providers}
