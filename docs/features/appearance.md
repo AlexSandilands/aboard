@@ -166,6 +166,12 @@ animations at 0 and under reduced motion.
   inner wrapper pinned to the aside's right edge at `var(--resizable-width)` (at least 380px, the `@container` the
   panel's `@[460px]` queries measure). `AppLayout` keeps it mounted on the closed task until the slide-out ends.
   `panel.toggle` (Ctrl/Cmd+Alt+B) closes it or reopens the last task.
+  A panel that is restored rather than opened appears in place, with no slide: `AppLayout` decides once, when it
+  mounts (`panelRestored` in `layout/panelRestore.logic.ts`), and passes `slideIn={false}`. Restored means the board is
+  coming back from Settings or Stats on the task it left open (`boardReturn.task`, saved when the board was left), or
+  the app has just loaded on the board with `?task=`. Closing it, and any later open or close on the board, still
+  animate. A different task opened from another page (the palette or a notification in Settings) is an opening and
+  slides in; a panel that was closed stays closed.
 
 React work is kept out of the slide, since the board's part runs on the main thread: a card prefetches its task's
 detail on pointer down (`usePrefetchTaskDetail`), so the panel renders its contents in the commit that mounts it rather
@@ -194,8 +200,8 @@ ones. The code is `lib/boardMotion.ts` and the View Transition block in `index.c
   or disappearing on the board (`panelTransitionType`), with the types `panel-open` and `panel-close`. Any other
   navigation returns `false`, which the router takes as no transition. While a board transition runs
   (`boardTransitionRunning`), `TaskPanel` skips `startSlide` and `AppLayout` unmounts a closing panel at once, since its
-  snapshot (`task-panel`) slides out instead. A task opened from another page or on load gets no transition, so its
-  panel slides in with `startSlide`.
+  snapshot (`task-panel`) slides out instead. A task opened from another page gets no transition, so its
+  panel slides in with `startSlide`; one restored on return or load doesn't slide at all (above).
 - **Sidebar:** `setOpen` (`ui/sidebar.tsx`) starts its own transition (`startSidebarTransition`, types `sidebar-open`
   and `sidebar-close`, the change applied in `flushSync`) and `useSidebarSlide` stands down. The change applies only
   once the old state is captured, so a second toggle before then starts from the state the first one asked for. The offcanvas sidebar is
