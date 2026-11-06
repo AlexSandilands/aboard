@@ -68,7 +68,10 @@ export const BoardLane = memo(function BoardLane({
       aria-label={project.title}
       className="scroll-mt-10 border-b border-border/40 pt-1.5 pb-3"
     >
-      <header className="sticky left-0 flex h-8 w-fit max-w-dvw items-center gap-1.5 ps-[calc(var(--workspace-gutter-start)-0.25rem)] pe-2">
+      <header
+        data-vt-left
+        className="sticky left-0 flex h-8 w-fit max-w-dvw items-center gap-1.5 ps-[calc(var(--workspace-gutter-start)-0.25rem)] pe-2"
+      >
         <Button
           variant="ghost-muted"
           size="icon-xs"

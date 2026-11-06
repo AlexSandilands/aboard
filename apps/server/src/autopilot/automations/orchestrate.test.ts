@@ -207,6 +207,19 @@ describe("orchestratePrompt", () => {
     expect(prompt).not.toContain("The user's own instructions");
   });
 
+  it("asks for no PR while the local review loop is still going, and judges stalls by state, not activity age", () => {
+    const prompt = orchestratePrompt({ project, mayMerge: true, instructions: "", handover: null });
+    expect(prompt).toContain("**Review with no PR:**");
+    expect(prompt).toContain("no PR is expected yet");
+    expect(prompt).toContain("never ask the thread for one then");
+    expect(prompt).toContain("only when get_task says the loop has ended and no PR is linked");
+    expect(prompt).toContain("never by how old the task's last board activity is");
+    expect(prompt).toContain("a local review round that is pending or running, is activity");
+    expect(prompt).toContain(
+      "A round that is stalled or failed counts as stuck; one that is pending or running does not.",
+    );
+  });
+
   it("uses the project id when the project has no folder", () => {
     const prompt = orchestratePrompt({
       project: { ...project, workspaceRoot: null },

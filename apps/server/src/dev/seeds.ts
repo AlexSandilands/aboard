@@ -1111,7 +1111,55 @@ function spreadOverWeeks(db: Db): void {
   }
 }
 
-export const SCENARIOS = { basic, review, threads, showcase, social, stats } satisfies Record<string, Scenario>;
+/**
+ * Boards for checking rendering cost. A project with twenty cards in every column fills a large screen; beside it, one
+ * with an epic whose children span every column (the band stretches as the board moves), fifteen cards spread across
+ * the columns against fifteen in backlog (the same cards, laid out wide or narrow), and a single card as the floor.
+ * Labels and ticket keys make the cards as busy as real ones.
+ */
+const dense: Scenario = (s, opts) => {
+  const project = s.projects.create({
+    title: "Dense board",
+    workspaceRoot: opts.workspaceRoot,
+    icon: { kind: "lucide", name: "layout-grid", color: "violet" },
+  });
+  const statuses: TaskStatus[] = ["backlog", "planned", "in_progress", "review", "done"];
+  const labelSets = [["frontend"], ["backend", "perf"], ["bug"], ["docs", "frontend", "ux"], []];
+  for (const [column, status] of statuses.entries()) {
+    for (let i = 0; i < 20; i++) {
+      const n = column * 20 + i + 1;
+      addTask(s, project.id, {
+        title: `Card ${n}: ${i % 3 === 0 ? "a longer title that wraps onto a second line of the card" : "short title"}`,
+        status,
+        labels: labelSets[n % labelSets.length],
+        links: n % 4 === 0 ? [`SHOP-${100 + n}`] : undefined,
+      });
+    }
+  }
+  const epics = s.projects.create({ title: "With an epic", icon: { kind: "lucide", name: "layers", color: "amber" } });
+  for (let i = 1; i <= 5; i++) addTask(s, epics.id, { title: `Loose card ${i}`, status: "backlog" });
+  const epic = s.tasks.create({
+    projectId: epics.id,
+    title: "Rework onboarding",
+    description: "An epic with one child in every column, so its band spans the board.",
+    kind: "epic",
+    actor: AGENT,
+  }).id;
+  for (const [i, status] of statuses.entries()) {
+    addTask(s, epics.id, { title: `Onboarding step ${i + 1}`, status, epicId: epic, labels: ["ux"] });
+  }
+  const spread = s.projects.create({ title: "15 spread", icon: { kind: "lucide", name: "columns-3", color: "sky" } });
+  const backlog = s.projects.create({ title: "15 in backlog", icon: { kind: "lucide", name: "list", color: "teal" } });
+  for (let i = 0; i < 15; i++) {
+    const labels = labelSets[i % labelSets.length];
+    addTask(s, spread.id, { title: `Card ${i + 1}`, status: statuses[i % statuses.length]!, labels });
+    addTask(s, backlog.id, { title: `Card ${i + 1}`, status: "backlog", labels });
+  }
+  const one = s.projects.create({ title: "Single card", icon: { kind: "lucide", name: "square", color: "green" } });
+  addTask(s, one.id, { title: "The only card", status: "backlog" });
+};
+
+export const SCENARIOS = { basic, review, threads, showcase, social, stats, dense } satisfies Record<string, Scenario>;
 export type ScenarioName = keyof typeof SCENARIOS;
 
 /** The made-up tracker the seeded tasks' keys (SHOP-77, PAY-88) belong to. */

@@ -136,6 +136,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     ["motion", "speed", "transition", "duration", "reduced motion"],
   ),
   draft(
+    "board.appearance.snapshot-motion",
+    "Smooth board motion",
+    "Move the board's cards as snapshots while the sidebar or task panel slides, instead of laying the board out every frame.",
+    ["motion", "smooth", "frame rate", "refresh rate", "performance", "lag", "jank", "view transition"],
+  ),
+  draft(
     "board.appearance.interface-font",
     "Interface font",
     "The font and size for everything outside code. The size scales the whole board.",

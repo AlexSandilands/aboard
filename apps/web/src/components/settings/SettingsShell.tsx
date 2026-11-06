@@ -457,7 +457,9 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
   }, [target, openedAt]);
 
   return (
-    <div ref={ref} className={cn("min-h-0 flex-1 overflow-y-auto", className)}>
+    // Opaque, with the grain scrolling along (bg-local), so Chromium scrolls it on the compositor, as the board's
+    // scroller does. Over the main area's background it repainted the whole screen on every scroll frame.
+    <div ref={ref} className={cn("min-h-0 flex-1 overflow-y-auto bg-background surface-grain bg-local", className)}>
       <div className="mx-auto w-full max-w-4xl space-y-8 px-4 pt-2 pb-24 sm:px-6">{children}</div>
     </div>
   );

@@ -13,10 +13,19 @@ export const DEFAULT_SANS_FONT_STACK = '-apple-system, BlinkMacSystemFont, "Sego
 // Concrete names first: some engines alias `ui-monospace` to the proportional system UI font.
 export const DEFAULT_MONO_FONT_STACK = '"SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace';
 
+export const BOARD_MOTIONS = ["snapshot", "reflow"] as const;
+export type BoardMotion = (typeof BOARD_MOTIONS)[number];
+
 export interface AppearancePrefs {
   contrast: number;
   glassOpacity: number;
   panelAnimationMs: number;
+  /**
+   * How the board moves as the task panel or the sidebar opens or closes (Smooth board motion). `snapshot` lays it out
+   * once and lets the compositor move snapshots of its cards (a View Transition), which keeps up with a 280 Hz screen;
+   * `reflow` lays it out again every frame.
+   */
+  boardMotion: BoardMotion;
   /** A font family list as typed; empty is the default stack. */
   fontSans: string;
   fontMono: string;
@@ -27,6 +36,7 @@ export const DEFAULT_APPEARANCE_PREFS: AppearancePrefs = {
   contrast: CONTRAST.default,
   glassOpacity: GLASS_OPACITY.default,
   panelAnimationMs: PANEL_ANIMATION_MS.default,
+  boardMotion: "snapshot",
   fontSans: "",
   fontMono: "",
   fontSize: INTERFACE_FONT_SIZE.default,
@@ -49,6 +59,7 @@ export function normalizeAppearancePrefs(value: Partial<Record<keyof AppearanceP
     contrast: clampSetting(value.contrast, CONTRAST),
     glassOpacity: clampSetting(value.glassOpacity, GLASS_OPACITY),
     panelAnimationMs: clampSetting(value.panelAnimationMs, PANEL_ANIMATION_MS),
+    boardMotion: BOARD_MOTIONS.find((motion) => motion === value.boardMotion) ?? DEFAULT_APPEARANCE_PREFS.boardMotion,
     fontSans: typeof value.fontSans === "string" ? value.fontSans.slice(0, 200) : "",
     fontMono: typeof value.fontMono === "string" ? value.fontMono.slice(0, 200) : "",
     fontSize: clampSetting(value.fontSize, INTERFACE_FONT_SIZE),
@@ -101,7 +112,13 @@ export function appearancePaint(prefs: AppearancePrefs, reducedMotion: boolean):
   style["--panel-animation-duration"] = `${prefs.panelAnimationMs}ms`;
   style["--slide-duration"] = `${slideDurationMs(prefs.panelAnimationMs)}ms`;
   const animate = prefs.panelAnimationMs > 0 && !reducedMotion;
-  return { style, data: { "panel-animations": animate ? "true" : "false" } };
+  return {
+    style,
+    data: {
+      "panel-animations": animate ? "true" : "false",
+      "board-motion": prefs.boardMotion,
+    },
+  };
 }
 
 /** The style properties appearancePaint can set, so the runtime clears the ones a new paint leaves out. */

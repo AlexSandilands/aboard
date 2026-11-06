@@ -4,6 +4,8 @@ import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
 import { PanelLeftCloseIcon, PanelLeftIcon } from "lucide-react";
 import * as React from "react";
+import { flushSync } from "react-dom";
+import { sidebarSnapshotMotion, startSidebarTransition } from "~/lib/boardMotion";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
 import { Input, type InputProps } from "~/components/ui/input";
@@ -102,7 +104,8 @@ function useSidebarSlide(
     if (previousOpen.current === open) return;
     previousOpen.current = open;
     const sidebar = sidebarRef.current;
-    const duration = slideDuration();
+    // Over the board with snapshot motion, a View Transition moves the sidebar and the board (setOpen, index.css).
+    const duration = sidebarSnapshotMotion() ? 0 : slideDuration();
     if (!sidebar || duration === 0 || collapsible !== "offcanvas") return;
     const container = sidebar.querySelector<HTMLElement>("[data-slot='sidebar-container']");
     const gap = sidebar.querySelector<HTMLElement>("[data-slot='sidebar-gap']");
@@ -148,14 +151,25 @@ function SidebarProvider({
   // We use openProp and setOpenProp for control from outside the component.
   const [_open, _setOpen] = React.useState(defaultOpen);
   const open = openProp ?? _open;
+  // With snapshot motion the change applies only once the transition has captured the old state, a frame or more
+  // later: a second toggle before then starts from the state the first one asked for, not the stale `open`.
+  const pendingOpen = React.useRef<boolean | null>(null);
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
-      const openState = typeof value === "function" ? value(open) : value;
-      if (setOpenProp) {
-        setOpenProp(openState);
-      } else {
-        _setOpen(openState);
-      }
+      const current = pendingOpen.current ?? open;
+      const openState = typeof value === "function" ? value(current) : value;
+      const apply = () => {
+        // A skipped transition still applies its change first; it must not clear the newer request.
+        if (pendingOpen.current === openState) pendingOpen.current = null;
+        if (setOpenProp) {
+          setOpenProp(openState);
+        } else {
+          _setOpen(openState);
+        }
+      };
+      if (openState === current) return;
+      pendingOpen.current = openState;
+      if (!startSidebarTransition(openState, () => flushSync(apply))) apply();
     },
     [setOpenProp, open],
   );

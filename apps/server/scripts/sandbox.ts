@@ -2,8 +2,9 @@
  * `pnpm sandbox`: runs this checkout's board on its own ports so a change can be tried in the browser
  * without touching the board the user runs from main.
  *
- *   pnpm sandbox [--seed basic|review|threads|showcase|none]   isolated: own server, temp data dir, seeded (default)
+ *   pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|none]   isolated: own server, temp data dir, seeded (default)
  *   pnpm sandbox --desktop                            also opens the Electron shell on the sandbox (isolated only)
+ *   pnpm sandbox --prod                               serves a production build instead of Vite's dev server (no hot reload)
  *   pnpm sandbox --live                               Vite only, on the real server's data (writes are rejected)
  *   pnpm sandbox status                               prints the running sandbox's ready line
  *   pnpm sandbox stop                                 stops it and deletes its data dir
@@ -42,6 +43,8 @@ interface SandboxState {
   serverPort: number;
   webPort: number;
   home: string;
+  /** Serving a production build of the web app (`--prod`) rather than Vite's dev server. */
+  prod?: boolean;
   /** The Electron shell `--desktop` opened on this sandbox; stopping the sandbox closes it. */
   desktop?: { pid: number; startedAt: number };
 }
@@ -325,31 +328,39 @@ async function openDesktop(state: SandboxState): Promise<void> {
 function parseArgs(argv: string[], isScenarioName: (name: string) => boolean) {
   const live = argv.includes("--live");
   const desktop = argv.includes("--desktop");
+  const prod = argv.includes("--prod");
   const seedIndex = argv.indexOf("--seed");
   const seed = seedIndex >= 0 ? argv[seedIndex + 1] : "basic";
   const unknown = argv.find(
-    (arg, i) => arg !== "--live" && arg !== "--desktop" && arg !== "--seed" && !(seedIndex >= 0 && i === seedIndex + 1),
+    (arg, i) => !["--live", "--desktop", "--prod", "--seed"].includes(arg) && !(seedIndex >= 0 && i === seedIndex + 1),
   );
   if (unknown !== undefined) {
-    fail(`unknown argument "${unknown}" (stop, status, or flags: --seed <name>, --live, --desktop)`);
+    fail(`unknown argument "${unknown}" (stop, status, or flags: --seed <name>, --live, --desktop, --prod)`);
   }
   if (live && desktop) fail("--desktop has no effect with --live: the shell must never attach to the real board");
   if (!seed || (seed !== "none" && !isScenarioName(seed)))
-    fail(`unknown seed "${seed}" (basic, review, threads, showcase, none)`);
+    fail(`unknown seed "${seed}" (basic, review, threads, showcase, social, stats, dense, none)`);
   if (live && seedIndex >= 0) fail("--seed has no effect with --live, which shows the real board");
-  return { live, seed, desktop };
+  return { live, seed, desktop, prod };
 }
 
 async function start(argv: string[]): Promise<void> {
   // Loaded here so `status` and `stop` don't open SQLite (and print its experimental warning).
   const { isScenarioName, seedDatabase } = await import("../src/dev/seeds.ts");
-  const { live, seed, desktop } = parseArgs(argv, isScenarioName);
+  const { live, seed, desktop, prod } = parseArgs(argv, isScenarioName);
   const existing = readState();
   if (existing && ownedPids(existing).includes(existing.pid)) {
-    // Same checkout, so Vite already hot-reloads its edits: hand back the running one instead of a port clash.
+    // Same checkout: hand back the running one instead of a port clash. A dev sandbox hot-reloads its edits; a
+    // production one serves the build it started with, so asking for the other kind needs a fresh one.
+    if (Boolean(existing.prod) !== prod) {
+      fail(
+        `a ${existing.prod ? "production" : "dev"} sandbox is already running; ` +
+          `run \`pnpm sandbox stop\` first for a ${prod ? "production" : "dev"} one`,
+      );
+    }
     console.log(
-      `[sandbox] already running (${existing.mode}${existing.seed ? `, seed ${existing.seed}` : ""}); ` +
-        "run `pnpm sandbox stop` first for a fresh one",
+      `[sandbox] already running (${existing.mode}${existing.prod ? ", production build" : ""}` +
+        `${existing.seed ? `, seed ${existing.seed}` : ""}); run \`pnpm sandbox stop\` first for a fresh one`,
     );
     console.log(`${READY_PREFIX} ${JSON.stringify(existing)}`);
     if (desktop) await openDesktop(existing).catch((error: Error) => fail(error.message));
@@ -392,6 +403,29 @@ async function start(argv: string[]): Promise<void> {
   };
   process.on("SIGINT", () => shutdown(0));
   process.on("SIGTERM", () => shutdown(0));
+
+  const viteBin = join(
+    dirname(createRequire(join(webDir, "package.json")).resolve("vite/package.json")),
+    "bin",
+    "vite.js",
+  );
+  const viteConfig = join(webDir, "vite.config.ts");
+  // React's development build is several times slower to render, so `--prod` judges performance on a production
+  // build. It goes in the sandbox's home, leaving apps/web/dist alone; `vite preview` reuses the dev server's proxy.
+  // Built before anything starts, so a failed build leaves nothing running.
+  const outDir = join(home, "web-dist");
+  if (prod) {
+    console.log("[sandbox] building the web app for --prod");
+    const build = spawnSync(process.execPath, [viteBin, "build", "--config", viteConfig, "--outDir", outDir], {
+      cwd: webDir,
+      env,
+      stdio: "inherit",
+    });
+    if (build.status !== 0) {
+      removeHome();
+      fail("the production build failed");
+    }
+  }
 
   if (live) {
     try {
@@ -438,12 +472,12 @@ async function start(argv: string[]): Promise<void> {
     );
   }
 
-  const viteBin = join(
-    dirname(createRequire(join(webDir, "package.json")).resolve("vite/package.json")),
-    "bin",
-    "vite.js",
-  );
-  children.push(run("web", [viteBin, "--config", join(webDir, "vite.config.ts")], webDir, env));
+  if (prod) {
+    const args = ["preview", "--config", viteConfig, "--outDir", outDir, "--port", String(webPort), "--strictPort"];
+    children.push(run("web", [viteBin, ...args], webDir, env));
+  } else {
+    children.push(run("web", [viteBin, "--config", viteConfig], webDir, env));
+  }
 
   for (const child of children) {
     child.once("exit", (code) => {
@@ -459,6 +493,7 @@ async function start(argv: string[]): Promise<void> {
     mode: live ? "live" : "isolated",
     startedAt: Date.now(),
     seed: live ? null : seed,
+    ...(prod ? { prod } : {}),
     url,
     serverPort,
     webPort,
@@ -491,4 +526,4 @@ else if (command === "status") {
   else console.log("[sandbox] no sandbox running");
 } else if (command === undefined || command.startsWith("--"))
   await start(command === undefined ? [] : [command, ...rest]);
-else fail(`unknown command "${command}" (stop, status, or flags: --seed <name>, --live, --desktop)`);
+else fail(`unknown command "${command}" (stop, status, or flags: --seed <name>, --live, --desktop, --prod)`);

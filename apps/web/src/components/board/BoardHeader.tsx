@@ -75,12 +75,19 @@ export function BoardHeader({ scopedProjects }: { scopedProjects: ReadonlyArray<
         atRightEdge && "wco:pe-(--workspace-native-controls-inset)",
       )}
     >
-      {isMobile || !open ? <SidebarTrigger variant="ghost-muted" size="icon-sm" aria-label="Toggle sidebar" /> : null}
-      <h1 className="text-sm font-medium">Board</h1>
-      <FiltersActive />
-      <ActiveEpicFilter />
-      <ActiveLabelFilters selected={selectedLabels} onChange={(labels) => void setLabelFilter(labels)} />
-      <div className="ms-auto flex items-center gap-1.5">
+      {isMobile || !open ? (
+        <SidebarTrigger data-vt-left variant="ghost-muted" size="icon-sm" aria-label="Toggle sidebar" />
+      ) : null}
+      <h1 data-vt-left className="text-sm font-medium">
+        Board
+      </h1>
+      {/* One snapshot for the filter chips, which move with the board's left edge as the sidebar slides. */}
+      <div data-vt-left className="flex min-w-0 items-center gap-2">
+        <FiltersActive />
+        <ActiveEpicFilter />
+        <ActiveLabelFilters selected={selectedLabels} onChange={(labels) => void setLabelFilter(labels)} />
+      </div>
+      <div data-vt-move className="ms-auto flex items-center gap-1.5">
         <Tooltip>
           <TooltipTrigger
             render={

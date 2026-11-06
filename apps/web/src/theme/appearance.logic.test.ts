@@ -40,6 +40,12 @@ describe("normalizeAppearancePrefs", () => {
       normalizeAppearancePrefs({ contrast: 500, fontSize: 9, fontSans: 42, fontMono: "x".repeat(300) }),
     ).toMatchObject({ contrast: 200, fontSize: 12, fontSans: "", fontMono: "x".repeat(200) });
   });
+
+  it("keeps a saved board motion and falls back to snapshot motion", () => {
+    expect(normalizeAppearancePrefs({ boardMotion: "reflow" }).boardMotion).toBe("reflow");
+    expect(normalizeAppearancePrefs({}).boardMotion).toBe("snapshot");
+    expect(normalizeAppearancePrefs({ boardMotion: "teleport" }).boardMotion).toBe("snapshot");
+  });
 });
 
 describe("cssFontFamilies", () => {
@@ -61,7 +67,7 @@ describe("appearancePaint", () => {
   it("leaves the stylesheet's defaults alone for default prefs", () => {
     expect(appearancePaint(DEFAULT_APPEARANCE_PREFS, false)).toEqual({
       style: { "--panel-animation-duration": "150ms", "--slide-duration": "450ms" },
-      data: { "panel-animations": "true" },
+      data: { "panel-animations": "true", "board-motion": "snapshot" },
     });
   });
 
@@ -94,7 +100,7 @@ describe("appearancePaint", () => {
   it("animates panels only with a duration and without reduced motion", () => {
     expect(appearancePaint(prefs({ panelAnimationMs: 200 }), false)).toMatchObject({
       style: { "--panel-animation-duration": "200ms", "--slide-duration": "600ms" },
-      data: { "panel-animations": "true" },
+      data: { "panel-animations": "true", "board-motion": "snapshot" },
     });
     expect(appearancePaint(prefs({ panelAnimationMs: 200 }), true).data["panel-animations"]).toBe("false");
   });

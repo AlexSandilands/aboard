@@ -152,6 +152,7 @@ const prefsOf = (s: AppearancePrefs): AppearancePrefs => ({
   contrast: s.contrast,
   glassOpacity: s.glassOpacity,
   panelAnimationMs: s.panelAnimationMs,
+  boardMotion: s.boardMotion,
   fontSans: s.fontSans,
   fontMono: s.fontMono,
   fontSize: s.fontSize,
@@ -446,7 +447,8 @@ export const useSettingsNav = create<SettingsNavState>()((set) => ({
   activeSection: null,
   scrollTarget: null,
   boardReturn: {},
-  setActiveSection: (activeSection) => set({ activeSection }),
+  // Scroll-spy calls this every scroll frame; an unchanged section skips notifying every subscriber.
+  setActiveSection: (activeSection) => set((s) => (s.activeSection === activeSection ? s : { activeSection })),
   requestScroll: (id, highlight = false) =>
     set((s) => ({ scrollTarget: { id, nonce: (s.scrollTarget?.nonce ?? 0) + 1, at: Date.now(), highlight } })),
   setBoardReturn: (boardReturn) => set({ boardReturn }),

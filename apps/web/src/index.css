@@ -666,11 +666,114 @@
   }
 }
 
+/* Smooth board motion (Appearance → Motion; lib/boardMotion.ts). Opening or closing the task panel or the sidebar runs
+   as a View Transition: the board is laid out once, at its new width, and each card, cell, epic band and header moves
+   from its old box to its new one as a snapshot the compositor animates, so it keeps up with a 280 Hz screen. */
+
+/* prepareBoardTransition marks what is on screen with data-vt for the length of the transition only. The name is on the
+   attribute rather than under html:active-view-transition-type(), which would restyle the whole page as it starts. */
+[data-vt] {
+  view-transition-name: match-element;
+  view-transition-class: board;
+}
+
+/* Frames (an epic band and its header) get their own names and stretch with their box instead of moving. */
+[data-vt][data-vt-frame] {
+  view-transition-class: frame;
+}
+
+/* Named all the time: a name does nothing outside a transition. Offcanvas, the sidebar is there in both states, so its
+   snapshot slides between its two places on its own. */
+[data-task-panel] {
+  view-transition-name: task-panel;
+}
+
+[data-slot="sidebar-container"] {
+  view-transition-name: app-sidebar;
+}
+
+/* The live page under the snapshots stays clickable. SLIDE_EASING in lib/slide.logic.ts. */
+::view-transition {
+  --slide-easing: cubic-bezier(0.2, 0.9, 0.25, 1);
+  pointer-events: none;
+}
+
+::view-transition-group(*) {
+  animation-duration: var(--slide-duration);
+  animation-timing-function: var(--slide-easing);
+}
+
+/* What doesn't move (lane lines, the background) doesn't cross-fade. The page underneath is the wider of the two, so
+   the board's scrollbar and lane lines reach the window's edge and the panel or sidebar covers them as it slides,
+   rather than jumping to where it will end up: the old page while opening, the new one while closing. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+html:active-view-transition-type(panel-open, sidebar-open)::view-transition-new(root),
+html:active-view-transition-type(panel-close, sidebar-close)::view-transition-old(root) {
+  visibility: hidden;
+}
+
+/* The groups only move (compositorOnly): each sits at its new size and clips its snapshots, which keep their own. The
+   new snapshot shows from the start and the old one not at all, so a card's text is at its new wrap as it moves and
+   nothing shows twice; a cross-fade looked the same and cost about twice the GPU and compositor work. */
+::view-transition-group(.board) {
+  overflow: clip;
+}
+
+::view-transition-new(.board) {
+  inline-size: auto;
+  block-size: auto;
+  animation: none;
+}
+
+::view-transition-old(.board) {
+  animation: none;
+  opacity: 0;
+}
+
+::view-transition-old(.frame),
+::view-transition-new(.frame) {
+  block-size: 100%;
+}
+
+/* Above the board's snapshots: closing, the panel is only in the old state, which the browser stacks underneath. */
+::view-transition-group(task-panel),
+::view-transition-group(app-sidebar) {
+  z-index: 1;
+}
+
+::view-transition-new(task-panel) {
+  animation: panel-slide-in var(--slide-duration) var(--slide-easing) both;
+}
+
+::view-transition-old(task-panel) {
+  animation: panel-slide-out var(--slide-duration) var(--slide-easing) both;
+}
+
+@keyframes panel-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes panel-slide-out {
+  to {
+    transform: translateX(100%);
+  }
+}
+
 /* App-chrome grain, baked into each surface's own background (behind content)
    rather than a fixed overlay: an overlay forces the compositor to re-blend every
-   frame. Surfaces floating over the body opt in via the surface-grain utility. */
+   frame. Surfaces floating over the body opt in via the surface-grain utility.
+   The tiles are T3 Code's SVG noise (feTurbulence fractalNoise, baseFrequency 0.9,
+   4 octaves, stitched, at 3.5% opacity) drawn once to PNG at 1x and 2x: as an SVG
+   background the filter ran again for every tile the GPU rastered, which was most
+   of the cost of a frame on a large screen (see docs/features/appearance.md#grain). */
 :root {
-  --surface-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  --surface-grain: image-set(url("./assets/grain/grain.png") 1x, url("./assets/grain/grain@2x.png") 2x);
   --surface-grain-size: 256px 256px;
 }
 
@@ -1215,9 +1318,9 @@ html[data-theme-id="t3-chat"] [data-app-sidebar] {
   }
 }
 
-/* T3 Chat's texture: a 128px tile at T3 Chat's strength, as in T3 Code. */
+/* T3 Chat's texture: a 128px tile at T3 Chat's strength (2.745%), as in T3 Code. */
 html[data-theme-id="t3-chat"] {
-  --surface-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 128 128' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.02745'/%3E%3C/svg%3E");
+  --surface-grain: image-set(url("./assets/grain/grain-t3-chat.png") 1x, url("./assets/grain/grain-t3-chat@2x.png") 2x);
   --surface-grain-size: 128px 128px;
 }
 

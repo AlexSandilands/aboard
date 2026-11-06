@@ -32,6 +32,7 @@ export function initAppearance() {
       state.contrast !== prev.contrast ||
       state.glassOpacity !== prev.glassOpacity ||
       state.panelAnimationMs !== prev.panelAnimationMs ||
+      state.boardMotion !== prev.boardMotion ||
       state.fontSans !== prev.fontSans ||
       state.fontMono !== prev.fontMono ||
       state.fontSize !== prev.fontSize

@@ -10,6 +10,8 @@ import { BoardFilterParams } from "@repo/contracts";
 import { z } from "zod";
 import { RunHistorySearch } from "./components/autopilot/runHistory.logic.ts";
 import { AppFrame } from "./components/layout/AppFrame.tsx";
+import { boardSnapshotMotion, prepareBoardTransition, snapshotMotionSupported } from "./lib/boardMotion.ts";
+import { panelTransitionType } from "./lib/boardMotion.logic.ts";
 import { AppLayout } from "./components/layout/AppLayout.tsx";
 import {
   AutopilotRunsPage,
@@ -189,6 +191,20 @@ export const router = createRouter({
     ]),
     ...devRoutes,
   ]),
+  // Smooth board motion (lib/boardMotion.ts): the task panel opening or closing on the board runs as a View
+  // Transition. Any other navigation returns false, which skips the transition.
+  defaultViewTransition: snapshotMotionSupported() && {
+    types: ({ fromLocation, toLocation }) => {
+      if (!boardSnapshotMotion() || fromLocation?.pathname !== "/" || toLocation.pathname !== "/") return false;
+      const type = panelTransitionType(
+        (fromLocation.search as { task?: unknown }).task,
+        (toLocation.search as { task?: unknown }).task,
+      );
+      if (!type) return false;
+      prepareBoardTransition("panel");
+      return [type];
+    },
+  },
 });
 
 declare module "@tanstack/react-router" {
