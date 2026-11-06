@@ -59,6 +59,14 @@ const MOVERS = "[data-task-card], [data-epic-card], [data-vt-move], [data-vt-fra
 const LEFT_EDGE = "[data-vt-left]";
 /** Frames get names of their own, so `compositorOnly` can tell their animations apart and leave them their size. */
 const FRAME_NAME = "vt-frame-";
+/**
+ * Cards change width when the sidebar opens or closes (with the panel closed), and a card that only moved sat at its new
+ * width from the first frame: its right edge jumped, then glided. In a sidebar transition they stretch instead, keeping
+ * their width animation (`compositorOnly`) under names of their own. Only cards: other movers (a column header, an epic
+ * title) have no box of their own to stretch, only text, which would stretch with it.
+ */
+const CARDS = "[data-task-card], [data-epic-card]";
+const STRETCH_NAME = "vt-stretch-";
 
 /** Input that hurries a board transition to its end. */
 const HURRY_EVENTS = ["wheel", "pointerdown", "keydown", "touchstart"] as const;
@@ -82,6 +90,7 @@ export function boardTransitionRunning(): boolean {
 function unname(elements: HTMLElement[]) {
   for (const element of elements) {
     element.removeAttribute("data-vt");
+    element.removeAttribute("data-vt-stretch");
     element.style.viewTransitionName = "";
   }
 }
@@ -106,6 +115,10 @@ export function prepareBoardTransition(kind: "panel" | "sidebar") {
     if (box.width === 0 || box.bottom <= 0 || box.top >= height || box.right <= 0 || box.left >= width) continue;
     element.setAttribute("data-vt", "");
     if (element.hasAttribute("data-vt-frame")) element.style.viewTransitionName = `${FRAME_NAME}${mine.length}`;
+    else if (kind === "sidebar" && element.matches(CARDS)) {
+      element.setAttribute("data-vt-stretch", "");
+      element.style.viewTransitionName = `${STRETCH_NAME}${mine.length}`;
+    }
     mine.push(element);
   }
   const release = () => {
@@ -152,7 +165,7 @@ function animate(transition: ViewTransition) {
  * The browser animates each snapshot's width and height as well as its transform, and width and height run on the main
  * thread: with dozens of cards that restyles every snapshot every frame, slower than laying the board out. Keeping only
  * the transform lets the compositor run it; the groups keep their new size and clip their snapshots (index.css). Frames
- * keep theirs, since they stretch.
+ * keep theirs, since they stretch, and cards in a sidebar transition keep their width (see STRETCH_NAME).
  */
 function compositorOnly(animations: Animation[]) {
   // Every keyframe read first, then every write: a read after a write restyles every snapshot again, which made this
@@ -164,7 +177,13 @@ function compositorOnly(animations: Animation[]) {
     if (!pseudo.startsWith("::view-transition-group(") || pseudo.includes(`(${FRAME_NAME}`)) continue;
     const frames = effect.getKeyframes();
     if (!frames.some((frame) => "width" in frame || "height" in frame)) continue;
-    rewrites.push([effect, frames.map(({ offset, easing, transform }) => ({ offset, easing, transform }))]);
+    const stretches = pseudo.includes(`(${STRETCH_NAME}`);
+    rewrites.push([
+      effect,
+      frames.map(({ offset, easing, transform, width }) =>
+        stretches ? { offset, easing, transform, width } : { offset, easing, transform },
+      ),
+    ]);
   }
   for (const [effect, frames] of rewrites) effect.setKeyframes(frames);
 }
