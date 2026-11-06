@@ -1,8 +1,7 @@
-import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 import { BRAND } from "@repo/contracts";
-import { cmdShimArgs } from "./claudeCli.ts";
-import { killTree, liveGroups, POSIX_GROUPS } from "./processTree.ts";
+import { spawnCli } from "./claudeCli.ts";
+import { killTree, liveGroups } from "./processTree.ts";
 
 // Asking Codex for its models over `codex app-server`, the JSON-RPC server Codex's own clients (and T3 Code) list
 // models with: one JSON message per line on stdin and stdout. The server answers `initialize`, then `model/list` page by
@@ -30,17 +29,7 @@ export function codexModelPages(
 ): Promise<CodexModelPages> {
   const args = [...(opts.args ?? []), "app-server"];
   return new Promise((resolve, reject) => {
-    // .cmd/.bat shims (an npm-installed codex) only run through cmd.exe, which needs its own quoting.
-    const child = /\.(cmd|bat)$/i.test(exe)
-      ? spawn(process.env.ComSpec ?? "cmd.exe", cmdShimArgs(exe, args), {
-          cwd: opts.cwd,
-          env: opts.env,
-          windowsHide: true,
-          windowsVerbatimArguments: true,
-        })
-      : spawn(exe, args, { cwd: opts.cwd, env: opts.env, windowsHide: true, detached: POSIX_GROUPS });
-    const group = POSIX_GROUPS ? child.pid : undefined;
-    if (group !== undefined) liveGroups.add(group);
+    const { child, group } = spawnCli(exe, args, opts);
     // The group stays tracked until the server has really exited, so a server that ignores SIGTERM is still ended
     // with the board; it gets SIGKILL if it outlives the grace period.
     let exited = false;

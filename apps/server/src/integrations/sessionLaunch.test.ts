@@ -481,6 +481,30 @@ describe("starting a session in a new worktree", { timeout: PROCESS_TEST_TIMEOUT
     }
   });
 
+  it("names a Codex session's worktree by its run, with no session to link", async () => {
+    const repo = createGitFixture();
+    try {
+      const app = appWith({
+        repo: repo.checkout,
+        worktrees: repo.worktrees,
+        host: { platform: "linux", which: () => "/usr/bin/xterm", readFile: () => null },
+      });
+      writeFileSync(join(app.root, "bin", "codex"), "");
+      const { status, body } = await app.start({
+        harness: "codex",
+        workspace: { mode: "new_worktree", baseRef: "origin/main" },
+      });
+      expect(status).toBe(201);
+      expect(body).toMatchObject({ launched: true, linkId: null, error: null });
+      expect(body.branch).toMatch(new RegExp(`^${BRAND.id}/1-[0-9a-f]{8}$`));
+      expect(existsSync(body.cwd)).toBe(true);
+      expect(app.spawned[0]!.cwd).toBe(body.cwd);
+      expect(app.sessionLinks()).toEqual([]);
+    } finally {
+      repo.cleanup();
+    }
+  });
+
   it("works on a pull request's own branch to fix it, and only on a branch the task's open PR has", async () => {
     const repo = createGitFixture();
     try {
@@ -595,6 +619,21 @@ describe("starting a planning session from the board", () => {
     // Windows command lines get single quotes for double ones.
     expect(body.shortPrompt).toContain("get_handoff_prompt(tasks: ['#1'], mode: 'plan')");
     expect(sessionLinksOf(app, app.task.id)).toHaveLength(1);
+  });
+
+  it("makes no links for a Codex planning session, and its short prompt asks it to link itself", async () => {
+    const app = appWith();
+    writeFileSync(join(app.root, "bin", "codex"), "");
+    const { status, body } = await plan(app, { harness: "codex", taskIds: [app.task.id] });
+    expect(status).toBe(201);
+    expect(body).toMatchObject({ launched: true, linkId: null, shortPrompt: null });
+    expect(sessionLinksOf(app, app.task.id)).toEqual([]);
+
+    const short = await plan(app, { harness: "codex", taskIds: [app.task.id], prompt: "word ".repeat(2000) });
+    expect(short.body.linkId).toBeNull();
+    // Windows command lines get single quotes for double ones.
+    expect(short.body.shortPrompt).toContain("harness: 'codex', sessionId: $CODEX_THREAD_ID");
+    expect(sessionLinksOf(app, app.task.id)).toEqual([]);
   });
 
   it("points at pasted images where they wait, without giving them to any task", async () => {

@@ -350,8 +350,10 @@ export function useAgentModels(enabled: boolean) {
   return useQuery({ ...agentModelsQuery, enabled });
 }
 
-/** What "Fix in →" starts a session with: the PR's branch and Fix PRs' prompt for its problems now. Read each time. */
-/** A PR's fix prompt; `harness` is the CLI it starts in, as one that picks its own session id is told to link itself. */
+/**
+ * What "Fix in →" starts a session with: the PR's branch and Fix PRs' prompt for its problems now. Read each time.
+ * `harness` is the CLI it starts in, since one that picks its own session id is told to link itself.
+ */
 export function usePrFix(linkId: string | null, harness: AgentHarness | null = null) {
   return useQuery({
     queryKey: queryKeys.prFix(linkId ?? "", harness),

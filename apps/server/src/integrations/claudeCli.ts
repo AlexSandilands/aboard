@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { delimiter, isAbsolute, join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -59,6 +59,29 @@ interface RunResult {
   stderr: string;
 }
 
+/**
+ * Spawns a CLI with piped stdio: through cmd.exe for a .cmd/.bat shim (an npm-installed CLI), which needs its own
+ * quoting, else directly in its own process group on POSIX. The group is registered in `liveGroups`; the caller
+ * removes it once the process has exited.
+ */
+export function spawnCli(
+  exe: string,
+  args: readonly string[],
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv },
+): { child: ChildProcessWithoutNullStreams; group: number | undefined } {
+  const child = /\.(cmd|bat)$/i.test(exe)
+    ? spawn(process.env.ComSpec ?? "cmd.exe", cmdShimArgs(exe, args), {
+        cwd: opts.cwd,
+        env: opts.env,
+        windowsHide: true,
+        windowsVerbatimArguments: true,
+      })
+    : spawn(exe, args, { cwd: opts.cwd, env: opts.env, windowsHide: true, detached: POSIX_GROUPS });
+  const group = POSIX_GROUPS ? child.pid : undefined;
+  if (group !== undefined) liveGroups.add(group);
+  return { child, group };
+}
+
 function run(
   exe: string,
   args: string[],
@@ -72,17 +95,7 @@ function run(
   },
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
-    // .cmd/.bat shims (an npm-installed claude) only run through cmd.exe, which needs its own quoting.
-    const child = /\.(cmd|bat)$/i.test(exe)
-      ? spawn(process.env.ComSpec ?? "cmd.exe", cmdShimArgs(exe, args), {
-          cwd: opts.cwd,
-          env: opts.env,
-          windowsHide: true,
-          windowsVerbatimArguments: true,
-        })
-      : spawn(exe, args, { cwd: opts.cwd, env: opts.env, windowsHide: true, detached: POSIX_GROUPS });
-    const group = POSIX_GROUPS ? child.pid : undefined;
-    if (group !== undefined) liveGroups.add(group);
+    const { child, group } = spawnCli(exe, args, opts);
     let stdout = "";
     let stderr = "";
     // What came after the last newline, for onStdoutLine.
