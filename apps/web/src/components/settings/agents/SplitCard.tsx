@@ -8,7 +8,7 @@ import { SETTINGS_PICKER_WIDTH, SettingsGroup } from "../settingsLayout";
 /**
  * The look of a model picker as a settings control: the field border every other control in a row has, but wider
  * (w-72 against the w-56 of inputs), because a T3 Code catalog name plus its effort ("Claude Sonnet 4.5 Medium")
- * doesn't fit in w-56. The trigger truncates the name before the effort (see ModelsSection).
+ * doesn't fit in w-56.
  */
 export const CONTROL_PICKER = cn(
   "w-full max-w-none justify-between rounded-lg border-input bg-background font-normal text-foreground shadow-xs/5 dark:bg-input/32",
