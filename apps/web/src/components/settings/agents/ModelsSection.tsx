@@ -506,7 +506,7 @@ function T3Control({
   // The picker needs T3 Code's catalog, but clearing a saved model doesn't, so that stays possible while it's away.
   if (!setting.t3) return placeholder;
   return (
-    <span className={cn("flex w-full items-center gap-1", SETTINGS_TEXT_WIDTH)}>
+    <span className={cn("flex w-full items-center gap-1", "@min-[32rem]/settings-row:w-72")}>
       <span className="min-w-0 flex-1 [&>*]:w-full">{placeholder}</span>
       <Button
         size="icon-xs"

@@ -3,15 +3,16 @@
 // providers or models there are: each is a row in a list, never a column.
 import type { ReactNode } from "react";
 import { cn } from "~/lib/utils";
-import { SETTINGS_TEXT_WIDTH, SettingsGroup } from "../settingsLayout";
+import { SettingsGroup } from "../settingsLayout";
 
 /**
- * The look of a model picker as a settings control: the field border and width every other control in a row has, so
- * the pickers share the card's right edge with the inputs and selects around them.
+ * The look of a model picker as a settings control: the field border every other control in a row has, but wider
+ * (w-72 against the w-56 of inputs), because a T3 Code catalog name plus its effort ("Claude Sonnet 4.5 Medium")
+ * doesn't fit in w-56. The trigger truncates the name before the effort (see ModelsSection).
  */
 export const CONTROL_PICKER = cn(
   "w-full max-w-none justify-between rounded-lg border-input bg-background font-normal text-foreground shadow-xs/5 dark:bg-input/32",
-  SETTINGS_TEXT_WIDTH,
+  "@min-[32rem]/settings-row:w-72",
 );
 
 export function SplitCard({ list, children }: { list: ReactNode; children: ReactNode }) {
