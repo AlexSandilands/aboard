@@ -7,7 +7,9 @@ import { TooltipProvider } from "./components/ui/tooltip.tsx";
 import { initTheme } from "./hooks/useTheme.ts";
 import { captureTokenFromHash } from "./lib/api.ts";
 import { syncDocumentWindowControlsOverlayClass } from "./lib/windowControlsOverlay.ts";
+import { restoredProjectScope } from "./components/board/projectScope.logic.ts";
 import { router } from "./router.tsx";
+import { useProjectScope } from "./state/ui.ts";
 import { initAppearance } from "./theme/appearance.ts";
 import "./index.css";
 
@@ -15,6 +17,21 @@ captureTokenFromHash();
 syncDocumentWindowControlsOverlayClass();
 initTheme();
 initAppearance();
+
+restoreProjectScope();
+
+/**
+ * The desktop shell always loads the bare board URL, so a restart would drop the project scope. Before the first
+ * render, a bare board takes the scope remembered last time; after that the URL rules (`useRememberProjectScope`).
+ */
+function restoreProjectScope() {
+  const { pathname, search } = router.state.location;
+  const project = restoredProjectScope(pathname, search, useProjectScope.getState().projectIds);
+  if (!project) return;
+  const params = new URLSearchParams(window.location.search);
+  params.set("project", project);
+  router.history.replace(`${pathname}?${params}${window.location.hash}`);
+}
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: Infinity, refetchOnWindowFocus: false, retry: 1 } },

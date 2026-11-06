@@ -1,6 +1,7 @@
-import { Outlet, useLocation, useNavigate, useRouter } from "@tanstack/react-router";
+import { Outlet, useLocation, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
-import { restoredProjectScope } from "~/components/board/projectScope.logic";
+import { scopeToRemember } from "~/components/board/projectScope.logic";
+import { useProjectIds } from "~/state/queries";
 import { useProjectScope } from "~/state/ui";
 import { useCloseTask, useProjectFilter, useSelectedTaskId } from "~/components/board/boardNavigation";
 import { SettingsSidebar, useSettingsBack } from "~/components/settings/SettingsShell";
@@ -16,7 +17,7 @@ import { AppShell } from "./AppShell";
  * what Esc does change.
  */
 export function AppFrame() {
-  useRestoreProjectScope();
+  useRememberProjectScope();
   const inSettings = useLocation({ select: (location) => location.pathname.startsWith("/settings") });
   const taskId = useSelectedTaskId();
   const closeTask = useCloseTask();
@@ -56,22 +57,20 @@ function CloseSheetOnSwitch({ inSettings }: { inSettings: boolean }) {
   return null;
 }
 
-/** Whether this page load has already had its chance to restore the remembered scope. */
-let scopeRestoreTried = false;
-
 /**
- * On the first load only, a bare board URL takes the project scope remembered last time: the desktop shell always
- * starts on it, so without this every restart would drop the scope. After that the URL rules, so a later trip to
- * "/" (the logo, a notification) is not rewritten.
+ * Keeps the project scope the URL shows for the next start (see `restoredProjectScope`, applied in main.tsx). Reading
+ * the URL rather than hooking each place that sets the scope covers the project menu, the palette, saved views and
+ * Back alike.
  */
-function useRestoreProjectScope() {
-  const router = useRouter();
-  const navigate = useNavigate();
+function useRememberProjectScope() {
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const project = useSearch({ strict: false, select: (search) => search.project });
+  const inprogress = useSearch({ strict: false, select: (search) => search.inprogress });
+  const order = useProjectIds();
   useEffect(() => {
-    if (scopeRestoreTried) return;
-    scopeRestoreTried = true;
-    const { pathname, search } = router.state.location;
-    const project = restoredProjectScope(pathname, search, useProjectScope.getState().projectIds);
-    if (project) void navigate({ to: "/", replace: true, search: (prev) => ({ ...prev, project }) });
-  }, [router, navigate]);
+    const ids = scopeToRemember(pathname, { project, inprogress }, order);
+    if (!ids) return;
+    const { projectIds, setProjectIds } = useProjectScope.getState();
+    if (ids.join(",") !== projectIds.join(",")) setProjectIds(ids);
+  }, [pathname, project, inprogress, order]);
 }

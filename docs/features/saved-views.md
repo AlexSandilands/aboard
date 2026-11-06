@@ -65,13 +65,15 @@ with the board's projects), and the board writes the ids in lane order (`formatP
 same URL. A saved view keeps whatever order it was saved in, and `sameFilters` compares the ids as a set, so a view
 still matches the board when the order differs.
 
-The scope survives a restart. The URL stays the source of truth while the app runs; the last scope is also kept in this
-browser (`useProjectScope`, localStorage key `project-scope`, written by `useSetProjectScope` and by applying a saved
-view, cleared by **All projects**). The desktop shell always loads the bare board URL, so on the first load of a page
-only (`useRestoreProjectScope` in `AppFrame`), a bare `/` is replaced with the remembered `?project=`
-(`restoredProjectScope`). A URL's own `?project=` wins, so do `?inprogress=` (which looks across every project) and
-any page other than the board, and later trips to `/` (the logo, a notification) are not rewritten. It is per browser,
-not a server setting, and the other filters still reset on restart.
+The scope survives a restart. The URL stays the source of truth while the app runs; whatever scope the board's URL shows
+is also kept in this browser (`useProjectScope`, localStorage key `project-scope`, written by `useRememberProjectScope`
+in `AppFrame`). It follows the URL rather than each place that sets the scope, so the project menu, the palette, a saved
+view and Back all count, **All projects** forgets it, and ids of deleted projects are dropped once the board has loaded.
+The in-progress filter and other pages leave it alone. The desktop shell always loads the bare board URL, so before
+the first render (`main.tsx`) a bare `/` is replaced with the remembered `?project=` (`restoredProjectScope`). A URL's
+own `?project=` wins, and so does `?inprogress=`, which looks across every project. Later trips to `/` (the logo, a
+notification) are not rewritten, and they show, and so remember, the whole board. It is per browser, not a server
+setting, and the other filters still reset on restart.
 
 The project menu is the one place the scope is shown and changed: the board header keeps its "Board" title and the
 menu's button keeps its filter icon. The sidebar's Projects list shows only the ticked projects

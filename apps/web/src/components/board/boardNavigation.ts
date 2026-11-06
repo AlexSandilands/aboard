@@ -4,7 +4,7 @@ import { useCallback, useMemo } from "react";
 import { formatLabelFilter, parseLabelFilter } from "~/components/labels/labels.logic";
 import type { BoardSearch } from "~/router";
 import { useProjectIds } from "~/state/queries";
-import { useProjectScope, useReveal, useSettingsNav } from "~/state/ui";
+import { useReveal, useSettingsNav } from "~/state/ui";
 import { clearedParams, FILTER_PARAM_KEYS, filterParams, readFilters, type FilterState } from "./boardFilters.logic";
 
 /**
@@ -140,22 +140,15 @@ export function useResetFilters() {
   );
 }
 
-/** Keeps the board's project scope (a `?project=` value, none for every project) for the next start. */
-function rememberProjectScope(project: string | undefined) {
-  useProjectScope.getState().setProjectIds(parseProjectScope(project));
-}
-
 /** Replaces the board's filters, the project scope included, with a saved view's. The open task stays. */
 export function useApplyFilterParams() {
   const navigate = useNavigate();
   return useCallback(
-    (params: BoardFilterParams) => {
-      rememberProjectScope(params.project);
-      return navigate({
+    (params: BoardFilterParams) =>
+      navigate({
         to: "/",
         search: (prev) => ({ ...boardSearchFrom(prev), ...clearedParams(), project: undefined, ...params }),
-      });
-    },
+      }),
     [navigate],
   );
 }
@@ -167,7 +160,6 @@ export function useSetProjectScope() {
   return useCallback(
     (projectIds: ReadonlyArray<string>) => {
       const project = order ? formatProjectScope(projectIds, order) : projectIds.join(",") || undefined;
-      rememberProjectScope(project);
       return navigate({
         to: "/",
         // The in-progress filter looks across every project, so choosing some ends it.
