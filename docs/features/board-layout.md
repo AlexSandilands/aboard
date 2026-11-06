@@ -396,7 +396,7 @@ providers, tiers and custom models are each a row in a list, however many there 
   CLIs again. Which item a target names and what the list says is `agents/agents.logic.ts`.
 - **Operations** (`agents.operations`, `agents/OperationsSection.tsx`): the board's model for each operation in
   `OPERATIONS`, in cards for Review, Autopilot and Board tools (`OPERATION_GROUPS`, `operations.logic.ts`), a row each
-  (`agents.operations.<op>`). The picker offers **Default** (nothing saved: the operation's default), the task's own
+  (`agents.operations.<op>`), whose one line is what it resolves to, with what the operation is behind its ⓘ. The picker offers **Default** (nothing saved: the operation's default), the task's own
   model where that differs from the default (saved as `inherit`), the tiers, the custom models and any provider's
   model. The line under it is the resolver run in the browser (`resolvesTo`): what runs it now and why, the resolver's
   notes, or why nothing can. With no CLI provider added and switched on (`activeProviderIds`) nothing can run, so the

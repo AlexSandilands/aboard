@@ -1,7 +1,14 @@
 // Settings → Agents → Operations: the model each operation runs on, with the picker in the same field look as the
 // rest of the page. While no provider can run anything the rows are dimmed behind one notice instead of a warning on
 // each.
-import { activeProviderIds, AGENT_HARNESSES, OPERATIONS, type AppSettings, type OperationId } from "@repo/contracts";
+import {
+  activeProviderIds,
+  AgentHarness,
+  OPERATIONS,
+  PROVIDERS,
+  type AppSettings,
+  type OperationId,
+} from "@repo/contracts";
 import { CircleAlertIcon, TerminalIcon } from "lucide-react";
 import { resolvesTo } from "~/components/models/choicePicker.logic";
 import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
@@ -18,7 +25,7 @@ import { useUpdateSettings } from "~/state/mutations";
 import { SettingsRow, SettingsSection, SettingsSubsection } from "../settingsLayout";
 import { CONTROL_PICKER } from "./SplitCard";
 
-const HEADLESS_LABELS = Object.values(AGENT_HARNESSES).map((h) => h.label);
+const HEADLESS_LABELS = AgentHarness.options.map((h) => PROVIDERS[h].label);
 
 /**
  * The model each operation runs on, at board level, with the line saying what that comes down to now. A project, a
@@ -82,7 +89,8 @@ function OperationRow({ op, settings, quiet }: { op: OperationId; settings: AppS
     <SettingsRow
       id={operationTarget(op)}
       title={OPERATIONS[op].label}
-      description={OPERATION_DESCRIPTIONS[op]}
+      info={OPERATION_DESCRIPTIONS[op]}
+      description={quiet ? OPERATION_DESCRIPTIONS[op] : undefined}
       status={
         quiet ? null : line.ok ? (
           <span className="block">

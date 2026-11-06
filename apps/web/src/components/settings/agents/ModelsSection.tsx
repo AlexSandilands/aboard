@@ -3,7 +3,7 @@
 // provider with the model it runs there, and which CLI headless runs prefer. A provider is a row, so six fit as well
 // as two.
 import {
-  AGENT_HARNESSES,
+  PROVIDERS,
   AgentHarness,
   MODEL_PROFILES_MAX,
   MODEL_TIERS,
@@ -16,7 +16,7 @@ import {
   type T3ModelCatalog,
   type T3ModelSelection,
 } from "@repo/contracts";
-import { ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, PlusIcon, RefreshCwIcon, XIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { selectionLabel } from "~/components/handoff/handoff.logic";
 import { ComposerControl } from "~/components/handoff/T3LaunchPickers";
@@ -408,7 +408,7 @@ function ModelRows({
                   model={setting.cli?.[provider] ?? ""}
                   effort={setting.cliEffort?.[provider] ?? null}
                   defaultLabel="Default model"
-                  ariaLabel={`${name} ${AGENT_HARNESSES[provider].label} model`}
+                  ariaLabel={`${name} ${PROVIDERS[provider].label} model`}
                   size="sm"
                   className={CONTROL_PICKER}
                   onModel={(value: string | null, levels: readonly CliEffort[]) =>
@@ -429,7 +429,7 @@ function ModelRows({
             info="A headless run (an Autopilot task, the board reviewer, PR review, the digest) needs a CLI. It runs on this one when it can do what the run needs, else on the first provider in your list that can."
             control={
               <Select
-                items={choices.map((harness) => ({ value: harness, label: AGENT_HARNESSES[harness].label }))}
+                items={choices.map((harness) => ({ value: harness, label: PROVIDERS[harness].label }))}
                 value={preferred}
                 onValueChange={(value) => {
                   const harness = AgentHarness.safeParse(value);
@@ -444,7 +444,7 @@ function ModelRows({
                     <SelectItem key={harness} value={harness}>
                       <span className="flex items-center gap-2">
                         <PickerIcon icon={{ kind: "harness", harness }} />
-                        {AGENT_HARNESSES[harness].label}
+                        {PROVIDERS[harness].label}
                       </span>
                     </SelectItem>
                   ))}
@@ -486,7 +486,7 @@ function T3Control({
     );
   }
   const label = t3PlaceholderLabel(providers.t3Ready, providers.catalogError, setting.t3?.label);
-  return (
+  const placeholder = (
     <ComposerControl
       size="sm"
       disabled
@@ -499,5 +499,21 @@ function T3Control({
       </span>
       <ChevronDownIcon aria-hidden className="-me-1 size-3.5 opacity-60" />
     </ComposerControl>
+  );
+  // The picker needs T3 Code's catalog, but clearing a saved model doesn't, so that stays possible while it's away.
+  if (!setting.t3) return placeholder;
+  return (
+    <span className={cn("flex w-full items-center gap-1", SETTINGS_TEXT_WIDTH)}>
+      <span className="min-w-0 flex-1 [&>*]:w-full">{placeholder}</span>
+      <Button
+        size="icon-xs"
+        variant="ghost-muted"
+        aria-label={`Reset ${name} T3 Code model to the default`}
+        title="Use T3 Code's default"
+        onClick={() => onChange({ field: "t3", value: null })}
+      >
+        <XIcon />
+      </Button>
+    </span>
   );
 }
