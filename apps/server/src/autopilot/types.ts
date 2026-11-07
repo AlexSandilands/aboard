@@ -213,6 +213,8 @@ export interface RunnerRequest {
    * that works through the board (Orchestrate). Narrow the board's tools with `deniedTools`.
    */
   boardTools?: boolean;
+  /** With `boardTools`: the actor the board records the run's writes under, whatever the agent passes as `actor`. */
+  boardActor?: string;
   /**
    * Headless only: the board's run tools for this run (docs/decisions/0013-board-served-run-tools.md). The runner mints
    * a token bound to the run and this scope before the agent starts, points the CLI at `/mcp/run` with it, and revokes

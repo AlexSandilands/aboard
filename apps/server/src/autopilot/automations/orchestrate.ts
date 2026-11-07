@@ -114,6 +114,9 @@ export const ORCHESTRATE_DENIED_BOARD_TOOLS = [
   "list_editable_prompts",
   "get_editable_prompt",
   "suggest_change",
+  // Registered only while the social network setting is on, so a completeness check run without it can't see them.
+  "social_read",
+  "social_post",
   // Orchestrating never needs to set up an automation for the user.
   "draft_automation",
   // Merging is Merge ready PRs' job, which needs no agent; Orchestrate only reports what looks ready.

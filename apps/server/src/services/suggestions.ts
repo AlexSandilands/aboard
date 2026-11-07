@@ -76,7 +76,21 @@ export interface SuggestionsService {
    */
   accept(id: string, actor: string): Suggestion;
   reject(id: string, actor: string): Suggestion;
+  /**
+   * Holds one run to its limits after the fact, for a run that can't be held to them by its tools (Improve
+   * automations). Looks only at the open suggestions made under `runActor`, oldest first: those whose target
+   * `allowed` refuses are rejected, then those past the first `max`. Each is rejected as `by`, with an outcome saying
+   * why, so it isn't read as the user's verdict. Returns what stays open and what it rejected.
+   */
+  limitRun(
+    runActor: string,
+    limits: { max: number; allowed: (targetKey: string) => boolean },
+    by: string,
+  ): { kept: Suggestion[]; dropped: Suggestion[] };
 }
+
+/** What a suggestion replaced by a newer one for its target records. */
+const SUPERSEDED_OUTCOME = "Replaced by a newer suggestion for the same target.";
 
 export function createSuggestionsService(
   core: Core,
@@ -327,9 +341,7 @@ export function createSuggestionsService(
       return core.write((fx) => {
         const now = nowIso();
         const previous = repos.suggestions.openFor(prompt.key);
-        const replaced = previous
-          ? close(previous, "superseded", actor, "Replaced by a newer suggestion for the same target.")
-          : null;
+        const replaced = previous ? close(previous, "superseded", actor, SUPERSEDED_OUTCOME) : null;
         const suggestion: Suggestion = {
           id: randomUUID(),
           targetKey: prompt.key,
@@ -396,6 +408,48 @@ export function createSuggestionsService(
 
     reject(id, actor) {
       return close(open(id), "rejected", actor, null);
+    },
+
+    limitRun(runActor, { max, allowed }, by) {
+      const made = repos.suggestions.list(0).filter((s) => s.status === "open" && s.actor === runActor);
+      const kept: Suggestion[] = [];
+      const dropped: Suggestion[] = [];
+      for (const s of made) {
+        const why = !allowed(s.targetKey)
+          ? "Not a kind of target this automation is set to suggest changes to."
+          : kept.length >= max
+            ? `Over the limit of ${max} suggestions for one run, so it was dropped.`
+            : null;
+        if (!why) {
+          kept.push(s);
+          continue;
+        }
+        core.write((fx) => {
+          dropped.push(close(s, "rejected", by, why));
+          // It had replaced the target's open suggestion, which was fine as it stood: bring that one back, if
+          // nothing else is open for the target now.
+          const replaced = repos.suggestions
+            .forTarget(s.targetKey, 10)
+            .find(
+              (o) =>
+                o.status === "superseded" &&
+                o.resolvedBy === runActor &&
+                o.actor !== runActor &&
+                o.outcome === SUPERSEDED_OUTCOME,
+            );
+          if (replaced && !repos.suggestions.openFor(s.targetKey)) {
+            repos.suggestions.update({
+              ...replaced,
+              status: "open",
+              resolvedAt: null,
+              resolvedBy: null,
+              outcome: null,
+            });
+            fx.suggestions();
+          }
+        });
+      }
+      return { kept, dropped };
     },
   };
 }

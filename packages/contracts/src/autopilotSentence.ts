@@ -1,4 +1,5 @@
 import {
+  AUTOPILOT_IMPROVE,
   AUTOPILOT_ORCHESTRATE,
   AUTOPILOT_START_PLANNED,
   AUTOPILOT_UNSTICK,
@@ -9,7 +10,7 @@ import { AUTOPILOT_DIGEST } from "./digest.ts";
 import { describeCustomTrigger, type CustomDefinition } from "./customAutomations.ts";
 import { AUTOPILOT_MERGE_EPIC_PRS } from "./delivery.ts";
 import { AUTOPILOT_FIX_PRS, AUTOPILOT_REVIEW_PRS } from "./prReview.ts";
-import { AUTOPILOT_RECURRING } from "./recurring.ts";
+import { AUTOPILOT_RECURRING, WEEKDAY_NAMES } from "./recurring.ts";
 
 // One sentence per automation, read from its effective config, for the top of its detail in Settings → Autopilot:
 // what it watches for and what it does, in the words the user would use. Pure, so the web and tests share it.
@@ -77,6 +78,8 @@ export function automationSentence(
       return `When a Planned task is flagged for Autopilot, has a plan and nothing blocks it, start an agent on it following ${skillPhrase(config.skill, "the default workflow")}.`;
     case AUTOPILOT_ORCHESTRATE:
       return `Every ${plural(num(config, "everyMinutes", 30), "minute")}, if a project has work in flight, an agent looks it over: nudges or restarts stalled threads, retries failed runs, lists what's ready to merge and flags what needs you.`;
+    case AUTOPILOT_IMPROVE:
+      return `Every ${WEEKDAY_NAMES[Number(str(config, "weekday", "1"))] ?? "Monday"} at ${str(config, "time", "07:00")}, an agent reads the last ${plural(num(config, "lookBackDays", 7), "day")} of runs, failures and review rounds and suggests up to ${plural(num(config, "maxSuggestions", 3), "change")} to the prompts and skills agents run with. Nothing changes until you accept it in Settings → Suggestions.`;
     case AUTOPILOT_REVIEW_PRS: {
       const rounds = `, up to ${plural(num(config, "rounds", 3), "round")} per PR`;
       const drafts = config.reviewDrafts === true ? " (drafts too)" : "";
