@@ -139,7 +139,7 @@ export function AutomationField({
     companions.length === 0 ? (
       own
     ) : (
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="flex min-w-0 items-center gap-2 @min-[32rem]/settings-row:justify-end">
         {companions.map((companion) => (
           <FieldControl
             key={`${companion.key}:${rejected}`}

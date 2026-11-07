@@ -827,7 +827,8 @@ function AgentDefaultsLine({
               defaults={{ value: fieldDefault(automation, f, agentDefaults) }}
               // Resetting one field keeps the others open, even when it was the last one set here.
               onReset={() => setOverriding(true)}
-              className="ps-6 sm:ps-8"
+              // Tinted rather than indented: an indent would narrow the row past its breakpoint in a narrow pane.
+              className="rounded-none bg-muted/25"
             />
           ))
         : null}

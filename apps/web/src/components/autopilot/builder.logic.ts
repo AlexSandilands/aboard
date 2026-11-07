@@ -115,6 +115,11 @@ function listPhrase(items: readonly string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
 }
 
+/** Up to three projects by name, the rest counted, so a long pick can't swallow the sentence. */
+function projectsPhrase(names: readonly string[]): string {
+  return names.length <= 3 ? listPhrase(names) : `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
+}
+
 /**
  * The automation as one sentence, as far as it is filled in: when, what, and where. Read on every step, so it says
  * something sensible before the prompt is written or while a number is half-typed.
@@ -144,7 +149,7 @@ export function formSentence(form: CustomForm, projects: readonly Pick<Project, 
   const where = form.everywhere
     ? "in every project"
     : named.length > 0
-      ? `in ${listPhrase(named)}`
+      ? `in ${projectsPhrase(named)}`
       : "in no project yet";
   const narrowed: string[] = [];
   if (form.triggerKind !== "schedule") {
