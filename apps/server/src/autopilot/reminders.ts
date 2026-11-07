@@ -1,4 +1,12 @@
-import { AUTOPILOT_ACTOR, UNSTICK_STALE_PREFIX, UNSTICK_WAITING_PREFIX, implementingThread } from "@repo/contracts";
+import {
+  AUTOPILOT_ACTOR,
+  AUTOPILOT_UNBLOCK_DEPENDENTS,
+  AUTOPILOT_UNSTICK,
+  UNSTICK_STALE_PREFIX,
+  UNSTICK_WAITING_PREFIX,
+  implementingThread,
+  type NotifyInput,
+} from "@repo/contracts";
 import type { Services } from "../services/types.ts";
 
 const MINUTE_MS = 60_000;
@@ -22,14 +30,26 @@ const duration = (ms: number): string => {
  * so they are notification settings, not automations; Pause all doesn't hold them back either (they only tell the
  * user), and quiet hours only keep their popups quiet. They come from the Unstick and Unblock dependents automations,
  * which lived in the catalogue until then, with the same detection and dedupe keys, so a state they had already
- * reported isn't reported again.
+ * reported (a run under the same key) isn't reported again.
  *
  * A reminder also leaves a note on the task as the Autopilot actor. Autopilot's own entries aren't activity, or the
  * note would end the quiet period it reports. Dedupe keys carry the moment the quiet period or the wait began (or the
- * latest blocker finished), so each is reported once; the note is added only when the notification was.
+ * latest blocker finished), so each is reported once; the note is added only when the notification was. The key lives
+ * in the notification, which is pruned after NOTIFICATION_RETENTION_DAYS, so a task that stays quiet or a thread that
+ * keeps waiting for longer than that is reminded of once more, with another note, each time.
  */
 export function sendReminders(services: Services, now: Date): void {
   const { kinds } = services.settings.get().notifications;
+  /**
+   * Sends one reminder, and adds the note when it was new. A state the retired automation already reported has a run
+   * under the same key, and its notification may never have been stored (it was `autopilot_notice`, off by default),
+   * so the runs count as seen too. Checking first keeps a reminder already sent from opening a write every pass.
+   */
+  const remind = (legacy: string, taskId: string, input: NotifyInput, note: string) => {
+    if (services.notifications.has(input.dedupeKey) || services.autopilot.hasRun(legacy, input.dedupeKey, false))
+      return;
+    if (services.notifications.notify({ ...input, taskId })) services.tasks.addNote(taskId, note, AUTOPILOT_ACTOR);
+  };
   const quiet = kinds.task_quiet;
   const waited = kinds.thread_waited;
   const unblocked = kinds.task_unblocked;
@@ -43,24 +63,24 @@ export function sendReminders(services: Services, now: Date): void {
         .filter((t) => t.kind !== "epic" && !t.manual);
       for (const t of inProgress) {
         if (quiet) {
-          const lastActivityAt = services.tasks
-            .detail(t.id)
-            .events.filter((e) => e.actor !== AUTOPILOT_ACTOR)
-            .map((e) => e.at)
-            .concat(t.statusChangedAt)
+          const lastActivityAt = [services.tasks.lastActivityAt(t.id, AUTOPILOT_ACTOR), t.statusChangedAt]
+            .filter((at): at is string => at !== null)
             .sort()
             .at(-1)!;
           const ms = now.getTime() - Date.parse(lastActivityAt);
           if (ms >= QUIET_AFTER_MS) {
             const message = `${UNSTICK_STALE_PREFIX} ${duration(ms)}`;
-            const sent = services.notifications.notify({
-              kind: "task_quiet",
-              taskId: t.id,
-              title: `#${t.number} has gone quiet`,
-              body: `${message}: “${t.title}”.`,
-              dedupeKey: `stale:${t.id}:${lastActivityAt}`,
-            });
-            if (sent) services.tasks.addNote(t.id, message, AUTOPILOT_ACTOR);
+            remind(
+              AUTOPILOT_UNSTICK,
+              t.id,
+              {
+                kind: "task_quiet",
+                title: `#${t.number} has gone quiet`,
+                body: `${message}: “${t.title}”.`,
+                dedupeKey: `stale:${t.id}:${lastActivityAt}`,
+              },
+              message,
+            );
           }
         }
         const thread = implementingThread(t);
@@ -75,14 +95,17 @@ export function sendReminders(services: Services, now: Date): void {
           const ms = now.getTime() - Date.parse(snapshot.lastActivityAt);
           if (ms >= WAITING_AFTER_MS) {
             const message = `${UNSTICK_WAITING_PREFIX} ${duration(ms)}`;
-            const sent = services.notifications.notify({
-              kind: "thread_waited",
-              taskId: t.id,
-              title: `#${t.number} is waiting for you`,
-              body: `${message}: “${t.title}”.`,
-              dedupeKey: `waiting:${thread.id}:${snapshot.lastActivityAt}`,
-            });
-            if (sent) services.tasks.addNote(t.id, message, AUTOPILOT_ACTOR);
+            remind(
+              AUTOPILOT_UNSTICK,
+              t.id,
+              {
+                kind: "thread_waited",
+                title: `#${t.number} is waiting for you`,
+                body: `${message}: “${t.title}”.`,
+                dedupeKey: `waiting:${thread.id}:${snapshot.lastActivityAt}`,
+              },
+              message,
+            );
           }
         }
       }
@@ -112,14 +135,17 @@ export function sendReminders(services: Services, now: Date): void {
         // or a Done task is attached as a blocker).
         if (Date.parse(lastDoneAt) < since) continue;
         const names = blockers.map((b) => `#${b.number}${b.resolution === "wont_do" ? " (won't do)" : ""}`).join(", ");
-        const sent = services.notifications.notify({
-          kind: "task_unblocked",
-          taskId: t.id,
-          title: `#${t.number} is unblocked`,
-          body: `${names} finished, so “${t.title}” has nothing left blocking it.`,
-          dedupeKey: `unblock:${t.id}:${lastDoneAt}`,
-        });
-        if (sent) services.tasks.addNote(t.id, `Unblocked: ${names} finished`, AUTOPILOT_ACTOR);
+        remind(
+          AUTOPILOT_UNBLOCK_DEPENDENTS,
+          t.id,
+          {
+            kind: "task_unblocked",
+            title: `#${t.number} is unblocked`,
+            body: `${names} finished, so “${t.title}” has nothing left blocking it.`,
+            dedupeKey: `unblock:${t.id}:${lastDoneAt}`,
+          },
+          `Unblocked: ${names} finished`,
+        );
       }
     }
   }

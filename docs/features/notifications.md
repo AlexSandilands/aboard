@@ -37,7 +37,11 @@ for them on the Autopilot engine's pass (every minute and after board events), b
 are never held back by it, and quiet hours only mute their pop-ups like any notification. Each runs only while its switch
 is on, in every project (it has no Autopilot scope), and adds a note under the actor `autopilot` ("Stale: no activity
 for 26h", "Thread waiting for input for 45m", "Unblocked: #12 finished") when the notification was new. Those notes
-aren't activity, or the note would end the quiet period it reports. They were the Remind me about stuck tasks
+aren't activity, or the note would end the quiet period it reports. A reminder is skipped when a notification with its
+dedupe key exists, or when the retired automation has a run under that key (its notices were `autopilot_notice`, off by
+default, so they may never have been stored), so an upgrade doesn't repeat what was already reported. The key lives in
+the notification, which is pruned after 30 days: a task left quiet, or a thread left waiting, longer than that is
+reminded of once more, with another note, each month. They were the Remind me about stuck tasks
 (`unstick`) and Unblock dependents (`unblock_dependents`) automations, with the same detection and dedupe keys; the
 two keys stay in `RETIRED_AUTOMATION_TITLES` so their old runs show a plain name. `board_activity` and the stats read
 the stalls from these notifications as well as from those old runs. Migration `043_reminder_notifications` set the

@@ -101,6 +101,11 @@ describe("recurring tasks", () => {
     expect(() => s.autopilot.setScope("project", project.id, AUTOPILOT_RECURRING, { mode: "off" })).toThrow(
       /no switch/,
     );
+    // It is not reported as switched on at any scope either, so a lane's pill doesn't read On because of it.
+    expect(s.autopilot.scope("project", project.id).find((e) => e.automation === AUTOPILOT_RECURRING)).toMatchObject({
+      mode: "inherit",
+      enabled: false,
+    });
     const r = rule({});
     await pass(at(12, 9, 1));
     expect(tasks()).toHaveLength(1);

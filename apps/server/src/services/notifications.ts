@@ -34,6 +34,8 @@ export interface NotificationsService {
    * during quiet hours is recorded but sent without a popup.
    */
   notify(input: NotifyInput): InboxNotification | null;
+  /** Whether a notification with this dedupe key exists (read or not), so a producer can skip `notify`'s write. */
+  has(dedupeKey: string): boolean;
   /** Newest first, with the unread count across all of them (not just this page). */
   list(opts?: { kind?: NotificationKind; limit?: number }): NotificationList;
   markRead(id: string): InboxNotification;
@@ -92,6 +94,8 @@ export function createNotificationsService(core: Core): NotificationsService {
     },
 
     list,
+
+    has: (dedupeKey) => repos.notifications.hasKey(dedupeKey),
 
     markRead(id) {
       return core.write((fx) => {

@@ -394,6 +394,8 @@ export function createTasksService(
 
     summary: (id) => assembleOne(id).summary,
 
+    lastActivityAt: (id, exceptActor) => repos.events.lastAtExcept(id, exceptActor),
+
     detail(id): TaskDetail {
       const { record: task, summary, phases, reviews } = assembleOne(id);
       return {

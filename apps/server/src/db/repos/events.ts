@@ -63,6 +63,16 @@ export function createEventsRepo(sql: Sql) {
         )?.n ?? 0
       );
     },
+    /** When the latest event not by `actor` happened, or null when there is none. */
+    lastAtExcept(taskId: string, actor: string): string | null {
+      return (
+        sql.get<{ at: string | null }>(
+          "SELECT MAX(at) AS at FROM task_events WHERE task_id = ? AND actor <> ?",
+          taskId,
+          actor,
+        )?.at ?? null
+      );
+    },
     /** The most recent `limit` events for a task, oldest first. */
     recent(taskId: string, limit: number): TaskEvent[] {
       return sql

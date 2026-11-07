@@ -79,6 +79,24 @@ describe("reminders", () => {
       expect(sent("task_quiet")).toHaveLength(2);
     });
 
+    it("doesn't repeat what the retired Unstick automation reported, though its notice was never stored", async () => {
+      const { s, working, pass, sent, notes } = setup();
+      const task = working();
+      const at = [s.tasks.lastActivityAt(task.id, "autopilot"), s.tasks.summary(task.id).statusChangedAt]
+        .filter((a): a is string => a !== null)
+        .sort()
+        .at(-1)!;
+      // An upgrade: the old automation ran for this quiet period, and left a run but no notification.
+      s.autopilot.record({
+        automation: "unstick",
+        candidate: { dedupeKey: `stale:${task.id}:${at}`, summary: "flag", taskId: task.id },
+        dryRun: false,
+      });
+      await pass(26 * HOUR_MS);
+      expect(sent("task_quiet")).toEqual([]);
+      expect(notes(task.id)).toEqual([]);
+    });
+
     it("leaves manual tasks, epics and tasks that aren't In Progress alone", async () => {
       const { s, project, working, pass, sent } = setup();
       s.tasks.update(working("Mine").id, { manual: true }, "user");
@@ -87,7 +105,7 @@ describe("reminders", () => {
       expect(sent("task_quiet")).toEqual([]);
     });
 
-    it("sends nothing while the setting is off, and not for what it would have found when it is switched on", async () => {
+    it("sends nothing while the setting is off, and reports what is still quiet once it is switched on", async () => {
       const { s, working, pass, sent, notes } = setup();
       const task = working();
       s.settings.update({ notifications: { kinds: { task_quiet: false } } });

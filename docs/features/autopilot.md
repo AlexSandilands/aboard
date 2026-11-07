@@ -291,8 +291,9 @@ config (24 hours quiet and 30 minutes waiting are fixed, as their labels say), a
 turned each switch on where its automation was effectively on, and dropped the automations' `autopilot_settings` rows.
 
 **Recurring tasks** (`recurring`, #89; `automations/recurring.ts`). Needs no agent and has no switch: it is `alwaysOn`, so
-every project is on for it at every scope (`resolve` and the scope entries say enabled, and `setScope` refuses it
-with a `VALIDATION`), and a rule that is enabled runs. Pause all still holds it back; quiet hours and the caps never
+every project is on for it (`resolve` and `enabledProjects` say so, which is what the engine and Pause all's restart use), while its
+scope entries stay Inherit and not enabled, so a lane's pill doesn't read On because of it, and `setScope` refuses it
+with a `VALIDATION`, and a rule that is enabled runs. Pause all still holds it back; quiet hours and the caps never
 did (it needs no agent). Makes a task from a template on a schedule; the rules are rows in `autopilot_recurring` (below).
 It has no config of its own. Migration `044_recurring_without_switch` disabled the rules of every project where it was
 effectively off, and dropped its settings rows.

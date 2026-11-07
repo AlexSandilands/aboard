@@ -349,7 +349,7 @@ export function createAutopilotService(
           automation: automation.key,
           mode: own?.mode ?? "inherit",
           config: own?.config ?? {},
-          enabled: automation.alwaysOn ? true : resolved.enabled,
+          enabled: resolved.enabled,
           source: resolved.source,
           effectiveConfig: parsed.success ? parsed.data : { ...automation.defaults, ...resolved.config },
         };

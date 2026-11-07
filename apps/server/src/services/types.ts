@@ -151,6 +151,8 @@ export interface TasksService {
   summaries(query?: TaskQuery): TaskSummary[];
   summary(id: string): TaskSummary;
   detail(id: string): TaskDetail;
+  /** When the latest activity entry not written by `actor` happened, or null when there is none. */
+  lastActivityAt(id: string, exceptActor: string): string | null;
   /** Accepts a uuid, "#42" or "42". */
   resolveId(ref: string): string;
   /**
