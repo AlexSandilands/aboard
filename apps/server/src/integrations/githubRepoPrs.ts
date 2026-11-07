@@ -423,24 +423,22 @@ const repoPath = (repo: string) =>
 
 /** GitHub's reads and writes for other people's PRs, over the API gh's token signs. */
 export function createGithubRepoPrs(api: GithubApi) {
-  /** The checks the base branch's rulesets require; none when they can't be read (the merge box's `isRequired` still applies). */
+  /**
+   * The checks the base branch's rulesets require. Anyone who can read the repository can read its rules, so a failure
+   * is GitHub's, not "nothing is required": it is thrown, and the PR is read again on a later pass rather than judged
+   * without them.
+   */
   const requiredContexts = async (host: string, repo: string, branch: string): Promise<string[]> => {
-    try {
-      const raw = await api.rest(host, `/repos/${repoPath(repo)}/rules/branches/${encodeURIComponent(branch)}`);
-      const rules = RulesJson.safeParse(raw);
-      if (!rules.success) return [];
-      return [
-        ...new Set(
-          rules.data.flatMap((r) =>
-            r.type === "required_status_checks"
-              ? (r.parameters?.required_status_checks ?? []).map((c) => c.context)
-              : [],
-          ),
+    const raw = await api.rest(host, `/repos/${repoPath(repo)}/rules/branches/${encodeURIComponent(branch)}`);
+    const rules = RulesJson.safeParse(raw);
+    if (!rules.success) throw new Error("GitHub returned unexpected branch rules");
+    return [
+      ...new Set(
+        rules.data.flatMap((r) =>
+          r.type === "required_status_checks" ? (r.parameters?.required_status_checks ?? []).map((c) => c.context) : [],
         ),
-      ];
-    } catch {
-      return [];
-    }
+      ),
+    ];
   };
 
   const compare = async (host: string, repo: string, base: string, head: string) => {

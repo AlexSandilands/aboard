@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
   AUTOPILOT_REVIEW_PRS,
@@ -25,7 +26,7 @@ import {
   type TaskSummary,
 } from "@repo/contracts";
 import { z } from "zod";
-import { StaleReviewError, isTransientHostError } from "../../integrations/gitHost.ts";
+import { StaleReviewError, isTransientHostError, type RepoPr } from "../../integrations/gitHost.ts";
 import type { GitHostActions } from "../../integrations/gitHosts.ts";
 import { messageOf } from "../../integrations/util.ts";
 import { RUN_SERVER_NAME } from "../../mcp/runTokens.ts";
@@ -186,6 +187,8 @@ export interface RepoPrData {
    * issue linked): approve on the review already done, with no agent.
    */
   approveReady?: boolean;
+  /** For `approveReady`: what held the approval until now (the stored wait reason). */
+  heldBy?: string;
   /** Which try at this review this is, from 1: a post GitHub failed on in passing is tried again. */
   attempt?: number;
 }
@@ -310,7 +313,7 @@ async function pollProject(
               ownThreads: [],
             };
       items.push({
-        ...(approveReady ? { approveReady } : {}),
+        ...(approveReady ? { approveReady, heldBy: state?.reasonDetail ?? "" } : {}),
         kind: "repo_pr",
         projectId: project.id,
         host,
@@ -392,7 +395,9 @@ export function otherPrCandidates(ctx: CheckContext<Record<string, unknown>>): C
       if (runs.some((r) => r.dedupeKey.startsWith(prefix) && (r.status === "queued" || r.status === "running"))) {
         continue;
       }
-      const base = `${repoPrDedupeKey(item, item.headOid, item.plan.resumeId, item.plan.replyId)}${item.approveReady ? ":approve" : ""}`;
+      // An approval on the earlier review is keyed by what held it, so one that found the gate failing again doesn't
+      // keep a later pass, after the gate passed once more, from trying.
+      const base = `${repoPrDedupeKey(item, item.headOid, item.plan.resumeId, item.plan.replyId)}${item.approveReady ? `:approve:${shortHash(item.heldBy ?? "")}` : ""}`;
       const tries = runs.filter((r) => r.dedupeKey === base || r.dedupeKey.startsWith(`${base}:a`));
       // Only a try skipped for GitHub failing in passing leaves the review open for another.
       if (tries.some((r) => !(r.status === "skipped" && r.output?.retry === true))) continue;
@@ -504,6 +509,7 @@ export function repoPrPrompt(item: RepoPrData, skill: string): string {
 // ── Posting ──────────────────────────────────────────────────────────────
 
 const shortSha = (sha: string) => sha.slice(0, 7);
+const shortHash = (text: string) => createHash("sha256").update(text).digest("hex").slice(0, 10);
 
 /** Minor points and nits never hold up an approval: they are FYI, whatever the agent said. */
 const normaliseIssues = (issues: readonly PrReviewIssue[]): PrReviewIssue[] =>
@@ -774,6 +780,24 @@ async function settleThreads(
   return resolved;
 }
 
+/**
+ * GitHub failing in passing (`isTransientHostError`) while the PR is read again or posted to: nothing was decided on
+ * the PR, so the run is skipped with `retry` and the next pass tries again, up to REPO_REVIEW_ATTEMPTS. Anything else
+ * is thrown, failing the run.
+ */
+function retryLater(error: unknown, item: RepoPrData): ActionResult {
+  if (!isTransientHostError(error)) throw error;
+  const attempt = item.attempt ?? 1;
+  if (attempt < REPO_REVIEW_ATTEMPTS) {
+    return {
+      status: "skipped",
+      summary: `${messageOf(error)} (PR #${item.number}, try ${attempt} of ${REPO_REVIEW_ATTEMPTS}, will retry)`,
+      output: { retry: true },
+    };
+  }
+  throw new Error(`${messageOf(error)} (PR #${item.number}, after ${REPO_REVIEW_ATTEMPTS} tries)`, { cause: error });
+}
+
 const SKIP_MOVED = (n: number) => ({
   status: "skipped" as const,
   summary: `PR #${n} moved on while it was being reviewed`,
@@ -838,7 +862,12 @@ export async function actRepoPr(
 
   // What the post rests on, read again now, not as the poll saw it minutes ago: the head, the user's stop, a person's
   // review, and the approval gate (a check re-run red, `Closes #n` removed). An approval is never posted on old facts.
-  const fresh = await gitHosts.readRepoPr(ref);
+  let fresh: RepoPr;
+  try {
+    fresh = await gitHosts.readRepoPr(ref);
+  } catch (error) {
+    return retryLater(error, item);
+  }
   if (fresh.headOid !== item.headOid) return SKIP_MOVED(item.number);
   const block = standingBlock(fresh);
   if (block) return { status: "skipped", summary: `PR #${item.number}: ${block.why}, so nothing was posted` };
@@ -847,6 +876,9 @@ export async function actRepoPr(
   const issues = normaliseIssues(verdict.issues);
   const settled = settleDecision(verdict, current, settings);
   if (item.approveReady && settled.outcome !== "approved") {
+    // Still held: say why on Needs you. The new reason gives the next pass that sees the gate pass a key of its own.
+    if (state)
+      services.repoPrReviews.record({ ...state, reasonDetail: settled.why, updatedAt: new Date().toISOString() });
     return { status: "skipped", summary: `PR #${item.number} still waits for your approval: ${settled.why}` };
   }
   // A small re-check after an approval or a ready-for-approval uses no round, when the reviewer says so.
@@ -903,21 +935,7 @@ export async function actRepoPr(
     }
   } catch (error) {
     if (error instanceof StaleReviewError) return SKIP_MOVED(item.number);
-    // GitHub failing in passing: nothing was decided on the PR, so the next pass tries again, a few times.
-    if (isTransientHostError(error)) {
-      const attempt = item.attempt ?? 1;
-      if (attempt < REPO_REVIEW_ATTEMPTS) {
-        return {
-          status: "skipped",
-          summary: `${messageOf(error)} (PR #${item.number}, try ${attempt} of ${REPO_REVIEW_ATTEMPTS}, will retry)`,
-          output: { retry: true },
-        };
-      }
-      throw new Error(`${messageOf(error)} (PR #${item.number}, after ${REPO_REVIEW_ATTEMPTS} tries)`, {
-        cause: error,
-      });
-    }
-    throw error;
+    return retryLater(error, item);
   }
 
   const resolvedThreads = await settleThreads(gitHosts, item, verdict);

@@ -505,8 +505,11 @@ out the mode and the approval gate from the PR's history, and posts. The gate is
     file GitHub serves no patch for (binary, too large), which can't be compared. A hand-off edited later counts from
     its edit.
   - The key is `review:repo:<host>/<repo>#<n>:<head12>:r<resume id>[:c<reply id>]`; one review of a PR runs at a time.
-- **The gate** (`approvalGate`): a closing issue (when required), every required check green and reported, at most
-  100 files (all of them read), no sensitive path. The agent is told the reasons but not asked to obey them.
+- **The gate** (`approvalGate`): a closing issue (when required), every required check finished, green and reported,
+  at most 100 files (all of them read), no sensitive path. The rulesets' required checks must be readable (anyone who
+  can read the repository can): a failure to read them fails the read of the PR, so it is judged on a later pass, never
+  as if nothing were required. Classic branch protection's list may be hidden from an account without admin rights;
+  then only the checks GitHub marks `isRequired` on the head count. The agent is told the reasons but not asked to obey them.
 - **The review.** A task-less, read-only headless run with `untrustedInput`, in a worktree of the project's checkout
   at the PR's head (`RunnerRequest.checkout`: removed when the run ends; a fork's PR gets an empty folder), on the
   `repoPrReview` [run tools](#run-tools): the PR review set plus `pr_threads` and `repo_issue`. `repoPrPrompt` gives
@@ -528,7 +531,8 @@ out the mode and the approval gate from the PR's history, and posts. The gate is
   folded into the body when GitHub refuses them), refused with `StaleReviewError` if the head moved, which skips the
   run. `counted: false` is honoured for an approval or a ready-for-approval in `delta` or `followup`, so small re-checks
   don't walk a PR into the round limit. GitHub failing in passing while posting (`isTransientHostError`) skips the run
-  with `output.retry`, and the next pass tries again under `<key>:a<n>`, up to `REPO_REVIEW_ATTEMPTS` (3).
+  with `output.retry`, and the next pass tries again under `<key>:a<n>`, up to `REPO_REVIEW_ATTEMPTS` (3); so does
+  GitHub failing in passing on the read before the post.
 - **Hand-offs.** The head is read again first; a moved PR skips the run with nothing posted or written. One comment
   (`renderHandoff`): the header, the round, "Handed to @you for manual review (<reason>): <why>" or "Ready for
   @you's approval: <gate>", the summary, every point, the checklist, and that Autopilot looks again by itself on a push.
@@ -541,7 +545,8 @@ out the mode and the approval gate from the PR's history, and posts. The gate is
   head comes, or its author leaves the list; the list also hides rows of projects where the source or Review PRs is
   off. While it waits, each poll works the gate out again at that head: a reason that changed is updated, and once the
   gate passes (a required check re-run green, an issue linked) and Approve is on, it is approved with no agent run
-  (`approveReady`, key `…:approve`, `counted=0`), on the review already done. Skips carry a typed `code`
+  (`approveReady`, key `…:approve:<hash of what held it>`, `counted=0`), on the review already done. If the gate fails
+  again at that moment, the new reason is stored, so a later pass that sees it pass gets a key of its own. Skips carry a typed `code`
   (`ENDS_WAIT` lists the ones that end the wait).
 - **Afterwards.** Its own threads the review says are fixed, and disputes it accepted, are resolved
   (`resolveReviewThread`); accepted and rejected disputes get the agent's reply on the thread. An approval, or the

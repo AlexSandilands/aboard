@@ -80,6 +80,9 @@ function setup() {
   /** Runs while the agent reviews: what changes on GitHub between the poll and the post. */
   let duringReview: (() => void) | null = null;
   let postErrors: string[] = [];
+  let readErrors: string[] = [];
+  let reads = 0;
+  let onRead: ((n: number) => void) | null = null;
   const runner: Runner = {
     start: async (request): Promise<RunnerResult> => {
       requests.push(request);
@@ -95,7 +98,12 @@ function setup() {
   const gitHosts: GitHostActions = {
     ...NO_GIT_HOSTS,
     listOpenPrs: async () => [{ number: pr.number, author: pr.author, draft: pr.draft }],
-    readRepoPr: async () => pr,
+    readRepoPr: async () => {
+      reads += 1;
+      onRead?.(reads);
+      if (readErrors.length > 0) throw new Error(readErrors.shift());
+      return pr;
+    },
     unchangedSince: async () => false,
     prHead: async () => (heads.length > 1 ? heads.shift()! : (heads[0] ?? live ?? pr.headOid)),
     postReview: async (_ref, input) => {
@@ -172,6 +180,11 @@ function setup() {
     setHeads: (next: string[]) => (heads = next),
     whileReviewing: (fn: (() => void) | null) => (duringReview = fn),
     failPosts: (...messages: string[]) => (postErrors = messages),
+    failReads: (...messages: string[]) => (readErrors = messages),
+    onRead: (fn: ((n: number) => void) | null) => {
+      reads = 0;
+      onRead = fn;
+    },
     setLive: (sha: string | null) => (live = sha),
     state: () => s.repoPrReviews.get("github.com", "acme/app", 42),
   };
@@ -289,6 +302,29 @@ describe("other people's PRs: facts read again before posting", () => {
     }
   });
 
+  it("doesn't approve while a required check re-run during the review is still running", async () => {
+    const t = setup();
+    t.turnOn();
+    t.whileReviewing(() => t.setPr({ checks: { pending: ["test"], failing: [], missing: [], latestAt: hourAgo() } }));
+    await t.pass();
+    expect(t.reviews).toHaveLength(0);
+    expect(t.comments[0]!.body).toContain("required checks still running: test");
+  });
+
+  it("tries again when GitHub fails in passing while the PR is read again before posting", async () => {
+    const t = setup();
+    t.turnOn();
+    // The poll's read succeeds; the one before the post fails once.
+    t.onRead((n) => {
+      if (n === 2) t.failReads("HTTP 502: try again");
+    });
+    await t.pass();
+    expect(t.runs()[0]).toMatchObject({ status: "skipped", output: { retry: true } });
+    t.onRead(null);
+    await t.pass();
+    expect(t.reviews).toHaveLength(1);
+  });
+
   it("tries a post GitHub failed on in passing again on the next pass", async () => {
     const t = setup();
     t.turnOn();
@@ -329,6 +365,40 @@ describe("other people's PRs: waiting for the user's approval", () => {
     expect(t.reviews[0]!.event).toBe("approve");
     expect(parseReviewMarker(t.reviews[0]!.body)).toMatchObject({ verdict: "approve", counted: "0" });
     expect(t.state()).toMatchObject({ outcome: "approved", readySince: null });
+  });
+
+  it("approves on a later pass after the gate failed again at the moment it tried", async () => {
+    const t = setup();
+    t.turnOn();
+    const failing = { checks: { pending: [], failing: ["test"], missing: [], latestAt: hourAgo() } };
+    const passing = { checks: { pending: [], failing: [], missing: [], latestAt: hourAgo() } };
+    t.setPr(failing);
+    await t.pass();
+    t.setPr({
+      ...passing,
+      comments: [
+        {
+          id: 901,
+          nodeId: "IC_901",
+          url: URL42,
+          author: ME,
+          body: t.comments[0]!.body,
+          createdAt: hourAgo(),
+          editedAt: null,
+        },
+      ],
+    });
+    // The poll sees it pass; by the read before the post it failed again (a flaky check).
+    t.onRead((n) => {
+      if (n === 2) t.setPr({ checks: { pending: [], failing: ["lint"], missing: [], latestAt: hourAgo() } });
+    });
+    await t.pass();
+    expect(t.reviews).toHaveLength(0);
+    expect(t.state()?.reasonDetail).toBe("required checks not green: lint");
+    t.onRead(null);
+    t.setPr(passing);
+    await t.pass();
+    expect(t.reviews.map((r) => r.event)).toEqual(["approve"]);
   });
 
   it("keeps the reason it waits for current when the gate changes without a push", async () => {

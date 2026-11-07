@@ -310,13 +310,14 @@ describe("other people's PRs: the approval gate", () => {
     const gate = approvalGate(
       pr({
         closingIssues: [],
-        checks: { pending: [], failing: ["test"], missing: ["lint"], latestAt: ago(60) },
+        checks: { pending: ["e2e"], failing: ["test"], missing: ["lint"], latestAt: ago(60) },
         files: { total: 150, paths: [".github/workflows/ci.yml", "web/yarn.lock", "src/a.ts", "docs/CODEOWNERS"] },
       }),
       settings,
     );
     expect(gate).toEqual([
       "no linked issue (Closes #n)",
+      "required checks still running: e2e",
       "required checks not green: test",
       "required checks haven't reported: lint",
       "too many files to check the sensitive paths",

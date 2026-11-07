@@ -146,6 +146,8 @@ const asReason = (value: string | undefined): EscalationReason | null =>
 export function approvalGate(pr: RepoPr, settings: OtherPrsSettings): string[] {
   const gate: string[] = [];
   if (settings.requireIssue && pr.closingIssues.length === 0) gate.push("no linked issue (Closes #n)");
+  // Pending only at the post: a check re-run while the agent reviewed. The poll waits for checks before reviewing.
+  if (pr.checks.pending.length > 0) gate.push(`required checks still running: ${pr.checks.pending.join(", ")}`);
   if (pr.checks.failing.length > 0) gate.push(`required checks not green: ${pr.checks.failing.join(", ")}`);
   if (pr.checks.missing.length > 0) gate.push(`required checks haven't reported: ${pr.checks.missing.join(", ")}`);
   if (pr.files.total > pr.files.paths.length) gate.push("too many files to check the sensitive paths");

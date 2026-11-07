@@ -199,6 +199,19 @@ describe("mapRepoPr", () => {
   });
 });
 
+describe("readRepoPr", () => {
+  it("fails, rather than judging with no required checks, when the branch's rules can't be read", async () => {
+    const api: GithubApi = {
+      graphql: async () => recorded(),
+      graphqlBatch: () => Promise.reject(new Error("no batch")),
+      rest: () => Promise.reject(new Error("HTTP 502")),
+    };
+    await expect(
+      createGithubRepoPrs(api).readRepoPr({ host: "github.com", repo: "acme/app", number: 42 }),
+    ).rejects.toThrow("HTTP 502");
+  });
+});
+
 describe("mapRepoPrChecks", () => {
   const run = (name: string, status: string, conclusion: string | null, required = false) => ({
     kind: "CheckRun",
