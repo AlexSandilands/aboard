@@ -322,7 +322,7 @@ describe("merge into epic branch", () => {
       engine: s.autopilot.engine(),
       now: new Date(),
       board: null,
-      projects: [{ project: s.projects.get(task.projectId), config: {} }],
+      projects: [{ project: s.projects.get(task.projectId), config: {}, dryRun: false }],
     };
     for (let i = 0; i < MERGE_ATTEMPTS + 1; i++) {
       const [candidate] = await mergeEpicPrs.check(ctx);

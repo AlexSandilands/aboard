@@ -228,16 +228,16 @@ describe("epic scope", () => {
     s.autopilot.setScope("project", epic.projectId, "noop", { mode: "on", config: { label: "project" } });
     s.autopilot.setScope("epic", epic.id, "noop", { mode: "off", config: { label: "epic" } }, epic.projectId);
     const resolve = () => s.autopilot.resolve(noop, epic.projectId, epic.id);
-    expect(resolve()).toEqual({ enabled: false, config: { label: "epic" } });
+    expect(resolve()).toEqual({ enabled: false, preview: false, config: { label: "epic" } });
 
     // An epic can only be archived once its tasks are finished; the finished task then follows the project.
     s.tasks.move(child.id, { status: "done" }, "agent");
     s.tasks.update(epic.id, { archived: true }, "user");
-    expect(resolve()).toEqual({ enabled: true, config: { label: "project" } });
+    expect(resolve()).toEqual({ enabled: true, preview: false, config: { label: "project" } });
     expect(s.autopilot.projectsWithEpicOn(noop).size).toBe(0);
 
     s.tasks.update(epic.id, { archived: false }, "user");
-    expect(resolve()).toEqual({ enabled: false, config: { label: "epic" } });
+    expect(resolve()).toEqual({ enabled: false, preview: false, config: { label: "epic" } });
   });
 
   it("looks at a project for an epic that is on, but not for one that is off or archived", () => {

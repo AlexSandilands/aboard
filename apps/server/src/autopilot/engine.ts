@@ -160,16 +160,25 @@ export function createAutopilotEngine(deps: {
     // A project is looked at where it is on, and where one of its epics is: the check returns every task of the
     // project there, and the per-task resolve below keeps the ones the epic's setting reaches.
     const withEpicOn = s.autopilot.projectsWithEpicOn(automation);
+    const withEpicLive = s.autopilot.projectsWithEpicOn(automation, true);
     const projects = s.projects
       .list()
       .map((project) => ({ project, resolved: s.autopilot.resolve(automation, project.id) }))
       .flatMap(({ project, resolved }) =>
         (resolved.enabled || withEpicOn.has(project.id)) && resolved.config
-          ? [{ project, config: resolved.config }]
+          ? [
+              {
+                project,
+                config: resolved.config,
+                dryRun: engine.dryRun || !((resolved.enabled && !resolved.preview) || withEpicLive.has(project.id)),
+              },
+            ]
           : [],
       );
     const boardConfig = board.enabled ? board.config : null;
     if (projects.length === 0 && !boardConfig) return;
+    // A check that is only previewing anywhere it looks hears so, as it would under Preview everything.
+    const allDry = projects.every((p) => p.dryRun) && (!boardConfig || engine.dryRun || board.preview);
 
     // Settings are read once per project and epic, not per candidate: a Done column can hold many.
     const resolutions = new Map<string, ReturnType<typeof s.autopilot.resolve>>();
@@ -185,7 +194,7 @@ export function createAutopilotEngine(deps: {
 
     const candidates = await automation.check({
       services: s,
-      engine,
+      engine: allDry && !engine.dryRun ? { ...engine, dryRun: true } : engine,
       now: at,
       projects,
       board: boardConfig,
@@ -213,7 +222,8 @@ export function createAutopilotEngine(deps: {
       const config = resolved.enabled ? resolved.config : null;
       if (!config) continue;
       if (s.autopilot.status().paused) return;
-      if (engine.dryRun) {
+      // Preview everything, or Preview where this candidate's task (or project, or the board) resolves.
+      if (engine.dryRun || resolved.preview) {
         if (!s.autopilot.hasRun(automation.key, candidate.dedupeKey, true)) {
           self(() => s.autopilot.record({ automation: automation.key, candidate, dryRun: true }));
         }

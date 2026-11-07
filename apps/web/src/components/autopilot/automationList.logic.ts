@@ -79,9 +79,9 @@ export function rowSubline(reach: AutomationReach, run: LastRun | undefined, now
   return `${whereText(reach)} · ${lastRunText(run, nowMs)}`;
 }
 
-/** The status line under the detail's title. */
-export function statusLine(reach: AutomationReach): string {
-  return isOffEverywhere(reach) ? "Off" : `On · ${whereText(reach)}`;
+/** The status line under the detail's title; `preview` when the board's mode is Preview. */
+export function statusLine(reach: AutomationReach, preview = false): string {
+  return isOffEverywhere(reach) ? "Off" : `${preview ? "Preview" : "On"} · ${whereText(reach)}`;
 }
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);

@@ -16,7 +16,9 @@ const entry = (automation: string, enabled: boolean): AutopilotScopeEntry => ({
   automation,
   mode: "inherit",
   config: {},
+  lastOnMode: null,
   enabled,
+  preview: false,
   source: enabled ? "board" : "default",
   effectiveConfig: {},
 });

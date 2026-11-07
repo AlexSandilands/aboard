@@ -155,7 +155,10 @@ export function createCustomAutomationsService(
     return next;
   };
 
-  /** Saves a checked definition as a new automation, armed from now. */
+  /**
+   * Saves a checked definition as a new automation, armed from now, in Preview for the board: it records what it
+   * would do until the user turns it on (docs/features/autopilot.md#preview).
+   */
   const insert = (def: CustomDefinition): CustomAutomation =>
     core.write((fx) => {
       const now = nowIso();
@@ -168,6 +171,15 @@ export function createCustomAutomationsService(
         updatedAt: now,
       };
       repos.autopilotCustom.insert(custom);
+      repos.autopilotSettings.upsert({
+        scopeKind: "board",
+        scopeId: null,
+        automation: customAutomationKey(custom.id),
+        mode: "preview",
+        config: {},
+        lastOnMode: "preview",
+        updatedAt: now,
+      });
       fx.autopilot();
       return custom;
     });

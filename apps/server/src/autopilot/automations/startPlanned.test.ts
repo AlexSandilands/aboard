@@ -701,7 +701,7 @@ describe("start planned tasks: skipped when no longer eligible", () => {
       services: s,
       engine: s.autopilot.engine(),
       now: new Date(),
-      projects: s.projects.list().map((project) => ({ project, config: startPlanned.defaults })),
+      projects: s.projects.list().map((project) => ({ project, config: startPlanned.defaults, dryRun: false })),
       board: null,
     });
     s.tasks.update(t.id, { autopilot: false }, "user");

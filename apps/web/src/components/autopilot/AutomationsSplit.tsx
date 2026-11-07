@@ -12,6 +12,7 @@ import {
   AUTOPILOT_UNSTICK,
   automationSentence,
   customAutomationId,
+  isOnMode,
   splitFieldsByTier,
   type AutopilotAutomation,
   type AutopilotOverview,
@@ -24,6 +25,7 @@ import {
   BotIcon,
   ChevronRightIcon,
   ClockAlertIcon,
+  EyeIcon,
   FileUpIcon,
   GitMergeIcon,
   type LucideIcon,
@@ -51,6 +53,7 @@ import {
 } from "~/components/settings/agents/SplitCard";
 import { FROM_SETTINGS_LIST } from "~/components/settings/settingsNavigation";
 import { ConfirmDialog } from "~/components/task/ConfirmDialog";
+import { Alert, AlertAction, AlertDescription } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
@@ -71,7 +74,15 @@ import {
   type AutomationReach,
   type LastRun,
 } from "./automationList.logic";
-import { BOARD_MODES, boardModeToSave, boardSwitchValue } from "./autopilot.logic";
+import {
+  BOARD_MODES,
+  boardModeToSave,
+  boardSummary,
+  boardSwitchValue,
+  modeDescription,
+  previewHint,
+  restoreMode,
+} from "./autopilot.logic";
 import { bundleFilename } from "./customAutomationImport.logic";
 import { BlockedWarning, NeedsVariablesWarning } from "./InputsAndSlots";
 import { ModeSwitch } from "./ModeSwitch";
@@ -99,8 +110,14 @@ function AutomationIcon({ automation, className }: { automation: AutopilotAutoma
 export interface ListedAutomation extends AutomationItem {
   reach: AutomationReach;
   lastRun: LastRun | undefined;
+  /** Its "would …" runs over the last 7 days. */
+  previewRuns: number;
   custom: CustomAutomation | null;
 }
+
+/** A custom automation whose agent action starts from a check script, which still runs for real in Preview. */
+export const hasCheckScript = (custom: CustomAutomation | null): boolean =>
+  custom?.action.kind === "agent" && custom.action.check !== null;
 
 /** The list and the picked automation's detail. The automation in `?automation=` is picked; with none, the first. */
 export function AutomationsSplit({
@@ -189,7 +206,7 @@ function ListRow({
   onSelect: () => void;
 }) {
   const { automation, entry, reach, lastRun, onMode } = item;
-  const on = entry.mode === "on";
+  const on = isOnMode(entry.mode);
   const off = isOffEverywhere(reach);
   return (
     <SplitListItem
@@ -197,7 +214,9 @@ function ListRow({
       icon={<AutomationIcon automation={automation} />}
       title={automation.title}
       badge={
-        off ? null : lastRun?.status === "failed" ? (
+        off ? null : entry.mode === "preview" ? (
+          <PreviewBadge />
+        ) : lastRun?.status === "failed" ? (
           <StatusDot tone="danger" label="Last run failed" />
         ) : (
           <StatusDot tone="success" label="On" />
@@ -214,7 +233,8 @@ function ListRow({
           checked={on}
           disabled={pending || (!on && Boolean(automation.blocked))}
           title={!on && automation.blocked ? automation.blocked : undefined}
-          onCheckedChange={(next) => onMode(next ? "on" : "inherit")}
+          // Back on in the mode it was last on in, or Preview for one that has never run.
+          onCheckedChange={(next) => onMode(next ? restoreMode(entry, lastRun !== undefined) : "inherit")}
         />
       }
     />
@@ -238,11 +258,13 @@ function AutomationDetail({
   rejected: number;
   onBack: () => void;
 }) {
-  const { automation, entry, reach, custom, onMode, onConfig } = item;
+  const { automation, entry, reach, custom, lastRun, previewRuns, onMode, onConfig } = item;
   const navigate = useNavigate();
   const { essential, advanced } = splitFieldsByTier(automation.fields);
-  const on = entry.mode === "on";
+  const on = isOnMode(entry.mode);
+  const preview = entry.mode === "preview";
   const off = isOffEverywhere(reach);
+  const checkScript = hasCheckScript(custom);
   const editCustom = (id: string) =>
     void navigate({ to: "/settings/autopilot/custom/$customId", params: { customId: id }, state: FROM_SETTINGS_LIST });
   const field = (f: (typeof automation.fields)[number]) => (
@@ -265,8 +287,11 @@ function AutomationDetail({
         title={automation.title}
         subtitle={
           <span className="flex items-center gap-1.5">
-            <StatusDot tone={off ? "muted" : "success"} label={off ? "Off" : "On"} />
-            <span className="truncate">{statusLine(reach)}</span>
+            <StatusDot
+              tone={off ? "muted" : preview ? "warning" : "success"}
+              label={off ? "Off" : preview ? "Preview" : "On"}
+            />
+            <span className="truncate">{statusLine(reach, preview)}</span>
             {custom ? (
               <Badge variant="outline" size="sm">
                 Custom
@@ -280,7 +305,7 @@ function AutomationDetail({
               size="xs"
               variant="ghost-muted"
               disabled={pending || (!on && Boolean(automation.blocked))}
-              onClick={() => onMode(on ? "inherit" : "on")}
+              onClick={() => onMode(on ? "inherit" : restoreMode(entry, lastRun !== undefined))}
             >
               {on ? "Switch off" : "Switch on"}
             </Button>
@@ -294,6 +319,14 @@ function AutomationDetail({
           {automation.needs ? <NeedsVariablesWarning needs={automation.needs} /> : null}
         </div>
       ) : null}
+      {preview ? (
+        <PreviewNotice
+          count={previewRuns}
+          automation={automation.key}
+          disabled={pending || Boolean(automation.blocked)}
+          onTurnOn={() => onMode("on")}
+        />
+      ) : null}
       <DetailSection title="What it does">
         <div className="flex flex-col gap-3 px-3 py-3 @min-[32rem]/split:flex-row @min-[32rem]/split:items-start sm:px-4">
           <p className="min-w-0 flex-1 text-sm leading-relaxed text-foreground">
@@ -303,12 +336,15 @@ function AutomationDetail({
             <RunHistoryLink automation={automation.key} label="All runs" size="xs" />
           </div>
         </div>
-      </DetailSection>
-      <DetailSection title="Where it runs">
         <SettingsRow
           id={`autopilot.automations.${automation.key}.board`}
-          title="Whole board"
-          description="On for the board: every project, unless a project or epic switches it off for itself."
+          title="Mode"
+          description={modeDescription(
+            boardSwitchValue(entry.mode) as "off" | "preview" | "on",
+            automation,
+            checkScript,
+          )}
+          info="Off: nothing runs. Preview: each time it would act, a run marked Preview is recorded instead; no agent starts and nothing on the board or on GitHub changes. A custom automation's check script is the exception: it runs for real. New, imported and drafted automations save in Preview."
           control={
             <ModeSwitch
               label={`${automation.title} for the board`}
@@ -319,6 +355,13 @@ function AutomationDetail({
               onChange={(mode) => onMode(boardModeToSave(mode))}
             />
           }
+        />
+      </DetailSection>
+      <DetailSection title="Where it runs">
+        <SettingsRow
+          title="Whole board"
+          description="Every project follows the mode above, unless a project or epic sets its own."
+          status={boardSummary(entry.mode)}
         />
         <SettingsRow
           title="Projects"
@@ -376,6 +419,43 @@ function AutomationDetail({
         </p>
       ) : null}
     </DetailBody>
+  );
+}
+
+/** Beside a list row's name: the automation only records what it would do. */
+function PreviewBadge() {
+  return (
+    <Badge variant="warning" size="sm" title="In Preview: it records what it would do and does none of it">
+      Preview
+    </Badge>
+  );
+}
+
+/** Over an automation in Preview: how often it would have run this week, its runs, and Turn on. */
+function PreviewNotice({
+  count,
+  automation,
+  disabled,
+  onTurnOn,
+}: {
+  count: number;
+  automation: string;
+  disabled: boolean;
+  onTurnOn: () => void;
+}) {
+  return (
+    <div className="px-3 sm:px-4">
+      <Alert variant="warning">
+        <EyeIcon />
+        <AlertDescription>{previewHint(count)}</AlertDescription>
+        <AlertAction className="flex items-center gap-1">
+          {count > 0 ? <RunHistoryLink automation={automation} label="See them" size="xs" /> : null}
+          <Button size="xs" variant="warning-outline" disabled={disabled} onClick={onTurnOn}>
+            Turn on
+          </Button>
+        </AlertAction>
+      </Alert>
+    </div>
   );
 }
 

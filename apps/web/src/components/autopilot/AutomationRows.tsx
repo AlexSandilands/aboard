@@ -138,7 +138,7 @@ function AutomationRow({
           ? boardSummary(entry.mode)
           : entry.mode === "inherit"
             ? inheritLabel(inherited)
-            : `Set to ${entry.mode} for ${where}`
+            : `${entry.mode === "preview" ? "In Preview" : entry.mode === "on" ? "On" : "Off"} for ${where}`
       }
       control={
         <ModeSwitch

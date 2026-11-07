@@ -112,7 +112,9 @@ describe("Autopilot REST routes", () => {
         automation: "archive",
         mode: "inherit",
         config: {},
+        lastOnMode: null,
         enabled: true,
+        preview: false,
         source: "board",
         effectiveConfig: { days: 7 },
       },
@@ -154,7 +156,9 @@ describe("Autopilot REST routes", () => {
         automation: "archive",
         mode: "inherit",
         config: {},
+        lastOnMode: null,
         enabled: true,
+        preview: false,
         source: "board",
         effectiveConfig: { days: 3 },
       },
@@ -207,7 +211,7 @@ describe("Autopilot REST routes", () => {
     // A row left from before the flag was set.
     h.db
       .prepare(
-        "INSERT INTO autopilot_settings VALUES ('epic', ?, 'project_wide', 'on', '{}', '2026-01-01T00:00:00.000Z')",
+        "INSERT INTO autopilot_settings VALUES ('epic', ?, 'project_wide', 'on', '{}', '2026-01-01T00:00:00.000Z', 'on')",
       )
       .run(epic.id);
     const automation = h.services.autopilot.automations().find((a) => a.key === "project_wide")!;
