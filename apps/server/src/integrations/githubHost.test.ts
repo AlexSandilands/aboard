@@ -750,6 +750,14 @@ describe("github postReview", () => {
     ]);
   });
 
+  it("approves or requests changes only when asked to (other people's PRs, past the board's gate)", async () => {
+    const { gh, github } = setup([ghLink("l1", 7)]);
+    gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));
+    await github.postReview(ref, { reviewedSha: "abcdef1", body: "Fine", comments: [], event: "approve" });
+    await github.postReview(ref, { reviewedSha: "abcdef1", body: "Fix it", comments, event: "request_changes" });
+    expect(gh.mutations.map((m) => m.input.event)).toEqual(["APPROVE", "REQUEST_CHANGES"]);
+  });
+
   it("cuts a body that would be too long for GitHub, also after folding the comments in", async () => {
     const { gh, github } = setup([ghLink("l1", 7)]);
     gh.prs.set("o/r#7", fakePr({ headRefOid: "abcdef1234567890" }));

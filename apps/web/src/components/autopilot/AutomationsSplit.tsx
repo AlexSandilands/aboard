@@ -359,7 +359,9 @@ function AutomationDetail({
       {automation.blocked || automation.needs ? (
         <div className="space-y-2 px-3 sm:px-4">
           {automation.blocked ? <BlockedWarning reason={automation.blocked} /> : null}
-          {automation.needs ? <NeedsVariablesWarning needs={automation.needs} /> : null}
+          {automation.needs ? (
+            <NeedsVariablesWarning needs={automation.needs} custom={customAutomationId(automation.key) !== null} />
+          ) : null}
         </div>
       ) : null}
       {hints.length > 0 ? (
