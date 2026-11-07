@@ -275,9 +275,11 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   even under Pause all. Clicking it opens a popover (`ScopePopover`) with a header ("Autopilot" and a cog button,
   tooltip "Autopilot settings", that closes it and opens Settings → Autopilot) and one on/off switch per automation at
   the project. Every row is a `ScopeRow` in a `ScopeCard`: the name (its description is the name's tooltip) and a
-  switch. The stored Inherit / On / Off model is unchanged; only the control is. A switch that follows the board (or
-  the built-in default) is faded, and its tooltip says where the state comes from (`scopeRowModel`, from the entry's
-  already resolved `enabled` and `source`: "On, following the board"). A click saves an explicit On or Off; once the
+  switch. The stored Inherit / Off / Preview / On model is unchanged; only the control is. A switch that follows the
+  board (or the built-in default) is faded, and its tooltip says where the state comes from (`scopeRowModel`, from the
+  entry's already resolved `enabled`, `preview` and `source`: "On, following the board"). An automation resolved to
+  [Preview](autopilot.md#preview) is on, with an amber **Preview** badge by its name. A click saves Off, or turns it on
+  in the mode the project last had it on in (`lastOnMode`, On when none); once the
   project sets it the switch is solid and a ↺ button saves Inherit again. An automation that can't be turned on
   (`blocked`, an empty required tool slot) shows a ⚠ with the reason as its tooltip and its switch can only be
   turned off. Under Recurring tasks a calendar icon button opens the project's settings at that section. Paused is a

@@ -567,12 +567,35 @@ describe("custom automations: filters and scopes", () => {
   it("doesn't act on what happened while it was off once it is switched on", async () => {
     const { s, task, define, pass, shellRuns, shell } = setup();
     const custom = define({ name: "Ping", trigger: { kind: "status_change", to: "review" }, action: shell() }, null);
+    s.autopilot.setScope("board", null, customAutomationKey(custom.id), { mode: "off" });
     const t = task("Moved while off");
     s.tasks.move(t.id, { status: "review" }, "agent");
     await new Promise((r) => setTimeout(r, 5));
     s.autopilot.setScope("board", null, customAutomationKey(custom.id), { mode: "on" });
     await pass();
     expect(shellRuns).toHaveLength(0);
+  });
+
+  it("saves in Preview, records what it would run, and doesn't redo that once turned on", async () => {
+    const { s, task, define, pass, shellRuns, shell, runsOf } = setup();
+    const custom = define({ name: "Ping", trigger: { kind: "status_change", to: "review" }, action: shell() }, null);
+    const key = customAutomationKey(custom.id);
+    expect(s.autopilot.scope("board", null).find((e) => e.automation === key)).toMatchObject({ mode: "preview" });
+    await tick();
+    const t = task("Moved in Preview");
+    s.tasks.move(t.id, { status: "review" }, "agent");
+    await pass();
+    expect(shellRuns).toHaveLength(0);
+    expect(runsOf()).toMatchObject([{ dryRun: true, status: "skipped", taskId: t.id }]);
+    await new Promise((r) => setTimeout(r, 5));
+    // On only acts on what happens from now: the move Preview saw stays a preview.
+    s.autopilot.setScope("board", null, key, { mode: "on" });
+    await pass();
+    expect(shellRuns).toHaveLength(0);
+    const later = task("Moved once on");
+    s.tasks.move(later.id, { status: "review" }, "agent");
+    await pass();
+    expect(shellRuns.map((r) => r.env[brandEnv("TASK_ID")])).toEqual([later.id]);
   });
 
   it("keeps a project's waiting events when it is switched on in another", async () => {
@@ -1570,6 +1593,16 @@ describe("custom automations: an agent with a check script", () => {
     expect(runs[0]!.detail).toContain("printed 2 items");
     expect(runs[0]!.detail).toContain("Look at Alpha item");
     expect(runs[1]!.detail).toContain("Look at Beta item");
+  });
+
+  it("still runs the check for real in the automation's own Preview, and starts no agent for what it printed", async () => {
+    const { s, custom, slot, scriptRuns, agentRuns, runsOf } = checkSetup(() => printed({ key: "a", title: "Alpha" }));
+    s.autopilot.setScope("board", null, customAutomationKey(custom.id), { mode: "preview" });
+    await slot(SLOT);
+    expect(scriptRuns).toHaveLength(1);
+    expect(agentRuns).toHaveLength(0);
+    expect(runsOf()).toMatchObject([{ dryRun: true, status: "skipped" }]);
+    expect(runsOf()[0]!.detail).toContain("The check script really ran (Preview still runs it)");
   });
 
   it("gives trusted items' agents the usual access and the allowed tools", async () => {

@@ -118,7 +118,8 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    When the user asks for an automation of their own ("every morning, triage new defects", "when a PR merges,
    ..."), `draft_automation(automation, note)` writes it as a draft in the shape of a shared automation file and
    returns a link to its import page. It saves nothing that runs: the user reviews it there, confirms any script,
-   fills in its inputs and tool slots, and imports it switched off. Give them the link and never say it is set up.
+   fills in its inputs and tool slots, and imports it in Preview (it records what it would do; a check script runs for
+   real) until they turn it on. Give them the link and never say it is set up.
    A refused draft lists every problem with where it is; fix them all and call again. Before you write one, use the
    `aboard-automations` skill if it is installed: it covers the triggers, actions, variables, inputs, tool slots and script
    contract, and how to test a script and hand the draft over.

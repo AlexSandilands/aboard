@@ -563,7 +563,7 @@ function AddAutomationDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     {
       icon: FileUpIcon,
       title: "Import",
-      blurb: "From a file someone shared, or one of the examples. It comes in switched off.",
+      blurb: "From a file someone shared, or one of the examples. It comes in in Preview.",
       go: () => void navigate({ to: "/settings/autopilot/custom/import", state: FROM_SETTINGS_LIST }),
     },
   ];

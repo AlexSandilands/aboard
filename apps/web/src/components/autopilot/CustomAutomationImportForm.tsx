@@ -157,7 +157,7 @@ export function CustomAutomationImportForm({
         <EditorTitle>Import an automation</EditorTitle>
         <p className="text-sm text-muted-foreground">
           Pick a file someone shared. You read what it would run, fill in its inputs and the tools it needs, and choose
-          where it applies. It comes in switched off.
+          where it applies. It comes in in Preview: it records what it would do until you turn it on.
         </p>
       </EditorHeader>
       <EditorPanel className="space-y-4">
@@ -203,8 +203,9 @@ export function CustomAutomationImportForm({
             <AlertDescription>
               {shownDraft.note ? <p className="whitespace-pre-wrap">{shownDraft.note}</p> : null}
               <p>
-                An agent can only draft an automation: nothing runs until you import it and switch it on. Read it as
-                carefully as a file from someone else. It is kept until {shownDraft.expiresAt.slice(0, 10)}.
+                An agent can only draft an automation: nothing is saved until you import it, and then it only records
+                what it would do (in Preview) until you turn it on. Read it as carefully as a file from someone else. It
+                is kept until {shownDraft.expiresAt.slice(0, 10)}.
               </p>
             </AlertDescription>
           </Alert>
@@ -216,8 +217,9 @@ export function CustomAutomationImportForm({
               <TriangleAlertIcon />
               <AlertTitle>Read all of this before you import it</AlertTitle>
               <AlertDescription>
-                This was written by someone else. Once you switch it on, it runs on this machine with your access, so
-                what it says below is what it will do. Nothing is saved until you import.
+                This was written by someone else. Once you turn it on, it runs on this machine with your access, so what
+                it says below is what it will do. Nothing is saved until you import, and it imports in Preview, where a
+                check script already runs for real.
               </AlertDescription>
             </Alert>
 

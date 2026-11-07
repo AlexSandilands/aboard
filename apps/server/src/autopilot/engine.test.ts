@@ -373,6 +373,84 @@ describe("runs", () => {
   });
 });
 
+describe("preview", () => {
+  it("records what one automation would do while another in the same project runs for real", async () => {
+    const { s, engine, task, runs, started } = setup();
+    s.autopilot.setScope("board", null, "noop", { mode: "preview" });
+    s.autopilot.setScope("board", null, "agent", { mode: "on" });
+    // The agent's run waits on the runner, so the pass is awaited, not the engine's idle.
+    await engine.pass();
+    expect(runs("noop")).toMatchObject([{ status: "skipped", dryRun: true, summary: `Would touch #${task.number}` }]);
+    expect(s.tasks.summary(task.id).labels).toEqual([]);
+    expect(runs("agent")).toMatchObject([{ dryRun: false }]);
+    expect(started).toHaveLength(1);
+    started[0]!.resolve({});
+    await engine.idle();
+  });
+
+  it("previews per scope: a project in Preview under a board that is on, and an epic in Preview in a live project", async () => {
+    const { s, engine, project, other, task, runs } = setup();
+    const b = s.tasks.create({ projectId: other.id, title: "Two", plan });
+    const child = s.tasks.create({ projectId: project.id, title: "In the epic", plan });
+    const epic = s.tasks.createEpic({ projectId: project.id, title: "Epic" }, [child.id], "agent");
+    s.autopilot.setScope("board", null, "noop", { mode: "on" });
+    s.autopilot.setScope("project", other.id, "noop", { mode: "preview" });
+    s.autopilot.setScope("epic", epic.id, "noop", { mode: "preview" }, project.id);
+    await settle(engine);
+    const byTask = new Map(runs("noop").map((r) => [r.taskId, r.dryRun]));
+    expect(byTask.get(task.id)).toBe(false);
+    expect(byTask.get(b.id)).toBe(true);
+    expect(byTask.get(child.id)).toBe(true);
+  });
+
+  it("hands a check that only previews a dry run, and one with a live scope a real one", async () => {
+    const { s, engine, project, other } = setup();
+    const seen: { engine: boolean; projects: [string, boolean][] }[] = [];
+    const spy = s.autopilot.automations().find((a) => a.key === "project_wide")!;
+    const check = spy.check.bind(spy);
+    spy.check = (ctx) => {
+      seen.push({ engine: ctx.engine.dryRun, projects: ctx.projects.map((p) => [p.project.id, p.dryRun]) });
+      return check(ctx);
+    };
+    s.autopilot.setScope("board", null, "project_wide", { mode: "preview" });
+    await settle(engine);
+    expect(seen.at(-1)).toEqual({
+      engine: true,
+      projects: [
+        [project.id, true],
+        [other.id, true],
+      ],
+    });
+    s.autopilot.setScope("project", other.id, "project_wide", { mode: "on" });
+    await settle(engine);
+    expect(seen.at(-1)).toEqual({
+      engine: false,
+      projects: [
+        [project.id, true],
+        [other.id, false],
+      ],
+    });
+  });
+
+  it("runs for real once switched from Preview to On, deduped apart from what it previewed", async () => {
+    const { s, engine, task, runs } = setup();
+    s.autopilot.setScope("project", task.projectId, "noop", { mode: "preview" });
+    await settle(engine);
+    s.autopilot.setScope("project", task.projectId, "noop", { mode: "on" });
+    await settle(engine);
+    expect(runs("noop").map((r) => r.dryRun)).toEqual(expect.arrayContaining([false, true]));
+    expect(runs("noop")).toHaveLength(2);
+    expect(s.tasks.summary(task.id).labels).toEqual(["touched"]);
+  });
+
+  it("counts each automation's would-be runs over the last week in the overview", async () => {
+    const { s, engine } = setup();
+    s.autopilot.setScope("board", null, "noop", { mode: "preview" });
+    await settle(engine);
+    expect(s.autopilot.overview().previewRuns).toEqual([{ automation: "noop", count: 1 }]);
+  });
+});
+
 describe("limits", () => {
   it("runs one agent at a time by default and picks the next up once it finishes", async () => {
     const { s, engine, task, runs, started } = setup();
