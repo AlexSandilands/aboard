@@ -53,7 +53,7 @@ import {
 } from "~/components/settings/agents/SplitCard";
 import { FROM_SETTINGS_LIST } from "~/components/settings/settingsNavigation";
 import { ConfirmDialog } from "~/components/task/ConfirmDialog";
-import { Alert, AlertAction, AlertDescription } from "~/components/ui/alert";
+import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
@@ -447,13 +447,16 @@ function PreviewNotice({
     <div className="px-3 sm:px-4">
       <Alert variant="warning">
         <EyeIcon />
-        <AlertDescription>{previewHint(count)}</AlertDescription>
-        <AlertAction className="flex items-center gap-1">
-          {count > 0 ? <RunHistoryLink automation={automation} label="See them" size="xs" /> : null}
-          <Button size="xs" variant="warning-outline" disabled={disabled} onClick={onTurnOn}>
-            Turn on
-          </Button>
-        </AlertAction>
+        {/* The buttons sit under the text, so a narrow detail pane doesn't squeeze it into a column. */}
+        <AlertDescription>
+          <p>{previewHint(count)}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            <Button size="xs" variant="warning-outline" disabled={disabled} onClick={onTurnOn}>
+              Turn on
+            </Button>
+            {count > 0 ? <RunHistoryLink automation={automation} label="See them" size="xs" /> : null}
+          </div>
+        </AlertDescription>
       </Alert>
     </div>
   );
