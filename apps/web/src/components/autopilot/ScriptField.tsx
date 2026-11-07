@@ -40,6 +40,7 @@ export function ScriptField({
   patch,
   projects,
   sample,
+  withTest = true,
 }: {
   kind: ScriptRole;
   form: CustomForm;
@@ -47,6 +48,8 @@ export function ScriptField({
   projects: readonly Project[];
   /** The task an action's test run can be given the values of. */
   sample: TaskSummary | null;
+  /** False where the test run has a place of its own (the builder's last step). */
+  withTest?: boolean;
 }) {
   const check = kind === "check";
   const language = check ? form.checkLanguage : form.language;
@@ -177,13 +180,13 @@ export function ScriptField({
         />
       </Field>
 
-      <ScriptTest kind={kind} form={form} projects={projects} sample={sample} />
+      {withTest ? <ScriptTest kind={kind} form={form} projects={projects} sample={sample} /> : null}
     </div>
   );
 }
 
 /** Runs the script once for real, against a project the user picks, and shows what came of it. */
-function ScriptTest({
+export function ScriptTest({
   kind,
   form,
   projects,

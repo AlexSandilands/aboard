@@ -17,6 +17,9 @@ const boardLine = (boardUrl: string) => `Board: ${boardUrl.replace(/\/+$/, "")}/
 const HANDOVER_LINE =
   "A draft is not set up: it comes in in Preview, and I have to import it and turn it on. Give me the link to it and say so; never tell me it is active.";
 
+const CHANGE_HANDOVER_LINE =
+  "With replaces, nothing changes until I apply it from a before/after diff, and it keeps the automation's id, switches and run history. Give me the link to it and say so; never tell me it is changed.";
+
 const READ_SKILL_LINE = `If the ${SKILL} skill is installed, read it first: it covers the triggers, actions, placeholders, inputs and tool slots, and how to test a script.`;
 
 /** "Ask an agent" beside + Add: write a new automation as a draft. */
@@ -77,8 +80,7 @@ export function changeAutomationPrompt({
       "",
       "1. Ask me what to change, and why, before you write anything.",
       `2. ${READ_SKILL_LINE}`,
-      `3. Save the changed version as a new draft with draft_automation(automation, note) on the ${BRAND.id} MCP server, keeping what I didn't ask you to change. In the note, say what you changed. ${HANDOVER_LINE}`,
-      "Importing the draft makes a new automation: tell me to switch the old one off once I have turned the new one on.",
+      `3. Save the changed version with draft_automation(automation, note, replaces: "${custom.id}") on the ${BRAND.id} MCP server, keeping what I didn't ask you to change. In the note, say what you changed and why. ${CHANGE_HANDOVER_LINE}`,
     ].join("\n");
   }
   return [
@@ -140,7 +142,7 @@ export function fixRunPrompt({
     "",
     "1. Find out why it failed: read the error and output above, then the task with get_task if it was on one, and the automation's prompt or script.",
     custom
-      ? `2. If its prompt or script is at fault, save the corrected version as a new draft with draft_automation(automation, note) on the ${BRAND.id} MCP server. ${READ_SKILL_LINE} ${HANDOVER_LINE}`
+      ? `2. If its prompt or script is at fault, save the corrected version with draft_automation(automation, note, replaces: "${custom.id}") on the ${BRAND.id} MCP server. ${READ_SKILL_LINE} ${CHANGE_HANDOVER_LINE}`
       : `2. It is a built-in, so there is no draft to write: if a setting of mine caused it, say which one to change and where (Settings → Autopilot → ${automation.title}); if the cause is in the repo or the project's setup, fix that.`,
     run.taskId
       ? `3. Once the cause is gone, you can let it try again with retry_autopilot_run(task, automation: "${automation.key}"). Don't push an empty commit to re-trigger it.`

@@ -10,6 +10,12 @@ does in one sentence, switch it on or off, **Edit** it, **Export** it or **Delet
 **Settings → Autopilot → + Add automation → Start from scratch**. The same dialog has **Recipes** (small ready-made
 automations that open for you to read and import, in Preview), **Import a file** and **Ask an agent**.
 
+The builder takes it in five steps: **When → Do → Details → Where → Review & try**. Each step shows only what the
+trigger and action you picked need, and a sentence above it says what the automation does so far ("When a task moves
+into Review, ask an agent: “…” It runs in every project it's switched on in."). **Back**, or a step you've already
+reached in the row at the top, takes you back without losing anything you typed. **Next** checks the step first and
+says what to fix.
+
 1. **When**: pick a trigger.
    - **A task changes column**: into a column, and optionally only from one (Done → In Progress catches reopened
      tasks).
@@ -21,9 +27,10 @@ automations that open for you to read and import, in Preview), **Import a file**
      (local time), so every 15 minutes runs at 00:00, 00:15, 00:30 and so on. It runs once in each project it's on
      in, with no task, so it can only filter by project. If the board was off, it runs once when it's back, not
      once for each slot it missed.
-2. **Only in these projects**, **with any of these labels**, **in the epic**: narrow it down. Leave them empty
-   for every task.
-3. **Do**: one of these.
+2. **Do**: one of these, then its **Details** on the next step: the prompt, the command or the script, up front.
+   The rest sits under **More options**, closed unless something in it is set: for an agent the model, skill,
+   allowed tools, inputs, required tools, and the pull request branch (or, on a schedule, the check script); for a
+   command or script its inputs.
    - **Start an agent** on the task, with your prompt. The prompt can name `{{task.number}}`, `{{task.title}}`,
      `{{task.id}}`, `{{task.status}}`, `{{pr.url}}`, `{{project.name}}`, `{{project.path}}`,
      `{{project.repo_url}}`, `{{automation.name}}`, your [variables](#variables) as `{{vars.name}}` and
@@ -69,11 +76,21 @@ automations that open for you to read and import, in Preview), **Import a file**
      `pnpm run notify "$env:ABOARD_TASK_TITLE"` is unsafe. Have the program read the variable itself instead:
      `pnpm run notify`, with `process.env.ABOARD_TASK_TITLE` in the script. Using a value inside PowerShell
      (`Write-Output`, `-match`, a `.ps1` script) is fine.
-4. The **Preview** shows exactly what would run for the newest task the filters let through: the filled prompt,
-   or the command with its variables.
-5. Save it. It starts in [Preview](autopilot.md#trying-one-out-with-preview): it records what it would do, and does
-   none of it. Once its Preview runs look right, turn it **On** on its page (**Turn on**, or its Mode), in a project's
-   Autopilot settings, or from the Autopilot pill on a lane.
+3. **Where**: **only in these projects**, **with any of these labels**, **in the epic**. Leave them empty for every
+   task in every project it's switched on in.
+4. **Review & try**: the sentence, each step in one line with an **Edit** that goes back to it, and:
+   - **Right now this would run for**: for "sits too long", the tasks already past the limit (it would act on each
+     once switched on); for an event, nothing yet, since it only acts on what happens after it's on; for a schedule,
+     the projects it would run in.
+   - **Try it**: **Show the prompt** shows exactly what an agent would be sent for the newest task the filters let
+     through; a command shows what it would run; a script or check script has its **Test run** here.
+   - **Name**, filled in from what you picked ("PR checks fail → agent"); change it if you like.
+5. **Save in Preview**, or **Save and turn on**. In [Preview](autopilot.md#trying-one-out-with-preview) it records
+   what it would do, and does none of it. Once its Preview runs look right, turn it **On** on its page (**Turn on**, or
+   its Mode), in a project's Autopilot settings, or from the Autopilot pill on a lane.
+
+**Edit** on an automation opens the same steps at **Review & try**, every step reachable, with **Save changes** at the
+bottom of each.
 
 ## What it does
 
@@ -267,12 +284,16 @@ prompt, skill name and allowed tools, any script or check script (in full), the 
 slots **without** their tools. It leaves out your projects, your epic and the tools you filled the slots with. If the
 automation names a skill you have installed, the skill's text goes in the file.
 
-To use someone's file: **+ Add automation → Import a file**, then choose the file. Before anything is saved you see everything it
-would run: the prompt, any command, script or check script (with its language), the tools it may use without asking and
+To use someone's file: **+ Add automation → Import a file**, then choose the file. It opens as the builder's review:
+what it does in one sentence, and before anything is saved, everything it would run: the prompt, any command, script or
+check script (with its language), the tools it may use without asking and
 the skill's text. Treat it as code from a stranger, because once you turn it on it runs on
-your machine with your access. Then fill in its inputs and slots, optionally restrict it to projects, and import.
-It comes in **in Preview**, which records what it would do (a check script still runs for real); turn it on in the
-Autopilot list when its Preview runs look right and the orange warning is gone.
+your machine with your access. Then fill in its inputs and slots, optionally restrict it to projects, choose
+**Saves in: Preview** (the default) or **On**, and **Import**. In Preview it records what it would do (a check script
+still runs for real); turn it on in the Autopilot list when its Preview runs look right and the orange warning is gone.
+**Edit first** opens it in the builder instead, at Details, with what you filled in; saving there makes it as you leave
+it (a skill in the file isn't saved that way: import it as it is for that). A script in it still needs the "I've read
+it" switch, on Review & try, before it saves.
 
 - A file with a script needs one more step: a switch that says you've read the script and understand it runs on your
   machine as you. **Import** waits for it.
@@ -301,9 +322,25 @@ hand-offs and `/autopilot stop` carry over.
 
 You can ask an agent connected to the board to write an automation for you: "every weekday at 8, triage the new
 defects in Jira", "when a PR merges, run the release notes script". The agent can't set one up itself. It drafts it,
-and you get a notification and a link to the import page, where the draft opens like a shared file, with a banner
+and you get a notification and a link to the review page, where the draft opens like a shared file, with a banner
 saying an agent wrote it and the agent's note to you. Read it with the same care, fill in its inputs and tools, and
-import it; it comes in off, like any import.
+import it (in Preview unless you choose On), or **Edit first**.
+
+### Changes to one you have
+
+An agent can also propose a change to one of your custom automations: a better prompt, a fixed check script,
+another time. It sends the whole new version naming the automation it replaces, and **Needs you** shows **Change to
+<name>**. **Review** shows the difference field by field (trigger, prompt, check script, inputs, allowed tools...)
+with the agent's reason, and three buttons:
+
+- **Apply change** changes the automation in place: it keeps its switches (Off, Preview or On), where it runs, its run
+  history, the values you gave its inputs and the tools in its slots. New inputs and slots are asked for on the
+  page. A changed script needs the same "I've read it" switch as an import, and a skill the change carries is saved only
+  if you switch it on (under a new name when you already have one by its name); otherwise the automation keeps its own
+  skill of that name, or names none.
+- **Edit first** opens the builder on the automation with the change filled in; **Save changes** applies it as you leave
+  it (a changed script still needs the "I've read it" switch on Review & try).
+- **Keep current** drops the proposal.
 
 With **Settings → Agents → Providers → Board skills** on, the agent also has the `aboard-automations` skill, which tells it
 how to pick a trigger and action, use your variables, inputs and tool slots, write a script that fails loudly and
@@ -313,12 +350,12 @@ less guidance.
 You don't need to know what to ask. **Ask an agent** (beside **+ Add automation**, and in the Add dialog) gives you a
 prompt to paste into your own agent, or starts a new T3 Code thread with it, which you can edit first. The same menu is
 on each automation as **Ask an agent to change this** (it hands over the automation's current definition and asks for a
-changed draft; for a built-in it tells you which settings to change) and on a failed run as **Ask an agent to fix**
+[change](#changes-to-one-you-have); for a built-in it tells you which settings to change) and on a failed run as **Ask an agent to fix**
 (with the error and the end of its output). There's no chat box: the agent works in your own session, and what it
 makes arrives as a draft.
 
 Drafts waiting for you are listed under **Needs you** at the top of Settings → Autopilot, with **Review** and
-**Dismiss**. Importing a
+**Dismiss**. Importing or applying a
 draft removes it; one you leave is dropped after 14 days. Drafts aren't backed up.
 
 ## Commands and scripts run on your machine

@@ -326,8 +326,16 @@ function NeedsYou({
             return (
               <SettingsRow
                 key={`draft:${need.draftId}`}
-                title={<NeedTitle icon={<FilePenLineIcon className="text-info" />}>Draft · {need.name}</NeedTitle>}
-                description={`From ${need.createdBy} · ${formatRelativeTimeLabel(need.createdAt)}. It saves in Preview when you import it.`}
+                title={
+                  <NeedTitle icon={<FilePenLineIcon className="text-info" />}>
+                    {need.replaces ? `Change to ${need.replaces.name}` : `Draft · ${need.name}`}
+                  </NeedTitle>
+                }
+                description={
+                  need.replaces
+                    ? `From ${need.createdBy} · ${formatRelativeTimeLabel(need.createdAt)}. Review the difference before it applies.`
+                    : `From ${need.createdBy} · ${formatRelativeTimeLabel(need.createdAt)}. It saves in Preview when you import it.`
+                }
                 control={
                   <>
                     <Button

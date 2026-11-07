@@ -519,6 +519,8 @@ export const AutopilotNeed = z.discriminatedUnion("kind", [
     kind: z.literal("draft"),
     draftId: z.string(),
     name: z.string(),
+    /** The custom automation it proposes a new version of (its current name), or null for a new one. */
+    replaces: z.object({ id: z.string(), name: z.string() }).nullable(),
     createdBy: z.string(),
     createdAt: z.string(),
   }),
