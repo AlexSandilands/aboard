@@ -462,7 +462,10 @@ export function createAutopilotService(
     const on = repos.projects
       .list()
       .filter((p) => withEpicOn.has(p.id) || resolveAutopilot(chainFor(settings, automation.key, p.id, null)).enabled);
-    return automation.needs(on);
+    return automation.needs(on, (p) => ({
+      ...automation.defaults,
+      ...resolveAutopilot(chainFor(settings, automation.key, p.id, null)).config,
+    }));
   };
 
   const usage = (agentAutomations: readonly string[], since: string) => {
@@ -522,7 +525,17 @@ export function createAutopilotService(
         ? [{ kind: "setup", automation: a.key, title: a.title, reason: (a.blocked ?? a.needs)! }]
         : [],
     );
-    return [...failed, ...drafts, ...setup];
+    // Other people's PRs Review PRs found clean that only the user can approve.
+    const approvals = repos.repoPrReviews.ready().map((r): AutopilotNeed => ({
+      kind: "pr_approval",
+      url: r.url,
+      pr: `${r.repo}#${r.number}`,
+      title: r.title,
+      author: r.author,
+      reason: r.reasonDetail ?? "ready for your approval",
+      since: r.readySince!,
+    }));
+    return [...failed, ...approvals, ...drafts, ...setup];
   };
 
   return {

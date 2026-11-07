@@ -32,6 +32,7 @@ export * from "./autopilot.ts";
 export * from "./autopilotRunHistory.ts";
 export * from "./autopilotSentence.ts";
 export * from "./prReview.ts";
+export * from "./repoPrReview.ts";
 export * from "./recurring.ts";
 export * from "./automationVariables.ts";
 export * from "./toolRules.ts";

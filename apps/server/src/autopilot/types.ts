@@ -58,6 +58,10 @@ export interface CheckContext<C> {
    * and has candidates once it ends; the engine's minute tick would get there too, only later.
    */
   wake?: () => void;
+  /** Reads on the git host, for a check that finds its work there (Review PRs' other people's PRs). */
+  gitHosts?: GitHostActions;
+  /** The repository a project's folder pushes to (its `origin`), or null when it has none the board can read. */
+  repoOf?: (project: Project) => Promise<{ host: string; repo: string } | null>;
 }
 
 /** What a runner recorded about an agent action. */
@@ -131,9 +135,10 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
   blocked?: string | null;
   /**
    * Why it won't run in some of the projects it is on in (a custom automation naming a variable they have no value for),
-   * given those projects, or null. Shown on its row; its check skips them meanwhile.
+   * given those projects and each one's config (defaults, then the board's and the project's keys), or null. Shown on
+   * its row and under Needs you; its check skips them meanwhile.
    */
-  needs?: (projects: readonly Project[]) => string | null;
+  needs?: (projects: readonly Project[], configOf: (project: Project) => AutomationConfig) => string | null;
   /** Parses the merged config; it should give every field a default. */
   schema: z.ZodType<C>;
   /** How the UI renders the config form. */
@@ -185,6 +190,11 @@ export interface RunnerRequest {
    * project with no folder) still gets the safety note, without a branch name; leaving it out adds neither.
    */
   repo?: string | null;
+  /**
+   * A task-less read-only run only, with `repo`: works in a worktree of `repo` on `branch` (origin's copy) instead of an
+   * empty folder, named after `tag` (`pr42`), and removed when the run ends. Review PRs reads other people's PRs so.
+   */
+  checkout?: { branch: string; tag: string };
   /** Headless only: `read-only` can't edit files (a reviewer); `none` has no tools at all. Defaults to edit. */
   access?: AgentAccess;
   /** Headless only: tools allowed on top of the access's list, e.g. `Bash(gh pr review *)`. */

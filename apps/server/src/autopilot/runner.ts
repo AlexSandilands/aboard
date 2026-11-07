@@ -598,6 +598,12 @@ export function createAutopilotRunner(deps: {
     };
   };
 
+  /** Removes a task-less run's read-only worktree and its branch. */
+  const dropCheckout = async (worktree: Worktree, repo: string) => {
+    await runGit(["worktree", "remove", "--force", worktree.path], repo).catch(() => null);
+    await runGit(["branch", "-D", worktree.branch], repo).catch(() => null);
+  };
+
   /**
    * A run with no task (a digest, a scheduled agent): headless, in an empty folder of its own that is removed
    * afterwards. With a `repo` it can use git there, so it gets Claude Code's push deny rules: there is no worktree for
@@ -616,7 +622,30 @@ export function createAutopilotRunner(deps: {
 
 You are running unattended as ${BRAND.name} Autopilot, with no task and no worktree, in an empty temporary folder. ${SAFETY(defaultBranch)}`
         : request.prompt;
-    const cwd = await mkdtemp(join(tmpdir(), `${BRAND.id}-run-`));
+    let worktree: Worktree | null = null;
+    if (request.checkout) {
+      if (!request.repo || request.access !== "read-only") {
+        throw new Error("A task-less checkout is only for a read-only run with a project folder");
+      }
+      worktree = await createWorktree(runGit, {
+        repo: request.repo,
+        root: deps.worktreesDir,
+        taskNumber: request.checkout.tag,
+        runId: request.run.id,
+        branch: request.checkout.branch,
+        readOnly: true,
+        pushGuard: true,
+      });
+      if (request.expectHead) {
+        try {
+          await checkHead(worktree.path, request.expectHead);
+        } catch (error) {
+          await dropCheckout(worktree, request.repo);
+          throw error;
+        }
+      }
+    }
+    const cwd = worktree?.path ?? (await mkdtemp(join(tmpdir(), `${BRAND.id}-run-`)));
     // The board's MCP config carries its token, so it sits outside the folder the agent may read.
     const mcpDir = request.boardTools ? await mkdtemp(join(tmpdir(), `${BRAND.id}-mcp-`)) : null;
     try {
@@ -636,7 +665,13 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
         null,
         options,
         settings,
-        { cwd, prompt, defaultBranch, ...(mcpConfig ? { boardMcpConfig: mcpConfig } : {}) },
+        {
+          cwd,
+          prompt: worktree ? `${request.prompt}\n\n${headlessWorkspaceNote(worktree, true, null)}` : prompt,
+          defaultBranch: worktree?.defaultBranch ?? defaultBranch,
+          ...(worktree ? { hooksPath: worktree.hooksPath } : {}),
+          ...(mcpConfig ? { boardMcpConfig: mcpConfig } : {}),
+        },
         { runner: "headless" },
         update,
         () => {},
@@ -649,7 +684,9 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
         ...(request.outputSchema ? { output: outcome.output } : {}),
       };
     } finally {
-      for (const dir of [cwd, mcpDir]) {
+      // A read-only checkout holds nothing of the agent's: it goes with the run.
+      if (worktree) await dropCheckout(worktree, request.repo!);
+      for (const dir of [worktree ? null : cwd, mcpDir]) {
         if (!dir) continue;
         await rm(dir, { recursive: true, force: true }).catch((error: unknown) => {
           log.warn(`[autopilot] couldn't remove ${dir}: ${messageOf(error)}`);

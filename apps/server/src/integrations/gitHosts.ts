@@ -8,9 +8,12 @@ import {
   type GitHost,
   type HostIssue,
   type PostedReview,
+  type OpenPrListing,
+  type PostedComment,
   type PostReviewInput,
   type PrAgentHints,
   type PrThreadState,
+  type RepoPr,
 } from "./gitHost.ts";
 import type { PrMerges } from "./prMerge.ts";
 import { messageOf } from "./util.ts";
@@ -81,6 +84,15 @@ export interface GitHostActions {
   /** The PR's unresolved review threads and newest commits, read now. */
   reviewThreads(ref: PrRef): Promise<PrThreadState>;
   resolveReviewThread(host: string, threadId: string): Promise<void>;
+  /** Review PRs' other people's PRs: the repository's open PRs, and one read in full. */
+  listOpenPrs(host: string, repo: string): Promise<OpenPrListing[]>;
+  readRepoPr(ref: PrRef): Promise<RepoPr>;
+  /** Whether nothing the author wrote changed from `base` to `head` (only merges, or a rebase of the same change). */
+  unchangedSince(ref: PrRef, base: string, head: string, baseRef: string): Promise<boolean>;
+  /** A conversation comment on the PR, posted or edited (the hand-off comment), and a reply on a review thread. */
+  postComment(ref: PrRef, body: string): Promise<PostedComment>;
+  editComment(host: string, nodeId: string, body: string): Promise<PostedComment>;
+  replyOnThread(host: string, threadId: string, body: string): Promise<void>;
   /** The commands an agent fixing the PR runs, in its host's CLI. */
   agentHints(pr: { host: string; repo: string; number: number }): PrAgentHints;
   /** What the host serving `host` is called and which CLI it uses, for prompts and notes. */
@@ -109,6 +121,12 @@ export function gitHostActions(hosts: GitHosts, merges: Pick<PrMerges, "mergeInt
     setPrBody: async (ref, body) => (await on(ref.host)).setPrBody(ref, body),
     reviewThreads: async (ref) => (await on(ref.host)).reviewThreads(ref),
     resolveReviewThread: async (host, threadId) => (await on(host)).resolveReviewThread(host, threadId),
+    listOpenPrs: async (host, repo) => (await on(host)).listOpenPrs(host, repo),
+    readRepoPr: async (ref) => (await on(ref.host)).readRepoPr(ref),
+    unchangedSince: async (ref, base, head, baseRef) => (await on(ref.host)).unchangedSince(ref, base, head, baseRef),
+    postComment: async (ref, body) => (await on(ref.host)).postComment(ref, body),
+    editComment: async (host, nodeId, body) => (await on(host)).editComment(host, nodeId, body),
+    replyOnThread: async (host, threadId, body) => (await on(host)).replyOnThread(host, threadId, body),
     agentHints: (pr) => hosts.agentHints(pr),
     definitionFor: (host) => (hosts.forHost(host) ?? hosts.all()[0]!).definition,
   };
@@ -164,6 +182,12 @@ export const NO_GIT_HOSTS: GitHostActions = {
   setPrBody: unavailable,
   reviewThreads: unavailable,
   resolveReviewThread: unavailable,
+  listOpenPrs: unavailable,
+  readRepoPr: unavailable,
+  unchangedSince: unavailable,
+  postComment: unavailable,
+  editComment: unavailable,
+  replyOnThread: unavailable,
   agentHints: () => {
     throw new Error("No git host is available");
   },

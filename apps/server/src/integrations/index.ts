@@ -20,6 +20,7 @@ import { createBackupSetup } from "./backupSetup.ts";
 import type { GitHostReads } from "./gitHost.ts";
 import { createGitHosts, gitHostActions, gitHostIssues } from "./gitHosts.ts";
 import { createGithubHost } from "./githubHost.ts";
+import { createRepoUrls, remoteRepo } from "./gitRemote.ts";
 import { createRunTokens } from "../mcp/runTokens.ts";
 import { RUN_TOOLS_PATH, type RunToolsContext } from "../mcp/runTools.ts";
 import { createPrMerges } from "./prMerge.ts";
@@ -223,11 +224,17 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       },
       ...(overrides.log ? { log: overrides.log } : {}),
     });
+  // Each project folder's `origin`, cached: Review PRs reads it on every pass for other people's PRs.
+  const repoUrls = createRepoUrls(overrides.autopilotGit ?? defaultRunGit);
   const autopilot = createAutopilotEngine({
     services: deps.services,
     bus: deps.bus,
     runner,
     gitHosts: gitHostActions(hosts, merges),
+    repoOf: async (project) => {
+      const url = await repoUrls(project.workspaceRoot);
+      return url ? remoteRepo(url) : null;
+    },
     runEnded: (run) => {
       if (run.sessionId) refreshSession(run.sessionId);
     },

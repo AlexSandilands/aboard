@@ -402,6 +402,21 @@ export const AutopilotNeed = z.discriminatedUnion("kind", [
     /** What is missing, as the automation's `blocked` or `needs` says it. */
     reason: z.string(),
   }),
+  /**
+   * Another person's PR Review PRs found clean, but that only the user can approve: the approval gate stopped it (a
+   * sensitive path, a required check, no linked issue) or Approve is off. Gone once the PR is approved, closed or moves.
+   */
+  z.object({
+    kind: z.literal("pr_approval"),
+    url: z.string(),
+    /** "acme/app#42". */
+    pr: z.string(),
+    title: z.string(),
+    author: z.string().nullable(),
+    /** What stopped the approval, e.g. "touches sensitive paths: .github/workflows/ci.yml". */
+    reason: z.string(),
+    since: z.string(),
+  }),
 ]);
 export type AutopilotNeed = z.infer<typeof AutopilotNeed>;
 
@@ -412,7 +427,7 @@ export const AutopilotOverview = z.object({
   automations: z.array(AutopilotAutomation),
   /** Since local midnight: real agent runs started (as the daily run cap counts them) and what runs cost. */
   today: z.object({ agentRuns: z.number().int(), spendUsd: z.number() }),
-  /** Newest first within each kind: failed runs, then drafts, then setup gaps. */
+  /** Failed runs (newest first), PRs waiting for the user's approval (oldest first), drafts, then setup gaps. */
   needsYou: z.array(AutopilotNeed),
   /** Each automation's latest real run that has finished, for its row in the list; none for one that never ran. */
   lastRuns: z.array(z.object({ automation: z.string(), status: AutopilotRunStatus, at: z.string() })),
