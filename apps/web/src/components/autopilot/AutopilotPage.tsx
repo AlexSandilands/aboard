@@ -10,7 +10,15 @@ import {
   type AutopilotOverview,
 } from "@repo/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { AlertTriangleIcon, FilePenLineIcon, PauseCircleIcon, PauseIcon, PlayIcon, XCircleIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  FilePenLineIcon,
+  GitPullRequestIcon,
+  PauseCircleIcon,
+  PauseIcon,
+  PlayIcon,
+  XCircleIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import {
   SettingsGroup,
@@ -318,8 +326,16 @@ function NeedsYou({
             return (
               <SettingsRow
                 key={`draft:${need.draftId}`}
-                title={<NeedTitle icon={<FilePenLineIcon className="text-info" />}>Draft · {need.name}</NeedTitle>}
-                description={`From ${need.createdBy} · ${formatRelativeTimeLabel(need.createdAt)}. It saves in Preview when you import it.`}
+                title={
+                  <NeedTitle icon={<FilePenLineIcon className="text-info" />}>
+                    {need.replaces ? `Change to ${need.replaces.name}` : `Draft · ${need.name}`}
+                  </NeedTitle>
+                }
+                description={
+                  need.replaces
+                    ? `From ${need.createdBy} · ${formatRelativeTimeLabel(need.createdAt)}. Review the difference before it applies.`
+                    : `From ${need.createdBy} · ${formatRelativeTimeLabel(need.createdAt)}. It saves in Preview when you import it.`
+                }
                 control={
                   <>
                     <Button
@@ -344,6 +360,29 @@ function NeedsYou({
                       Dismiss
                     </Button>
                   </>
+                }
+              />
+            );
+          case "pr_approval":
+            return (
+              <SettingsRow
+                key={`pr:${need.url}`}
+                title={
+                  <NeedTitle icon={<GitPullRequestIcon className="text-info" />}>
+                    Ready for your approval · {need.pr} {need.title}
+                  </NeedTitle>
+                }
+                description={`${need.author ? `By ${need.author} · ` : ""}${need.reason} · ${formatRelativeTimeLabel(need.since)}`}
+                control={
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    render={
+                      <a href={need.url} target="_blank" rel="noreferrer" aria-label={`Open ${need.pr} on GitHub`} />
+                    }
+                  >
+                    Open PR
+                  </Button>
                 }
               />
             );

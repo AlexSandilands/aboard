@@ -39,7 +39,6 @@ function setup() {
     titlePattern: "Audit {{project}}",
     phases: [{ title: "Audit", steps: [{ title: "Run pnpm audit" }, { title: "Fix what it finds" }] }],
   });
-  const turnOn = () => s.autopilot.setScope("project", project.id, AUTOPILOT_RECURRING, { mode: "on" });
   const rule = (input: { name?: string; templateId?: string; flagAutopilot?: boolean; schedule?: RecurringSchedule }) =>
     s.recurring.create(project.id, {
       name: input.name ?? "Weekly bump",
@@ -54,13 +53,12 @@ function setup() {
   };
   const tasks = () => s.tasks.summaries({ projectId: project.id, includeArchived: true });
   const runs = () => s.autopilot.runsForProject(project.id);
-  return { ...h, s, project, bump, audit, turnOn, rule, pass, tasks, runs, newEngine };
+  return { ...h, s, project, bump, audit, rule, pass, tasks, runs, newEngine };
 }
 
 describe("recurring tasks", () => {
   it("creates a Backlog task from the template when a slot is due, as autopilot, with a note", async () => {
-    const { s, turnOn, rule, pass, tasks, runs } = setup();
-    turnOn();
+    const { s, rule, pass, tasks, runs } = setup();
     const r = rule({});
     await pass(at(12, 8, 59));
     expect(tasks()).toEqual([]);
@@ -81,8 +79,7 @@ describe("recurring tasks", () => {
   });
 
   it("makes a Planned task when the template has a plan, and flags it when asked", async () => {
-    const { s, turnOn, rule, pass, tasks, audit, bump } = setup();
-    turnOn();
+    const { s, rule, pass, tasks, audit, bump } = setup();
     rule({ name: "Audit", templateId: audit.id, flagAutopilot: true });
     rule({ name: "Flagged bump", templateId: bump.id, flagAutopilot: true });
     rule({ name: "Plain bump", templateId: bump.id });
@@ -98,22 +95,29 @@ describe("recurring tasks", () => {
     expect(planned.phases[0]!.steps.map((step) => step.title)).toEqual(["Run pnpm audit", "Fix what it finds"]);
   });
 
-  it("does nothing while the automation is off for the project, or the rule is disabled", async () => {
-    const { s, turnOn, rule, pass, tasks, runs } = setup();
+  it("runs an enabled rule with no switch anywhere, and does nothing while the rule is disabled", async () => {
+    const { s, project, rule, pass, tasks, runs } = setup();
+    // No board, project or epic setting exists for the automation, and none can be made.
+    expect(() => s.autopilot.setScope("project", project.id, AUTOPILOT_RECURRING, { mode: "off" })).toThrow(
+      /no switch/,
+    );
+    // It is not reported as switched on at any scope either, so a lane's pill doesn't read On because of it.
+    expect(s.autopilot.scope("project", project.id).find((e) => e.automation === AUTOPILOT_RECURRING)).toMatchObject({
+      mode: "inherit",
+      enabled: false,
+    });
     const r = rule({});
     await pass(at(12, 9, 1));
-    expect(tasks()).toEqual([]);
+    expect(tasks()).toHaveLength(1);
 
-    turnOn();
     s.recurring.update(r.id, { enabled: false });
     await pass(at(19, 9, 1));
-    expect(tasks()).toEqual([]);
-    expect(runs()).toEqual([]);
+    expect(tasks()).toHaveLength(1);
+    expect(runs()).toHaveLength(1);
   });
 
   it("doesn't catch up on slots that passed before the rule existed or while it was off", async () => {
-    const { s, turnOn, rule, pass, tasks } = setup();
-    turnOn();
+    const { s, rule, pass, tasks } = setup();
     // Created on Monday at 12:00, after that day's 09:00 slot.
     const r = rule({});
     await pass(at(5, 13));
@@ -128,26 +132,8 @@ describe("recurring tasks", () => {
     expect(tasks()).toHaveLength(1);
   });
 
-  it("doesn't catch up when the project's automation is switched back on", async () => {
-    const { s, project, turnOn, rule, pass, tasks } = setup();
-    turnOn();
-    rule({});
-    await pass(at(6, 12));
-    s.autopilot.setScope("project", project.id, AUTOPILOT_RECURRING, { mode: "off" });
-    // Monday the 12th passes while it is off.
-    await pass(at(13, 12));
-    expect(tasks()).toEqual([]);
-    turnOn();
-    await pass(at(13, 12, 1));
-    expect(tasks()).toEqual([]);
-    // The 19th is on again.
-    await pass(at(19, 9, 1));
-    expect(tasks()).toHaveLength(1);
-  });
-
-  it("doesn't catch up when the board is switched on, or Pause all is lifted", async () => {
-    const { s, project, rule, pass, tasks } = setup();
-    s.autopilot.setScope("board", null, AUTOPILOT_RECURRING, { mode: "on" });
+  it("doesn't catch up when Pause all is lifted", async () => {
+    const { s, rule, pass, tasks } = setup();
     rule({});
     await pass(at(6, 12));
     s.autopilot.setPaused(true);
@@ -155,20 +141,12 @@ describe("recurring tasks", () => {
     s.autopilot.setPaused(false);
     await pass(at(13, 12, 1));
     expect(tasks()).toEqual([]);
-
-    // A project that sets its own switch off, then inherits the board's On again, starts afresh too.
-    s.autopilot.setScope("project", project.id, AUTOPILOT_RECURRING, { mode: "off" });
-    await pass(at(20, 12));
-    s.autopilot.setScope("project", project.id, AUTOPILOT_RECURRING, { mode: "inherit" });
-    await pass(at(20, 12, 1));
-    expect(tasks()).toEqual([]);
-    await pass(at(26, 9, 1));
+    await pass(at(19, 9, 1));
     expect(tasks()).toHaveLength(1);
   });
 
   it("creates one catch-up task after downtime, not one per missed slot", async () => {
-    const { s, turnOn, rule, pass, tasks, runs } = setup();
-    turnOn();
+    const { s, rule, pass, tasks, runs } = setup();
     const r = rule({});
     // Mondays the 12th, 19th and 26th all pass with no pass in between.
     await pass(at(28, 10));
@@ -180,8 +158,7 @@ describe("recurring tasks", () => {
   });
 
   it("doesn't create a duplicate after a restart, even if the run history is gone", async () => {
-    const { db, turnOn, rule, pass, tasks, newEngine, runs } = setup();
-    turnOn();
+    const { db, rule, pass, tasks, newEngine, runs } = setup();
     rule({});
     await pass(at(12, 9, 1));
     expect(tasks()).toHaveLength(1);
@@ -197,8 +174,7 @@ describe("recurring tasks", () => {
   });
 
   it("skips a slot while the last task is still open, and logs it", async () => {
-    const { s, turnOn, rule, pass, tasks, runs } = setup();
-    turnOn();
+    const { s, rule, pass, tasks, runs } = setup();
     const r = rule({});
     await pass(at(12, 9, 1));
     const [first] = tasks();
@@ -216,8 +192,7 @@ describe("recurring tasks", () => {
   });
 
   it.each(["done", "closed", "archived"] as const)("creates again once the last task is %s", async (finish) => {
-    const { s, turnOn, rule, pass, tasks } = setup();
-    turnOn();
+    const { s, rule, pass, tasks } = setup();
     rule({});
     await pass(at(12, 9, 1));
     const first = tasks()[0]!;
@@ -232,8 +207,7 @@ describe("recurring tasks", () => {
   });
 
   it("only previews in dry-run, and creates the task once dry-run is off", async () => {
-    const { s, turnOn, rule, pass, tasks, runs } = setup();
-    turnOn();
+    const { s, rule, pass, tasks, runs } = setup();
     const r = rule({});
     s.autopilot.updateEngine({ dryRun: true });
     await pass(at(12, 9, 1));
@@ -250,8 +224,7 @@ describe("recurring tasks", () => {
   });
 
   it("fails the run, and still moves on, when the template was deleted", async () => {
-    const { s, turnOn, rule, pass, tasks, runs, bump } = setup();
-    turnOn();
+    const { s, rule, pass, tasks, runs, bump } = setup();
     const r = rule({});
     s.templates.delete(bump.id);
     expect(s.recurring.get(r.id).templateId).toBeNull();
@@ -264,8 +237,7 @@ describe("recurring tasks", () => {
   });
 
   it("works on an every-N-days schedule from a start date", async () => {
-    const { turnOn, rule, pass, tasks, runs } = setup();
-    turnOn();
+    const { rule, pass, tasks, runs } = setup();
     rule({ schedule: { kind: "every", everyDays: 10, startDate: "2026-10-01", time: "06:30" } });
     await pass(at(10, 6, 29));
     expect(tasks()).toEqual([]);

@@ -48,7 +48,7 @@ describe("createAutomationPrompt", () => {
 describe("changeAutomationPrompt", () => {
   const automation = { key: "custom:c-1", title: "Nudge stale work" };
 
-  it("hands over a custom automation's id and definition and asks for a replacement draft", () => {
+  it("hands over a custom automation's id and definition and asks for a change with replaces", () => {
     const prompt = changeAutomationPrompt({
       boardUrl: BOARD,
       automation,
@@ -59,7 +59,7 @@ describe("changeAutomationPrompt", () => {
     expect(prompt).toContain("Today: When a task has been in In Progress for 48 hours");
     expect(prompt).toContain('"name": "Nudge stale work"');
     expect(prompt).toContain("Read its plan and notes");
-    expect(prompt).toContain("draft_automation(automation, note)");
+    expect(prompt).toContain('draft_automation(automation, note, replaces: "c-1")');
     expect(prompt).toContain("?automation=custom%3Ac-1");
   });
 

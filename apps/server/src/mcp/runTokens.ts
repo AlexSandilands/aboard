@@ -12,7 +12,7 @@ export const RUN_SERVER_NAME = `${BRAND.id}-run`;
 export const RUN_TOKEN_ENV = brandEnv("RUN_TOKEN");
 
 /** The tool sets a run can be given, one per kind of operation. */
-export type RunToolSet = "prReview";
+export type RunToolSet = "prReview" | "repoPrReview";
 
 /** What a run's tools read. Every tool of the set is bound to it: none takes a target of its own. */
 export type RunTarget = { kind: "pr" } & PrRef;

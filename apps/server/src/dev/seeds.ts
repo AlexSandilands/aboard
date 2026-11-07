@@ -1162,7 +1162,8 @@ const dense: Scenario = (s, opts) => {
 /**
  * The showcase board with Autopilot set up, for Settings → Autopilot: the agent automations in Preview (so the
  * sandbox never starts an agent) with a few "would" runs this week, Auto-archive on, a failed run to retry, an agent's
- * draft to review, a custom automation whose tool slot is empty and one with a check script.
+ * draft to review, a custom automation whose tool slot is empty and one with a check script, an agent's proposed
+ * change to that one, and recurring rules in three projects.
  */
 const autopilot: Scenario = (s, opts) => {
   showcase(s, opts);
@@ -1179,7 +1180,7 @@ const autopilot: Scenario = (s, opts) => {
       dryRun: true,
     });
   }
-  s.customAutomations.create({
+  const flaky = s.customAutomations.create({
     name: "Flaky test report",
     trigger: { kind: "schedule", schedule: { kind: "weekly", days: [1], time: "08:00" } },
     action: {
@@ -1189,6 +1190,34 @@ const autopilot: Scenario = (s, opts) => {
     },
   });
   s.autopilot.setScope("board", null, "fix_prs", { config: { resolveThreads: false } });
+  // Review PRs' other people's PRs: on with nobody listed in one project (Needs setup), and in another a colleague's PR
+  // it found clean but left for the user to approve (Needs you).
+  const [first, second] = s.projects.list();
+  if (second)
+    s.autopilot.setScope("project", second.id, "review_prs", { config: { otherPrs: true, otherAuthors: "" } });
+  if (first) {
+    s.autopilot.setScope("project", first.id, "review_prs", { config: { otherPrs: true, otherAuthors: "mara-k" } });
+    const now = new Date().toISOString();
+    s.repoPrReviews.record({
+      host: "github.com",
+      repo: "acme/storefront",
+      number: 418,
+      projectId: first.id,
+      url: "https://github.com/acme/storefront/pull/418",
+      title: "Pin the payment SDK and update the CI matrix",
+      author: "mara-k",
+      headOid: "4f1c2e9a0b7d3c5e8f6a1b2c3d4e5f6a7b8c9d0e",
+      round: 1,
+      outcome: "ready",
+      reason: "gate",
+      reasonDetail: "touches sensitive paths: .github/workflows/ci.yml, pnpm-lock.yaml",
+      handoffCommentId: null,
+      handoffCommentUrl: null,
+      taskId: null,
+      readySince: now,
+      updatedAt: now,
+    });
+  }
   // Merge ready PRs (Into main off): an epic delivering through a branch of its own, and Review tasks flagged
   // Auto-merge, the last held for an approval only the user gives.
   s.autopilot.setScope("board", null, "merge_epic_prs", { mode: "on" });
@@ -1228,6 +1257,43 @@ const autopilot: Scenario = (s, opts) => {
         action: { kind: "agent", prompt: "Fix the failing checks on the pull request of #{{task.number}}." },
       },
       note: "Drafted from your request to fix failing checks.",
+    },
+    AGENT,
+  );
+  // Recurring rules in several projects, one of them paused, for the Recurring tasks detail.
+  const bump = s.templates.create({
+    name: "Dependency bump",
+    titlePattern: "Bump dependencies {{date}}",
+    labels: ["deps"],
+  });
+  const audit = s.templates.create({ name: "Security audit", titlePattern: "Audit {{project}}" });
+  const [rulesA, rulesB, rulesC] = s.projects.list();
+  const weekly = (day: number) => ({ kind: "weekly" as const, days: [day], time: "09:00" });
+  if (rulesA)
+    s.recurring.create(rulesA.id, { name: "Weekly dependency bump", templateId: bump.id, schedule: weekly(1) });
+  if (rulesA)
+    s.recurring.create(rulesA.id, { name: "Monthly audit", templateId: audit.id, schedule: weekly(5), enabled: false });
+  if (rulesB)
+    s.recurring.create(rulesB.id, { name: "Weekly dependency bump", templateId: bump.id, schedule: weekly(3) });
+  if (rulesC) s.recurring.create(rulesC.id, { name: "Security audit", templateId: audit.id, schedule: weekly(2) });
+  // A change an agent proposed to the flaky test report (draft_automation's `replaces`), for the before/after review.
+  s.customAutomations.draft(
+    {
+      automation: {
+        name: "Flaky test report",
+        trigger: { kind: "schedule", schedule: { kind: "weekly", days: [1, 4], time: "08:00" } },
+        action: {
+          kind: "agent",
+          prompt:
+            "Open a task with the evidence for {{item.key}}.\nLink the three most recent failing runs and say which commit first failed.",
+          check: {
+            language: "node",
+            body: "// Reads the last week of CI runs; prints nothing in the sandbox.\n// Now also skips tests quarantined in .flaky.json.\n",
+          },
+        },
+      },
+      note: "You asked for it twice a week, and for the runs to be linked. It also skips tests you already quarantined.",
+      replaces: flaky.id,
     },
     AGENT,
   );

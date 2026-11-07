@@ -291,8 +291,8 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   is on, with an amber **Preview** badge by its name. The rows read the same cached switches
   (`useAutopilotModes`, one request for every scope) and save with `useApplyWhere`, so the popover, the project page
   and the widget never disagree. An automation that can't be turned on (`blocked`, an empty required tool slot)
-  shows a ⚠ with the reason as its tooltip and its switch can only be turned off. Under Recurring tasks a calendar
-  icon button opens the project's settings at that section. Paused is a one-line `Alert` with a **Resume** button
+  shows a ⚠ with the reason as its tooltip and its switch can only be turned off. An automation with no switch
+  (`alwaysOn`: Recurring tasks, whose rules have their own) isn't listed. Paused is a one-line `Alert` with a **Resume** button
   (`PausedNotice`). A row waits behind a skeleton until the switches and the board have loaded (a failed load shows
   its error instead), so no switch shows a made-up Off, and a long list scrolls in a `ScrollArea`.
   - **Orchestrate** is pinned above, in a card of its own (`OrchestrateSection`): its row, then one line with
@@ -314,7 +314,7 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   in the epic panel's top bar. It has the pill's four states and the same sweep (it wears `.autopilot-pill`, so
   reduced motion is respected), animates while a run on one of the epic's tasks is going (`epicId` on the active
   run), and opens the same popover (`ScopePopover`) for the epic, whose rows switch the epic against its project (a row's
-  line is the widget's sentence, so "epic #5 Off" shows when it is). The epic's delivery control is a card of its own below the automations. Automations with `epicScope: false` (Recurring, Digest) aren't listed and don't count. Off means nothing is on for the epic's
+  line is the widget's sentence, so "epic #5 Off" shows when it is). The epic's delivery control is a card of its own below the automations. Automations with `epicScope: false` (Digest) aren't listed and don't count. Off means nothing is on for the epic's
   tasks, whether the epic or its project says so. It isn't shown for an archived epic.
 - **The header's pause button** (`PauseAllButton`): Pause all, which turns into a labelled "Autopilot paused ·
   Resume" while set.
@@ -505,7 +505,7 @@ rule editor take `?project=`; without it the page shows the project the board wa
   bottom). The list highlights that section.
 - **Ways in.** The sidebar gear, Ctrl/Cmd+, (`settings.open`), the palette's "Settings: <group or section>"
   entries (sections only once a query is typed), a project's gear or right-click (project page), and the Autopilot
-  popover (its settings cog, and the icon beside Recurring tasks for the project's rules).
+  popover (its settings cog).
 - **Editors.** `EditorFrame`'s parts render the template, custom automation and rule editors as a dialog by
   default and as page blocks inside `EditorPage`, so Save as template keeps its dialog. Cancel, Save and Esc all
   leave an editor for the section listing what it edits (`editorListSection`, `useLeaveEditor`): opened from that

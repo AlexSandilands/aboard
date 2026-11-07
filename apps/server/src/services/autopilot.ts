@@ -25,6 +25,7 @@ import {
   FIX_RESOLVE_KEY_PREFIX,
   isRetried,
   isSupersededRun,
+  parseLogins,
   resolveAutopilot,
   RETRIED_PREFIX,
   RUN_DELETE_MIN_AGE_MS,
@@ -117,6 +118,7 @@ export const describeAutomation = (
   description: a.description,
   needsAgent: a.needsAgent,
   epicScope: a.epicScope ?? true,
+  alwaysOn: a.alwaysOn ?? false,
   group: a.group ?? "yours",
   blocked: a.blocked ?? null,
   needs,
@@ -455,9 +457,11 @@ export function createAutopilotService(
    */
   const enabledProjects = (key: string, live = false): string[] => {
     const all = repos.autopilotSettings.all();
+    const always = find(key)?.alwaysOn === true;
     return repos.projects
       .list()
       .filter((p) => {
+        if (always) return true;
         const resolved = resolveAutopilot(chainFor(all, key, p.id));
         return resolved.enabled && (!live || !resolved.preview);
       })
@@ -539,7 +543,10 @@ export function createAutopilotService(
     const on = repos.projects
       .list()
       .filter((p) => withEpicOn.has(p.id) || resolveAutopilot(chainFor(settings, automation.key, p.id, null)).enabled);
-    return automation.needs(on);
+    return automation.needs(on, (p) => ({
+      ...automation.defaults,
+      ...resolveAutopilot(chainFor(settings, automation.key, p.id, null)).config,
+    }));
   };
 
   const usage = (agentAutomations: readonly string[], since: string) => {
@@ -590,6 +597,9 @@ export function createAutopilotService(
         kind: "draft",
         draftId: d.id,
         name: d.bundle.name,
+        replaces: d.replaces
+          ? { id: d.replaces, name: repos.autopilotCustom.get(d.replaces)?.name ?? d.bundle.name }
+          : null,
         createdBy: d.createdBy,
         createdAt: d.createdAt,
       }));
@@ -598,7 +608,29 @@ export function createAutopilotService(
         ? [{ kind: "setup", automation: a.key, title: a.title, reason: (a.blocked ?? a.needs)! }]
         : [],
     );
-    return [...failed, ...drafts, ...setup];
+    // Other people's PRs Review PRs found clean that only the user can approve, while it still reviews them there: a row
+    // left from before the source (or the author) was switched off would never be lifted by a poll.
+    const autopilotSettings = repos.autopilotSettings.all();
+    const reviewPrs = deps.automations().find((a) => a.key === AUTOPILOT_REVIEW_PRS);
+    const stillReviewed = (projectId: string, author: string | null): boolean => {
+      if (!reviewPrs) return false;
+      const resolved = resolveAutopilot(chainFor(autopilotSettings, AUTOPILOT_REVIEW_PRS, projectId, null));
+      const config = { ...reviewPrs.defaults, ...resolved.config };
+      return resolved.enabled && config.otherPrs === true && parseLogins(config.otherAuthors).includes(author ?? "");
+    };
+    const approvals = repos.repoPrReviews
+      .ready()
+      .filter((r) => stillReviewed(r.projectId, r.author))
+      .map((r): AutopilotNeed => ({
+        kind: "pr_approval",
+        url: r.url,
+        pr: `${r.repo}#${r.number}`,
+        title: r.title,
+        author: r.author,
+        reason: r.reasonDetail ?? "ready for your approval",
+        since: r.readySince!,
+      }));
+    return [...failed, ...approvals, ...drafts, ...setup];
   };
 
   /** Local midnight `days` days before today's. */
@@ -829,6 +861,7 @@ export function createAutopilotService(
       if (kind === "epic" && !epicScoped(automation)) {
         throw new AppError("VALIDATION", `${automation.title} doesn't apply to epics`);
       }
+      if (automation.alwaysOn) throw new AppError("VALIDATION", `${automation.title} has no switch: its rules do`);
       if (input.mode && isOnMode(input.mode) && automation.blocked) {
         throw new AppError("VALIDATION", automation.blocked);
       }
@@ -894,8 +927,8 @@ export function createAutopilotService(
       const resolved = resolveAutopilot(chainFor(repos.autopilotSettings.all(), automation.key, projectId, epic));
       const parsed = parseConfig(automation, resolved.config);
       return {
-        enabled: resolved.enabled,
-        preview: resolved.preview,
+        enabled: automation.alwaysOn ? true : resolved.enabled,
+        preview: automation.alwaysOn ? false : resolved.preview,
         config: parsed.success ? parsed.data : null,
       };
     },

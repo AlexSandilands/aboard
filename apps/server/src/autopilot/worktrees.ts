@@ -14,7 +14,8 @@ export interface WorktreeRequest {
   repo: string;
   /** Where Autopilot keeps its worktrees. */
   root: string;
-  taskNumber: number;
+  /** Names the worktree with the run: the task's number, or another short tag for a run with no task (`pr42`). */
+  taskNumber: number | string;
   runId: string;
   /** The ref a new branch starts from. Defaults to the default branch (origin's copy when there is one). */
   baseRef?: string | null | undefined;

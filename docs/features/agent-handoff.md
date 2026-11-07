@@ -290,7 +290,7 @@ own web client uses:
 
 ### Follow-up threads
 
-Messages the board sends by itself (the review nudge, Fix PRs, Unstick, `message_task_thread`) go to the thread
+Messages the board sends by itself (the review nudge, Fix PRs, `message_task_thread`) go to the thread
 that did the work, not to one the user opened afterwards to ask about it. A thread started from the card's plain
 launch dialog (`POST /api/tasks/:id/t3-thread` with `followUp: true`, which the web sends for neither a task's
 "Fix in →" nor an epic) while the task is in Review or Done is saved with `role: "followup"` on its

@@ -72,7 +72,6 @@ export function ScopeRow({
   blocked,
   disabled,
   onChange,
-  trailing,
 }: {
   name: string;
   description: string;
@@ -87,8 +86,6 @@ export function ScopeRow({
   blocked: string | null;
   disabled?: boolean;
   onChange: (on: boolean) => void;
-  /** Icon buttons after the name, such as a link to the automation's own page. */
-  trailing?: ReactNode;
 }) {
   return (
     <div className="flex min-h-9 items-center gap-2 py-1">
@@ -113,7 +110,6 @@ export function ScopeRow({
               <TooltipPopup side="top">{blocked}</TooltipPopup>
             </Tooltip>
           ) : null}
-          {trailing}
         </div>
         {where ? <span className="truncate text-2xs text-muted-foreground">{where}</span> : null}
       </div>

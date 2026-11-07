@@ -1,5 +1,4 @@
 import type { AutopilotAutomation } from "@repo/contracts";
-import type { ReactNode } from "react";
 import { Skeleton } from "~/components/ui/skeleton";
 import { ScopeRow } from "./ScopeRow";
 import { scopeState, scopeToggle, type PopoverScope } from "./where.logic";
@@ -13,13 +12,11 @@ export function WhereRow({
   automation,
   scope,
   title,
-  trailing,
 }: {
   automation: AutopilotAutomation;
   scope: PopoverScope;
   /** The project's or epic's name, for the switch's label. */
   title: string;
-  trailing?: ReactNode;
 }) {
   const { input, description, apply } = useWhere(automation);
   const state = input ? scopeState(input, scope) : null;
@@ -46,7 +43,6 @@ export function WhereRow({
         const writes = scopeToggle(input, scope, next);
         if (writes.length > 0) apply.mutate(writes);
       }}
-      trailing={trailing}
     />
   );
 }

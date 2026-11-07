@@ -1,5 +1,5 @@
-import { AUTOPILOT_ORCHESTRATE, AUTOPILOT_RECURRING } from "@repo/contracts";
-import { CalendarClockIcon, SettingsIcon } from "lucide-react";
+import { AUTOPILOT_ORCHESTRATE } from "@repo/contracts";
+import { SettingsIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { PopoverClose } from "~/components/ui/popover";
@@ -28,7 +28,7 @@ export function ScopePopover({
 }: {
   /** The project's or epic's name, for the switches' labels. */
   title: string;
-  /** A project's popover gives Recurring tasks a link to the project's settings page and pins Orchestrate; an epic's leaves out the automations that don't apply to epics. */
+  /** A project's popover pins Orchestrate; an epic's leaves out the automations that don't apply to epics. */
   scope: PopoverScope;
   /** The load error, so a failed load shows a message instead of a skeleton for good. */
   error?: Error | null;
@@ -83,35 +83,7 @@ export function ScopePopover({
               {automations
                 .filter((automation) => automation !== pinned)
                 .map((automation) => (
-                  <WhereRow
-                    key={automation.key}
-                    automation={automation}
-                    scope={scope}
-                    title={title}
-                    trailing={
-                      projectId && automation.key === AUTOPILOT_RECURRING ? (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <PopoverClose
-                                render={
-                                  <Button
-                                    size="icon-micro"
-                                    variant="ghost-muted"
-                                    aria-label="Recurring tasks settings"
-                                    onClick={() => openSettings("project.recurring", { project: projectId })}
-                                  />
-                                }
-                              />
-                            }
-                          >
-                            <CalendarClockIcon />
-                          </TooltipTrigger>
-                          <TooltipPopup side="top">Recurring tasks</TooltipPopup>
-                        </Tooltip>
-                      ) : null
-                    }
-                  />
+                  <WhereRow key={automation.key} automation={automation} scope={scope} title={title} />
                 ))}
             </ScopeCard>
           </ScrollArea>

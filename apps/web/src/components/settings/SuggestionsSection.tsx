@@ -200,7 +200,7 @@ const LINE_CLASS: Record<Exclude<DiffHunkLine["kind"], "skipped">, string> = {
 const LINE_MARK = { same: " ", added: "+", removed: "-" } as const;
 
 /** The change as a line diff, unchanged stretches folded. Every changed line is shown. */
-function Diff({ before, after }: { before: string; after: string }) {
+export function Diff({ before, after }: { before: string; after: string }) {
   const lines = useMemo(() => foldDiff(lineDiff(before, after)), [before, after]);
   return (
     <div className="max-h-[32rem] overflow-auto rounded-lg border border-border/60 bg-muted/30 py-2 font-mono text-xs leading-relaxed">

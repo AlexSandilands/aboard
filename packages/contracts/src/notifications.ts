@@ -5,8 +5,12 @@ import { z } from "zod";
 /** What a notification is about; each has its own switch in settings. */
 export const NotificationKind = z.enum([
   "thread_waiting",
+  "thread_waited",
+  "task_quiet",
+  "task_unblocked",
   "pr_checks_failing",
   "pr_changes_requested",
+  "pr_ready",
   "review_finished",
   "autopilot_failed",
   "autopilot_notice",
@@ -19,11 +23,31 @@ export type NotificationKind = z.infer<typeof NotificationKind>;
 
 export const NOTIFICATION_KINDS: ReadonlyArray<{ kind: NotificationKind; label: string; description: string }> = [
   { kind: "thread_waiting", label: "Thread waiting", description: "A linked T3 Code thread needs input or approval" },
+  {
+    kind: "thread_waited",
+    label: "A thread has waited on me for 30 min",
+    description: "A linked T3 Code thread has been waiting on you for half an hour",
+  },
+  {
+    kind: "task_quiet",
+    label: "In Progress work is quiet for 24 h",
+    description: "An In Progress task has had no activity for a day",
+  },
+  {
+    kind: "task_unblocked",
+    label: "A task's last blocker finished",
+    description: "Nothing is left blocking a task, so it can be picked up",
+  },
   { kind: "pr_checks_failing", label: "Checks failing", description: "A linked pull request's checks started failing" },
   {
     kind: "pr_changes_requested",
     label: "Changes requested",
     description: "A reviewer asked for changes on a linked pull request",
+  },
+  {
+    kind: "pr_ready",
+    label: "Ready for your approval",
+    description: "Autopilot found someone else's pull request clean, but only you can approve it",
   },
   {
     kind: "review_finished",
@@ -43,11 +67,12 @@ export const NOTIFICATION_KINDS: ReadonlyArray<{ kind: NotificationKind; label: 
 ];
 
 /** The inbox filter's chips: related kinds share one, so the row stays short however many kinds there are. */
-export const NOTIFICATION_GROUPS = ["agents", "prs", "reviews", "autopilot", "suggestions", "backup"] as const;
+export const NOTIFICATION_GROUPS = ["agents", "tasks", "prs", "reviews", "autopilot", "suggestions", "backup"] as const;
 export type NotificationGroup = (typeof NOTIFICATION_GROUPS)[number];
 
 export const NOTIFICATION_GROUP_LABELS: Record<NotificationGroup, string> = {
   agents: "Agents",
+  tasks: "Tasks",
   prs: "PRs",
   reviews: "Reviews",
   autopilot: "Autopilot",
@@ -58,9 +83,13 @@ export const NOTIFICATION_GROUP_LABELS: Record<NotificationGroup, string> = {
 /** Exhaustive on purpose: a new kind has to pick its group. */
 export const NOTIFICATION_KIND_GROUP: Record<NotificationKind, NotificationGroup> = {
   thread_waiting: "agents",
+  thread_waited: "agents",
   agent_request: "agents",
+  task_quiet: "tasks",
+  task_unblocked: "tasks",
   pr_checks_failing: "prs",
   pr_changes_requested: "prs",
+  pr_ready: "prs",
   review_finished: "reviews",
   autopilot_failed: "autopilot",
   autopilot_notice: "autopilot",
@@ -108,8 +137,13 @@ export type NotificationSettings = z.infer<typeof NotificationSettings>;
 /** What the user is told about unless they switch it off: only what needs them. Digests and unblocks are news. */
 export const DEFAULT_NOTIFICATION_KINDS: Record<NotificationKind, boolean> = {
   thread_waiting: true,
+  thread_waited: true,
+  task_quiet: true,
+  // News rather than something that needs you.
+  task_unblocked: false,
   pr_checks_failing: true,
   pr_changes_requested: true,
+  pr_ready: true,
   review_finished: true,
   autopilot_failed: true,
   autopilot_notice: false,

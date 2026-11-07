@@ -22,7 +22,7 @@ import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import { Button } from "~/components/ui/button";
 import { useSetAutopilotScope, useUpdateAutopilotEngine } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotScope } from "~/state/queries";
-import { parseLimit } from "./autopilot.logic";
+import { parseLimit, scopeAutomations } from "./autopilot.logic";
 import { TimeInput } from "./TimeInput";
 import { ownSettingsLabel, scopeState } from "./where.logic";
 import { useWhere } from "./useWhere";
@@ -56,14 +56,16 @@ export function AutopilotLimits() {
  */
 export function ProjectAutopilotSection({ projectId }: { projectId: string }) {
   const overview = useAutopilotOverview();
+  // Recurring tasks has no switch (each rule has its own, in the project's Recurring tasks section).
+  const automations = scopeAutomations(overview.data?.automations ?? [], false);
   return (
     <SettingsSection id="project.autopilot.automations" title="Automations">
       {!overview.data ? (
         <SettingsNote>{overview.error ? overview.error.message : "Loading automations..."}</SettingsNote>
-      ) : overview.data.automations.length === 0 ? (
+      ) : automations.length === 0 ? (
         <SettingsNote>No automations are installed yet.</SettingsNote>
       ) : (
-        overview.data.automations.map((automation) => (
+        automations.map((automation) => (
           <ProjectAutomationRow key={automation.key} automation={automation} projectId={projectId} />
         ))
       )}

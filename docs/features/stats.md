@@ -66,8 +66,8 @@ appear only when that automation ran in the two periods.
 | `friction.steps_skipped` | count | Plan steps whose status changed to skipped | `step_updated` |
 | `friction.attention_requests` | count | Times an agent (or anyone) asked for the user's attention on a task, `request_attention` | `task_events` `attention_requested` |
 | `friction.autopilot_flags` | count | Real Autopilot runs that finished flagging their task as needing attention, in the week they finished; runs a restart cut short are left out, since the board flagged those (they count under `friction.runs_restarted`) | `autopilot_runs` |
-| `friction.stalls.stale` | count | Tasks Unstick found quiet for too long. A task counts once per week and kind, however often it was noticed | `autopilot_runs` |
-| `friction.stalls.waiting` | count | Tasks whose thread waited on input, from Unstick's runs and the inbox's `thread_waiting` notices, once per task and week | `autopilot_runs`, `notifications` |
+| `friction.stalls.stale` | count | Tasks found quiet for too long (`task_quiet` notices, and the retired Unstick's runs). A task counts once per week and kind, however often it was noticed | `notifications`, `autopilot_runs` |
+| `friction.stalls.waiting` | count | Tasks whose thread waited on input, from the inbox's `thread_waiting` and `thread_waited` notices and the retired Unstick's runs, once per task and week | `autopilot_runs`, `notifications` |
 | `friction.runs_restarted` | count | Runs cut short by the board restarting (`BOARD_RESTARTED_ERROR`), in the week they were marked failed | `autopilot_runs` |
 
 A stall and a restart-cut run are read as `board_activity` reads them: `stallKind` and `wasRestarted` in

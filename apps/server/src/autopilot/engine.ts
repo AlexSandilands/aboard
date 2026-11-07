@@ -1,10 +1,11 @@
-import { AUTOPILOT_ACTOR, type AutopilotEngineSettings, type AutopilotRun } from "@repo/contracts";
+import { AUTOPILOT_ACTOR, type AutopilotEngineSettings, type AutopilotRun, type Project } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
 import { NO_GIT_HOSTS, type GitHostActions } from "../integrations/gitHosts.ts";
 import { messageOf } from "../integrations/util.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
 import { agentHold } from "./limits.ts";
+import { sendReminders } from "./reminders.ts";
 import {
   NO_RUNNER,
   type Automation,
@@ -48,6 +49,8 @@ export function createAutopilotEngine(deps: {
   bus: EventBus;
   runner?: Runner;
   gitHosts?: GitHostActions;
+  /** The repository a project's folder pushes to (its `origin`), for checks that read the git host. */
+  repoOf?: (project: Project) => Promise<{ host: string; repo: string } | null>;
   /** Where the user opens the board; actions put it in agent prompts. */
   boardUrl?: () => string;
   /** A run ended, so the board can show its headless session as finished or failed at once. */
@@ -203,6 +206,8 @@ export function createAutopilotEngine(deps: {
       board: boardConfig,
       clock: now,
       wake: schedule,
+      gitHosts,
+      repoOf: deps.repoOf ?? (() => Promise.resolve(null)),
     });
     for (const found of candidates) {
       let candidate = found;
@@ -248,9 +253,16 @@ export function createAutopilotEngine(deps: {
 
   const runPass = async (): Promise<void> => {
     const s = deps.services();
+    const at = now();
+    // Reminders only tell the user something, so Pause all doesn't hold them back (notifications.ts has quiet hours).
+    // Dry run does: it promises to change nothing, and a reminder sends a notification and writes a note.
+    try {
+      if (!s.autopilot.engine().dryRun) self(() => sendReminders(s, at));
+    } catch (error) {
+      log.warn(`[autopilot] reminders failed: ${messageOf(error)}`);
+    }
     if (s.autopilot.status().paused) return;
     const engine = s.autopilot.engine();
-    const at = now();
     for (const automation of s.autopilot.automations()) {
       await runAutomation(s, automation, engine, at).catch((error: unknown) => {
         log.warn(`[autopilot] ${automation.key} failed: ${messageOf(error)}`);

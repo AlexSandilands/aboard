@@ -388,6 +388,10 @@ describe("stats.weekly", () => {
       body: "Waiting",
       dedupeKey: "w2",
     });
+    // The reminders that replaced Unstick are stalls too: a quiet task is stale, a waited thread is waiting, each once
+    // per task and week (this one's task already stalled waiting above).
+    s.notifications.notify({ kind: "task_quiet", taskId: other.id, title: "Quiet", body: "Quiet", dedupeKey: "q1" });
+    s.notifications.notify({ kind: "thread_waited", taskId: t.id, title: "Waited", body: "Waited", dedupeKey: "w3" });
     // A run still going when the board restarted: recover() flags it too, but it counts as a restart only.
     clock(at(14, 10));
     const stranded = s.autopilot.record({
@@ -399,10 +403,11 @@ describe("stats.weekly", () => {
     clock(at(14, 11));
     expect(s.autopilot.recover()).toBe(1);
 
-    expect(await values("friction.stalls.stale")).toMatchObject({ values: [0, 0, 1, 1], total: 2 });
+    expect(await values("friction.stalls.stale")).toMatchObject({ values: [0, 0, 1, 2], total: 3 });
     expect(await values("friction.stalls.waiting")).toMatchObject({ values: [0, 0, 0, 2], total: 2 });
     expect(await values("friction.autopilot_flags")).toMatchObject({ values: [0, 0, 0, 2], total: 2 });
     expect(await values("friction.runs_restarted")).toMatchObject({ values: [0, 0, 0, 1], total: 1 });
+    expect((await values("friction.stalls.stale", 4, beta.id)).total).toBe(1);
     expect((await values("friction.stalls.waiting", 4, beta.id)).total).toBe(1);
     expect((await values("friction.autopilot_flags", 4, beta.id)).total).toBe(1);
     expect((await values("friction.runs_restarted", 4, beta.id)).total).toBe(0);
