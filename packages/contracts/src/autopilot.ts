@@ -191,6 +191,8 @@ const FieldBase = {
   help: z.string().optional(),
   /** The detail that doesn't fit that line, behind an info button beside the label. */
   info: z.string().optional(),
+  /** Drawn in that field's row, its control beside that one's, rather than as a row of its own. */
+  inRowOf: z.string().optional(),
   tier: AutopilotFieldTier.optional(),
 };
 

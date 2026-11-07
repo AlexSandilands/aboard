@@ -35,22 +35,16 @@ export function refList(items: ReadonlyArray<{ number: number; title: string }>,
   return named.length > 1 ? `${named.slice(0, -1).join(", ")} and ${named.at(-1)}` : (named[0] ?? "");
 }
 
-/** The status under Into epic branches: how many epics deliver this way, and which. */
+/** The status under Epic branches, one fact: which epics deliver through a branch of their own. */
 export function epicsStatus(info: MergeTargetsInfo): string {
   const n = info.epics.length;
-  if (n === 0) return "No epic delivers through a branch of its own yet";
-  return `${n === 1 ? "1 epic delivers" : `${n} epics deliver`} this way: ${refList(info.epics)}`;
+  if (n === 0) return "No epic uses one yet";
+  return `${n === 1 ? "1 epic" : `${n} epics`}: ${refList(info.epics)}`;
 }
 
-/**
- * The status under Into main: how many tasks are flagged Auto-merge across the board, and whether this setting merges
- * them. A project or epic can set Into main for itself, so with it on here it says where they merge, not that they will.
- */
-export function flaggedStatus(info: MergeTargetsInfo, intoMain: boolean): string {
+/** The status under Main, one fact: which tasks are flagged Auto-merge (the switch beside it says whether they merge). */
+export function flaggedStatus(info: MergeTargetsInfo): string {
   const n = info.flagged.length;
   if (n === 0) return "No task is flagged Auto-merge";
-  const which = `${n === 1 ? "1 task is" : `${n} tasks are`} flagged Auto-merge: ${refList(info.flagged)}`;
-  return intoMain
-    ? `${which}. They merge once ready, wherever this is on`
-    : `${which}. Autopilot leaves them to you (or an agent's merge_task_pr) while this is off`;
+  return `${n} flagged: ${refList(info.flagged)}`;
 }

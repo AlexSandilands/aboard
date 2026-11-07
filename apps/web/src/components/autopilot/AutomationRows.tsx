@@ -121,13 +121,46 @@ export function AutomationField({
     onConfig((current) => withConfigValue(current, field.key, kept));
     return true;
   };
+  // Fields drawn in this one's row (`inRowOf`): their controls sit before its own, and its reset resets them too.
+  const companions = automation.fields.filter((f) => f.inRowOf === field.key);
+  const companionSet = companions.some((f) => f.key in entry.config);
   const reset = () => {
-    if (overridden) onConfig((current) => withConfigValue(current, field.key, undefined));
+    if (overridden || companionSet) {
+      onConfig((current) =>
+        [field, ...companions].reduce((config, f) => withConfigValue(config, f.key, undefined), current),
+      );
+    }
     onReset?.();
   };
-  const control = (
+  const own = (
     <FieldControl key={rejected} field={field} value={value} projectId={projectId} onSave={save} label={field.label} />
   );
+  const control =
+    companions.length === 0 ? (
+      own
+    ) : (
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {companions.map((companion) => (
+          <FieldControl
+            key={`${companion.key}:${rejected}`}
+            field={companion}
+            value={
+              companion.key in entry.effectiveConfig
+                ? entry.effectiveConfig[companion.key]
+                : automation.defaults[companion.key]
+            }
+            projectId={projectId}
+            label={companion.label}
+            onSave={(next) => {
+              if (next === undefined && !(companion.key in entry.config)) return false;
+              onConfig((current) => withConfigValue(current, companion.key, next));
+              return true;
+            }}
+          />
+        ))}
+        {own}
+      </div>
+    );
   const multiline = field.kind === "text" && field.multiline;
   return (
     <SettingsRow
@@ -137,7 +170,7 @@ export function AutomationField({
       status={status}
       className={className}
       resetAction={
-        changed || alwaysReset ? (
+        changed || companionSet || alwaysReset ? (
           <SettingResetButton
             label={field.label}
             to={defaults ? fieldValueText(field, defaults.value) : projectId ? "the board's value" : "default"}

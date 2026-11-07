@@ -81,7 +81,9 @@ import { variableNeeds } from "./variables.logic";
 /** The shell a command runs in here, for the examples: PowerShell on Windows, sh elsewhere. */
 const COMMAND_SHELL = typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent) ? "powershell" : "sh";
 
-const INPUTS_FOR_CODE_HINT = `Values it reads as ${inputEnvName("<name>")} (or inputs on stdin, for a script), declared so whoever imports a shared file fills them in without editing the code.`;
+const INPUTS_FOR_CODE_HINT = `Values it reads as ${inputEnvName("<name>")}.`;
+const INPUTS_FOR_CODE_INFO =
+  "Or as inputs on stdin, for a script. Declared so whoever imports a shared file fills them in without editing the code.";
 
 /** What every step reads: the form, how to change it, and the board it is built against. */
 export interface StepProps {
@@ -504,11 +506,13 @@ function MoreOptions({ form, children }: { form: CustomForm; children: ReactNode
 function SwitchRow({
   title,
   description,
+  info,
   checked,
   onCheckedChange,
 }: {
   title: string;
   description: string;
+  info?: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
 }) {
@@ -516,6 +520,7 @@ function SwitchRow({
     <SettingsRow
       title={title}
       description={description}
+      info={info}
       control={<Switch aria-label={title} checked={checked} onCheckedChange={onCheckedChange} />}
     />
   );
@@ -625,7 +630,8 @@ function AgentDetails({ form, patch, setForm, projects, boardVariables }: StepPr
           <>
             <SwitchRow
               title="Check first with a script"
-              description="Runs before any agent. Each JSON line it prints is an item, and each item it hasn't printed before starts an agent of its own; printing nothing starts nothing. In Preview the check still runs for real."
+              description="A script runs first; each item it prints starts an agent."
+              info="Each JSON line it prints is an item, and each item it hasn't printed before starts an agent of its own; printing nothing starts nothing. In Preview the check still runs for real."
               checked={form.checkOn}
               onCheckedChange={(checkOn) => setForm((current) => withCheck(current, checkOn))}
             />
@@ -644,7 +650,8 @@ function AgentDetails({ form, patch, setForm, projects, boardVariables }: StepPr
                 </Block>
                 <SwitchRow
                   title="Treat the items as untrusted"
-                  description="Items often carry text anyone can write, such as a pull request title or comment. On, each item's agent runs read-only with only this board's tools. It can't be combined with allowed tools or tool slots."
+                  description="Each item's agent runs read-only, with only this board's tools."
+                  info="Items often carry text anyone can write, such as a pull request title or comment. It can't be combined with allowed tools or tool slots."
                   checked={form.untrustedItems}
                   onCheckedChange={(untrustedItems) => patch({ untrustedItems })}
                 />
@@ -665,7 +672,7 @@ function AgentDetails({ form, patch, setForm, projects, boardVariables }: StepPr
         ) : (
           <SwitchRow
             title="Work on the pull request's branch"
-            description="When the task has an open pull request, the agent pushes to it instead of starting a new branch."
+            description="Pushes to the task's open pull request, not a new branch."
             checked={form.onPrBranch}
             onCheckedChange={(onPrBranch) => patch({ onPrBranch })}
           />
@@ -673,11 +680,12 @@ function AgentDetails({ form, patch, setForm, projects, boardVariables }: StepPr
         <Block>
           <Field
             label="Allowed tools"
-            hint={
+            hint="One per line: a whole MCP server or one of its tools."
+            info={
               <>
-                One per line. A whole MCP server (<code className="font-mono">mcp__issue-tracker</code>) or one of its
-                tools (<code className="font-mono">mcp__issue-tracker__search_jira</code>). The board&apos;s own tools
-                are always allowed.
+                A server (<code className="font-mono">mcp__issue-tracker</code>) or one tool (
+                <code className="font-mono">mcp__issue-tracker__search_jira</code>). The board&apos;s own tools are
+                always allowed.
               </>
             }
           >
@@ -706,13 +714,15 @@ function AgentDetails({ form, patch, setForm, projects, boardVariables }: StepPr
         <Block>
           <Field
             label="Inputs"
-            hint="Values the prompt reads as {{inputs.name}}. A shared file asks whoever imports it to fill them in, so they never edit the prompt."
+            hint="Values the prompt reads as {{inputs.name}}."
+            info="A shared file asks whoever imports it to fill them in, so they never edit the prompt."
           >
             <InputsField inputs={form.inputs} onChange={(inputs) => patch({ inputs })} />
           </Field>
           <Field
             label="Required tools"
-            hint="Tools it needs but can't name, since people use different MCP servers: Jira search, say. The prompt is told which tools fill each slot. Sharing it leaves the tools out."
+            hint="Tools it needs but can't name, such as Jira search."
+            info="People use different MCP servers, so the importer fills each slot with their own. The prompt is told which tools fill each slot. Sharing it leaves the tools out."
           >
             <SlotsField slots={form.slots} onChange={(slots) => patch({ slots })} />
           </Field>
@@ -745,7 +755,7 @@ function ScriptDetails({ form, patch, projects, tasks }: StepProps) {
       </Block>
       <MoreOptions form={form}>
         <Block>
-          <Field label="Inputs" hint={INPUTS_FOR_CODE_HINT}>
+          <Field label="Inputs" hint={INPUTS_FOR_CODE_HINT} info={INPUTS_FOR_CODE_INFO}>
             <InputsField inputs={form.inputs} onChange={(inputs) => patch({ inputs })} />
           </Field>
         </Block>
@@ -762,11 +772,12 @@ function CommandDetails({ form, patch, projects, boardVariables }: StepProps) {
       <Block>
         <Field
           label="Command"
-          hint={
+          hint="Runs in the project's folder, in sh (PowerShell on Windows)."
+          info={
             <>
-              Runs in the project&apos;s folder, in sh (PowerShell on Windows). It is never filled in: read values from
-              the environment, as <code className="font-mono">&quot;$NAME&quot;</code> in sh or{" "}
-              <code className="font-mono">$env:NAME</code> in PowerShell.
+              It is never filled in: read values from the environment, as{" "}
+              <code className="font-mono">&quot;$NAME&quot;</code> in sh or <code className="font-mono">$env:NAME</code>{" "}
+              in PowerShell.
             </>
           }
         >
@@ -810,7 +821,7 @@ function CommandDetails({ form, patch, projects, boardVariables }: StepProps) {
       </Block>
       <MoreOptions form={form}>
         <Block>
-          <Field label="Inputs" hint={INPUTS_FOR_CODE_HINT}>
+          <Field label="Inputs" hint={INPUTS_FOR_CODE_HINT} info={INPUTS_FOR_CODE_INFO}>
             <InputsField inputs={form.inputs} onChange={(inputs) => patch({ inputs })} />
           </Field>
         </Block>
@@ -1048,7 +1059,8 @@ export function ReviewStep({
           <Block>
             <Field
               label="Variables it reads"
-              hint="Found in what it names; one built at run time isn't seen. A project with no value for one gets no run of it, and the preview fills it in empty."
+              hint="A project with no value for one gets no run of it."
+              info="Found in what it names; one built at run time isn't seen. The preview fills a missing one in empty."
             >
               <VariableNeedsList needs={needs} />
             </Field>

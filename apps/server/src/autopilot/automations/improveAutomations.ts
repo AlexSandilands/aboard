@@ -173,7 +173,8 @@ export const improveAutomations = defineAutomation({
       tier: "essential",
       min: 1,
       max: 10,
-      help: "Fewer, better suggestions win: each costs you a review. Any past the limit are dropped.",
+      help: "Any past the limit are dropped.",
+      info: "Fewer, better suggestions win: each costs you a review.",
     },
     {
       key: "targets",
@@ -190,13 +191,18 @@ export const improveAutomations = defineAutomation({
       label: "Improve skill",
       kind: "skill",
       builtinLabel: BUILTIN_IMPROVE_SKILL_NAME,
-      help: "Built-in: the board's own, which is part of this automation. A skill of your own replaces it.",
+      help: "A skill of your own replaces the built-in one.",
+      info: "Built-in: the board's own, which is part of this automation.",
     },
     ...runnerFields("improve")
       .filter((f) => ["modelChoice", "budgetUsd", "timeoutMinutes"].includes(f.key))
       .map((f) =>
         f.key === "modelChoice"
-          ? { ...f, help: "Inherit: the board's model for Improve automations, by default the Deep tier." }
+          ? {
+              ...f,
+              help: "From Agents → Operations unless set here.",
+              info: "Inherit: the board's model for Improve automations, by default the Deep tier.",
+            }
           : f,
       ),
   ],

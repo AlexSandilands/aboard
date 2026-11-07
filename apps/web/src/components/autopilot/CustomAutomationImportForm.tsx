@@ -355,7 +355,7 @@ export function CustomAutomationImportForm({
                 {tools.length > 0 ? (
                   <Section
                     title="Tools it may use without asking"
-                    hint="They run unattended, with nobody to approve a call. Read them against your own MCP servers."
+                    hint="Nobody approves a call: check them against your own MCP servers."
                   >
                     <Code>{tools.join("\n")}</Code>
                   </Section>
@@ -417,7 +417,7 @@ export function CustomAutomationImportForm({
             {bundle.skill ? (
               <Section
                 title={`Skill: ${bundle.skill.name}`}
-                hint="Written to your skills folder (~/.claude/skills). A name you already use is kept apart, never overwritten."
+                hint="Written to ~/.claude/skills; a name you use already is kept apart."
               >
                 <Code tall>{bundle.skill.body}</Code>
                 <div className="flex items-center justify-between gap-4">
@@ -461,7 +461,7 @@ export function CustomAutomationImportForm({
             {bundle.slots.length > 0 ? (
               <Section
                 title="Tools it needs"
-                hint="One tool per line, from your own MCP servers (mcp__server__tool, or mcp__server for all of its tools). It can't be switched on until each is filled in."
+                hint="One tool per line (mcp__server__tool, or mcp__server for all of them). Needed to switch it on."
               >
                 <div className="flex flex-col gap-3">
                   {bundle.slots.map((slot) => (
@@ -489,7 +489,7 @@ export function CustomAutomationImportForm({
             {needs.length > 0 ? (
               <Section
                 title="Variables it reads"
-                hint="The file doesn't carry their values: they are yours. Set them for every project under Settings → Autopilot → Limits & safety → Variables, or in a project's settings. It doesn't run in a project where one has no value."
+                hint="Set their values under Limits & safety → Variables, or in a project's settings."
               >
                 <VariableNeedsList needs={needs} />
               </Section>

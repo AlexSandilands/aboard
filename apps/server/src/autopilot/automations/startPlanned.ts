@@ -46,7 +46,8 @@ const FIELDS: AutopilotField[] = [
     tier: "essential",
     kind: "skill",
     builtinLabel: "Default workflow",
-    help: "What the agent follows to do the work. The default is the board's own workflow, from the hand-off prompt.",
+    help: "What the agent follows to do the work.",
+    info: "The default is the board's own workflow, from the hand-off prompt.",
   },
   ...runnerFields("taskRun"),
   {
@@ -63,7 +64,8 @@ const FIELDS: AutopilotField[] = [
     min: 1,
     max: 1440,
     unit: "minutes",
-    help: "The agent moves the task to In Progress itself. A task still in Planned after this long is flagged.",
+    help: "A task still in Planned after this long is flagged.",
+    info: "The agent moves the task to In Progress itself; one that hasn't by then is flagged.",
   },
 ];
 

@@ -469,7 +469,8 @@ function AutomationDetail({
   const { automation, entry, reach, custom, lastRun, previewRuns, onConfig } = item;
   const board = useBoardMode(item);
   const navigate = useNavigate();
-  const { essential, advanced } = splitFieldsByTier(automation.fields);
+  // A field drawn in another's row (`inRowOf`) gets no row of its own.
+  const { essential, advanced } = splitFieldsByTier(automation.fields.filter((f) => !f.inRowOf));
   const overview = useAutopilotOverview().data;
   const agentDefaults = overview?.engine.agentDefaults ?? {};
   const hints = hintsFor(overview?.hints ?? [], automation.key);
@@ -639,7 +640,7 @@ function AutomationDetail({
         <DetailSection title="Trigger and action">
           <SettingsRow
             title="Edit the automation"
-            description="Its trigger, filters, prompt or command, inputs and tool slots, in the automation editor."
+            description="Its trigger, filters, prompt or command, inputs and tool slots."
             control={
               <Button size="xs" variant="outline" onClick={() => editCustom(custom.id)}>
                 Edit

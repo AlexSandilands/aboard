@@ -140,7 +140,7 @@ function EngineSections({ engine }: { engine: AutopilotEngineSettings }) {
         <SettingsRow
           id="autopilot.limits.max-concurrent"
           title="Agent runs at once"
-          description="How many of Autopilot's agent runs can be open at once. Not a limit on your machine."
+          description="How many of Autopilot's agent runs can be open at once."
           info="Counts runs Autopilot has open. A T3 thread Autopilot started counts only against Start planned, while it is working; threads you start yourself never count."
           control={
             <LimitInput
@@ -173,7 +173,7 @@ function EngineSections({ engine }: { engine: AutopilotEngineSettings }) {
         <SettingsRow
           id="autopilot.limits.daily-spend-cap"
           title="Daily spend cap"
-          description="No more agent runs start once today's have cost this much (local time). Empty is no cap."
+          description="No more runs start once today's cost this much. Empty is no cap."
           control={
             <LimitInput
               label="Daily spend cap"
@@ -227,8 +227,8 @@ function EngineSections({ engine }: { engine: AutopilotEngineSettings }) {
         <SettingsRow
           id="autopilot.limits.runner"
           title="Where agents run"
-          description="Auto: a T3 Code thread when T3 Code is connected, else a headless CLI in a worktree."
-          info="Some runs are always headless, whatever this says: Review PRs, runs with no task (the digest, scheduled automations) and custom automations that give their agent extra tools."
+          description="Where its runs start."
+          info="Auto: a T3 Code thread when T3 Code is connected, else a headless CLI in a worktree. Some runs are always headless, whatever this says: Review PRs, runs with no task (the digest, scheduled automations) and custom automations that give their agent extra tools."
           control={
             <OptionSelect
               label="Where agents run"
@@ -241,7 +241,8 @@ function EngineSections({ engine }: { engine: AutopilotEngineSettings }) {
         <SettingsRow
           id="autopilot.limits.budget"
           title="Budget per headless run"
-          description="Claude Code only. Codex and Copilot CLI runs report no cost: only the timeout stops them."
+          description="Claude Code only."
+          info="Codex and Copilot CLI runs have no spending cap and report no cost: only the timeout stops them."
           control={
             <LimitInput
               label="Budget per headless run"
@@ -260,7 +261,7 @@ function EngineSections({ engine }: { engine: AutopilotEngineSettings }) {
         <SettingsRow
           id="autopilot.limits.timeout"
           title="Timeout per headless run"
-          description="A headless run still going after this long is stopped."
+          description="Stops a run after this long."
           control={
             <LimitInput
               label="Timeout per headless run"
@@ -279,7 +280,8 @@ function EngineSections({ engine }: { engine: AutopilotEngineSettings }) {
         <SettingsRow
           id="autopilot.limits.t3-access"
           title="T3 Code access"
-          description="The most access a T3 Code thread Autopilot starts gets. Never more than T3 Code's own default."
+          description="Never more than T3 Code's own default."
+          info="The most access a T3 Code thread that Autopilot starts gets."
           control={
             <OptionSelect
               label="T3 Code access"
@@ -295,8 +297,8 @@ function EngineSections({ engine }: { engine: AutopilotEngineSettings }) {
         <SettingsRow
           id="autopilot.limits.preview-everything"
           title="Preview everything"
-          description="Every automation records what it would do, as runs marked Preview, and does nothing. Each automation also has a Preview mode of its own."
-          info="To try one new automation, set its own Mode to Preview instead: the others keep working. A custom automation's check script still runs for real, so it can tell what it would act on."
+          description="Every automation records what it would do, and does nothing."
+          info="Its runs are marked Preview. To try one new automation, set its own Mode to Preview instead: the others keep working. A custom automation's check script still runs for real, so it can tell what it would act on."
           control={
             <Switch
               aria-label="Preview everything"
