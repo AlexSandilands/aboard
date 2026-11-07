@@ -12,6 +12,7 @@ import {
 } from "./gitHost.ts";
 import { createGhTokens, createGithubApi, GithubApiError, type GithubApi, type GraphqlError } from "./githubApi.ts";
 import { createGithubReads } from "./githubReads.ts";
+import { createGithubRepoPrs } from "./githubRepoPrs.ts";
 import {
   allowedMergeMethods,
   GraphqlPr,
@@ -171,6 +172,8 @@ export function foldReviewComments(body: string, comments: readonly ReviewCommen
   return clipBody(`${body}\n\n### Inline comments\n\n${items.join("\n\n")}`);
 }
 
+const REVIEW_EVENTS = { comment: "COMMENT", approve: "APPROVE", request_changes: "REQUEST_CHANGES" } as const;
+
 // ── Merges ───────────────────────────────────────────────────────────────
 
 /** GitHub refusing a merge method the repository's settings or a ruleset don't allow. */
@@ -221,6 +224,7 @@ export function createGithubHost(deps: { runGh?: RunGh; fetch?: FetchFn } = {}):
   const tokens = createGhTokens({ runGh });
   const api: GithubApi = createGithubApi({ tokens, ...(deps.fetch ? { fetch: deps.fetch } : {}) });
   const gh = createGhStatus(runGh);
+  const repoPrs = createGithubRepoPrs(api);
   const timers: NodeJS.Timeout[] = [];
 
   const claims = (host: string): boolean => {
@@ -402,7 +406,7 @@ export function createGithubHost(deps: { runGh?: RunGh; fetch?: FetchFn } = {}):
             input: {
               pullRequestId: id,
               commitOID: head,
-              event: "COMMENT",
+              event: REVIEW_EVENTS[input.event ?? "comment"],
               body,
               ...(comments.length > 0
                 ? { threads: comments.map((c) => ({ path: c.path, line: c.line, side: "RIGHT", body: c.body })) }
@@ -477,6 +481,30 @@ export function createGithubHost(deps: { runGh?: RunGh; fetch?: FetchFn } = {}):
           threads: mapReviewThreadDetails(pr.reviewThreads.nodes),
         };
       });
+    },
+    async listOpenPrs(host, repo) {
+      await requireSignedIn(host);
+      return asAppError(() => repoPrs.listOpenPrs(host, repo));
+    },
+    async readRepoPr(ref) {
+      await requireSignedIn(ref.host);
+      return asAppError(() => repoPrs.readRepoPr(ref));
+    },
+    async unchangedSince(ref, base, head, baseRef) {
+      await requireSignedIn(ref.host);
+      return asAppError(() => repoPrs.unchangedSince(ref, base, head, baseRef));
+    },
+    async postComment(ref, body) {
+      await requireSignedIn(ref.host);
+      return asAppError(() => repoPrs.postComment(ref, body), "GitHub couldn't post the comment: ");
+    },
+    async editComment(host, nodeId, body) {
+      await requireSignedIn(host);
+      return asAppError(() => repoPrs.editComment(host, nodeId, body), "GitHub couldn't edit the comment: ");
+    },
+    async replyOnThread(host, threadId, body) {
+      await requireSignedIn(host);
+      await asAppError(() => repoPrs.replyOnThread(host, threadId, body), "GitHub couldn't reply on the thread: ");
     },
     async resolveReviewThread(host, threadId) {
       await requireSignedIn(host);

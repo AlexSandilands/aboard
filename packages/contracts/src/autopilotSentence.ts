@@ -11,6 +11,7 @@ import { describeCustomTrigger, type CustomDefinition } from "./customAutomation
 import { AUTOPILOT_MERGE_EPIC_PRS } from "./delivery.ts";
 import { AUTOPILOT_FIX_PRS, AUTOPILOT_REVIEW_PRS } from "./prReview.ts";
 import { AUTOPILOT_RECURRING, WEEKDAY_NAMES } from "./recurring.ts";
+import { parseLogins } from "./repoPrReview.ts";
 
 // One sentence per automation, read from its effective config, for the top of its detail in Settings → Autopilot:
 // what it watches for and what it does, in the words the user would use. Pure, so the web and tests share it.
@@ -83,7 +84,15 @@ export function automationSentence(
     case AUTOPILOT_REVIEW_PRS: {
       const rounds = `, up to ${plural(num(config, "rounds", 3), "round")} per PR`;
       const drafts = config.reviewDrafts === true ? " (drafts too)" : "";
-      return `When a task's PR${drafts} gets new commits, review it with ${skillPhrase(config.skill, "the built-in review skill")} and post the findings on it as comments${rounds}.`;
+      const tasks = `When a task's PR${drafts} gets new commits, review it with ${skillPhrase(config.skill, "the built-in review skill")} and post the findings on it as comments${rounds}.`;
+      if (config.otherPrs !== true) return tasks;
+      const authors = parseLogins(config.otherAuthors);
+      const who = authors.length > 0 ? authors.join(", ") : "nobody yet (add authors)";
+      const verdict =
+        config.otherApprove === true
+          ? "approve it when it is clean and the gate passes, ask for changes, or hand it to you"
+          : "ask for changes or hand it to you; a clean one waits for your approval";
+      return `${tasks} Also review open PRs by ${who} that no task links to: ${verdict}.`;
     }
     case AUTOPILOT_FIX_PRS: {
       const triggers = [

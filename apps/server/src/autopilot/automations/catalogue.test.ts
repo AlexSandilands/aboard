@@ -24,7 +24,7 @@ describe("the built-in catalogue", () => {
       "attempts",
       "commentAttempts",
     ]);
-    expect(essentials("review_prs")).toEqual(["skill", "rounds"]);
+    expect(essentials("review_prs")).toEqual(["skill", "rounds", "otherPrs", "otherAuthors", "otherApprove"]);
     expect(essentials("orchestrate")).toEqual(["everyMinutes", "instructions"]);
     expect(essentials("auto_archive")).toEqual(["days"]);
     expect(essentials("digest")).toEqual(["mode", "time", "weekdaysOnly"]);

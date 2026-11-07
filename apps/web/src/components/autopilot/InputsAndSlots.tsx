@@ -219,14 +219,22 @@ export function SlotsField({ slots, onChange }: { slots: FormSlot[]; onChange: (
 }
 
 /** The notice for an automation that names a variable some projects it is on in have no value for: it skips them. */
-export function NeedsVariablesWarning({ needs }: { needs: string }) {
+export function NeedsVariablesWarning({ needs, custom = true }: { needs: string; custom?: boolean }) {
   return (
     <Alert variant="warning">
       <TriangleAlertIcon />
       <AlertTitle className="text-sm">{needs}</AlertTitle>
       <AlertDescription>
-        It doesn&apos;t run in those projects until the variable has a value there: set it in the project&apos;s
-        settings, or for every project under Settings → Autopilot → Limits &amp; safety → Variables.
+        {custom ? (
+          <>
+            It doesn&apos;t run in those projects until the variable has a value there: set it in the project&apos;s
+            settings, or for every project under Settings → Autopilot → Limits &amp; safety → Variables.
+          </>
+        ) : (
+          <>
+            That part of it does nothing in those projects until it is filled in, in the project&apos;s settings below.
+          </>
+        )}
       </AlertDescription>
     </Alert>
   );
