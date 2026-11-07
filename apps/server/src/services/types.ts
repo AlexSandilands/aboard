@@ -29,6 +29,7 @@ import type {
   TaskDetail,
   LabelUsage,
   TaskEvent,
+  TrashedTask,
   TaskLink,
   TaskResolution,
   TaskReview,
@@ -195,10 +196,25 @@ export interface TasksService {
   archiveFinishedEpic(id: string, actor: string): number;
   addNote(id: string, text: string, actor: string): TaskEvent;
   /**
-   * Permanently deletes an archived task with its activity, plan and links. Throws VALIDATION if it isn't
-   * archived. Tasks closed against it keep their resolution but lose the pointer.
+   * Moves tasks to the trash (task-lifecycle.md#deleting) in one write and returns the ids that went, for Undo. An
+   * epic's tasks go with it when `withTasks`, stamped the same so restoring it brings them back; otherwise they are
+   * left as loose tasks. Only the user deletes: no MCP tool calls this.
    */
-  delete(id: string, actor: string): void;
+  delete(ids: readonly string[], opts: { withTasks?: boolean }, actor: string): string[];
+  /**
+   * Brings tasks back out of the trash in one write, each to the end of its lane, an epic with the tasks deleted
+   * together with it. A task that isn't in the trash is skipped. Returns the ids restored.
+   */
+  restore(ids: readonly string[], actor: string): string[];
+  /** The trash, most recently deleted first. */
+  trash(): TrashedTask[];
+  /**
+   * Removes trashed tasks for good with their activity, plan and links (an epic with the tasks deleted with it).
+   * Tasks closed against one keep their resolution but lose the pointer. Throws NOT_FOUND for one not in the trash.
+   */
+  purge(ids: readonly string[], actor: string): void;
+  /** Purges what has been in the trash longer than the retention setting; returns how many tasks went. */
+  purgeExpired(): number;
 }
 
 export interface CloseInput {

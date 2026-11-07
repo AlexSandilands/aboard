@@ -154,7 +154,8 @@ describe("recurring rules", () => {
     s.templates.delete(template.id);
     expect(s.recurring.get(rule.id).templateId).toBeNull();
     s.tasks.update(task.id, { archived: true }, "user");
-    s.tasks.delete(task.id, "user");
+    s.tasks.delete([task.id], {}, "user");
+    s.tasks.purge([task.id], "user");
     expect(s.recurring.get(rule.id).lastTaskId).toBeNull();
 
     s.projects.delete(project.id);

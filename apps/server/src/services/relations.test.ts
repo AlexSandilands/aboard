@@ -176,7 +176,8 @@ describe("task relations", () => {
     s.tasks.update(b.id, { addBlockedBy: [a.id] }, "agent");
     s.tasks.update(c.id, { addBlockedBy: [b.id] }, "agent");
     s.tasks.update(b.id, { archived: true }, "user");
-    s.tasks.delete(b.id, "user");
+    s.tasks.delete([b.id], {}, "user");
+    s.tasks.purge([b.id], "user");
     expect(s.tasks.summary(a.id).blocks).toEqual([]);
     expect(s.tasks.summary(c.id).blockedBy).toEqual([]);
     expect(s.tasks.detail(a.id).events.at(-1)).toMatchObject({ type: "blocked_deleted" });

@@ -219,6 +219,7 @@ export function createAutopilotRunsRepo(sql: Sql) {
           `SELECT r.id, r.automation, r.task_id, r.status, r.created_at, r.runner, r.worktree_path,
              r.task_id IS NOT NULL AND EXISTS (
                SELECT 1 FROM tasks t WHERE t.id = r.task_id AND t.status <> 'done' AND t.archived_at IS NULL
+                 AND t.deleted_at IS NULL
              ) AS open_task,
              r.id IN (
                SELECT id FROM (

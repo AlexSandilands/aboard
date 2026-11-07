@@ -7,6 +7,8 @@ import type { Config } from "./config.ts";
 import { createContext } from "./context.ts";
 import { removeServerFile, writeServerFile } from "./serverFile.ts";
 
+const TRASH_PURGE_INTERVAL_MS = 60 * 60 * 1000;
+
 export interface RunningServer {
   /** The bound port (differs from `config.port` when that was 0). */
   port: number;
@@ -44,6 +46,16 @@ export async function startServer(config: Config): Promise<RunningServer> {
   // Runs a previous process left going can't be finished; flag them whether or not Autopilot runs now.
   ctx.services.autopilot.recover();
   ctx.services.attachments.sweep();
+  // The trash keeps deleted tasks for the retention setting; past it they go for good, checked now and hourly.
+  const purgeTrash = () => {
+    try {
+      ctx.services.tasks.purgeExpired();
+    } catch (error) {
+      console.error("Emptying the trash failed:", error);
+    }
+  };
+  purgeTrash();
+  const trashTimer = setInterval(purgeTrash, TRASH_PURGE_INTERVAL_MS).unref();
   ctx.services.projects.ensureGeneral();
   // After an update, installed copies of the board skill catch up with the app.
   ctx.services.skillSync.syncAll();
@@ -59,6 +71,7 @@ export async function startServer(config: Config): Promise<RunningServer> {
     close() {
       closing ??= new Promise<void>((resolve) => {
         ctx.integrations.stop();
+        clearInterval(trashTimer);
         removeServerFile(runtime.homeDir);
         server.close(() => {
           ctx.db.close();

@@ -333,7 +333,8 @@ describe("issue import", () => {
     const gone = deleted.create(GH_URL);
     deleted.importer.start(gone.id);
     deleted.s.tasks.update(gone.id, { archived: true }, "user");
-    deleted.s.tasks.delete(gone.id, "user");
+    deleted.s.tasks.delete([gone.id], {}, "user");
+    deleted.s.tasks.purge([gone.id], "user");
     gate.release();
     await deleted.importer.idle();
     expect(deleted.s.imports.get(gone.id)).toBeNull();

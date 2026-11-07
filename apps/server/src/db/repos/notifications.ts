@@ -1,5 +1,5 @@
 import type { InboxNotification, NotificationKind } from "@repo/contracts";
-import { jsonList, type Sql } from "./sql.ts";
+import { jsonList, liveTask, type Sql } from "./sql.ts";
 
 interface NotificationRow {
   id: string;
@@ -50,7 +50,7 @@ export function createNotificationsRepo(sql: Sql) {
       return sql
         .all<NotificationRow>(
           `SELECT * FROM notifications
-           WHERE created_at >= ? AND (read_at IS NULL OR read_at >= ?) AND (? IS NULL OR kind = ?)
+           WHERE created_at >= ? AND (read_at IS NULL OR read_at >= ?) AND (? IS NULL OR kind = ?) AND ${liveTask("task_id")}
            ORDER BY created_at DESC, rowid DESC LIMIT ?`,
           opts.since,
           opts.readSince,
@@ -84,6 +84,7 @@ export function createNotificationsRepo(sql: Sql) {
       return sql
         .all<NotificationRow>(
           `SELECT * FROM notifications WHERE created_at >= ? AND created_at < ? AND kind IN (SELECT value FROM json_each(?))
+           AND ${liveTask("task_id")}
            ORDER BY created_at, rowid`,
           from,
           to,
@@ -94,7 +95,7 @@ export function createNotificationsRepo(sql: Sql) {
     unread(since: string): number {
       return (
         sql.get<{ n: number }>(
-          "SELECT COUNT(*) AS n FROM notifications WHERE read_at IS NULL AND created_at >= ?",
+          `SELECT COUNT(*) AS n FROM notifications WHERE read_at IS NULL AND created_at >= ? AND ${liveTask("task_id")}`,
           since,
         )?.n ?? 0
       );

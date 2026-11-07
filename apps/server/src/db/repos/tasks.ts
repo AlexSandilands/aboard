@@ -63,6 +63,8 @@ export interface TaskRecord {
   integrationMergedAt: string | null;
   /** Where the task was moved to on another machine, while this copy stays archived; null otherwise. */
   movedTo: MovedTo | null;
+  /** When it went to the trash; null for a live task. Trashed tasks are hidden from every query but the trash's. */
+  deletedAt: string | null;
 }
 
 interface TaskRow {
@@ -100,6 +102,7 @@ interface TaskRow {
   integration_branch: string | null;
   integration_merged_at: string | null;
   moved_to_json: string | null;
+  deleted_at: string | null;
 }
 
 const toRecord = (r: TaskRow): TaskRecord => ({
@@ -137,6 +140,7 @@ const toRecord = (r: TaskRow): TaskRecord => ({
   integrationBranch: r.integration_branch,
   integrationMergedAt: r.integration_merged_at,
   movedTo: parseMovedTo(r.moved_to_json),
+  deletedAt: r.deleted_at,
 });
 
 const toRow = (t: TaskRecord): TaskRow => ({
@@ -174,6 +178,7 @@ const toRow = (t: TaskRecord): TaskRow => ({
   integration_branch: t.integrationBranch,
   integration_merged_at: t.integrationMergedAt,
   moved_to_json: t.movedTo ? JSON.stringify(t.movedTo) : null,
+  deleted_at: t.deletedAt,
 });
 
 export interface TaskFilter {
@@ -182,25 +187,42 @@ export interface TaskFilter {
   includeArchived?: boolean;
 }
 
-/** Typed access to the tasks table. */
+/**
+ * Typed access to the tasks table. Every read skips tasks in the trash (`deleted_at` set) unless its name says it
+ * doesn't (`getAny`, `byNumberAny`, the trash functions), so a deleted task is gone from the board, lookups,
+ * relations and every producer without each caller checking.
+ */
 export function createTasksRepo(sql: Sql) {
   return {
     get(id: string): TaskRecord | null {
+      const row = sql.get<TaskRow>("SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL", id);
+      return row ? toRecord(row) : null;
+    },
+    /** The task even when it is in the trash. */
+    getAny(id: string): TaskRecord | null {
       const row = sql.get<TaskRow>("SELECT * FROM tasks WHERE id = ?", id);
       return row ? toRecord(row) : null;
     },
     byNumber(n: number): TaskRecord | null {
+      const row = sql.get<TaskRow>("SELECT * FROM tasks WHERE number = ? AND deleted_at IS NULL", n);
+      return row ? toRecord(row) : null;
+    },
+    /** The task with number `n` even when it is in the trash: numbers are never reused, so it still owns `n`. */
+    byNumberAny(n: number): TaskRecord | null {
       const row = sql.get<TaskRow>("SELECT * FROM tasks WHERE number = ?", n);
       return row ? toRecord(row) : null;
     },
     getMany(ids: readonly string[]): TaskRecord[] {
       return sql
-        .all<TaskRow>("SELECT * FROM tasks WHERE id IN (SELECT value FROM json_each(?))", jsonList(ids))
+        .all<TaskRow>(
+          "SELECT * FROM tasks WHERE id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL",
+          jsonList(ids),
+        )
         .map(toRecord);
     },
     /** Tasks ordered by project lane order, then status and position. */
     list(filter: TaskFilter = {}): TaskRecord[] {
-      const where: string[] = [];
+      const where: string[] = ["t.deleted_at IS NULL"];
       const params: string[] = [];
       if (!filter.includeArchived) where.push("t.archived_at IS NULL");
       if (filter.projectId) {
@@ -211,15 +233,15 @@ export function createTasksRepo(sql: Sql) {
         where.push("t.status = ?");
         params.push(filter.status);
       }
-      const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
       return sql
         .all<TaskRow>(
-          `SELECT t.* FROM tasks t JOIN projects p ON p.id = t.project_id ${clause}
+          `SELECT t.* FROM tasks t JOIN projects p ON p.id = t.project_id WHERE ${where.join(" AND ")}
            ORDER BY p.position, t.project_id, t.status, t.position, t.id`,
           ...params,
         )
         .map(toRecord);
     },
+    /** Every task of the project, trashed ones included (deleting the project removes their files too). */
     idsForProject(projectId: string): string[] {
       return sql.all<{ id: string }>("SELECT id FROM tasks WHERE project_id = ?", projectId).map((r) => r.id);
     },
@@ -227,7 +249,8 @@ export function createTasksRepo(sql: Sql) {
     lane(projectId: string, status: TaskStatus): TaskRecord[] {
       return sql
         .all<TaskRow>(
-          "SELECT * FROM tasks WHERE project_id = ? AND status = ? AND archived_at IS NULL ORDER BY position, id",
+          `SELECT * FROM tasks WHERE project_id = ? AND status = ? AND archived_at IS NULL AND deleted_at IS NULL
+           ORDER BY position, id`,
           projectId,
           status,
         )
@@ -237,7 +260,8 @@ export function createTasksRepo(sql: Sql) {
     resolvedBy(ids: readonly string[]): TaskRecord[] {
       return sql
         .all<TaskRow>(
-          "SELECT * FROM tasks WHERE resolved_by_task_id IN (SELECT value FROM json_each(?)) ORDER BY number",
+          `SELECT * FROM tasks WHERE resolved_by_task_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL
+           ORDER BY number`,
           jsonList(ids),
         )
         .map(toRecord);
@@ -246,11 +270,33 @@ export function createTasksRepo(sql: Sql) {
     childrenOf(epicIds: readonly string[]): TaskRecord[] {
       return sql
         .all<TaskRow>(
-          `SELECT * FROM tasks WHERE parent_id IN (SELECT value FROM json_each(?))
+          `SELECT * FROM tasks WHERE parent_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL
            ORDER BY CASE status WHEN 'backlog' THEN 0 WHEN 'planned' THEN 1 WHEN 'in_progress' THEN 2
              WHEN 'review' THEN 3 ELSE 4 END, position, id`,
           jsonList(epicIds),
         )
+        .map(toRecord);
+    },
+    /** Children of `epicId` in the trash with exactly `deletedAt`: the ones deleted together with it. */
+    trashedWith(epicId: string, deletedAt: string): TaskRecord[] {
+      return sql
+        .all<TaskRow>("SELECT * FROM tasks WHERE parent_id = ? AND deleted_at = ? ORDER BY number", epicId, deletedAt)
+        .map(toRecord);
+    },
+    /** Tasks in the trash, most recently deleted first. */
+    trashed(): TaskRecord[] {
+      return sql
+        .all<TaskRow>("SELECT * FROM tasks WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC, number DESC")
+        .map(toRecord);
+    },
+    /** The newest `deleted_at` in the trash, or null when it is empty. */
+    latestDeletedAt(): string | null {
+      return sql.get<{ at: string | null }>("SELECT max(deleted_at) AS at FROM tasks")?.at ?? null;
+    },
+    /** Tasks in the trash that went there before `cutoff`: the ones the purge removes. */
+    deletedBefore(cutoff: string): TaskRecord[] {
+      return sql
+        .all<TaskRow>("SELECT * FROM tasks WHERE deleted_at IS NOT NULL AND deleted_at < ? ORDER BY number", cutoff)
         .map(toRecord);
     },
     /** Claims the next task number. Call inside the write that inserts the task, so a rollback releases it. */

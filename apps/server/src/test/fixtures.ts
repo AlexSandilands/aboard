@@ -44,6 +44,7 @@ export const defaultSettings: AppSettings = {
   keybindings: {},
   socialNetwork: false,
   automationVariables: [],
+  trashRetentionDays: 30,
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,

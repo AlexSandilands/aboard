@@ -89,7 +89,8 @@ describe("attachment files", () => {
     const [stored] = services.attachments.forTask(task.id);
     expect(existsSync(stored!.path)).toBe(true);
     services.tasks.update(task.id, { archived: true }, "user");
-    services.tasks.delete(task.id, "user");
+    services.tasks.delete([task.id], {}, "user");
+    services.tasks.purge([task.id], "user");
     expect(existsSync(stored!.path)).toBe(false);
     expect(services.attachments.forTask(task.id)).toEqual([]);
   });
@@ -279,7 +280,8 @@ describe("attachments in a backup", () => {
     }
 
     services.tasks.update(task.id, { archived: true }, "user");
-    services.tasks.delete(task.id, "user");
+    services.tasks.delete([task.id], {}, "user");
+    services.tasks.purge([task.id], "user");
     const second = writeDumpDir(dir, services.backup.dump(), attachmentsDir);
     expect(second.removed).toContain(`attachments/${task.id}/${stored!.id}.png`);
     expect(existsSync(join(dir, "attachments"))).toBe(false);
@@ -294,7 +296,8 @@ describe("attachments in a backup", () => {
     writeDumpDir(dir, dump, attachmentsDirOf(stored!.path));
 
     services.tasks.update(task.id, { archived: true }, "user");
-    services.tasks.delete(task.id, "user");
+    services.tasks.delete([task.id], {}, "user");
+    services.tasks.purge([task.id], "user");
     expect(existsSync(stored!.path)).toBe(false);
     services.backup.restoreTask(dump, task.number, { actor: "user", attachmentsFrom: dir });
     expect(existsSync(stored!.path)).toBe(true);

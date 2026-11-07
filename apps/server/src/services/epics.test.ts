@@ -219,7 +219,8 @@ describe("epics", () => {
     const a = child("A");
     const b = child("B");
     s.tasks.update(b.id, { archived: true }, "user");
-    s.tasks.delete(b.id, "user");
+    s.tasks.delete([b.id], {}, "user");
+    s.tasks.purge([b.id], "user");
     expect(s.tasks.detail(epic.id).events.at(-1)).toMatchObject({
       type: "child_removed",
       payload: { deleted: true },
@@ -227,7 +228,8 @@ describe("epics", () => {
 
     s.tasks.move(a.id, { status: "done" }, "user");
     s.tasks.update(epic.id, { archived: true }, "user");
-    s.tasks.delete(epic.id, "user");
+    s.tasks.delete([epic.id], {}, "user");
+    s.tasks.purge([epic.id], "user");
     expect(s.tasks.summary(a.id).parent).toBeNull();
     expect(s.tasks.detail(a.id).events.at(-1)).toMatchObject({
       type: "epic_changed",

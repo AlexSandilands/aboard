@@ -269,7 +269,8 @@ describe("dump", () => {
     const dir = tempDir();
     writeDumpDir(dir, s.backup.dump());
     s.tasks.update(b.id, { archived: true }, "user");
-    s.tasks.delete(b.id, "user");
+    s.tasks.delete([b.id], {}, "user");
+    s.tasks.purge([b.id], "user");
     const { removed } = writeDumpDir(dir, s.backup.dump());
     expect(removed).toEqual([`tasks/${b.createdAt.slice(0, 7)}/task-${b.number}.json`]);
   });
@@ -532,6 +533,7 @@ describe("restore", () => {
           integration_branch: _b,
           integration_merged_at: _im,
           moved_to_json: _mt,
+          deleted_at: _del,
           attention_message: _atm,
           attention_actor: _aa,
           attention_requested_at: _at,
@@ -652,7 +654,8 @@ describe("backup routes", () => {
 
     const dump = s.backup.dump();
     s.tasks.update(a.id, { archived: true }, "user");
-    s.tasks.delete(a.id, "user");
+    s.tasks.delete([a.id], {}, "user");
+    s.tasks.purge([a.id], "user");
     const res = await request("/api/backup/restore-task", { method: "POST", json: { dump, number: a.number } });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ taskId: a.id, number: a.number });
@@ -667,7 +670,8 @@ describe("restoreTask", () => {
     const dump = s.backup.dump();
     const before = s.tasks.detail(a.id);
     s.tasks.update(a.id, { archived: true }, "user");
-    s.tasks.delete(a.id, "user");
+    s.tasks.delete([a.id], {}, "user");
+    s.tasks.purge([a.id], "user");
 
     events.length = 0;
     const result = s.backup.restoreTask(dump, a.number, { actor: "user" });
@@ -687,7 +691,8 @@ describe("restoreTask", () => {
     const bug = s.templates.list().find((t) => t.name === "Bug")!;
     expect(db.prepare("SELECT template_id FROM tasks WHERE id = ?").get(a.id)).toEqual({ template_id: bug.id });
     s.tasks.update(a.id, { archived: true }, "user");
-    s.tasks.delete(a.id, "user");
+    s.tasks.delete([a.id], {}, "user");
+    s.tasks.purge([a.id], "user");
     s.templates.delete(bug.id);
     s.backup.restoreTask(dump, a.number, { actor: "user" });
     expect(db.prepare("SELECT template_id FROM tasks WHERE id = ?").get(a.id)).toEqual({ template_id: null });
@@ -697,7 +702,8 @@ describe("restoreTask", () => {
     const { s, a, idea } = seed();
     const dump = s.backup.dump();
     s.tasks.update(a.id, { archived: true }, "user");
-    s.tasks.delete(a.id, "user");
+    s.tasks.delete([a.id], {}, "user");
+    s.tasks.purge([a.id], "user");
     expect(s.tasks.summary(idea.id).blockedBy).toEqual([]);
     s.backup.restoreTask(dump, a.number, { actor: "user" });
     expect(s.tasks.summary(idea.id).blockedBy.map((t) => t.id)).toEqual([a.id]);
@@ -717,7 +723,8 @@ describe("restoreTask", () => {
     expect(s.tasks.detail(b.id).resolvedBy?.id).toBe(a.id);
 
     s.tasks.update(a.id, { archived: true }, "user");
-    s.tasks.delete(a.id, "user");
+    s.tasks.delete([a.id], {}, "user");
+    s.tasks.purge([a.id], "user");
     // Another task now holds the number (as if the counter had been reset).
     db.prepare("UPDATE tasks SET number = ? WHERE id = ?").run(a.number, b.id);
     const restored = s.backup.restoreTask(dump, a.number, { actor: "user" });
@@ -732,7 +739,8 @@ describe("restoreTask", () => {
     const dump = s.backup.dump();
 
     s.tasks.update(child.id, { archived: true }, "user");
-    s.tasks.delete(child.id, "user");
+    s.tasks.delete([child.id], {}, "user");
+    s.tasks.purge([child.id], "user");
     expect(s.tasks.summary(epic.id).status).toBe("backlog");
     s.backup.restoreTask(dump, child.number, { actor: "user" });
     expect(s.tasks.summary(child.id).parent?.id).toBe(epic.id);
@@ -744,9 +752,11 @@ describe("restoreTask", () => {
 
     // With the epic gone, the task comes back loose.
     s.tasks.update(child.id, { archived: true }, "user");
-    s.tasks.delete(child.id, "user");
+    s.tasks.delete([child.id], {}, "user");
+    s.tasks.purge([child.id], "user");
     s.tasks.update(epic.id, { archived: true }, "user");
-    s.tasks.delete(epic.id, "user");
+    s.tasks.delete([epic.id], {}, "user");
+    s.tasks.purge([epic.id], "user");
     s.backup.restoreTask(dump, child.number, { actor: "user" });
     expect(s.tasks.summary(child.id).parent).toBeNull();
   });
@@ -782,7 +792,8 @@ describe("diff", () => {
 
     s.tasks.update(a.id, { title: "Feature, renamed" }, "user");
     s.tasks.update(b.id, { archived: true }, "user");
-    s.tasks.delete(b.id, "user");
+    s.tasks.delete([b.id], {}, "user");
+    s.tasks.purge([b.id], "user");
     const diff = s.backup.diff(dump);
     expect(diff.counts).toMatchObject({ missing: 1, changed: 1, board: dump.tasks.length - 1 });
     expect(diff.tasks).toEqual([

@@ -14,6 +14,10 @@ export class AppError extends Error {
 
 export const notFound = (what: string, id: string) => new AppError("NOT_FOUND", `${what} not found: ${id}`);
 
+/** A task in the trash: its number still belongs to it, so a reference to it never reaches another task. */
+export const deletedError = (task: { number: number }) =>
+  new AppError("NOT_FOUND", `Task #${task.number} was deleted; the user can restore it from the trash (Settings)`);
+
 export const planRequired = (taskNumber: number) =>
   new AppError(
     "PLAN_REQUIRED",

@@ -72,7 +72,6 @@ describe("MCP endpoint", () => {
       "move_task",
       "close_task",
       "update_task",
-      "delete_task",
       "add_note",
       "request_attention",
       "link",
@@ -517,20 +516,15 @@ describe("MCP endpoint", () => {
     expect(h.services.tasks.summary(epic.id).status).toBe("done");
   });
 
-  it("delete_task requires the task to be archived first", async () => {
+  it("has no delete tool, and says when a task was deleted rather than not found", async () => {
+    const { tools } = await client.listTools();
+    expect(tools.map((t) => t.name)).not.toContain("delete_task");
     const project = h.services.projects.create({ workspaceRoot: "C:/Fake/proj" });
     const task = h.services.tasks.create({ projectId: project.id, title: "Scrap me" });
-    const ref = `#${task.number}`;
-
-    const refused = await client.callTool({ name: "delete_task", arguments: { task: ref } });
-    expect(refused.isError).toBe(true);
-    expect(text(refused)).toMatch(/^VALIDATION: Archive #\d+ before deleting it/);
-
-    await client.callTool({ name: "update_task", arguments: { task: ref, archived: true } });
-    const deleted = await client.callTool({ name: "delete_task", arguments: { task: ref } });
-    expect(deleted.isError).toBeFalsy();
-    expect(text(deleted)).toBe(`Deleted ${ref} "Scrap me" permanently.`);
-    expect(text(await client.callTool({ name: "get_task", arguments: { task: ref } }))).toMatch(/^NOT_FOUND: /);
+    h.services.tasks.delete([task.id], {}, "user");
+    const result = await client.callTool({ name: "get_task", arguments: { task: `#${task.number}` } });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toMatch(new RegExp(`^NOT_FOUND: Task #${task.number} was deleted`));
   });
 
   it("files work that belongs to no code project in General, only when asked", async () => {

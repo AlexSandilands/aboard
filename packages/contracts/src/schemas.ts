@@ -832,6 +832,43 @@ export const MoveTaskInput = z.object({
 });
 export type MoveTaskInput = z.infer<typeof MoveTaskInput>;
 
+/** Days a deleted task stays restorable (task-lifecycle.md#deleting). */
+export const TrashRetentionDays = z.number().int().min(1).max(365);
+export const DEFAULT_TRASH_RETENTION_DAYS = 30;
+
+export const DeleteTaskInput = z.object({
+  /** For an epic: delete its tasks with it (restored together), instead of leaving them as loose tasks. */
+  withTasks: z.boolean().optional(),
+});
+export type DeleteTaskInput = z.infer<typeof DeleteTaskInput>;
+
+/**
+ * Several tasks (references: uuid, "#42" or "42") for one trash action in one write: a bulk delete (one confirm, one
+ * Undo), a restore, or a purge.
+ */
+export const TaskRefsInput = z.object({ tasks: z.array(z.string().trim().min(1)).min(1).max(500) });
+export type TaskRefsInput = z.infer<typeof TaskRefsInput>;
+
+/** What a delete put in the trash: the ids to pass back to restore for Undo. */
+export const DeleteTasksResult = z.object({ deleted: z.array(z.string()) });
+export type DeleteTasksResult = z.infer<typeof DeleteTasksResult>;
+
+/** A task in the trash, for Settings → Recently deleted. */
+export const TrashedTask = z.object({
+  id: z.string(),
+  number: z.number().int(),
+  title: z.string(),
+  kind: TaskKind,
+  projectId: z.string(),
+  status: TaskStatus,
+  deletedAt: IsoDate,
+  /** When the purge removes it for good. */
+  purgeAt: IsoDate,
+  /** The epic it was deleted together with, when it was; restoring that epic brings it back too. */
+  withEpic: z.number().int().nullable(),
+});
+export type TrashedTask = z.infer<typeof TrashedTask>;
+
 export const CloseTaskInput = z
   .object({
     resolution: TaskResolution,
@@ -922,6 +959,8 @@ export const AppSettings = z
     socialNetwork: z.boolean(),
     /** Custom automations' variables for every project; a project's own override them (effectiveVariables). */
     automationVariables: AutomationVariables,
+    /** Days a deleted task stays in the trash, restorable, before the purge removes it for good. */
+    trashRetentionDays: TrashRetentionDays,
   })
   .extend(BackupSettings.shape);
 
@@ -962,6 +1001,7 @@ export const UpdateSettingsInput = z.object({
   socialNetwork: z.boolean().optional(),
   /** Replaces the board's automation variables. */
   automationVariables: AutomationVariables.optional(),
+  trashRetentionDays: TrashRetentionDays.optional(),
   backupEnabled: z.boolean().optional(),
   backupDir: z.string().trim().nullable().optional(),
   backupRemote: z.string().trim().nullable().optional(),

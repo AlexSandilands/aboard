@@ -124,7 +124,7 @@ function templateFor(
 }
 
 /**
- * Task lifecycle tools: add_to_backlog, create_task, create_epic, move_task, close_task, update_task, delete_task,
+ * Task lifecycle tools: add_to_backlog, create_task, create_epic, move_task, close_task, update_task,
  * add_note, request_attention.
  */
 export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor }) => {
@@ -544,29 +544,6 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         if (args.delivery !== undefined) await ctx.integrations.setEpicDelivery(id, args.delivery, actor(args.actor));
         // Labels usually arrive after the plan is saved, so this is when a new ui label can ask for the capture step.
         return taskResult(services, task.id, `Updated #${task.number}.`, { captureHint: args.labels !== undefined });
-      }),
-  );
-
-  server.registerTool(
-    "delete_task",
-    {
-      title: "Permanently delete an archived task",
-      description:
-        "Permanently delete a task with its plan, links and activity log. This cannot be undone. The task must be " +
-        "archived first (update_task with archived: true), so deleting is always a deliberate second step. Only " +
-        "delete when the user asks for it; to close finished or unwanted work use close_task or move_task instead. " +
-        "Tasks that were closed against this one keep their resolution but lose the link to it.",
-      inputSchema: {
-        task: taskField,
-        actor: actorField,
-      },
-    },
-    (args) =>
-      run(() => {
-        const id = services.tasks.resolveId(args.task);
-        const { number, title } = services.tasks.summary(id);
-        services.tasks.delete(id, actor(args.actor));
-        return textResult(`Deleted #${number} "${title}" permanently.`);
       }),
   );
 

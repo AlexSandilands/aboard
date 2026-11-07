@@ -6,7 +6,7 @@ import type {
   ReviewTrigger,
   TaskReview,
 } from "@repo/contracts";
-import { jsonList, type Sql } from "./sql.ts";
+import { jsonList, liveTask, type Sql } from "./sql.ts";
 
 /** A task_reviews row in domain shape (without findings). */
 export type ReviewRecord = Omit<TaskReview, "findings">;
@@ -164,7 +164,7 @@ export function createReviewsRepo(sql: Sql) {
       return sql
         .all<ReviewRow>(
           `SELECT r.* FROM task_reviews r JOIN tasks t ON t.id = r.task_id
-           WHERE r.status = ? AND t.archived_at IS NULL ORDER BY r.created_at, r.id`,
+           WHERE r.status = ? AND t.archived_at IS NULL AND t.deleted_at IS NULL ORDER BY r.created_at, r.id`,
           status,
         )
         .map(toReview);
@@ -173,7 +173,8 @@ export function createReviewsRepo(sql: Sql) {
     roundsBetween(from: string, to: string): ReviewRecord[] {
       return sql
         .all<ReviewRow>(
-          "SELECT * FROM task_reviews WHERE created_at >= ? AND created_at < ? ORDER BY created_at, id",
+          `SELECT * FROM task_reviews WHERE created_at >= ? AND created_at < ? AND ${liveTask("task_id")}
+           ORDER BY created_at, id`,
           from,
           to,
         )
@@ -183,7 +184,7 @@ export function createReviewsRepo(sql: Sql) {
     findingsBetween(from: string, to: string): FindingRecord[] {
       return sql
         .all<FindingRow & { round: number }>(
-          `${FINDINGS_SELECT} WHERE f.created_at >= ? AND f.created_at < ? ORDER BY f.created_at, r.round, f.position`,
+          `${FINDINGS_SELECT} WHERE f.created_at >= ? AND f.created_at < ? AND ${liveTask("r.task_id")} ORDER BY f.created_at, r.round, f.position`,
           from,
           to,
         )

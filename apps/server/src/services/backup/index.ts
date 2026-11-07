@@ -144,7 +144,7 @@ export function createBackupService(
           throw new AppError("NOT_FOUND", `Task #${number}'s project (${projectId}) is not on the board`);
         }
         const task = { ...bundle.task };
-        if (repos.tasks.byNumber(number)) task.number = repos.tasks.nextNumber();
+        if (repos.tasks.byNumberAny(number)) task.number = repos.tasks.nextNumber();
         else db.prepare("UPDATE counters SET value = max(value, ?) WHERE name = 'task_number'").run(number);
         if (task.resolved_by_task_id && !repos.tasks.get(String(task.resolved_by_task_id))) {
           task.resolved_by_task_id = null;

@@ -1,4 +1,10 @@
-import { jsonList, type Sql } from "./sql.ts";
+import { jsonList, liveTask, type Sql } from "./sql.ts";
+
+/**
+ * A relation with a task in the trash on either side is hidden, not dropped, so restoring the task brings it back.
+ * `path` still walks them, so a new block can't close a cycle through a task that comes back later.
+ */
+const LIVE = `${liveTask("blocker_id")} AND ${liveTask("blocked_id")}`;
 
 /** One "blocker blocks blocked" row. */
 export interface RelationRecord {
@@ -30,6 +36,19 @@ export function createRelationsRepo(sql: Sql) {
       return sql
         .all<RelationRow>(
           `SELECT * FROM task_relations
+           WHERE (blocker_id IN (SELECT value FROM json_each(?)) OR blocked_id IN (SELECT value FROM json_each(?)))
+             AND ${LIVE}
+           ORDER BY created_at, blocker_id, blocked_id`,
+          jsonList(taskIds),
+          jsonList(taskIds),
+        )
+        .map(toRecord);
+    },
+    /** Every relation of `taskIds`, those with a task in the trash too: what a purge takes away. */
+    allFor(taskIds: readonly string[]): RelationRecord[] {
+      return sql
+        .all<RelationRow>(
+          `SELECT * FROM task_relations
            WHERE blocker_id IN (SELECT value FROM json_each(?)) OR blocked_id IN (SELECT value FROM json_each(?))
            ORDER BY created_at, blocker_id, blocked_id`,
           jsonList(taskIds),
@@ -42,8 +61,8 @@ export function createRelationsRepo(sql: Sql) {
       const list = jsonList(taskIds);
       return sql
         .all<{ id: string }>(
-          `SELECT blocked_id AS id FROM task_relations WHERE blocker_id IN (SELECT value FROM json_each(?))
-           UNION SELECT blocker_id FROM task_relations WHERE blocked_id IN (SELECT value FROM json_each(?))`,
+          `SELECT blocked_id AS id FROM task_relations WHERE blocker_id IN (SELECT value FROM json_each(?)) AND ${LIVE}
+           UNION SELECT blocker_id FROM task_relations WHERE blocked_id IN (SELECT value FROM json_each(?)) AND ${LIVE}`,
           list,
           list,
         )

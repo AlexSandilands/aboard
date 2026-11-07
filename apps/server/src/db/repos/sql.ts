@@ -38,5 +38,12 @@ export function createSql(db: Db) {
 }
 export type Sql = ReturnType<typeof createSql>;
 
+/**
+ * SQL that is true unless the task with id `column` is in the trash (task-lifecycle.md#deleting), for queries over
+ * task-owned rows that don't join tasks. A NULL `column` (a row with no task) counts as live.
+ */
+export const liveTask = (column: string): string =>
+  `NOT EXISTS (SELECT 1 FROM tasks trashed WHERE trashed.id = ${column} AND trashed.deleted_at IS NOT NULL)`;
+
 /** Binds a string list for `IN (SELECT value FROM json_each(?))`. */
 export const jsonList = (ids: readonly string[]): string => JSON.stringify(ids);
