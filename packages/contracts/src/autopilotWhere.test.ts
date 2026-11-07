@@ -11,7 +11,9 @@ import {
   whereEpic,
   whereEverywhere,
   whereInput,
+  whereOffEverywhere,
   whereOnlyIn,
+  whereOwnOn,
   whereProject,
   whereRemoveException,
   type AutopilotModeRow,
@@ -339,6 +341,30 @@ describe("edits", () => {
         }
       }
     }
+  });
+});
+
+describe("Off everywhere", () => {
+  it("leaves nothing running from any combination of modes, and keeps rows set Off", () => {
+    for (const board of MODES) {
+      for (const p1 of MODES) {
+        for (const e5 of MODES) {
+          const before = input(board, { p1, p2: "on", p3: "off" }, { e5, e6: "preview" });
+          const after = apply(before, whereOffEverywhere(before));
+          for (const p of PROJECTS) expect(engineSays(after, p.id)).toBe(false);
+          for (const e of EPICS) expect(engineSays(after, e.projectId, e.id)).toBe(false);
+          expect(after.projects.find((p) => p.id === "p3")!.mode).toBe("off");
+          expect(whereOwnOn(after)).toEqual({ projects: [], epics: [] });
+        }
+      }
+    }
+  });
+
+  it("names the projects and epics that keep running when only the board goes off", () => {
+    const own = whereOwnOn(input("on", { p1: "on", p2: "preview", p3: "off" }, { e6: "on" }));
+    expect(own.projects.map((p) => p.id)).toEqual(["p1", "p2"]);
+    expect(own.epics.map((e) => e.id)).toEqual(["e6"]);
+    expect(whereOffEverywhere(input("inherit"))).toEqual([]);
   });
 });
 

@@ -239,8 +239,8 @@ shows whether auto-review is on, as plain text. A task for a person shows only P
 flags (no plan to start, no PR, no priority), so its panel shows the section only once Autopilot has run on it, with the
 runs alone.
 
-Under the settings come the run notice and the task's Autopilot runs (status, automation, what it did, runner, a thread
-link or session id, cost and the error), or "Autopilot hasn't run on this task". The collapsed header reads what it may do
+Under the settings come the run notice and the task's Autopilot runs (status, automation and age with **Retry** on the
+same line; what it did; runner, the thread and session as links, cost; and the error), or "Autopilot hasn't run on this task". The collapsed header reads what it may do
 ("May start, review · Priority", "Not automated", "For a person"; "Runs on this epic" for an epic), from the same chips
 (`mayState`, so a task that follows the board's Auto-review counts review when the board has it on), or the attention
 message when a run needs a look.

@@ -251,11 +251,16 @@ automation's editor link to its own. It is for reading what scheduled agents did
   no longer has (`unstick`, `unblock_dependents`, `fix_pr_findings`), "Removed custom automation" for a deleted custom
   one, and otherwise the key made readable. The server's titles (activity, digests, Needs you, notifications) and the
   Stats page's table use it too.
-- **A row** shows its status, automation, project and task, the error or summary, cost and age, with **Retry** when
-  `canRetryRun` allows it (judged against the loaded runs, so a superseded run offers none). Clicking it opens what the
-  run kept: its summary under an error, the output (**Error output** on a failure), a scheduled agent's handover,
-  cost, model, runner, session, worktree, times and run id, **Open thread**, and on a failure **Ask an agent to fix**
-  (`AskToFix`, the hand-off menu described under [Ask an agent](#ask-an-agent) below).
+- **A row** shows its status, automation, project and task, the error or summary, cost and age. What you can _do_ with
+  it sits in its header, right of cost and age, whether it is open or closed: **↻ Retry** when `canRetryRun` allows it
+  (judged against the loaded runs, so a superseded run offers none) and, on a failure, **Ask an agent ▾** (`AskToFix`,
+  the hand-off menu described under [Ask an agent](#ask-an-agent) below), so a failed run can be handled without
+  opening it. Clicking it opens what the run kept: its summary under an error, the output (**Error output** on a
+  failure), a scheduled agent's handover, and a details list of cost, model, runner, times and run id. What it can
+  _open_ is a link in that list: **Thread** ("Open in T3 Code ↗" for a T3 deep link, "Open thread ↗" for a web URL)
+  and **Session** ("Open session ↗", which opens the session in a terminal as the task panel does when it is linked
+  on the run's task (`runSessionLink`), then the short id, the whole one in its tooltip). The task panel's Autopilot
+  section places them the same way: Retry on the run's first line, the thread and session links on the line under it.
 
 - **The list.** `GET /api/autopilot/runs/history` (`ListAutopilotRunsQuery`, `AutopilotRunPage` in
   `packages/contracts/src/autopilotRunHistory.ts`) takes `automation` (a key or `all`) and optionally `projectId`,
@@ -332,7 +337,7 @@ How each automation is doing, on its detail in Settings → Autopilot and in Nee
   with a reason ("Failed 3 times in a row. The last: …"), publishes `autopilot.changed` and sends an
   `autopilot_failed` notification. The engine then leaves the project out of the automation's check (a custom
   automation's check script doesn't run there either) and drops its candidates; other projects go on. The overview
-  lists the pauses (`autoPaused`): the list row shows a warning dot and "Paused in storefront", the detail's Where it
+  lists the pauses (`autoPaused`): the list row's subline reads **Paused** (amber) "in storefront", the detail's Where it
   runs a row per project with the reason and **Resume**, and Needs you the same. Resume
   (`POST /api/autopilot/auto-pauses/resume`, `{ automation, projectId }`; 409 when it isn't paused) lifts it, counts
   failures again only from then (`counted_from`), marks the notification read, and calls `onEnabled` as lifting Pause
@@ -1098,7 +1103,14 @@ steps in `BuilderSteps.tsx`): one form, so moving between steps keeps everything
 checks each step only for what it shows, and Save jumps to the first step with a problem. Review shows the
 sentence, what it would run for right now (`rightNow`: a stale trigger's tasks already past the limit), the prompt
 preview or a script's test run, and the name, pre-filled from the trigger and action. A new one saves in Preview, or
-**Save and turn on** sets the board's mode to On after it is created; an existing one opens at Review.
+**Save and turn on** sets the board's mode to On after it is created; an existing one opens at Review. Details for a
+command ("Which command?") or a script ("The script") has a small amber **Runs as you** pill by its heading
+(`RunsAsYouBadge` in `ScriptWarning.tsx`) instead of an alert: its card opens on hover, on click or tap, and on
+keyboard focus, and Esc closes it (it stays closed until focus leaves the pill). It says the code runs on this machine
+as the user, with their logins, can do anything they can in the project's folder, and that text from GitHub can come
+from anyone who can comment; a command's adds the Windows advice (let the program read the variable itself, since
+PowerShell doesn't escape quotes and npm and pnpm hand arguments to cmd.exe). Code someone else wrote keeps the full
+`ScriptWarning`: the import page, an agent's draft or change, and the script confirmation.
 Each row of
 `autopilot_custom` (name, `trigger_json`, `filters_json`, `action_json`, `armed_at`) is a catalogue entry
 `custom:<id>`, built by `customAutomation` (`autopilot/custom.ts`). The service's catalogue is a function
@@ -1350,7 +1362,8 @@ schedule takes one for now (`checkCustomDefinition`); task triggers would need a
   script confirmation; see [Sharing automations](#sharing-automations)), and the import page shows it and says how its
   items' agents run.
 - **In the editor.** A schedule's agent form has **Check first with a script**: a switch that reveals the
-  [script editor](#the-script-editor), the untrusted-items switch (with a warning when it is turned off) and `ScriptWarning`.
+  [script editor](#the-script-editor), the untrusted-items switch (with a warning when it is turned off) and `ScriptWarning`
+  (the check has no heading of its own for the Runs as you badge).
   The section is hidden for the other triggers, and `customFormToInput` leaves a check out unless the trigger is a
   schedule, so what was typed survives switching the trigger and back. The prompt hint names `{{item}}` and
   `{{item.<field>}}` while a check is on.
@@ -1901,23 +1914,33 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
     custom one's editor).
   - **The list and detail** (`AutomationsSplit`), the Providers page's `SplitCard`. Every automation is listed once,
     under its `group` heading (`AUTOMATION_GROUPS`: Ship work, Pull requests, Upkeep, then Yours for custom
-    automations, which have no group of their own). A row has an icon, the name with a dot (green on, red when the
-    last run failed), a line saying where it is on and how its last run went (`rowSubline`, from each project's scope
-    and `overview.lastRuns`), and its board switch (on saves the mode `restoreMode` gives, off saves `inherit`); that
-    switch, and the detail header's **Switch on** (`useBoardMode`), turn it on as Everywhere, so the rows Only in… left
-    go too and a later off is off everywhere (while it is already on or in Preview, only the board's own row changes). A
-    row in Preview has an amber **Preview** badge instead of the dot. An
+    automations, which have no group of their own). A row has an icon, the name with the row's full width (no marker
+    beside it: the switch says On or Off), a subline (`rowSubline`, from each project's scope and `overview.lastRuns`),
+    and its board switch (on saves the mode `restoreMode` gives); that switch, and the detail header's **Switch on**
+    (`useBoardMode`), turn it on as Everywhere, so the rows Only in… left go too and a later off is off everywhere (while
+    it is already on or in Preview, only the board's own row changes). The subline says where it is on and how its last
+    run went ("every project · ✓ 2m"), led by what the switch can't show, as a coloured word: **Paused** (amber) "in
+    storefront", **Preview** (amber), **Last run failed** (red) "· 3m ago". A project's own setting beats the board's,
+    so with the board off and some projects set On it does run there: the switch is then **mixed** (`switchState`, a
+    centred thumb on a tinted track) and the subline reads "On in 5 projects". Switching off a mixed automation, or one
+    whose board is on while projects or epics set their own On (`whereOwnOn`), asks first (`SwitchOffDialog`): **Off
+    everywhere** (`whereOffEverywhere`: the board and every own On or Preview back to Inherit; rows set Off stay) or,
+    when the board is on, **Board only**, which leaves those projects running; a plain one saves the board's `inherit`.
+    An
     automation off on the board and in every project is dimmed, as a switched-off provider is; its switch stays.
     **+ Add automation** opens [the Add gallery](#the-add-gallery), and **Ask an agent** beside it is
     [the hand-off](#ask-an-agent). `?automation=<key>` picks a row; with none, the first is shown.
-  - **The detail**: a header with the status line (`statusLine`, "Preview · …" in Preview) and **Switch on/off**,
+  - **The detail**: a header with the status line (`statusLine`, "Preview · …" in Preview, "On in 5 projects · Off for
+    the board" when mixed, agreeing with the list switch) and **Switch on/off** (Switch off when mixed),
     plus **Export** and **Delete** for a custom automation; in Preview, a notice with how often it would have run this
     week (`previewHint`), **See them** (its run history) and **Turn on**; **What it does**, one sentence read from its
     effective config (`automationSentence`; a custom automation's from its trigger and action) with **All runs**, and
-    the **Mode** row, the board's Off · Preview · On, saying what the mode does (`modeDescription`; with a check
-    script, that it still runs for real); **Where it runs** (`WhereItRuns`): the sentence (`describeWhere`, "Preview
+    the **Mode · for the board** row, the board's Off · Preview · On, saying what the mode does (`modeDescription`;
+    with a check script, that it still runs for real; when mixed, "**Off for the board.** On in 5 projects, which
+    set their own." (a project only in Preview is named as Preview) with a **Turn off everywhere** link); **Where it runs** (`WhereItRuns`): the sentence (`describeWhere`, "Preview
     everywhere", "On only in storefront; Preview in docs"), an **Everywhere / Only in…** control with the projects as
-    chips under Only in… (amber when only in Preview), and **Exceptions** as removable chips (a project's or epic's own
+    chips under Only in… (amber when only in Preview; past `PROJECT_CHIPS_MAX`, 8 projects, one "5 of 20 projects ▾"
+    button instead, opening a searchable checklist with All and None, `ProjectPicker`), and **Exceptions** as removable chips (a project's or epic's own
     setting, with the mode it has: On, Preview or Off) with **+ Exception**, which offers the projects not yet Off under
     Everywhere and the epics that aren't exceptions yet, each with the mode it would be given (On or Off). Everywhere
     turns an off automation on in the mode `restoreMode` gives. It reads `useAutopilotModes` and the board's projects and

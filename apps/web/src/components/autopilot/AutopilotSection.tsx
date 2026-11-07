@@ -1,5 +1,5 @@
 import { canRetryRun, type AttentionReason, type AutopilotRun, type TaskDetail } from "@repo/contracts";
-import { ExternalLinkIcon, XIcon } from "lucide-react";
+import { RotateCwIcon, XIcon } from "lucide-react";
 import { AttentionIcon } from "~/components/board/attention";
 import { isWebUrl } from "~/components/task/links.logic";
 import { AutopilotFlags } from "~/components/task/AutopilotFlags";
@@ -11,6 +11,8 @@ import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { useDismissAutopilotRun, useRetryAutopilotRun } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotRuns } from "~/state/queries";
 import { pausedForRun } from "./health.logic";
+import { DetailLink, SessionValue } from "./RunHistoryRow";
+import { threadLinkLabel } from "./runHistory.logic";
 import {
   automationTitle,
   dismissableRun,
@@ -110,28 +112,18 @@ function RunRow({ run, title, retryable }: { run: AutopilotRun; title: string; r
         <span className="ms-auto shrink-0 tabular-nums text-secondary-label" title={new Date(at).toLocaleString()}>
           {formatElapsedDurationLabel(at)}
         </span>
+        {/* What you can do sits on the header line, as in Runs; what it can open is a link on the line below. */}
+        {retryable ? <RetryButton runId={run.id} /> : null}
       </div>
       {run.summary ? <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{run.summary}</p> : null}
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-2xs text-muted-foreground">
         {run.runner ? <span>{run.runner}</span> : null}
         {run.threadUrl && isOpenable(run.threadUrl) ? (
-          <a
-            href={run.threadUrl}
-            {...(isWebUrl(run.threadUrl) ? { target: "_blank", rel: "noreferrer" } : {})}
-            className="inline-flex items-center gap-0.5 rounded-sm underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            Open thread
-            <ExternalLinkIcon className="size-3" />
-          </a>
+          <DetailLink href={run.threadUrl} external={isWebUrl(run.threadUrl)} label={threadLinkLabel(run.threadUrl)} />
         ) : null}
-        {run.sessionId ? (
-          <span className="min-w-0 truncate font-mono" title={`Session ${run.sessionId}`}>
-            session {run.sessionId}
-          </span>
-        ) : null}
+        {run.sessionId ? <SessionValue run={run} sessionId={run.sessionId} /> : null}
         {cost ? <span className="tabular-nums">{cost}</span> : null}
         {run.exitCode !== null ? <span className="tabular-nums">exit {run.exitCode}</span> : null}
-        {retryable ? <RetryButton runId={run.id} /> : null}
       </div>
       {run.error ? <p className="text-xs text-destructive-foreground [overflow-wrap:anywhere]">{run.error}</p> : null}
       {run.detail ? (
@@ -155,11 +147,12 @@ function RetryButton({ runId }: { runId: string }) {
     <Button
       size="xs"
       variant="ghost"
-      className="ms-auto"
+      className="-my-0.5 shrink-0"
       disabled={retry.isPending}
       title="Let Autopilot try this again on its next pass"
       onClick={() => retry.mutate(runId)}
     >
+      <RotateCwIcon />
       Retry
     </Button>
   );

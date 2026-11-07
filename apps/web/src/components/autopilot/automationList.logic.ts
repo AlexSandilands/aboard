@@ -92,15 +92,80 @@ export function lastRunText(run: LastRun | undefined, nowMs: number = Date.now()
   return `${run.status} ${ago}`;
 }
 
-/** The line under a row's name: "Off", or "where · last run". */
-export function rowSubline(reach: AutomationReach, run: LastRun | undefined, nowMs?: number): string {
-  if (isOffEverywhere(reach)) return "Off";
-  return `${whereText(reach)} · ${lastRunText(run, nowMs)}`;
+/**
+ * What a list row's switch shows: the board's own setting, or mixed when the board isn't on but some projects set
+ * their own On (a project beats the board, so it really runs there).
+ */
+export type SwitchState = "on" | "off" | "mixed";
+
+export function switchState(reach: Pick<AutomationReach, "board" | "projects">): SwitchState {
+  if (reach.board) return "on";
+  return reach.projects.length > 0 ? "mixed" : "off";
 }
 
-/** The status line under the detail's title; `preview` when the board's mode is Preview. */
+const projectsCount = (titles: readonly string[]): string =>
+  titles.length === 1 ? titles[0]! : `${titles.length} projects`;
+
+/**
+ * Where it runs while the board is off and projects set their own: "On in 5 projects", "On in storefront" (one is
+ * named), "Preview in docs" for a project only in Preview, or both ("On in 2 projects · Preview in docs").
+ */
+export function onInProjectsText(reach: Pick<AutomationReach, "projects" | "previewProjects">): string {
+  const preview = new Set(reach.previewProjects);
+  const live = reach.projects.filter((title) => !preview.has(title));
+  return [
+    ...(live.length > 0 ? [`On in ${projectsCount(live)}`] : []),
+    ...(preview.size > 0 ? [`Preview in ${projectsCount(reach.previewProjects)}`] : []),
+  ].join(" · ");
+}
+
+export type SublineTone = "warning" | "danger";
+
+/**
+ * The line under a row's name. A row that is plainly On or Off has no marker (its switch says it); a state the switch
+ * can't show leads the line as a coloured word: Preview, Paused, Last run failed. A board that is off while projects
+ * set their own On reads "On in 5 projects".
+ */
+export interface RowSubline {
+  word: { text: string; tone: SublineTone } | null;
+  /** Between the word and the text: " " for "Paused in storefront", else " · ". */
+  sep: string;
+  text: string;
+}
+
+export function rowSubline(
+  reach: AutomationReach,
+  run: LastRun | undefined,
+  opts: {
+    nowMs?: number;
+    /** The board's mode is Preview. */
+    preview?: boolean;
+    /** "Paused in storefront", when it paused itself somewhere after failing. */
+    paused?: string | null;
+    /** Recurring tasks: no switch and no reach, only its last run. */
+    switchless?: boolean;
+  } = {},
+): RowSubline {
+  const { nowMs, preview = false, paused = null, switchless = false } = opts;
+  const off = !switchless && isOffEverywhere(reach);
+  if (off) return { word: null, sep: "", text: "Off" };
+  const ago = (r: LastRun) => formatElapsedDurationLabel(r.at, nowMs ?? Date.now());
+  if (paused) return { word: { text: "Paused", tone: "warning" }, sep: " ", text: paused.replace(/^Paused /, "") };
+  const where = switchless ? null : switchState(reach) === "mixed" ? onInProjectsText(reach) : whereText(reach);
+  if (preview && !switchless) {
+    return { word: { text: "Preview", tone: "warning" }, sep: " · ", text: `${where} · ${lastRunText(run, nowMs)}` };
+  }
+  if (run?.status === "failed") {
+    return { word: { text: "Last run failed", tone: "danger" }, sep: " · ", text: `${ago(run)} ago` };
+  }
+  return { word: null, sep: "", text: where ? `${where} · ${lastRunText(run, nowMs)}` : lastRunText(run, nowMs) };
+}
+
+/** The status line under the detail's title; `preview` when the board's mode is Preview. Agrees with the list switch. */
 export function statusLine(reach: AutomationReach, preview = false): string {
-  return isOffEverywhere(reach) ? "Off" : `${preview ? "Preview" : "On"} · ${whereText(reach)}`;
+  if (isOffEverywhere(reach)) return "Off";
+  if (switchState(reach) === "mixed") return `${onInProjectsText(reach)} · Off for the board`;
+  return `${preview ? "Preview" : "On"} · ${whereText(reach)}`;
 }
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);

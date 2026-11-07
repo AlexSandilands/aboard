@@ -1,22 +1,26 @@
 import { canRetryRun, type AutopilotRun } from "@repo/contracts";
-import { ChevronRightIcon, ExternalLinkIcon } from "lucide-react";
+import { ChevronRightIcon, ExternalLinkIcon, RotateCwIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { isWebUrl } from "~/components/task/links.logic";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
+import { useSessionActions } from "~/components/sessions/useSessionActions";
 import { useRetryAutopilotRun } from "~/state/mutations";
+import { useBoard } from "~/state/queries";
 import { formatCost, runStatusLabel, runStatusVariant, scheduledAnswerOf } from "./autopilot.logic";
+import { runSessionLink, shortSessionId, threadLinkLabel } from "./runHistory.logic";
 
 /** Web URLs and T3 Code deep links; a runner's thread URL is shown as a link only if it is one of those. */
 const isOpenable = (url: string) => isWebUrl(url) || url.startsWith("t3code://");
 
 /**
- * One run in the history page: its status, automation, where it ran, when and what it said it did, with Retry when its
- * work can be tried again. Clicking it opens what else the run kept: the error and output, a scheduled agent's
- * handover, cost, model, the thread and the run id, with Ask an agent to fix on a failure. In select mode (Clean up…) a
- * checkbox selects it for deleting.
+ * One run in the history page: its status, automation, where it ran, when and what it said it did. What you can do
+ * with it sits in its header, open or closed: Retry when its work can be tried again, and Ask an agent ▾ on a failure.
+ * Clicking it opens what else the run kept: the error and output, a scheduled agent's handover, cost, model, and
+ * what it can open (its thread, its session) as links among the details. In select mode (Clean up…) a checkbox
+ * selects it for deleting.
  */
 export function RunHistoryRow({
   run,
@@ -50,7 +54,7 @@ export function RunHistoryRow({
   checked: boolean;
   disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
-  /** In an opened failed run: "Ask an agent to fix". */
+  /** On a failed run, beside Retry: "Ask an agent ▾". */
   action?: ReactNode;
 }) {
   const answer = scheduledAnswerOf(run);
@@ -105,25 +109,19 @@ export function RunHistoryRow({
             <span title={new Date(at).toLocaleString()}>{formatElapsedDurationLabel(at)}</span>
           </span>
         </button>
-        {retryable ? <RetryButton runId={run.id} /> : null}
+        {retryable || action ? (
+          <span className="flex shrink-0 flex-wrap items-start justify-end gap-1.5 self-start">
+            {retryable ? <RetryButton runId={run.id} /> : null}
+            {action}
+          </span>
+        ) : null}
       </div>
-      {open ? <RunDetail run={run} summary={summary} cost={cost} action={action} /> : null}
+      {open ? <RunDetail run={run} summary={summary} cost={cost} /> : null}
     </li>
   );
 }
 
-function RunDetail({
-  run,
-  summary,
-  cost,
-  action,
-}: {
-  run: AutopilotRun;
-  summary: string;
-  cost: string | null;
-  /** "Ask an agent to fix" on a failed run. */
-  action: ReactNode;
-}) {
+function RunDetail({ run, summary, cost }: { run: AutopilotRun; summary: string; cost: string | null }) {
   const answer = scheduledAnswerOf(run);
   const model = run.model ? [run.model.provider, run.model.model, run.model.effort].filter(Boolean).join(" · ") : null;
   const rows: Array<[string, ReactNode]> = [];
@@ -132,14 +130,19 @@ function RunDetail({
   if (cost) rows.push(["Cost", cost]);
   if (model) rows.push(["Model", model]);
   if (run.runner) rows.push(["Runner", run.runner]);
-  if (run.exitCode !== null) rows.push(["Exit code", String(run.exitCode)]);
-  if (run.sessionId)
+  if (run.threadUrl && isOpenable(run.threadUrl)) {
     rows.push([
-      "Session",
-      <span key="sessionId" className="font-mono">
-        {run.sessionId}
-      </span>,
+      "Thread",
+      <DetailLink
+        key="thread"
+        href={run.threadUrl}
+        external={isWebUrl(run.threadUrl)}
+        label={threadLinkLabel(run.threadUrl)}
+      />,
     ]);
+  }
+  if (run.exitCode !== null) rows.push(["Exit code", String(run.exitCode)]);
+  if (run.sessionId) rows.push(["Session", <SessionValue key="sessionId" run={run} sessionId={run.sessionId} />]);
   if (run.worktreePath)
     rows.push([
       "Worktree",
@@ -171,22 +174,51 @@ function RunDetail({
         </Block>
       ) : null}
       {answer ? <Block title="Handover">{answer.handover || "Nothing passed on."}</Block> : null}
-      <div className="flex flex-wrap gap-1.5">
-        {run.threadUrl && isOpenable(run.threadUrl) ? (
-          <Button
-            size="xs"
-            variant="outline"
-            render={
-              <a href={run.threadUrl} {...(isWebUrl(run.threadUrl) ? { target: "_blank", rel: "noreferrer" } : {})} />
-            }
-          >
-            Open thread
-            <ExternalLinkIcon />
-          </Button>
-        ) : null}
-        {action}
-      </div>
     </div>
+  );
+}
+
+const LINK_CLASS =
+  "inline-flex cursor-pointer items-center gap-1 rounded-sm text-info-foreground underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
+
+/** Something a run can open, as a link in its details (not a button: it opens, it doesn't act). */
+export function DetailLink({ href, external, label }: { href: string; external: boolean; label: string }) {
+  return (
+    <a href={href} {...(external ? { target: "_blank", rel: "noreferrer" } : {})} className={LINK_CLASS}>
+      {label}
+      <ExternalLinkIcon aria-hidden className="size-3" />
+    </a>
+  );
+}
+
+/**
+ * The run's agent session: Open session (in a terminal, as from the task panel) when it is linked on the run's task,
+ * then its short id; the whole id is in the tooltip.
+ */
+export function SessionValue({ run, sessionId }: { run: AutopilotRun; sessionId: string }) {
+  const link = runSessionLink(useBoard().data?.tasks, run);
+  const short = (
+    <span className="font-mono text-muted-foreground" title={`Session ${sessionId}`}>
+      {shortSessionId(sessionId)}
+    </span>
+  );
+  return link && run.taskId ? (
+    <span className="inline-flex flex-wrap items-center gap-x-2">
+      <OpenSessionLink taskId={run.taskId} link={link} />
+      {short}
+    </span>
+  ) : (
+    short
+  );
+}
+
+function OpenSessionLink({ taskId, link }: { taskId: string; link: NonNullable<ReturnType<typeof runSessionLink>> }) {
+  const session = useSessionActions(taskId);
+  return (
+    <button type="button" className={LINK_CLASS} disabled={session.pending} onClick={() => session.open(link)}>
+      Open session
+      <ExternalLinkIcon aria-hidden className="size-3" />
+    </button>
   );
 }
 
@@ -208,11 +240,12 @@ function RetryButton({ runId }: { runId: string }) {
     <Button
       size="xs"
       variant="outline"
-      className="shrink-0 self-start"
+      className="shrink-0"
       disabled={retry.isPending}
       title="Let Autopilot try this again on its next pass"
       onClick={() => retry.mutate(runId)}
     >
+      <RotateCwIcon />
       Retry
     </Button>
   );
