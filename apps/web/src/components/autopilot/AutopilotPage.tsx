@@ -3,14 +3,22 @@
 // paths of their own; the tab bar ties them together.
 import {
   AUTOPILOT_ALL_RUNS,
+  automationTitleOf,
   canRetryRun,
   limitsSummary,
   todaySummary,
-  type AutopilotNeed,
   type AutopilotOverview,
 } from "@repo/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { AlertTriangleIcon, FilePenLineIcon, GitPullRequestIcon, PauseIcon, PlayIcon, XCircleIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  FilePenLineIcon,
+  GitPullRequestIcon,
+  PauseCircleIcon,
+  PauseIcon,
+  PlayIcon,
+  XCircleIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import {
   SettingsGroup,
@@ -25,13 +33,18 @@ import { SettingsScroller, SettingsTopBar } from "~/components/settings/Settings
 import { Button } from "~/components/ui/button";
 import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
+import { useResumeAutoPause } from "~/state/autopilotRunHistory";
 import { useCustomAutomations, useDismissAutomationDraft } from "~/state/customAutomations";
 import { useDismissAutopilotRun, useRetryAutopilotRun, useSetAutopilotPaused } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotProjectScopes, useBoard } from "~/state/queries";
 import { useScopeAutomations } from "./AutomationRows";
 import { automationReach, isOffEverywhere } from "./automationList.logic";
 import { AutopilotLimits } from "./AutopilotSettingsSection";
+import { AskToFix } from "./AskAgentButtons";
+import { QuickSetup, type QuickSetupState } from "./QuickSetup";
 import { AutomationsSplit, customOf, type ListedAutomation } from "./AutomationsSplit";
+import { HINT_ICONS, useApplyHint, type HintTarget } from "./HealthSections";
+import { pausedForRun } from "./health.logic";
 
 type Tab = "automations" | "runs" | "limits";
 
@@ -113,8 +126,16 @@ export function AutopilotAutomationsTab() {
       projects.map((p, i) => ({ title: p.title, entries: scopes[i]?.data })),
     ),
     lastRun: overview.data?.lastRuns.find((r) => r.automation === item.automation.key),
+    previewRuns: overview.data?.previewRuns.find((r) => r.automation === item.automation.key)?.count ?? 0,
     custom: customOf(customs, item.automation.key),
   }));
+  const quickSetup: QuickSetupState = {
+    automations: overview.data?.automations ?? [],
+    board: items.map((item) => item.entry),
+    projects: projects.map((p, i) => ({ title: p.title, entries: scopes[i]?.data ?? [] })),
+  };
+  // Not known until every project's scope has loaded: before that a project's own switch would be missed.
+  const nothingOn = scopes.every((s) => s.data) && !listed.some((i) => !isOffEverywhere(i.reach));
   return (
     <div className="space-y-6">
       <AutopilotTabs current="automations" />
@@ -122,9 +143,22 @@ export function AutopilotAutomationsTab() {
         {overview.data && !message ? (
           <>
             <StatusStrip overview={overview.data} anyOn={listed.some((i) => !isOffEverywhere(i.reach))} />
-            <NeedsYou needs={overview.data.needsYou} onSelect={(key) => selectAutomation(key)} />
+            {nothingOn ? (
+              // The empty state: nothing is on, so the first thing to offer is switching a sensible set on.
+              <SettingsGroup className="px-3 py-3 sm:px-4">
+                <QuickSetup state={quickSetup} title="Start with Quick setup" />
+              </SettingsGroup>
+            ) : null}
+            <NeedsYou
+              overview={overview.data}
+              onSelect={(key) => selectAutomation(key)}
+              targetFor={(key) => {
+                const item = listed.find((i) => i.automation.key === key);
+                return item ? { onConfig: item.onConfig } : undefined;
+              }}
+            />
             <section className="space-y-2.5">
-              <AutomationsSplit items={listed} overview={overview.data} pending={pending} rejected={rejected} />
+              <AutomationsSplit items={listed} pending={pending} rejected={rejected} quickSetup={quickSetup} />
             </section>
           </>
         ) : (
@@ -156,13 +190,13 @@ function StatusStrip({ overview, anyOn }: { overview: AutopilotOverview; anyOn: 
   const setPaused = useSetAutopilotPaused();
   const openSettings = useOpenSettings();
   const { paused } = overview;
-  // In dry run the automations only record what they would do, so the strip mustn't say plainly that they run.
+  // Under Preview everything the automations only record what they would do, so the strip mustn't say they run.
   const state = paused
     ? "Paused: no new runs start"
     : !anyOn
       ? "Nothing is on"
       : overview.engine.dryRun
-        ? "Running in dry run: nothing is done"
+        ? "Preview everything: nothing is done"
         : "Running";
   return (
     <SettingsGroup className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:px-4">
@@ -196,19 +230,61 @@ function StatusStrip({ overview, anyOn }: { overview: AutopilotOverview; anyOn: 
   );
 }
 
-/** What only the user can sort out: failed runs, drafts to review and automations missing setup. Hidden when empty. */
-function NeedsYou({ needs, onSelect }: { needs: AutopilotNeed[]; onSelect: (automation: string) => void }) {
+/**
+ * What only the user can sort out: failed runs, automations that paused themselves in a project, drafts to review,
+ * automations missing setup, and tuning hints. Hidden when empty.
+ */
+function NeedsYou({
+  overview,
+  onSelect,
+  targetFor,
+}: {
+  overview: AutopilotOverview;
+  onSelect: (automation: string) => void;
+  targetFor: (automation: string) => HintTarget | undefined;
+}) {
   const retry = useRetryAutopilotRun();
   const dismissRun = useDismissAutopilotRun();
   const dismissDraft = useDismissAutomationDraft();
+  const resume = useResumeAutoPause();
+  const hint = useApplyHint();
   const navigate = useNavigate();
-  if (needs.length === 0) return null;
+  const { needsYou: needs, autoPaused, hints } = overview;
+  const titleOf = (key: string) => automationTitleOf(overview.automations, key);
+  const count = needs.length + autoPaused.length + hints.length;
+  if (count === 0) return null;
   return (
     <SettingsSection
       id="autopilot.automations.needs-you"
       title="Needs you"
-      headerAction={<span className="text-xs text-muted-foreground tabular-nums">{needs.length}</span>}
+      headerAction={<span className="text-xs text-muted-foreground tabular-nums">{count}</span>}
     >
+      {autoPaused.map((pause) => (
+        <SettingsRow
+          key={`paused:${pause.automation}:${pause.projectId}`}
+          title={
+            <NeedTitle icon={<PauseCircleIcon className="text-warning" />}>
+              {titleOf(pause.automation)} paused itself in {pause.projectTitle}
+            </NeedTitle>
+          }
+          description={`${pause.reason} · ${formatRelativeTimeLabel(pause.pausedAt)}`}
+          control={
+            <>
+              <Button
+                size="xs"
+                variant="outline"
+                disabled={resume.isPending}
+                onClick={() => resume.mutate({ automation: pause.automation, projectId: pause.projectId })}
+              >
+                Resume
+              </Button>
+              <Button size="xs" variant="ghost-muted" onClick={() => onSelect(pause.automation)}>
+                Open
+              </Button>
+            </>
+          }
+        />
+      ))}
       {needs.map((need) => {
         switch (need.kind) {
           case "failed_run":
@@ -223,7 +299,7 @@ function NeedsYou({ needs, onSelect }: { needs: AutopilotNeed[]; onSelect: (auto
                 description={`${need.run.error ?? need.run.summary} · ${formatRelativeTimeLabel(need.run.updatedAt)}`}
                 control={
                   <>
-                    {canRetryRun(need.run) ? (
+                    {canRetryRun(need.run) && !pausedForRun(autoPaused, need.run) ? (
                       <Button
                         size="xs"
                         variant="outline"
@@ -233,6 +309,7 @@ function NeedsYou({ needs, onSelect }: { needs: AutopilotNeed[]; onSelect: (auto
                         Retry
                       </Button>
                     ) : null}
+                    <AskToFix run={need.run} automationTitle={need.title} task={need.task} />
                     <Button
                       size="xs"
                       variant="ghost-muted"
@@ -250,7 +327,7 @@ function NeedsYou({ needs, onSelect }: { needs: AutopilotNeed[]; onSelect: (auto
               <SettingsRow
                 key={`draft:${need.draftId}`}
                 title={<NeedTitle icon={<FilePenLineIcon className="text-info" />}>Draft · {need.name}</NeedTitle>}
-                description={`From ${need.createdBy} · ${formatRelativeTimeLabel(need.createdAt)}. Nothing runs until you import it.`}
+                description={`From ${need.createdBy} · ${formatRelativeTimeLabel(need.createdAt)}. It saves in Preview when you import it.`}
                 control={
                   <>
                     <Button
@@ -320,6 +397,37 @@ function NeedsYou({ needs, onSelect }: { needs: AutopilotNeed[]; onSelect: (auto
             );
         }
       })}
+      {hints.map((h) => (
+        <SettingsRow
+          key={`hint:${h.id}`}
+          title={
+            <NeedTitle icon={HINT_ICONS[h.tone]}>
+              {h.automation ? `${titleOf(h.automation)}: ` : ""}
+              {h.text}
+            </NeedTitle>
+          }
+          control={
+            <>
+              <Button
+                size="xs"
+                variant="outline"
+                disabled={hint.pending}
+                onClick={() => void hint.apply(h, h.automation ? targetFor(h.automation) : undefined)}
+              >
+                {h.action.label}
+              </Button>
+              <Button
+                size="xs"
+                variant="ghost-muted"
+                disabled={hint.dismiss.isPending}
+                onClick={() => hint.dismiss.mutate(h.id)}
+              >
+                Dismiss
+              </Button>
+            </>
+          }
+        />
+      ))}
     </SettingsSection>
   );
 }

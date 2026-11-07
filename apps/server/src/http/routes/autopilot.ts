@@ -1,5 +1,7 @@
 import {
   DeleteAutopilotRunsInput,
+  DismissHintInput,
+  ResumeAutoPauseInput,
   ListAutopilotRunsQuery,
   UpdateAutopilotEngineInput,
   UpdateAutopilotSettingInput,
@@ -135,6 +137,28 @@ export function registerAutopilotRoutes(app: Hono, { services, integrations }: A
         return c.json(autopilot.runsForProject(project.id, query.limit));
       }
       throw new AppError("VALIDATION", "Pass taskId or projectId");
+    }),
+  );
+  // An automation's week, for its This week section and its hints.
+  app.get(
+    "/api/autopilot/automations/:automation/week",
+    handle((c) => c.json(autopilot.week(automationParam(c)))),
+  );
+  app.post(
+    "/api/autopilot/hints/dismiss",
+    handle(async (c) => {
+      autopilot.dismissHint((await parseBody(c, DismissHintInput)).id);
+      return c.body(null, 204);
+    }),
+  );
+  // Resuming an automation that paused itself in a project: the user has looked at why it kept failing.
+  app.post(
+    "/api/autopilot/auto-pauses/resume",
+    handle(async (c) => {
+      const { automation, projectId } = await parseBody(c, ResumeAutoPauseInput);
+      autopilot.resumeAutoPause(automation, projectId);
+      integrations.autopilotPass();
+      return c.body(null, 204);
     }),
   );
   // The run history page: filtered, keyset-paged. The route above stays as it was for its callers.

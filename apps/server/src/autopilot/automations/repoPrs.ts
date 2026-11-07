@@ -814,8 +814,9 @@ function retryLater(error: unknown, item: RepoPrData): ActionResult {
   throw new Error(`${messageOf(error)} (PR #${item.number}, after ${REPO_REVIEW_ATTEMPTS} tries)`, { cause: error });
 }
 
-const SKIP_MOVED = (n: number) => ({
-  status: "skipped" as const,
+const SKIP_MOVED = (n: number): ActionResult => ({
+  status: "skipped",
+  deferred: "head_moved",
   summary: `PR #${n} moved on while it was being reviewed`,
 });
 
@@ -838,7 +839,9 @@ export async function actRepoPr(
   } catch (error) {
     return retryLater(error, item);
   }
-  if (live !== item.headOid) return { status: "skipped", summary: `PR #${item.number} moved on to ${shortSha(live)}` };
+  if (live !== item.headOid) {
+    return { status: "skipped", deferred: "head_moved", summary: `PR #${item.number} moved on to ${shortSha(live)}` };
+  }
 
   const state = services.repoPrReviews.get(item.host, item.repo, item.number);
   let verdict: RepoPrReviewVerdict;

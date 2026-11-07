@@ -1,10 +1,14 @@
 // Pure helpers for Settings → Autopilot's list and detail: which group each automation is listed under, the line
 // under its name, whether it is dimmed as off, and whether its Advanced section holds anything changed.
 import {
+  AGENT_DEFAULT_KEYS,
   AUTOMATION_GROUPS,
   fieldTier,
+  RUNNER_CHOICES,
+  T3_RUNTIME_MODES,
   type AutomationGroup,
   type AutopilotAutomation,
+  type AutopilotField,
   type AutopilotConfig,
   type AutopilotOverview,
   type AutopilotScopeEntry,
@@ -31,8 +35,10 @@ export function groupAutomations<T extends { automation: Pick<AutopilotAutomatio
 /** Where an automation is on: the board, or the projects whose own setting (or the board's) switches it on. */
 export interface AutomationReach {
   board: boolean;
-  /** Titles of the projects it is on in, in board order. */
+  /** Titles of the projects it is on in (in Preview too), in board order. */
   projects: string[];
+  /** Those of them where it is only in Preview. */
+  previewProjects: string[];
   /** How many projects the board has. */
   total: number;
 }
@@ -43,11 +49,24 @@ export function automationReach(
   board: Pick<AutopilotScopeEntry, "enabled"> | undefined,
   projects: ReadonlyArray<{ title: string; entries: ReadonlyArray<AutopilotScopeEntry> | undefined }>,
 ): AutomationReach {
+  const entryIn = (p: (typeof projects)[number]) => p.entries?.find((e) => e.automation === key);
   return {
     board: board?.enabled ?? false,
-    projects: projects.filter((p) => p.entries?.find((e) => e.automation === key)?.enabled).map((p) => p.title),
+    projects: projects.filter((p) => entryIn(p)?.enabled).map((p) => p.title),
+    previewProjects: projects.filter((p) => entryIn(p)?.enabled && entryIn(p)?.preview).map((p) => p.title),
     total: projects.length,
   };
+}
+
+/** The Projects row's status: "On in storefront · Preview in docs", or "On in no project". */
+export function projectsStatus(reach: Pick<AutomationReach, "projects" | "previewProjects">): string {
+  const preview = new Set(reach.previewProjects);
+  const live = reach.projects.filter((title) => !preview.has(title));
+  const parts = [
+    ...(live.length > 0 ? [`On in ${live.join(", ")}`] : []),
+    ...(preview.size > 0 ? [`Preview in ${reach.previewProjects.join(", ")}`] : []),
+  ];
+  return parts.length > 0 ? parts.join(" · ") : "On in no project";
 }
 
 /** Off everywhere: the row is dimmed, as a switched-off provider is. */
@@ -79,9 +98,9 @@ export function rowSubline(reach: AutomationReach, run: LastRun | undefined, now
   return `${whereText(reach)} · ${lastRunText(run, nowMs)}`;
 }
 
-/** The status line under the detail's title. */
-export function statusLine(reach: AutomationReach): string {
-  return isOffEverywhere(reach) ? "Off" : `On · ${whereText(reach)}`;
+/** The status line under the detail's title; `preview` when the board's mode is Preview. */
+export function statusLine(reach: AutomationReach, preview = false): string {
+  return isOffEverywhere(reach) ? "Off" : `${preview ? "Preview" : "On"} · ${whereText(reach)}`;
 }
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -106,4 +125,65 @@ export function advancedChanged(
 export function selectedAutomation(keys: readonly string[], requested: string | undefined): string | null {
   if (requested && keys.includes(requested)) return requested;
   return keys[0] ?? null;
+}
+
+const AGENT_KEYS: ReadonlySet<string> = new Set(AGENT_DEFAULT_KEYS);
+
+/**
+ * An automation's advanced fields split into its agent's (the model, and what the board's agent defaults cover:
+ * runner, budget, timeout, T3 access) and the rest. The agent's show as summary lines with Override, not one row each.
+ */
+export function splitAgentFields<F extends Pick<AutopilotField, "key" | "kind">>(
+  fields: readonly F[],
+): { model: F | null; runner: F[]; rest: F[] } {
+  return {
+    model: fields.find((f) => f.kind === "model") ?? null,
+    runner: fields.filter((f) => AGENT_KEYS.has(f.key)),
+    rest: fields.filter((f) => f.kind !== "model" && !AGENT_KEYS.has(f.key)),
+  };
+}
+
+const RUNNER_NAMES: Record<string, string> = {
+  runner: "runner",
+  budgetUsd: "budget",
+  timeoutMinutes: "timeout",
+  t3Access: "T3 access",
+};
+
+/** "Runner, budget and timeout": what an automation's agent-defaults line covers, from the fields it has. */
+export function agentFieldsTitle(fields: ReadonlyArray<Pick<AutopilotField, "key">>): string {
+  const names = fields.map((f) => RUNNER_NAMES[f.key] ?? f.key);
+  const text = names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+const money = (n: number): string => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`);
+
+/** "Auto · $5 · 60 min", from the effective values of the keys the automation has; T3 access only when not T3's default. */
+export function agentSummary(fields: ReadonlyArray<Pick<AutopilotField, "key">>, config: AutopilotConfig): string {
+  const parts = fields.flatMap((f): string[] => {
+    const value = config[f.key];
+    switch (f.key) {
+      case "runner":
+        return typeof value === "string" ? [RUNNER_CHOICES.find((c) => c.value === value)?.short ?? value] : [];
+      case "budgetUsd":
+        return typeof value === "number" ? [money(value)] : [];
+      case "timeoutMinutes":
+        return typeof value === "number" ? [`${value} min`] : [];
+      case "t3Access": {
+        if (typeof value !== "string" || value === "default") return [];
+        const mode = T3_RUNTIME_MODES.find((m) => m.value === value);
+        return [`T3: ${mode?.label ?? value}`];
+      }
+      default:
+        return [];
+    }
+  });
+  return parts.join(" · ");
+}
+
+/** The Advanced section's summary of what it holds: "Agent, Review drafts", agent fields named once. */
+export function advancedFieldNames(fields: ReadonlyArray<Pick<AutopilotField, "key" | "kind" | "label">>): string[] {
+  const { model, runner, rest } = splitAgentFields(fields);
+  return [...(model || runner.length > 0 ? ["Agent"] : []), ...rest.map((f) => f.label)];
 }

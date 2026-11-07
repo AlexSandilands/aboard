@@ -37,7 +37,7 @@ and a click tries again.
 | **Keybindings**  | [Shortcuts](using-the-board.md#keyboard) by group (General, Navigation, Layout, Tasks), with a search box |
 | **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), [Suggestions](#suggested-changes) |
 | **Agents**       | [Providers](#providers) (T3 Code, Claude Code, Codex and GitHub Copilot, once you add them: [connecting agents](connect-agents.md), [T3 Code](t3-code.md)), [Models](#models) (the Light, Standard and Deep tiers and custom models picked by a task label), Operations (the model each kind of run uses) |
-| **Autopilot**    | [Automations](autopilot.md#switching-automations-on) (status, Needs you, every automation and [your own](custom-automations.md) in one list), [Runs](autopilot.md#run-history), [Limits & safety](autopilot.md#limits) (caps, quiet hours, dry run, variables) |
+| **Autopilot**    | [Automations](autopilot.md#switching-automations-on) (status, Needs you, every automation and [your own](custom-automations.md) in one list), [Runs](autopilot.md#run-history), [Limits & safety](autopilot.md#limits) (caps, quiet hours, Preview everything, variables) |
 | **Integrations** | GitHub, Ticket systems, Terminal |
 | **Project**      | General (name, icon, folder), Planning skill, Review skill, Reviewer model, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
 
@@ -51,8 +51,8 @@ and a click tries again.
   fixing.
 - A session whose CLI isn't available here has no **Open in terminal** or **Fork in terminal** in its menus, only
   the copy commands.
-- On the Autopilot page each automation is folded: its On / Off switch is in the header, and opening it
-  shows what it does and its settings. Only a project's or epic's switch has Inherit.
+- On the Autopilot page each automation is a row with its switch; clicking it shows what it does, its Off / Preview /
+  On mode and its settings. Only a project's or epic's switch has Inherit.
 - The Project page has a picker at the top. It starts on the project the board was showing, else the first one.
 
 ## Models
@@ -152,7 +152,7 @@ Agents can suggest changes to the prompts and skills the board runs them with: t
 chose (on the board or a project), your custom automations' prompts, and the skills those automations name. Each
 suggestion waits under **Settings → Tasks → Suggestions**, with a count beside the section in the list and a
 notification when a new one arrives. Nothing changes until you decide. The
-[Improve prompts and skills](custom-automations.md#improve-prompts-and-skills) automation makes them every week.
+[Improve automations](autopilot.md#improve-automations) automation can make them every week.
 
 Each one shows why the agent suggests it, the evidence (tasks open on the board, links open in a new tab), and the
 change as a diff; **Show the whole proposed text** shows all of it. Read it before you accept: it is an agent's

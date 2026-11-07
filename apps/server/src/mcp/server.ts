@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { BRAND } from "@repo/contracts";
+import { ACTOR_HEADER, BRAND } from "@repo/contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { AppContext } from "../app.ts";
@@ -23,9 +23,9 @@ const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for trackin
 - Showing the user a draft plan: print it in full as its own message first, and only then ask your questions (a question dialog is never where the plan lives). Once it is saved, end the turn restating what was saved: some apps collapse everything but a turn's last message.
 - To plan several of a project's tasks with the user in one session, follow the prompt get_handoff_prompt(tasks: ["#3", "#4"]) returns; the board starts such sessions from a lane's Plan tasks.
 - Autopilot can start flagged Planned tasks by itself. When a planning result says the Autopilot flag isn't set, ask the user whether to flag the task, then apply their answer with update_task(autopilot: "on" | "off"); never set it unasked. You can only flag tasks: Autopilot's own settings are the user's alone, and no tool changes them. When an Autopilot run on a task failed or was cut short (a board restart, say), retry_autopilot_run(task) lets it try again once the cause is gone; don't push an empty commit to re-trigger it.
-- Custom automations: when the user asks for an automation of their own ("every morning, ...", "when a PR merges, ..."), draft_automation writes it as a draft and returns a link to its import page. Nothing runs until the user reviews and imports it there and switches it on, so give them the link and never say it is set up. If the ${BRAND.id}-automations skill is installed, read it before drafting: it covers triggers, variables, inputs, tool slots, the script contract and testing.
+- Custom automations: when the user asks for an automation of their own ("every morning, ...", "when a PR merges, ..."), draft_automation writes it as a draft and returns a link to its import page. Nothing is saved until the user reviews and imports it there; it then comes in in Preview (it records what it would do, though a check script runs for real) until they turn it on, so give them the link and never say it is set up. If the ${BRAND.id}-automations skill is installed, read it before drafting: it covers triggers, variables, inputs, tool slots, the script contract and testing.
 - Priority tasks show in a lane above every project, and Autopilot starts them first. Set it with update_task(priority: true | false), or priority on create_task / add_to_backlog, only when the user has asked for it.
-- merge_task_pr merges a task's PR into the default branch, only for a task flagged with update_task(autoMerge: "on"), which you set only when the user says so. The board refuses, with the reason, until the PR is reviewed, green and mergeable; fix what it names or wait, and never merge with gh or git instead.
+- merge_task_pr merges a task's PR into the default branch, only for a task flagged with update_task(autoMerge: "on"), which you set only when the user says so. The board refuses, with the reason, until the PR is reviewed, green and mergeable; fix what it names or wait, and never merge with gh or git instead. Where the user has switched on Autopilot's Merge ready PRs with Into main, Autopilot merges flagged tasks by itself once they're ready, one at a time, so you needn't call it.
 - set_plan REPLACES the whole plan: steps you don't pass back with their id are deleted with their status and notes. Use it to write or deliberately rewrite a plan. To change an existing plan, use update_plan (several changes at once: notes, moves, phase renames, statuses that really changed together), update_step (one step) or add_steps (append).
 - Keep steps current with update_step (in_progress when you start, done when finished): update each step the moment it changes, one call per step, and never save the updates for the end of a phase. If steps can only be verified together, still mark each in_progress as you start it and done once it is written, with testing as its own step. Results point out when no step is in progress or the plan has gone stale. Before asking the user a question and waiting for the answer, mark the current step blocked with a note saying what you need; set it back to in_progress once answered. move_task to review when the work is done (with auto-review on, finish the review loop first, then always open the PR, or push to the one already linked), link PRs when opened; done when merged/verified.
 - A task that changes what the user sees (components, styles, layout, the ui label) needs a Screen capture step in its plan; add_steps one if it has none (then update_plan it ahead of any review or PR step). Open the changed surface in a real browser in each state you introduced (menus open, warnings showing, narrow phone width where relevant), save the screenshots as JPEG or WebP (each under 5 MB), look at every one and fix what's wrong, then attach them with update_step(step, status: "done", images: [absolute paths]) before moving the task to review. Moving a ui task to review without screenshots warns, and the reviewer checks them.
@@ -61,10 +61,14 @@ function actorFromUserAgent(userAgent: string | null): string | undefined {
 function createMcpServer(ctx: AppContext, request: Request): McpServer {
   const server = new McpServer({ name: BRAND.id, version: "0.1.0" }, { instructions: INSTRUCTIONS });
   const fallbackActor = actorFromUserAgent(request.headers.get("user-agent"));
+  // A caller that sends the actor header is pinned to it, whatever `actor` argument its agent passes (apart from
+  // `submit_review`, which keeps its own): Autopilot's runs use it so what a run writes can be told from the rest.
+  const pinnedActor = request.headers.get(ACTOR_HEADER)?.trim().slice(0, 64) || undefined;
   const tc: ToolContext = {
     ctx,
     services: ctx.services,
-    actor: (explicit) => explicit?.trim() || server.server.getClientVersion()?.name || fallbackActor || "agent",
+    actor: (explicit) =>
+      pinnedActor || explicit?.trim() || server.server.getClientVersion()?.name || fallbackActor || "agent",
     client: () => server.server.getClientVersion()?.name || fallbackActor,
   };
   registerReadTools(server, tc);

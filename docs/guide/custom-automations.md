@@ -1,13 +1,14 @@
 # Custom automations
 
 A custom automation is an Autopilot automation you define yourself: say what to watch for, and what to do. It
-sits in the Autopilot list next to the built-in ones, under **Yours**, with the same **Inherit / On / Off** switches
-per project, and keeps to the same pause, dry run, caps and quiet hours. Click it in the list to see what it does in
-one sentence, switch it on or off, **Edit** it, **Export** it or **Delete** it.
+sits in the Autopilot list next to the built-in ones, under **Yours**, with the same **Off / Preview / On** switches
+(and **Inherit** per project), and keeps to the same pause, caps and quiet hours. Click it in the list to see what it
+does in one sentence, switch it on or off, **Edit** it, **Export** it or **Delete** it.
 
 ## Setting one up
 
-**Settings → Autopilot → + Add automation → New automation** (the last row of the list).
+**Settings → Autopilot → + Add automation → Start from scratch**. The same dialog has **Recipes** (small ready-made
+automations that open for you to read and import, in Preview), **Import a file** and **Ask an agent**.
 
 1. **When**: pick a trigger.
    - **A task changes column**: into a column, and optionally only from one (Done → In Progress catches reopened
@@ -70,8 +71,9 @@ one sentence, switch it on or off, **Edit** it, **Export** it or **Delete** it.
      (`Write-Output`, `-match`, a `.ps1` script) is fine.
 4. The **Preview** shows exactly what would run for the newest task the filters let through: the filled prompt,
    or the command with its variables.
-5. Save it, then switch it **On** in the Autopilot list (for the board) or in a project's Autopilot settings, or
-   from the Autopilot pill on a lane. Like every automation, it is off until you switch it on.
+5. Save it. It starts in [Preview](autopilot.md#trying-one-out-with-preview): it records what it would do, and does
+   none of it. Once its Preview runs look right, turn it **On** on its page (**Turn on**, or its Mode), in a project's
+   Autopilot settings, or from the Autopilot pill on a lane.
 
 ## What it does
 
@@ -90,7 +92,8 @@ one sentence, switch it on or off, **Edit** it, **Export** it or **Delete** it.
 - A command that exits non-zero, or runs past its timeout (it's stopped), fails its run and puts the task under
   Needs attention. The run keeps the exit code and the end of its output, shown in the task panel's **Autopilot**
   section under **Output**.
-- With **dry run** on, each run records what it would have run, under **What it would run**, and does nothing.
+- In **Preview** (its own, or Preview everything), each run records what it would have run, under **What it would
+  run**, and does nothing.
 
 ## Scripts
 
@@ -189,7 +192,7 @@ that it never repeats work: **retry** the run (`POST /api/autopilot/runs/<id>/re
 the key. In both cases the board takes the same care as any retry: quiet hours, the caps and the switches still hold.
 
 A check starts only when an agent could: not in quiet hours, nor while the agent caps are full, and at most four
-checks and commands run at once. A **dry run** runs the check for real, so it can do whatever your script does, and
+checks and commands run at once. **Preview runs the check for real**, so it can do whatever your script does, and
 records what each agent would have been told instead of starting it.
 
 ### Items are untrusted by default
@@ -264,12 +267,12 @@ prompt, skill name and allowed tools, any script or check script (in full), the 
 slots **without** their tools. It leaves out your projects, your epic and the tools you filled the slots with. If the
 automation names a skill you have installed, the skill's text goes in the file.
 
-To use someone's file: **+ Add automation → Import**, then choose the file (or the example the app ships,
-**Improve prompts and skills**). Before anything is saved you see everything it
+To use someone's file: **+ Add automation → Import a file**, then choose the file. Before anything is saved you see everything it
 would run: the prompt, any command, script or check script (with its language), the tools it may use without asking and
-the skill's text. Treat it as code from a stranger, because once you switch it on it runs on
+the skill's text. Treat it as code from a stranger, because once you turn it on it runs on
 your machine with your access. Then fill in its inputs and slots, optionally restrict it to projects, and import.
-It comes in **off**; switch it on in the Autopilot list when you have read it and the orange warning is gone.
+It comes in **in Preview**, which records what it would do (a check script still runs for real); turn it on in the
+Autopilot list when its Preview runs look right and the orange warning is gone.
 
 - A file with a script needs one more step: a switch that says you've read the script and understand it runs on your
   machine as you. **Import** waits for it.
@@ -279,40 +282,12 @@ It comes in **off**; switch it on in the Autopilot list when you have read it an
   it, so check the skill for anything private first.
 - An automation name you already use gets a number: `Triage (2)`.
 - A file made by a newer version of the app is refused, saying so.
-
-### Improve prompts and skills
-
-The first example audits how agents did and suggests changes to the text they run with. Every Monday at 07:00 it
-reads what happened in the project over the past week (`board_activity`: review rounds and findings, failed or
-retried Autopilot runs, blocked steps, stalls, agents' notes), looks closer at the few tasks that went worst (their
-session transcripts only when the notes don't say why), and suggests at most a few rewrites of your review and
-planning skills, your custom automations' prompts and the skills they name. You decide each one under
-**Settings → Tasks → Suggestions** ([Suggested changes](settings.md#suggested-changes)); it never edits anything
-itself.
-
-It comes with its own skill, `aboard-improve`, which keeps the suggestions few and lean:
-
-- each one cites the tasks that show the problem, at least two or one that cost a failed run or a blocked task;
-- it rewrites or deletes the sentence that caused the problem rather than adding one, and a suggestion that makes
-  the text longer says why in its first line;
-- one behaviour per suggestion, no generic advice ("be careful"), the target's own wording and layout kept;
-- with weak evidence it suggests nothing, which is a good week.
-
-Its handover remembers what it suggested, so the next run sees whether you accepted it and whether the problem went
-away. `get_editable_prompt` shows each prompt's recent suggestions and what you decided, so it never suggests again
-what you rejected. Text the board itself ships (its tool descriptions) can't be suggested to; if one of your
-projects is the board's own code, it adds a backlog task there instead.
-
-To use it: **Import → Example: Improve prompts and skills**, switch **Save the skill** on (without the skill it
-suggests nothing), and check the inputs: **Look back (whole days)** (7), **Most suggestions per run** (3) and **May
-suggest changes to** (`skills`, `prompts` or `all`). Switch it on in the projects to audit. It runs on the deep model
-tier, once per project it's on in. A run that finds another project's run already left a suggestion open for the
-same skill or prompt leaves it alone; two runs at the same moment can still both suggest, and the later one replaces
-the earlier (it stays in the history).
+- The "Improve prompts and skills" example that older versions shipped is now the built-in
+  [Improve automations](autopilot.md#improve-automations). One you imported earlier keeps working as it is.
 
 ### Reviewing pull requests
 
-An earlier version shipped a second example, **Review repo PRs**, that commented on any pull request of the
+An earlier version shipped an example, **Review repo PRs**, that commented on any pull request of the
 repository. It is gone: the built-in **Review PRs** now does that with its **Other people's PRs** setting, and it can
 approve (past a gate the board checks itself), ask for changes or hand a pull request to you
 ([Review PRs](autopilot.md#review-prs)). An automation you imported from it keeps working until you delete it.
@@ -334,6 +309,13 @@ With **Settings → Agents → Providers → Board skills** on, the agent also h
 how to pick a trigger and action, use your variables, inputs and tool slots, write a script that fails loudly and
 treats what it reads as data, and test it before handing it over. Without it the agent still has the tool, just
 less guidance.
+
+You don't need to know what to ask. **Ask an agent** (beside **+ Add automation**, and in the Add dialog) gives you a
+prompt to paste into your own agent, or starts a new T3 Code thread with it, which you can edit first. The same menu is
+on each automation as **Ask an agent to change this** (it hands over the automation's current definition and asks for a
+changed draft; for a built-in it tells you which settings to change) and on a failed run as **Ask an agent to fix**
+(with the error and the end of its output). There's no chat box: the agent works in your own session, and what it
+makes arrives as a draft.
 
 Drafts waiting for you are listed under **Needs you** at the top of Settings → Autopilot, with **Review** and
 **Dismiss**. Importing a

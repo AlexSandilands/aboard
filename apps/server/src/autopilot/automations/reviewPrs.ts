@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import {
+  AUTOPILOT_FIX_PRS,
   AUTOPILOT_REVIEW_PRS,
   BRAND,
   BUILTIN_REVIEW_SKILL_BODY,
@@ -10,13 +11,13 @@ import {
   countReviewIssues,
   describeCounts,
   effectiveFixThreshold,
+  FindingSeverity,
   isReviewOfLink,
   prReviewDedupeKey,
   prReviewHeader,
   prReviewMarker,
   prReviewOutput,
   prWaitsForLocalReview,
-  type FindingSeverity,
   type PrReviewHandoff,
   type PrReviewIssue,
   type PrReviewRunOutput,
@@ -34,6 +35,7 @@ import {
 } from "../../integrations/gitHost.ts";
 import type { GitHostActions } from "../../integrations/gitHosts.ts";
 import { messageOf } from "../../integrations/util.ts";
+import type { Services } from "../../services/types.ts";
 import { RUN_SERVER_NAME } from "../../mcp/runTokens.ts";
 import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
 import {
@@ -312,9 +314,28 @@ const ConfigSchema = z.object({
   runner: z.enum(["auto", "headless"]),
   skill: ReviewSkillRef,
   reviewDrafts: z.boolean(),
+  /** Reviews per PR. An engine setting (prReviewRounds) before 044_autopilot_agent_defaults. */
+  rounds: z.number().int().min(1).max(10),
   ...OTHER_PRS_SHAPE,
 });
 type ReviewPrsConfig = z.infer<typeof ConfigSchema>;
+
+/** Fix PRs' default fix threshold, for a board that has no Fix PRs. */
+const DEFAULT_FIX_THRESHOLD: FindingSeverity = "major";
+
+/**
+ * The lowest severity a review asks to have fixed: Fix PRs' threshold where the task is, since Fix PRs is what acts
+ * on it. Read whether Fix PRs is on or not: the review's verdict still says what is left to fix.
+ */
+export function fixThresholdFor(
+  services: Services,
+  task: { projectId: string; parent: { id: string } | null },
+): FindingSeverity {
+  const fix = services.autopilot.automations().find((a) => a.key === AUTOPILOT_FIX_PRS);
+  const config = fix ? services.autopilot.resolve(fix, task.projectId, task.parent?.id ?? null).config : null;
+  const parsed = FindingSeverity.safeParse(config?.fixThreshold);
+  return parsed.success ? parsed.data : DEFAULT_FIX_THRESHOLD;
+}
 
 /**
  * Reviews pull requests linked to tasks and posts the review on GitHub as a comment (docs/features/autopilot.md
@@ -323,7 +344,7 @@ type ReviewPrsConfig = z.infer<typeof ConfigSchema>;
  * holds no write access to GitHub. The findings stay on GitHub: the board keeps the verdict on the run, and the task
  * gets an activity entry linking the review.
  *
- * One review per PR and head commit (`review:pr:<linkId>:<headOid>`), at most `prReviewRounds` per PR, and none while
+ * One review per PR and head commit (`review:pr:<linkId>:<headOid>`), at most `rounds` per PR, and none while
  * the PR's previous review is still running. The verdict decides what comes next: nothing, the fix automation
  * (`handoff: "fix"`), or Autopilot giving up on the last round.
  */
@@ -342,6 +363,16 @@ export const reviewPrs = defineAutomation({
       tier: "essential",
       kind: "skill",
       help: "What the reviewer follows. The built-in skill is aboard-review.",
+    },
+    {
+      key: "rounds",
+      label: "Rounds per PR",
+      tier: "essential",
+      kind: "number",
+      min: 1,
+      max: 10,
+      unit: "rounds",
+      help: "Reviews of one PR, each after new commits. The last round asks for no fixes below the fix threshold. Fix PRs' attempts on checks and reviews should be at least this.",
     },
     ...OTHER_PRS_ESSENTIAL_FIELDS,
     {
@@ -374,10 +405,9 @@ export const reviewPrs = defineAutomation({
   defaults: {
     ...RUNNER_DEFAULTS,
     runner: "headless",
-    budgetUsd: 2,
-    timeoutMinutes: 20,
     skill: { source: "builtin" },
     reviewDrafts: false,
+    rounds: 3,
     ...OTHER_PRS_DEFAULTS,
   },
   needs: otherPrsNeeds,
@@ -387,7 +417,7 @@ export const reviewPrs = defineAutomation({
 });
 
 /** Task PRs to review: the first source. */
-function taskPrCandidates({ services, engine, projects }: CheckContext<ReviewPrsConfig>): Candidate[] {
+function taskPrCandidates({ services, projects }: CheckContext<ReviewPrsConfig>): Candidate[] {
   return projects.flatMap(({ project, config }): Candidate[] =>
     services.tasks.summaries({ projectId: project.id }).flatMap((task): Candidate[] => {
       if (task.kind === "epic" || task.manual || task.archivedAt !== null || task.status === "done") return [];
@@ -418,7 +448,7 @@ function taskPrCandidates({ services, engine, projects }: CheckContext<ReviewPrs
         if (ofLink.some((r) => r.status === "queued" || r.status === "running")) return [];
         // A review that posted nothing (skipped) didn't use a round.
         const used = ofLink.filter((r) => r.status !== "skipped");
-        if (used.length >= engine.prReviewRounds) return [];
+        if (used.length >= config.rounds) return [];
         const round = used.length + 1;
         const data: ReviewData = {
           linkId: link.id,
@@ -430,14 +460,14 @@ function taskPrCandidates({ services, engine, projects }: CheckContext<ReviewPrs
           headRef,
           headOid,
           round,
-          maxRounds: engine.prReviewRounds,
+          maxRounds: config.rounds,
           earlier: earlierReviews(used, link.id),
           attempt: atHead.length + 1,
         };
         return [
           {
             dedupeKey,
-            summary: `review PR #${ref.number} at ${shortSha(headOid)} (round ${round} of ${engine.prReviewRounds})`,
+            summary: `review PR #${ref.number} at ${shortSha(headOid)} (round ${round} of ${config.rounds})`,
             taskId: task.id,
             data,
           },
@@ -450,7 +480,7 @@ function taskPrCandidates({ services, engine, projects }: CheckContext<ReviewPrs
 /** Reviews one task PR and posts the findings as a comment review. */
 async function actTaskPr(
   candidate: Candidate,
-  { services, runner, gitHosts, engine, config, run, actor }: ActionContext<ReviewPrsConfig>,
+  { services, runner, gitHosts, config, run, actor }: ActionContext<ReviewPrsConfig>,
 ): Promise<ActionResult> {
   const data = candidate.data as ReviewData;
   const task = services.tasks.summary(candidate.taskId!);
@@ -462,10 +492,14 @@ async function actTaskPr(
   }
   // The next poll's head commit has its own key, and its own round.
   if (headOid !== data.headOid) {
-    return { status: "skipped", summary: `PR #${data.number} moved on to ${shortSha(headOid ?? "")}` };
+    return {
+      status: "skipped",
+      deferred: "head_moved",
+      summary: `PR #${data.number} moved on to ${shortSha(headOid ?? "")}`,
+    };
   }
 
-  const threshold = effectiveFixThreshold(engine.prFixThreshold, data.round, data.maxRounds);
+  const threshold = effectiveFixThreshold(fixThresholdFor(services, task), data.round, data.maxRounds);
   let verdict: PrReviewVerdict;
   let posted: PostedReview;
   let posting = false;
@@ -512,14 +546,22 @@ async function actTaskPr(
     // The branch moved on before or while the agent read it: nothing was posted, and the new head is reviewed next.
     // That isn't a failure, nor a round used. A worktree at some other commit is one: it never matched.
     if (error instanceof StaleReviewError || (error instanceof WorktreeHeadError && error.moved)) {
-      return { status: "skipped", summary: `PR #${data.number} moved on while it was being reviewed` };
+      return {
+        status: "skipped",
+        deferred: "head_moved",
+        summary: `PR #${data.number} moved on while it was being reviewed`,
+      };
     }
     // A branch that was rewritten (a force-push) no longer descends from the commit either. Only when GitHub still
     // calls that commit the head is the checkout what's wrong; otherwise the PR just moved on.
     if (error instanceof WorktreeHeadError) {
       const live = await gitHosts.prHead({ host: data.host, repo: data.repo, number: data.number }).catch(() => null);
       if (live && live !== data.headOid) {
-        return { status: "skipped", summary: `PR #${data.number} moved on while it was being reviewed` };
+        return {
+          status: "skipped",
+          deferred: "head_moved",
+          summary: `PR #${data.number} moved on while it was being reviewed`,
+        };
       }
     }
     // GitHub failing in passing (an internal error, the network) after the agent had read: post again on the next pass.

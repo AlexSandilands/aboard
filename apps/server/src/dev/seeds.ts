@@ -1160,16 +1160,34 @@ const dense: Scenario = (s, opts) => {
 };
 
 /**
- * The showcase board with Autopilot set up, for Settings → Autopilot: several automations on for the board (in dry
- * run, so the sandbox never starts an agent), a failed run to retry, an agent's draft to review and a custom
- * automation whose tool slot is empty.
+ * The showcase board with Autopilot set up, for Settings → Autopilot: the agent automations in Preview (so the
+ * sandbox never starts an agent) with a few "would" runs this week, Auto-archive on, a failed run to retry, an agent's
+ * draft to review, a custom automation whose tool slot is empty and one with a check script.
  */
 const autopilot: Scenario = (s, opts) => {
   showcase(s, opts);
-  s.autopilot.updateEngine({ dryRun: true, dailySpendCapUsd: 5, quietHours: { enabled: true } });
-  for (const key of ["start_planned", "review_prs", "fix_prs", "auto_archive", "digest"]) {
-    s.autopilot.setScope("board", null, key, { mode: "on" });
+  s.autopilot.updateEngine({ dailySpendCapUsd: 5, quietHours: { enabled: true } });
+  for (const key of ["start_planned", "review_prs", "fix_prs", "digest"]) {
+    s.autopilot.setScope("board", null, key, { mode: "preview" });
   }
+  s.autopilot.setScope("board", null, "auto_archive", { mode: "on" });
+  const [planned] = s.tasks.summaries({ status: "planned" });
+  for (const n of [1, 2, 3]) {
+    s.autopilot.record({
+      automation: "start_planned",
+      candidate: { dedupeKey: `seed-preview:${n}`, summary: `start a planned task (${n})`, taskId: planned?.id },
+      dryRun: true,
+    });
+  }
+  s.customAutomations.create({
+    name: "Flaky test report",
+    trigger: { kind: "schedule", schedule: { kind: "weekly", days: [1], time: "08:00" } },
+    action: {
+      kind: "agent",
+      prompt: "Open a task with the evidence for {{item.key}}.",
+      check: { language: "node", body: "// Reads the last week of CI runs; prints nothing in the sandbox.\n" },
+    },
+  });
   s.autopilot.setScope("board", null, "fix_prs", { config: { resolveThreads: false } });
   // Review PRs' other people's PRs: on with nobody listed in one project (Needs setup), and in another a colleague's PR
   // it found clean but left for the user to approve (Needs you).
@@ -1199,6 +1217,36 @@ const autopilot: Scenario = (s, opts) => {
       updatedAt: now,
     });
   }
+  // Merge ready PRs (Into main off): an epic delivering through a branch of its own, and Review tasks flagged
+  // Auto-merge, the last held for an approval only the user gives.
+  s.autopilot.setScope("board", null, "merge_epic_prs", { mode: "on" });
+  const epic = s.tasks.summaries({}).find((t) => t.kind === "epic");
+  if (epic) s.tasks.setDelivery(epic.id, "integration", epicBranchName(epic), "user");
+  const flagged = s.tasks
+    .summaries({})
+    .filter((t) => t.kind !== "epic" && t.status === "review" && !t.integrationBranch)
+    .slice(0, 2);
+  for (const t of flagged) s.tasks.update(t.id, { autoMerge: true }, "user");
+  const held = flagged.at(-1);
+  if (held) {
+    const run = s.autopilot.record({
+      automation: "merge_epic_prs",
+      candidate: {
+        dedupeKey: `main-hold:${held.id}:seed`,
+        summary: `say why #${held.number} can't merge`,
+        taskId: held.id,
+      },
+      dryRun: false,
+    });
+    if (run) {
+      s.autopilot.start(run.id);
+      s.autopilot.finish(run.id, {
+        status: "skipped",
+        summary: `Ready to merge into main, but Autopilot won't merge #${held.number} by itself: it still needs an approving review. Merge it yourself, or fix that.`,
+        needsAttention: true,
+      });
+    }
+  }
   s.customAutomations.draft(
     {
       automation: {
@@ -1211,6 +1259,51 @@ const autopilot: Scenario = (s, opts) => {
     },
     AGENT,
   );
+  // Run health: a run deferred because its PR moved on, Fix PRs failing three times in a row in one project (so it
+  // pauses itself there), giving up on two PRs (a tuning hint), and a run of an automation the board no longer has.
+  const tasks = s.tasks.summaries({}).filter((t) => t.kind !== "epic" && t.archivedAt === null);
+  const shopTasks = tasks.filter((t) => t.projectId === tasks[0]!.projectId);
+  const finished = (
+    automation: string,
+    key: string,
+    taskId: string,
+    result: Parameters<typeof s.autopilot.finish>[1],
+  ) => {
+    const run = s.autopilot.record({
+      automation,
+      candidate: { dedupeKey: key, summary: "act", taskId, projectId: s.tasks.summary(taskId).projectId },
+      dryRun: false,
+    });
+    if (!run) return;
+    s.autopilot.start(run.id);
+    s.autopilot.finish(run.id, result);
+  };
+  finished("review_prs", "seed-deferred", shopTasks[1]!.id, {
+    status: "skipped",
+    deferred: "head_moved",
+    summary: "PR #214 moved on while it was being reviewed",
+  });
+  finished("fix_prs", "fix:gave_up:seed-a:review", shopTasks[2]!.id, {
+    status: "skipped",
+    summary: "Gave up on PR #208: 3 fix attempts used, still to fix: failing checks",
+  });
+  finished("fix_prs", "fix:gave_up:seed-b:review", shopTasks[3]!.id, {
+    status: "skipped",
+    summary: "Gave up on PR #211: 3 fix attempts used, still to fix: failing checks",
+  });
+  finished("fix_pr_findings", "seed-retired", shopTasks[1]!.id, {
+    summary: "Fixed the findings on PR #87",
+    costUsd: 0.31,
+  });
+  for (const n of [1, 2, 3]) {
+    finished("fix_prs", `seed-failing-${n}`, shopTasks[n % shopTasks.length]!.id, {
+      status: "failed",
+      error: "The fix agent exited with code 1: pnpm install failed (ERR_PNPM_FETCH_404)",
+      detail: "ERR_PNPM_FETCH_404  GET https://registry.npmjs.org/@acme%2Fui: Not Found - 404\n",
+      runner: "headless",
+      costUsd: 0.12,
+    });
+  }
   s.customAutomations.create({
     name: "Triage new bugs",
     trigger: { kind: "schedule", schedule: { kind: "weekly", days: [1, 2, 3, 4, 5], time: "09:00" } },

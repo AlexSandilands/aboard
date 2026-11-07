@@ -1,4 +1,5 @@
 import {
+  AUTOPILOT_IMPROVE,
   AUTOPILOT_ORCHESTRATE,
   AUTOPILOT_START_PLANNED,
   AUTOPILOT_UNSTICK,
@@ -9,8 +10,8 @@ import { AUTOPILOT_DIGEST } from "./digest.ts";
 import { describeCustomTrigger, type CustomDefinition } from "./customAutomations.ts";
 import { AUTOPILOT_MERGE_EPIC_PRS } from "./delivery.ts";
 import { AUTOPILOT_FIX_PRS, AUTOPILOT_REVIEW_PRS } from "./prReview.ts";
+import { AUTOPILOT_RECURRING, WEEKDAY_NAMES } from "./recurring.ts";
 import { parseLogins } from "./repoPrReview.ts";
-import { AUTOPILOT_RECURRING } from "./recurring.ts";
 
 // One sentence per automation, read from its effective config, for the top of its detail in Settings → Autopilot:
 // what it watches for and what it does, in the words the user would use. Pure, so the web and tests share it.
@@ -64,23 +65,24 @@ function customSentence(custom: CustomDefinition): string {
 }
 
 /**
- * What an automation does, given its effective config (defaults and every scope's keys) and, for the PR automations,
- * the engine's rounds. A custom automation is described from its trigger and action; anything unknown falls back to
+ * What an automation does, given its effective config (defaults and every scope's keys). A custom automation is described from its trigger and action; anything unknown falls back to
  * its description.
  */
 export function automationSentence(
   automation: { key: string; description: string },
   config: AutopilotConfig,
-  options: { custom?: CustomDefinition | null; engine?: Pick<AutopilotEngineSettings, "prReviewRounds"> } = {},
+  options: { custom?: CustomDefinition | null } = {},
 ): string {
   if (options.custom) return customSentence(options.custom);
   switch (automation.key) {
     case AUTOPILOT_START_PLANNED:
       return `When a Planned task is flagged for Autopilot, has a plan and nothing blocks it, start an agent on it following ${skillPhrase(config.skill, "the default workflow")}.`;
     case AUTOPILOT_ORCHESTRATE:
-      return `Every ${plural(num(config, "everyMinutes", 30), "minute")}, if a project has work in flight, an agent looks it over: nudges or restarts stalled threads, retries failed runs${config.mayMerge === false ? "" : ", merges ready tasks flagged for auto-merge"} and flags what needs you.`;
+      return `Every ${plural(num(config, "everyMinutes", 30), "minute")}, if a project has work in flight, an agent looks it over: nudges or restarts stalled threads, retries failed runs, lists what's ready to merge and flags what needs you.`;
+    case AUTOPILOT_IMPROVE:
+      return `Every ${WEEKDAY_NAMES[Number(str(config, "weekday", "1"))] ?? "Monday"} at ${str(config, "time", "07:00")}, an agent reads the last ${plural(num(config, "lookBackDays", 7), "day")} of runs, failures and review rounds and suggests up to ${plural(num(config, "maxSuggestions", 3), "change")} to the prompts and skills agents run with. Nothing changes until you accept it in Settings → Suggestions.`;
     case AUTOPILOT_REVIEW_PRS: {
-      const rounds = options.engine ? `, up to ${plural(options.engine.prReviewRounds, "round")} per PR` : "";
+      const rounds = `, up to ${plural(num(config, "rounds", 3), "round")} per PR`;
       const drafts = config.reviewDrafts === true ? " (drafts too)" : "";
       const tasks = `When a task's PR${drafts} gets new commits, review it with ${skillPhrase(config.skill, "the built-in review skill")} and post the findings on it as comments${rounds}.`;
       if (config.otherPrs !== true) return tasks;
@@ -98,14 +100,17 @@ export function automationSentence(
         config.onConflicts !== false && "conflicts",
         config.onChangesRequested !== false && "a review requesting changes",
         config.onComments !== false && "new review comments",
-        config.onAutopilotReview !== false && "findings from Autopilot's review",
+        config.onAutopilotReview !== false &&
+          `findings from Autopilot's review at ${str(config, "fixThreshold", "major")} or above`,
       ].filter((t): t is string => typeof t === "string");
       return triggers.length === 0
         ? "Every trigger is off, so it never fixes anything."
         : `When a task's PR has ${listPhrase(triggers)}, send an agent to fix it.`;
     }
     case AUTOPILOT_MERGE_EPIC_PRS:
-      return "When a task's PR into its epic's integration branch is reviewed, green and mergeable, merge it into that branch. Never into main.";
+      return config.intoMain === true
+        ? "When a task's PR is reviewed, green and mergeable, merge it: into its epic's branch if the epic has one, or into main if you flagged the task Auto-merge."
+        : "When a task's PR into its epic's branch is reviewed, green and mergeable, merge it into that branch. Into main is off, so nothing merges into main.";
     case AUTOPILOT_RECURRING:
       return "Make a task from a template whenever one of a project's recurring rules comes due.";
     case AUTO_ARCHIVE:

@@ -104,11 +104,13 @@ made again if needed). It is refused together with a path or id, and omitting bo
 
 ### Who did it
 
-Each write is logged with an actor, resolved in this order: the tool's `actor` argument, the client name
+Each write is logged with an actor, resolved in this order: the `ACTOR_HEADER` header when the caller sends one (it pins
+the actor, whatever the agent passes: Autopilot's task-less runs use it, so what a run wrote can be told from the
+rest), the tool's `actor` argument, the client name
 from `initialize`, the first meaningful product token of the User-Agent (generic HTTP clients are
 ignored), then `agent`. The User-Agent step exists because a stateless server doesn't see the
 `initialize` client info on later calls. `submit_review` defaults to `<actor> (reviewer)`. REST uses the
-`ACTOR_HEADER` header instead, defaulting to `user`.
+`ACTOR_HEADER` header too, defaulting to `user`.
 
 ### Results
 

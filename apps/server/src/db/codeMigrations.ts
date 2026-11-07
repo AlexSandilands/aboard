@@ -1,6 +1,8 @@
 import {
   AgentHarness,
   AUTOPILOT_DIGEST,
+  AUTOPILOT_FIX_PRS,
+  AUTOPILOT_MERGE_EPIC_PRS,
   AUTOPILOT_ORCHESTRATE,
   AUTOPILOT_REVIEW_PRS,
   classifyLink,
@@ -26,6 +28,8 @@ export const CODE_MIGRATIONS: Readonly<Record<string, (db: Db) => void>> = {
   "036_ticket_systems_settings": jiraSettingsToTicketSystem,
   "040_providers_settings": seedProviders,
   "041_operation_models": operationModels,
+  "043_merge_ready_prs": mergeReadyPrs,
+  "044_autopilot_agent_defaults": autopilotAgentDefaults,
 };
 
 /**
@@ -285,4 +289,139 @@ function operationModels(db: Db): void {
     upsert.run("modelTiers", JSON.stringify(next));
   }
   if (Array.isArray(profiles)) upsert.run("modelProfiles", JSON.stringify(profiles.map(renamed)));
+}
+
+/**
+ * Orchestrate loses May merge, and Merge ready PRs (merge_epic_prs) gains Into main (#127). Wherever Orchestrate was
+ * on with May merge (on unless switched off), Merge ready PRs is switched on with Into main at that scope, so tasks
+ * flagged for auto-merge keep landing there. A project with a setting of its own where Orchestrate didn't merge
+ * (switched off there, or May merge off), under a board that gets Into main, gets Into main off. An explicit Off for
+ * Merge ready PRs at that scope is the user's and stays. A project that took both Orchestrate and May merge from the
+ * board gets no row: the board's covers it. One that switched Orchestrate on itself gets Merge ready PRs on, which turns
+ * Into epic branches on there too, even under a board that has it off: the two can't be separated, and keeping main
+ * merges is the point. The stored May merge values are dropped.
+ */
+function mergeReadyPrs(db: Db): void {
+  type Row = { scope_kind: string; scope_id: string; mode: string; config_json: string };
+  const rows = (automation: string) =>
+    db
+      .prepare("SELECT scope_kind, scope_id, mode, config_json FROM autopilot_settings WHERE automation = ?")
+      .all(automation) as Row[];
+  const configOf = (row: Row | undefined): Record<string, unknown> => {
+    try {
+      const parsed: unknown = row ? JSON.parse(row.config_json) : {};
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  };
+  const now = new Date().toISOString();
+  const merges = rows(AUTOPILOT_MERGE_EPIC_PRS);
+  const setMerge = (kind: string, id: string, intoMain: boolean, switchOn: boolean) => {
+    const existing = merges.find((r) => r.scope_kind === kind && r.scope_id === id);
+    const mode = existing?.mode === "off" ? "off" : switchOn ? "on" : (existing?.mode ?? "inherit");
+    const config = JSON.stringify({ ...configOf(existing), intoMain });
+    db.prepare(
+      `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (scope_kind, scope_id, automation) DO UPDATE SET mode = excluded.mode,
+         config_json = excluded.config_json, updated_at = excluded.updated_at`,
+    ).run(kind, id, AUTOPILOT_MERGE_EPIC_PRS, mode, config, now);
+  };
+
+  const orchestrate = rows(AUTOPILOT_ORCHESTRATE);
+  const board = orchestrate.find((r) => r.scope_kind === "board");
+  const boardOn = board?.mode === "on";
+  const boardMay = configOf(board).mayMerge !== false;
+  const boardIntoMain = boardOn && boardMay;
+  if (boardIntoMain) setMerge("board", "", true, true);
+  for (const row of orchestrate.filter((r) => r.scope_kind === "project")) {
+    const on = row.mode === "on" || (row.mode === "inherit" && boardOn);
+    const config = configOf(row);
+    const ownMay = typeof config.mayMerge === "boolean";
+    const may = ownMay ? config.mayMerge === true : boardMay;
+    // Everything from the board: the board's row covers it (and an Off for Merge ready PRs there still holds).
+    if (row.mode === "inherit" && !ownMay) continue;
+    if (on && may) setMerge("project", row.scope_id, true, true);
+    // Orchestrate off here, or on without May merge: nothing merged into main, so the board's new Into main mustn't.
+    else if (boardIntoMain) setMerge("project", row.scope_id, false, false);
+  }
+
+  const strip = db.prepare(
+    "UPDATE autopilot_settings SET config_json = ? WHERE automation = ? AND scope_kind = ? AND scope_id = ?",
+  );
+  for (const row of orchestrate) {
+    const { mayMerge: _dropped, ...rest } = configOf(row);
+    strip.run(JSON.stringify(rest), AUTOPILOT_ORCHESTRATE, row.scope_kind, row.scope_id);
+  }
+}
+
+/**
+ * Runner, budget, timeout and T3 access got board defaults (the engine's `agentDefaults`), and the PR rounds and fix
+ * threshold moved from the engine into Review PRs and Fix PRs, the only automations that read them. Nothing that ran
+ * before runs differently after:
+ * - An engine PR value the user changed goes into the board-scope config of the automations that read it, unless that
+ *   scope already sets the key; then the engine keys are dropped. Values left at their defaults need nothing.
+ * - Review PRs, Fix PRs, Orchestrate and the digest had budgets and timeouts of their own below the board's defaults.
+ *   Each one the user has a setting for (at any scope) keeps them in its board-scope config, unless that scope sets
+ *   them. One never touched was never on, so it simply takes the board's defaults from now on.
+ */
+function autopilotAgentDefaults(db: Db): void {
+  const upsertSetting = db.prepare(
+    "INSERT INTO settings (key, value_json) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json",
+  );
+  const boardRow = db.prepare(
+    "SELECT config_json FROM autopilot_settings WHERE scope_kind = 'board' AND scope_id = '' AND automation = ?",
+  );
+  const anyRow = db.prepare("SELECT 1 FROM autopilot_settings WHERE automation = ? LIMIT 1");
+  const insertBoard = db.prepare(
+    "INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES ('board', '', ?, 'inherit', ?, ?)",
+  );
+  const updateBoard = db.prepare(
+    "UPDATE autopilot_settings SET config_json = ? WHERE scope_kind = 'board' AND scope_id = '' AND automation = ?",
+  );
+  /** Sets the keys the automation's board scope doesn't set already. */
+  const setBoardKeys = (automation: string, values: Record<string, unknown>) => {
+    if (Object.keys(values).length === 0) return;
+    const row = boardRow.get(automation) as { config_json: string } | undefined;
+    if (!row) {
+      insertBoard.run(automation, JSON.stringify(values), new Date().toISOString());
+      return;
+    }
+    const config = JSON.parse(row.config_json) as Record<string, unknown>;
+    updateBoard.run(JSON.stringify({ ...values, ...config }), automation);
+  };
+
+  const ownLimits: Array<[string, { budgetUsd: number; timeoutMinutes: number }]> = [
+    [AUTOPILOT_REVIEW_PRS, { budgetUsd: 2, timeoutMinutes: 20 }],
+    [AUTOPILOT_FIX_PRS, { budgetUsd: 3, timeoutMinutes: 30 }],
+    [AUTOPILOT_ORCHESTRATE, { budgetUsd: 3, timeoutMinutes: 30 }],
+    [AUTOPILOT_DIGEST, { budgetUsd: 1, timeoutMinutes: 15 }],
+  ];
+  // Before anything below adds a row.
+  const inUse = new Set(ownLimits.map(([automation]) => automation).filter((a) => anyRow.get(a) !== undefined));
+
+  const engineRow = db.prepare("SELECT value_json FROM settings WHERE key = 'autopilotEngine'").get() as
+    | { value_json: string }
+    | undefined;
+  const engine = engineRow ? (JSON.parse(engineRow.value_json) as unknown) : null;
+  if (engine && typeof engine === "object") {
+    const { prReviewRounds, prCommentRounds, prFixThreshold, ...rest } = engine as Record<string, unknown>;
+    const changed = (value: unknown, def: unknown) => value !== undefined && value !== null && value !== def;
+    const review: Record<string, unknown> = {};
+    const fix: Record<string, unknown> = {};
+    if (changed(prReviewRounds, 3)) {
+      review.rounds = prReviewRounds;
+      fix.attempts = prReviewRounds;
+    }
+    if (changed(prCommentRounds, 5)) fix.commentAttempts = prCommentRounds;
+    if (changed(prFixThreshold, "major")) fix.fixThreshold = prFixThreshold;
+    setBoardKeys(AUTOPILOT_REVIEW_PRS, review);
+    setBoardKeys(AUTOPILOT_FIX_PRS, fix);
+    upsertSetting.run("autopilotEngine", JSON.stringify(rest));
+  }
+
+  for (const [automation, limits] of ownLimits) {
+    if (inUse.has(automation)) setBoardKeys(automation, limits);
+  }
 }

@@ -4,7 +4,7 @@ import { automationSentence, limitsSummary, todaySummary } from "./autopilotSent
 import type { CustomDefinition } from "./customAutomations.ts";
 
 const say = (key: string, config: Record<string, unknown> = {}) =>
-  automationSentence({ key, description: "fallback" }, config, { engine: { prReviewRounds: 3 } });
+  automationSentence({ key, description: "fallback" }, config);
 
 describe("automationSentence", () => {
   it("reads a built-in's config", () => {
@@ -14,12 +14,16 @@ describe("automationSentence", () => {
     expect(say("digest", { mode: "summarised", time: "08:30", weekdaysOnly: true })).toBe(
       "Every weekday at 08:30, write an agent's summary of what changed on the board.",
     );
-    expect(say("orchestrate", { everyMinutes: 15, mayMerge: false })).toContain("Every 15 minutes");
-    expect(say("orchestrate", { everyMinutes: 15, mayMerge: false })).not.toContain("merges");
+    expect(say("orchestrate", { everyMinutes: 15 })).toContain("Every 15 minutes");
+    expect(say("orchestrate", { everyMinutes: 15 })).toContain("lists what's ready to merge");
+    expect(say("orchestrate", { everyMinutes: 15 })).not.toContain("merges");
+    expect(say("merge_epic_prs", { intoMain: false })).toContain("nothing merges into main");
+    expect(say("merge_epic_prs", { intoMain: true })).toContain("or into main if you flagged the task Auto-merge");
     expect(say("review_prs", { skill: { source: "global", name: "security-review" } })).toContain(
       "with the security-review skill",
     );
     expect(say("review_prs")).toContain("up to 3 rounds per PR");
+    expect(say("review_prs", { rounds: 1 })).toContain("up to 1 round per PR");
     expect(say("start_planned", { skill: { source: "builtin" } })).toContain("following the default workflow");
   });
 
@@ -53,6 +57,9 @@ describe("automationSentence", () => {
         onAutopilotReview: false,
       }),
     ).toBe("Every trigger is off, so it never fixes anything.");
+    expect(say("fix_prs", { onChecks: false, onConflicts: false, fixThreshold: "minor" })).toContain(
+      "findings from Autopilot's review at minor or above",
+    );
   });
 
   it("falls back to the description for an automation it doesn't know", () => {

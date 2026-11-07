@@ -230,7 +230,13 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     services: deps.services,
     bus: deps.bus,
     runner,
-    gitHosts: gitHostActions(hosts, merges),
+    gitHosts: gitHostActions(hosts, merges, {
+      mergeAutoMergeTask: (taskId, input, actor) =>
+        mergeTaskPr({ services: deps.services(), merges, hosts }, taskId, input, actor),
+      rereadPr: async (link) => {
+        if (link.kind === "pr" && link.ref) await poller.reread({ ...link, ref: link.ref }, { quiet: true });
+      },
+    }),
     repoOf: async (project) => {
       const url = await repoUrls(project.workspaceRoot);
       return url ? remoteRepo(url) : null;

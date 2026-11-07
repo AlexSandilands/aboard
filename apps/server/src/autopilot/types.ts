@@ -1,5 +1,6 @@
 import type {
   AutopilotEngineSettings,
+  AutopilotRunDeferral,
   AutopilotField,
   AutopilotRun,
   AutomationGroup,
@@ -37,10 +38,19 @@ export interface Candidate {
 export interface ProjectScope<C> {
   project: Project;
   config: C;
+  /**
+   * Nothing runs for real here: Preview everything is set, or the automation is in Preview in the project and no epic
+   * of it switches it on for real. The engine still decides each candidate's dry run on its own task's scopes.
+   */
+  dryRun: boolean;
 }
 
 export interface CheckContext<C> {
   services: Services;
+  /**
+   * The engine settings, with `dryRun` set when nothing of this automation runs for real anywhere: Preview everything,
+   * or every scope it is on in is in Preview. Where scopes differ, `ProjectScope.dryRun` says it per project.
+   */
   engine: AutopilotEngineSettings;
   now: Date;
   /** The engine's clock, for work a check started that ends after the pass (`now` is the pass's time). */
@@ -96,6 +106,8 @@ export interface ActionResult extends RunPatch {
   /** Replaces the run's summary with what actually happened. */
   summary?: string;
   error?: string;
+  /** With `skipped`: the work was put off, not dropped (the PR's head moved), and is shown as Deferred. */
+  deferred?: AutopilotRunDeferral;
   /** Show the run's error (or summary) on the task under Needs attention. */
   needsAttention?: boolean;
   /** Kept on the run for later automations to read, e.g. the verdict of a review. */
@@ -104,9 +116,10 @@ export interface ActionResult extends RunPatch {
 
 /**
  * One automation: a deterministic check over board state and an action per candidate. The engine resolves scopes,
- * dedupes, applies the limits and records runs; the automation only finds work and does it. It must never merge into
- * the default branch, close or delete tasks, force-push or push to the default branch; the one merge it may make is a
- * task's PR into its epic's integration branch (docs/decisions/0008-autopilot-engine.md).
+ * dedupes, applies the limits and records runs; the automation only finds work and does it. It must never close or
+ * delete tasks, force-push or push to the default branch. It may merge only a task's PR into its epic's integration
+ * branch, or, through merge_task_pr's own path (GitHostActions.mergeAutoMergeTask), the PR of a task the user flagged
+ * for auto-merge into the default branch (docs/decisions/0008-autopilot-engine.md).
  */
 export interface Automation<C extends AutomationConfig = AutomationConfig> {
   key: string;
@@ -213,6 +226,8 @@ export interface RunnerRequest {
    * that works through the board (Orchestrate). Narrow the board's tools with `deniedTools`.
    */
   boardTools?: boolean;
+  /** With `boardTools`: the actor the board records the run's writes under, whatever the agent passes as `actor`. */
+  boardActor?: string;
   /**
    * Headless only: the board's run tools for this run (docs/decisions/0013-board-served-run-tools.md). The runner mints
    * a token bound to the run and this scope before the agent starts, points the CLI at `/mcp/run` with it, and revokes

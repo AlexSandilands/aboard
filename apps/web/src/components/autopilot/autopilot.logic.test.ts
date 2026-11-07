@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   AUTOPILOT_MODES,
   BOARD_MODES,
+  modeDescription,
+  previewHint,
+  restoreMode,
   automationTitle,
   boardModeToSave,
   boardSummary,
@@ -147,9 +150,9 @@ describe("active runs", () => {
 });
 
 describe("board switch", () => {
-  it("offers On and Off, without Inherit", () => {
-    expect(BOARD_MODES.map((mode) => mode.value)).toEqual(["on", "off"]);
-    expect(AUTOPILOT_MODES.map((mode) => mode.value)).toEqual(["inherit", "on", "off"]);
+  it("offers Off, Preview and On, without Inherit", () => {
+    expect(BOARD_MODES.map((mode) => mode.value)).toEqual(["off", "preview", "on"]);
+    expect(AUTOPILOT_MODES.map((mode) => mode.value)).toEqual(["inherit", "off", "preview", "on"]);
   });
 
   it("shows no row (inherit) as Off", () => {
@@ -167,6 +170,30 @@ describe("board switch", () => {
     expect(boardSummary("on")).toBe("On for the board");
     expect(boardSummary("off")).toBe("Off for the board");
     expect(boardSummary("inherit")).toBe("Off for the board");
+    expect(boardSummary("preview")).toBe("In Preview for the board");
+  });
+});
+
+describe("restoreMode", () => {
+  it("brings back the last on-mode, else Preview for one that never ran, else On", () => {
+    expect(restoreMode({ lastOnMode: "on" }, false)).toBe("on");
+    expect(restoreMode({ lastOnMode: "preview" }, true)).toBe("preview");
+    expect(restoreMode({ lastOnMode: null }, false)).toBe("preview");
+    expect(restoreMode({ lastOnMode: null }, true)).toBe("on");
+  });
+});
+
+describe("Preview wording", () => {
+  it("says a check script still runs for real, and only where there is one", () => {
+    expect(modeDescription("preview", { needsAgent: true }, true)).toMatch(/check script still runs for real/);
+    expect(modeDescription("preview", { needsAgent: true }, false)).not.toMatch(/script/);
+    expect(modeDescription("on", { needsAgent: false }, false)).toMatch(/starts no agent/);
+  });
+
+  it("counts the week's would-be runs", () => {
+    expect(previewHint(1)).toBe("Would have run once this week. Did those look right?");
+    expect(previewHint(3)).toBe("Would have run 3 times this week. Did those look right?");
+    expect(previewHint(0)).toMatch(/^Nothing for it to do yet/);
   });
 });
 
@@ -198,9 +225,29 @@ describe("inheritLabel", () => {
 });
 
 describe("scopeRowModel", () => {
+  it("shows Preview as on with a badge, and turns back on in the mode it was last on in", () => {
+    const preview = {
+      mode: "preview",
+      enabled: true,
+      preview: true,
+      source: "project",
+      lastOnMode: "preview",
+    } as const;
+    expect(scopeRowModel(preview, null, "project")).toMatchObject({
+      checked: true,
+      preview: true,
+      nextMode: "off",
+      note: "In Preview for this project",
+    });
+    const off = { mode: "off", enabled: false, preview: false, source: "project", lastOnMode: "preview" } as const;
+    expect(scopeRowModel(off, null, "project")).toMatchObject({ checked: false, preview: false, nextMode: "preview" });
+    expect(scopeRowModel(off, "Pick a tool", "project").canToggle).toBe(false);
+  });
+
   it("fades an inherited switch and says where it comes from", () => {
     expect(scopeRowModel({ mode: "inherit", enabled: true, source: "board" }, null, "project")).toEqual({
       checked: true,
+      preview: false,
       inherited: true,
       nextMode: "off",
       canToggle: true,
@@ -312,8 +359,9 @@ describe("parseLimit", () => {
 
 describe("runs", () => {
   it("labels statuses, telling a dry run from a skip", () => {
-    expect(runStatusLabel({ status: "skipped", dryRun: true })).toBe("Dry run");
+    expect(runStatusLabel({ status: "skipped", dryRun: true })).toBe("Preview");
     expect(runStatusLabel({ status: "skipped", dryRun: false })).toBe("Skipped");
+    expect(runStatusLabel({ status: "skipped", dryRun: false, deferred: "head_moved" })).toBe("Deferred: head moved");
     expect(runStatusLabel({ status: "succeeded", dryRun: false })).toBe("Done");
     expect(runStatusLabel({ status: "failed", dryRun: false, dedupeKey: "retried:r1:review:pr:l1:abc" })).toBe(
       "Failed, retried",
@@ -328,9 +376,10 @@ describe("runs", () => {
     expect(formatCost(0)).toBe("$0.00");
   });
 
-  it("falls back to the key for an automation that is no longer in the catalogue", () => {
+  it("names an automation that is no longer in the catalogue plainly", () => {
     expect(automationTitle([{ key: "a", title: "Archive done" }], "a")).toBe("Archive done");
-    expect(automationTitle([], "gone")).toBe("gone");
+    expect(automationTitle([], "fix_pr_findings")).toBe("Fix PR findings");
+    expect(automationTitle([], "gone_away")).toBe("Gone away");
   });
 
   it("summarizes a task's runs", () => {

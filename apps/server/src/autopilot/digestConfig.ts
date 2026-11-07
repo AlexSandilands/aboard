@@ -1,4 +1,12 @@
-import { BRAND, DigestMode, INHERIT, ModelChoice, ReviewSkillRef, type AutopilotField } from "@repo/contracts";
+import {
+  BRAND,
+  DEFAULT_AGENT_DEFAULTS,
+  DigestMode,
+  INHERIT,
+  ModelChoice,
+  ReviewSkillRef,
+  type AutopilotField,
+} from "@repo/contracts";
 import { z } from "zod";
 
 // The digest automation's config (docs/features/autopilot.md#automations), apart from the automation so
@@ -14,7 +22,7 @@ export const DigestConfig = z.object({
   weekdaysOnly: z.boolean(),
   /** What the summarising agent follows. */
   skill: ReviewSkillRef,
-  /** The agent's budget, in USD. */
+  /** The agent's budget, in USD. Its default and the timeout's are the board's agent defaults. */
   budgetUsd: z.number().positive().max(100),
   timeoutMinutes: z
     .number()
@@ -34,8 +42,8 @@ export const DIGEST_DEFAULTS: DigestConfig = {
   time: "09:00",
   weekdaysOnly: false,
   skill: { source: "builtin" },
-  budgetUsd: 1,
-  timeoutMinutes: 15,
+  budgetUsd: DEFAULT_AGENT_DEFAULTS.budgetUsd,
+  timeoutMinutes: DEFAULT_AGENT_DEFAULTS.timeoutMinutes,
   modelChoice: INHERIT,
 };
 

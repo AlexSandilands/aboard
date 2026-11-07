@@ -1,8 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import {
+  AUTOMATION_WEEK_DAYS,
+  AUTOMATION_WEEK_LAST_RUNS,
   AUTOPILOT_ACTIVE_STATUSES,
   AUTOPILOT_ACTOR,
+  AUTOPILOT_AUTO_PAUSE_FAILURES,
+  AUTOPILOT_START_PLANNED,
+  automationHints,
+  automationTitleOf,
+  autoPauseReason,
+  engineHints,
+  failureStreak,
   AUTOPILOT_FIX_PRS,
   AUTOPILOT_REVIEW_PRS,
   BOARD_RESTARTED_ERROR,
@@ -23,7 +32,10 @@ import {
   RUN_PAGE_DEFAULT,
   ScheduledAgentRunOutput,
   unretiredKey,
+  type AutomationWeek,
+  type AutopilotAutoPause,
   type AutopilotAutomation,
+  type AutopilotHint,
   type AutopilotNeed,
   type AutopilotOverview,
   type AutopilotRun,
@@ -36,10 +48,14 @@ import {
   type DeleteAutopilotRunsResult,
   type ListAutopilotRunsQuery,
   type UpdateAutopilotEngineInput,
+  type TaskSummary,
   type UpdateAutopilotSettingInput,
+  isOnMode,
+  PREVIEW_WINDOW_MS,
 } from "@repo/contracts";
 import { AUTOPILOT_AUTO_ARCHIVE } from "../autopilot/automations/autoArchive.ts";
 import { startOfDay } from "../autopilot/limits.ts";
+import { agentDefaultsFor } from "../autopilot/runnerOptions.ts";
 import type { ActionResult, Automation, AutomationConfig, Candidate, RunPatch } from "../autopilot/types.ts";
 import { nowIso } from "../db/database.ts";
 import type { Repos } from "../db/repos/index.ts";
@@ -51,13 +67,20 @@ import type { NotificationsService } from "./notifications.ts";
 /** Settings-table keys for the engine. Only the settings are exported in backups; pause stays with the machine. */
 export const AUTOPILOT_ENGINE_KEY = "autopilotEngine";
 export const AUTOPILOT_PAUSED_KEY = "autopilotPaused";
+/** The tuning hints the user dismissed, by id, newest last. Machine state like pause: not in backups. */
+export const AUTOPILOT_DISMISSED_HINTS_KEY = "autopilotDismissedHints";
+const DISMISSED_HINTS_MAX = 200;
 
 /** The engine settings stored, over the defaults; a value that no longer parses falls back to them. */
 export function loadAutopilotEngine(repos: Repos): AutopilotEngineSettings {
-  const stored = repos.settings.all().get(AUTOPILOT_ENGINE_KEY);
+  // One row, not the whole table: the service reads it on every resolve, for the agent defaults.
+  const raw = repos.settings.get(AUTOPILOT_ENGINE_KEY);
+  const stored = raw && typeof raw === "object" ? (raw as Partial<Record<keyof AutopilotEngineSettings, unknown>>) : {};
+  const agentDefaults = stored.agentDefaults && typeof stored.agentDefaults === "object" ? stored.agentDefaults : {};
   const parsed = AutopilotEngineSettings.safeParse({
     ...DEFAULT_AUTOPILOT_ENGINE,
-    ...(typeof stored === "object" ? stored : {}),
+    ...stored,
+    agentDefaults: { ...DEFAULT_AUTOPILOT_ENGINE.agentDefaults, ...agentDefaults },
   });
   return parsed.success ? parsed.data : DEFAULT_AUTOPILOT_ENGINE;
 }
@@ -83,7 +106,12 @@ export function loadAutopilotStatus(repos: Repos): AutopilotStatus {
   };
 }
 
-export const describeAutomation = (a: Automation, needs: string | null = null): AutopilotAutomation => ({
+/** `defaults`: what applies where no scope sets a key, the board's agent defaults included. */
+export const describeAutomation = (
+  a: Automation,
+  needs: string | null = null,
+  defaults: AutopilotAutomation["defaults"] = a.defaults,
+): AutopilotAutomation => ({
   key: a.key,
   title: a.title,
   description: a.description,
@@ -93,12 +121,15 @@ export const describeAutomation = (a: Automation, needs: string | null = null): 
   blocked: a.blocked ?? null,
   needs,
   fields: a.fields,
-  defaults: a.defaults,
+  defaults,
 });
 
 /** An automation's effective state for one project (or the board, with null). */
 export interface ResolvedAutomation {
+  /** On or in Preview. */
   enabled: boolean;
+  /** In Preview: its runs here are dry runs. */
+  preview: boolean;
   /** Parsed over the automation's defaults; null when the stored config no longer parses. */
   config: AutomationConfig | null;
 }
@@ -136,8 +167,11 @@ export interface AutopilotService {
    * `epicId` (an epic that is archived or in another project doesn't count).
    */
   resolve(automation: Automation, projectId: string | null, epicId?: string | null): ResolvedAutomation;
-  /** Projects with an epic, not archived, that switches the automation on: the engine must look there even when the project is off. */
-  projectsWithEpicOn(automation: Automation): ReadonlySet<string>;
+  /**
+   * Projects with an epic, not archived, that switches the automation on (or, unless `live`, into Preview): the engine
+   * must look there even when the project is off.
+   */
+  projectsWithEpicOn(automation: Automation, live?: boolean): ReadonlySet<string>;
   /** Epics with a setting of their own for the automation: their tasks follow the epic, not the project. */
   epicsWithOwnSetting(automation: Pick<Automation, "key" | "epicScope">): ReadonlySet<string>;
   /** Newest first. */
@@ -146,6 +180,14 @@ export interface AutopilotService {
   runsForProject(projectId: string, limit?: number): AutopilotRun[];
   /** One automation's runs in a project, newest first. */
   automationRunsForProject(automation: string, projectId: string, limit?: number): AutopilotRun[];
+  /** An automation's last seven days, for its This week section. */
+  week(automation: string): AutomationWeek;
+  /** Hides a tuning hint until its situation changes (its id with it). */
+  dismissHint(id: string): void;
+  /** Whether the automation paused itself in the project after failing there in a row. */
+  isAutoPaused(automation: string, projectId: string): boolean;
+  /** Lifts an auto-pause; failures count again from now. Publishes autopilot.changed. */
+  resumeAutoPause(automation: string, projectId: string): void;
   /** One page of an automation's (or every automation's) runs for the history page, newest first. */
   history(query: ListAutopilotRunsQuery): AutopilotRunPage;
   /**
@@ -163,8 +205,11 @@ export interface AutopilotService {
   lastHandover(automation: string, projectId: string): string | null;
   /** The run that made this headless session; null when Autopilot didn't. */
   runForSession(sessionId: string): AutopilotRun | null;
-  /** When the board's setting for an automation (its switch or config) last changed; null when it has none. */
-  settingChangedAt(automation: string): string | null;
+  /**
+   * When the board's setting for an automation (its switch or config) last changed; null when it has none. With a
+   * project, the latest of the board's and that project's.
+   */
+  settingChangedAt(automation: string, projectId?: string): string | null;
   /** Finished headless runs that made a worktree, oldest first. */
   finishedWithWorktree(): AutopilotRun[];
   /** Real agent runs started and spend since `since`, and agent runs going now. */
@@ -256,6 +301,8 @@ export function createAutopilotService(
      * onEpicEnabled, so an epic that was on through its project can carry over the project's state.
      */
     onEpicOwnSetting?: (automation: string, epicIds: readonly string[]) => void;
+    /** Planned tasks in these projects, for Start planned's hint about tasks nobody flagged. */
+    plannedTasks?: (projectIds: readonly string[]) => readonly TaskSummary[];
   },
 ): AutopilotService {
   const { repos } = core;
@@ -275,7 +322,7 @@ export function createAutopilotService(
     return at;
   };
   const find = (key: string) => deps.automations().find((a) => a.key === key);
-  const titleOf = (key: string) => find(key)?.title ?? key;
+  const titleOf = (key: string) => automationTitleOf(deps.automations(), key);
 
   const epicScoped = (a: Pick<Automation, "epicScope">) => a.epicScope ?? true;
 
@@ -331,11 +378,18 @@ export function createAutopilotService(
     ];
   };
 
-  const parseConfig = (automation: Automation, config: AutomationConfig) =>
-    automation.schema.safeParse({ ...automation.defaults, ...config });
+  /** The automation's defaults with the board's agent defaults laid over them: what applies where no scope sets a key. */
+  const defaultsOf = (automation: Automation, board = loadAutopilotEngine(repos).agentDefaults): AutomationConfig => ({
+    ...automation.defaults,
+    ...agentDefaultsFor(automation, board),
+  });
+
+  const parseConfig = (automation: Automation, config: AutomationConfig, defaults = defaultsOf(automation)) =>
+    automation.schema.safeParse({ ...defaults, ...config });
 
   const entries = (kind: AutopilotScopeKind, id: string | null, projectId?: string): AutopilotScopeEntry[] => {
     const all = repos.autopilotSettings.all();
+    const board = loadAutopilotEngine(repos).agentDefaults;
     return deps
       .automations()
       .filter((automation) => kind !== "epic" || epicScoped(automation))
@@ -344,47 +398,64 @@ export function createAutopilotService(
         const resolved = resolveAutopilot(
           chainFor(all, automation.key, kind === "board" ? null : (projectId ?? id), kind === "epic" ? id : null),
         );
-        const parsed = parseConfig(automation, resolved.config);
+        const defaults = defaultsOf(automation, board);
+        const parsed = parseConfig(automation, resolved.config, defaults);
         return {
           automation: automation.key,
           mode: own?.mode ?? "inherit",
           config: own?.config ?? {},
+          lastOnMode: own?.lastOnMode ?? null,
           enabled: resolved.enabled,
+          preview: resolved.preview,
           source: resolved.source,
-          effectiveConfig: parsed.success ? parsed.data : { ...automation.defaults, ...resolved.config },
+          effectiveConfig: parsed.success ? parsed.data : { ...defaults, ...resolved.config },
         };
       });
   };
 
-  /** Epics with a setting of their own for the automation (any mode), that count as a scope. */
+  /**
+   * Epics with a setting of their own for the automation (any mode, or config), that count as a scope. A row kept only
+   * to remember its last on-mode (Inherit, no config) is no setting: the epic follows its project.
+   */
   const epicsWithOwnSetting = (automation: Pick<Automation, "key" | "epicScope">): string[] => {
     if (!epicScoped(automation)) return [];
     return repos.autopilotSettings
       .all()
       .filter((s) => s.scopeKind === "epic" && s.automation === automation.key)
+      .filter((s) => s.mode !== "inherit" || Object.keys(s.config).length > 0)
       .map((s) => repos.tasks.get(s.scopeId!))
       .filter((epic) => epic && countsAsScope(epic.id, epic.projectId))
       .map((epic) => epic!.id);
   };
 
-  /** Whether the automation is on for each of these epics' tasks, as the engine resolves it. */
-  const epicStates = (automation: Automation, epicIds: Iterable<string>): Map<string, boolean> => {
+  /** Whether the automation is on (in Preview too) and live for each of these epics' tasks, as the engine resolves it. */
+  const epicStates = (
+    automation: Automation,
+    epicIds: Iterable<string>,
+  ): Map<string, { on: boolean; live: boolean }> => {
     const all = repos.autopilotSettings.all();
-    const states = new Map<string, boolean>();
+    const states = new Map<string, { on: boolean; live: boolean }>();
     for (const epicId of epicIds) {
       const epic = repos.tasks.get(epicId);
       if (!epic || !countsAsScope(epic.id, epic.projectId)) continue;
-      states.set(epicId, resolveAutopilot(chainFor(all, automation.key, epic.projectId, epic.id)).enabled);
+      const resolved = resolveAutopilot(chainFor(all, automation.key, epic.projectId, epic.id));
+      states.set(epicId, { on: resolved.enabled, live: resolved.enabled && !resolved.preview });
     }
     return states;
   };
 
-  /** The projects an automation is on for, with the board's setting and any project's own taken into account. */
-  const enabledProjects = (key: string): string[] => {
+  /**
+   * The projects an automation is on for (in Preview too), with the board's setting and any project's own taken into
+   * account; with `live`, only those where it runs for real.
+   */
+  const enabledProjects = (key: string, live = false): string[] => {
     const all = repos.autopilotSettings.all();
     return repos.projects
       .list()
-      .filter((p) => resolveAutopilot(chainFor(all, key, p.id)).enabled)
+      .filter((p) => {
+        const resolved = resolveAutopilot(chainFor(all, key, p.id));
+        return resolved.enabled && (!live || !resolved.preview);
+      })
       .map((p) => p.id);
   };
 
@@ -454,7 +525,7 @@ export function createAutopilotService(
     const withEpicOn = new Set(
       epicScoped(automation)
         ? settings.flatMap((s) => {
-            if (s.scopeKind !== "epic" || s.mode !== "on" || s.automation !== automation.key) return [];
+            if (s.scopeKind !== "epic" || !isOnMode(s.mode) || s.automation !== automation.key) return [];
             const epic = repos.tasks.get(s.scopeId!);
             return epic && countsAsScope(epic.id, epic.projectId) ? [epic.projectId] : [];
           })
@@ -493,7 +564,6 @@ export function createAutopilotService(
    * a task-less failure (a digest's) shows on its automation's row instead.
    */
   const needsYou = (described: readonly AutopilotAutomation[]): AutopilotNeed[] => {
-    const titles = new Map(described.map((a) => [a.key, a.title]));
     const seen = new Set<string>();
     const failed = repos.autopilotRuns.standingFailures(50).flatMap((run): AutopilotNeed[] => {
       const taskId = run.taskId!;
@@ -505,7 +575,7 @@ export function createAutopilotService(
         {
           kind: "failed_run",
           run,
-          title: titles.get(run.automation) ?? run.automation,
+          title: titleOf(run.automation),
           task: `#${task.number} ${task.title}`,
         },
       ];
@@ -551,9 +621,167 @@ export function createAutopilotService(
     return [...failed, ...approvals, ...drafts, ...setup];
   };
 
+  /** Local midnight `days` days before today's. */
+  const dayStart = (now: Date, days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
+  const localDate = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const week = (automation: string): AutomationWeek => {
+    const now = core.now();
+    const days = Array.from({ length: AUTOMATION_WEEK_DAYS }, (_, i) => dayStart(now, AUTOMATION_WEEK_DAYS - 1 - i));
+    const since = days[0]!.toISOString();
+    const runs = repos.autopilotRuns.automationSince(automation, since);
+    const real = runs.filter((r) => !r.dryRun);
+    const acted = real.filter((r) => r.status !== "skipped");
+    // Newest first, as the repo lists them.
+    const gaveUpRuns = (budget: string) =>
+      real.filter((r) => {
+        const k = unretiredKey(r.dedupeKey);
+        return k.startsWith(FIX_GAVE_UP_KEY_PREFIX) && k.endsWith(`:${budget}`);
+      });
+    const gaveUp = (budget: string) => new Set(gaveUpRuns(budget).map((r) => unretiredKey(r.dedupeKey))).size;
+    return {
+      automation,
+      since,
+      runs: acted.length,
+      failed: acted.filter((r) => r.status === "failed").length,
+      deferred: real.filter((r) => r.status === "skipped" && r.deferred !== null).length,
+      spendUsd: real.reduce((sum, r) => sum + (r.costUsd ?? 0), 0),
+      wouldRun: runs.length - real.length,
+      gaveUp: { review: gaveUp("review"), comments: gaveUp("comments") },
+      lastGaveUp: { review: gaveUpRuns("review")[0]?.id ?? null, comments: gaveUpRuns("comments")[0]?.id ?? null },
+      days: days.map((day, i) => {
+        const end = days[i + 1]?.toISOString() ?? "\uffff";
+        const start = day.toISOString();
+        const inDay = acted.filter((r) => r.createdAt >= start && r.createdAt < end);
+        return {
+          date: localDate(day),
+          runs: inDay.length,
+          failed: inDay.filter((r) => r.status === "failed").length,
+        };
+      }),
+      lastRuns: repos.autopilotRuns.latestFinishedOf(automation, AUTOMATION_WEEK_LAST_RUNS),
+    };
+  };
+
+  /** When the automation's setting last changed at the board, or at the board or the project when one is given. */
+  const settingChangedAt = (automation: string, projectId?: string): string | null =>
+    repos.autopilotSettings
+      .all()
+      .filter(
+        (s) =>
+          s.automation === automation &&
+          (s.scopeKind === "board" ||
+            (projectId !== undefined && s.scopeKind === "project" && s.scopeId === projectId)),
+      )
+      .map((s) => s.updatedAt)
+      .sort()
+      .at(-1) ?? null;
+
+  const dismissedHints = (): string[] => {
+    const stored = repos.settings.all().get(AUTOPILOT_DISMISSED_HINTS_KEY);
+    return Array.isArray(stored) ? stored.filter((v): v is string => typeof v === "string") : [];
+  };
+
+  /** Every tuning hint the user hasn't dismissed: Autopilot-wide first, then each automation's that is on somewhere. */
+  const hints = (today: { agentRuns: number; spendUsd: number }): AutopilotHint[] => {
+    const engine = loadAutopilotEngine(repos);
+    const dismissed = new Set(dismissedHints());
+    const all = [...engineHints({ engine, today, date: localDate(core.now()) })];
+    for (const automation of deps.automations()) {
+      const projects = enabledProjects(automation.key);
+      const board = resolveAutopilot(chainFor(repos.autopilotSettings.all(), automation.key, null));
+      if (projects.length === 0 && !board.enabled) continue;
+      const parsed = parseConfig(automation, board.config);
+      let planned: { flagged: number; unflagged: { id: string; number: number }[] } | undefined;
+      if (automation.key === AUTOPILOT_START_PLANNED && deps.plannedTasks) {
+        const ready = deps
+          .plannedTasks(projects)
+          .filter(
+            (t) =>
+              t.kind !== "epic" &&
+              !t.manual &&
+              t.archivedAt === null &&
+              t.status === "planned" &&
+              t.progress.total > 0 &&
+              !t.blocked,
+          );
+        planned = {
+          flagged: ready.filter((t) => t.autopilot === true).length,
+          unflagged: ready.filter((t) => t.autopilot === null).map((t) => ({ id: t.id, number: t.number })),
+        };
+      }
+      const thisWeek = week(automation.key);
+      const changedAt = settingChangedAt(automation.key);
+      const runsSinceConfigChange = repos.autopilotRuns
+        .automationSince(automation.key, changedAt && changedAt > thisWeek.since ? changedAt : thisWeek.since)
+        .filter((r) => !r.dryRun && r.status !== "skipped").length;
+      all.push(
+        ...automationHints({
+          automation,
+          week: thisWeek,
+          runsSinceConfigChange,
+          boardConfig: parsed.success ? parsed.data : automation.defaults,
+          planned,
+        }),
+      );
+    }
+    return all.filter((h) => !dismissed.has(h.id));
+  };
+
+  const autoPaused = (): AutopilotAutoPause[] =>
+    repos.autopilotAutoPauses.paused().flatMap((p) => {
+      const project = repos.projects.get(p.projectId);
+      if (!project || !find(p.automation)) return [];
+      return [
+        {
+          automation: p.automation,
+          projectId: p.projectId,
+          projectTitle: project.title,
+          reason: p.reason ?? "",
+          pausedAt: p.pausedAt!,
+        },
+      ];
+    });
+
+  /**
+   * After a real run in a project fails: when it is the automation's AUTOPILOT_AUTO_PAUSE_FAILURES-th failure there in
+   * a row (since it was last resumed), pauses the automation in that project and tells the user.
+   */
+  const autoPauseAfter = (run: AutopilotRun) => {
+    if (run.dryRun || !run.projectId) return;
+    const current = repos.autopilotAutoPauses.get(run.automation, run.projectId);
+    if (current?.pausedAt) return;
+    const streak = failureStreak(
+      repos.autopilotRuns.finishedInProject(run.automation, run.projectId, current?.countedFrom ?? null, 20),
+    );
+    if (streak.count < AUTOPILOT_AUTO_PAUSE_FAILURES) return;
+    const project = repos.projects.get(run.projectId);
+    if (!project) return;
+    const at = nowIso();
+    const reason = autoPauseReason(streak.count, streak.last);
+    const title = titleOf(run.automation);
+    core.write((fx) => {
+      repos.autopilotAutoPauses.pause(run.automation, run.projectId!, at, reason);
+      fx.autopilot();
+    });
+    deps.notifications.notify({
+      kind: "autopilot_failed",
+      taskId: null,
+      title: `${title} paused in ${project.title}`,
+      body: `${reason}\nIt stays paused there until you resume it in Settings → Autopilot.`,
+      dedupeKey: `autopilot-paused:${run.automation}:${run.projectId}:${at}`,
+    });
+  };
+
   return {
     overview: () => {
-      const automations = deps.automations().map((automation) => describeAutomation(automation, needsOf(automation)));
+      const engine = loadAutopilotEngine(repos);
+      const automations = deps
+        .automations()
+        .map((automation) =>
+          describeAutomation(automation, needsOf(automation), defaultsOf(automation, engine.agentDefaults)),
+        );
       const agents = deps
         .automations()
         .filter((a) => a.needsAgent)
@@ -561,11 +789,16 @@ export function createAutopilotService(
       const { started, spendUsd } = usage(agents, startOfDay(core.now()));
       return {
         paused: loadAutopilotStatus(repos).paused,
-        engine: loadAutopilotEngine(repos),
+        engine,
         automations,
         today: { agentRuns: started, spendUsd },
         needsYou: needsYou(automations),
+        autoPaused: autoPaused(),
+        hints: hints({ agentRuns: started, spendUsd }),
         lastRuns: repos.autopilotRuns.latestFinished(),
+        previewRuns: repos.autopilotRuns.dryRunCountsSince(
+          new Date(core.now().getTime() - PREVIEW_WINDOW_MS).toISOString(),
+        ),
       };
     },
     status: () => loadAutopilotStatus(repos),
@@ -577,6 +810,7 @@ export function createAutopilotService(
         ...current,
         ...input,
         quietHours: { ...current.quietHours, ...input.quietHours },
+        agentDefaults: { ...current.agentDefaults, ...input.agentDefaults },
       });
       if (!next.success) throw new AppError("VALIDATION", "Invalid Autopilot settings", next.error.issues);
       core.write((fx) => {
@@ -594,7 +828,7 @@ export function createAutopilotService(
       if (wasPaused && !paused) {
         for (const a of deps.automations()) {
           deps.onEnabled?.(a.key, enabledProjects(a.key));
-          const epics = [...epicStates(a, epicsWithOwnSetting(a))].filter(([, on]) => on).map(([id]) => id);
+          const epics = [...epicStates(a, epicsWithOwnSetting(a))].filter(([, state]) => state.on).map(([id]) => id);
           if (epics.length > 0) deps.onEpicEnabled?.(a.key, epics);
         }
       }
@@ -609,9 +843,13 @@ export function createAutopilotService(
       if (kind === "epic" && !epicScoped(automation)) {
         throw new AppError("VALIDATION", `${automation.title} doesn't apply to epics`);
       }
-      if (input.mode === "on" && automation.blocked) throw new AppError("VALIDATION", automation.blocked);
+      if (input.mode && isOnMode(input.mode) && automation.blocked) {
+        throw new AppError("VALIDATION", automation.blocked);
+      }
       const own = repos.autopilotSettings.forScope(kind, scopeId).find((s) => s.automation === key);
       const mode = input.mode ?? own?.mode ?? "inherit";
+      // Kept through Off and Inherit, so the switch can bring back the mode it was last on in.
+      const lastOnMode = isOnMode(mode) ? mode : (own?.lastOnMode ?? null);
       const known = new Set(automation.fields.map((f) => f.key));
       const stored = own?.config ?? {};
       // A key the automation has since dropped (Unstick's `nudge`) may still be in the stored row, and the forms send
@@ -624,12 +862,13 @@ export function createAutopilotService(
         throw new AppError("VALIDATION", `Invalid settings for ${automation.title}`, parsed.error.issues);
       }
       const before = new Set(enabledProjects(key));
+      const liveBefore = new Set(enabledProjects(key, true));
       // Epics with their own setting follow it rather than the project, so their switching on is tracked apart.
       const ownBefore = new Set(epicsWithOwnSetting(automation));
       const watched = new Set([...ownBefore, ...(kind === "epic" && scopeId ? [scopeId] : [])]);
       const epicsBefore = epicStates(automation, watched);
       core.write((fx) => {
-        if (mode === "inherit" && Object.keys(config).length === 0) {
+        if (mode === "inherit" && Object.keys(config).length === 0 && lastOnMode === null) {
           repos.autopilotSettings.delete(kind, scopeId, key);
         } else {
           repos.autopilotSettings.upsert({
@@ -638,6 +877,7 @@ export function createAutopilotService(
             automation: key,
             mode,
             config,
+            lastOnMode,
             updatedAt: nowIso(),
           });
         }
@@ -646,12 +886,19 @@ export function createAutopilotService(
       const enabledNow = new Set(enabledProjects(key));
       // Run now requests where the automation just went off are dropped, not kept for when it's back on.
       for (const wasOn of before) if (!enabledNow.has(wasOn)) requests.delete(requestKey(key, wasOn));
-      const started = [...enabledNow].filter((enabledId) => !before.has(enabledId));
+      // Going from Preview to On starts it too: what Preview only recorded isn't caught up on.
+      const liveNow = new Set(enabledProjects(key, true));
+      const started = [...enabledNow].filter(
+        (enabledId) => !before.has(enabledId) || (liveNow.has(enabledId) && !liveBefore.has(enabledId)),
+      );
       if (started.length > 0) deps.onEnabled?.(key, started);
       const gainedOwn = epicsWithOwnSetting(automation).filter((epicId) => !ownBefore.has(epicId));
       if (gainedOwn.length > 0) deps.onEpicOwnSetting?.(key, gainedOwn);
       const epicsStarted = [...epicStates(automation, watched)]
-        .filter(([epicId, on]) => on && !epicsBefore.get(epicId))
+        .filter(([epicId, now]) => {
+          const was = epicsBefore.get(epicId);
+          return (now.on && !was?.on) || (now.live && !was?.live);
+        })
         .map(([epicId]) => epicId);
       if (epicsStarted.length > 0) deps.onEpicEnabled?.(key, epicsStarted);
       return entries(kind, scopeId, projectId);
@@ -660,14 +907,19 @@ export function createAutopilotService(
       const epic = epicScoped(automation) && countsAsScope(epicId, projectId) ? epicId : null;
       const resolved = resolveAutopilot(chainFor(repos.autopilotSettings.all(), automation.key, projectId, epic));
       const parsed = parseConfig(automation, resolved.config);
-      return { enabled: resolved.enabled, config: parsed.success ? parsed.data : null };
+      return {
+        enabled: resolved.enabled,
+        preview: resolved.preview,
+        config: parsed.success ? parsed.data : null,
+      };
     },
     epicsWithOwnSetting: (automation) => new Set(epicsWithOwnSetting(automation)),
-    projectsWithEpicOn(automation) {
+    projectsWithEpicOn(automation, live = false) {
       const projects = new Set<string>();
       if (!epicScoped(automation)) return projects;
       for (const s of repos.autopilotSettings.all()) {
-        if (s.scopeKind !== "epic" || s.mode !== "on" || s.automation !== automation.key) continue;
+        if (s.scopeKind !== "epic" || s.automation !== automation.key) continue;
+        if (!(live ? s.mode === "on" : isOnMode(s.mode))) continue;
         const epic = repos.tasks.get(s.scopeId!);
         if (epic && countsAsScope(epic.id, epic.projectId)) projects.add(epic.projectId);
       }
@@ -677,6 +929,31 @@ export function createAutopilotService(
     runsForProject: (projectId, limit = RUN_LIMIT) => repos.autopilotRuns.forProject(projectId, limit),
     automationRunsForProject: (automation, projectId, limit = RUN_LIMIT) =>
       repos.autopilotRuns.forProjectAutomation(projectId, automation, limit),
+    week(key) {
+      automationOf(key);
+      return week(key);
+    },
+    dismissHint(id) {
+      const kept = dismissedHints().filter((d) => d !== id);
+      core.write((fx) => {
+        repos.settings.set(AUTOPILOT_DISMISSED_HINTS_KEY, [...kept, id].slice(-DISMISSED_HINTS_MAX));
+        fx.autopilot();
+      });
+    },
+    isAutoPaused: (automation, projectId) => !!repos.autopilotAutoPauses.get(automation, projectId)?.pausedAt,
+    resumeAutoPause(automation, projectId) {
+      if (!repos.projects.get(projectId)) throw new AppError("NOT_FOUND", `Project ${projectId} not found`);
+      if (!repos.autopilotAutoPauses.get(automation, projectId)?.pausedAt) {
+        throw new AppError("CONFLICT", `${titleOf(automation)} isn't paused in this project`);
+      }
+      core.write((fx) => {
+        repos.autopilotAutoPauses.resume(automation, projectId, nowIso());
+        deps.notifications.resolve({ keyPrefix: `autopilot-paused:${automation}:${projectId}:` });
+        fx.autopilot();
+      });
+      // Like lifting Pause all: what keeps its own schedule doesn't catch up on what passed while paused.
+      deps.onEnabled?.(automation, [projectId]);
+    },
     history({ cursor, limit = RUN_PAGE_DEFAULT, ...filter }) {
       const page = repos.autopilotRuns.history(filter, cursor, limit);
       if (page === "invalid") throw new AppError("VALIDATION", "Invalid cursor");
@@ -723,9 +1000,7 @@ export function createAutopilotService(
       return parsed.success && parsed.data.handover ? capHandover(parsed.data.handover) : null;
     },
     runForSession: (sessionId) => repos.autopilotRuns.forSession(sessionId),
-    settingChangedAt: (automation) =>
-      repos.autopilotSettings.all().find((s) => s.scopeKind === "board" && s.automation === automation)?.updatedAt ??
-      null,
+    settingChangedAt,
     finishedWithWorktree: () => repos.autopilotRuns.finishedWithWorktree(),
     usage,
     record({ automation, candidate, dryRun }) {
@@ -747,6 +1022,7 @@ export function createAutopilotService(
         detail: dryRun ? (candidate.preview ?? null) : null,
         exitCode: null,
         error: null,
+        deferred: null,
         needsAttention: false,
         dismissedAt: null,
         output: null,
@@ -831,7 +1107,7 @@ export function createAutopilotService(
       const run = runOf(runId);
       const { status = "succeeded", summary, error, needsAttention, ...patch } = result;
       const at = nowIso();
-      return save(
+      const finished = save(
         {
           ...run,
           ...patch,
@@ -844,6 +1120,8 @@ export function createAutopilotService(
         },
         { log: true },
       );
+      if (finished.status === "failed") autoPauseAfter(finished);
+      return finished;
     },
     recover() {
       const stranded = repos.autopilotRuns.withStatus(AUTOPILOT_ACTIVE_STATUSES);

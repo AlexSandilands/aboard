@@ -1,63 +1,46 @@
 import {
+  AGENT_DEFAULT_KEYS,
+  AutopilotAgentDefaults,
+  DEFAULT_AGENT_DEFAULTS,
   INHERIT,
   ModelChoice,
+  RUNNER_CHOICES,
   T3_RUNTIME_MODES,
-  T3RuntimeMode,
   type AutopilotField,
   type OperationId,
   type OperationNeed,
 } from "@repo/contracts";
 import { z } from "zod";
+import type { Automation, AutomationConfig } from "./types.ts";
 
 // The config fields every agent automation shares: which runner, and its limits. An automation spreads
 // RUNNER_OPTION_SHAPE into its schema, RUNNER_FIELDS into its fields and RUNNER_DEFAULTS into its defaults; the
-// runner reads them back from the config with readRunnerOptions.
-
-/** Auto: a T3 Code thread when T3 is connected, else headless. */
-export const RunnerChoice = z.enum(["auto", "t3", "headless"]);
-export type RunnerChoice = z.infer<typeof RunnerChoice>;
+// runner reads them back from the config with readRunnerOptions. Runner, budget, timeout and T3 access have board
+// defaults (the engine's agentDefaults), which the service lays over the automation's own defaults
+// (agentDefaultsFor): a scope only sets them to override the board.
 
 export const RUNNER_OPTION_SHAPE = {
-  runner: RunnerChoice,
-  /** Headless: `--max-budget-usd`, for Claude Code only (Codex and Copilot CLI have no cap). */
-  budgetUsd: z.number().positive().max(100),
-  /** Headless: the run is stopped after this long. */
-  timeoutMinutes: z
-    .number()
-    .int()
-    .min(1)
-    .max(24 * 60),
+  ...AutopilotAgentDefaults.shape,
   /**
    * The model the run starts on (resolveOperationChoice): inherit takes the board's setting for the operation, then
    * the task's own; or a tier, a custom model, or a model typed for one provider. Before 041_operation_models a typed
    * `model` sat beside it; that migration folded it in.
    */
   modelChoice: ModelChoice,
-  /** T3: the most access a thread gets; "default" is T3's own default, which is also the ceiling. */
-  t3Access: z.union([z.literal("default"), T3RuntimeMode]),
 };
 
 export const RunnerOptions = z.object(RUNNER_OPTION_SHAPE);
 export type RunnerOptions = z.infer<typeof RunnerOptions>;
 
-export const RUNNER_DEFAULTS: RunnerOptions = {
-  runner: "auto",
-  budgetUsd: 5,
-  timeoutMinutes: 60,
-  modelChoice: INHERIT,
-  t3Access: "default",
-};
+/** The built-in values, under the board's agent defaults. */
+export const RUNNER_DEFAULTS: RunnerOptions = { ...DEFAULT_AGENT_DEFAULTS, modelChoice: INHERIT };
 
 export const RUNNER_FIELDS: AutopilotField[] = [
   {
     key: "runner",
     label: "Runner",
     kind: "select",
-    options: [
-      { value: "auto", label: "Auto (T3 Code when connected, else headless)" },
-      { value: "t3", label: "T3 Code only" },
-      { value: "headless", label: "Headless only (a CLI in a worktree)" },
-    ],
+    options: RUNNER_CHOICES.map(({ value, label }) => ({ value, label })),
   },
   {
     key: "modelChoice",
@@ -97,9 +80,34 @@ export const runnerFields = (operation: OperationId, needs: readonly OperationNe
     field.kind === "model" ? { ...field, operation, ...(needs.length > 0 ? { needs: [...needs] } : {}) } : field,
   );
 
-/** The runner options in an automation's config; anything missing or invalid takes its default. */
-export function readRunnerOptions(config: Record<string, unknown>): RunnerOptions {
-  const out = { ...RUNNER_DEFAULTS };
+/**
+ * The board's agent defaults an automation takes: each one it has a default of its own for, and accepts (Review PRs
+ * runs headless only, so a board default of T3 Code leaves its runner alone). Laid over its own defaults, under every
+ * scope's config.
+ */
+export function agentDefaultsFor(
+  automation: Pick<Automation, "schema" | "defaults">,
+  board: AutopilotAgentDefaults,
+): AutomationConfig {
+  const shape = automation.schema instanceof z.ZodObject ? (automation.schema.shape as Record<string, z.ZodType>) : {};
+  const out: AutomationConfig = {};
+  for (const key of AGENT_DEFAULT_KEYS) {
+    if (!(key in automation.defaults)) continue;
+    const accepts = shape[key];
+    if (!accepts || accepts.safeParse(board[key]).success) out[key] = board[key];
+  }
+  return out;
+}
+
+/**
+ * The runner options in an automation's config; anything missing or invalid takes the board's agent default, then the
+ * built-in one.
+ */
+export function readRunnerOptions(
+  config: Record<string, unknown>,
+  board: AutopilotAgentDefaults = DEFAULT_AGENT_DEFAULTS,
+): RunnerOptions {
+  const out: RunnerOptions = { ...RUNNER_DEFAULTS, ...board };
   for (const key of Object.keys(RUNNER_OPTION_SHAPE) as (keyof RunnerOptions)[]) {
     const parsed = RUNNER_OPTION_SHAPE[key].safeParse(config[key]);
     if (parsed.success) Object.assign(out, { [key]: parsed.data });

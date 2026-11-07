@@ -12,13 +12,20 @@ import {
   type AutopilotRun,
 } from "./autopilot.ts";
 
-const board = (mode: "inherit" | "on" | "off", config = {}) => ({ scopeKind: "board" as const, mode, config });
-const project = (mode: "inherit" | "on" | "off", config = {}) => ({ scopeKind: "project" as const, mode, config });
+type Mode = "inherit" | "on" | "preview" | "off";
+const board = (mode: Mode, config = {}) => ({ scopeKind: "board" as const, mode, config });
+const project = (mode: Mode, config = {}) => ({ scopeKind: "project" as const, mode, config });
+const epic = (mode: Mode, config = {}) => ({ scopeKind: "epic" as const, mode, config });
 
 describe("resolveAutopilot", () => {
   it("is off by default", () => {
-    expect(resolveAutopilot([])).toEqual({ enabled: false, source: "default", config: {} });
-    expect(resolveAutopilot([undefined, null])).toEqual({ enabled: false, source: "default", config: {} });
+    expect(resolveAutopilot([])).toEqual({ enabled: false, preview: false, source: "default", config: {} });
+    expect(resolveAutopilot([undefined, null])).toEqual({
+      enabled: false,
+      preview: false,
+      source: "default",
+      config: {},
+    });
     expect(resolveAutopilot([board("inherit"), project("inherit")])).toMatchObject({
       enabled: false,
       source: "default",
@@ -31,6 +38,22 @@ describe("resolveAutopilot", () => {
     expect(resolveAutopilot([board("on"), project("off")])).toMatchObject({ enabled: false, source: "project" });
     expect(resolveAutopilot([board("off"), project("on")])).toMatchObject({ enabled: true, source: "project" });
     expect(resolveAutopilot([undefined, project("on")])).toMatchObject({ enabled: true, source: "project" });
+  });
+
+  it("resolves Preview as enabled with preview set, at whichever scope wins", () => {
+    expect(resolveAutopilot([board("preview")])).toEqual({ enabled: true, preview: true, source: "board", config: {} });
+    expect(resolveAutopilot([board("preview"), project("on")])).toMatchObject({ enabled: true, preview: false });
+    expect(resolveAutopilot([board("on"), project("preview")])).toMatchObject({
+      enabled: true,
+      preview: true,
+      source: "project",
+    });
+    expect(resolveAutopilot([board("on"), project("inherit"), epic("preview")])).toMatchObject({
+      preview: true,
+      source: "epic",
+    });
+    expect(resolveAutopilot([board("preview"), project("off")])).toMatchObject({ enabled: false, preview: false });
+    expect(describeInherited({ enabled: true, preview: true, source: "board" })).toBe("Inherit (Preview from board)");
   });
 
   it("merges config keys board first, whatever the modes", () => {

@@ -120,7 +120,8 @@ export const autopilotField = z
 export const autoMergeField = z
   .enum(["default", "on", "off"])
   .describe(
-    "Whether merge_task_pr may merge this task's pull request into the default branch once it is reviewed and green. " +
+    "Whether this task's pull request may be merged into the default branch without the user once it is reviewed and " +
+      "green: by merge_task_pr, or by Autopilot's Merge ready PRs where the user has switched on its Into main. " +
       "on: allow it. default and off: it never merges, and the user merges it. Set it only when the user has said so; " +
       "ask first, never on your own.",
   );

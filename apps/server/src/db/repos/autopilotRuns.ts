@@ -8,6 +8,7 @@ import {
   FIX_GAVE_UP_KEY_PREFIX,
   FIX_RESOLVE_KEY_PREFIX,
   RETRIED_PREFIX,
+  AutopilotRunDeferral,
   RunModelRecord,
   type AutopilotRun,
   type AutopilotRunFilter,
@@ -33,6 +34,7 @@ interface RunRow {
   detail: string | null;
   exit_code: number | null;
   error: string | null;
+  deferred: string | null;
   needs_attention: number;
   dismissed_at: string | null;
   output_json: string | null;
@@ -60,6 +62,7 @@ const toRun = (r: RunRow): AutopilotRun => ({
   detail: r.detail,
   exitCode: r.exit_code,
   error: r.error,
+  deferred: AutopilotRunDeferral.safeParse(r.deferred).data ?? null,
   needsAttention: r.needs_attention === 1,
   dismissedAt: r.dismissed_at,
   output: parseJson<Record<string, unknown>>(r.output_json),
@@ -87,6 +90,7 @@ const toRow = (r: AutopilotRun) => ({
   detail: r.detail,
   exit_code: r.exitCode,
   error: r.error,
+  deferred: r.deferred,
   needs_attention: r.needsAttention ? 1 : 0,
   dismissed_at: r.dismissedAt,
   output_json: r.output ? JSON.stringify(r.output) : null,
@@ -131,6 +135,16 @@ function decodeCursor(cursor: string): [string, string] | null {
   return null;
 }
 
+/** What each outcome of the history filter matches (AutopilotRunOutcome). */
+const OUTCOME_CLAUSE: Record<NonNullable<AutopilotRunFilter["outcome"]>, string> = {
+  failed: "(r.dry_run = 0 AND r.status = 'failed')",
+  succeeded: "(r.dry_run = 0 AND r.status = 'succeeded')",
+  deferred: "(r.dry_run = 0 AND r.status = 'skipped' AND r.deferred IS NOT NULL)",
+  skipped: "(r.dry_run = 0 AND r.status = 'skipped' AND r.deferred IS NULL)",
+  preview: "r.dry_run = 1",
+  active: "r.status IN ('queued', 'running')",
+};
+
 /** The WHERE clause and bindings for a history filter (runs are aliased `r`). */
 function filterClause(filter: AutopilotRunFilter): { where: string; params: SQLInputValue[] } {
   const where: string[] = [];
@@ -152,6 +166,7 @@ function filterClause(filter: AutopilotRunFilter): { where: string; params: SQLI
     where.push("r.created_at < ?");
     params.push(new Date(filter.until).toISOString());
   }
+  if (filter.outcome) where.push(OUTCOME_CLAUSE[filter.outcome]);
   if (filter.q) {
     const like = likePattern(filter.q);
     const taskNumber = /^#(\d+)$/.exec(filter.q);
@@ -325,6 +340,40 @@ export function createAutopilotRunsRepo(sql: Sql) {
         )
         .map(toRun);
     },
+    /** One automation's runs made at or after `since`, real and dry, newest first: its week. */
+    automationSince(automation: string, since: string): AutopilotRun[] {
+      return sql
+        .all<RunRow>(
+          "SELECT * FROM autopilot_runs WHERE automation = ? AND created_at >= ? ORDER BY created_at DESC, rowid DESC",
+          automation,
+          since,
+        )
+        .map(toRun);
+    },
+    /** One automation's newest real finished runs, newest first, as many as `limit`. */
+    latestFinishedOf(automation: string, limit: number): AutopilotRun[] {
+      return sql
+        .all<RunRow>(
+          `SELECT * FROM autopilot_runs WHERE automation = ? AND dry_run = 0 AND finished_at IS NOT NULL
+           ORDER BY finished_at DESC, rowid DESC LIMIT ?`,
+          automation,
+          limit,
+        )
+        .map(toRun);
+    },
+    /** One automation's real finished runs in a project, finished after `after` (all, when null), newest first. */
+    finishedInProject(automation: string, projectId: string, after: string | null, limit: number): AutopilotRun[] {
+      return sql
+        .all<RunRow>(
+          `SELECT * FROM autopilot_runs WHERE automation = ? AND project_id = ? AND dry_run = 0
+           AND finished_at IS NOT NULL AND finished_at > ? ORDER BY finished_at DESC, rowid DESC LIMIT ?`,
+          automation,
+          projectId,
+          after ?? "",
+          limit,
+        )
+        .map(toRun);
+    },
     /** Oldest first. */
     withStatus(statuses: readonly AutopilotRunStatus[]): AutopilotRun[] {
       return sql
@@ -393,6 +442,14 @@ export function createAutopilotRunsRepo(sql: Sql) {
              ROW_NUMBER() OVER (PARTITION BY automation ORDER BY finished_at DESC, rowid DESC) AS n
            FROM autopilot_runs WHERE dry_run = 0 AND finished_at IS NOT NULL
          ) WHERE n = 1`,
+      );
+    },
+    /** Dry runs ("would …") per automation made since `since`, for the Preview hint. */
+    dryRunCountsSince(since: string): { automation: string; count: number }[] {
+      return sql.all<{ automation: string; count: number }>(
+        `SELECT automation, COUNT(*) AS count FROM autopilot_runs
+         WHERE dry_run = 1 AND created_at >= ? GROUP BY automation ORDER BY automation`,
+        since,
       );
     },
     /**
