@@ -94,7 +94,10 @@ export interface StepProps {
   epics: readonly TaskSummary[];
   tasks: readonly TaskSummary[];
   boardVariables: readonly AutomationVariable[];
-  /** The saved automation being edited, whose Where step writes its switches; absent for a new one. */
+  /**
+   * The saved automation being edited, whose Where step writes its switches: undefined for a new one, null for a saved
+   * one whose catalogue entry hasn't loaded yet.
+   */
   automation?: AutopilotAutomation | null;
 }
 
@@ -845,6 +848,9 @@ export function WhereStep({ form, patch, projects, automation }: StepProps) {
           <div className="flex flex-col gap-2">
             {automation ? (
               <WhereProjects automation={automation} />
+            ) : automation === null ? (
+              // A saved one's switches are edited in place; until its entry loads there is nothing to edit.
+              <p className="text-xs text-muted-foreground">Loading where it runs…</p>
             ) : (
               <DraftProjects
                 projects={lanes}

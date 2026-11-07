@@ -895,9 +895,10 @@ function AdvancedSection({
             )}
           />
           <span className="text-sm text-foreground">Advanced</span>
-          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-            {fields.join(", ")}
-            {changed > 0 ? <span className="text-info-foreground"> · {changed} changed</span> : null}
+          {/* The names truncate; the count after them never does. */}
+          <span className="flex min-w-0 flex-1 gap-1 text-xs text-muted-foreground">
+            <span className="min-w-0 truncate">{fields.join(", ")}</span>
+            {changed > 0 ? <span className="shrink-0 text-info-foreground">· {changed} changed</span> : null}
           </span>
         </CollapsibleTrigger>
         <CollapsiblePanel className="border-t border-border/50 [&>div>*+*]:border-t [&>div>*+*]:border-border/50">

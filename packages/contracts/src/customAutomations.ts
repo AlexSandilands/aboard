@@ -283,8 +283,14 @@ export const CreateCustomAutomationInput = z.object({
 });
 export type CreateCustomAutomationInput = z.input<typeof CreateCustomAutomationInput>;
 
-// The filters' default would fill in a patch that leaves them out, widening the automation to every project.
-export const UpdateCustomAutomationInput = z.object({ ...Definition, filters: CustomFilters }).partial();
+// Without defaults, so a patch that leaves out the filters, or one of them, keeps what the automation has (the service
+// merges them over the current ones) rather than resetting it: Tasks in epics turning back on, say.
+export const UpdateCustomAutomationInput = z
+  .object({
+    ...Definition,
+    filters: z.object({ labels: CustomFilters.shape.labels.removeDefault(), epicTasks: z.boolean() }).partial(),
+  })
+  .partial();
 export type UpdateCustomAutomationInput = z.input<typeof UpdateCustomAutomationInput>;
 
 // ── Placeholders and the shell environment ──────────────────────────────

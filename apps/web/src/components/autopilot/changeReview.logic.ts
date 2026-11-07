@@ -48,9 +48,14 @@ export function proposedDefinition(
       ...(bundle.skill ? { skill: fill.installSkill || keepsSkill(current, bundle) ? bundle.skill.name : null } : {}),
     }),
   );
-  // Where it runs is its switches, which applying leaves alone.
+  // Where it runs is its switches, which applying leaves alone, and so is Tasks in epics.
   const { name, trigger, filters, action } = def;
-  return { name, trigger, filters, action };
+  return {
+    name,
+    trigger,
+    filters: { ...filters, epicTasks: trigger.kind === "schedule" || current.filters.epicTasks },
+    action,
+  };
 }
 
 /** One field the draft changes, as text before and after, for a line diff. */

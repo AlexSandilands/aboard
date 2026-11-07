@@ -123,7 +123,10 @@ export function AutomationField({
   };
   // Fields drawn in this one's row (`inRowOf`): their controls sit before its own, and its reset resets them too.
   const companions = automation.fields.filter((f) => f.inRowOf === field.key);
-  const companionSet = companions.some((f) => f.key in entry.config);
+  // A paired field set back to the automation's default counts as unchanged, as the row's own does.
+  const atDefault = (f: AutopilotField, next: unknown) =>
+    JSON.stringify(next ?? null) === JSON.stringify(automation.defaults[f.key] ?? null);
+  const companionSet = companions.some((f) => f.key in entry.config && !atDefault(f, entry.config[f.key]));
   const reset = () => {
     if (overridden || companionSet) {
       onConfig((current) =>
@@ -152,8 +155,9 @@ export function AutomationField({
             projectId={projectId}
             label={companion.label}
             onSave={(next) => {
-              if (next === undefined && !(companion.key in entry.config)) return false;
-              onConfig((current) => withConfigValue(current, companion.key, next));
+              const kept = next === undefined || atDefault(companion, next) ? undefined : next;
+              if (kept === undefined && !(companion.key in entry.config)) return next !== undefined;
+              onConfig((current) => withConfigValue(current, companion.key, kept));
               return true;
             }}
           />

@@ -50,6 +50,20 @@ describe("proposedDefinition", () => {
   });
 });
 
+describe("Tasks in epics in a change", () => {
+  it("keeps the automation's own, since it is where it runs", () => {
+    const loose: CustomAutomation = {
+      ...current,
+      trigger: { kind: "status_change", to: "review", from: null },
+      action: { ...current.action, check: null } as CustomAutomation["action"],
+      filters: { labels: [], epicTasks: false },
+    };
+    const bundle = automationBundle(loose);
+    const next = proposedDefinition(loose, { ...bundle, filters: { labels: ["ui"], epicTasks: true } });
+    expect(next.filters).toEqual({ labels: ["ui"], epicTasks: false });
+  });
+});
+
 describe("the skill a change names", () => {
   const withSkill = (name: string): CustomAutomation =>
     ({ ...current, action: { ...current.action, skill: name } }) as CustomAutomation;

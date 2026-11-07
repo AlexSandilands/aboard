@@ -1278,6 +1278,35 @@ describe("custom automations: definitions", () => {
     expect(renamed.armedAt).toBe(custom.armedAt);
   });
 
+  it("keeps Tasks in epics through an edit of the labels alone and through an agent's change", () => {
+    const { s } = setup();
+    const custom = s.customAutomations.create({
+      name: "Loose tasks",
+      trigger: { kind: "status_change", to: "review" },
+      filters: { labels: ["ui"], epicTasks: false },
+      action: { kind: "agent", prompt: "Go" },
+    });
+    expect(s.customAutomations.update(custom.id, { filters: { labels: ["api"] } }).filters).toEqual({
+      labels: ["api"],
+      epicTasks: false,
+    });
+    // A draft that leaves epicTasks out (it reads as true) mustn't turn it back on: it is where it runs, the user's.
+    const draft = s.customAutomations.draft(
+      {
+        automation: {
+          name: "Loose tasks",
+          trigger: { kind: "status_change", to: "review" },
+          action: { kind: "agent", prompt: "Go, carefully" },
+        },
+        replaces: custom.id,
+      },
+      "claude-code",
+    );
+    const { automation } = s.customAutomations.applyDraft(draft.id, {});
+    expect(automation.action).toMatchObject({ prompt: "Go, carefully" });
+    expect(automation.filters).toEqual({ labels: [], epicTasks: false });
+  });
+
   it("arms again when the trigger changes, not when only the name does", async () => {
     const { s } = setup();
     const custom = s.customAutomations.create({

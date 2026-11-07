@@ -103,7 +103,16 @@ export function CustomAutomationEditorForm({
   const where = useWhere(automation ?? { key: "", epicScope: false }).description;
   const shown =
     automation && where ? { ...form, everywhere: where.reach === "everywhere", projectIds: where.projects } : form;
-  const props: StepProps = { form: shown, patch, setForm, projects, epics, tasks, boardVariables, automation };
+  const props: StepProps = {
+    form: shown,
+    patch,
+    setForm,
+    projects,
+    epics,
+    tasks,
+    boardVariables,
+    automation: customId ? automation : undefined,
+  };
   const sentence = formSentence(shown, projects);
 
   const goTo = (next: BuilderStep) => {

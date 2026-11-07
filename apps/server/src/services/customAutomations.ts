@@ -383,12 +383,14 @@ export function createCustomAutomationsService(
         ),
         slots: Object.fromEntries(bundle.slots.map((s) => [s.name, slots[s.name] ?? currentSlots.get(s.name) ?? []])),
       };
-      // Where it runs is the user's, not the draft's: its switches stay as they are.
+      // Where it runs is the user's, not the draft's: its switches stay as they are, and so does Tasks in epics.
       const define = (skill?: string | null) => {
         const { name, trigger, filters, action } = CreateCustomAutomationInput.parse(
           bundleToDefinition(bundle, { ...fill, ...(skill === undefined ? {} : { skill }) }),
         );
-        return { name, trigger, filters, action };
+        // A schedule has no task, so it can't skip any.
+        const epicTasks = trigger.kind === "schedule" || current.filters.epicTasks;
+        return { name, trigger, filters: { ...filters, epicTasks }, action };
       };
       // A skill the draft carries is written only with consent, and never over one of the user's (installSkill keeps a
       // taken name apart). Without it the automation keeps naming its own skill when the draft names the same one, and
@@ -413,7 +415,8 @@ export function createCustomAutomationsService(
           {
             name: patch.name ?? current.name,
             trigger: patch.trigger ?? current.trigger,
-            filters: patch.filters ?? current.filters,
+            // A patch's filters are merged over the current ones, so one that leaves epicTasks out keeps it.
+            filters: { ...current.filters, ...patch.filters },
             action: patch.action ?? current.action,
           },
           id,

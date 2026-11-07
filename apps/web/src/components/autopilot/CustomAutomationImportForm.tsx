@@ -251,8 +251,9 @@ export function CustomAutomationImportForm({
   const sentence = (() => {
     if (!bundle || !draft) return null;
     try {
+      // Where it runs as picked here, Only in… with nothing picked included.
       return formSentence(
-        formFromBundle(bundle, { projectIds: draftToRequest(bundle, draft).projectIds ?? [] }),
+        { ...formFromBundle(bundle), everywhere: draft.everywhere, projectIds: draft.projectIds },
         projects,
       );
     } catch {
