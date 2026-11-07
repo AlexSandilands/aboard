@@ -549,10 +549,11 @@ agent and is off until switched on. It was Merge into epic branch, and keeps tha
 branches**, always on with it, for epics with integration delivery ([epics](epics.md#delivery)); and **Into main**
 (`intoMain`, the one setting, essential, default off) for tasks flagged for auto-merge. Its detail in Settings →
 Autopilot explains integration branches and gives each target a sentence, its gate and an example
-(`MergeTargets` in `AutomationsSplit.tsx`).
+(`MergeTargets.tsx`; its counts are board-wide, from `mergeTargets.logic.ts`).
 
-- **Into main.** With `intoMain` on in the task's project (the engine drops tasks an epic's own Off reaches), the
-  candidates are open tasks in Review with `autoMerge` on and no integration branch. Each goes through
+- **Into main.** The candidates are open tasks in Review with `autoMerge` on, no integration branch, and `intoMain` on
+  for the task (`intoMainOn`: the automation resolved at the task's epic, then project, then board, so an epic's own
+  setting counts; checked again in the action). Each goes through
   `autoMergeVerdict` (`integrations/mergeTaskPr.ts`), the rules `merge_task_pr` refuses by: the task's one unfinished
   PR (unpolled ones count), not from a fork, passing `notMergeable` against its own base, no required approval still
   missing, and an account that can merge. `ready` makes a merge candidate `main:<linkId>:<headOid>` (retries

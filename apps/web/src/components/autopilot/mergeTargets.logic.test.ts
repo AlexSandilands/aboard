@@ -45,7 +45,7 @@ describe("the statuses", () => {
     );
     expect(flaggedStatus({ epics: [], flagged: [] }, true)).toBe("No task is flagged Auto-merge");
     expect(flaggedStatus({ epics: [], flagged: items.slice(0, 2) }, true)).toBe(
-      "2 tasks are flagged Auto-merge: #1 T1 and #2 T2",
+      "2 tasks are flagged Auto-merge: #1 T1 and #2 T2. They merge once ready, wherever this is on",
     );
     expect(flaggedStatus({ epics: [], flagged: items.slice(0, 1) }, false)).toBe(
       "1 task is flagged Auto-merge: #1 T1. Autopilot leaves them to you (or an agent's merge_task_pr) while this is off",
