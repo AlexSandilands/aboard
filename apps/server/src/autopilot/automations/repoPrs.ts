@@ -816,7 +816,12 @@ export async function actRepoPr(
   const ref = { host: item.host, repo: item.repo, number: item.number };
   const project = services.projects.get(item.projectId);
 
-  const live = await gitHosts.prHead(ref);
+  let live: string;
+  try {
+    live = await gitHosts.prHead(ref);
+  } catch (error) {
+    return retryLater(error, item);
+  }
   if (live !== item.headOid) return { status: "skipped", summary: `PR #${item.number} moved on to ${shortSha(live)}` };
 
   const state = services.repoPrReviews.get(item.host, item.repo, item.number);
