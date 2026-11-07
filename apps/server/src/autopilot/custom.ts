@@ -47,7 +47,7 @@ import { z } from "zod";
 import type { RepoUrls } from "../integrations/gitRemote.ts";
 import { messageOf } from "../integrations/util.ts";
 import { InterpreterMissingError, type RunScript } from "../integrations/scriptRunner.ts";
-import type { RunShell, ShellResult } from "../integrations/shellCommand.ts";
+import { SHELL_OUTPUT_TAIL, type RunShell, type ShellResult } from "../integrations/shellCommand.ts";
 import type { Services } from "../services/types.ts";
 import { ORCHESTRATE_BOARD_TOOLS, ORCHESTRATE_DENIED_BOARD_TOOLS } from "./automations/orchestrate.ts";
 import { AUTOPILOT_BACKGROUND_MAX } from "./engine.ts";
@@ -231,12 +231,17 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
 
   /** Runs the check script and reads what it printed. Never throws: a failure is a state of its own. */
   const runCheck = async (project: Project, values: CustomValues): Promise<CheckState> => {
-    const failed = (what: string, error: string, ran?: { output: string; exitCode: number | null }): CheckState => ({
+    const failed = (
+      what: string,
+      error: string,
+      ran?: { output: string; stderr: string; exitCode: number | null },
+    ): CheckState => ({
       kind: "failed",
       failure: {
         summary: `The check of "${custom.name}" in ${project.title} ${what}`,
         error,
-        output: ran?.output || null,
+        // What it said went wrong is on stderr; the interleaved tail can be all items printed before it failed.
+        output: ran?.stderr.trim() ? ran.stderr.slice(-SHELL_OUTPUT_TAIL) : ran?.output || null,
         exitCode: ran?.exitCode ?? null,
       },
     });

@@ -398,15 +398,23 @@ Other automations have their own guides: [Recurring tasks](recurring-tasks.md) a
 ## Run history
 
 The **Runs** tab of Settings → Autopilot lists every run, newest first, with more loading as you scroll. Each run shows its
-status, project, when it ran, what it said it did and, for a scheduled agent, the handover it left, folded away. Narrow
-the list by project and time (the last 24 hours, 7 or 30 days, or a range of days), and search by run id, project name,
-a task as `#12`, or any word of the summary or handover. The filters are in the page's address, so you can bookmark a
-view.
+status, automation, project and task, when it ran, what it said it did or why it failed, and what it cost. Click a run
+to open the rest: its full output (the error output for a failure), the handover a scheduled agent left, the model,
+the session and a link to its thread. A failed run you can try again has **Retry** on its row, and an opened failure has
+**Ask an agent to fix**, which hands the error and output to an agent session.
 
-You can clear out old runs from this page. Tick runs and choose **Delete selected**, or choose **Delete all matching…**
-to delete everything the filters match: set a custom range ending on a date, say, then delete. The box tells you how many
-will go before you confirm, and that runs aren't in backups, so a delete can't be undone. Autopilot never deletes runs
-by itself.
+A run that stopped because the pull request moved on while it worked shows as **Deferred: head moved**: nothing went
+wrong, and Autopilot acts on the new commit next.
+
+Narrow the list by automation, outcome (failed, succeeded, deferred, skipped, dry run or running), project and time
+(the last 24 hours, 7 or 30 days, or a range of days), and search by run id, project name, a task as `#12`, or any word
+of the summary or handover. Automations that no longer exist are listed by their old names. The filters are in the
+page's address, so you can bookmark a view.
+
+You can clear out old runs from **Clean up…** under the list. **Select runs to delete** lets you tick runs and choose
+**Delete selected**; **Delete all matching…** deletes everything the filters match: set a custom range ending on a
+date, say, then delete. The box tells you how many will go before you confirm, and that runs aren't in backups, so a
+delete can't be undone. Autopilot never deletes runs by itself.
 
 Some runs stay even when you ask, because Autopilot still reads them. The box says how many it kept and why:
 
@@ -415,6 +423,26 @@ Some runs stay even when you ask, because Autopilot still reads them. The box sa
 - Auto-archive and custom automation runs on a task;
 - the latest answer of each scheduled agent in each project (its next run is handed that handover);
 - runs less than a day old.
+
+## How each automation is doing
+
+Pick an automation that is on in Settings → Autopilot to see its **This week**: how many runs it made, how many failed,
+what it spent, a bar for each day and its last few runs.
+
+Autopilot also reads those numbers for **hints**, simple rules with a one-click fix. They show on the automation and
+under **Needs you**:
+
+- Fix PRs gave up on several PRs at its attempt limit: **Raise** the limit by one.
+- An automation failed 3 of its last 5 runs: **Ask an agent to fix** copies a prompt with the errors.
+- Start planned tasks is on, but none of your Planned tasks is flagged for Autopilot: **Flag** them.
+- Orchestrate runs very often: run it less often.
+- Today's run or spend cap is reached: see your limits.
+
+**Dismiss** a hint you don't want; it comes back only if the situation changes.
+
+**Auto-pause.** When an automation fails 3 times in a row in a project, it pauses itself there and you get a
+notification. It keeps running in your other projects. The automation's row says where it is paused, and its detail
+and Needs you show why, with **Resume**. Resuming starts the count again.
 
 ## Limits
 

@@ -10,6 +10,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { useDismissAutopilotRun, useRetryAutopilotRun } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotRuns } from "~/state/queries";
+import { pausedForRun } from "./health.logic";
 import { automationTitle, dismissableRun, formatCost, runStatusLabel, runStatusVariant } from "./autopilot.logic";
 
 /**
@@ -19,7 +20,8 @@ import { automationTitle, dismissableRun, formatCost, runStatusLabel, runStatusV
  */
 export function AutopilotSection({ task }: { task: TaskDetail }) {
   const runs = useAutopilotRuns({ taskId: task.id }).data ?? [];
-  const automations = useAutopilotOverview().data?.automations ?? [];
+  const overview = useAutopilotOverview().data;
+  const automations = overview?.automations ?? [];
   const epic = task.kind === "epic";
   if (epic && runs.length === 0) return null;
   // Newest first. A run that needs attention is what the card and the collapsed text point at, so it comes first.
@@ -32,7 +34,7 @@ export function AutopilotSection({ task }: { task: TaskDetail }) {
       summary={
         shown ? (
           <Badge
-            variant={runStatusVariant(shown.status)}
+            variant={runStatusVariant(shown.status, shown.deferred)}
             size="sm"
             title={automationTitle(automations, shown.automation)}
           >
@@ -52,7 +54,7 @@ export function AutopilotSection({ task }: { task: TaskDetail }) {
               key={run.id}
               run={run}
               title={automationTitle(automations, run.automation)}
-              retryable={canRetryRun(run, runs)}
+              retryable={canRetryRun(run, runs) && !pausedForRun(overview?.autoPaused, run)}
             />
           ))}
         </ul>
@@ -94,7 +96,7 @@ function RunRow({ run, title, retryable }: { run: AutopilotRun; title: string; r
   return (
     <li className="flex flex-col gap-0.5 rounded-md px-1 py-1">
       <div className="flex min-w-0 items-center gap-1.5 text-xs">
-        <Badge variant={runStatusVariant(run.status)} size="sm">
+        <Badge variant={runStatusVariant(run.status, run.deferred)} size="sm">
           {runStatusLabel(run)}
         </Badge>
         <span className="min-w-0 truncate font-medium text-foreground/90">{title}</span>
