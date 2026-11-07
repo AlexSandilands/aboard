@@ -660,6 +660,9 @@ export function settleDecision(
   let decision = verdict.decision;
   // An approval with blocking or major points open isn't one.
   if (decision === "approve" && open > 0) decision = "request_changes";
+  // Nor is a request for changes with none open: minor points and nits are FYI, and a CHANGES_REQUESTED review would
+  // block the merge, as the user, over nothing the author has to do. It is a clean review; the gate decides the rest.
+  if (decision === "request_changes" && open === 0) decision = "approve";
   if (decision === "escalate") {
     const e = verdict.escalation;
     if (!e) throw new Error("The reviewer handed the PR over without saying why");

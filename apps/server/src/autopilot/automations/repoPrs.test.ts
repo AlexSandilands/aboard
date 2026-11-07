@@ -616,6 +616,26 @@ describe("other people's PRs: changes and hand-offs", () => {
     expect(t.state()?.taskId).toBeNull();
   });
 
+  it("never asks for changes with nothing blocking or major: a review of only minor points and nits is clean", async () => {
+    const t = setup();
+    t.turnOn();
+    const minor = { ...major(), severity: "minor" as const, title: "Name it better" };
+    t.answer({ decision: "request_changes", summary: "Small things only.", issues: [minor] });
+    await t.pass();
+    expect(t.reviews).toHaveLength(1);
+    expect(t.reviews[0]!.event).toBe("approve");
+    expect(t.reviews[0]!.comments).toHaveLength(0);
+    expect(t.reviews[0]!.body).toContain("### FYI (no action needed)");
+    // With the gate failing it waits for the user instead; it never blocks the merge.
+    expect(
+      settleDecision(
+        { decision: "request_changes", summary: "x", issues: [minor] },
+        { plan: { mode: "full", maxRounds: 3, gate: ["no linked issue (Closes #n)"] } as never },
+        { approve: true },
+      ),
+    ).toMatchObject({ outcome: "ready", reason: "gate" });
+  });
+
   it("hands over when the rounds are used up and changes are still asked for", () => {
     const settled = settleDecision(
       { decision: "request_changes", summary: "x", issues: [major()] },

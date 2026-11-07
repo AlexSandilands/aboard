@@ -666,7 +666,8 @@ out the mode and the approval gate from the PR's history, and posts. The gate is
   review or a closed PR skips it with nothing posted (`standingBlock`), and the gate is worked out afresh, so an
   approval never rests on a check that has since turned red or a `Closes #n` that was removed.
 - **What the server does with it** (`settleDecision`). Minor points and nits are always FYI. An approval with a
-  blocking or major point open is a request for changes. A request for changes in `cap_reached` is a hand-off for
+  blocking or major point open is a request for changes, and a request for changes with none open is a clean
+  review (minor points never block a merge). A request for changes in `cap_reached` is a hand-off for
   `cap`. An approval with the gate failing, or with **Approve** off, is `ready`. Only a clean approval past the gate
   is posted as one: `postReview` with `event: "approve"` (or `request_changes`, blocking and major points inline,
   folded into the body when GitHub refuses them), refused with `StaleReviewError` if the head moved, which skips the
