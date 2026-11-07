@@ -224,7 +224,10 @@ describe("REST", () => {
     const res = await h.request("/api/settings", { method: "PATCH", json: { t3Token: "tok" } });
     expect(await res.json()).toMatchObject({ t3TokenSet: true });
     const status = await h.request("/api/integrations/status");
-    expect(await status.json()).toMatchObject({ t3: { detected: false }, github: { available: false } });
+    expect(await status.json()).toMatchObject({
+      t3: { detected: false },
+      gitHosts: [{ kind: "github", available: false }],
+    });
   });
 
   it("stores saved views as one list, drops a repeated id and rejects bad names", async () => {

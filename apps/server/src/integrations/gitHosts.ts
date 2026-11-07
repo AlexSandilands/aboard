@@ -1,7 +1,18 @@
-import type { GitHostStatus } from "@repo/contracts";
-import type { EpicPrInput, GitHost, PostedReview, PostReviewInput, PrAgentHints, PrThreadState } from "./gitHost.ts";
-import type { PrRef } from "@repo/contracts";
+import type { GitHostStatus, IssueRef, MergeMethod, PrRef, TaskLink } from "@repo/contracts";
 import { AppError } from "../errors.ts";
+import {
+  GitHostError,
+  type EpicMergeInput,
+  type EpicPrInput,
+  type GitHost,
+  type HostIssue,
+  type PostedReview,
+  type PostReviewInput,
+  type PrAgentHints,
+  type PrThreadState,
+} from "./gitHost.ts";
+import type { PrMerges } from "./prMerge.ts";
+import { messageOf } from "./util.ts";
 
 /** Every git host kind the board knows, and which one serves a host name. */
 export interface GitHosts {
@@ -62,6 +73,8 @@ export interface GitHostActions {
   postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
   /** The PR's head commit now, in full. */
   prHead(ref: PrRef): Promise<string>;
+  /** Merges the PR, with the method the repository allows (a merge commit if it can), and says which. */
+  mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<{ method: MergeMethod }>;
   ensureEpicPr(input: EpicPrInput): Promise<{ number: number; url: string; created: boolean }>;
   setPrBody(ref: PrRef, body: string): Promise<void>;
   /** The PR's unresolved review threads and newest commits, read now. */
@@ -70,7 +83,7 @@ export interface GitHostActions {
 }
 
 /** The actions, each sent to the host serving its PR, after checking the CLI is signed in there. */
-export function gitHostActions(hosts: GitHosts): GitHostActions {
+export function gitHostActions(hosts: GitHosts, merges: Pick<PrMerges, "mergeIntoEpicBranch">): GitHostActions {
   const on = async (host: string): Promise<GitHost> => {
     const found = await hosts.resolve(host);
     if (!found) {
@@ -86,9 +99,60 @@ export function gitHostActions(hosts: GitHosts): GitHostActions {
   return {
     postReview: async (ref, input) => (await on(ref.host)).postReview(ref, input),
     prHead: async (ref) => (await on(ref.host)).prHead(ref),
+    mergeIntoEpicBranch: (link, input) => merges.mergeIntoEpicBranch(link, input),
     ensureEpicPr: async (input) => (await on(input.host)).ensurePr(input),
     setPrBody: async (ref, body) => (await on(ref.host)).setPrBody(ref, body),
     reviewThreads: async (ref) => (await on(ref.host)).reviewThreads(ref),
     resolveReviewThread: async (host, threadId) => (await on(host)).resolveReviewThread(host, threadId),
   };
 }
+
+/** Issue reads for an import, from the host the issue is on, as AppErrors that say which issue failed. */
+export function gitHostIssues(hosts: GitHosts): {
+  getIssue(ref: IssueRef): Promise<HostIssue>;
+  listSubIssues(ref: IssueRef): Promise<string[]>;
+} {
+  const on = async (ref: IssueRef): Promise<GitHost> => {
+    const host = await hosts.resolve(ref.host);
+    if (!host) throw new AppError("VALIDATION", `No git host the board knows serves ${ref.host}`);
+    return host;
+  };
+  return {
+    async getIssue(ref) {
+      const host = await on(ref);
+      try {
+        return await host.getIssue(ref);
+      } catch (error) {
+        if (error instanceof GitHostError && error.reason === "missing-tool") {
+          throw new AppError("VALIDATION", error.message);
+        }
+        throw new AppError("VALIDATION", `Could not read ${ref.repo}#${ref.number}: ${messageOf(error)}`);
+      }
+    },
+    async listSubIssues(ref) {
+      const host = await on(ref);
+      if (!host.capabilities.subIssues) return [];
+      try {
+        return await host.listSubIssues(ref);
+      } catch (error) {
+        throw new AppError(
+          "VALIDATION",
+          `Could not read the sub-issues of ${ref.repo}#${ref.number}: ${messageOf(error)}`,
+        );
+      }
+    },
+  };
+}
+
+const unavailable = () => Promise.reject(new Error("No git host is available"));
+
+/** No git host until one is configured: every action that needs one fails with a clear reason. */
+export const NO_GIT_HOSTS: GitHostActions = {
+  postReview: unavailable,
+  prHead: unavailable,
+  mergeIntoEpicBranch: unavailable,
+  ensureEpicPr: unavailable,
+  setPrBody: unavailable,
+  reviewThreads: unavailable,
+  resolveReviewThread: unavailable,
+};

@@ -7,7 +7,7 @@ import {
   diffPages,
   packPages,
   pickPage,
-  type GitHost,
+  type GitHostReads,
   type HostComment,
   type HostPr,
   type HostPrFile,
@@ -32,7 +32,8 @@ export const RUN_TOOLS_PATH = "/mcp/run";
 
 export interface RunToolsContext {
   tokens: RunTokens;
-  gitHost: GitHost;
+  /** The reads of the git host serving `host`, or null when no kind the board knows does. */
+  gitHost(host: string): GitHostReads | null;
 }
 
 const UNTRUSTED =
@@ -94,7 +95,7 @@ function commentHead(c: HostComment): string {
 }
 
 /** The PR review set: read the one pull request the run reviews. */
-function registerPrReviewTools(server: McpServer, grant: RunGrant, host: GitHost): void {
+function registerPrReviewTools(server: McpServer, grant: RunGrant, host: GitHostReads): void {
   const ref = { host: grant.target.host, repo: grant.target.repo, number: grant.target.number };
   const files = () => cached(grant, "files", () => host.listFiles(ref));
   const readOnly = { readOnlyHint: true, openWorldHint: false };
@@ -198,11 +199,11 @@ function registerPrReviewTools(server: McpServer, grant: RunGrant, host: GitHost
   );
 }
 
-const TOOL_SETS: Record<RunToolSet, (server: McpServer, grant: RunGrant, host: GitHost) => void> = {
+const TOOL_SETS: Record<RunToolSet, (server: McpServer, grant: RunGrant, host: GitHostReads) => void> = {
   prReview: registerPrReviewTools,
 };
 
-function createRunServer(grant: RunGrant, host: GitHost): McpServer {
+function createRunServer(grant: RunGrant, host: GitHostReads): McpServer {
   const server = new McpServer(
     { name: RUN_SERVER_NAME, version: "0.1.0" },
     {
@@ -232,11 +233,13 @@ const bearer = (header: string | undefined): string | null => {
  */
 export function registerRunMcp(app: Hono, ctx: () => RunToolsContext): void {
   app.post(RUN_TOOLS_PATH, async (c) => {
-    const { tokens, gitHost } = ctx();
+    const { tokens } = ctx();
     const token = bearer(c.req.header("authorization"));
     const grant = token ? tokens.resolve(token) : null;
     if (!grant) return rpcError(401, "This run's tools are not available: its token is missing, unknown or expired.");
-    const server = createRunServer(grant, gitHost);
+    const host = ctx().gitHost(grant.target.host);
+    if (!host) return rpcError(404, `No git host the board knows serves ${grant.target.host}.`);
+    const server = createRunServer(grant, host);
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

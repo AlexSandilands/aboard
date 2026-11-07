@@ -25,22 +25,17 @@ import {
 } from "@repo/contracts";
 import { z } from "zod";
 import {
+  isTransientHostError,
   StaleReviewError,
   type PostedReview,
   type ReviewComment,
   type ReviewThreadDetail,
-} from "../../integrations/github.ts";
-import { isTransientGithubError } from "../../integrations/githubApi.ts";
+} from "../../integrations/gitHost.ts";
+import type { GitHostActions } from "../../integrations/gitHosts.ts";
 import { messageOf } from "../../integrations/util.ts";
 import { RUN_SERVER_NAME } from "../../mcp/runTokens.ts";
 import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
-import {
-  WorktreeHeadError,
-  defineAutomation,
-  type ActionResult,
-  type Candidate,
-  type GithubActions,
-} from "../types.ts";
+import { WorktreeHeadError, defineAutomation, type ActionResult, type Candidate } from "../types.ts";
 
 export { AUTOPILOT_REVIEW_PRS };
 
@@ -222,7 +217,7 @@ export function renderReview(
  * whose review opened a thread). Never fails the review: returns how many.
  */
 export async function resolveConfirmedThreads(
-  github: Pick<GithubActions, "reviewThreads" | "resolveReviewThread">,
+  gitHosts: Pick<GitHostActions, "reviewThreads" | "resolveReviewThread">,
   ref: PrRef,
   fixed: readonly number[],
   ownReviewIds: ReadonlySet<number>,
@@ -230,7 +225,7 @@ export async function resolveConfirmedThreads(
   const ids = new Set(fixed);
   let threads: ReviewThreadDetail[];
   try {
-    threads = (await github.reviewThreads(ref)).threads;
+    threads = (await gitHosts.reviewThreads(ref)).threads;
   } catch {
     return 0;
   }
@@ -246,7 +241,7 @@ export async function resolveConfirmedThreads(
   let resolved = 0;
   for (const thread of targets) {
     try {
-      await github.resolveReviewThread(ref.host, thread.id);
+      await gitHosts.resolveReviewThread(ref.host, thread.id);
       resolved += 1;
     } catch {
       // Left open: the next round sees it and can report it again.
@@ -410,7 +405,7 @@ export const reviewPrs = defineAutomation({
         });
       }),
     ),
-  act: async (candidate, { services, runner, github, engine, config, run, actor }): Promise<ActionResult> => {
+  act: async (candidate, { services, runner, gitHosts, engine, config, run, actor }): Promise<ActionResult> => {
     const data = candidate.data as ReviewData;
     const task = services.tasks.summary(candidate.taskId!);
     const link = task.links.find((l) => l.id === data.linkId);
@@ -462,7 +457,7 @@ export const reviewPrs = defineAutomation({
       verdict = parsed.data;
       const rendered = renderReview(verdict, data);
       posting = true;
-      posted = await github.postReview(
+      posted = await gitHosts.postReview(
         { host: data.host, repo: data.repo, number: data.number },
         { reviewedSha: data.headOid, body: rendered.body, comments: rendered.comments },
       );
@@ -475,14 +470,14 @@ export const reviewPrs = defineAutomation({
       // A branch that was rewritten (a force-push) no longer descends from the commit either. Only when GitHub still
       // calls that commit the head is the checkout what's wrong; otherwise the PR just moved on.
       if (error instanceof WorktreeHeadError) {
-        const live = await github.prHead({ host: data.host, repo: data.repo, number: data.number }).catch(() => null);
+        const live = await gitHosts.prHead({ host: data.host, repo: data.repo, number: data.number }).catch(() => null);
         if (live && live !== data.headOid) {
           return { status: "skipped", summary: `PR #${data.number} moved on while it was being reviewed` };
         }
       }
       // GitHub failing in passing (an internal error, the network) after the agent had read: post again on the next pass.
       // Nothing was posted, so no round was used. The agent's own failures aren't retried here.
-      if (posting && isTransientGithubError(error)) {
+      if (posting && isTransientHostError(error)) {
         if (data.attempt < REVIEW_ATTEMPTS) {
           return {
             status: "skipped",
@@ -501,7 +496,7 @@ export const reviewPrs = defineAutomation({
     const resolvedThreads =
       data.earlier.length > 0 && (verdict.fixed?.length ?? 0) > 0
         ? await resolveConfirmedThreads(
-            github,
+            gitHosts,
             { host: data.host, repo: data.repo, number: data.number },
             verdict.fixed ?? [],
             new Set(data.earlier.flatMap((e) => (e.reviewId === null ? [] : [e.reviewId]))),

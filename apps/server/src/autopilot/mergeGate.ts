@@ -10,7 +10,7 @@ import {
   type TaskLink,
   type TaskSummary,
 } from "@repo/contracts";
-import { describeUnresolved } from "../integrations/github.ts";
+import { describeUnresolved } from "../integrations/prMerge.ts";
 import type { Services } from "../services/types.ts";
 
 // The gate every board-made merge passes: Autopilot's into an epic's branch (automations/mergeEpicPrs.ts) and

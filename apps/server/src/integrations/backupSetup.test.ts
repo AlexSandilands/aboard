@@ -2,28 +2,38 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRAND, type GithubStatus } from "@repo/contracts";
+import { BRAND, type GitHostStatus } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
 import { defaultRunGit } from "./backup.ts";
 import { createBackupSetup, remoteFailure } from "./backupSetup.ts";
 import { GhError, type RunGh } from "./gh.ts";
+import { createGithubHost } from "./githubHost.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-const signedIn: GithubStatus = {
+const signedIn: GitHostStatus = {
+  kind: "github",
   available: true,
+  version: "2.96.0",
   authenticated: true,
   error: null,
-  hosts: [{ host: "github.com", login: "octocat", authenticated: true }],
+  accounts: [{ host: "github.com", login: "octocat", authenticated: true }],
 };
-const noGh: GithubStatus = { available: false, authenticated: false, error: "gh CLI not found", hosts: [] };
+const noGh: GitHostStatus = {
+  kind: "github",
+  available: false,
+  version: null,
+  authenticated: false,
+  error: "gh CLI not found",
+  accounts: [],
+};
 
-function setup(opts: { gh?: GithubStatus; runGh?: RunGh } = {}) {
+function setup(opts: { gh?: GitHostStatus; runGh?: RunGh } = {}) {
   const h = createTestHarness();
   const calls: string[][] = [];
   const runGh: RunGh = async (args, o) => {
@@ -33,8 +43,7 @@ function setup(opts: { gh?: GithubStatus; runGh?: RunGh } = {}) {
   };
   const backupSetup = createBackupSetup({
     services: () => h.services,
-    ghStatus: async () => opts.gh ?? signedIn,
-    runGh,
+    host: { ...createGithubHost({ runGh }), checkStatus: async () => opts.gh ?? signedIn },
     runGit: defaultRunGit,
     defaultDir: "/data/backup",
     instanceId: "11111111-1111-4111-8111-111111111111",
@@ -47,7 +56,7 @@ describe("backup setup info", () => {
     const { h, setup: s } = setup();
     h.services.settings.update({ machineName: "laptop" });
     expect(await s.info()).toEqual({
-      gh: { available: true, signedIn: true, login: "octocat" },
+      host: { kind: "github", available: true, signedIn: true, login: "octocat" },
       defaultDir: "/data/backup",
       backupDir: null,
       backupRemote: null,
@@ -58,12 +67,18 @@ describe("backup setup info", () => {
   });
 
   it("says when gh is missing or signed in elsewhere only", async () => {
-    expect((await setup({ gh: noGh }).setup.info()).gh).toEqual({ available: false, signedIn: false, login: null });
-    const enterprise: GithubStatus = {
+    expect((await setup({ gh: noGh }).setup.info()).host).toEqual({
+      kind: "github",
+      available: false,
+      signedIn: false,
+      login: null,
+    });
+    const enterprise: GitHostStatus = {
       ...signedIn,
-      hosts: [{ host: "ghe.example.com", login: "me", authenticated: true }],
+      accounts: [{ host: "ghe.example.com", login: "me", authenticated: true }],
     };
-    expect((await setup({ gh: enterprise }).setup.info()).gh).toEqual({
+    expect((await setup({ gh: enterprise }).setup.info()).host).toEqual({
+      kind: "github",
       available: true,
       signedIn: false,
       login: null,
@@ -114,7 +129,7 @@ describe("creating a GitHub repo", () => {
   it("refuses without gh or its sign-in, without running gh", async () => {
     const missing = setup({ gh: noGh });
     await expect(missing.setup.createRepo("x")).rejects.toThrow(/isn't installed/);
-    const out = setup({ gh: { ...signedIn, authenticated: false, hosts: [] } });
+    const out = setup({ gh: { ...signedIn, authenticated: false, accounts: [] } });
     await expect(out.setup.createRepo("x")).rejects.toThrow(/gh auth login/);
     expect([...missing.calls, ...out.calls]).toEqual([]);
   });

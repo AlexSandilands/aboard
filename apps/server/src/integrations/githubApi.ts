@@ -1,6 +1,7 @@
-import type { GithubHostStatus } from "@repo/contracts";
+import type { GitHostAccount } from "@repo/contracts";
 import { z } from "zod";
 import { GhError, type RunGh } from "./gh.ts";
+import { GitHostError, type GitHostErrorReason } from "./gitHost.ts";
 import type { FetchFn } from "./t3.ts";
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -40,28 +41,26 @@ export type GithubApiErrorKind =
   /** GitHub answered with a failure, usually a GraphQL `errors` list. */
   | "response";
 
+const REASONS: Record<GithubApiErrorKind, GitHostErrorReason> = {
+  cli_missing: "missing-tool",
+  not_signed_in: "unauthenticated",
+  unauthorized: "unauthenticated",
+  rate_limited: "rate-limited",
+  not_found: "not-found",
+  request: "transient",
+  response: "failed",
+};
+
 /** A GitHub failure whose message is safe to show: GitHub's own words, never a token. */
-export class GithubApiError extends Error {
+export class GithubApiError extends GitHostError {
   constructor(
     readonly kind: GithubApiErrorKind,
-    readonly host: string,
+    host: string,
     message: string,
   ) {
-    super(message);
+    super(REASONS[kind], host, message);
     this.name = "GithubApiError";
   }
-}
-
-/**
- * Failures another try may get past: GitHub itself failing ("an internal error occurred, please try again", `HTTP 5xx`
- * as the client reports it), the network, a timeout, a rate limit. Anything else (a refusal, a missing PR) won't change.
- */
-const TRANSIENT_FAILURE =
-  /try again|internal error|timed? ?out|econn|fetch failed|socket|rate limit|unavailable|\bHTTP 5\d\d\b/i;
-
-export function isTransientGithubError(error: unknown): boolean {
-  if (error instanceof GithubApiError && (error.kind === "request" || error.kind === "rate_limited")) return true;
-  return TRANSIENT_FAILURE.test(error instanceof Error ? error.message : String(error));
 }
 
 // ── Tokens ───────────────────────────────────────────────────────────────
@@ -136,7 +135,7 @@ const AuthStatusJson = z.object({
  * Parses `gh auth status --json hosts` into one entry per host: its active (or first signed-in)
  * account. Null when the output isn't that shape, as from a `gh` too old for `--json`.
  */
-export function parseGhAuthStatus(stdout: string): GithubHostStatus[] | null {
+export function parseGhAuthStatus(stdout: string): GitHostAccount[] | null {
   let json: unknown;
   try {
     json = JSON.parse(stdout);

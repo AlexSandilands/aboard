@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { TEST_JIRA } from "../test/fixtures.ts";
 import { createTestHarness } from "../test/harness.ts";
-import type { IssueDetails } from "./github.ts";
+
 import type { ImportJob, ImportOutcome } from "./headlessImport.ts";
-import { createIssueImporter, MAX_IMPORT_ATTEMPTS } from "./issueImport.ts";
+import { createIssueImporter, MAX_IMPORT_ATTEMPTS, type IssueDetails } from "./issueImport.ts";
 
 const GH_URL = "https://github.com/acme/app/issues/45";
 /** The tools the test system allows an import to call. */
@@ -27,9 +27,9 @@ const outcome: ImportOutcome = {
 
 function setup(
   opts: {
-    fetchIssue?: () => Promise<IssueDetails>;
+    getIssue?: () => Promise<IssueDetails>;
     /** Sub-issue URLs by the parent issue's number; none by default. */
-    fetchSubIssues?: (ref: { number: number }) => Promise<string[]>;
+    listSubIssues?: (ref: { number: number }) => Promise<string[]>;
     runImport?: (job: ImportJob) => Promise<ImportOutcome>;
     /** The MCP servers the CLI reports as connected. */
     servers?: string[];
@@ -45,9 +45,9 @@ function setup(
   const warnings: string[] = [];
   const importer = createIssueImporter({
     services: () => s,
-    github: {
-      fetchIssue: opts.fetchIssue ?? (() => Promise.resolve(issue)),
-      fetchSubIssues: opts.fetchSubIssues ?? (() => Promise.resolve([])),
+    issues: {
+      getIssue: opts.getIssue ?? (() => Promise.resolve(issue)),
+      listSubIssues: opts.listSubIssues ?? (() => Promise.resolve([])),
     },
     runImport: (job) => {
       jobs.push(job);
@@ -134,7 +134,7 @@ describe("issue import", () => {
   });
 
   it("fails with the reason when the issue can't be read", async () => {
-    const { s, create, run } = setup({ fetchIssue: () => Promise.reject(new Error("gh is not signed in")) });
+    const { s, create, run } = setup({ getIssue: () => Promise.reject(new Error("gh is not signed in")) });
     const failed = await run(create(GH_URL).id);
     expect(failed).toMatchObject({ title: "acme/app#45", import: { status: "failed", error: "gh is not signed in" } });
     expect(failed.events.map((e) => e.type)).toContain("import_failed");
@@ -314,7 +314,7 @@ describe("issue import", () => {
   it("runs a retried import again", async () => {
     let fail = true;
     const { s, create, run } = setup({
-      fetchIssue: () => (fail ? Promise.reject(new Error("offline")) : Promise.resolve(issue)),
+      getIssue: () => (fail ? Promise.reject(new Error("offline")) : Promise.resolve(issue)),
     });
     const id = create(GH_URL).id;
     expect((await run(id)).import?.status).toBe("failed");
@@ -329,7 +329,7 @@ describe("issue import", () => {
       new Promise<IssueDetails>((resolve) => {
         gate.release = () => resolve(issue);
       });
-    const deleted = setup({ fetchIssue: slow });
+    const deleted = setup({ getIssue: slow });
     const gone = deleted.create(GH_URL);
     deleted.importer.start(gone.id);
     deleted.s.tasks.update(gone.id, { archived: true }, "user");
@@ -338,7 +338,7 @@ describe("issue import", () => {
     await deleted.importer.idle();
     expect(deleted.s.imports.get(gone.id)).toBeNull();
 
-    const archived = setup({ fetchIssue: slow });
+    const archived = setup({ getIssue: slow });
     const task = archived.create(GH_URL);
     archived.importer.start(task.id);
     archived.s.tasks.update(task.id, { archived: true }, "user");
@@ -439,7 +439,7 @@ describe("importing an epic", () => {
     };
     const asked: number[] = [];
     const { create, run } = setup({
-      fetchSubIssues: (ref) => {
+      listSubIssues: (ref) => {
         asked.push(ref.number);
         return Promise.resolve(subIssues[ref.number] ?? []);
       },
@@ -459,7 +459,7 @@ describe("importing an epic", () => {
   it("leaves an issue without children a task, also when its sub-issues can't be read", async () => {
     const plain = setup();
     expect(await plain.run(plain.create(GH_URL).id)).toMatchObject({ kind: "task", children: [] });
-    const broken = setup({ fetchSubIssues: () => Promise.reject(new Error("HTTP 404")) });
+    const broken = setup({ listSubIssues: () => Promise.reject(new Error("HTTP 404")) });
     expect(await broken.run(broken.create(GH_URL).id)).toMatchObject({ kind: "task", import: { status: "done" } });
     expect(broken.warnings.join()).toContain("HTTP 404");
   });

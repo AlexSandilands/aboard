@@ -1,93 +1,88 @@
 import { describe, expect, it } from "vitest";
-import { GhError } from "./gh.ts";
-import { createGithubIntegration, parseGhIssue, parseSubIssueUrls } from "./github.ts";
+import { GhError, type RunGh } from "./gh.ts";
+import { createGitHosts, gitHostIssues } from "./gitHosts.ts";
+import { createGithubHost } from "./githubHost.ts";
+import type { FetchFn } from "./t3.ts";
 
-const json = (value: unknown) => JSON.stringify(value);
+/** gh signed in to github.com and ghe.example.com, handing out a token; `missing` when it isn't installed. */
+const runGh =
+  (missing = false): RunGh =>
+  async (args) => {
+    if (missing) throw new GhError("gh CLI not found", true);
+    if (args[0] === "--version") return "gh version 2.96.0";
+    if (args[0] === "auth" && args[1] === "status") {
+      const hosts = ["github.com", "ghe.example.com"];
+      return JSON.stringify({
+        hosts: Object.fromEntries(hosts.map((host) => [host, [{ state: "success", active: true, host, login: "me" }]])),
+      });
+    }
+    if (args[0] === "auth" && args[1] === "token") return ["fake", "credential", args[3]].join("-");
+    throw new GhError(`unexpected gh ${args.join(" ")}`, false);
+  };
 
-describe("parseGhIssue", () => {
-  it("reads the title, body, label names and state", () => {
-    expect(
-      parseGhIssue(json({ title: "T", body: null, state: "CLOSED", labels: [{ name: "bug", color: "f00" }] })),
-    ).toEqual({ title: "T", body: "", labels: ["bug"], state: "closed" });
-    expect(parseGhIssue(json({ title: "T", body: "B", state: "OPEN" }))).toMatchObject({ labels: [], state: "open" });
-  });
+function issues(handler: (url: string) => Response, opts: { missing?: boolean } = {}) {
+  const urls: string[] = [];
+  const fetch: FetchFn = async (url) => {
+    urls.push(url);
+    return handler(url);
+  };
+  const host = createGithubHost({ runGh: runGh(opts.missing), fetch });
+  return { urls, issues: gitHostIssues(createGitHosts([host])) };
+}
 
-  it("throws on output that isn't an issue", () => {
-    expect(() => parseGhIssue("not json")).toThrow("isn't JSON");
-    expect(() => parseGhIssue(json({ state: "OPEN" }))).toThrow("unexpected issue shape");
-  });
-});
-
-describe("parseSubIssueUrls", () => {
-  it("reads one URL per line, once each, skipping anything else", () => {
-    const stdout = [
-      "https://github.com/acme/app/issues/46",
-      "https://github.com/acme/lib/issues/2\r",
-      "",
-      "null",
-      "https://github.com/acme/app/issues/46",
-    ].join("\n");
-    expect(parseSubIssueUrls(stdout)).toEqual([
-      "https://github.com/acme/app/issues/46",
-      "https://github.com/acme/lib/issues/2",
+describe("reading an issue to import", () => {
+  it("reads the title, body, label names and state from the issue's own host", async () => {
+    const { urls, issues: read } = issues(() =>
+      Response.json({
+        number: 45,
+        html_url: "https://github.com/acme/app/issues/45",
+        title: "T",
+        body: null,
+        state: "closed",
+        user: { login: "ana" },
+        labels: [{ name: "bug", color: "f00" }, "chore"],
+      }),
+    );
+    expect(await read.getIssue({ host: "github.com", repo: "acme/app", number: 45 })).toMatchObject({
+      title: "T",
+      body: "",
+      labels: ["bug", "chore"],
+      state: "closed",
+    });
+    await read.getIssue({ host: "ghe.example.com", repo: "team/svc", number: 8 });
+    expect(urls).toEqual([
+      "https://api.github.com/repos/acme/app/issues/45",
+      "https://ghe.example.com/api/v3/repos/team/svc/issues/8",
     ]);
-    expect(parseSubIssueUrls("")).toEqual([]);
-  });
-});
-
-describe("fetchIssue", () => {
-  const integration = (runGh: (args: string[]) => Promise<string>) =>
-    createGithubIntegration({
-      services: () => {
-        throw new Error("not used");
-      },
-      runGh,
-    });
-
-  it("asks gh for the issue, naming the host only when it isn't github.com", async () => {
-    const calls: string[][] = [];
-    const gh = integration((args) => {
-      calls.push(args);
-      return Promise.resolve(json({ title: "T", body: "B", state: "OPEN", labels: [] }));
-    });
-    await gh.fetchIssue({ host: "github.com", repo: "acme/app", number: 45 });
-    await gh.fetchIssue({ host: "ghe.example.com", repo: "team/svc", number: 8 });
-    expect(calls[0]).toEqual(["issue", "view", "45", "--repo", "acme/app", "--json", "title,body,labels,state"]);
-    expect(calls[1]![4]).toBe("ghe.example.com/team/svc");
   });
 
   it("explains a missing gh and a failed read", async () => {
-    const missing = integration(() => Promise.reject(new GhError("gh CLI not found", true)));
-    await expect(missing.fetchIssue({ host: "github.com", repo: "a/b", number: 1 })).rejects.toThrow(
+    const missing = issues(() => Response.json({}), { missing: true }).issues;
+    await expect(missing.getIssue({ host: "github.com", repo: "a/b", number: 1 })).rejects.toThrow(
       "GitHub CLI (gh) is not installed",
     );
-    const failing = integration(() => Promise.reject(new GhError("Could not resolve to an issue", false)));
-    await expect(failing.fetchIssue({ host: "github.com", repo: "a/b", number: 1 })).rejects.toThrow(
-      "Could not read a/b#1: Could not resolve to an issue",
+    const failing = issues(() => Response.json({ message: "Not Found" }, { status: 404 })).issues;
+    await expect(failing.getIssue({ host: "github.com", repo: "a/b", number: 1 })).rejects.toThrow(
+      "Could not read a/b#1: Not Found",
     );
   });
 
-  it("pages through the sub-issues, naming the host only when it isn't github.com", async () => {
-    const calls: string[][] = [];
-    const gh = integration((args) => {
-      calls.push(args);
-      return Promise.resolve("https://ghe.example.com/team/svc/issues/9\n");
-    });
-    expect(await gh.fetchSubIssues({ host: "github.com", repo: "acme/app", number: 45 })).toEqual([
-      "https://ghe.example.com/team/svc/issues/9",
+  it("pages through the sub-issues, once each", async () => {
+    const page = (n: number, from: number) =>
+      Array.from({ length: n }, (_, i) => ({ html_url: `https://github.com/acme/app/issues/${from + i}` }));
+    const { urls, issues: read } = issues((url) =>
+      Response.json(url.endsWith("&page=1") ? page(100, 100) : [...page(1, 300), ...page(1, 100)]),
+    );
+    const subIssues = await read.listSubIssues({ host: "github.com", repo: "acme/app", number: 45 });
+    expect(subIssues).toHaveLength(101);
+    expect(subIssues.at(-1)).toBe("https://github.com/acme/app/issues/300");
+    expect(urls).toEqual([
+      "https://api.github.com/repos/acme/app/issues/45/sub_issues?per_page=100&page=1",
+      "https://api.github.com/repos/acme/app/issues/45/sub_issues?per_page=100&page=2",
     ]);
-    await gh.fetchSubIssues({ host: "ghe.example.com", repo: "team/svc", number: 8 });
-    expect(calls[0]).toEqual([
-      "api",
-      "--paginate",
-      "repos/acme/app/issues/45/sub_issues?per_page=100",
-      "--jq",
-      ".[].html_url",
-    ]);
-    expect(calls[1]!.slice(0, 3)).toEqual(["api", "--hostname", "ghe.example.com"]);
-    const failing = integration(() => Promise.reject(new GhError("HTTP 404", false)));
-    await expect(failing.fetchSubIssues({ host: "github.com", repo: "a/b", number: 1 })).rejects.toThrow(
-      "Could not read the sub-issues of a/b#1: HTTP 404",
+    const failing = issues(() => Response.json({ message: "Not Found" }, { status: 404 })).issues;
+    await expect(failing.listSubIssues({ host: "github.com", repo: "a/b", number: 1 })).rejects.toThrow(
+      "Could not read the sub-issues of a/b#1: Not Found",
     );
   });
 });

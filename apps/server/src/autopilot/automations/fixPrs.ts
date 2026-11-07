@@ -32,6 +32,7 @@ import {
 import { z } from "zod";
 import { AppError } from "../../errors.ts";
 import { shQuote } from "../../integrations/terminal.ts";
+import type { GitHostActions } from "../../integrations/gitHosts.ts";
 import { messageOf } from "../../integrations/util.ts";
 import type { Services } from "../../services/types.ts";
 import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE, runnerFields } from "../runnerOptions.ts";
@@ -41,7 +42,6 @@ import {
   WorktreeHeadError,
   defineAutomation,
   type ActionResult,
-  type GithubActions,
   type Candidate,
   type RunnerResult,
 } from "../types.ts";
@@ -659,12 +659,12 @@ export const fixPrs = defineAutomation({
         });
       }),
     ),
-  act: async (candidate, { services, runner, github, config, run }): Promise<ActionResult> => {
+  act: async (candidate, { services, runner, gitHosts, config, run }): Promise<ActionResult> => {
     const given = candidate.data as FixData | GaveUpData | ResolveData;
     if ("gaveUp" in given) {
       return { summary: `${fixGaveUpPrefix(given.number)} ${given.reason}`, needsAttention: true };
     }
-    if ("resolve" in given) return resolveFixedThreads(given, github);
+    if ("resolve" in given) return resolveFixedThreads(given, gitHosts);
     const data = given;
     const task = services.tasks.summary(candidate.taskId!);
     const link = task.links.find((l) => l.id === data.linkId);
@@ -726,7 +726,7 @@ export const fixPrs = defineAutomation({
       if (error instanceof WorktreeHeadError) {
         const live = error.moved
           ? null
-          : await github.prHead({ host: data.host, repo: data.repo, number: data.number }).catch(() => null);
+          : await gitHosts.prHead({ host: data.host, repo: data.repo, number: data.number }).catch(() => null);
         if (error.moved || (live && live !== data.headOid)) {
           return { status: "skipped", summary: `PR #${data.number} moved on before the fix started` };
         }
@@ -769,9 +769,9 @@ const threads = (n: number) => `${n} review thread${n === 1 ? "" : "s"}`;
  */
 async function resolveFixedThreads(
   data: ResolveData,
-  github: Pick<GithubActions, "reviewThreads" | "resolveReviewThread">,
+  gitHosts: Pick<GitHostActions, "reviewThreads" | "resolveReviewThread">,
 ): Promise<ActionResult> {
-  const state = await github.reviewThreads({ host: data.host, repo: data.repo, number: data.number });
+  const state = await gitHosts.reviewThreads({ host: data.host, repo: data.repo, number: data.number });
   const commits = state.commits.map((c) => c.toLowerCase());
   const wanted = new Set(data.threadIds);
   const read = state.threads.filter((t) => wanted.has(t.id));
@@ -788,7 +788,7 @@ async function resolveFixedThreads(
   const failed: string[] = [];
   for (const thread of onPr) {
     try {
-      await github.resolveReviewThread(data.host, thread.id);
+      await gitHosts.resolveReviewThread(data.host, thread.id);
     } catch (error) {
       failed.push(messageOf(error));
     }

@@ -1,3 +1,4 @@
+import { GitHostKind } from "./gitHosts.ts";
 import { z } from "zod";
 
 // A backup is the board's tables written out as JSON, one file per task, so it diffs well in git. Rows keep the
@@ -274,12 +275,14 @@ export const RestoreBoardResult = z.object({
 export type RestoreBoardResult = z.infer<typeof RestoreBoardResult>;
 /** What the backup setup dialog starts from (`GET /api/backup/setup-info`). */
 export const BackupSetupInfo = z.object({
-  gh: z.object({
-    /** Whether the `gh` CLI is installed. */
+  /** The git host a new backup repo is made on, and whether its CLI can make one. */
+  host: z.object({
+    kind: GitHostKind,
+    /** Whether the host's CLI (gh) is installed. */
     available: z.boolean(),
-    /** Signed in to github.com, so it can create a repo. */
+    /** Signed in to the host's main site (github.com), so it can create a repo. */
     signedIn: z.boolean(),
-    /** The github.com account it is signed in as; null when signed out or when gh is too old to say. */
+    /** The account it is signed in as; null when signed out or when the CLI is too old to say. */
     login: z.string().nullable(),
   }),
   /** `<data dir>/backup`, offered when no folder is set. */

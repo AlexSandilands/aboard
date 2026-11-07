@@ -68,7 +68,9 @@ describe("GitHosts", () => {
   });
 
   it("sends actions to the host serving the PR, and refuses one no kind serves", async () => {
-    const actions = gitHostActions(createGitHosts([fakeHost(["github.com"])]));
+    const actions = gitHostActions(createGitHosts([fakeHost(["github.com"])]), {
+      mergeIntoEpicBranch: () => Promise.reject(new Error("no")),
+    });
     expect(await actions.prHead({ host: "github.com", repo: "o/r", number: 1 })).toBe("abc");
     await expect(actions.prHead({ host: "gitlab.com", repo: "o/r", number: 1 })).rejects.toThrow(
       "GitHub CLI (gh) is not signed in to gitlab.com: run `gh auth login --hostname gitlab.com`",

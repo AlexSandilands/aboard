@@ -3,7 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { PrRef } from "@repo/contracts";
-import { pageDiff, type GitHost, type HostPrFile } from "../integrations/gitHost.ts";
+import { pageDiff, type GitHostReads, type HostPrFile } from "../integrations/gitHost.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { createRunTokens, RUN_TOKEN_MAX_TTL_MS, type RunToolScope } from "./runTokens.ts";
 import { RUN_TOOL_NAMES, RUN_TOOLS_PATH } from "./runTools.ts";
@@ -33,7 +33,7 @@ const filesOf = (count: number, lines: number): HostPrFile[] =>
 function fakeHost(files: HostPrFile[]) {
   const asked: PrRef[] = [];
   let listCalls = 0;
-  const host: GitHost = {
+  const host: GitHostReads = {
     async getPr(ref) {
       asked.push(ref);
       return {

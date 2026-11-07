@@ -6,9 +6,9 @@ import {
   createGithubApi,
   GithubApiError,
   githubGraphqlUrl,
-  isTransientGithubError,
   parseGhAuthStatus,
 } from "./githubApi.ts";
+import { isTransientHostError } from "./gitHost.ts";
 import type { FetchFn } from "./t3.ts";
 
 // Built at runtime so no token-shaped literal sits in the source.
@@ -239,7 +239,7 @@ describe("classifyGraphqlResponse", () => {
   });
 });
 
-describe("isTransientGithubError", () => {
+describe("isTransientHostError", () => {
   it("says which failures another try may get past", () => {
     const err = (kind: GithubApiError["kind"], message: string) => new GithubApiError(kind, "github.com", message);
     for (const transient of [
@@ -250,7 +250,7 @@ describe("isTransientGithubError", () => {
       err("rate_limited", "GitHub API rate limit exceeded on github.com"),
       new Error("GitHub at github.com timed out"),
     ]) {
-      expect(isTransientGithubError(transient)).toBe(true);
+      expect(isTransientHostError(transient)).toBe(true);
     }
     for (const lasting of [
       err("response", "Line must be part of the diff"),
@@ -259,7 +259,7 @@ describe("isTransientGithubError", () => {
       err("unauthorized", "GitHub refused the credential for github.com"),
       new Error("GitHub returned an unexpected PR shape"),
     ]) {
-      expect(isTransientGithubError(lasting)).toBe(false);
+      expect(isTransientHostError(lasting)).toBe(false);
     }
   });
 });

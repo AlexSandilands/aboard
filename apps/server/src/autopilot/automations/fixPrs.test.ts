@@ -13,19 +13,12 @@ import {
   type PrReviewThreadInfo,
   type PrSnapshot,
 } from "@repo/contracts";
-import type { PrThreadState, ReviewThreadDetail } from "../../integrations/github.ts";
+import type { PrThreadState, ReviewThreadDetail } from "../../integrations/gitHost.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
-import {
-  NO_GITHUB,
-  RunAbandonedError,
-  WorktreeHeadError,
-  type GithubActions,
-  type Runner,
-  type RunnerRequest,
-  type RunnerResult,
-} from "../types.ts";
+import { NO_GIT_HOSTS, type GitHostActions } from "../../integrations/gitHosts.ts";
+import { RunAbandonedError, WorktreeHeadError, type Runner, type RunnerRequest, type RunnerResult } from "../types.ts";
 import {
   attemptBudget,
   attemptBudgets,
@@ -127,8 +120,8 @@ function setup() {
   const resolved: string[] = [];
   /** GitHub's refusal for every thread, or for some by id. */
   let failResolve: string | Record<string, string> | null = null;
-  const github: GithubActions = {
-    ...NO_GITHUB,
+  const gitHosts: GitHostActions = {
+    ...NO_GIT_HOSTS,
     postReview: () => Promise.reject(new Error("not in these tests")),
     prHead: async () => live,
     reviewThreads: async () => threadState,
@@ -144,7 +137,7 @@ function setup() {
     services: () => h.services,
     bus: h.bus,
     runner,
-    github,
+    gitHosts,
     debounceMs: 5,
     tickMs: 1_000_000,
     log: { warn: () => {} },

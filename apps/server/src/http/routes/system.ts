@@ -119,7 +119,7 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
 
   app.get(
     "/api/integrations/status",
-    handle((c) => c.json({ t3: integrations.t3Status(), github: integrations.githubStatus() })),
+    handle((c) => c.json({ t3: integrations.t3Status(), gitHosts: integrations.gitHostStatuses() })),
   );
   app.get(
     "/api/integrations/t3/status",
