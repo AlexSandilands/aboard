@@ -761,6 +761,12 @@ Autopilot explains integration branches and gives each target a sentence, its ga
   `epic-pr-body:<linkId>:<hash of the body>` changes exactly when the body does, so nothing in it is a time. A closed
   epic PR is left alone. Nothing in Autopilot merges it.
 
+**Improve automations** (`improve_automations`, #133; `automations/improveAutomations.ts`). Needs an agent, is in the
+Upkeep group and is off until switched on. A weekly (`weekday`, `time`) task-less headless agent per project that audits
+recent runs, failures and review rounds and writes at most `maxSuggestions` Suggestions through `suggest_change`; the
+design, tools and cap are in [suggestions.md](suggestions.md#the-improve-automation). Its `improve` operation defaults to
+the Deep tier.
+
 **Orchestrate** (`orchestrate`, #138; `automations/orchestrate.ts`). Needs an agent and is off until switched on.
 The built-in version of the T3 Code "babysitter" threads: a scheduled agent per project that keeps its work moving.
 
@@ -1279,14 +1285,8 @@ text in full, as untrusted, before **Import**. A file with a script also shows `
 the editor too: it runs as you and can do anything you can, such as approve PRs through `gh`; text it reads from GitHub
 comes from anyone who can comment, so it should check who wrote it) and a switch ("I've read the script above and I understand it runs on my machine as me"), which
 **Import** waits for. It also offers the
-files in `AUTOMATION_EXAMPLES` (`automationExamples.ts`). **Improve prompts and skills** (#134) is a weekly (Monday 07:00)
-scheduled agent on the `deep` tier with the inputs `look_back_days`, `max_suggestions` and `targets`, `allowedTools:
-["Skill"]` (a headless run is denied the Skill tool otherwise) and its own skill, `<brand id>-improve`, in the file.
-The skill holds the method and the rules that keep suggestions lean (evidence from at least two tasks or one costly
-one, one behaviour each, rewrite or delete rather than add, no growth without a stated reason); the prompt holds the
-inputs. Each run audits its own project (`board_activity` with the project's folder), proposes through
-`suggest_change`, and hands over what it proposed, what was accepted and what to watch; `get_editable_prompt` lists a
-target's recent suggestions with their status, so it can leave an open one alone and not repeat a rejected one.
+file in `AUTOMATION_EXAMPLES` (`automationExamples.ts`). The "Improve prompts and skills" example that was here is now the built-in
+[Improve automations](suggestions.md#the-improve-automation); a copy someone imported is an ordinary custom automation and is unaffected.
 
 **Review repo PRs** (#230) is the example of a [check script](#check-scripts): a version 2 file, since it carries one. A
 schedule every 5 minutes, an agent action with `check` (`REVIEW_PRS_CHECK_SCRIPT`, Node, 120 seconds) and the inputs
@@ -1627,6 +1627,7 @@ each with what it needs from the provider and a default that is a tier or inheri
 | Board reviewer (`boardReviewer`)             | standard | structured output, tool rules           |
 | PR review (`prReview`)                       | standard | structured output, untrusted lockdown, run tools |
 | Orchestrate (`orchestrate`)                  | standard | untrusted lockdown, tool rules          |
+| Improve automations (`improve`)              | deep    | untrusted lockdown, tool rules           |
 | Digest (`digest`)                            | light   | no tools                                 |
 | Custom agents on a task (`customTask`)       | inherit | edit                                     |
 | Custom agents without a task (`customDetached`) | light | nothing                                 |

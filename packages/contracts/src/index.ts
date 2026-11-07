@@ -42,6 +42,7 @@ export * from "./automationDrafts.ts";
 export * from "./automationSdk.ts";
 export * from "./automationExamples.ts";
 export * from "./digest.ts";
+export * from "./improveSkill.ts";
 export * from "./stats.ts";
 export * from "./notifications.ts";
 export * from "./keybindings.ts";

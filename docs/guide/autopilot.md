@@ -341,6 +341,38 @@ same section. It clears the flag and nothing else: the run stays as it was and A
 unlike Retry it can't repeat something that already took effect (such as posting a second review). A new problem on
 the task flags it again.
 
+## Improve automations
+
+**Improve automations** audits how agents did and suggests changes to the text they run with. It is off until you
+switch it on, and it runs once a week (**Day** and **Time**, Monday 07:00 by default) in each project it is on in.
+It reads what happened over the last **Look back** days (7): review rounds and findings, failed or retried
+Autopilot runs, blocked steps, stalls and agents' notes. It looks closer at the few tasks that went worst, and at
+their session transcripts only when the notes don't say why. Then it suggests at most **Most suggestions per run**
+(3) rewrites of your review and planning skills, your custom automations' prompts and the skills they name
+(**May suggest changes to** narrows that to skills or prompts). You decide each one under
+**Settings → Tasks → Suggestions** ([Suggested changes](settings.md#suggested-changes)). It never edits anything
+itself: its only tools besides reading are `suggest_change` and an attention request, and a suggestion over the limit,
+or for a kind of target you didn't allow, is dropped. A project where nothing happened in the look-back window is
+skipped, so an idle project costs nothing.
+
+Its skill is built in, so it can't run without it and quietly propose nothing. The skill keeps suggestions few and lean:
+
+- each one cites the tasks that show the problem: at least two, or one that cost a failed run or a blocked task;
+- it rewrites or deletes the sentence that caused the problem rather than adding one, and a suggestion that makes
+  the text longer says why in its first line;
+- one behaviour per suggestion, no generic advice ("be careful"), the target's own wording and layout kept;
+- with weak evidence it suggests nothing, which is a good week.
+
+To use your own rules instead, pick a skill under **Improve skill**. If that skill's file has gone missing the run
+fails and says which skill it couldn't read, instead of running without one; pick another, or **Built-in**.
+
+Its handover remembers what it suggested, so the next run sees whether you accepted it and whether the problem went
+away, and `get_editable_prompt` shows what you decided, so it doesn't suggest again what you rejected. Text the
+board itself ships (its tool descriptions) can't be suggested to; the agent says so in its summary. It runs on the Deep
+model tier (change it under **Settings → Agents → Models**) and counts against the agent limits. Switching it on
+doesn't catch up on weeks before: the first run is the first slot after you switch it on. Several runs at the same
+moment can both suggest for one skill; the later one replaces the earlier, which stays in the history.
+
 Other automations have their own guides: [Recurring tasks](recurring-tasks.md) and the
 [Digest of what changed](digest.md).
 
