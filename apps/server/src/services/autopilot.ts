@@ -181,8 +181,11 @@ export interface AutopilotService {
   lastHandover(automation: string, projectId: string): string | null;
   /** The run that made this headless session; null when Autopilot didn't. */
   runForSession(sessionId: string): AutopilotRun | null;
-  /** When the board's setting for an automation (its switch or config) last changed; null when it has none. */
-  settingChangedAt(automation: string): string | null;
+  /**
+   * When the board's setting for an automation (its switch or config) last changed; null when it has none. With a
+   * project, the latest of the board's and that project's.
+   */
+  settingChangedAt(automation: string, projectId?: string): string | null;
   /** Finished headless runs that made a worktree, oldest first. */
   finishedWithWorktree(): AutopilotRun[];
   /** Real agent runs started and spend since `since`, and agent runs going now. */
@@ -770,9 +773,18 @@ export function createAutopilotService(
       return parsed.success && parsed.data.handover ? capHandover(parsed.data.handover) : null;
     },
     runForSession: (sessionId) => repos.autopilotRuns.forSession(sessionId),
-    settingChangedAt: (automation) =>
-      repos.autopilotSettings.all().find((s) => s.scopeKind === "board" && s.automation === automation)?.updatedAt ??
-      null,
+    settingChangedAt: (automation, projectId) =>
+      repos.autopilotSettings
+        .all()
+        .filter(
+          (s) =>
+            s.automation === automation &&
+            (s.scopeKind === "board" ||
+              (projectId !== undefined && s.scopeKind === "project" && s.scopeId === projectId)),
+        )
+        .map((s) => s.updatedAt)
+        .sort()
+        .at(-1) ?? null,
     finishedWithWorktree: () => repos.autopilotRuns.finishedWithWorktree(),
     usage,
     record({ automation, candidate, dryRun }) {

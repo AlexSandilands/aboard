@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { attachmentToken } from "@repo/contracts";
+import { ACTOR_HEADER, attachmentToken } from "@repo/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -46,12 +46,37 @@ describe("MCP endpoint", () => {
   });
 
   it("places every tool on one side of Orchestrate's allow or deny list", async () => {
+    // The social network's tools are registered only while it is on.
+    h.services.settings.update({ socialNetwork: true });
     const { tools } = await client.listTools();
     const placed = new Set<string>([...ORCHESTRATE_BOARD_TOOLS, ...ORCHESTRATE_DENIED_BOARD_TOOLS]);
     expect(tools.map((t) => t.name).filter((name) => !placed.has(name))).toEqual([]);
     expect(
       ORCHESTRATE_BOARD_TOOLS.filter((name) => (ORCHESTRATE_DENIED_BOARD_TOOLS as readonly string[]).includes(name)),
     ).toEqual([]);
+  });
+
+  it("records a run's writes under the actor its config pins, whatever the agent passes", async () => {
+    const pinned = new Client({ name: "claude-code", version: "1.0.0" });
+    await pinned.connect(
+      new StreamableHTTPClientTransport(new URL("http://127.0.0.1:4317/mcp"), {
+        requestInit: { headers: { [ACTOR_HEADER]: "improve-automations:abc12345" } },
+        fetch: (input, init) => {
+          const url = new URL(input instanceof Request ? input.url : String(input));
+          const headers = new Headers(init?.headers);
+          headers.set("host", "127.0.0.1:4317");
+          return Promise.resolve(h.app.request(url.pathname + url.search, { ...init, headers }));
+        },
+      }),
+    );
+    const project = h.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
+    await pinned.callTool({
+      name: "add_to_backlog",
+      arguments: { title: "Pinned", workspacePath: "/work/alpha", actor: "someone-else" },
+    });
+    await pinned.close();
+    const task = h.services.tasks.summaries({ projectId: project.id }).find((t) => t.title === "Pinned")!;
+    expect(h.services.tasks.detail(task.id).events.map((e) => e.actor)).toEqual(["improve-automations:abc12345"]);
   });
 
   it("lists the agent tools", async () => {

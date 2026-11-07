@@ -677,6 +677,12 @@ Autopilot explains integration branches and gives each target a sentence, its ga
   `epic-pr-body:<linkId>:<hash of the body>` changes exactly when the body does, so nothing in it is a time. A closed
   epic PR is left alone. Nothing in Autopilot merges it.
 
+**Improve automations** (`improve_automations`, #133; `automations/improveAutomations.ts`). Needs an agent, is in the
+Upkeep group and is off until switched on. A weekly (`weekday`, `time`) task-less headless agent per project that audits
+recent runs, failures and review rounds and writes at most `maxSuggestions` Suggestions through `suggest_change`; the
+design, tools and cap are in [suggestions.md](suggestions.md#the-improve-automation). Its `improve` operation defaults to
+the Deep tier.
+
 **Orchestrate** (`orchestrate`, #138; `automations/orchestrate.ts`). Needs an agent and is off until switched on.
 The built-in version of the T3 Code "babysitter" threads: a scheduled agent per project that keeps its work moving.
 
@@ -1195,14 +1201,8 @@ text in full, as untrusted, before **Import**. A file with a script also shows `
 the editor too: it runs as you and can do anything you can, such as approve PRs through `gh`; text it reads from GitHub
 comes from anyone who can comment, so it should check who wrote it) and a switch ("I've read the script above and I understand it runs on my machine as me"), which
 **Import** waits for. It also offers the
-files in `AUTOMATION_EXAMPLES` (`automationExamples.ts`). **Improve prompts and skills** (#134) is a weekly (Monday 07:00)
-scheduled agent on the `deep` tier with the inputs `look_back_days`, `max_suggestions` and `targets`, `allowedTools:
-["Skill"]` (a headless run is denied the Skill tool otherwise) and its own skill, `<brand id>-improve`, in the file.
-The skill holds the method and the rules that keep suggestions lean (evidence from at least two tasks or one costly
-one, one behaviour each, rewrite or delete rather than add, no growth without a stated reason); the prompt holds the
-inputs. Each run audits its own project (`board_activity` with the project's folder), proposes through
-`suggest_change`, and hands over what it proposed, what was accepted and what to watch; `get_editable_prompt` lists a
-target's recent suggestions with their status, so it can leave an open one alone and not repeat a rejected one.
+file in `AUTOMATION_EXAMPLES` (`automationExamples.ts`). The "Improve prompts and skills" example that was here is now the built-in
+[Improve automations](suggestions.md#the-improve-automation); a copy someone imported is an ordinary custom automation and is unaffected.
 
 **Review repo PRs** (#230) is the example of a [check script](#check-scripts): a version 2 file, since it carries one. A
 schedule every 5 minutes, an agent action with `check` (`REVIEW_PRS_CHECK_SCRIPT`, Node, 120 seconds) and the inputs
@@ -1543,6 +1543,7 @@ each with what it needs from the provider and a default that is a tier or inheri
 | Board reviewer (`boardReviewer`)             | standard | structured output, tool rules           |
 | PR review (`prReview`)                       | standard | structured output, untrusted lockdown, run tools |
 | Orchestrate (`orchestrate`)                  | standard | untrusted lockdown, tool rules          |
+| Improve automations (`improve`)              | deep    | untrusted lockdown, tool rules           |
 | Digest (`digest`)                            | light   | no tools                                 |
 | Custom agents on a task (`customTask`)       | inherit | edit                                     |
 | Custom agents without a task (`customDetached`) | light | nothing                                 |
@@ -1647,8 +1648,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
     and `overview.lastRuns`), and its board switch (on saves the mode `restoreMode` gives, off saves `inherit`). A
     row in Preview has an amber **Preview** badge instead of the dot. An
     automation off on the board and in every project is dimmed, as a switched-off provider is; its switch stays.
-    **+ Add automation** opens a chooser: New (the editor) or Import. `?automation=<key>` picks a row; with none,
-    the first is shown.
+    **+ Add automation** opens [the Add gallery](#the-add-gallery), and **Ask an agent** beside it is
+    [the hand-off](#ask-an-agent). `?automation=<key>` picks a row; with none, the first is shown.
   - **The detail**: a header with the status line (`statusLine`, "Preview · …" in Preview) and **Switch on/off**,
     plus **Export** and **Delete** for a custom automation; in Preview, a notice with how often it would have run this
     week (`previewHint`), **See them** (its run history) and **Turn on**; **What it does**, one sentence read from its
@@ -1659,7 +1660,57 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
     Its heading gets a dot when an advanced value isn't the default (`advancedChanged`). A field without a tier is
     advanced. A custom automation's trigger and action are edited in its editor (**Edit**,
     `/settings/autopilot/custom/<id>`).
+  - **Quick setup as the empty state**: while nothing is on at any scope (`isOffEverywhere` for every row), the tab shows
+    [Quick setup](#quick-setup) above Needs you.
   - At phone width the card shows one side at a time: the list, then the detail with an **All automations** link back.
+#### The Add gallery
+
+`AddAutomationDialog` (`components/autopilot/`), opened by **+ Add automation**, is one place to start anything:
+
+- **Quick setup**, a row with **Choose…** that opens [the card](#quick-setup) inside the dialog.
+- **Quickest: ask your agent**, with the [Ask an agent](#ask-an-agent) menu.
+- **Recipes** (`AUTOMATION_RECIPES`, `automationExamples.ts`): ready-made custom automations as bundles. A card opens the
+  import page with `?recipe=<id>`, where the bundle is read like a shared file and saves in Preview. They are plain
+  custom automations; nothing marks one as a recipe afterwards. A recurring-task rule is not a recipe: it needs a
+  project and a template.
+- **Import a file** (the import page) and **Start from scratch** (the editor, `/settings/autopilot/custom/new`).
+
+Built-ins that are switched off stay in the main list, dimmed, so the gallery doesn't repeat them.
+
+#### Quick setup
+
+`QUICK_SETUP_PRESETS` (`packages/contracts/src/quickSetup.ts`) names three one-off presets: **Notify** (Digest, Remind
+me about stuck tasks, Unblock dependents, Auto-archive Done), **Assist** (Review PRs, Fix PRs, Digest, stuck-task
+reminders, Auto-archive) and **Hands-off** (Start planned tasks, Orchestrate, Review PRs, Fix PRs, Merge ready PRs,
+stuck-task reminders, Auto-archive). Quick setup writes only each automation's mode: Merge ready PRs' Into main setting, like every other config, is left as it is.
+
+`quickSetupChanges(level, state)` is pure and drives both the list the card shows and the writes it makes
+(`quickSetupWrites`): each preset automation that is off or inherits at the **board** scope is switched on there; one
+already On or in Preview is listed as "already on" and left alone; one with `blocked` is listed and skipped. A project
+that switches one Off for itself is named in the row ("Stays off in …"), since the board write doesn't override it.
+Automations that start an agent or act on GitHub start in **Preview** while "Start agent automations in Preview"
+(on by default) is on; the rest start On.
+
+Apply (`useApplyQuickSetup`) sends the writes one after another through the board scope's `PUT`, since the server has
+no batch; a refused write is reported in one toast and doesn't stop the others. **Nothing stores the level**: the writes
+are ordinary board switches, and the next Quick setup reads what is on then.
+
+#### Ask an agent
+
+There is no chat box. `AskAgentMenu` (`handoff/HandoffActions.tsx`) hands a prompt to the user's own agent as **New T3
+Code thread…** (one item per project that can start one, `canStartProjectT3Thread`; the dialog's `prompt` launch kind
+shows the prompt for editing first and starts it in a project thread linked to nothing) or **Copy prompt**. It sits
+beside **Add automation** (`createAutomationPrompt`), as **Ask an agent to change this** in each automation's detail
+header (`changeAutomationPrompt`) and as **Ask an agent to fix** on a failed run in Needs you and the Runs tab
+(`fixRunPrompt`), all in `packages/contracts/src/automationPrompts.ts`.
+
+The prompts name the `aboard-automations` skill and `draft_automation`. A custom automation's prompt carries its id and
+definition (as a shared-file bundle, cut at 6,000 characters), and the agent drafts a replacement for the user to
+review; a built-in's tells the agent it can't change settings and should say which to change. A fix prompt carries the
+run's summary, error, exit code and the last lines of its output, and `retry_autopilot_run` when the run was on a
+task. They all say a draft isn't active until the user imports it. A session in a CLI harness isn't offered: those
+launchers are task- and planning-specific.
+
 - **Runs** (`/settings/autopilot/runs/$automation`): the [run history](#run-history) of every automation (`all`) or
   one.
 - **Limits & safety** (`/settings/autopilot/limits`, `AutopilotLimits`): spending and timing (concurrency, the daily
@@ -1772,6 +1823,9 @@ button beside a field's title (shown only while the key is set at that scope) re
 | `packages/contracts/src/customAutomations.ts` | Custom triggers, filters and actions, placeholders, the shell environment, the definition check |
 | `apps/server/src/autopilot/custom.ts`, `services/customAutomations.ts` | Custom automations as catalogue entries, and their service |
 | `apps/server/src/integrations/shellCommand.ts`, `scriptRunner.ts`, `captureProcess.ts` | Running a shell or script action, and the spawn they share |
+| `packages/contracts/src/quickSetup.ts` | Quick setup's presets and `quickSetupChanges` |
+| `packages/contracts/src/automationPrompts.ts` | The Ask an agent prompts: create, change this, fix this run |
+| `apps/web/src/components/autopilot/AddAutomationDialog.tsx`, `QuickSetup.tsx`, `AskAgentButtons.tsx` | The Add gallery, the Quick setup card, and the change and fix menus |
 | `packages/contracts/src/automationVariables.ts` | Variables: the schema and `effectiveVariables` |
 | `packages/contracts/src/automationSdk.ts` | What a script can read, and the snippets the editor's panel shows |
 | `apps/server/src/integrations/gitRemote.ts` | `remoteRepo`, `repoWebUrl` and the cached repository URL per folder |

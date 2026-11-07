@@ -2,6 +2,7 @@ import type { Automation } from "../types.ts";
 import { autoArchive } from "./autoArchive.ts";
 import { digest } from "./digest.ts";
 import { fixPrs } from "./fixPrs.ts";
+import { improveAutomations } from "./improveAutomations.ts";
 import { mergeEpicPrs } from "./mergeEpicPrs.ts";
 import { orchestrate } from "./orchestrate.ts";
 import { recurring } from "./recurring.ts";
@@ -21,4 +22,5 @@ export const AUTOMATIONS: readonly Automation[] = [
   mergeEpicPrs,
   orchestrate,
   digest,
+  improveAutomations,
 ];

@@ -1,4 +1,4 @@
-import { BRAND } from "@repo/contracts";
+import { ACTOR_HEADER, BRAND } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { RUN_SERVER_NAME } from "../mcp/runTokens.ts";
 import {
@@ -164,6 +164,14 @@ describe("headless agent", () => {
     const token = ["t", "1"].join("");
     expect(JSON.parse(boardMcpConfig("http://127.0.0.1:1/mcp", token)).mcpServers[BRAND.id].headers).toEqual({
       Authorization: `Bearer ${token}`,
+    });
+  });
+
+  it("can pin the actor the board records the run's writes under", () => {
+    expect(
+      JSON.parse(boardMcpConfig("http://127.0.0.1:1/mcp", null, "improve-run")).mcpServers[BRAND.id].headers,
+    ).toEqual({
+      [ACTOR_HEADER]: "improve-run",
     });
   });
 
