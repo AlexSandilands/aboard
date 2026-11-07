@@ -1,4 +1,5 @@
 import {
+  ACTOR_HEADER,
   BRAND,
   HEADLESS_CAPABILITIES,
   type AgentHarness,
@@ -151,10 +152,15 @@ export interface AgentArgsInput {
 
 /**
  * An MCP config with only this board's server, for `--mcp-config`. It carries the board's API token when one is set,
- * so it goes in a file of the runner's, not on the command line.
+ * so it goes in a file of the runner's, not on the command line. With `actor`, the board records everything the run
+ * writes as that actor, whatever the agent passes.
  */
-export function boardMcpConfig(url: string, token: string | null): string {
-  const server = { type: "http", url, ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}) };
+export function boardMcpConfig(url: string, token: string | null, actor?: string): string {
+  const headers = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(actor ? { [ACTOR_HEADER]: actor } : {}),
+  };
+  const server = { type: "http", url, ...(Object.keys(headers).length > 0 ? { headers } : {}) };
   return JSON.stringify({ mcpServers: { [BRAND.id]: server } });
 }
 
