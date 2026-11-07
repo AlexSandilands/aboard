@@ -296,7 +296,8 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
     (`pillTimerAt`, `formatPillCountdown`): only when a slot would run, so not while paused, while its run is going,
     with nothing to look at (`useProjectHasOrchestrateWork`, from the snapshot with the server's rule) or in quiet hours
     at the slot. The daily caps are left to the popover. One display preference, `showAutopilotTimer` in
-    `useBoardView` (default on), is switched in Settings → Autopilot, in Orchestrate's card (**Countdown on lanes**).
+    `useBoardView` (default on), is switched in Settings → Appearance (**Autopilot countdown on lanes**,
+    `board.appearance.autopilot-countdown`; the old `autopilot.engine.orchestrate.countdown` target redirects there).
 - **The epic's Autopilot button** (`AutopilotEpicButton`), a small circle at the end of the epic band's header and
   in the epic panel's top bar. It has the pill's four states and the same sweep (it wears `.autopilot-pill`, so
   reduced motion is respected), animates while a run on one of the epic's tasks is going (`epicId` on the active
@@ -404,7 +405,18 @@ providers, tiers and custom models are each a row in a list, however many there 
   notes, or why nothing can. With no CLI provider added and switched on (`activeProviderIds`) nothing can run, so the
   rows are dimmed and inert under one notice instead of each carrying the same reason.
 
-Models and Operations show only once a provider is added. `integrations` keeps GitHub, Ticket systems and Terminal.
+Models and Operations show only once a provider is added.
+
+`autopilot` is three tabs, each a sidebar section with a path of its own: **Automations** (`autopilot.automations`,
+`/settings/autopilot`: a status strip, Needs you, and every automation on the same split card, `?automation=`
+picking one), **Runs** (`autopilot.runs`, the run history at `/settings/autopilot/runs/<automation>`) and **Limits &
+safety** (`autopilot.limits`, `/settings/autopilot/limits`). A target on Runs or Limits navigates to that path
+(`autopilotTabOf`), and the two count as pages, not editors (`isEditorPath`), so Esc leaves Settings from them. The
+split card takes `detailOpen` there: under 48rem it shows the list or the detail, not both, and the detail has an
+**All automations** link back (`SplitBack`). What the tabs hold is in [autopilot.md](autopilot.md#the-ui). The old
+page's targets (`autopilot.engine…`, `autopilot.custom…`) redirect to where they are now.
+
+`integrations` keeps GitHub, Ticket systems and Terminal.
 Old targets and URLs are read as they are now (`redirectSettingsTarget`, applied by `parseSettingsTarget` and the
 route's `beforeLoad`): `integrations.<provider>…` and `providers.…` go to `agents.providers.…`, and `models.tiers…`,
 `models.custom…` and `models.operations…` to their place on Agents (`MOVED_TO_AGENTS`).

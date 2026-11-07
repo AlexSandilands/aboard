@@ -1,12 +1,13 @@
 # Custom automations
 
 A custom automation is an Autopilot automation you define yourself: say what to watch for, and what to do. It
-sits in the Autopilot list next to the built-in ones, with the same **Inherit / On / Off** switches per project,
-and keeps to the same pause, dry run, caps and quiet hours.
+sits in the Autopilot list next to the built-in ones, under **Yours**, with the same **Inherit / On / Off** switches
+per project, and keeps to the same pause, dry run, caps and quiet hours. Click it in the list to see what it does in
+one sentence, switch it on or off, **Edit** it, **Export** it or **Delete** it.
 
 ## Setting one up
 
-**Settings → Autopilot → Custom automations → New automation.**
+**Settings → Autopilot → + Add automation → New automation** (the last row of the list).
 
 1. **When**: pick a trigger.
    - **A task changes column**: into a column, and optionally only from one (Done → In Progress catches reopened
@@ -27,7 +28,7 @@ and keeps to the same pause, dry run, caps and quiet hours.
      `{{project.repo_url}}`, `{{automation.name}}`, your [variables](#variables) as `{{vars.name}}` and
      [inputs](#inputs-and-required-tools) as `{{inputs.name}}`; the task's title, labels, PR and description are added after it. Optionally name a
      skill the agent should use, a model (inherit, a tier, a custom model or any provider's model), and whether to work on the task's pull request branch. The runner,
-     budget and timeout are the automation's settings in the Autopilot list, like any agent automation's
+     budget and timeout are the automation's settings under **Advanced** in the Autopilot list, like any agent automation's
      ([Autopilot](autopilot.md#runners)). On a schedule the agent has no task: it runs headless in an empty
      temporary folder, not the project's own, and is told the project's name and folder (and not to edit the folder, which is only a request: nothing stops it); it can use the board's
      tools to find its work, with the same edit access as any Autopilot agent (it is told not to push to the default
@@ -36,7 +37,7 @@ and keeps to the same pause, dry run, caps and quiet hours.
      Each scheduled run ends with a short **handover**: a note of what the next run needs to know, such as items it is
      holding or waiting on, what it triggered, and what it already triaged or skipped. The next run of the same
      automation in the same project is given it (cut off at 4,000 characters), so the agent remembers between
-     runs. A run that fails leaves no handover, so the one before it is passed on. The editor's **Run history** opens a page that lists
+     runs. A run that fails leaves no handover, so the one before it is passed on. The editor's **Run history** (or **All runs** on the automation) opens a page that lists
      each run's summary and handover ([Autopilot](autopilot.md#run-history)).
 
      Under **Allowed tools** you can list tools the agent may use besides the board's own, one per line: a whole MCP
@@ -205,7 +206,7 @@ everyone who can write the text it reads is someone you trust. The editor warns,
 
 Variables are values your automations read that differ by project, so one automation works everywhere without
 branching on the project's name: a Jira key, a team, a board id. Set them for every project under **Settings →
-Autopilot → Custom automations → Variables**, and override them for one project in its settings (**Autopilot
+Autopilot → Limits & safety → Variables**, and override them for one project in its settings (**Autopilot
 overrides → Automation variables**), where you also see the board's value each override replaces.
 
 | Where           | How to read `jira_key`                                                   |
@@ -263,7 +264,7 @@ prompt, skill name and allowed tools, any script or check script (in full), the 
 slots **without** their tools. It leaves out your projects, your epic and the tools you filled the slots with. If the
 automation names a skill you have installed, the skill's text goes in the file.
 
-To use someone's file: **Custom automations → Import**, then choose the file (or one of the examples the app ships:
+To use someone's file: **+ Add automation → Import**, then choose the file (or one of the examples the app ships:
 **Improve prompts and skills** or **Review repo PRs**). Before anything is saved you see everything it
 would run: the prompt, any command, script or check script (with its language), the tools it may use without asking and
 the skill's text. Treat it as code from a stranger, because once you switch it on it runs on
@@ -367,7 +368,8 @@ how to pick a trigger and action, use your variables, inputs and tool slots, wri
 treats what it reads as data, and test it before handing it over. Without it the agent still has the tool, just
 less guidance.
 
-Drafts waiting for you are listed at the top of **Custom automations**, with **Review** and **Dismiss**. Importing a
+Drafts waiting for you are listed under **Needs you** at the top of Settings → Autopilot, with **Review** and
+**Dismiss**. Importing a
 draft removes it; one you leave is dropped after 14 days. Drafts aren't backed up.
 
 ## Commands and scripts run on your machine

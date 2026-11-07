@@ -1,9 +1,7 @@
 import type { AppSettings } from "@repo/contracts";
 import { useParams } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { AutopilotEngineSection } from "~/components/autopilot/AutopilotSettingsSection";
-import { CustomAutomationsSection } from "~/components/autopilot/CustomAutomationsSection";
-import { BoardVariablesSection } from "~/components/autopilot/VariablesSection";
+import { AutopilotAutomationsTab } from "~/components/autopilot/AutopilotPage";
 import { NotificationsSection } from "~/components/notifications/NotificationsSection";
 import { VersionAndSocial } from "~/components/social/SocialSettings";
 import { useIntegrationsStatus, useSettings } from "~/state/queries";
@@ -73,17 +71,7 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
     case "agents":
       return <AgentsContent />;
     case "autopilot":
-      return (
-        <>
-          <SettingsSubsection id="autopilot.engine">
-            <AutopilotEngineSection />
-          </SettingsSubsection>
-          <SettingsSubsection id="autopilot.custom">
-            <CustomAutomationsSection />
-            <BoardVariablesSection />
-          </SettingsSubsection>
-        </>
-      );
+      return <AutopilotAutomationsTab />;
     case "integrations":
       return <IntegrationsContent />;
   }

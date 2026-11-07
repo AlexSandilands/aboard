@@ -74,16 +74,17 @@ describe("settingsIndex", () => {
     expect(entries.filter((entry) => !entry.id.startsWith(entry.sectionId)).map((entry) => entry.id)).toEqual([]);
   });
 
-  it("marks the built-in automations as folded sections, and nothing else", () => {
-    const folded = entries.filter((entry) => entry.foldedIn !== null);
-    expect(folded.map((entry) => entry.id)).toEqual(
-      AUTOMATION_ENTRIES.map((automation) => `autopilot.engine.automation-${automation.key}`),
-    );
-    for (const entry of folded) expect(entry.foldedIn).toBe(entry.id);
+  it("indexes the built-in automations as rows of the Automations list, with nothing folded", () => {
+    expect(entries.filter((entry) => entry.foldedIn !== null)).toEqual([]);
+    for (const { key } of AUTOMATION_ENTRIES) {
+      expect(entries.find((entry) => entry.id === `autopilot.automations.${key}`)).toMatchObject({
+        sectionId: "autopilot.automations",
+      });
+    }
   });
 
-  it("indexes Orchestrate's own area as a card, not a folded section", () => {
-    expect(entries.find((entry) => entry.id === "autopilot.engine.orchestrate")).toMatchObject({
+  it("indexes Orchestrate as a card in the Automations list", () => {
+    expect(entries.find((entry) => entry.id === "autopilot.automations.orchestrate")).toMatchObject({
       title: "Orchestrate",
       kind: "card",
       foldedIn: null,
@@ -101,8 +102,8 @@ describe("settingsIndex", () => {
 
 describe("settingsLocation", () => {
   it("names the group and sub-section a setting is in", () => {
-    const row = entries.find((entry) => entry.id === "autopilot.engine.quiet-hours")!;
-    expect(settingsLocation(row)).toBe("Autopilot");
+    const row = entries.find((entry) => entry.id === "autopilot.limits.quiet-hours")!;
+    expect(settingsLocation(row)).toBe("Autopilot › Limits & safety");
     const provider = entries.find((entry) => entry.id === "agents.providers.claude-code.cli-path")!;
     expect(settingsLocation(provider)).toBe("Agents › Providers");
   });

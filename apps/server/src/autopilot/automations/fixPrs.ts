@@ -417,27 +417,37 @@ const DEFAULTS: Config = {
 };
 
 const FIELDS: AutopilotField[] = [
-  { key: "onChecks", label: "Failing checks", kind: "boolean", help: "Fix the PR when its checks fail." },
+  {
+    key: "onChecks",
+    label: "Failing checks",
+    kind: "boolean",
+    tier: "essential",
+    help: "Fix the PR when its checks fail.",
+  },
   {
     key: "onConflicts",
+    tier: "essential",
     label: "Merge conflicts",
     kind: "boolean",
     help: "Merge the base branch in when the PR conflicts with it.",
   },
   {
     key: "onChangesRequested",
+    tier: "essential",
     label: "Changes requested",
     kind: "boolean",
     help: "Address a review that requests changes.",
   },
   {
     key: "onComments",
+    tier: "essential",
     label: "Review comments",
     kind: "boolean",
     help: "Address new review comments from people with access to the repository. Your own don't count: Autopilot posts as you.",
   },
   {
     key: "onAutopilotReview",
+    tier: "essential",
     label: "Autopilot's review",
     kind: "boolean",
     help: "Fix what Review PRs found at or above the fix threshold.",
@@ -486,6 +496,7 @@ export const fixPrs = defineAutomation({
   description:
     "Fixes linked pull requests when checks fail, they conflict, a reviewer asks for changes or comments, or Autopilot's review finds issues.",
   needsAgent: true,
+  group: "prs",
   schema: ConfigSchema,
   fields: FIELDS,
   defaults: DEFAULTS,

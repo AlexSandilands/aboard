@@ -385,6 +385,37 @@ export function createAutopilotRunsRepo(sql: Sql) {
         )?.total ?? 0
       );
     },
+    /** Each automation's latest real finished run: its status and when it finished. */
+    latestFinished(): { automation: string; status: AutopilotRunStatus; at: string }[] {
+      return sql.all<{ automation: string; status: AutopilotRunStatus; at: string }>(
+        `SELECT automation, status, finished_at AS at FROM (
+           SELECT automation, status, finished_at,
+             ROW_NUMBER() OVER (PARTITION BY automation ORDER BY finished_at DESC, rowid DESC) AS n
+           FROM autopilot_runs WHERE dry_run = 0 AND finished_at IS NOT NULL
+         ) WHERE n = 1`,
+      );
+    },
+    /**
+     * Real failed runs whose needs-attention flag still stands on their task, by the rules `attentionFor` uses for each
+     * run (not dismissed, written since the task last changed status, no later success of the same automation on it),
+     * newest first. Unstick never fails, so its activity exception doesn't arise.
+     */
+    standingFailures(limit: number): AutopilotRun[] {
+      return sql
+        .all<RunRow>(
+          `SELECT r.* FROM autopilot_runs r JOIN tasks t ON t.id = r.task_id
+           WHERE r.dry_run = 0 AND r.status = 'failed' AND r.needs_attention = 1 AND r.dismissed_at IS NULL
+             AND r.updated_at >= t.status_changed_at
+             AND NOT EXISTS (
+               SELECT 1 FROM autopilot_runs s
+               WHERE s.task_id = r.task_id AND s.automation = r.automation AND s.status = 'succeeded' AND s.dry_run = 0
+                 AND s.finished_at > r.updated_at
+             )
+           ORDER BY r.updated_at DESC, r.rowid DESC LIMIT ?`,
+          limit,
+        )
+        .map(toRun);
+    },
     /** When the task's latest run flagged needs_attention (and not dismissed) was last written, if it has one. */
     latestFlaggedAt(taskId: string): string | null {
       return (

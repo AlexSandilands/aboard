@@ -43,6 +43,7 @@ export function AppearanceSection() {
         <PriorityLaneRow />
         <PinnedLaneHeightRow />
         <ScrollToTaskRow />
+        <AutopilotCountdownRow />
       </SettingsSection>
       <SettingsSection title="Motion">
         <PanelAnimationsRow />
@@ -293,6 +294,19 @@ function ScrollToTaskRow() {
       title="Scroll to a task when opening it"
       description="Slide the board to the card. Off, only the panel opens."
       control={<Switch checked={scroll} onCheckedChange={setScroll} aria-label="Scroll to a task when opening it" />}
+    />
+  );
+}
+
+function AutopilotCountdownRow() {
+  const show = useBoardView((s) => s.showAutopilotTimer);
+  const setShow = useBoardView((s) => s.setShowAutopilotTimer);
+  return (
+    <SettingsRow
+      id="board.appearance.autopilot-countdown"
+      title="Autopilot countdown on lanes"
+      description="The lane's Autopilot pill counts down to Orchestrate's next check (Autopilot · 12m) while it is on in the project."
+      control={<Switch checked={show} onCheckedChange={setShow} aria-label="Autopilot countdown on lanes" />}
     />
   );
 }

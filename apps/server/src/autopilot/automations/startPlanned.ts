@@ -43,6 +43,7 @@ const FIELDS: AutopilotField[] = [
   {
     key: "skill",
     label: "Implement skill",
+    tier: "essential",
     kind: "skill",
     builtinLabel: "Default workflow",
     help: "What the agent follows to do the work. The default is the board's own workflow, from the hand-off prompt.",
@@ -176,6 +177,7 @@ export const startPlanned = defineAutomation({
   description:
     "Starts an agent on each Planned task whose Autopilot flag is On, once it has a plan and nothing blocks it.",
   needsAgent: true,
+  group: "ship",
   schema: ConfigSchema,
   fields: FIELDS,
   defaults: DEFAULTS,

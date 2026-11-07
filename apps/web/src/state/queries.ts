@@ -33,7 +33,7 @@ import type {
   TaskTemplate,
   ProvidersStatus,
 } from "@repo/contracts";
-import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
 import { taskActiveRun } from "~/components/autopilot/autopilot.logic";
 import { projectHasOrchestrateWork } from "~/components/autopilot/orchestrate.logic";
@@ -118,6 +118,21 @@ export function useAutopilotScope(projectId: string | null, enabled = true) {
       ),
     enabled,
     staleTime: 30_000,
+  });
+}
+
+/**
+ * Every listed project's automations at once, for where each automation is on in Settings → Autopilot. Shares its
+ * cache with `useAutopilotScope`.
+ */
+export function useAutopilotProjectScopes(projectIds: readonly string[]) {
+  return useQueries({
+    queries: projectIds.map((projectId) => ({
+      queryKey: queryKeys.autopilotScope(projectId),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        api<AutopilotScopeEntry[]>(`/api/autopilot/projects/${encodeURIComponent(projectId)}`, { signal }),
+      staleTime: 30_000,
+    })),
   });
 }
 

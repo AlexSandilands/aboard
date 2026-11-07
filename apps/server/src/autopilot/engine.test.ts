@@ -508,6 +508,82 @@ describe("failures and attention", () => {
     expect(s.tasks.summary(task.id).attention.map((a) => a.kind)).not.toContain("autopilot");
   });
 
+  it("lists a failed run in the overview's Needs you until it is dismissed, with today's runs and the last run", async () => {
+    const { s, engine, task, started } = setup();
+    s.autopilot.setScope("board", null, "agent", { mode: "on" });
+    await engine.pass();
+    started[0]!.reject(new Error("no runner today"));
+    await engine.idle();
+    const overview = s.autopilot.overview();
+    expect(overview.needsYou).toMatchObject([
+      {
+        kind: "failed_run",
+        title: "Agent",
+        task: `#${s.tasks.summary(task.id).number} One`,
+        run: { error: "no runner today" },
+      },
+    ]);
+    expect(overview.today.agentRuns).toBe(1);
+    expect(overview.lastRuns).toMatchObject([{ automation: "agent", status: "failed" }]);
+    // Every automation is listed under the user's own group unless it names one.
+    expect(overview.automations.map((a) => a.group)).toEqual(["yours", "yours", "yours", "yours"]);
+
+    s.autopilot.dismiss(overview.needsYou[0]!.kind === "failed_run" ? overview.needsYou[0]!.run.id : "", "user");
+    expect(s.autopilot.overview().needsYou).toEqual([]);
+  });
+
+  describe("Needs you", () => {
+    beforeEach(() => void vi.useFakeTimers({ toFake: ["Date"] }));
+    afterEach(() => void vi.useRealTimers());
+    const tick = () => vi.setSystemTime(Date.now() + 1000);
+
+    it("lists the failure that still flags a task, not a newer one a later success cleared", () => {
+      const { s, task } = setup();
+      const run = (automation: string, key: string, result: Parameters<typeof s.autopilot.finish>[1]) => {
+        tick();
+        const recorded = s.autopilot.record({
+          automation,
+          candidate: { dedupeKey: key, summary: key, taskId: task.id },
+          dryRun: false,
+        })!;
+        s.autopilot.start(recorded.id);
+        tick();
+        return s.autopilot.finish(recorded.id, result);
+      };
+      const standing = run("noop", "noop:1", { status: "failed", error: "noop broke", needsAttention: true });
+      run("agent", "agent:1", { status: "failed", error: "agent broke", needsAttention: true });
+      run("agent", "agent:2", {});
+      expect(s.autopilot.overview().needsYou).toMatchObject([{ kind: "failed_run", run: { id: standing.id } }]);
+    });
+
+    it("lists drafts after failed runs and automations missing setup last, leaving out expired drafts", () => {
+      const { s } = setup();
+      const draft = (name: string) =>
+        s.customAutomations.draft(
+          {
+            automation: {
+              name,
+              trigger: { kind: "status_change", to: "review" },
+              action: { kind: "agent", prompt: "Summarise it." },
+            },
+          },
+          "claude-code",
+        );
+      draft("Old draft");
+      vi.setSystemTime(Date.now() + 30 * 86_400_000);
+      const fresh = draft("Fresh draft");
+      s.customAutomations.create({
+        name: "Triage",
+        trigger: { kind: "status_change", to: "review" },
+        action: { kind: "agent", prompt: "Triage it.", slots: [{ name: "tracker", label: "Tracker search" }] },
+      });
+      expect(s.autopilot.overview().needsYou).toMatchObject([
+        { kind: "draft", draftId: fresh.id, name: "Fresh draft", createdBy: "claude-code" },
+        { kind: "setup", title: "Triage", reason: expect.stringContaining("Tracker search") },
+      ]);
+    });
+  });
+
   describe("on a frozen clock", () => {
     // Fast runners finish a failure and a move inside one millisecond; the order must still tell them apart.
     beforeEach(() => void vi.useFakeTimers({ toFake: ["Date"] }));
