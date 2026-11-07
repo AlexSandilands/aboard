@@ -279,7 +279,7 @@ function FilterBar({
             aria-label="Search runs"
             size="sm"
             className="ps-8"
-            placeholder="Search run id, project, #12, summary or handover"
+            placeholder="Search: #12, summary, run id"
             value={text}
             onChange={(event) => setText(event.currentTarget.value)}
           />

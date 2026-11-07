@@ -52,7 +52,8 @@ export function RunHistoryRow({
   const at = run.finishedAt ?? run.startedAt ?? run.createdAt;
   const cost = formatCost(run.costUsd);
   const summary = answer?.summary || run.summary;
-  const retryable = canRetryRun(run, others);
+  // A deferred run's work comes round again by itself, on the new head: retrying it would redo nothing.
+  const retryable = run.deferred === null && canRetryRun(run, others);
   const where = [projectTitle, taskNumber !== null ? `#${taskNumber}` : null].filter(Boolean).join(" ");
   return (
     <li className="text-xs">
