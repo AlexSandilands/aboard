@@ -186,7 +186,7 @@ toggles):
 | Relations    | `#N` chips, red for an open blocker, green once Done, outlined for what the task blocks; each opens its task       |
 | Automation   | Text only                                                                                                          |
 | Local review | The review badge                                                                                                   |
-| Autopilot    | The run that needs attention as a **Needs attention** pill (warning or error colour), else the latest run's status  |
+| Autopilot    | A **Needs attention** pill (warning or error colour) while a run still has a Dismiss in the open section (`summaryRun`), else the latest run's status |
 | Plan         | The step bar (grey to-do, blue current, green done) with done/total and the current step                           |
 | Details, Activity | Text only                                                                                                     |
 

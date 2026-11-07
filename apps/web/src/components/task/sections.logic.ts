@@ -303,7 +303,7 @@ export function summarizeSection(
       return open ? plural(open, "open finding") : reviewBadgeLabel(task.review);
     }
     case "autopilot":
-      return task.attention.find((a) => a.kind === "autopilot")?.message ?? autopilotSummary(task, globalReview);
+      return sectionAttention("autopilot", task)?.message ?? autopilotSummary(task, globalReview);
     case "plan": {
       const { done, total } = task.progress;
       if (total === 0) return "No plan yet";

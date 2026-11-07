@@ -28,6 +28,7 @@ import {
   runStatusLabel,
   scheduledAgentRuns,
   scheduledAnswerOf,
+  summaryRun,
   taskActiveRun,
   withConfigValue,
 } from "./autopilot.logic";
@@ -327,6 +328,39 @@ describe("dismissableRun", () => {
     ];
     expect(dismissableRun(runs, flagged)).toBeNull();
     expect(dismissableRun([...runs, flaggedRun("live")], flagged)?.id).toBe("live");
+  });
+});
+
+describe("summaryRun", () => {
+  const flaggedRun = (id: string, patch: Partial<AutopilotRun> = {}) => ({
+    id,
+    needsAttention: true,
+    dismissedAt: null,
+    dryRun: false,
+    ...patch,
+  });
+  const plain = (id: string) => flaggedRun(id, { needsAttention: false });
+  const flagged = [{ kind: "autopilot" }];
+
+  it("shows the run the Dismiss belongs to as flagged, ahead of a newer one", () => {
+    const shown = summaryRun([plain("newest"), flaggedRun("old")], flagged);
+    expect(shown.run?.id).toBe("old");
+    expect(shown.flagged).toBe(true);
+  });
+
+  it("falls back to the newest run when the task no longer carries the flag", () => {
+    const shown = summaryRun([plain("newest"), flaggedRun("stale")], []);
+    expect(shown.run?.id).toBe("newest");
+    expect(shown.flagged).toBe(false);
+  });
+
+  it("does not flag a dry or dismissed run, which has no Dismiss", () => {
+    const runs = [flaggedRun("dry", { dryRun: true }), flaggedRun("done", { dismissedAt: "2026-10-18T00:00:00.000Z" })];
+    expect(summaryRun(runs, flagged)).toEqual({ run: runs[0], flagged: false });
+  });
+
+  it("has no run when there are none", () => {
+    expect(summaryRun([], flagged)).toEqual({ run: undefined, flagged: false });
   });
 });
 

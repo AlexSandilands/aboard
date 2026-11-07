@@ -305,6 +305,19 @@ export function dismissableRun<T extends Pick<AutopilotRun, "needsAttention" | "
   return runs.find((r) => r.needsAttention && r.dismissedAt === null && !r.dryRun) ?? null;
 }
 
+/**
+ * The run the collapsed Autopilot header shows and whether it is flagged. Flagged means the run the open section
+ * offers a Dismiss for (`dismissableRun`), so the "Needs attention" pill is only ever shown with the header icon and a
+ * Dismiss behind it; otherwise it is the newest run, by its status. `runs` is newest first.
+ */
+export function summaryRun<T extends Pick<AutopilotRun, "needsAttention" | "dismissedAt" | "dryRun">>(
+  runs: readonly T[],
+  attention: ReadonlyArray<{ kind: string }>,
+): { run: T | undefined; flagged: boolean } {
+  const flag = dismissableRun(runs, attention);
+  return flag ? { run: flag, flagged: true } : { run: runs[0], flagged: false };
+}
+
 /** The Autopilot section's collapsed summary. */
 export function runsSummary(runs: ReadonlyArray<Pick<AutopilotRun, "status" | "needsAttention">>): string {
   if (runs.length === 0) return "No runs";
