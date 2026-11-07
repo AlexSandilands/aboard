@@ -158,7 +158,8 @@ describe("notify", () => {
     s.tasks.update(task.id, { archived: true }, "user");
     s.notifications.notify({ kind: "autopilot_notice", taskId: task.id, title: "x", body: "", dedupeKey: "x" });
     events.length = 0;
-    s.tasks.delete(task.id, "user");
+    s.tasks.delete([task.id], {}, "user");
+    s.tasks.purge([task.id], "user");
     expect(s.notifications.list().items).toEqual([]);
     expect(events).toContainEqual({ type: "notifications.changed", unread: 0 });
   });

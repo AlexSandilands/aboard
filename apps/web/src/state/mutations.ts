@@ -1,4 +1,5 @@
 import type {
+  DeleteTasksResult,
   AddLinkResult,
   AgentModels,
   AppSettings,
@@ -220,9 +221,27 @@ export function useSetLabelColor(opts?: MutationOpts) {
   });
 }
 
-/** Permanently deletes a task; the server only allows it for archived tasks. */
-export const useDeleteTask = (opts?: MutationOpts) =>
-  useApiMutation((id: string) => api<void>(`/api/tasks/${enc(id)}`, { method: "DELETE" }), opts);
+/**
+ * Moves tasks to the trash: one through DELETE (with its epic's tasks when `withTasks`), several in one bulk write.
+ * Resolves with the ids that went, for Undo.
+ */
+export const useDeleteTasks = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ ids, withTasks }: { ids: readonly string[]; withTasks?: boolean }) =>
+      ids.length === 1
+        ? api<DeleteTasksResult>(`/api/tasks/${enc(ids[0]!)}${withTasks ? "?withTasks=1" : ""}`, { method: "DELETE" })
+        : api<DeleteTasksResult>("/api/tasks/bulk-delete", { body: { tasks: ids } }),
+    opts,
+  );
+/** Brings tasks back out of the trash (Undo, or Settings → Recently deleted). */
+export const useRestoreTasks = (opts?: MutationOpts) =>
+  useApiMutation(
+    (ids: readonly string[]) => api<{ restored: string[] }>("/api/tasks/restore", { body: { tasks: ids } }),
+    opts,
+  );
+/** Removes trashed tasks for good (Settings → Recently deleted → Delete now). */
+export const usePurgeTasks = (opts?: MutationOpts) =>
+  useApiMutation((ids: readonly string[]) => api<void>("/api/tasks/trash/purge", { body: { tasks: ids } }), opts);
 /** Closes a task as done by / duplicate of another task, or won't do. Named apart from the panel's useCloseTask. */
 export const useResolveTask = (opts?: MutationOpts) =>
   useApiMutation(

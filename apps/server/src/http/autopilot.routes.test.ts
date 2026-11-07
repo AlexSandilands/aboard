@@ -237,7 +237,8 @@ describe("Autopilot REST routes", () => {
     const epic = h.services.tasks.createEpic({ projectId: h.project.id, title: "E" }, [], "agent");
     h.services.autopilot.setScope("epic", epic.id, "archive", { mode: "on" }, h.project.id);
     h.services.tasks.update(epic.id, { archived: true }, "user");
-    h.services.tasks.delete(epic.id, "user");
+    h.services.tasks.delete([epic.id], {}, "user");
+    h.services.tasks.purge([epic.id], "user");
     expect(h.db.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 0 });
   });
 

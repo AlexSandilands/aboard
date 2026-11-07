@@ -130,7 +130,7 @@ export function createBackupService(
         if (repos.tasks.get(taskId)) {
           if (!force) throw new AppError("CONFLICT", `Task #${number} is still on the board. Use force to replace it.`);
           closedAgainst = repos.tasks.resolvedBy([taskId]).map((t) => t.id);
-          children = repos.tasks.childrenOf([taskId]).map((t) => t.id);
+          children = repos.tasks.childIdsAny(taskId);
           relations = repos.relations.forTasks([taskId]).map((r) => ({
             blocker_id: r.blockerId,
             blocked_id: r.blockedId,
@@ -138,13 +138,19 @@ export function createBackupService(
             actor: r.actor,
           }));
           repos.tasks.delete(taskId);
+        } else if (repos.tasks.getAny(taskId)) {
+          // In the trash here: the backup's copy replaces it, and keeps its number. An epic keeps its tasks, those
+          // deleted with it included, so they can still come back into it.
+          children = repos.tasks.childIdsAny(taskId);
+          repos.tasks.delete(taskId);
         }
         const projectId = String(bundle.task.project_id);
         if (!repos.projects.get(projectId)) {
           throw new AppError("NOT_FOUND", `Task #${number}'s project (${projectId}) is not on the board`);
         }
-        const task = { ...bundle.task };
-        if (repos.tasks.byNumber(number)) task.number = repos.tasks.nextNumber();
+        // Restoring a task brings it back to the board, even one that was in the backup's trash.
+        const task: BackupRow = { ...bundle.task, deleted_at: null };
+        if (repos.tasks.byNumberAny(number)) task.number = repos.tasks.nextNumber();
         else db.prepare("UPDATE counters SET value = max(value, ?) WHERE name = 'task_number'").run(number);
         if (task.resolved_by_task_id && !repos.tasks.get(String(task.resolved_by_task_id))) {
           task.resolved_by_task_id = null;
@@ -172,7 +178,7 @@ export function createBackupService(
         }
         for (const id of children) {
           // A task that moved to another project since the backup stays loose: an epic's tasks share its project.
-          if (repos.tasks.get(id)?.projectId === projectId) {
+          if (repos.tasks.getAny(id)?.projectId === projectId) {
             db.prepare("UPDATE tasks SET parent_id = ? WHERE id = ?").run(taskId, id);
           }
           fx.task(id);

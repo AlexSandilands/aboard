@@ -7,6 +7,7 @@ import {
   DEFAULT_HANDOFF_MENUS,
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_REVIEW_MAX_ROUNDS,
+  DEFAULT_TRASH_RETENTION_DAYS,
   EMPTY_MODEL_TIERS,
   type AppSettings,
   machineNameFrom,
@@ -62,6 +63,7 @@ const DEFAULTS: StoredSettings = {
   keybindings: {},
   socialNetwork: false,
   automationVariables: [],
+  trashRetentionDays: DEFAULT_TRASH_RETENTION_DAYS,
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,
@@ -102,6 +104,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "savedViews",
     "keybindings",
     "automationVariables",
+    "trashRetentionDays",
   ] satisfies Array<keyof StoredSettings>),
 ]);
 
@@ -371,6 +374,7 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.savedViews !== undefined) repos.settings.set("savedViews", uniqueViews(input.savedViews));
         if (input.keybindings !== undefined) repos.settings.set("keybindings", input.keybindings);
         if (input.socialNetwork !== undefined) repos.settings.set("socialNetwork", input.socialNetwork);
+        if (input.trashRetentionDays !== undefined) repos.settings.set("trashRetentionDays", input.trashRetentionDays);
         if (input.automationVariables !== undefined) {
           repos.settings.set("automationVariables", input.automationVariables);
           // Which projects a custom automation still needs a variable in shows on its row.

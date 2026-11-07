@@ -20,7 +20,7 @@ import { nowIso } from "../db/database.ts";
 import type { Repos } from "../db/repos/index.ts";
 import { toLink } from "../db/repos/links.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
-import { AppError, notFound, planRequired } from "../errors.ts";
+import { AppError, deletedError, notFound, planRequired } from "../errors.ts";
 import { positionAmong, type Core, type Effects } from "./core.ts";
 import { withSuggestedModel, type PlansModule } from "./plans.ts";
 import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
@@ -40,6 +40,9 @@ import type {
 } from "./types.ts";
 
 const DETAIL_EVENT_LIMIT = 100;
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Who the scheduled purge acts as in the logs of tasks that pointed at a purged one. */
+const PURGE_ACTOR = "trash";
 const EPIC_AUTOPILOT_MESSAGE = "An epic isn't started by Autopilot; flag its tasks instead";
 const EPIC_DUE_DATE_MESSAGE = "An epic has no due date; set it on its tasks instead";
 const EPIC_PRIORITY_MESSAGE = "An epic has no card to put in the priority lane; mark its tasks instead";
@@ -141,8 +144,126 @@ export function createTasksService(
 
   const record = (id: string): TaskRecord => {
     const task = repos.tasks.get(id);
-    if (!task) throw notFound("Task", id);
+    if (!task) throw missing(id);
     return task;
+  };
+
+  /** Not found, saying so when the task is in the trash: its number still belongs to it and to no other task. */
+  const missing = (ref: string): AppError => {
+    const number = /^#?(\d+)$/.exec(ref.trim());
+    const trashed = number ? repos.tasks.byNumberAny(Number(number[1])) : repos.tasks.getAny(ref.trim());
+    return trashed?.deletedAt ? deletedError(trashed) : notFound("Task", ref.trim());
+  };
+
+  /** A task in the trash or not, by uuid, "#42" or "42"; NOT_FOUND once it is purged. */
+  const anyRecord = (ref: string): TaskRecord => {
+    const number = /^#?(\d+)$/.exec(ref.trim());
+    const task = number ? repos.tasks.byNumberAny(Number(number[1])) : repos.tasks.getAny(ref.trim());
+    if (!task) throw notFound("Task", ref.trim());
+    return task;
+  };
+
+  /** A task in the trash, by uuid, "#42" or "42". */
+  const trashedRecord = (ref: string): TaskRecord => {
+    const task = anyRecord(ref);
+    if (task.deletedAt === null) throw new AppError("VALIDATION", `#${task.number} is not in the trash`);
+    return task;
+  };
+
+  const retentionDays = (): number => deps.settings.get().trashRetentionDays;
+
+  /**
+   * Moves one task to the trash inside a write, with the epic's tasks when `withTasks`. Returns the ids stamped. What
+   * hides it is the stamp: every repo read skips it, so its relations, links, notifications and stats go with it,
+   * and come back on restore. Only its epic and its loose children change, which a restore can't undo.
+   */
+  const trashIn = (task: TaskRecord, withTasks: boolean, at: string, actor: string, fx: Effects): string[] => {
+    // Before stamping: once it is in the trash its relations are hidden, and these cards still show it.
+    const neighbours = repos.relations.neighbours([task.id]);
+    const resolved = repos.tasks.resolvedBy([task.id]);
+    const children = task.kind === "epic" ? repos.tasks.childrenOf([task.id]) : [];
+    const stamped = [task.id];
+    repos.tasks.update({ ...task, deletedAt: at, updatedAt: at });
+    fx.log(task.id, actor, "deleted", withTasks && children.length > 0 ? { tasks: children.length } : {});
+    fx.taskDeleted(task.id);
+    for (const child of children) {
+      if (withTasks) {
+        // The epic's stamp, so restoring the epic can tell them from tasks deleted on their own (see restoreIn).
+        repos.tasks.update({ ...child, deletedAt: at, updatedAt: at });
+        fx.log(child.id, actor, "deleted", { withEpic: task.number });
+        fx.taskDeleted(child.id);
+        stamped.push(child.id);
+      } else {
+        // Left loose for good: restoring the epic doesn't take them back.
+        repos.tasks.update({ ...child, parentId: null, updatedAt: at });
+        fx.log(child.id, actor, "epic_changed", { from: task.number, to: null, epicDeleted: true });
+      }
+    }
+    for (const id of neighbours) fx.task(id);
+    for (const r of resolved) fx.task(r.id);
+    if (task.resolvedByTaskId) fx.detail(task.resolvedByTaskId);
+    if (task.parentId) {
+      fx.log(task.parentId, actor, "child_removed", { task: task.number, title: task.title, deleted: true });
+      syncEpic(task.parentId, actor, fx);
+    }
+    return stamped;
+  };
+
+  /** Brings one trashed task back inside a write; an epic with the tasks deleted with it. Returns the ids restored. */
+  const restoreIn = (task: TaskRecord, actor: string, fx: Effects, withEpic: TaskRecord | null = null): string[] => {
+    const at = nowIso();
+    // Back with the epic it was deleted with, or into its epic while that one is live, unarchived and in the same
+    // project; otherwise it comes back loose.
+    const epic = withEpic ?? (task.parentId ? repos.tasks.get(task.parentId) : null);
+    const rejoin =
+      epic !== null && epic.projectId === task.projectId && (withEpic !== null || epic.archivedAt === null);
+    const next: TaskRecord = { ...task, deletedAt: null, updatedAt: at, parentId: rejoin ? epic.id : null };
+    // Unarchived lanes are what positions are among; an archived task keeps its place, like unarchiving does.
+    if (task.archivedAt === null) next.position = endOfLane(next);
+    repos.tasks.update(next);
+    fx.log(task.id, actor, "restored", withEpic ? { withEpic: withEpic.number } : {});
+    if (task.parentId && !rejoin) {
+      const from = repos.tasks.getAny(task.parentId);
+      fx.log(task.id, actor, "epic_changed", { from: from?.number ?? null, to: null });
+    }
+    // The detail of a task closed against it lists it again.
+    if (task.resolvedByTaskId) fx.detail(task.resolvedByTaskId);
+    for (const r of repos.tasks.resolvedBy([task.id])) fx.task(r.id);
+    // A notification of it may be unread again.
+    fx.notificationsChanged();
+    const restored = [task.id];
+    if (task.kind === "epic" && task.deletedAt !== null) {
+      for (const child of repos.tasks.trashedWith(task.id, task.deletedAt)) {
+        restored.push(...restoreIn(child, actor, fx, next));
+      }
+    }
+    if (rejoin && !withEpic) {
+      fx.log(epic.id, actor, "child_added", { task: task.number, title: task.title, restored: true });
+      syncEpic(epic.id, actor, fx);
+    }
+    if (task.kind === "epic") syncEpic(task.id, actor, fx);
+    return restored;
+  };
+
+  /**
+   * Removes one trashed task for good inside a write, with the tasks deleted with it if it is an epic. The cleanup a
+   * delete used to do at once happens here, when the task is really gone. Returns the ids removed.
+   */
+  const purgeIn = (task: TaskRecord, actor: string, fx: Effects): string[] => {
+    const removed: string[] = [];
+    if (task.kind === "epic" && task.deletedAt !== null) {
+      for (const child of repos.tasks.trashedWith(task.id, task.deletedAt)) removed.push(...purgeIn(child, actor, fx));
+    }
+    // Tasks closed against this one keep their resolution; their log records what they pointed at.
+    for (const resolved of repos.tasks.resolvedBy([task.id])) {
+      fx.log(resolved.id, actor, "resolver_deleted", { number: task.number, title: task.title });
+    }
+    // Tasks it blocks, or that block it, drop the relation with it; their logs say what went.
+    deps.relations().noteDeletionIn(task, actor, fx);
+    repos.tasks.delete(task.id);
+    fx.taskDeleted(task.id);
+    removed.push(task.id);
+    return removed;
   };
 
   const assembleOne = (id: string): AssembledTask => assembleSummaries(repos, [record(id)]).get(id)!;
@@ -296,7 +417,7 @@ export function createTasksService(
       const trimmed = ref.trim();
       const number = /^#?(\d+)$/.exec(trimmed);
       const task = number ? repos.tasks.byNumber(Number(number[1])) : repos.tasks.get(trimmed);
-      if (!task) throw notFound("Task", trimmed);
+      if (!task) throw missing(trimmed);
       return task.id;
     },
 
@@ -428,6 +549,7 @@ export function createTasksService(
           integrationBranch: null,
           integrationMergedAt: null,
           movedTo: null,
+          deletedAt: null,
         };
         repos.tasks.insert(task);
         fx.log(task.id, actor, "created", {
@@ -875,35 +997,93 @@ export function createTasksService(
       });
     },
 
-    delete(id, actor) {
-      core.write((fx) => {
-        const task = record(id);
-        if (task.archivedAt === null) {
-          throw new AppError(
-            "VALIDATION",
-            `Archive #${task.number} before deleting it; only archived tasks can be deleted`,
-          );
+    delete(refs, opts, actor) {
+      return core.write((fx) => {
+        // One stamp per delete, later than any already in the trash: two deletes never share one, so an epic's
+        // restore can't pick up a task of it deleted on its own in the same millisecond.
+        const latest = repos.tasks.latestDeletedAt();
+        const now = nowIso();
+        const at = latest && latest >= now ? new Date(Date.parse(latest) + 1).toISOString() : now;
+        // Epics last: an epic's task picked with it is then in the trash with the epic's stamp and parent, so restoring
+        // the epic brings it back too, whichever order the picks came in.
+        const tasks = [...new Map(refs.map((ref) => [service.resolveId(ref), null])).keys()]
+          .map(record)
+          .sort((a, b) => Number(a.kind === "epic") - Number(b.kind === "epic"));
+        const deleted: string[] = [];
+        for (const task of tasks) {
+          // Already gone with an epic earlier in this call.
+          if (deleted.includes(task.id)) continue;
+          deleted.push(...trashIn(record(task.id), opts.withTasks ?? false, at, actor, fx));
         }
-        // Tasks closed against this one keep their resolution; their log records what they pointed at.
-        for (const resolved of repos.tasks.resolvedBy([id])) {
-          fx.log(resolved.id, actor, "resolver_deleted", { number: task.number, title: task.title });
-        }
-        if (task.resolvedByTaskId) fx.detail(task.resolvedByTaskId);
-        // Its children stay as loose tasks (parent_id is SET NULL); their log records which epic they were in.
-        for (const child of repos.tasks.childrenOf([id])) {
-          fx.log(child.id, actor, "epic_changed", { from: task.number, to: null, epicDeleted: true });
-        }
-        // Tasks it blocks, or that block it, drop the relation with it; their logs say what went.
-        deps.relations().noteDeletionIn(task, actor, fx);
-        repos.tasks.delete(id);
-        fx.taskDeleted(id);
-        if (task.parentId) {
-          fx.log(task.parentId, actor, "child_removed", { task: task.number, title: task.title, deleted: true });
-          syncEpic(task.parentId, actor, fx);
-        }
+        return deleted;
       });
-      // After the commit: a delete that rolled back keeps its images.
-      deps.attachments.removeFilesOf(id);
+    },
+
+    restore(refs, actor) {
+      return core.write((fx) => {
+        // A task already back (an epic restored it, or it came back from Settings before Undo) is skipped, so one
+        // stale id doesn't cost the rest. Epics first, so a task doesn't come back loose while its epic is still in the
+        // trash a step behind it.
+        const tasks = refs
+          .map(anyRecord)
+          .filter((t) => t.deletedAt !== null)
+          .sort((a, b) => Number(b.kind === "epic") - Number(a.kind === "epic"));
+        const restored: string[] = [];
+        for (const task of tasks) {
+          const current = repos.tasks.getAny(task.id);
+          if (!current?.deletedAt) continue;
+          restored.push(...restoreIn(current, actor, fx));
+        }
+        return restored;
+      });
+    },
+
+    trash() {
+      const days = retentionDays();
+      const tasks = repos.tasks.trashed();
+      const numbers = new Map(tasks.map((t) => [t.id, t]));
+      return tasks.map((t) => {
+        const epic = t.parentId ? numbers.get(t.parentId) : undefined;
+        return {
+          id: t.id,
+          number: t.number,
+          title: t.title,
+          kind: t.kind,
+          projectId: t.projectId,
+          status: t.status,
+          deletedAt: t.deletedAt!,
+          purgeAt: new Date(Date.parse(t.deletedAt!) + days * DAY_MS).toISOString(),
+          withEpic: epic && epic.deletedAt === t.deletedAt ? epic.number : null,
+        };
+      });
+    },
+
+    purge(refs, actor) {
+      const removed = core.write((fx) => {
+        const ids: string[] = [];
+        for (const ref of refs) {
+          const task = trashedRecord(ref);
+          if (!ids.includes(task.id)) ids.push(...purgeIn(task, actor, fx));
+        }
+        return ids;
+      });
+      // After the commit: a purge that rolled back keeps its images.
+      for (const id of removed) deps.attachments.removeFilesOf(id);
+    },
+
+    purgeExpired() {
+      const cutoff = new Date(core.now().getTime() - retentionDays() * DAY_MS).toISOString();
+      const expired = repos.tasks.deletedBefore(cutoff);
+      if (expired.length === 0) return 0;
+      const removed = core.write((fx) => {
+        const ids: string[] = [];
+        for (const task of expired) {
+          if (!ids.includes(task.id) && repos.tasks.getAny(task.id)) ids.push(...purgeIn(task, PURGE_ACTOR, fx));
+        }
+        return ids;
+      });
+      for (const id of removed) deps.attachments.removeFilesOf(id);
+      return removed.length;
     },
   };
 

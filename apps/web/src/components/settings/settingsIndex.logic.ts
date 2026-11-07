@@ -269,6 +269,20 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Archiving a project hides its lane; it can be restored here.",
     ["restore", "unarchive", "hidden", "lane"],
   ),
+  draft("board.data.recently-deleted", "Recently deleted", "Deleted tasks wait here, restorable, until they expire.", [
+    "trash",
+    "restore",
+    "undelete",
+    "bin",
+    "delete now",
+    "purge",
+  ]),
+  draft(
+    "board.data.trash-retention",
+    "Keep deleted tasks for",
+    "How many days a deleted task stays in the trash before it is removed for good.",
+    ["trash", "retention", "days", "expire"],
+  ),
   // Tasks › New tasks
   draft(
     "tasks.new-tasks.templates",
@@ -766,6 +780,7 @@ const CARD_IDS: ReadonlySet<string> = new Set([
   ORCHESTRATE_AREA_ID,
   "board.data.backup",
   "board.data.archived-projects",
+  "board.data.recently-deleted",
   "tasks.new-tasks.templates",
   "tasks.new-tasks.issue-import",
   "agents.models.tiers.list",

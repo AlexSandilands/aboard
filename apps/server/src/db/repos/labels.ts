@@ -27,7 +27,7 @@ export function createLabelsRepo(sql: Sql) {
       return sql.all<{ name: string; count: number }>(
         `SELECT l.label AS name, COUNT(*) AS count FROM task_labels l
          JOIN tasks t ON t.id = l.task_id JOIN projects p ON p.id = t.project_id
-         WHERE t.archived_at IS NULL AND p.archived_at IS NULL
+         WHERE t.archived_at IS NULL AND t.deleted_at IS NULL AND p.archived_at IS NULL
          GROUP BY l.label ORDER BY l.label`,
       );
     },

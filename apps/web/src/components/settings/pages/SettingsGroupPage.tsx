@@ -10,6 +10,7 @@ import { useIntegrationsStatus, useSettings } from "~/state/queries";
 import { AgentsPage } from "../agents/AgentsPage";
 import { AppearanceSection } from "../AppearanceSection";
 import { ArchivedProjectsSection } from "../ArchivedProjectsSection";
+import { RecentlyDeletedSection } from "../RecentlyDeletedSection";
 import { BackupSection } from "../BackupSection";
 import { GithubSection } from "../IntegrationsSections";
 import { IssueImportSection } from "../IssueImportSection";
@@ -60,6 +61,7 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
           <SettingsSubsection id="board.data">
             <WithSettings>{(settings) => <BackupSection settings={settings} />}</WithSettings>
             <ArchivedProjectsSection />
+            <WithSettings>{(settings) => <RecentlyDeletedSection settings={settings} />}</WithSettings>
           </SettingsSubsection>
           <WithSettings>{(settings) => <VersionAndSocial settings={settings} />}</WithSettings>
         </>

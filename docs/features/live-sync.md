@@ -19,7 +19,7 @@ to its TanStack Query cache.
 | `project.upserted`     | the project                   | Upserts it; an archived project drops its lane      |
 | `project.deleted`      | `projectId`                   | Removes the lane and its tasks                      |
 | `task.upserted`        | the full `TaskSummary` (card) | Replaces the card; an archived task is removed      |
-| `task.deleted`         | `taskId`                      | Removes the card, resets an open panel's query      |
+| `task.deleted`         | `taskId`                      | Removes the card, resets an open panel's query; sent when a task goes to the trash (a restore sends `task.upserted`) |
 | `task.detail_changed`  | `taskId`                      | Invalidates that task's detail query                |
 | `integrations.changed` | T3 Code status                | Patches the board's T3 status, invalidates the integrations query |
 | `labels.colors_changed` | every label colour override  | Replaces the board's `labelColors`                  |

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -5,6 +7,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogPanel,
   DialogPopup,
   DialogTitle,
 } from "~/components/ui/dialog";
@@ -17,6 +20,7 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   onConfirm,
+  children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -24,6 +28,8 @@ export function ConfirmDialog({
   description: string;
   confirmLabel: string;
   onConfirm: () => void;
+  /** Options between the description and the buttons, e.g. a switch. */
+  children?: ReactNode;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -32,6 +38,7 @@ export function ConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
+        {children ? <DialogPanel>{children}</DialogPanel> : null}
         <DialogFooter>
           <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
           <Button

@@ -170,9 +170,9 @@ export function createTransferService(
     const taskId = String(bundle.task.id);
     const fromNumber = Number(bundle.task.number);
     return core.write((fx) => {
-      // An archived copy here (moved away earlier, or archived by hand) is replaced; a live one never is.
-      const existing = repos.tasks.get(taskId);
-      if (existing && existing.archivedAt === null) {
+      // An archived copy here (moved away earlier, or archived by hand) or one in the trash is replaced; a live one never is.
+      const existing = repos.tasks.getAny(taskId);
+      if (existing && existing.archivedAt === null && existing.deletedAt === null) {
         throw new AppError("CONFLICT", `Already on this board as #${existing.number}`);
       }
       if (!repos.projects.get(targetProject)) throw new AppError("NOT_FOUND", `No project ${targetProject} here`);
@@ -201,6 +201,7 @@ export function createTransferService(
         project_id: targetProject,
         archived_at: null,
         moved_to_json: null,
+        deleted_at: null,
       };
       if (task.resolved_by_task_id && !repos.tasks.get(String(task.resolved_by_task_id))) {
         task.resolved_by_task_id = null;

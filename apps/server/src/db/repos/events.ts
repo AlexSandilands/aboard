@@ -75,7 +75,7 @@ export function createEventsRepo(sql: Sql) {
       return sql
         .all<EventRow & { number: number; title: string; project_id: string }>(
           `SELECT e.*, t.number, t.title, t.project_id FROM task_events e JOIN tasks t ON t.id = e.task_id
-           WHERE e.at >= ? AND e.at < ? AND e.type IN (SELECT value FROM json_each(?)) ORDER BY e.id`,
+           WHERE t.deleted_at IS NULL AND e.at >= ? AND e.at < ? AND e.type IN (SELECT value FROM json_each(?)) ORDER BY e.id`,
           from,
           to,
           jsonList(types),

@@ -266,17 +266,185 @@ describe("events", () => {
   });
 
   describe("delete", () => {
-    it("only deletes archived tasks", () => {
+    it("moves any task to the trash, archived or not, and publishes task.deleted", () => {
       const { s, project, events } = setup();
-      const task = s.tasks.create({ projectId: project.id, title: "Keep" });
+      const task = s.tasks.create({ projectId: project.id, title: "Gone", plan: plan("a") });
       events.length = 0;
-      expectCode(() => s.tasks.delete(task.id, "user"), "VALIDATION");
-      expect(events).toEqual([]);
-      expect(s.tasks.summary(task.id).title).toBe("Keep");
+      expect(s.tasks.delete([task.id], {}, "user")).toEqual([task.id]);
+      expect(events).toEqual([{ type: "task.deleted", taskId: task.id }]);
+      expectCode(() => s.tasks.summary(task.id), "NOT_FOUND");
+      expect(s.tasks.trash()).toMatchObject([{ id: task.id, number: task.number, title: "Gone", withEpic: null }]);
     });
 
-    it("cascades the plan, links and activity and publishes task.deleted", () => {
-      const { s, project, events, db } = setup();
+    it("hides a trashed task from every lookup and says it was deleted", async () => {
+      const { s, project, request } = setup();
+      const task = s.tasks.create({ projectId: project.id, title: "Hidden", labels: ["ui"] });
+      const other = s.tasks.create({ projectId: project.id, title: "Other" });
+      s.tasks.delete([task.id], {}, "user");
+      expect(s.tasks.summaries().map((t) => t.id)).toEqual([other.id]);
+      expect(s.tasks.summaries({ query: "Hidden" })).toEqual([]);
+      expect(s.board.snapshot().tasks.map((t) => t.id)).toEqual([other.id]);
+      expect(s.labels.usage()).toEqual([]);
+      for (const ref of [task.id, `#${task.number}`, String(task.number)]) {
+        expect(() => s.tasks.resolveId(ref)).toThrow(`Task #${task.number} was deleted`);
+      }
+      expect((await request(`/api/tasks/${task.number}`)).status).toBe(404);
+    });
+
+    it("hides relations with a trashed task and brings them back with it", () => {
+      const { s, project, events } = setup();
+      const blocker = s.tasks.create({ projectId: project.id, title: "Blocker" });
+      const blocked = s.tasks.create({ projectId: project.id, title: "Blocked" });
+      s.tasks.update(blocked.id, { addBlockedBy: [blocker.id] }, "user");
+      events.length = 0;
+      s.tasks.delete([blocker.id], {}, "user");
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "task.upserted",
+          task: expect.objectContaining({ id: blocked.id, blocked: false }),
+        }),
+      );
+      expect(s.tasks.summary(blocked.id).blockedBy).toEqual([]);
+      s.tasks.restore([blocker.id], "user");
+      expect(s.tasks.summary(blocked.id).blockedBy.map((t) => t.id)).toEqual([blocker.id]);
+    });
+
+    it("restores a task to the end of its lane with its plan, links and activity, logging both", () => {
+      const { s, project, events } = setup();
+      const task = s.tasks.create({
+        projectId: project.id,
+        title: "Back",
+        plan: plan("a", "b"),
+        links: [{ value: "https://example.com" }],
+      });
+      const later = s.tasks.create({ projectId: project.id, title: "Later", plan: plan("a") });
+      s.tasks.delete([`#${task.number}`], {}, "user");
+      events.length = 0;
+      expect(s.tasks.restore([`#${task.number}`], "user")).toEqual([task.id]);
+      expect(events).toContainEqual(
+        expect.objectContaining({ type: "task.upserted", task: expect.objectContaining({ id: task.id }) }),
+      );
+      const detail = s.tasks.detail(task.id);
+      expect(detail.status).toBe("planned");
+      expect(detail.phases[0]!.steps).toHaveLength(2);
+      expect(detail.links).toHaveLength(1);
+      expect(detail.events.slice(-2).map((e) => e.type)).toEqual(["deleted", "restored"]);
+      expect(s.tasks.summaries({ status: "planned" }).map((t) => t.id)).toEqual([later.id, task.id]);
+      expect(s.tasks.trash()).toEqual([]);
+      // Restoring again does nothing, and doesn't stop the others in the same call.
+      const other = s.tasks.create({ projectId: project.id, title: "Other" });
+      s.tasks.delete([other.id], {}, "user");
+      expect(s.tasks.restore([task.id, other.id], "user")).toEqual([other.id]);
+    });
+
+    it("deletes an epic with its tasks and restores them together", () => {
+      const { s, project } = setup();
+      const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+      const a = s.tasks.create({ projectId: project.id, title: "A", epicId: epic.id, plan: plan("a") });
+      const b = s.tasks.create({ projectId: project.id, title: "B", epicId: epic.id, plan: plan("a") });
+      // Deleted on its own first: the epic's restore leaves it in the trash.
+      s.tasks.delete([b.id], {}, "user");
+      expect(s.tasks.delete([epic.id], { withTasks: true }, "user").sort()).toEqual([epic.id, a.id].sort());
+      expect(s.tasks.trash().find((t) => t.id === a.id)?.withEpic).toBe(epic.number);
+      expect(s.tasks.trash().find((t) => t.id === b.id)?.withEpic).toBeNull();
+
+      expect(s.tasks.restore([epic.id], "user").sort()).toEqual([epic.id, a.id].sort());
+      expect(s.tasks.detail(epic.id).children.map((c) => c.id)).toEqual([a.id]);
+      expect(s.tasks.summary(a.id).parent?.id).toBe(epic.id);
+      expect(s.tasks.trash().map((t) => t.id)).toEqual([b.id]);
+      // A task of the epic restored on its own goes back into it while the epic is live.
+      s.tasks.restore([b.id], "user");
+      expect(s.tasks.summary(b.id).parent?.id).toBe(epic.id);
+    });
+
+    it("leaves an epic's tasks loose when they aren't deleted with it, and its restore doesn't take them back", () => {
+      const { s, project } = setup();
+      const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+      const a = s.tasks.create({ projectId: project.id, title: "A", epicId: epic.id, plan: plan("a") });
+      expect(s.tasks.delete([epic.id], {}, "user")).toEqual([epic.id]);
+      expect(s.tasks.summary(a.id).parent).toBeNull();
+      expect(s.tasks.detail(a.id).events.at(-1)).toMatchObject({
+        type: "epic_changed",
+        payload: { from: epic.number, to: null, epicDeleted: true },
+      });
+      s.tasks.restore([epic.id], "user");
+      expect(s.tasks.summary(a.id).parent).toBeNull();
+      expect(s.tasks.detail(epic.id).children).toEqual([]);
+    });
+
+    it("undoes an epic deleted with its tasks from the full id list, in any order", () => {
+      const { s, project } = setup();
+      const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+      const a = s.tasks.create({ projectId: project.id, title: "A", epicId: epic.id, plan: plan("a") });
+      const b = s.tasks.create({ projectId: project.id, title: "B", epicId: epic.id, plan: plan("a") });
+      const deleted = s.tasks.delete([epic.id], { withTasks: true }, "user");
+      expect(s.tasks.restore([epic.id, a.id, b.id], "user").sort()).toEqual(deleted.sort());
+      expect(
+        s.tasks
+          .detail(epic.id)
+          .children.map((c) => c.id)
+          .sort(),
+      ).toEqual([a.id, b.id].sort());
+      expect(s.tasks.trash()).toEqual([]);
+    });
+
+    it("keeps an epic's task picked with it in the epic, whichever order the bulk delete lists them", () => {
+      const { s, project } = setup();
+      for (const order of ["epic first", "task first"]) {
+        const epic = s.tasks.create({ projectId: project.id, title: `Epic ${order}`, kind: "epic" });
+        const a = s.tasks.create({ projectId: project.id, title: "A", epicId: epic.id, plan: plan("a") });
+        const deleted = s.tasks.delete(order === "epic first" ? [epic.id, a.id] : [a.id, epic.id], {}, "user");
+        expect(s.tasks.trash().find((t) => t.id === a.id)?.withEpic).toBe(epic.number);
+        s.tasks.restore(deleted, "user");
+        expect(s.tasks.summary(a.id).parent?.id).toBe(epic.id);
+      }
+    });
+
+    it("brings a task back loose when its epic is still in the trash", () => {
+      const { s, project } = setup();
+      const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+      const a = s.tasks.create({ projectId: project.id, title: "A", epicId: epic.id, plan: plan("a") });
+      s.tasks.delete([epic.id], { withTasks: true }, "user");
+      s.tasks.restore([a.id], "user");
+      expect(s.tasks.summary(a.id).parent).toBeNull();
+      expect(s.tasks.trash().map((t) => t.id)).toEqual([epic.id]);
+    });
+
+    it("deletes several tasks in one write, and restores them all", () => {
+      const { s, project, events } = setup();
+      const [a, b, c] = ["A", "B", "C"].map((title) => s.tasks.create({ projectId: project.id, title }));
+      events.length = 0;
+      const deleted = s.tasks.delete([a!.id, `#${b!.number}`, a!.id], {}, "user");
+      expect(deleted).toEqual([a!.id, b!.id]);
+      expect(events.filter((e) => e.type === "task.deleted")).toHaveLength(2);
+      expect(s.tasks.summaries().map((t) => t.id)).toEqual([c!.id]);
+      // An unknown task in the list rolls the whole delete back.
+      expectCode(() => s.tasks.delete([c!.id, "#999"], {}, "user"), "NOT_FOUND");
+      expect(s.tasks.summaries().map((t) => t.id)).toEqual([c!.id]);
+      expect(s.tasks.restore(deleted, "user")).toEqual(deleted);
+      expect(s.tasks.summaries()).toHaveLength(3);
+    });
+
+    it("never reuses a deleted task's number, including after a purge and a project delete", () => {
+      const { s, project } = setup();
+      const first = s.tasks.create({ projectId: project.id, title: "One" });
+      const second = s.tasks.create({ projectId: project.id, title: "Two" });
+      expect([first.number, second.number]).toEqual([1, 2]);
+      s.tasks.delete([second.id], {}, "user");
+      expect(s.tasks.create({ projectId: project.id, title: "Three" }).number).toBe(3);
+      s.tasks.purge([second.id], "user");
+      expect(s.tasks.create({ projectId: project.id, title: "Four" }).number).toBe(4);
+
+      const other = s.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
+      s.tasks.create({ projectId: other.id, title: "Five" });
+      s.projects.delete(other.id);
+      expect(s.tasks.create({ projectId: project.id, title: "Six" }).number).toBe(6);
+    });
+  });
+
+  describe("purge", () => {
+    it("removes a trashed task with its plan, links and activity", () => {
+      const { s, project, db } = setup();
       const task = s.tasks.create({
         projectId: project.id,
         title: "Gone",
@@ -284,30 +452,38 @@ describe("events", () => {
         links: [{ value: "https://example.com" }],
       });
       s.tasks.addNote(task.id, "note", "user");
-      s.tasks.update(task.id, { archived: true }, "user");
-      events.length = 0;
-      s.tasks.delete(task.id, "user");
-      expect(events).toEqual([{ type: "task.deleted", taskId: task.id }]);
-      expectCode(() => s.tasks.summary(task.id), "NOT_FOUND");
-      for (const table of ["plan_phases", "plan_steps", "task_links", "task_events"]) {
-        const row = db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE task_id = ?`).get(task.id) as { n: number };
+      expectCode(() => s.tasks.purge([task.id], "user"), "VALIDATION");
+      s.tasks.delete([task.id], {}, "user");
+      s.tasks.purge([task.id], "user");
+      expect(s.tasks.trash()).toEqual([]);
+      expectCode(() => s.tasks.restore([task.id], "user"), "NOT_FOUND");
+      for (const table of ["tasks", "plan_phases", "plan_steps", "task_links", "task_events"]) {
+        const column = table === "tasks" ? "id" : "task_id";
+        const row = db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${column} = ?`).get(task.id) as { n: number };
         expect({ table, n: row.n }).toEqual({ table, n: 0 });
       }
     });
 
-    it("never reuses a deleted task's number, including after a project delete", () => {
-      const { s, project } = setup();
-      const first = s.tasks.create({ projectId: project.id, title: "One" });
-      const second = s.tasks.create({ projectId: project.id, title: "Two" });
-      expect([first.number, second.number]).toEqual([1, 2]);
-      s.tasks.update(second.id, { archived: true }, "user");
-      s.tasks.delete(second.id, "user");
-      expect(s.tasks.create({ projectId: project.id, title: "Three" }).number).toBe(3);
-
-      const other = s.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
-      s.tasks.create({ projectId: other.id, title: "Four" });
-      s.projects.delete(other.id);
-      expect(s.tasks.create({ projectId: project.id, title: "Five" }).number).toBe(5);
+    it("purges only what has been in the trash longer than the retention setting, an epic with its tasks", () => {
+      const { s, project, db } = setup();
+      const old = s.tasks.create({ projectId: project.id, title: "Old" });
+      const recent = s.tasks.create({ projectId: project.id, title: "Recent" });
+      const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+      const child = s.tasks.create({ projectId: project.id, title: "Child", epicId: epic.id });
+      s.tasks.delete([old.id, recent.id], {}, "user");
+      s.tasks.delete([epic.id], { withTasks: true }, "user");
+      s.settings.update({ trashRetentionDays: 7 });
+      const age = (id: string, days: number) => {
+        const at = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+        db.prepare("UPDATE tasks SET deleted_at = ? WHERE id = ?").run(at, id);
+      };
+      age(old.id, 8);
+      age(recent.id, 6);
+      age(epic.id, 10);
+      age(child.id, 10);
+      expect(s.tasks.purgeExpired()).toBe(3);
+      expect(s.tasks.trash().map((t) => t.id)).toEqual([recent.id]);
+      expect(s.tasks.purgeExpired()).toBe(0);
     });
 
     it("keeps the resolution of tasks closed against it and logs why the link went", () => {
@@ -315,18 +491,18 @@ describe("events", () => {
       const resolver = s.tasks.create({ projectId: project.id, title: "Resolver" });
       const dupe = s.tasks.create({ projectId: project.id, title: "Dupe" });
       s.tasks.close(dupe.id, { resolution: "duplicate", byTaskId: resolver.id }, "user");
-      s.tasks.update(resolver.id, { archived: true }, "user");
       events.length = 0;
-      s.tasks.delete(resolver.id, "agent");
+      s.tasks.delete([resolver.id], {}, "user");
       expect(events).toContainEqual(
         expect.objectContaining({
           type: "task.upserted",
           task: expect.objectContaining({ id: dupe.id, resolution: "duplicate", resolvedBy: null }),
         }),
       );
+      s.tasks.purge([resolver.id], "user");
       expect(s.tasks.detail(dupe.id).events.at(-1)).toMatchObject({
         type: "resolver_deleted",
-        actor: "agent",
+        actor: "user",
         payload: { number: resolver.number, title: "Resolver" },
       });
     });
@@ -336,11 +512,12 @@ describe("events", () => {
       const resolver = s.tasks.create({ projectId: project.id, title: "Resolver" });
       const dupe = s.tasks.create({ projectId: project.id, title: "Dupe" });
       s.tasks.close(dupe.id, { resolution: "duplicate", byTaskId: resolver.id }, "user");
-      s.tasks.update(dupe.id, { archived: true }, "user");
       events.length = 0;
-      s.tasks.delete(dupe.id, "user");
+      s.tasks.delete([dupe.id], {}, "user");
       expect(events).toContainEqual({ type: "task.detail_changed", taskId: resolver.id });
       expect(s.tasks.detail(resolver.id).resolves).toEqual([]);
+      s.tasks.restore([dupe.id], "user");
+      expect(s.tasks.detail(resolver.id).resolves.map((r) => r.id)).toEqual([dupe.id]);
     });
   });
 

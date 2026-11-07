@@ -22,6 +22,7 @@ const idle: KeybindingContext = {
   dialogOpen: false,
   settingsOpen: false,
   panelOpen: false,
+  cardFocus: false,
   canGoBack: false,
 };
 

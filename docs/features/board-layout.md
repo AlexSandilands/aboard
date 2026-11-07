@@ -349,7 +349,8 @@ which take a `TaskSummary`, since a card has no more; **Save as template…** fe
 (`fetchTaskDetail`). Pin toggles are the panel's only. `CardContextMenu` wraps the card in a `ContextMenu`
 (`components/ui/context-menu.tsx`, Base UI) whose trigger draws no box (`display: contents`) and whose items mount only
 while the menu is open. The close-as and delete dialogs are app-level (`TaskMenuDialogs`, driven by
-`useDialogs.closeTaskAs` and `deleteTask`), because the menu is gone by the time they show. A right-click starts no drag
+`useDialogs.closeTaskAs` and `deleteTask`), because the menu is gone by the time they show. **Delete…** is the last item,
+set apart, on every task; the bulk menu ends with **Delete N tasks…** ([task-lifecycle](task-lifecycle.md#deleting)). A right-click starts no drag
 (dnd-kit's `PointerSensor` takes the primary button only), opens no panel and leaves the pick alone.
 
 With two or more cards picked (Ctrl/⌘-click, any task card; see [agent-handoff.md](agent-handoff.md#plan-tasks-several-tasks-at-once)),
@@ -516,7 +517,7 @@ over a virtualised list (`LegendList` inside a Base UI `Combobox`), and an effor
 ### Keyboard shortcuts
 
 The app-wide shortcuts are a registry in `packages/contracts/src/keybindings.ts`: each command (`palette.open`,
-`idea.new`, `settings.open`, `back`, `task.reveal`, `sidebar.toggle`, `panel.toggle`) has a title, a group, a default key and a default `when`. Shaped like T3
+`idea.new`, `settings.open`, `back`, `task.reveal`, `sidebar.toggle`, `panel.toggle`, `task.delete`) has a title, a group, a default key and a default `when`. Shaped like T3
 Code's keybindings: a command, a key and a `when`, and when several match a key event the later one wins.
 
 - **Keys.** `mod+k`, `shift+n`, `escape`: lowercase modifiers (`mod` is Cmd on macOS and Ctrl elsewhere, plus
@@ -525,7 +526,8 @@ Code's keybindings: a command, a key and a `when`, and when several match a key 
   from the physical key (`event.code`), since macOS's Option turns `b` into `∫`.
 - **`when`.** An expression over the context flags with `!`, `&&`, `||` and parentheses (`!` binds tightest, `||`
   loosest); empty means always. The flags (`KEYBINDING_CONTEXT_KEYS`) are `editableFocus`, `popupFocus`,
-  `overlayOpen`, `paletteOpen`, `dialogOpen`, `settingsOpen`, `panelOpen` and `canGoBack`; `AppShell` builds them per
+  `overlayOpen`, `paletteOpen`, `dialogOpen`, `settingsOpen`, `panelOpen`, `cardFocus` (a board card has focus) and
+  `canGoBack`; `AppShell` builds them per
   key event (`overlayOpen` is the palette or the digest, as it always was; `dialogOpen` is any app dialog, via
   `anyDialogOpen`). An unknown name is a parse error (`parseWhen`), so the server refuses it on save. The defaults are the old
   hard-coded behaviour, e.g. `n` is `!overlayOpen && !editableFocus && !popupFocus`.

@@ -61,7 +61,7 @@ export function createRelations(
     },
 
     noteDeletionIn(task, actor, fx) {
-      for (const r of repos.relations.forTasks([task.id])) {
+      for (const r of repos.relations.allFor([task.id])) {
         const blocks = r.blockerId === task.id;
         fx.log(blocks ? r.blockedId : r.blockerId, actor, blocks ? "blocker_deleted" : "blocked_deleted", {
           task: task.number,

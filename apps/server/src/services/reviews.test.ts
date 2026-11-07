@@ -303,7 +303,8 @@ describe("reviews", () => {
     s.reviews.submit(task.id, { findings: [{ severity: "minor", title: "x" }] }, "reviewer");
     expect(s.tasks.detail(task.id).reviews).toHaveLength(1);
     s.tasks.update(task.id, { archived: true }, "user");
-    s.tasks.delete(task.id, "user");
+    s.tasks.delete([task.id], {}, "user");
+    s.tasks.purge([task.id], "user");
     expect(s.reviews.list(task.id)).toEqual([]);
   });
 });

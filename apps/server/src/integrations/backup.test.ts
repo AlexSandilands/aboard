@@ -393,7 +393,8 @@ describe("restoring from the backup repo", { timeout: PROCESS_TEST_TIMEOUT }, ()
     await backup.run();
     services.tasks.update(task.id, { title: "Renamed" }, "user");
     services.tasks.update(other.id, { archived: true }, "user");
-    services.tasks.delete(other.id, "user");
+    services.tasks.delete([other.id], {}, "user");
+    services.tasks.purge([other.id], "user");
 
     const first = await backup.restoreTasks({ numbers: [other.number, task.number] }, "user");
     expect(first.results).toEqual([

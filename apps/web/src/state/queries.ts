@@ -28,6 +28,7 @@ import type {
   T3ProjectCandidate,
   TaskDetail,
   TaskSummary,
+  TrashedTask,
   TerminalInfo,
   TaskTemplate,
   ProvidersStatus,
@@ -47,6 +48,7 @@ import { applyBoardEvent, eventMovesCards } from "./boardReducer";
 export const queryKeys = {
   board: ["board"] as const,
   archivedTasks: ["archivedTasks"] as const,
+  trash: ["trash"] as const,
   task: (id: string) => ["task", id] as const,
   settings: ["settings"] as const,
   integrations: ["integrations"] as const,
@@ -222,6 +224,14 @@ export function useArchivedTasks(enabled: boolean) {
     queryFn: async ({ signal }) =>
       (await api<TaskSummary[]>("/api/tasks?includeArchived=true", { signal })).filter((t) => t.archivedAt),
     enabled,
+  });
+}
+
+/** The trash, for Settings → Recently deleted. Invalidated by every task.deleted and task.upserted (a restore). */
+export function useTrash() {
+  return useQuery({
+    queryKey: queryKeys.trash,
+    queryFn: ({ signal }) => api<TrashedTask[]>("/api/tasks/trash", { signal }),
   });
 }
 
@@ -541,6 +551,7 @@ export function useBoardEvents() {
       if (connectedOnce) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.board });
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.trash });
         void queryClient.invalidateQueries({ queryKey: ["task"] });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
@@ -571,6 +582,7 @@ export function useBoardEvents() {
       // Inactive (Show archived off) queries are only marked stale, not refetched.
       if (event.type === "task.upserted" || event.type === "task.deleted") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.archivedTasks });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.trash });
         // A rule's "last task" line follows that task (done, archived).
         void queryClient.invalidateQueries({ queryKey: queryKeys.recurring });
         // Whether Orchestrate has anything to look at follows the project's tasks.
