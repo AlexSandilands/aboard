@@ -93,8 +93,8 @@ how it runs as an automation: [autopilot.md](autopilot.md#automations).
 
 - **Weekly, per project.** `check` makes one candidate per project it is on in at the latest `weekday` + `time` slot
   (`latestDue`), keyed `improve:<projectId>:<slot stamp>`. A slot before the setting last changed
-  (`settingChangedAt(automation, projectId)`) doesn't count, so switching it on never backfills, and a project with
-  no tasks is skipped.
+  (`settingChangedAt(automation, projectId)`) doesn't count, so switching it on never backfills, and a project where no
+  task changed and no other automation ran within `lookBackDays` is skipped, so an idle project costs nothing.
 - **The skill is in the prompt.** The built-in skill text (`BUILTIN_IMPROVE_SKILL_BODY`, `contracts/improveSkill.ts`)
   goes into `improvePrompt`, so there is no file to install and no way to run without it. This replaced the shipped
   "Improve prompts and skills" example (#134), which an agent could only follow if the user had imported it with its
@@ -106,10 +106,14 @@ how it runs as an automation: [autopilot.md](autopilot.md#automations).
   Everything else is denied: `IMPROVE_DENIED_TOOLS` is Orchestrate's two lists (which `mcp.test.ts` keeps covering
   every registered tool) minus the allowed ones, so a new tool is denied until placed. It has no `add_to_backlog`:
   it reads transcripts and notes that agents and people wrote, and a task it created could be flagged for Autopilot.
-- **The cap.** The agent is told `maxSuggestions`, but a tool can't count, so after the run
-  `SuggestionsService.limitSince(runStart, max, actor)` keeps the first open suggestions made since the run began
-  and rejects the rest, with an `outcome` saying the run was over its limit (not a verdict of the user's). The run's
-  summary says how many it kept and dropped.
+- **The limits.** The agent is told `maxSuggestions` and `targets`, but a tool can't count or filter, so after the run
+  (and also when it fails, times out or runs out of budget) `SuggestionsService.limitRun` holds it to them. The prompt
+  has the agent pass `actor` `improve-automations:<first 8 of the run id>` to `suggest_change`, and only the open
+  suggestions under that actor are looked at, so another project's run, a custom automation or the user's own
+  session is never touched. It rejects, oldest first, those for a kind of target the `targets` setting doesn't allow
+  (`targetAllowed`) and those past the first `max`, each with an `outcome` saying why (not a verdict of the user's).
+  The run's summary says how many it kept and dropped. An agent that doesn't pass the actor escapes the count, which
+  fails open on the cap but never rejects what isn't the run's.
 - **The `improve` operation** (Deep tier by default) is the model's setting; `modelChoice`, `budgetUsd` and
   `timeoutMinutes` are its runner options.
 

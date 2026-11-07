@@ -16,7 +16,12 @@ afterEach(() => {
 const DAY_MS = 24 * 3_600_000;
 
 /** `onRun` is what the fake agent does while it runs, such as writing suggestions. */
-function setup(onRun: (s: ReturnType<typeof createTestHarness>["services"]) => void = () => {}) {
+type Services = ReturnType<typeof createTestHarness>["services"];
+
+/** The actor the prompt tells the agent to pass to suggest_change. */
+const actorIn = (request: RunnerRequest): string => /actor "([^"]+)"/.exec(request.prompt)![1]!;
+
+function setup(onRun: (s: Services, request: RunnerRequest) => void = () => {}, fail = false) {
   const home = mkdtempSync(join(tmpdir(), "improve-home-"));
   const h = createTestHarness({ userHome: home, integrations: { automations: [improveAutomations] } });
   const requests: RunnerRequest[] = [];
@@ -28,7 +33,8 @@ function setup(onRun: (s: ReturnType<typeof createTestHarness>["services"]) => v
     runner: {
       start: (request) => {
         requests.push(request);
-        onRun(h.services);
+        onRun(h.services, request);
+        if (fail) return Promise.reject(new Error("out of budget"));
         return Promise.resolve({ runner: "headless", result: null, output: { summary: "audited", handover: "next" } });
       },
     },
@@ -42,7 +48,11 @@ function setup(onRun: (s: ReturnType<typeof createTestHarness>["services"]) => v
   const project = s.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
   const withTask = () => s.tasks.create({ projectId: project.id, title: "Something that happened" });
   const turnOn = (config?: Record<string, unknown>) =>
-    s.autopilot.setScope("project", project.id, AUTOPILOT_IMPROVE, { mode: "on", ...(config ? { config } : {}) });
+    s.autopilot.setScope("project", project.id, AUTOPILOT_IMPROVE, {
+      mode: "on",
+      // A window wide enough that the task made now is inside it when the engine is eight days on.
+      config: { lookBackDays: 30, ...config },
+    });
   const pass = async () => {
     await engine.pass();
     await engine.idle();
@@ -114,6 +124,8 @@ describe("Improve automations", () => {
       "merge_task_pr",
       "set_plan",
       "link",
+      "social_post",
+      "social_read",
     ]) {
       expect(denied(tool)).toBe(true);
     }
@@ -146,30 +158,81 @@ describe("Improve automations", () => {
     expect(requests[0]!.prompt).not.toContain(BUILTIN_IMPROVE_SKILL_BODY);
   });
 
-  it("keeps the first suggestions up to the cap and rejects the rest, saying the run was over its limit", async () => {
+  /** Makes a suggestion for `target` as `actor`, the way the agent's suggest_change does. */
+  const suggestFor = (services: Services, target: string, actor: string) => {
+    const { hash, text } = services.suggestions.read(target);
+    return services.suggestions.suggest({ target, baseHash: hash, proposed: `${text}\nMore.`, rationale: "x" }, actor)
+      .suggestion;
+  };
+
+  it("keeps this run's first suggestions up to the cap and rejects the rest, leaving other actors' alone", async () => {
     const made: Suggestion[] = [];
-    const { s, withTask, turnOn, pass, runs } = setup((services) => {
-      for (const target of ["builtin:review", "builtin:plan"]) {
-        const { hash } = services.suggestions.read(target);
-        made.push(
-          services.suggestions.suggest(
-            { target, baseHash: hash, proposed: `${services.suggestions.read(target).text}\nMore.`, rationale: "x" },
-            "improver",
-          ).suggestion,
-        );
-      }
+    let other: Suggestion | undefined;
+    const { s, withTask, turnOn, pass, runs } = setup((services, request) => {
+      // Another writer's suggestion lands while the run is going.
+      other = suggestFor(services, "builtin:plan", "someone-else");
+      made.push(suggestFor(services, "builtin:review", actorIn(request)));
     });
     withTask();
     turnOn({ maxSuggestions: 1 });
     await pass();
-    expect(runs()).toMatchObject([
-      { status: "succeeded", summary: "Audited Alpha: 1 suggestion, dropped 1 over the limit of 1" },
-    ]);
+    expect(runs()).toMatchObject([{ status: "succeeded", summary: "Audited Alpha: 1 suggestion" }]);
     expect(s.suggestions.get(made[0]!.id).status).toBe("open");
-    expect(s.suggestions.get(made[1]!.id)).toMatchObject({
+    expect(s.suggestions.get(other!.id).status).toBe("open");
+
+    // Over the cap: a second suggestion by the same run is dropped, with an outcome that isn't the user's verdict.
+    const again: Suggestion[] = [];
+    const second = setup((services, request) => {
+      for (const target of ["builtin:review", "builtin:plan"])
+        again.push(suggestFor(services, target, actorIn(request)));
+    });
+    second.withTask();
+    second.turnOn({ maxSuggestions: 1 });
+    await second.pass();
+    expect(second.runs()).toMatchObject([{ summary: "Audited Alpha: 1 suggestion, dropped 1 past the limits" }]);
+    expect(second.s.suggestions.get(again[0]!.id).status).toBe("open");
+    expect(second.s.suggestions.get(again[1]!.id)).toMatchObject({
       status: "rejected",
       resolvedBy: AUTOPILOT_ACTOR,
       outcome: expect.stringContaining("Over the limit of 1"),
     });
+  });
+
+  it("holds a run that fails to its cap too", async () => {
+    const made: Suggestion[] = [];
+    const { s, withTask, turnOn, pass, runs } = setup((services, request) => {
+      for (const target of ["builtin:review", "builtin:plan"])
+        made.push(suggestFor(services, target, actorIn(request)));
+    }, true);
+    withTask();
+    turnOn({ maxSuggestions: 1 });
+    await pass();
+    expect(runs()).toMatchObject([{ status: "failed" }]);
+    expect(s.suggestions.get(made[0]!.id).status).toBe("open");
+    expect(s.suggestions.get(made[1]!.id).status).toBe("rejected");
+  });
+
+  it("rejects a suggestion for a kind of target the setting doesn't allow", async () => {
+    const made: Suggestion[] = [];
+    const { s, withTask, turnOn, pass } = setup((services, request) => {
+      made.push(suggestFor(services, "builtin:review", actorIn(request)));
+    });
+    withTask();
+    turnOn({ targets: "prompts" });
+    await pass();
+    expect(s.suggestions.get(made[0]!.id)).toMatchObject({
+      status: "rejected",
+      outcome: expect.stringContaining("set to suggest changes to"),
+    });
+  });
+
+  it("starts nothing for a project where nothing happened in the window", async () => {
+    const { withTask, turnOn, pass, requests, setLater } = setup();
+    withTask();
+    turnOn({ lookBackDays: 3 });
+    // Ten days on: the task is older than three days, and no run happened since.
+    setLater(10 * DAY_MS);
+    await pass();
+    expect(requests).toHaveLength(0);
   });
 });

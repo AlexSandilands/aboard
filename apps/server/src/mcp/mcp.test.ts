@@ -46,6 +46,8 @@ describe("MCP endpoint", () => {
   });
 
   it("places every tool on one side of Orchestrate's allow or deny list", async () => {
+    // The social network's tools are registered only while it is on.
+    h.services.settings.update({ socialNetwork: true });
     const { tools } = await client.listTools();
     const placed = new Set<string>([...ORCHESTRATE_BOARD_TOOLS, ...ORCHESTRATE_DENIED_BOARD_TOOLS]);
     expect(tools.map((t) => t.name).filter((name) => !placed.has(name))).toEqual([]);

@@ -77,11 +77,16 @@ export interface SuggestionsService {
   accept(id: string, actor: string): Suggestion;
   reject(id: string, actor: string): Suggestion;
   /**
-   * Keeps the first `max` open suggestions made at or after `since` and rejects the rest, with an outcome saying the
-   * run was over its limit (so it isn't the user's verdict). Returns both lists. For a run that was asked for
-   * at most `max` and can't be held to it by its tools (Improve automations).
+   * Holds one run to its limits after the fact, for a run that can't be held to them by its tools (Improve
+   * automations). Looks only at the open suggestions made under `runActor`, oldest first: those whose target
+   * `allowed` refuses are rejected, then those past the first `max`. Each is rejected as `by`, with an outcome saying
+   * why, so it isn't read as the user's verdict. Returns what stays open and what it rejected.
    */
-  limitSince(since: string, max: number, actor: string): { kept: Suggestion[]; dropped: Suggestion[] };
+  limitRun(
+    runActor: string,
+    limits: { max: number; allowed: (targetKey: string) => boolean },
+    by: string,
+  ): { kept: Suggestion[]; dropped: Suggestion[] };
 }
 
 export function createSuggestionsService(
@@ -404,17 +409,20 @@ export function createSuggestionsService(
       return close(open(id), "rejected", actor, null);
     },
 
-    limitSince(since, max, actor) {
-      const made = repos.suggestions.list(0).filter((s) => s.status === "open" && s.createdAt >= since);
-      const limit = Math.max(0, max);
-      return {
-        kept: made.slice(0, limit),
-        dropped: made
-          .slice(limit)
-          .map((s) =>
-            close(s, "rejected", actor, `Over the limit of ${max} suggestions for one run, so it was dropped.`),
-          ),
-      };
+    limitRun(runActor, { max, allowed }, by) {
+      const made = repos.suggestions.list(0).filter((s) => s.status === "open" && s.actor === runActor);
+      const kept: Suggestion[] = [];
+      const dropped: Suggestion[] = [];
+      for (const s of made) {
+        const why = !allowed(s.targetKey)
+          ? "Not a kind of target this automation is set to suggest changes to."
+          : kept.length >= max
+            ? `Over the limit of ${max} suggestions for one run, so it was dropped.`
+            : null;
+        if (why) dropped.push(close(s, "rejected", by, why));
+        else kept.push(s);
+      }
+      return { kept, dropped };
     },
   };
 }

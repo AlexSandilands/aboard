@@ -300,8 +300,9 @@ their session transcripts only when the notes don't say why. Then it suggests at
 (3) rewrites of your review and planning skills, your custom automations' prompts and the skills they name
 (**May suggest changes to** narrows that to skills or prompts). You decide each one under
 **Settings → Tasks → Suggestions** ([Suggested changes](settings.md#suggested-changes)). It never edits anything
-itself: its only tools besides reading are `suggest_change` and an attention request, and a suggestion over the limit
-is dropped.
+itself: its only tools besides reading are `suggest_change` and an attention request, and a suggestion over the limit,
+or for a kind of target you didn't allow, is dropped. A project where nothing happened in the look-back window is
+skipped, so an idle project costs nothing.
 
 Its skill is built in, so it can't run without it and quietly propose nothing. The skill keeps suggestions few and lean:
 
