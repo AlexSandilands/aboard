@@ -230,6 +230,10 @@ export function hasMoreOptions(form: CustomForm): boolean {
   );
 }
 
+/** Whether what the form would save runs a script: a script action, or a schedule's check. */
+export const formRunsScript = (form: CustomForm): boolean =>
+  form.actionKind === "script" || (form.actionKind === "agent" && form.triggerKind === "schedule" && form.checkOn);
+
 /** What More options holds for this trigger and action, for its closed header. */
 export function moreOptionsSummary(form: CustomForm): string {
   if (form.actionKind !== "agent") return "inputs";

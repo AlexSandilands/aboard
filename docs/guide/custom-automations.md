@@ -292,7 +292,8 @@ your machine with your access. Then fill in its inputs and slots, optionally res
 **Saves in: Preview** (the default) or **On**, and **Import**. In Preview it records what it would do (a check script
 still runs for real); turn it on in the Autopilot list when its Preview runs look right and the orange warning is gone.
 **Edit first** opens it in the builder instead, at Details, with what you filled in; saving there makes it as you leave
-it (a skill in the file isn't saved that way: import it as it is for that).
+it (a skill in the file isn't saved that way: import it as it is for that). A script in it still needs the "I've read
+it" switch, on Review & try, before it saves.
 
 - A file with a script needs one more step: a switch that says you've read the script and understand it runs on your
   machine as you. **Import** waits for it.
@@ -368,9 +369,10 @@ with the agent's reason, and three buttons:
 - **Apply change** changes the automation in place: it keeps its switches (Off, Preview or On), where it runs, its run
   history, the values you gave its inputs and the tools in its slots. New inputs and slots are asked for on the
   page. A changed script needs the same "I've read it" switch as an import, and a skill the change carries is saved only
-  if you switch it on.
+  if you switch it on (under a new name when you already have one by its name); otherwise the automation keeps its own
+  skill of that name, or names none.
 - **Edit first** opens the builder on the automation with the change filled in; **Save changes** applies it as you leave
-  it.
+  it (a changed script still needs the "I've read it" switch on Review & try).
 - **Keep current** drops the proposal.
 
 With **Settings → Agents → Providers → Board skills** on, the agent also has the `aboard-automations` skill, which tells it

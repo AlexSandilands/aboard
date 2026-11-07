@@ -380,11 +380,13 @@ export function createCustomAutomationsService(
         );
         return { ...def, filters: { ...def.filters, epicId: current.filters.epicId } };
       };
-      // A skill the automation already names isn't written again; one the draft carries is only with consent.
+      // A skill the draft carries is written only with consent, and never over one of the user's (installSkill keeps a
+      // taken name apart). Without it the automation keeps naming its own skill when the draft names the same one, and
+      // names none for a skill it would have needed the draft's copy of, as an import does.
       const keepSkill = current.action.kind === "agent" && bundle.skill?.name === current.action.skill;
       // Check everything before writing a skill, so a change that can't be saved leaves nothing behind.
       checked(define(bundle.skill?.name), current.id);
-      const installed = bundle.skill && wantSkill && !keepSkill && installSkill ? installSkill(bundle.skill) : null;
+      const installed = bundle.skill && wantSkill && installSkill ? installSkill(bundle.skill) : null;
       const def = define(installed ? installed.name : keepSkill ? bundle.skill!.name : undefined);
       const automation = service.update(current.id, def);
       core.write((fx) => {

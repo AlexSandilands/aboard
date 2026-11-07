@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   firstProblem,
   formFromBundle,
+  formRunsScript,
   formSentence,
   hasMoreOptions,
   rightNow,
@@ -135,6 +136,16 @@ describe("hasMoreOptions", () => {
     expect(hasMoreOptions(form({ triggerKind: "schedule", checkOn: true }))).toBe(true);
     // A PR branch means nothing on a schedule, so it doesn't open it.
     expect(hasMoreOptions(form({ triggerKind: "schedule", onPrBranch: true }))).toBe(false);
+  });
+});
+
+describe("formRunsScript", () => {
+  it("is true for a script action and a schedule's check, which an Edit first must confirm", () => {
+    expect(formRunsScript(form({ actionKind: "script" }))).toBe(true);
+    expect(formRunsScript(form({ triggerKind: "schedule", checkOn: true }))).toBe(true);
+    // A check is only a schedule's; switched to another trigger it isn't saved.
+    expect(formRunsScript(form({ checkOn: true }))).toBe(false);
+    expect(formRunsScript(form())).toBe(false);
   });
 });
 

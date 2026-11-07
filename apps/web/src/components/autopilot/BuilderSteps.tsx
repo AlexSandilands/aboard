@@ -1085,6 +1085,33 @@ export function ReviewStep({
   );
 }
 
+/** The "I've read it" switch for a script someone else wrote, as on an import, under its warning. */
+export function ScriptConfirm({
+  checked,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <SettingsGroup>
+      <Block>
+        <ScriptWarning>
+          <p>Someone else wrote this script. Read it on Details before you save it.</p>
+        </ScriptWarning>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-sm">I&apos;ve read the script and I understand it runs on my machine as me</span>
+          <Switch
+            aria-label="Confirm the script runs on your machine"
+            checked={checked}
+            onCheckedChange={onCheckedChange}
+          />
+        </div>
+      </Block>
+    </SettingsGroup>
+  );
+}
+
 function PreviewBlock({ children }: { children: string }) {
   return (
     <pre className="max-h-72 overflow-auto rounded-md bg-muted/60 px-3 py-2 font-mono text-2xs whitespace-pre-wrap [overflow-wrap:anywhere] text-foreground/85">

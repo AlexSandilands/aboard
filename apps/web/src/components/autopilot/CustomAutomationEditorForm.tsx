@@ -12,13 +12,23 @@ import { useBoard, useSettings } from "~/state/queries";
 import {
   BUILDER_STEPS,
   firstProblem,
+  formRunsScript,
   formSentence,
   REVIEW_STEP,
   stepProblem,
   suggestedName,
   type BuilderStep,
 } from "./builder.logic";
-import { DetailsStep, DoStep, ReviewStep, Stepper, WhenStep, WhereStep, type StepProps } from "./BuilderSteps";
+import {
+  DetailsStep,
+  DoStep,
+  ReviewStep,
+  ScriptConfirm,
+  Stepper,
+  WhenStep,
+  WhereStep,
+  type StepProps,
+} from "./BuilderSteps";
 import { customFormToInput, type CustomForm } from "./customAutomations.logic";
 
 /**
@@ -36,6 +46,7 @@ export function CustomAutomationEditorForm({
   draftId,
   title,
   notice,
+  confirmScript = false,
 }: {
   customId: string | null;
   initial: CustomForm;
@@ -49,6 +60,11 @@ export function CustomAutomationEditorForm({
   title?: string;
   /** Shown above the steps: where what is being edited came from. */
   notice?: ReactNode;
+  /**
+   * It was opened on a script someone else wrote (Edit first on a file or an agent's draft): saving waits for the same
+   * "I've read it" confirmation an import does, so editing first is no way around it.
+   */
+  confirmScript?: boolean;
 }) {
   const opening = startStep ?? (customId ? REVIEW_STEP : 0);
   const [form, setFormState] = useState(() =>
@@ -58,6 +74,7 @@ export function CustomAutomationEditorForm({
   // Every step of an existing automation (or a file being edited) is filled in already, so all of them can be opened.
   const [reached, setReached] = useState<BuilderStep>(customId || opening > 0 ? REVIEW_STEP : opening);
   const [error, setError] = useState<string | null>(null);
+  const [scriptRead, setScriptRead] = useState(false);
   const board = useBoard().data;
   const boardVariables = useSettings().data?.automationVariables ?? [];
   const create = useCreateCustomAutomation();
@@ -102,11 +119,19 @@ export function CustomAutomationEditorForm({
     onDone(id);
   };
 
+  // Only while it still runs a script: one switched to an agent without a check has nothing to read.
+  const mustConfirm = confirmScript && !scriptRead && formRunsScript(form);
+
   const save = (turnOn: boolean) => {
     const problem = firstProblem(form);
     if (problem) {
       setStep(problem.step);
       setError(problem.error);
+      return;
+    }
+    if (mustConfirm) {
+      setStep(REVIEW_STEP);
+      setError("Read the script, then confirm it runs on your machine as you");
       return;
     }
     const result = customFormToInput(form);
@@ -148,6 +173,9 @@ export function CustomAutomationEditorForm({
         {step === 3 ? <WhereStep {...props} /> : null}
         {step === REVIEW_STEP ? (
           <ReviewStep {...props} sentence={sentence} customId={customId} isNew={isNew} onStep={goTo} />
+        ) : null}
+        {step === REVIEW_STEP && confirmScript && formRunsScript(form) ? (
+          <ScriptConfirm checked={scriptRead} onCheckedChange={setScriptRead} />
         ) : null}
         {error ? (
           <p role="alert" className="px-1 text-xs text-destructive-foreground">

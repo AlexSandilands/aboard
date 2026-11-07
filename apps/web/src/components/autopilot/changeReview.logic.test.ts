@@ -51,6 +51,23 @@ describe("proposedDefinition", () => {
   });
 });
 
+describe("the skill a change names", () => {
+  const withSkill = (name: string): CustomAutomation =>
+    ({ ...current, action: { ...current.action, skill: name } }) as CustomAutomation;
+  const carrying = (name: string) => draft((b) => ({ ...b, skill: { name, body: "# A skill" } }));
+  const skillOf = (def: ReturnType<typeof proposedDefinition>) =>
+    def.action.kind === "agent" ? def.action.skill : null;
+
+  it("names the draft's skill only once the reader saves it, as applying does", () => {
+    expect(skillOf(proposedDefinition(withSkill("triage"), carrying("flaky")))).toBe("");
+    expect(skillOf(proposedDefinition(withSkill("triage"), carrying("flaky"), { installSkill: true }))).toBe("flaky");
+  });
+
+  it("keeps the automation's own skill when the draft carries one of the same name and it isn't saved", () => {
+    expect(skillOf(proposedDefinition(withSkill("triage"), carrying("triage")))).toBe("triage");
+  });
+});
+
 describe("automationChanges", () => {
   it("is empty for the automation's own file", () => {
     expect(

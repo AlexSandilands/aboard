@@ -14,15 +14,24 @@ import { actionModelLabel } from "./customAutomations.logic";
 // A draft that replaces a custom automation (draft_automation's `replaces`, docs/features/autopilot.md#drafts): what the
 // automation would become if applied, and the difference field by field, for the before/after review.
 
+/** Whether the draft carries a skill of the name the automation already uses, so not saving it keeps the user's own. */
+export const keepsSkill = (current: CustomAutomation, bundle: AutomationBundle): boolean =>
+  current.action.kind === "agent" && bundle.skill?.name === current.action.skill;
+
 /**
  * The definition applying the draft saves, as the server builds it: the draft's, with the inputs' and slots' current
- * values kept by name, and the automation's own projects and epic.
+ * values kept by name, the automation's own projects and epic, and the skill applying would name.
  * `fill` is what the reader typed for inputs and slots that are new.
  */
 export function proposedDefinition(
   current: CustomAutomation,
   bundle: AutomationBundle,
-  fill: { inputs?: Record<string, string>; slots?: Record<string, readonly string[]> } = {},
+  fill: {
+    inputs?: Record<string, string>;
+    slots?: Record<string, readonly string[]>;
+    /** Whether the reader chose to save the skill the draft carries; the server then names the copy it writes. */
+    installSkill?: boolean;
+  } = {},
 ): CustomDefinition {
   const values = new Map(current.action.inputs.map((i) => [i.name, i.value]));
   const tools = new Map(current.action.kind === "agent" ? current.action.slots.map((s) => [s.name, s.tools]) : []);
@@ -36,8 +45,8 @@ export function proposedDefinition(
       ),
       slots: Object.fromEntries(bundle.slots.map((s) => [s.name, fill.slots?.[s.name] ?? tools.get(s.name) ?? []])),
       projectIds: current.filters.projectIds,
-      // Shown as the draft names it; installing the skill it carries is the reader's choice on the review.
-      ...(bundle.skill ? { skill: bundle.skill.name } : {}),
+      // As applying names it: the draft's skill once saved, the automation's own when the names match, else none.
+      ...(bundle.skill ? { skill: fill.installSkill || keepsSkill(current, bundle) ? bundle.skill.name : null } : {}),
     }),
   );
   return { ...def, filters: { ...def.filters, epicId: current.filters.epicId } };

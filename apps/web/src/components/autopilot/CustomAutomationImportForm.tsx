@@ -100,7 +100,9 @@ export function CustomAutomationImportForm({
   const setScope = useSetAutopilotScope(null);
   const [mode, setMode] = useState<"preview" | "on">("preview");
   // "Edit first": the builder, opened on what this would import (or, for a change, on the automation it changes).
-  const [editing, setEditing] = useState<{ form: CustomForm; customId: string | null } | null>(null);
+  const [editing, setEditing] = useState<{ form: CustomForm; customId: string | null; confirmScript: boolean } | null>(
+    null,
+  );
   const settings = useSettings().data;
   const boardVariables = settings?.automationVariables ?? [];
   const needs =
@@ -178,7 +180,7 @@ export function CustomAutomationImportForm({
         slots: Object.fromEntries(Object.entries(draft.slots).map(([name, text]) => [name, parseAllowedTools(text)])),
         projectIds: draft.projectIds,
       });
-      setEditing({ form, customId: null });
+      setEditing({ form, customId: null, confirmScript: actionScripts(bundle.action).length > 0 });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     }
@@ -191,6 +193,7 @@ export function CustomAutomationImportForm({
         initial={editing.form}
         startStep={2}
         draftId={shownDraft?.id}
+        confirmScript={editing.confirmScript}
         title={editing.customId ? "Edit the change first" : "Edit before importing"}
         notice={
           <p className="text-sm text-muted-foreground">
@@ -217,7 +220,7 @@ export function CustomAutomationImportForm({
           current={target}
           onDone={onDone}
           onCancel={onCancel}
-          onEditFirst={(form) => setEditing({ form, customId: target.id })}
+          onEditFirst={(form, confirmScript) => setEditing({ form, customId: target.id, confirmScript })}
         />
       );
     }

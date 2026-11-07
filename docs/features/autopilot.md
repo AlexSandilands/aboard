@@ -1273,7 +1273,8 @@ on the REST writes is unchanged, so this opens no path to setting up a command o
   `formSentence` sentence, the read-first sections, **Saves in** Preview or On (On sets the board's mode after the
   import), and **Edit first**, which opens the builder (`CustomAutomationEditorForm`) at Details on `formFromBundle`
   with what was filled in. Saving there creates it over the ordinary route (Origin-guarded) and dismisses the draft;
-  a skill the file carries isn't installed that way.
+  a skill the file carries isn't installed that way. Opened on a script (or, for a change, a changed one), the builder's
+  `confirmScript` holds Save until the same "I've read it" switch is on, so editing first doesn't skip it.
 - **Changes (`replaces`).** A draft can name the custom automation it is a new version of: `replaces` takes its id,
   `custom:<id>` key or exact name, resolved on drafting (a built-in's key or title is refused as VALIDATION, anything
   else unknown as NOT_FOUND) and stored as the id (`autopilot_drafts.replaces`, migration 044; no foreign key, so a

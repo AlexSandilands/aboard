@@ -12,7 +12,7 @@ import { toastManager } from "~/components/ui/toast";
 import { useApplyAutomationDraft, useDismissAutomationDraft } from "~/state/customAutomations";
 import { useSettings } from "~/state/queries";
 import { Block } from "./BuilderSteps";
-import { addedTools, automationChanges, changesScripts, proposedDefinition } from "./changeReview.logic";
+import { addedTools, automationChanges, changesScripts, keepsSkill, proposedDefinition } from "./changeReview.logic";
 import { formFromCustom, parseAllowedTools, type CustomForm } from "./customAutomations.logic";
 import { InputValueControl } from "./InputsAndSlots";
 import { ScriptWarning } from "./ScriptWarning";
@@ -35,8 +35,11 @@ export function AutomationChangeReview({
   /** After applying or keeping: the automation's id. */
   onDone: (id: string) => void;
   onCancel: () => void;
-  /** Opens the builder on the automation with this form, the change applied. */
-  onEditFirst: (form: CustomForm) => void;
+  /**
+   * Opens the builder on the automation with this form, the change applied. `confirmScript` when the change runs a new
+   * script, which the builder then asks the user to confirm before saving.
+   */
+  onEditFirst: (form: CustomForm, confirmScript: boolean) => void;
 }) {
   const { bundle } = draft;
   const profiles = useSettings().data?.modelProfiles ?? [];
@@ -52,15 +55,16 @@ export function AutomationChangeReview({
   );
   const [slots, setSlots] = useState<Record<string, string>>({});
   const [confirmScript, setConfirmScript] = useState(false);
-  const keepsSkill = current.action.kind === "agent" && bundle.skill?.name === current.action.skill;
+  const sameSkillName = keepsSkill(current, bundle);
   const [installSkill, setInstallSkill] = useState(false);
 
   const fill = useMemo(
     () => ({
       inputs,
       slots: Object.fromEntries(Object.entries(slots).map(([name, text]) => [name, parseAllowedTools(text)])),
+      installSkill,
     }),
-    [inputs, slots],
+    [inputs, slots, installSkill],
   );
   const proposed = useMemo(() => {
     try {
@@ -72,11 +76,11 @@ export function AutomationChangeReview({
   const changes = proposed.ok ? automationChanges(current, proposed.def, profiles) : [];
   const scriptChanged = proposed.ok && changesScripts(current, proposed.def);
   const tools = proposed.ok ? addedTools(current, proposed.def) : [];
-  const offersSkill = Boolean(bundle.skill) && !keepsSkill;
+  const offersSkill = Boolean(bundle.skill);
 
   const submit = () =>
     apply.mutate(
-      { id: draft.id, ...fill, confirmScript, installSkill: offersSkill && installSkill },
+      { id: draft.id, ...fill, confirmScript },
       {
         onSuccess: ({ automation, skill }) => {
           toastManager.add({ type: "success", title: `Applied the change to ${automation.name}` });
@@ -191,6 +195,11 @@ export function AutomationChangeReview({
                   <span className="text-sm">Save this skill so the agent can use it</span>
                   <Switch aria-label="Save the skill" checked={installSkill} onCheckedChange={setInstallSkill} />
                 </div>
+                <p className="text-2xs text-muted-foreground">
+                  {sameSkillName
+                    ? `It has the name of the skill the automation uses now. Saving it writes a copy under a new name and switches the automation to it; leave it off to keep using yours.`
+                    : "Saved to your skills folder (~/.claude/skills), never over one you have. Without it the automation runs with no skill."}
+                </p>
               </Block>
             ) : null}
             {scriptChanged ? (
@@ -237,7 +246,7 @@ export function AutomationChangeReview({
         <Button
           variant="outline"
           disabled={!proposed.ok}
-          onClick={() => proposed.ok && onEditFirst(formFromCustom(proposed.def))}
+          onClick={() => proposed.ok && onEditFirst(formFromCustom(proposed.def), scriptChanged)}
         >
           Edit first
         </Button>

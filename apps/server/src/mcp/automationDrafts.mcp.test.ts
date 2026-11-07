@@ -315,6 +315,35 @@ describe("draft_automation with replaces", () => {
     expect((await apply(draft!.id, {})).status).toBe(200);
   });
 
+  it("keeps the automation's own skill unless the reader saves the draft's, which is kept apart", async () => {
+    const { custom, key } = flakyReport();
+    h.services.customAutomations.update(custom.id, {
+      action: { ...custom.action, kind: "agent", skill: "flaky" } as typeof custom.action,
+    });
+    const withSkill = {
+      ...changed,
+      action: { ...changed.action, skill: "flaky", check: { language: "node", body: "// v1\n" } },
+      skill: { name: "flaky", body: "# New text" },
+    };
+    const installed: string[] = [];
+    const install = (skill: { name: string }) => {
+      installed.push(skill.name);
+      return { name: `${skill.name}-2`, path: `/skills/${skill.name}-2`, renamed: true };
+    };
+
+    await call({ automation: withSkill, replaces: key });
+    const [kept] = await drafts();
+    const left = h.services.customAutomations.applyDraft(kept!.id, {}, install);
+    expect(left.automation.action).toMatchObject({ skill: "flaky" });
+    expect(installed).toEqual([]);
+
+    await call({ automation: withSkill, replaces: key });
+    const [saved] = await drafts();
+    const apart = h.services.customAutomations.applyDraft(saved!.id, { installSkill: true }, install);
+    expect(installed).toEqual(["flaky"]);
+    expect(apart.automation.action).toMatchObject({ skill: "flaky-2" });
+  });
+
   it("refuses to replace a built-in or an automation that doesn't exist", async () => {
     flakyReport();
 
