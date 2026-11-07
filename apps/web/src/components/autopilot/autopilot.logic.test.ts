@@ -314,6 +314,7 @@ describe("runs", () => {
   it("labels statuses, telling a dry run from a skip", () => {
     expect(runStatusLabel({ status: "skipped", dryRun: true })).toBe("Dry run");
     expect(runStatusLabel({ status: "skipped", dryRun: false })).toBe("Skipped");
+    expect(runStatusLabel({ status: "skipped", dryRun: false, deferred: "head_moved" })).toBe("Deferred: head moved");
     expect(runStatusLabel({ status: "succeeded", dryRun: false })).toBe("Done");
     expect(runStatusLabel({ status: "failed", dryRun: false, dedupeKey: "retried:r1:review:pr:l1:abc" })).toBe(
       "Failed, retried",
@@ -328,9 +329,10 @@ describe("runs", () => {
     expect(formatCost(0)).toBe("$0.00");
   });
 
-  it("falls back to the key for an automation that is no longer in the catalogue", () => {
+  it("names an automation that is no longer in the catalogue plainly", () => {
     expect(automationTitle([{ key: "a", title: "Archive done" }], "a")).toBe("Archive done");
-    expect(automationTitle([], "gone")).toBe("gone");
+    expect(automationTitle([], "fix_pr_findings")).toBe("Fix PR findings");
+    expect(automationTitle([], "gone_away")).toBe("Gone away");
   });
 
   it("summarizes a task's runs", () => {

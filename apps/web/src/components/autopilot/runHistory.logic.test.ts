@@ -63,6 +63,19 @@ describe("runHistoryFilter", () => {
   });
 });
 
+describe("outcome", () => {
+  it("parses a known outcome, drops another, and carries it to the filter and the query", () => {
+    expect(RunHistorySearch.parse({ outcome: "deferred" }).outcome).toBe("deferred");
+    expect(RunHistorySearch.parse({ outcome: "nope" }).outcome).toBeUndefined();
+    const filter = runHistoryFilter("all", { outcome: "failed" }, new Date());
+    expect(filter.outcome).toBe("failed");
+    expect(runHistoryParams(filter).get("outcome")).toBe("failed");
+    expect(isNarrowed({ outcome: "failed" })).toBe(true);
+    expect(describeRunFilter("Fix PRs", null, { outcome: "failed" })).toBe("failed Fix PRs runs");
+    expect(describeRunFilter(null, null, { outcome: "deferred" })).toBe("Deferred runs of every automation");
+  });
+});
+
 describe("localDayStart", () => {
   it("rolls over month ends", () => {
     expect(localDayStart("2026-01-31", 1)).toBe(new Date(2026, 1, 1).toISOString());
