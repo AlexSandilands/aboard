@@ -47,8 +47,7 @@ export function createBackupSetup(deps: {
 }): BackupSetup {
   const { host } = deps;
   const { cli } = host.definition;
-  /** The host's main site, where a new repo is made: github.com for GitHub. */
-  const site = host.definition.kind === "github" ? "github.com" : null;
+  const { site } = host.definition;
 
   const signedIn = (status: GitHostStatus) => {
     // A CLI too old to list hosts only says whether it is signed in at all, which is to the main site.

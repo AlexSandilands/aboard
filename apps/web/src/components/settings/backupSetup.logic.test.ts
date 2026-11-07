@@ -13,7 +13,7 @@ import {
 } from "./backupSetup.logic";
 
 const info = (over: Partial<BackupSetupInfo> = {}): BackupSetupInfo => ({
-  gh: { available: true, signedIn: true, login: "octocat" },
+  host: { kind: "github", available: true, signedIn: true, login: "octocat" },
   defaultDir: "/data/backup",
   backupDir: null,
   backupRemote: null,
@@ -22,8 +22,8 @@ const info = (over: Partial<BackupSetupInfo> = {}): BackupSetupInfo => ({
   suggestedRepoName: "board-backup",
   ...over,
 });
-const noGh = info({ gh: { available: false, signedIn: false, login: null } });
-const signedOut = info({ gh: { available: true, signedIn: false, login: null } });
+const noGh = info({ host: { kind: "github", available: false, signedIn: false, login: null } });
+const signedOut = info({ host: { kind: "github", available: true, signedIn: false, login: null } });
 
 describe("backupState", () => {
   it("tells unconfigured, local-only and pushing backups apart", () => {

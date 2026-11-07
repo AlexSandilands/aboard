@@ -12,6 +12,8 @@ export interface GitHostDefinition {
   kind: GitHostKind;
   /** The host's name, as people say it: "GitHub". */
   label: string;
+  /** Its main site, where the CLI makes a new repository (the backup's): "github.com". */
+  site: string;
   /** What the host calls a pull request, short ("PR") and in full ("pull request"). */
   terminology: { short: string; long: string };
   /** The CLI the board borrows its sign-in from. */
@@ -33,6 +35,7 @@ export interface GitHostDefinition {
 export const GITHUB_HOST: GitHostDefinition = {
   kind: "github",
   label: "GitHub",
+  site: "github.com",
   terminology: { short: "PR", long: "pull request" },
   cli: {
     name: "gh",
