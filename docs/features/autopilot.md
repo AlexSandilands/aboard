@@ -15,13 +15,14 @@ settings UI. The digest's header button and panel are in [board-layout.md](board
 
 ### Switches and scopes
 
-Each automation has a mode at each scope: **Inherit**, **On** or **Off**. The most specific scope that isn't
-Inherit wins: epic over project over board. With nothing set anywhere, an automation is off.
+Each automation has a mode at each scope: **Inherit**, **Off**, **Preview** or **On**. The most specific scope that
+isn't Inherit wins: epic over project over board. With nothing set anywhere, an automation is off. [Preview](#preview)
+is on, but every run it makes is a dry run.
 
 The board is the top scope, so Inherit there would only fall back to that default, which is the same as Off. The
-board's switch therefore offers **On** and **Off** only (`BOARD_MODES`); no row reads as Off, and picking Off saves
-`inherit`, which drops the row unless it still holds config. The server still accepts all three modes at every
-scope, so the API and old rows are unchanged. Projects and epics keep Inherit / On / Off.
+board's switch therefore offers **Off**, **Preview** and **On** only (`BOARD_MODES`); no row reads as Off, and picking
+Off saves `inherit`, which drops the row unless it still holds config or a last on-mode. The server accepts every mode
+at every scope. Projects and epics offer Inherit / Off / Preview / On.
 
 | Board | Project | Epic    | Effective      |
 | ----- | ------- | ------- | -------------- |
@@ -31,6 +32,8 @@ scope, so the API and old rows are unchanged. Projects and epics keep Inherit / 
 | Off   | On      | Inherit | On (project)   |
 | Off   | Off     | On      | On (epic)      |
 | On    | On      | Off     | Off (epic)     |
+| On    | Preview | Inherit | Preview (project) |
+| Preview | Inherit | On    | On (epic)      |
 
 An epic's setting covers only the tasks in it (`parent_id`). A task with no epic skips that level, and so does a
 task whose epic is archived: an archived epic no longer counts (unarchive it and its rows apply again). The epic
@@ -48,7 +51,7 @@ Each automation also has config (a skill, a budget, a number of days). Config ke
 first, then project, then epic, over the automation's defaults (with the board's [agent defaults](#agent-defaults)
 laid over them), whatever the modes: a project can tune an
 automation the board switches on, and an epic can tune one for its tasks. `resolveAutopilot` in `packages/contracts/src/autopilot.ts` is the rule, and
-`describeInherited` gives the UI its "Inherit (On from board)" label.
+`describeInherited` gives the UI its "Inherit (On from board)" (or "Preview from board") label.
 
 Rows live in `autopilot_settings`, keyed by scope and automation. The board scope has an empty `scope_id`. The
 service reads or sets an epic scope only for an epic in the project it is given (`NOT_FOUND` otherwise: another
@@ -62,6 +65,45 @@ drops every candidate whose task doesn't resolve to on, using the task's own epi
 config, while `act` gets the task's effective config, epic keys included; a config key that changes what a `check`
 finds can't be tuned per epic.
 
+### Preview
+
+Preview is a per-automation dry run: try one new automation while the others keep working. `resolveAutopilot` counts
+`preview` as enabled and sets `preview`, so the check runs where it would, and the engine records each candidate whose
+task (or project, or the board for a task-less one) resolves to Preview as a dry run: a `skipped` run with "Would …"
+as its summary, exactly as under [Preview everything](#engine-settings-and-pause) (`engine.dryRun`), which still
+previews every automation at once.
+
+- **What still runs.** Nothing the action would do: no agent, no shell command or script action, no change to the
+  board or GitHub. A custom automation's **check script** is the exception: it runs for real, to find what it would act
+  on, so its preview can say what it printed. The UI says so wherever an automation has one.
+- **Per scope.** A project, or an epic, can be in Preview while the rest is On, and the other way round. A check is
+  handed `ProjectScope.dryRun` per project (true when no scope reaching the project is live: neither the project's own
+  resolution nor an epic of it switched On) and `engine.dryRun` set when nothing of the automation is live anywhere, so
+  checks that read the dry-run flag (dedupe of custom checks, Orchestrate's slots, Start planned's room) read the right
+  one. The engine still decides each candidate by its own task's scopes.
+- **Turning it on.** Going from Preview to On counts as switching it on (`onEnabled`, `onEpicEnabled`): a custom
+  automation re-arms and Recurring tasks restarts, so On acts on what happens from then, not on what Preview saw. Dry
+  runs are deduped apart from real ones, so the Preview runs stay as history.
+- **Start planned's room.** Its check resolves each task as the engine will: a task that resolves Off (outside an epic
+  that is on, in a project that is off) is left out, and one in Preview is handed over outside the slots, since the
+  engine only records it. Neither can take the room a live task needs.
+- **A custom automation's preview text** is built per task: its epic's mode when the epic has its own setting, else
+  its project's, so a task in a Preview epic of a live project still gets "what it would run".
+- **Elsewhere.** The merge gate counts Review PRs in Preview (or under Preview everything) as on, so a merge still
+  waits for its review: that review doesn't come until it is turned on, which holds merges back rather than letting a
+  PR through unreviewed. A Recurring section in Preview says no task is made.
+- **New automations save in Preview.** Creating, importing or importing a draft writes a board row in Preview
+  (`customAutomations` insert), with `last_on_mode` Preview.
+- **The last on-mode.** `autopilot_settings.last_on_mode` (migration 043, which also widens the mode CHECK) keeps the
+  last of On or Preview a scope was set to, through Off and Inherit; the row stays while it holds one. Such a row, at
+  Inherit with no config, isn't an epic's own setting (`epicsWithOwnSetting`), so the epic still follows its project. Scope entries
+  carry it as `lastOnMode`, with `preview`. The list's switch turns an automation back on in it, or, with none, in
+  Preview for one that has never made a real run and On for one that has (`restoreMode`). The lane and epic popovers'
+  switches turn on in it, or On.
+- **How often it would have run.** `overview.previewRuns` counts each automation's dry runs over the last 7 days
+  (`PREVIEW_WINDOW_MS`, `autopilotRuns.dryRunCountsSince`), for the detail's "Would have run N times this week" notice
+  and its **Turn on**.
+
 ### Engine settings and pause
 
 Engine-wide settings are one `autopilotEngine` key in the `settings` table, and Pause all is
@@ -73,7 +115,7 @@ Engine-wide settings are one `autopilotEngine` key in the `settings` table, and 
 | `dailyRunCap`          | none            | Agent runs started per local day                                    |
 | `dailySpendCapUsd`     | none            | What agent runs created today may cost before no more start          |
 | `quietHours`           | off, 22:00–07:00 | No agent runs start in the window (local time; may wrap midnight; equal ends are no window) |
-| `dryRun`               | off             | Record what would run, and do nothing                                |
+| `dryRun`               | off             | Preview everything: every automation records what would run, and does nothing |
 | `worktreeRetentionDays` | 7              | Days a finished headless run's worktree is kept when its PR hasn't merged |
 | `agentDefaults`        | auto, $5, 60 min, T3's default | What agent automations run with unless they override it ([below](#agent-defaults)) |
 
@@ -117,7 +159,8 @@ so they need no hook of their own. Events published while the engine itself writ
    task.
 4. Drops candidates outside the scopes it's on in (per task: its epic, then its project), and candidates whose
    dedupe key already has a run.
-5. In dry-run, records a `skipped` run with "Would …" as its summary and moves on.
+5. Under Preview everything, or where the candidate resolves to Preview, records a `skipped` run with "Would …" as its
+   summary and moves on.
 6. For agent automations, holds the candidate in quiet hours, at the concurrency cap or at a daily cap. Held
    candidates aren't recorded, so a later pass picks them up. A candidate with `startsNoAgent` (Fix PRs giving up)
    isn't held: it starts no agent, so the caps and quiet hours don't apply to it, and it counts toward neither the daily run cap nor the concurrency count.
@@ -149,7 +192,8 @@ hide work it only previewed.
 `runner`, `session_id`, `thread_url`, `worktree_path` and `cost_usd`. An action can leave a structured result in
 `output_json` (`ActionResult.output`, `AutopilotRun.output`) for a later automation to read; Review PRs leaves its
 verdict there. A custom automation's shell or script action fills in `exit_code` and `detail` (the output's tail); a dry run
-of a custom automation keeps in `detail` what it would have run (`Candidate.preview`). Runs are history, so backups
+of a custom automation keeps in `detail` what it would have run (`Candidate.preview`). The UI labels a dry run
+**Preview**. Runs are history, so backups
 leave them out.
 
 - A task's runs log `autopilot_run` activity under the actor `autopilot`: when it starts, when it ends, and
@@ -353,7 +397,9 @@ this automation's own switch decides whether a project's rules run. It has no co
   (closed tasks are Done) and not archived. A deleted template fails the run with "pick another one".
 - Whatever the outcome, `act` moves the cursor to the slot (`recurring.handled`), so the next pass looks for the
   slot after it, and never moves it back. The cursor is also what stops a duplicate when runs are gone (a restore
-  doesn't bring runs back). Dry-run records "Would …" and leaves the cursor, so turning it off makes the task.
+  doesn't bring runs back). Preview everything records "Would …" and leaves the cursor, so turning it off makes the
+  task. The automation's own Preview does too, but turning it On restarts the rules (`onEnabled`), so a slot only
+  previewed is not made.
 - A rule's cursor starts at its creation time, and is set again when the rule is switched on or its schedule
   changes, so slots from before that aren't caught up. The same goes for the automation: when its switch turns on
   for a project (its own, or the board's), or Pause all is lifted, `AutopilotService` calls `onEnabled` and the
@@ -1056,7 +1102,7 @@ schedule takes one for now (`checkCustomDefinition`); task triggers would need a
   (Orchestrate's deny list plus starting, messaging or retrying other agents' work and merging). What is left reads the
   board, adds notes and asks the user. Allowed tools and slots can't be used with it, so the definition check refuses
   them; off, the agents get a scheduled agent's access and the action's tools.
-- **Dry run.** The check really runs (the preview says so), and each new item is recorded as a skipped run whose
+- **Dry run and Preview.** The check really runs (the preview says so), and each new item is recorded as a skipped run whose
   preview is its agent's filled prompt; a failed check records a skipped run with the failure.
 - **Sharing and the editor.** The bundle carries the check with the action (a version 2 file, imported only with the
   script confirmation; see [Sharing automations](#sharing-automations)), and the import page shows it and says how its
@@ -1151,7 +1197,7 @@ name (`Name (2)`) and runs the usual definition check **before** writing anythin
 skill behind. The skill goes to `~/.claude/skills/<name>/SKILL.md` (`installSkill` in `skills.ts`) only when
 `installSkill` is true; a name taken by any installed skill (folder or frontmatter name) becomes `<name>-2`, `-3`, with
 the frontmatter name rewritten, and the automation names what was written. Without `installSkill` it names no skill. It
-is saved like any new one, with no switches, so it is off. As when creating one, a shell or script action needs the board page's
+is saved like any new one, in Preview for the board. As when creating one, a shell or script action needs the board page's
 `Origin`, and so does `installSkill` with a skill in the file: a skill persists into every later session that reads
 the user's skills. The skill's frontmatter `name:` is always set to the name it was installed as (added, with a
 frontmatter block, when missing), so a file can't install a skill under another name. Export carries only the skill's
@@ -1210,7 +1256,7 @@ on the REST writes is unchanged, so this opens no path to setting up a command o
 - **What the agent is told.** The import page's URL (`automationDraftPath`, `/settings/autopilot/custom/import?draft=<id>`
   on the board's URL), the expiry, whether a script needs confirming (or, for a command, reading), the slots to fill and, per variable
   the action reads, the projects with no value for it, so the agent can tell the user. The result says nothing is set
-  up until the user imports it. Orchestrate's agent is denied the tool.
+  up until the user imports it, and that it then saves in Preview. Orchestrate's agent is denied the tool.
 - **The user.** Each draft sends an `automation_draft` notification (task-less; the inbox opens Needs you in Settings → Autopilot).
   That section lists the drafts with **Review** and **Dismiss**. The import page with `?draft=` loads it
   (`GET /api/autopilot/drafts/:id`, NOT_FOUND once gone) into the same untrusted preview, script confirmation, inputs and
@@ -1612,15 +1658,18 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
     under its `group` heading (`AUTOMATION_GROUPS`: Ship work, Pull requests, Upkeep, then Yours for custom
     automations, which have no group of their own). A row has an icon, the name with a dot (green on, red when the
     last run failed), a line saying where it is on and how its last run went (`rowSubline`, from each project's scope
-    and `overview.lastRuns`), and its board switch (On saves `on`, off saves `inherit`, as the old switch did). An
+    and `overview.lastRuns`), and its board switch (on saves the mode `restoreMode` gives, off saves `inherit`). A
+    row in Preview has an amber **Preview** badge instead of the dot. An
     automation off on the board and in every project is dimmed, as a switched-off provider is; its switch stays.
     **+ Add automation** opens a chooser: New (the editor) or Import. `?automation=<key>` picks a row; with none,
     the first is shown.
-  - **The detail**: a header with the status line (`statusLine`) and **Switch on/off**, plus **Export** and
-    **Delete** for a custom automation; **What it does**, one sentence read from its effective config
-    (`automationSentence`; a custom automation's from its trigger and action) with **All runs**; **Where it runs**,
-    still the board's On / Off and a line naming the projects it is on in, which a project sets in its lane pill or
-    settings; **Settings**, the fields whose `tier` is `essential`; and **Advanced**, closed, with every other field.
+  - **The detail**: a header with the status line (`statusLine`, "Preview · …" in Preview) and **Switch on/off**,
+    plus **Export** and **Delete** for a custom automation; in Preview, a notice with how often it would have run this
+    week (`previewHint`), **See them** (its run history) and **Turn on**; **What it does**, one sentence read from its
+    effective config (`automationSentence`; a custom automation's from its trigger and action) with **All runs**, and
+    the **Mode** row, the board's Off · Preview · On, saying what the mode does (`modeDescription`; with a check
+    script, that it still runs for real); **Where it runs**, the board's mode as text and a line naming the projects it
+    is on in and, apart, those only in Preview (`projectsStatus`), which a project sets in its lane pill or settings; **Settings**, the fields whose `tier` is `essential`; and **Advanced**, closed, with every other field.
     Its heading gets a dot when an advanced value isn't the default (`advancedChanged`). A field without a tier is
     advanced. A custom automation's trigger and action are edited in its editor (**Edit**,
     `/settings/autopilot/custom/<id>`).
@@ -1629,13 +1678,14 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
   one.
 - **Limits & safety** (`/settings/autopilot/limits`, `AutopilotLimits`): spending and timing (concurrency, the daily
   caps, quiet hours), the defaults for agent runs ([agent defaults](#agent-defaults), with a link to Agents →
-  Operations for the models), safety (dry run for every automation, worktree
-  retention), and the board's variables. A number that is out of range is put back with a toast; an empty cap means
+  Operations for the models), **Advanced** (`autopilot.limits.advanced`: **Preview everything**, `engine.dryRun`, and
+  worktree retention), and the board's variables. A number that is out of range is put back with a toast; an empty cap means
   no cap.
 
 Old links still work: `redirectSettingsTarget` sends `autopilot.engine.*` to the limits rows or, for
 `autopilot.engine.automation-<key>` and `autopilot.engine.orchestrate`, to `autopilot.automations.<key>` (which picks
-it), and `autopilot.custom` to the list (its variables to Limits & safety). The router redirects such a hash to the
+it), and `autopilot.custom` to the list (its variables to Limits & safety). The old Dry run and Safety anchors go to
+Preview everything and Advanced. The router redirects such a hash to the
 tab's path. Orchestrate's **Countdown on lanes** (`showAutopilotTimer`, a per-browser display preference) is
 **Autopilot countdown on lanes** in Settings → Appearance.
 

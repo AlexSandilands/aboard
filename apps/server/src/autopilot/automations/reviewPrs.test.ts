@@ -700,7 +700,7 @@ describe("review PRs: the agent", () => {
       services: s,
       engine: s.autopilot.engine(),
       now: new Date(),
-      projects: s.projects.list().map((project) => ({ project, config: reviewPrs.defaults })),
+      projects: s.projects.list().map((project) => ({ project, config: reviewPrs.defaults, dryRun: false })),
       board: null,
     });
     expect(candidate).toBeDefined();

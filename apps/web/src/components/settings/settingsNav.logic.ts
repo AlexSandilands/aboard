@@ -138,6 +138,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
         "limits",
         "quiet hours",
         "dry run",
+        "preview everything",
         "caps",
         "concurrency",
         "variables",
@@ -253,6 +254,10 @@ const MOVED_AUTOPILOT: ReadonlyArray<[string, string]> = [
   ["autopilot.engine.pr-fix-threshold", "autopilot.automations.fix_prs"],
   ["autopilot.limits.pr-fix-threshold", "autopilot.automations.fix_prs"],
   ["autopilot.limits.pull-requests", "autopilot.automations.fix_prs"],
+  // Dry run became Preview everything, under Limits → Advanced (the Safety section before).
+  ["autopilot.engine.dry-run", "autopilot.limits.preview-everything"],
+  ["autopilot.limits.dry-run", "autopilot.limits.preview-everything"],
+  ["autopilot.limits.safety", "autopilot.limits.advanced"],
   ["autopilot.engine.orchestrate.countdown", "board.appearance.autopilot-countdown"],
   ["autopilot.engine.orchestrate", "autopilot.automations.orchestrate"],
   ["autopilot.engine.pause-all", "autopilot.automations.pause-all"],

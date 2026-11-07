@@ -13,6 +13,7 @@ import {
   selectedAutomation,
   splitAgentFields,
   statusLine,
+  projectsStatus,
   whereText,
 } from "./automationList.logic";
 
@@ -20,7 +21,9 @@ const entry = (automation: string, enabled: boolean): AutopilotScopeEntry => ({
   automation,
   mode: "inherit",
   config: {},
+  lastOnMode: null,
   enabled,
+  preview: false,
   source: enabled ? "board" : "default",
   effectiveConfig: {},
 });
@@ -51,6 +54,18 @@ describe("where an automation is on", () => {
     expect(whereText(automationReach("a", entry("a", false), projects([true, true, true, true, false])))).toBe(
       "p1, p2 +2",
     );
+  });
+
+  it("names the projects it only previews apart from those it runs in", () => {
+    const preview = (title: string): { title: string; entries: AutopilotScopeEntry[] } => ({
+      title,
+      entries: [{ ...entry("a", true), preview: true }],
+    });
+    const reach = automationReach("a", entry("a", true), [...projects([true]), preview("docs")]);
+    expect(reach.previewProjects).toEqual(["docs"]);
+    expect(projectsStatus(reach)).toBe("On in p1 · Preview in docs");
+    expect(projectsStatus({ projects: ["docs"], previewProjects: ["docs"] })).toBe("Preview in docs");
+    expect(projectsStatus({ projects: [], previewProjects: [] })).toBe("On in no project");
   });
 
   it("dims a row only when the automation is off on the board and in every project", () => {

@@ -237,6 +237,37 @@ describe("start planned tasks: agent settings", () => {
   });
 });
 
+describe("start planned tasks: preview", () => {
+  it("records tasks in a Preview epic without taking the room a live task needs", async () => {
+    const { s, task, pass, requests, runs, turnOn } = setup();
+    const previewed = task("Previewed");
+    const epic = s.tasks.createEpic({ projectId: previewed.projectId, title: "Trial" }, [previewed.id], "user");
+    // Ahead of the live task in board order, so slicing them together would give it the only slot.
+    s.tasks.update(previewed.id, { priority: true }, "user");
+    const live = task("Live");
+    turnOn();
+    s.autopilot.setScope("epic", epic.id, AUTOPILOT_START_PLANNED, { mode: "preview" }, epic.projectId);
+    await pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([live.id]);
+    expect(runs().find((r) => r.taskId === previewed.id)).toMatchObject({ dryRun: true, status: "skipped" });
+  });
+
+  it("gives no room to a task the engine would drop: outside an epic that is on, in a project that is off", async () => {
+    const { s, task, pass, requests, project } = setup();
+    const beta = s.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
+    const inEpic = task("In the epic");
+    const epic = s.tasks.createEpic({ projectId: project.id, title: "On" }, [inEpic.id], "user");
+    // Ahead of everything, in a project that is off: it must not take the only slot.
+    const outside = task("Outside the epic");
+    s.tasks.update(outside.id, { priority: true }, "user");
+    const live = s.tasks.create({ projectId: beta.id, title: "Live", plan, autopilot: true });
+    s.autopilot.setScope("epic", epic.id, AUTOPILOT_START_PLANNED, { mode: "preview" }, project.id);
+    s.autopilot.setScope("project", beta.id, AUTOPILOT_START_PLANNED, { mode: "on" });
+    await pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([live.id]);
+  });
+});
+
 describe("start planned tasks: priority", () => {
   it("starts priority tasks first, whatever their project or position", async () => {
     const { s, task, engine, project, requests, turnOn } = setup();
@@ -731,13 +762,14 @@ describe("start planned tasks: one attempt per entry into Planned", () => {
 
 describe("start planned tasks: skipped when no longer eligible", () => {
   it("skips a task whose flag was switched off between the check and the action", async () => {
-    const { s, task } = setup();
+    const { s, task, turnOn } = setup();
     const t = task("Flagged");
+    turnOn();
     const [candidate] = await startPlanned.check({
       services: s,
       engine: s.autopilot.engine(),
       now: new Date(),
-      projects: s.projects.list().map((project) => ({ project, config: startPlanned.defaults })),
+      projects: s.projects.list().map((project) => ({ project, config: startPlanned.defaults, dryRun: false })),
       board: null,
     });
     s.tasks.update(t.id, { autopilot: false }, "user");

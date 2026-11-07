@@ -567,12 +567,54 @@ describe("custom automations: filters and scopes", () => {
   it("doesn't act on what happened while it was off once it is switched on", async () => {
     const { s, task, define, pass, shellRuns, shell } = setup();
     const custom = define({ name: "Ping", trigger: { kind: "status_change", to: "review" }, action: shell() }, null);
+    s.autopilot.setScope("board", null, customAutomationKey(custom.id), { mode: "off" });
     const t = task("Moved while off");
     s.tasks.move(t.id, { status: "review" }, "agent");
     await new Promise((r) => setTimeout(r, 5));
     s.autopilot.setScope("board", null, customAutomationKey(custom.id), { mode: "on" });
     await pass();
     expect(shellRuns).toHaveLength(0);
+  });
+
+  it("previews a task in an epic in Preview with what it would run, while its project runs for real", async () => {
+    const { s, task, define, pass, shellRuns, shell, project, runsOf } = setup();
+    const custom = define({ name: "Ping", trigger: { kind: "status_change", to: "review" }, action: shell() });
+    const key = customAutomationKey(custom.id);
+    const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+    s.autopilot.setScope("epic", epic.id, key, { mode: "preview" }, project.id);
+    await tick();
+    const inEpic = task("In the epic");
+    s.tasks.update(inEpic.id, { epicId: epic.id }, "agent");
+    const outside = task("Outside");
+    s.tasks.move(inEpic.id, { status: "review" }, "agent");
+    s.tasks.move(outside.id, { status: "review" }, "agent");
+    await pass();
+    expect(shellRuns.map((r) => r.env[brandEnv("TASK_ID")])).toEqual([outside.id]);
+    const previewed = runsOf().find((r) => r.taskId === inEpic.id);
+    expect(previewed).toMatchObject({ dryRun: true, status: "skipped" });
+    expect(previewed!.detail).toContain("./notify.sh");
+  });
+
+  it("saves in Preview, records what it would run, and doesn't redo that once turned on", async () => {
+    const { s, task, define, pass, shellRuns, shell, runsOf } = setup();
+    const custom = define({ name: "Ping", trigger: { kind: "status_change", to: "review" }, action: shell() }, null);
+    const key = customAutomationKey(custom.id);
+    expect(s.autopilot.scope("board", null).find((e) => e.automation === key)).toMatchObject({ mode: "preview" });
+    await tick();
+    const t = task("Moved in Preview");
+    s.tasks.move(t.id, { status: "review" }, "agent");
+    await pass();
+    expect(shellRuns).toHaveLength(0);
+    expect(runsOf()).toMatchObject([{ dryRun: true, status: "skipped", taskId: t.id }]);
+    await new Promise((r) => setTimeout(r, 5));
+    // On only acts on what happens from now: the move Preview saw stays a preview.
+    s.autopilot.setScope("board", null, key, { mode: "on" });
+    await pass();
+    expect(shellRuns).toHaveLength(0);
+    const later = task("Moved once on");
+    s.tasks.move(later.id, { status: "review" }, "agent");
+    await pass();
+    expect(shellRuns.map((r) => r.env[brandEnv("TASK_ID")])).toEqual([later.id]);
   });
 
   it("keeps a project's waiting events when it is switched on in another", async () => {
@@ -644,6 +686,24 @@ describe("custom automations: filters and scopes", () => {
       s.tasks.move(later.id, { status: "review" }, "agent");
       await pass();
       expect(ran()).toEqual([later.id]);
+    });
+
+    it("lets an epic set back to Inherit follow its project, though its row stays to remember the last on-mode", async () => {
+      const { s, key, epic, project, inEpic, setEpic, setProject, pass, ran } = epicSetup();
+      setProject("off");
+      setEpic("on");
+      setEpic("inherit");
+      expect(s.autopilot.scope("epic", epic.id, project.id).find((e) => e.automation === key)).toMatchObject({
+        mode: "inherit",
+        lastOnMode: "on",
+      });
+      expect(s.autopilot.epicsWithOwnSetting({ key }).has(epic.id)).toBe(false);
+      const t = inEpic("Moved while the project was off");
+      s.tasks.move(t.id, { status: "review" }, "agent");
+      await tick();
+      setProject("on");
+      await pass();
+      expect(ran()).toEqual([]);
     });
 
     it("doesn't act on what a task did before it joined an epic that is on", async () => {
@@ -1593,6 +1653,16 @@ describe("custom automations: an agent with a check script", () => {
     expect(runs[0]!.detail).toContain("printed 2 items");
     expect(runs[0]!.detail).toContain("Look at Alpha item");
     expect(runs[1]!.detail).toContain("Look at Beta item");
+  });
+
+  it("still runs the check for real in the automation's own Preview, and starts no agent for what it printed", async () => {
+    const { s, custom, slot, scriptRuns, agentRuns, runsOf } = checkSetup(() => printed({ key: "a", title: "Alpha" }));
+    s.autopilot.setScope("board", null, customAutomationKey(custom.id), { mode: "preview" });
+    await slot(SLOT);
+    expect(scriptRuns).toHaveLength(1);
+    expect(agentRuns).toHaveLength(0);
+    expect(runsOf()).toMatchObject([{ dryRun: true, status: "skipped" }]);
+    expect(runsOf()[0]!.detail).toContain("The check script really ran (Preview still runs it)");
   });
 
   it("gives trusted items' agents the usual access and the allowed tools", async () => {

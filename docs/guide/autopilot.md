@@ -45,17 +45,33 @@ switch it on. Click a row to see it on the right:
 
 - one sentence saying what it does with your settings ("Every weekday at 09:00, write a plain list of what changed
   on the board"), and **All runs**;
-- **Where it runs**: the board's **On / Off** and the projects it's on in;
+- **Mode**: **Off**, **Preview** or **On** for the board (see [Trying one out with Preview](#trying-one-out-with-preview));
+- **Where it runs**: the board's mode and the projects it's on in;
 - **Settings**: the few options most people change;
 - **Advanced**, closed: everything else. For an automation that starts an agent it opens with two lines: the
   **Model**, which comes from Settings → Agents → Operations and says what it runs on now, and **Runner, budget and
   timeout**, which come from the [defaults for agent runs](#limits). Each has **Override**, to set it for this
   automation alone, and each overridden value a reset. A dot on Advanced means something in there isn't the default.
 
-The board's switch is just **On / Off** (there's nothing above the board to inherit from, so an automation you
-haven't switched on is off); only projects and epics can follow the scope above (the ↺ button), and a project can
+The board's switch is just **Off / Preview / On** (there's nothing above the board to inherit from, so an automation
+you haven't switched on is off); only projects and epics can follow the scope above (the ↺ button), and a project can
 override the options in its own settings. On a phone the list and an automation take turns: tap a row, and **All
 automations** takes you back.
+
+### Trying one out with Preview
+
+**Preview** lets you watch one automation before you trust it, while the others keep working. In Preview it does none
+of its work: each time it would act, it records a run marked **Preview** saying what it would have done ("Would start
+#12 …"), and no agent starts, no command runs and nothing on the board or GitHub changes. The one exception is a custom
+automation's **check script**: it still runs for real, so it can tell what it would act on, and the automation says so.
+
+An automation in Preview has an amber **Preview** badge in the list. Its page says how many times it would have run this
+week, with **See them** (its runs) and **Turn on**. Turning it on doesn't go back over what Preview saw: it acts on what
+happens from then. A project or an epic can be in Preview on its own too, from its Autopilot pill or settings.
+
+Automations you make, import or accept from an agent's draft start in Preview. The switch in the list remembers the
+mode an automation was last on in, so switching it off and on again brings back Preview or On; one that has never run
+comes back in Preview.
 
 ## Remind me about stuck tasks
 
@@ -94,7 +110,7 @@ automation alone.
 - Its settings: **Rounds per PR**, the **review skill** it follows (the built-in one by default), **Review drafts**,
   and the model, budget and timeout. It always runs headless, since it must be held to read-only. It
   needs `gh` signed in to the PR's host and the PR's branch on `origin`, so a PR from a fork isn't reviewed.
-- Switching it on reviews every open PR already linked in the project, once per head commit. **Dry run** shows
+- Switching it on reviews every open PR already linked in the project, once per head commit. **Preview** shows
   which first.
 
 ## Fix PRs
@@ -210,8 +226,8 @@ see (T3 Code closed, the thread deleted) stops holding it after ten minutes.
 
 It tries a task once each time it enters Planned. If the run fails, or the task is still in Planned when the
 grace period ends, the card goes under **Needs attention** with "Autopilot couldn't start this task" and you get
-a notification; nothing retries. Move the task out of Planned and back in to try again. Try it first with
-**Dry run** to see which tasks it would start.
+a notification; nothing retries. Move the task out of Planned and back in to try again. Try it first in
+**Preview** to see which tasks it would start.
 
 ## Merge ready PRs
 
@@ -360,8 +376,9 @@ In **Settings → Autopilot → Limits & safety**:
   headless run ($5 and 60 minutes by default) and **T3 Code access**. Every automation that starts an agent uses
   these unless it overrides them. Models are set per kind of run in Settings → Agents → Operations.
 - Review PRs' rounds and Fix PRs' threshold and attempts are on those automations.
-- **Dry run**: record what each automation would do, and do nothing. Good for trying an automation out.
-- **Worktree retention**, and the **Variables** your custom automations read.
+- Under **Advanced**, **Preview everything**: every automation records what it would do, and does nothing. To try one
+  automation, put just that one in [Preview](#trying-one-out-with-preview) instead. Also **Worktree retention**.
+- The **Variables** your custom automations read.
 
 ## Pausing
 
