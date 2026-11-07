@@ -164,7 +164,10 @@ export function createAutopilotEngine(deps: {
       .list()
       .map((project) => ({ project, resolved: s.autopilot.resolve(automation, project.id) }))
       .flatMap(({ project, resolved }) =>
-        (resolved.enabled || withEpicOn.has(project.id)) && resolved.config
+        (resolved.enabled || withEpicOn.has(project.id)) &&
+        resolved.config &&
+        // Paused there after failing in a row: not even its check runs (a custom one's script) until resumed.
+        !s.autopilot.isAutoPaused(automation.key, project.id)
           ? [{ project, config: resolved.config }]
           : [],
       );
@@ -208,6 +211,7 @@ export function createAutopilotEngine(deps: {
         epicId = task.kind === "epic" ? found.taskId! : (task.parent?.id ?? null);
       }
       const projectId = candidate.projectId ?? null;
+      if (projectId && s.autopilot.isAutoPaused(automation.key, projectId)) continue;
       // Only where the automation is on: a check may return more than it was asked for.
       const resolved = projectId ? resolveFor(projectId, epicId) : board;
       const config = resolved.enabled ? resolved.config : null;

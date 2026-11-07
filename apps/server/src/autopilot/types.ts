@@ -1,5 +1,6 @@
 import type {
   AutopilotEngineSettings,
+  AutopilotRunDeferral,
   AutopilotField,
   AutopilotRun,
   AutomationGroup,
@@ -92,6 +93,8 @@ export interface ActionResult extends RunPatch {
   /** Replaces the run's summary with what actually happened. */
   summary?: string;
   error?: string;
+  /** With `skipped`: the work was put off, not dropped (the PR's head moved), and is shown as Deferred. */
+  deferred?: AutopilotRunDeferral;
   /** Show the run's error (or summary) on the task under Needs attention. */
   needsAttention?: boolean;
   /** Kept on the run for later automations to read, e.g. the verdict of a review. */

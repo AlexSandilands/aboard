@@ -28,7 +28,7 @@ export function AutopilotSection({ task }: { task: TaskDetail }) {
       title="Autopilot"
       summary={
         <Badge
-          variant={runStatusVariant(shown.status)}
+          variant={runStatusVariant(shown.status, shown.deferred)}
           size="sm"
           title={automationTitle(automations, shown.automation)}
         >
@@ -84,7 +84,7 @@ function RunRow({ run, title, retryable }: { run: AutopilotRun; title: string; r
   return (
     <li className="flex flex-col gap-0.5 rounded-md px-1 py-1">
       <div className="flex min-w-0 items-center gap-1.5 text-xs">
-        <Badge variant={runStatusVariant(run.status)} size="sm">
+        <Badge variant={runStatusVariant(run.status, run.deferred)} size="sm">
           {runStatusLabel(run)}
         </Badge>
         <span className="min-w-0 truncate font-medium text-foreground/90">{title}</span>

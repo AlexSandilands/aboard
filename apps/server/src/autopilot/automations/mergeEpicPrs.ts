@@ -332,7 +332,7 @@ export const mergeEpicPrs = defineAutomation({
         return { status: "skipped", summary: `#${task.number}'s epic no longer delivers through ${data.branch}` };
       }
       if (link.snapshot?.headOid !== data.headOid) {
-        return { status: "skipped", summary: `PR #${data.number} moved on before the merge` };
+        return { status: "skipped", deferred: "head_moved", summary: `PR #${data.number} moved on before the merge` };
       }
       const timing = {
         now: Date.now(),

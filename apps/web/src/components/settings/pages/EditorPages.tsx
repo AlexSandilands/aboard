@@ -1,4 +1,4 @@
-import { AUTOMATION_EXAMPLES, AUTOPILOT_ALL_RUNS } from "@repo/contracts";
+import { AUTOMATION_EXAMPLES } from "@repo/contracts";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { CustomAutomationEditorForm } from "~/components/autopilot/CustomAutomationEditorForm";
@@ -136,15 +136,14 @@ export function AutopilotRunsPage() {
             state: (prev) => prev,
           })
         }
-        onShowAll={
-          automation === AUTOPILOT_ALL_RUNS
-            ? undefined
-            : () =>
-                void navigate({
-                  to: "/settings/autopilot/runs/$automation",
-                  params: { automation: AUTOPILOT_ALL_RUNS },
-                  search: { ...search },
-                })
+        onAutomation={(next) =>
+          void navigate({
+            to: "/settings/autopilot/runs/$automation",
+            params: { automation: next },
+            search: { ...search },
+            replace: true,
+            state: (prev) => prev,
+          })
         }
       />
     </AutopilotTabPage>

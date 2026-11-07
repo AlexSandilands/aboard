@@ -40,6 +40,7 @@ function setup() {
       detail: null,
       exitCode: null,
       error: null,
+      deferred: null,
       needsAttention: false,
       dismissedAt: null,
       output: null,
