@@ -346,7 +346,66 @@ describe("required checks", () => {
   });
 });
 
+describe("a check's newest run", () => {
+  const run = (name: string, databaseId: number, conclusion: string, workflow: number | null = 1) => ({
+    __typename: "CheckRun",
+    name,
+    databaseId,
+    status: "COMPLETED",
+    conclusion,
+    checkSuite: { workflowRun: workflow === null ? null : { workflow: { databaseId: workflow } } },
+  });
+  const snapshot = (...items: Array<Record<string, unknown>>) =>
+    mapPrSnapshot(fakePr({ commits: rollup(...items) }), repo);
+
+  it("counts a superseded cancelled run as replaced by the newer successful one", () => {
+    expect(
+      snapshot(required(run("commitlint", 1, "CANCELLED")), required(run("commitlint", 2, "SUCCESS"))).checks,
+    ).toBe("passing");
+    // Order in the rollup doesn't matter: the highest id wins.
+    expect(
+      snapshot(required(run("commitlint", 2, "SUCCESS")), required(run("commitlint", 1, "CANCELLED"))).checks,
+    ).toBe("passing");
+  });
+
+  it("fails when the newest run failed after an older success", () => {
+    expect(snapshot(required(run("ci", 1, "SUCCESS")), required(run("ci", 2, "FAILURE"))).checks).toBe("failing");
+  });
+
+  it("counts a same-named job in another workflow separately", () => {
+    expect(snapshot(required(run("build", 5, "SUCCESS", 1)), required(run("build", 3, "FAILURE", 2))).checks).toBe(
+      "failing",
+    );
+  });
+
+  it("falls back to the name alone when a run has no workflow", () => {
+    expect(snapshot(required(run("lint", 1, "FAILURE", null)), required(run("lint", 2, "SUCCESS", null))).checks).toBe(
+      "passing",
+    );
+  });
+
+  it("counts differently named checks each, and never drops unnamed runs or status contexts", () => {
+    expect(snapshot(required(run("a", 1, "SUCCESS")), required(run("b", 2, "FAILURE"))).checks).toBe("failing");
+    const unnamed = { __typename: "CheckRun", status: "COMPLETED", conclusion: "FAILURE" };
+    expect(snapshot(required(run("a", 1, "SUCCESS")), required(unnamed)).checks).toBe("failing");
+    expect(snapshot(required(run("a", 1, "SUCCESS")), required(statusContext("FAILURE"))).checks).toBe("failing");
+  });
+
+  it("ignores whether a superseded run was required or optional", () => {
+    const optionalOld = snapshot(required(run("ci", 2, "SUCCESS")), optional(run("ci", 1, "FAILURE")));
+    expect(optionalOld.checks).toBe("passing");
+    expect(optionalOld).not.toHaveProperty("optionalChecks");
+    const requiredOld = snapshot(required(run("ci", 1, "CANCELLED")), optional(run("ci", 2, "SUCCESS")));
+    expect(requiredOld.checks).toBe("passing");
+    expect(requiredOld).not.toHaveProperty("optionalChecks");
+  });
+});
+
 describe("pollQuery", () => {
+  it("asks for each check run's name, id and workflow", () => {
+    expect(pollQuery([4]).query).toContain("name databaseId checkSuite { workflowRun { workflow { databaseId } } }");
+  });
+
   it("aliases each PR and passes numbers as variables", () => {
     const { query, variables } = pollQuery([4, 9]);
     expect(query).toContain("query PollPullRequests($owner: String!, $name: String!, $n0: Int!, $n1: Int!)");
