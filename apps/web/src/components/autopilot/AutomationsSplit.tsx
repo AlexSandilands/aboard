@@ -402,6 +402,8 @@ function ListRow({
               }
               checked={on}
               mixed={state === "mixed"}
+              // On somewhere, so the track takes a tint of On rather than the plain Off of a mixed selection.
+              className="data-[mixed]:bg-primary/45"
               disabled={pending || (!on && (!board.ready || (state !== "mixed" && Boolean(automation.blocked))))}
               title={!on && state !== "mixed" && automation.blocked ? automation.blocked : undefined}
               // Back on in the mode it was last on in, or Preview for one that has never run. A mixed switch is on

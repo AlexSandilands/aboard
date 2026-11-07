@@ -1,5 +1,5 @@
 import { TriangleAlertIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 
@@ -36,15 +36,26 @@ export function ScriptWarning({ children }: { children?: ReactNode }) {
  */
 export function RunsAsYouBadge({ kind }: { kind: "command" | "script" }) {
   const [open, setOpen] = useState(false);
+  // Closing (Esc, or a click outside) hands focus back to the badge; it stays closed until focus leaves and comes back.
+  const closedHere = useRef(false);
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) closedHere.current = true;
+        setOpen(next);
+      }}
+    >
       <PopoverTrigger
         openOnHover
         delay={150}
         // Base UI opens on hover and click; keyboard focus opens it too, so it isn't hover-only. A mouse click also
         // focuses the trigger, so only a focus that shows a ring (the keyboard's) opens it here, or the click would close it.
         onFocus={(event) => {
-          if (event.currentTarget.matches(":focus-visible")) setOpen(true);
+          if (!closedHere.current && event.currentTarget.matches(":focus-visible")) setOpen(true);
+        }}
+        onBlur={() => {
+          closedHere.current = false;
         }}
         className="inline-flex shrink-0 cursor-help items-center gap-1 rounded-full border border-warning/40 bg-warning/12 px-2 py-0.5 text-xs font-medium text-warning-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
