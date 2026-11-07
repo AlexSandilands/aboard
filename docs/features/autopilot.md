@@ -1936,8 +1936,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
     week (`previewHint`), **See them** (its run history) and **Turn on**; **What it does**, one sentence read from its
     effective config (`automationSentence`; a custom automation's from its trigger and action) with **All runs**, and
     the **Mode · for the board** row, the board's Off · Preview · On, saying what the mode does (`modeDescription`;
-    with a check script, that it still runs for real; when mixed, "**Off for the board.** On in 5 projects that set
-    their own." with a **Turn off everywhere** link); **Where it runs** (`WhereItRuns`): the sentence (`describeWhere`, "Preview
+    with a check script, that it still runs for real; when mixed, "**Off for the board.** On in 5 projects, which
+    set their own." (a project only in Preview is named as Preview) with a **Turn off everywhere** link); **Where it runs** (`WhereItRuns`): the sentence (`describeWhere`, "Preview
     everywhere", "On only in storefront; Preview in docs"), an **Everywhere / Only in…** control with the projects as
     chips under Only in… (amber when only in Preview; past `PROJECT_CHIPS_MAX`, 8 projects, one "5 of 20 projects ▾"
     button instead, opening a searchable checklist with All and None, `ProjectPicker`), and **Exceptions** as removable chips (a project's or epic's own

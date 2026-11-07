@@ -103,9 +103,20 @@ export function switchState(reach: Pick<AutomationReach, "board" | "projects">):
   return reach.projects.length > 0 ? "mixed" : "off";
 }
 
-/** "On in 5 projects", "On in storefront" (one is named), for a board that is off while projects set their own. */
-export function onInProjectsText(projects: readonly string[]): string {
-  return projects.length === 1 ? `On in ${projects[0]}` : `On in ${projects.length} projects`;
+const projectsCount = (titles: readonly string[]): string =>
+  titles.length === 1 ? titles[0]! : `${titles.length} projects`;
+
+/**
+ * Where it runs while the board is off and projects set their own: "On in 5 projects", "On in storefront" (one is
+ * named), "Preview in docs" for a project only in Preview, or both ("On in 2 projects · Preview in docs").
+ */
+export function onInProjectsText(reach: Pick<AutomationReach, "projects" | "previewProjects">): string {
+  const preview = new Set(reach.previewProjects);
+  const live = reach.projects.filter((title) => !preview.has(title));
+  return [
+    ...(live.length > 0 ? [`On in ${projectsCount(live)}`] : []),
+    ...(preview.size > 0 ? [`Preview in ${projectsCount(reach.previewProjects)}`] : []),
+  ].join(" · ");
 }
 
 export type SublineTone = "warning" | "danger";
@@ -140,11 +151,7 @@ export function rowSubline(
   if (off) return { word: null, sep: "", text: "Off" };
   const ago = (r: LastRun) => formatElapsedDurationLabel(r.at, nowMs ?? Date.now());
   if (paused) return { word: { text: "Paused", tone: "warning" }, sep: " ", text: paused.replace(/^Paused /, "") };
-  const where = switchless
-    ? null
-    : switchState(reach) === "mixed"
-      ? onInProjectsText(reach.projects)
-      : whereText(reach);
+  const where = switchless ? null : switchState(reach) === "mixed" ? onInProjectsText(reach) : whereText(reach);
   if (preview && !switchless) {
     return { word: { text: "Preview", tone: "warning" }, sep: " · ", text: `${where} · ${lastRunText(run, nowMs)}` };
   }
@@ -157,7 +164,7 @@ export function rowSubline(
 /** The status line under the detail's title; `preview` when the board's mode is Preview. Agrees with the list switch. */
 export function statusLine(reach: AutomationReach, preview = false): string {
   if (isOffEverywhere(reach)) return "Off";
-  if (switchState(reach) === "mixed") return `${onInProjectsText(reach.projects)} · Off for the board`;
+  if (switchState(reach) === "mixed") return `${onInProjectsText(reach)} · Off for the board`;
   return `${preview ? "Preview" : "On"} · ${whereText(reach)}`;
 }
 

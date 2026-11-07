@@ -187,7 +187,12 @@ function useBoardMode(item: ListedAutomation): {
     set,
     ownOn,
     offEverywhere,
-    switchOff: () => (ownOn > 0 ? setAsking(true) : set("off")),
+    // Until the scopes load it can't tell whether projects set their own On, so it doesn't guess (the controls wait too).
+    switchOff: () => {
+      if (!input) return;
+      if (ownOn > 0) setAsking(true);
+      else set("off");
+    },
     dialog: (
       <SwitchOffDialog
         open={asking}
@@ -397,14 +402,15 @@ function ListRow({
               size="sm"
               aria-label={
                 state === "mixed"
-                  ? `${automation.title}: off for the board, ${onInProjectsText(reach.projects)}`
+                  ? `${automation.title}: off for the board, ${onInProjectsText(reach)}`
                   : `${automation.title} on for the board`
               }
               checked={on}
               mixed={state === "mixed"}
               // On somewhere, so the track takes a tint of On rather than the plain Off of a mixed selection.
               className="data-[mixed]:bg-primary/45"
-              disabled={pending || (!on && (!board.ready || (state !== "mixed" && Boolean(automation.blocked))))}
+              // Either way it waits for the scopes: switching on drops Only in…'s rows, switching off asks about them.
+              disabled={pending || !board.ready || (!on && state !== "mixed" && Boolean(automation.blocked))}
               title={!on && state !== "mixed" && automation.blocked ? automation.blocked : undefined}
               // Back on in the mode it was last on in, or Preview for one that has never run. A mixed switch is on
               // somewhere, so a click switches it off.
@@ -511,7 +517,7 @@ function AutomationDetail({
               <Button
                 size="xs"
                 variant="ghost-muted"
-                disabled={pending || (!on && (!board.ready || (!mixed && Boolean(automation.blocked))))}
+                disabled={pending || !board.ready || (!on && !mixed && Boolean(automation.blocked))}
                 // A mixed automation runs somewhere, so this switches it off, as its list switch does.
                 onClick={() => (on || mixed ? board.switchOff() : board.set(restoreMode(entry, lastRun !== undefined)))}
               >
@@ -573,8 +579,8 @@ function AutomationDetail({
             description={
               !on && mixed ? (
                 <>
-                  <span className="font-medium text-foreground">Off for the board.</span>{" "}
-                  {onInProjectsText(reach.projects)} that set their own.{" "}
+                  <span className="font-medium text-foreground">Off for the board.</span> {onInProjectsText(reach)},{" "}
+                  {reach.projects.length === 1 ? "which sets its own" : "which set their own"}.{" "}
                   <button
                     type="button"
                     className="cursor-pointer text-foreground underline underline-offset-2 hover:text-primary disabled:cursor-not-allowed disabled:opacity-64"

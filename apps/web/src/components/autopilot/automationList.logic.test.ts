@@ -127,7 +127,19 @@ describe("where an automation is on", () => {
     expect(switchState(off3())).toBe("off");
     expect(rowSubline(mixed, undefined, { nowMs: now }).text).toBe("On in 5 projects · no runs yet");
     expect(statusLine(mixed)).toBe("On in 5 projects · Off for the board");
-    expect(onInProjectsText(["storefront"])).toBe("On in storefront");
+    expect(onInProjectsText({ projects: ["storefront"], previewProjects: [] })).toBe("On in storefront");
+  });
+
+  it("names projects only in Preview as Preview, not On, while the board is off", () => {
+    const preview = (title: string): { title: string; entries: AutopilotScopeEntry[] } => ({
+      title,
+      entries: [{ ...entry("a", true), preview: true }],
+    });
+    const onlyPreview = automationReach("a", entry("a", false), [preview("docs")]);
+    expect(statusLine(onlyPreview)).toBe("Preview in docs · Off for the board");
+    expect(rowSubline(onlyPreview, undefined).text).toBe("Preview in docs · no runs yet");
+    const both = automationReach("a", entry("a", false), [...projects([true, true]), preview("docs")]);
+    expect(onInProjectsText(both)).toBe("On in 2 projects · Preview in docs");
   });
 });
 
