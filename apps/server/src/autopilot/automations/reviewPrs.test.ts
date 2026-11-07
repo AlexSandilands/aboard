@@ -516,7 +516,7 @@ describe("review PRs: triggers", () => {
     expect(requests).toHaveLength(2);
     const stopped = runs()[0]!;
     expect(stopped).toMatchObject({ status: "skipped", needsAttention: true });
-    expect(stopped.summary).toContain("PR #7 changed after Review PRs' last round (2 of 2");
+    expect(stopped.summary).toContain("PR #7 changed after Review PRs' last round (round 2, at b2c3d4e)");
     expect(stopped.summary).toContain("retry this run to allow one more round");
     expect(s.tasks.summary(task.id).attention).toContainEqual(
       expect.objectContaining({
@@ -1169,7 +1169,7 @@ describe("review PRs: a head that moved by merging the base in", () => {
     setPr({ headOid: SHA_B, baseRef: "main" });
     await pass();
     const stopped = runs()[0]!;
-    expect(stopped.summary).toContain("PR #7 changed after Review PRs' last round (1 of 1, at a1b2c3d)");
+    expect(stopped.summary).toContain("PR #7 changed after Review PRs' last round (round 1, at a1b2c3d)");
     expect(stopped.summary).toContain("the branch was rewritten");
     s.autopilot.retry(stopped.id, "user");
     await pass();
@@ -1180,7 +1180,75 @@ describe("review PRs: a head that moved by merging the base in", () => {
     await pass();
     expect(requests).toHaveLength(2);
     expect(runs()[0]).toMatchObject({ status: "skipped", needsAttention: true });
-    expect(runs()[0]!.summary).toContain("(2 of 2");
+    expect(runs()[0]!.summary).toContain("(round 2, at b2c3d4e)");
+  });
+
+  it("grants a round only for a notice of the PR's current head, so a stale one banks nothing", async () => {
+    const { s, requests, setPr, pass, turnOn, prSettings, runs } = setup();
+    prSettings({ rounds: 1 });
+    turnOn();
+    setPr({ baseRef: "main" });
+    await pass();
+    setPr({ headOid: SHA_B, baseRef: "main" });
+    await pass();
+    const stale = runs()[0]!;
+    setPr({ headOid: SHA_C, baseRef: "main" });
+    await pass();
+    const current = runs()[0]!;
+    expect(current).toMatchObject({ status: "skipped", needsAttention: true });
+    // The older head's notice is history: the board won't retry it, so it can't bank a round for later.
+    expect(() => s.autopilot.retry(stale.id, "user")).toThrow("run again since");
+    await pass();
+    expect(requests).toHaveLength(1);
+    s.autopilot.retry(current.id, "user");
+    await pass();
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.prompt).toContain("This is review round 2 of 2");
+    // One round granted, one used: the next change is put to the user again.
+    setPr({ headOid: SHA_D, baseRef: "main" });
+    await pass();
+    expect(requests).toHaveLength(2);
+    expect(runs()[0]).toMatchObject({ status: "skipped", needsAttention: true });
+  });
+
+  it("keeps what the review before it left open when a resolution review finds the merge clean", async () => {
+    const { s, task, requests, posts, setPr, pass, turnOn, prSettings, moveHead, runs, linkId, setIssues } = setup();
+    prSettings({ rounds: 2 });
+    setIssues([issue("major"), issue("major", { title: "Another" })]);
+    turnOn();
+    setPr({ baseRef: "main" });
+    await pass();
+    expect(reviewOf(runs()[0]!)).toMatchObject({ handoff: "fix", actionable: 2 });
+    // The conflicts of a base merge were resolved by hand, and the resolution itself is fine.
+    setIssues([]);
+    moveHead(SHA_A, SHA_B, "resolved");
+    setPr({ headOid: SHA_B, baseRef: "main" });
+    await pass();
+    expect(requests).toHaveLength(2);
+    const verdict = currentPrReview(s.autopilot.runsForTask(task.id), linkId(), SHA_B)!;
+    expect(verdict).toMatchObject({ basis: "conflict_review", actionable: 2, handoff: "fix" });
+    expect(verdict.counts.major).toBe(2);
+    expect(runs()[0]!.summary).toContain("and 2 still open from round 1");
+    expect(posts[1]!.input.body).toContain(
+      "Round 1's review (https://github.com/acme/app/pull/7#pullrequestreview-101) left 2 points at or above major open",
+    );
+  });
+
+  it("still gives up after a resolution review on the last round when earlier points are open", async () => {
+    const { requests, setPr, pass, turnOn, prSettings, moveHead, runs, setIssues } = setup();
+    prSettings({ rounds: 1 });
+    setIssues([issue("major")]);
+    turnOn();
+    setPr({ baseRef: "main" });
+    await pass();
+    expect(reviewOf(runs()[0]!)).toMatchObject({ handoff: "gave_up", actionable: 1 });
+    setIssues([]);
+    moveHead(SHA_A, SHA_B, "resolved");
+    setPr({ headOid: SHA_B, baseRef: "main" });
+    await pass();
+    expect(requests).toHaveLength(2);
+    expect(reviewOf(runs()[0]!)).toMatchObject({ basis: "conflict_review", handoff: "gave_up", actionable: 1 });
+    expect(runs()[0]).toMatchObject({ needsAttention: true });
   });
 
   it("treats a move git can't read as a change of the PR's own, so it is never let through unreviewed", async () => {

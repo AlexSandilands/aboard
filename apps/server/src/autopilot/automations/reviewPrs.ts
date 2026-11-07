@@ -259,6 +259,13 @@ export function reviewPrompt({
   return lines.join("\n");
 }
 
+const addCounts = (a: SeverityCounts, b: SeverityCounts): SeverityCounts => ({
+  blocking: a.blocking + b.blocking,
+  major: a.major + b.major,
+  minor: a.minor + b.minor,
+  nit: a.nit + b.nit,
+});
+
 const clip = (text: string) => (text.length > MAX_BODY ? `${text.slice(0, MAX_BODY)}\n\n_…cut off_` : text);
 
 const where = (issue: PrReviewIssue) => (issue.file ? ` \`${issue.file}${issue.line ? `:${issue.line}` : ""}\`` : "");
@@ -281,7 +288,14 @@ const bullet = (issue: PrReviewIssue) =>
  */
 export function renderReview(
   verdict: { summary: string; issues: readonly PrReviewIssue[] },
-  info: { round: number; maxRounds: number; headOid: string; basis?: PrReviewBasis },
+  info: {
+    round: number;
+    maxRounds: number;
+    headOid: string;
+    basis?: PrReviewBasis;
+    /** A resolution review's: the review before it, whose points are still open. */
+    stillOpen?: Pick<PrReviewRunOutput, "round" | "reviewUrl" | "actionable" | "threshold">;
+  },
 ): { body: string; comments: ReviewComment[] } {
   const comments: ReviewComment[] = [];
   const unplaced: PrReviewIssue[] = [];
@@ -305,6 +319,12 @@ export function renderReview(
     `_${info.basis === "conflict_review" ? `Conflict resolution review (not counted), after round ${info.round} of ${info.maxRounds}` : `Round ${info.round} of ${info.maxRounds}`}, at \`${shortSha(info.headOid)}\`: ${describeCounts(counts)}${fyi.length > 0 ? `, ${fyi.length} FYI` : ""}_`,
     "",
     verdict.summary.trim(),
+    ...(info.stillOpen
+      ? [
+          "",
+          `Round ${info.stillOpen.round}'s review (${info.stillOpen.reviewUrl}) left ${info.stillOpen.actionable} point${info.stillOpen.actionable === 1 ? "" : "s"} at or above ${info.stillOpen.threshold} open; this merge doesn't change them, so they still need fixing.`,
+        ]
+      : []),
     ...(unplaced.length > 0 ? ["", "### Points", "", ...unplaced.map(bullet)] : []),
     ...(fyi.length > 0 ? ["", "### FYI (no action needed)", "", ...fyi.map(bullet)] : []),
   ].join("\n");
@@ -527,10 +547,13 @@ function taskPrCandidates({ services, projects }: CheckContext<ReviewPrsConfig>)
         const used = ofLink.filter((r) => r.status !== "skipped");
         const counted = used.filter((r) => isCountedReview({ basis: basisOf(r.output) }));
         const conflictReviews = used.filter((r) => basisOf(r.output) === "conflict_review").length;
-        // The user lets one more of each through by retrying the run that stopped for it.
-        const retried = runs.filter(
-          (r) => isRetried(r.dedupeKey) && isReviewOfLink(unretiredKey(r.dedupeKey), link.id),
-        );
+        // The user lets one more of each through by retrying the run that stopped for it, at this head only: a notice
+        // of an older head said nothing about this one, so retrying it late banks no round for later.
+        const retried = runs.filter((r) => {
+          if (!isRetried(r.dedupeKey)) return false;
+          const key = unretiredKey(r.dedupeKey);
+          return key === headKey || key.startsWith(`${headKey}:`);
+        });
         const granted = retried.filter((r) => r.output?.[ROUNDS_USED_UP] === true).length;
         const grantedConflict = retried.filter((r) => r.output?.[CONFLICT_REVIEWS_USED_UP] === true).length;
         const maxRounds = config.rounds + granted;
@@ -630,7 +653,7 @@ async function actTaskPr(candidate: Candidate, ctx: ActionContext<ReviewPrsConfi
       if (data.round <= data.maxRounds) return reviewTaskPr(candidate, ctx, null);
       return {
         status: "skipped",
-        summary: `PR #${data.number} changed after Review PRs' last round (${data.maxRounds} of ${data.maxRounds}${last ? `, at ${shortSha(last.headOid)}` : ""}): ${move.reason}. Review and merge it yourself, or retry this run to allow one more round.`,
+        summary: `PR #${data.number} changed after Review PRs' last round (round ${data.round - 1}${last ? `, at ${shortSha(last.headOid)}` : ""}): ${move.reason}. Review and merge it yourself, or retry this run to allow one more round.`,
         output: { [ROUNDS_USED_UP]: true, linkId: data.linkId },
         needsAttention: true,
       };
@@ -722,6 +745,9 @@ async function postReview(
   const round = resolution ? resolution.last.round : data.round;
   const basis: PrReviewBasis | undefined = resolution ? "conflict_review" : undefined;
   const threshold = effectiveFixThreshold(fixThresholdFor(services, task), round, data.maxRounds);
+  // A resolution review looks only at the merge: what the review before it left open is still open, since the PR's own
+  // code didn't change. Its verdict counts those too, so it can't wave through points nobody fixed.
+  const stillOpen = resolution && resolution.last.actionable > 0 ? resolution.last : null;
   let verdict: PrReviewVerdict;
   let posted: PostedReview;
   let posting = false;
@@ -771,7 +797,13 @@ async function postReview(
       throw new Error(`The reviewer's answer wasn't a review: ${parsed.error.issues[0]?.message ?? "invalid"}`);
     }
     verdict = parsed.data;
-    const rendered = renderReview(verdict, { round, maxRounds: data.maxRounds, headOid: data.headOid, basis });
+    const rendered = renderReview(verdict, {
+      round,
+      maxRounds: data.maxRounds,
+      headOid: data.headOid,
+      basis,
+      ...(stillOpen ? { stillOpen } : {}),
+    });
     posting = true;
     posted = await gitHosts.postReview(
       { host: data.host, repo: data.repo, number: data.number },
@@ -814,8 +846,10 @@ async function postReview(
     throw error;
   }
 
-  const { counts, fyi } = countReviewIssues(verdict.issues);
-  const actionable = actionableCount(counts, threshold);
+  const own = countReviewIssues(verdict.issues);
+  const { fyi } = own;
+  const counts: SeverityCounts = stillOpen ? addCounts(own.counts, stillOpen.counts) : own.counts;
+  const actionable = actionableCount(own.counts, threshold) + (stillOpen?.actionable ?? 0);
   const handoff = reviewHandoff(actionable, round, data.maxRounds);
   const resolvedThreads =
     data.earlier.length > 0 && (verdict.fixed?.length ?? 0) > 0
@@ -853,7 +887,7 @@ async function postReview(
     actor,
   );
 
-  const found = `${describeCounts(counts)}${fyi > 0 ? `, ${fyi} FYI` : ""}`;
+  const found = `${describeCounts(own.counts)}${fyi > 0 ? `, ${fyi} FYI` : ""}${stillOpen ? `, and ${stillOpen.actionable} still open from round ${stillOpen.round}` : ""}`;
   const folded = posted.folded > 0 ? ` (${posted.folded} inline, put in the summary: not on the diff)` : "";
   const closed =
     resolvedThreads > 0

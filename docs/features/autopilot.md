@@ -537,7 +537,9 @@ approves, asks for changes or hands them to the user.
     doubled, code that no longer fits the other side, markers left in, unrelated edits), with `git show
     --remerge-diff` of the resolved merges inlined as untrusted text (cut at `MAX_REMERGE_DIFF`, 40,000 characters).
     It is posted like any review, headed "Conflict resolution review (not counted), after round N of M"; its output
-    has `basis: "conflict_review"` and the last counted round. A git too old to check a merge (no `merge-tree
+    has `basis: "conflict_review"` and the last counted round. Its verdict also counts what the review before it left
+    open (counts, `actionable` and so `handoff`; the posted body names that review), since the merge didn't change the
+    PR's own code: a clean resolution can't wave through points nobody fixed. A git too old to check a merge (no `merge-tree
     --write-tree`) treats it as resolved, and one with no `--remerge-diff` gets a full review instead, still
     uncounted. At most `CONFLICT_REVIEWS_PER_PR` (5) per PR, as many as Fix PRs' conflict attempts; past that the run
     is skipped, flagged: "PR #N merged <base> in with conflicts resolved by hand again, after 5 conflict resolution
