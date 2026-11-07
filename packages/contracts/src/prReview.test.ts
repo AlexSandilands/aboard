@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   AUTOPILOT_REVIEW_PRS,
+  PrReviewRunOutput,
   PrReviewVerdict,
   actionableCount,
   countReviewIssues,
+  currentPrReview,
   describeCounts,
   effectiveFixThreshold,
+  isCountedReview,
   isReviewOfLink,
+  latestPrReview,
   meetsThreshold,
   prReviewDedupeKey,
   prReviewHeader,
@@ -88,5 +92,53 @@ describe("PR review verdict", () => {
     expect(prReviewOutput({ ...run, dryRun: true })).toBeNull();
     expect(prReviewOutput({ ...run, automation: "other" })).toBeNull();
     expect(prReviewOutput({ ...run, output: null })).toBeNull();
+  });
+});
+
+describe("currentPrReview with verdicts that cost no round", () => {
+  const verdict = (round: number, headOid: string, extra: Partial<PrReviewRunOutput> = {}): PrReviewRunOutput => ({
+    kind: "pr_review",
+    linkId: "l1",
+    prUrl: "https://github.com/o/r/pull/1",
+    headOid,
+    round,
+    maxRounds: 3,
+    reviewUrl: "https://github.com/o/r/pull/1#review",
+    reviewId: 1,
+    counts: { blocking: 0, major: 0, minor: 0, nit: 0 },
+    fyi: 0,
+    threshold: "major",
+    actionable: 0,
+    handoff: "clean",
+    ...extra,
+  });
+  const run = (output: PrReviewRunOutput) => ({
+    automation: AUTOPILOT_REVIEW_PRS,
+    status: "succeeded" as const,
+    dryRun: false,
+    output,
+  });
+
+  it("takes a carried verdict at the new head over the counted one it keeps the round of, newest run first", () => {
+    const runs = [
+      run(verdict(3, "c", { basis: "conflict_review", carriedFrom: "b" })),
+      run(verdict(3, "b", { basis: "carried", carriedFrom: "a" })),
+      run(verdict(3, "a")),
+      run(verdict(2, "z")),
+    ];
+    expect(currentPrReview(runs, "l1", "c")?.basis).toBe("conflict_review");
+    expect(currentPrReview(runs, "l1", "b")).toBeNull();
+    expect(currentPrReview(runs.slice(1), "l1", "b")?.carriedFrom).toBe("a");
+    expect(latestPrReview(runs, "l1")?.headOid).toBe("c");
+  });
+
+  it("counts only reviews without a basis as rounds", () => {
+    expect(isCountedReview(verdict(1, "a"))).toBe(true);
+    expect(isCountedReview(verdict(1, "a", { basis: "carried" }))).toBe(false);
+  });
+
+  it("parses outputs written before the basis existed", () => {
+    expect(PrReviewRunOutput.safeParse(verdict(1, "a")).success).toBe(true);
+    expect(PrReviewRunOutput.safeParse({ ...verdict(1, "a"), basis: "other" }).success).toBe(false);
   });
 });

@@ -347,6 +347,45 @@ describe("fix PRs: triggers", () => {
     expect(runs()[0]!.dedupeKey).toMatch(/:review@900$/);
   });
 
+  it("acts on a verdict Review PRs carried across a base merge, and not again on one it already handled", async () => {
+    const { requests, setPr, pass, turnOn, reviewed, runs } = setup();
+    turnOn();
+    // Reviewed at SHA_A, then the base was merged in before Fix PRs got to it: the verdict was carried to SHA_B.
+    setPr({ headOid: SHA_B });
+    reviewed();
+    await pass();
+    expect(requests).toHaveLength(0);
+    reviewed({ headOid: SHA_B, basis: "carried", carriedFrom: SHA_A });
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.prompt).toContain("2 points at or above **major** to fix");
+    expect(runs()[0]!.dedupeKey).toMatch(/:review@900$/);
+    // Another base merge carries the same review on: it was handed over already, so nothing starts again.
+    setPr({ headOid: SHA_C });
+    reviewed({ headOid: SHA_C, basis: "carried", carriedFrom: SHA_B });
+    await pass();
+    expect(requests).toHaveLength(1);
+  });
+
+  it("points the fixer at the earlier review whose points a conflict resolution review carried", async () => {
+    const { requests, setPr, pass, turnOn, reviewed } = setup();
+    turnOn();
+    setPr({ headOid: SHA_B });
+    reviewed({
+      headOid: SHA_B,
+      reviewId: 950,
+      reviewUrl: "https://github.com/acme/app/pull/7#pullrequestreview-950",
+      basis: "conflict_review",
+      carriedFrom: SHA_A,
+      openFrom: { reviewId: 900, reviewUrl: "https://github.com/acme/app/pull/7#pullrequestreview-900" },
+    });
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.prompt).toContain("gh api repos/acme/app/pulls/7/reviews/950/comments");
+    expect(requests[0]!.prompt).toContain("only checked how merge conflicts were resolved");
+    expect(requests[0]!.prompt).toContain("gh api repos/acme/app/pulls/7/reviews/900/comments");
+  });
+
   it("ignores a review that was clean, gave up, or is of an older head", async () => {
     const { requests, setPr, pass, turnOn, reviewed } = setup();
     turnOn();

@@ -43,7 +43,7 @@ import type { Logger } from "../integrations/util.ts";
 import { RUN_TOKEN_ENV, type RunToolScope } from "../mcp/runTokens.ts";
 import type { Services } from "../services/types.ts";
 import { pushGuardEnv } from "./pushGuard.ts";
-import { createRepoGate, gateFetches } from "./repoGate.ts";
+import { createRepoGate, gateFetches, type RepoGate } from "./repoGate.ts";
 import { readRunnerOptions, type RunnerOptions } from "./runnerOptions.ts";
 import {
   RunAbandonedError,
@@ -166,6 +166,8 @@ export function createAutopilotRunner(deps: {
   t3PrepareMs?: number;
   t3PreparePollMs?: number;
   runGit?: RunGit;
+  /** The per-repository fetch gate, shared with whatever else fetches in the same checkouts (the engine's actions). */
+  gate?: RepoGate;
   runAgent?: RunAgent;
   newSessionId?: () => string;
   /** A headless session was just linked to its task, so the board can read its state at once. */
@@ -183,7 +185,7 @@ export function createAutopilotRunner(deps: {
 }): Runner {
   // One `git fetch` per repository at a time across T3 launches and headless worktrees. What the user asks for (an epic's
   // branch, a launch from the dialog) doesn't queue behind them: a hold can last minutes.
-  const gate = createRepoGate();
+  const gate = deps.gate ?? createRepoGate();
   const runGit = gateFetches(deps.runGit ?? defaultRunGit, gate);
   const runAgent = deps.runAgent ?? runHeadlessAgent;
   const newSessionId = deps.newSessionId ?? randomUUID;

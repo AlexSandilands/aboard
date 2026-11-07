@@ -15,6 +15,7 @@ import { NO_GIT_HOSTS, type GitHostActions } from "../../integrations/gitHosts.t
 import { NO_RUNNER } from "../types.ts";
 import { NO_CHECKS_WAIT_MS } from "../mergeGate.ts";
 import { epicPrBody, epicPrTitle, MERGE_ATTEMPTS, mergeEpicPrs, parseConventionalHeader } from "./mergeEpicPrs.ts";
+import { fakeHeadMoveGit } from "../../test/fakeHeadMoveGit.ts";
 import { reviewPrs } from "./reviewPrs.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it", status: "done" as const }] }] };
@@ -75,11 +76,13 @@ function setup() {
       bodies.push({ number: ref.number, body });
     },
   };
+  const headGit = fakeHeadMoveGit();
   const engine = createAutopilotEngine({
     services: () => h.services,
     bus: h.bus,
     runner: NO_RUNNER,
     gitHosts,
+    runGit: headGit.runGit,
     debounceMs: 5,
     tickMs: 1_000_000,
     log: { warn: () => {} },
@@ -152,6 +155,7 @@ function setup() {
     merges,
     opened,
     bodies,
+    moveHead: headGit.move,
     /** The method the fake merge reports, as the real one does for the repository's settings. */
     mergeWith: (m: "merge" | "squash" | "rebase") => (mergeMethod = m),
     failMerge: (e: Error | null) => (mergeError = e),
@@ -252,6 +256,28 @@ describe("merge into epic branch", () => {
     expect(merges).toHaveLength(1);
   });
 
+  it("merges a PR whose head only merged the epic's branch in after its last clean round, with no one stepping in", async () => {
+    const { s, task, setPr, toReview, pass, turnOn, merges, reviewed, moveHead, linkId } = setup();
+    turnOn();
+    turnOn(AUTOPILOT_REVIEW_PRS);
+    toReview();
+    // Every round used; the last one, at SHA_A, was clean. Then other PRs merged into the epic's branch.
+    reviewed({ round: 1, headOid: "c".repeat(40), actionable: 1, handoff: "fix" });
+    reviewed({ round: 2, headOid: "d".repeat(40), actionable: 1, handoff: "fix" });
+    reviewed({ round: 3 });
+    setPr({ mergeable: "conflicting" });
+    await pass();
+    expect(merges).toHaveLength(0);
+    // The session merged the epic's branch into the PR, and git merged it on its own.
+    moveHead(SHA_A, SHA_B, "clean");
+    setPr({ headOid: SHA_B });
+    await pass();
+    await pass();
+    const carried = s.autopilot.runsForTask(task.id).find((r) => r.automation === AUTOPILOT_REVIEW_PRS)!;
+    expect(carried.output).toMatchObject({ basis: "carried", carriedFrom: SHA_A, headOid: SHA_B, round: 3 });
+    expect(merges).toEqual([{ linkId: linkId(), input: expect.objectContaining({ headOid: SHA_B }) }]);
+  });
+
   it("with Review PRs in Preview, still waits for a real review rather than merging unreviewed", async () => {
     const { s, project, setPr, toReview, pass, turnOn, merges, reviewed } = setup();
     turnOn();
@@ -348,6 +374,7 @@ describe("merge into epic branch", () => {
         services: s,
         runner: NO_RUNNER,
         gitHosts: NO_GIT_HOSTS,
+        runGit: () => Promise.reject(new Error("must not run git")),
         engine: s.autopilot.engine(),
         boardUrl: "http://x",
         config: {},

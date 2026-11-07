@@ -117,6 +117,10 @@ export const PR_REVIEW_OUTPUT_SCHEMA = {
 export const PrReviewHandoff = z.enum(["clean", "fix", "gave_up"]);
 export type PrReviewHandoff = z.infer<typeof PrReviewHandoff>;
 
+/** Why a verdict cost no round (see `PrReviewRunOutput.basis`). */
+export const PrReviewBasis = z.enum(["carried", "conflict_review"]);
+export type PrReviewBasis = z.infer<typeof PrReviewBasis>;
+
 /**
  * What a finished review leaves on its run (`run.output`): the contract with the fix automation. A run with
  * `handoff: "fix"` is a review whose issues the fix automation should address, but only while it is `currentPrReview`
@@ -149,6 +153,19 @@ export const PrReviewRunOutput = z.object({
   handoff: PrReviewHandoff,
   /** Autopilot's own earlier threads this round confirmed fixed and resolved. */
   resolvedThreads: z.number().int().optional(),
+  /**
+   * Set when this verdict didn't cost a round, because the head only moved by merging the PR's base branch in:
+   * `carried` copies the verdict at `carriedFrom` with no agent (git merged it on its own), `conflict_review` is a
+   * review of how hand-resolved conflicts were resolved. Unset on a counted round. `round` is then the last counted one.
+   */
+  basis: PrReviewBasis.optional(),
+  /** With `basis`: the reviewed head the verdict was carried from (or whose merge was reviewed). */
+  carriedFrom: z.string().optional(),
+  /**
+   * A conflict review's: the earlier review whose points are still open and counted here, so the fix automation reads
+   * them there (this review's own comments are only about the merge).
+   */
+  openFrom: z.object({ reviewId: z.number().int().nullable(), reviewUrl: z.string() }).optional(),
 });
 export type PrReviewRunOutput = z.infer<typeof PrReviewRunOutput>;
 
@@ -162,21 +179,34 @@ export function prReviewOutput(run: ReviewRun): PrReviewRunOutput | null {
 }
 
 /**
- * The newest finished review of the link, only if it is of the PR's current head: the one the fix automation acts
- * on. A review of an older commit says nothing about the code now, and a newer review supersedes an older one.
+ * The newest finished review of the link, of any head. `runs` are newest first, as `runsForTask` lists them: the
+ * highest round wins, and on a tie (a verdict carried forward or a conflict review keeps its round) the newer run.
+ */
+export function latestPrReview(runs: readonly ReviewRun[], linkId: string): PrReviewRunOutput | null {
+  let latest: PrReviewRunOutput | null = null;
+  for (const run of runs) {
+    const out = prReviewOutput(run);
+    if (out && out.linkId === linkId && (!latest || out.round > latest.round)) latest = out;
+  }
+  return latest;
+}
+
+/**
+ * The newest finished review of the link, only if it is of the PR's current head: the one the fix automation and the
+ * merge gate act on. A review of an older commit says nothing about the code now, and a newer review supersedes an
+ * older one. `runs` are newest first (see `latestPrReview`).
  */
 export function currentPrReview(
   runs: readonly ReviewRun[],
   linkId: string,
   headOid: string | null | undefined,
 ): PrReviewRunOutput | null {
-  const outputs = runs.flatMap((run) => {
-    const out = prReviewOutput(run);
-    return out && out.linkId === linkId ? [out] : [];
-  });
-  const latest = outputs.reduce<PrReviewRunOutput | null>((a, b) => (a && a.round > b.round ? a : b), null);
+  const latest = latestPrReview(runs, linkId);
   return latest && headOid && latest.headOid === headOid ? latest : null;
 }
+
+/** Whether a review used one of the PR's rounds: one that cost none says so in `basis`. */
+export const isCountedReview = (output: Pick<PrReviewRunOutput, "basis">): boolean => output.basis === undefined;
 
 const RANK: Record<FindingSeverity, number> = { blocking: 0, major: 1, minor: 2, nit: 3 };
 
