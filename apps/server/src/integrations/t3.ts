@@ -27,7 +27,7 @@ import type { EventBus } from "../bus.ts";
 import { AppError } from "../errors.ts";
 import type { AttachmentsService } from "../services/attachments.ts";
 import type { LinksService, ProjectsService, SettingsService, TasksService } from "../services/types.ts";
-import { messageOf } from "./github.ts";
+import { messageOf } from "./util.ts";
 import {
   autoLaunchSettings,
   type AutoLaunchChoice,

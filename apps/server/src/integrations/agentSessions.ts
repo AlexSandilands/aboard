@@ -26,7 +26,7 @@ import { AppError } from "../errors.ts";
 import type { AutopilotService } from "../services/autopilot.ts";
 import type { LinksService, SettingsService } from "../services/types.ts";
 import { createTitleReader, tidy } from "./claudeSessionTitle.ts";
-import { messageOf } from "./github.ts";
+import { messageOf } from "./util.ts";
 import {
   copyCommand,
   defaultShell,

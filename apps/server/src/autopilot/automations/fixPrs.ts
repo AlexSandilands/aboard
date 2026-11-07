@@ -32,7 +32,7 @@ import {
 import { z } from "zod";
 import { AppError } from "../../errors.ts";
 import { shQuote } from "../../integrations/terminal.ts";
-import { messageOf } from "../../integrations/github.ts";
+import { messageOf } from "../../integrations/util.ts";
 import type { Services } from "../../services/types.ts";
 import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE, runnerFields } from "../runnerOptions.ts";
 import { threadSeen } from "../threads.ts";

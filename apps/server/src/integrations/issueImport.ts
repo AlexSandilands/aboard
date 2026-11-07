@@ -8,7 +8,8 @@ import {
 import { tmpdir } from "node:os";
 import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ImportResult, Services } from "../services/types.ts";
-import { messageOf, type IssueDetails } from "./github.ts";
+import type { IssueDetails } from "./github.ts";
+import { messageOf } from "./util.ts";
 import { listConnectedMcpServers, runIssueImport, writeToolDenyRules, type RunImport } from "./headlessImport.ts";
 import type { Logger } from "./util.ts";
 

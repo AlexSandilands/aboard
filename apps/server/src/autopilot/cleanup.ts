@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
-import { messageOf } from "../integrations/github.ts";
+import { messageOf } from "../integrations/util.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
 import { removeWorktree } from "./worktrees.ts";

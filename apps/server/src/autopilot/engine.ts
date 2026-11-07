@@ -1,6 +1,6 @@
 import { AUTOPILOT_ACTOR, type AutopilotEngineSettings, type AutopilotRun } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
-import { messageOf } from "../integrations/github.ts";
+import { messageOf } from "../integrations/util.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
 import { agentHold } from "./limits.ts";

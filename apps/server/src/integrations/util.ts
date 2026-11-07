@@ -15,3 +15,7 @@ export async function mapWithConcurrency<T>(
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }
+
+export function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

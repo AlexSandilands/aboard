@@ -13,7 +13,7 @@ import type { ReviewRecord } from "../db/repos/reviews.ts";
 import { AppError } from "../errors.ts";
 import { renderTaskDetail } from "../mcp/format.ts";
 import type { Services } from "../services/types.ts";
-import { messageOf } from "./github.ts";
+import { messageOf } from "./util.ts";
 import { headlessPrompt, runHeadlessReview, type RunHeadless } from "./headlessReview.ts";
 import type { T3Integration, ThreadLink } from "./t3.ts";
 import type { Logger } from "./util.ts";

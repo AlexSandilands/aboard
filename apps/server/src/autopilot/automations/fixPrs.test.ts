@@ -1007,6 +1007,46 @@ describe("fixPrompt", () => {
     expect(prompt).not.toContain("the reviewer does");
   });
 
+  it("keeps GitHub's commands word for word, on github.com and another host", () => {
+    const triggers = [
+      { kind: "checks", key: "checks@x" },
+      { kind: "conflict", key: "conflict@x" },
+      { kind: "changes", key: "changes@a", reviewId: null, author: null },
+      { kind: "changes", key: "changes@b", reviewId: 5, author: "ana" },
+      { kind: "comments", key: "comments@4", ids: [4, 6], authors: ["ana"] },
+      {
+        kind: "review",
+        key: "review@x",
+        review: {
+          round: 1,
+          maxRounds: 3,
+          reviewUrl: "https://github.com/acme/app/pull/7#pullrequestreview-9",
+          reviewId: 9,
+          actionable: 2,
+          threshold: "medium",
+          counts: { critical: 0, high: 1, medium: 1, low: 0 },
+          fyi: 1,
+        },
+      },
+    ] as Parameters<typeof fixPrompt>[0]["triggers"];
+    for (const host of ["github.com", "ghe.example.io"]) {
+      const target = { ...pr, host, url: `https://${host}/acme/app/pull/7` };
+      for (const manual of [false, true]) {
+        const prompt = fixPrompt({
+          task: { number: 3, title: "T" },
+          pr: target,
+          round: 1,
+          maxRounds: 3,
+          triggers,
+          stillOpen: [],
+          skill: { source: "builtin" },
+          manual,
+        });
+        expect(prompt).toMatchSnapshot(`${host}${manual ? " manual" : ""}`);
+      }
+    }
+  });
+
   it("points at a chosen skill it can't read", () => {
     const prompt = fixPrompt({
       task: { number: 3, title: "T" },

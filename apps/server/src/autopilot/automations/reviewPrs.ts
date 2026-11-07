@@ -26,12 +26,12 @@ import {
 import { z } from "zod";
 import {
   StaleReviewError,
-  messageOf,
   type PostedReview,
   type ReviewComment,
   type ReviewThreadDetail,
 } from "../../integrations/github.ts";
 import { isTransientGithubError } from "../../integrations/githubApi.ts";
+import { messageOf } from "../../integrations/util.ts";
 import { RUN_SERVER_NAME } from "../../mcp/runTokens.ts";
 import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
 import {

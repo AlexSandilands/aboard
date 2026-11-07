@@ -10,7 +10,8 @@ import {
 } from "@repo/contracts";
 import { z } from "zod";
 import { AppError } from "../../errors.ts";
-import { MergeTargetError, messageOf } from "../../integrations/github.ts";
+import { MergeTargetError } from "../../integrations/github.ts";
+import { messageOf } from "../../integrations/util.ts";
 import { isTransientGithubError } from "../../integrations/githubApi.ts";
 import { headSeenSince, isPrLink, notMergeable, type PrLink } from "../mergeGate.ts";
 import { defineAutomation, type ActionResult, type Candidate } from "../types.ts";

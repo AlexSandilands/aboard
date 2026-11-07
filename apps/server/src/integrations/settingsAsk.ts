@@ -14,7 +14,7 @@ import type { Services } from "../services/types.ts";
 import { resolveExecutable } from "./claudeCli.ts";
 import { runHeadlessAgent, type RunAgent } from "./headlessAgent.ts";
 import { headlessDriverFor, withDriverArgs } from "./headlessDrivers.ts";
-import { messageOf } from "./github.ts";
+import { messageOf } from "./util.ts";
 
 // The settings "Ask": answers "how do I…?" with a headless run on the Ask operation's model (the light tier by
 // default) and its provider, and names the setting to jump to. Everything it needs is in the prompt, so it runs in an

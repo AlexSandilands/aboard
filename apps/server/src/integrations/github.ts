@@ -38,7 +38,7 @@ import {
 import type { GitHost } from "./gitHost.ts";
 import { createGithubHost } from "./githubHost.ts";
 import type { FetchFn } from "./t3.ts";
-import { mapWithConcurrency, type Logger } from "./util.ts";
+import { mapWithConcurrency, messageOf, type Logger } from "./util.ts";
 
 export const GH_STATUS_INTERVAL_MS = 10 * 60_000;
 /** Requests in flight at once, polite to GitHub's secondary limits. */
@@ -1594,7 +1594,3 @@ function errorFor(errors: readonly GraphqlError[], alias: string): string | null
 /** "3 unresolved review conversations". */
 export const describeUnresolved = (count: number): string =>
   `${count} unresolved review conversation${count === 1 ? "" : "s"}`;
-
-export function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}

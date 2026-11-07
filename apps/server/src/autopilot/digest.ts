@@ -10,7 +10,7 @@ import {
   type ReviewSkillRef,
 } from "@repo/contracts";
 import { AppError } from "../errors.ts";
-import { messageOf } from "../integrations/github.ts";
+import { messageOf } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
 import { digestHeadline, digestIsEmpty, renderPlainDigest } from "./digestBuilder.ts";
 import { DIGEST_DEFAULTS, DigestConfig } from "./digestConfig.ts";
