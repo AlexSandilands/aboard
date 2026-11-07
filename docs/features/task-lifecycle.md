@@ -95,7 +95,7 @@ be blocked by them, and live in any project, General included. The rules are in 
   terminal launcher), `links.add` refuses an `agent_session` or `t3_thread` link, and `planTaskProblem` keeps it out of planning
   sessions. The web hides the hand-off menu (`showHandoffActions`).
 - Autopilot skips it in every automation that works on tasks (see [autopilot.md](autopilot.md#manual-tasks)),
-  except Unblock dependents and Auto-archive.
+  except the unblocked notification and Auto-archive.
 
 ### Entering Review
 

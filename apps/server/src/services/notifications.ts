@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  AUTOPILOT_ACTOR,
   inQuietHours,
   type InboxNotification,
   type NotificationKind,
@@ -23,6 +24,14 @@ const LIST_LIMIT = 100;
 const daysAgo = (now: Date, days: number): string => new Date(now.getTime() - days * 86_400_000).toISOString();
 const cutoff = (now: Date): string => daysAgo(now, NOTIFICATION_RETENTION_DAYS);
 
+/**
+ * Activity by anyone but Autopilot on a task ends the quiet period a "gone quiet" notice told the user about, so the
+ * notice is read (every route that adds a task_events row calls this). True when something was read.
+ */
+export function endQuietNotice(repos: Repos, taskId: string, actor: string, at: string): boolean {
+  return actor !== AUTOPILOT_ACTOR && repos.notifications.markTaskKindRead(taskId, "task_quiet", at) > 0;
+}
+
 /** How many notifications are unread, among those kept. Also what the SSE events carry. */
 export const unreadNotifications = (repos: Repos, now: Date): number => repos.notifications.unread(cutoff(now));
 
@@ -34,6 +43,8 @@ export interface NotificationsService {
    * during quiet hours is recorded but sent without a popup.
    */
   notify(input: NotifyInput): InboxNotification | null;
+  /** Whether a notification with this dedupe key exists (read or not), so a producer can skip `notify`'s write. */
+  has(dedupeKey: string): boolean;
   /** Newest first, with the unread count across all of them (not just this page). */
   list(opts?: { kind?: NotificationKind; limit?: number }): NotificationList;
   markRead(id: string): InboxNotification;
@@ -92,6 +103,8 @@ export function createNotificationsService(core: Core): NotificationsService {
     },
 
     list,
+
+    has: (dedupeKey) => repos.notifications.hasKey(dedupeKey),
 
     markRead(id) {
       return core.write((fx) => {

@@ -572,4 +572,114 @@ describe("migrations", () => {
       db.close();
     });
   });
+
+  describe("reminders and Recurring tasks without switches (047, 048)", () => {
+    const before = (setup: string): DatabaseSync => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const path = join(dir, "board.db");
+      const old = openDatabase(path, { migrateTo: "042_task_trash.sql" });
+      old.exec(`
+        INSERT INTO projects (id, title, position, created_at, updated_at) VALUES
+          ('a', 'A', 'a0', '', ''), ('b', 'B', 'a1', '', ''), ('c', 'C', 'a2', '', '');
+        INSERT INTO tasks (id, number, project_id, title, status, position, created_by, created_at, updated_at, status_changed_at, kind)
+          VALUES ('e', 1, 'c', 'Epic', 'in_progress', 'a0', 'user', '', '', '', 'epic');
+        ${setup}
+      `);
+      old.close();
+      return openDatabase(path);
+    };
+    const kinds = (db: DatabaseSync) =>
+      (
+        JSON.parse(
+          (db.prepare("SELECT value_json FROM settings WHERE key = 'notifications'").get() as { value_json: string })
+            .value_json,
+        ) as { kinds: Record<string, boolean> }
+      ).kinds;
+    const rule = (id: string, projectId: string) =>
+      `INSERT INTO autopilot_recurring (id, project_id, name, schedule_json, enabled, last_due_at, created_at, updated_at)
+       VALUES ('${id}', '${projectId}', '${id}', '{}', 1, '', '', '');`;
+    const enabled = (db: DatabaseSync) =>
+      Object.fromEntries(
+        (db.prepare("SELECT id, enabled FROM autopilot_recurring").all() as Array<{ id: string; enabled: number }>).map(
+          (r) => [r.id, r.enabled === 1],
+        ),
+      );
+    const settingRow = (scope: string, id: string, automation: string, mode: string) =>
+      `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES ('${scope}', '${id}', '${automation}', '${mode}', '{}', '');`;
+
+    it("keeps the defaults on a new install", () => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const db = openDatabase(join(dir, "board.db"));
+      expect(db.prepare("SELECT 1 FROM settings WHERE key = 'notifications'").get()).toBeUndefined();
+      db.close();
+    });
+
+    it("turns each switch on where its automation was on in some project, off where it never was", () => {
+      const db = before(`
+        ${settingRow("board", "", "unstick", "on")}
+        ${settingRow("project", "a", "unstick", "off")}
+        ${settingRow("project", "b", "unstick", "off")}
+        ${settingRow("project", "c", "unstick", "inherit")}
+        ${settingRow("project", "a", "unblock_dependents", "off")}
+      `);
+      // Unstick: the board's On reaches project c.
+      expect(kinds(db)).toEqual({ thread_waited: true, task_quiet: true, task_unblocked: false });
+      expect(
+        db.prepare("SELECT 1 FROM autopilot_settings WHERE automation IN ('unstick', 'unblock_dependents')").get(),
+      ).toBeUndefined();
+      db.close();
+    });
+
+    it("is off for an automation only an epic had on when that epic is archived, and on when it isn't", () => {
+      const archived = before(`
+        ${settingRow("epic", "e", "unblock_dependents", "on")}
+        UPDATE tasks SET archived_at = '2026-01-01' WHERE id = 'e';
+      `);
+      expect(kinds(archived).task_unblocked).toBe(false);
+      archived.close();
+      rmSync(dir!, { recursive: true, force: true });
+      const live = before(settingRow("epic", "e", "unblock_dependents", "on"));
+      expect(kinds(live)).toEqual({ thread_waited: false, task_quiet: false, task_unblocked: true });
+      live.close();
+    });
+
+    it("keeps the other notification settings it finds", () => {
+      const db = before(`
+        INSERT INTO settings (key, value_json) VALUES ('notifications', '{"muteInQuietHours":false,"kinds":{"suggestion":false}}');
+        ${settingRow("project", "a", "unstick", "on")}
+      `);
+      expect(
+        JSON.parse(
+          (db.prepare("SELECT value_json FROM settings WHERE key = 'notifications'").get() as { value_json: string })
+            .value_json,
+        ),
+      ).toEqual({
+        muteInQuietHours: false,
+        kinds: { suggestion: false, thread_waited: true, task_quiet: true, task_unblocked: false },
+      });
+      db.close();
+    });
+
+    it("disables the rules of projects where Recurring tasks was effectively off, and drops its settings", () => {
+      const db = before(`
+        ${rule("ra", "a")} ${rule("rb", "b")} ${rule("rc", "c")}
+        ${settingRow("board", "", "recurring", "on")}
+        ${settingRow("project", "b", "recurring", "off")}
+      `);
+      // The board's On reaches a and c; b switched it off for itself.
+      expect(enabled(db)).toEqual({ ra: true, rb: false, rc: true });
+      expect(db.prepare("SELECT 1 FROM autopilot_settings WHERE automation = 'recurring'").get()).toBeUndefined();
+      db.close();
+    });
+
+    it("disables every rule when Recurring tasks was on nowhere, and keeps one a project switched on", () => {
+      const off = before(`${rule("ra", "a")} ${rule("rb", "b")}`);
+      expect(enabled(off)).toEqual({ ra: false, rb: false });
+      off.close();
+      rmSync(dir!, { recursive: true, force: true });
+      const some = before(`${rule("ra", "a")} ${rule("rb", "b")} ${settingRow("project", "a", "recurring", "on")}`);
+      expect(enabled(some)).toEqual({ ra: true, rb: false });
+      some.close();
+    });
+  });
 });

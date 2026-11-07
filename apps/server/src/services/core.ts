@@ -5,7 +5,7 @@ import { nowIso, parseJson, transaction, type Db } from "../db/database.ts";
 import type { Repos } from "../db/repos/index.ts";
 import { AppError } from "../errors.ts";
 import { loadAutopilotStatus } from "./autopilot.ts";
-import { unreadNotifications } from "./notifications.ts";
+import { endQuietNotice, unreadNotifications } from "./notifications.ts";
 import { storedProviderList } from "./settings.ts";
 import { assembleSummaries } from "./summaries.ts";
 
@@ -108,6 +108,7 @@ export function createCore(deps: {
     log: (taskId, actor, type, payload) => {
       repos.events.append(taskId, nowIso(), actor, type, payload);
       if (FINISHING_EVENTS.has(type)) p.finishing.add(taskId);
+      if (endQuietNotice(repos, taskId, actor, nowIso())) p.notificationsChanged = true;
       p.tasks.add(taskId);
     },
   });
