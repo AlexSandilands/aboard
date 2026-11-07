@@ -16,7 +16,9 @@ const entry = (enabled: boolean, everyMinutes = 30): AutopilotScopeEntry => ({
   automation: AUTOPILOT_ORCHESTRATE,
   mode: enabled ? "on" : "off",
   config: {},
+  lastOnMode: null,
   enabled,
+  preview: false,
   source: "project",
   effectiveConfig: { everyMinutes },
 });

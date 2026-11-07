@@ -227,7 +227,7 @@ export const orchestrate = defineAutomation({
       ),
   ],
   defaults,
-  check: ({ services, projects, engine, now }) => {
+  check: ({ services, projects, now }) => {
     // One run at a time per project: a run that outlasts the interval holds the next slot back (unrecorded), and the
     // latest slot runs once it ends.
     const busy = new Set(
@@ -241,7 +241,7 @@ export const orchestrate = defineAutomation({
     for (const project of services.projects.list()) {
       if (!on.has(project.id)) services.autopilot.clearRunRequest(AUTOPILOT_ORCHESTRATE, project.id);
     }
-    return projects.flatMap(({ project, config }): Candidate[] => {
+    return projects.flatMap(({ project, config, dryRun }): Candidate[] => {
       if (busy.has(project.id)) return [];
       const preview = () =>
         orchestratePrompt({
@@ -254,7 +254,7 @@ export const orchestrate = defineAutomation({
       const requested = services.autopilot.runRequest(AUTOPILOT_ORCHESTRATE, project.id);
       if (requested) {
         const dedupeKey = manualKey(project.id, requested);
-        if (!services.autopilot.hasRun(AUTOPILOT_ORCHESTRATE, dedupeKey, engine.dryRun)) {
+        if (!services.autopilot.hasRun(AUTOPILOT_ORCHESTRATE, dedupeKey, dryRun)) {
           return [
             { dedupeKey, summary: `look over ${project.title} (run now)`, projectId: project.id, preview: preview() },
           ];
@@ -265,7 +265,7 @@ export const orchestrate = defineAutomation({
       if (!services.tasks.summaries({ projectId: project.id }).some(orchestrateNeedsLooking)) return [];
       const slot = latestMinutesSlot(config.everyMinutes, now);
       // A Run now since the slot began has looked already; the next slot is the next look.
-      if (ranManuallySince(services, project.id, slot, engine.dryRun)) return [];
+      if (ranManuallySince(services, project.id, slot, dryRun)) return [];
       const stamp = localStamp(slot);
       return [
         {
@@ -351,7 +351,7 @@ export function orchestrateState(services: Services, projectId: string, now: Dat
   const everyMinutes = config.success ? config.data.everyMinutes : defaults.everyMinutes;
   const next = nextMinutesSlot(everyMinutes, now);
   const requested = resolved.enabled ? services.autopilot.runRequest(AUTOPILOT_ORCHESTRATE, project.id) : null;
-  const { dryRun } = services.autopilot.engine();
+  const dryRun = services.autopilot.engine().dryRun || resolved.preview;
   const lastRun =
     services.autopilot
       .automationRunsForProject(AUTOPILOT_ORCHESTRATE, project.id, 20)

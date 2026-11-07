@@ -361,7 +361,8 @@ function mergeReadyPrs(db: Db): void {
 
 /**
  * The projects an automation was effectively on in, by the rule in docs/features/autopilot.md: the project's own mode
- * if it set one, else the board's, and also a project with an unarchived epic that switched it on (when epics can).
+ * if it set one, else the board's, and also a project with an unarchived epic that switched it on (when epics can). Only
+ * On counts: an automation in Preview recorded what it would do and acted on nothing, so it wasn't on.
  */
 function projectsWhereOn(db: Db, automation: string, withEpics: boolean): string[] {
   const rows = db

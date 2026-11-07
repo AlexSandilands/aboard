@@ -37,9 +37,22 @@ export const UNSTICK_WAITING_PREFIX = "Thread waiting for input for";
 /** What a run failed by the board restarting says first, so reports can tell it from a failure of the run's own. */
 export const BOARD_RESTARTED_ERROR = "The board restarted";
 
-/** An automation's switch at one scope. `inherit` defers to the next scope up; nothing set anywhere is off. */
-export const AutopilotMode = z.enum(["inherit", "on", "off"]);
+/**
+ * An automation's switch at one scope. `inherit` defers to the next scope up; nothing set anywhere is off. `preview`
+ * is on, but every run is a dry run: it records what it would do and does none of it (a custom automation's check
+ * script still runs for real, to find what it would act on).
+ */
+export const AutopilotMode = z.enum(["inherit", "on", "preview", "off"]);
 export type AutopilotMode = z.infer<typeof AutopilotMode>;
+
+/** The modes that switch an automation on: what a scope remembers so its switch can restore it after Off. */
+export const AutopilotOnMode = z.enum(["on", "preview"]);
+export type AutopilotOnMode = z.infer<typeof AutopilotOnMode>;
+
+export const isOnMode = (mode: AutopilotMode): mode is AutopilotOnMode => mode === "on" || mode === "preview";
+
+/** How far back an automation's Preview hint counts its "would …" runs. */
+export const PREVIEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Most specific last. An epic's setting applies to the tasks in it. */
 export const AutopilotScopeKind = z.enum(["board", "project", "epic"]);
@@ -62,6 +75,8 @@ export const AutopilotSetting = z.object({
   mode: AutopilotMode,
   /** Only the keys set at this scope; the others inherit. */
   config: AutopilotConfig,
+  /** The last on-mode this scope was set to, kept through Off; null when it never was on. */
+  lastOnMode: AutopilotOnMode.nullable().default(null),
   updatedAt: z.string(),
 });
 export type AutopilotSetting = z.infer<typeof AutopilotSetting>;
@@ -78,7 +93,10 @@ export const AutopilotModeSource = z.enum(["board", "project", "epic", "default"
 export type AutopilotModeSource = z.infer<typeof AutopilotModeSource>;
 
 export interface ResolvedAutopilot {
+  /** On or in Preview: the automation's check runs. */
   enabled: boolean;
+  /** Enabled in Preview: its runs are dry runs. */
+  preview: boolean;
   source: AutopilotModeSource;
   /** Config keys merged board first, most specific scope last. Not yet merged over the automation's defaults. */
   config: AutopilotConfig;
@@ -86,7 +104,8 @@ export interface ResolvedAutopilot {
 
 /**
  * The effective mode and config of one automation, given its settings from least to most specific scope (board,
- * project, then the task's epic). The most specific scope that isn't `inherit` wins; with none, it's off. Config keys
+ * project, then the task's epic). The most specific scope that isn't `inherit` wins; with none, it's off. Preview
+ * counts as enabled, with `preview` set, so the engine records its runs as dry runs. Config keys
  * merge in the same order whatever the modes, so a project can tune an automation that is switched on for the whole
  * board.
  */
@@ -94,17 +113,19 @@ export function resolveAutopilot(
   chain: ReadonlyArray<Pick<AutopilotSetting, "scopeKind" | "mode" | "config"> | null | undefined>,
 ): ResolvedAutopilot {
   let enabled = false;
+  let preview = false;
   let source: AutopilotModeSource = "default";
   const config: AutopilotConfig = {};
   for (const setting of chain) {
     if (!setting) continue;
     Object.assign(config, setting.config);
     if (setting.mode !== "inherit") {
-      enabled = setting.mode === "on";
+      enabled = isOnMode(setting.mode);
+      preview = setting.mode === "preview";
       source = setting.scopeKind;
     }
   }
-  return { enabled, source, config };
+  return { enabled, preview, source, config };
 }
 
 const AUTOPILOT_LABELLED_PREFIX = "Autopilot · ";
@@ -145,9 +166,15 @@ export const isAutopilotSessionName = (name: string | null | undefined): boolean
   !!name &&
   (name === AUTOPILOT_UNLABELLED_NAME || name.startsWith(AUTOPILOT_LABELLED_PREFIX) || AUTOPILOT_TASK_NAME.test(name));
 
+/** What a resolved switch reads as: Off, Preview or On. */
+export const resolvedModeLabel = (resolved: Pick<ResolvedAutopilot, "enabled" | "preview">): string =>
+  !resolved.enabled ? "Off" : resolved.preview ? "Preview" : "On";
+
 /** "Inherit (On from board)": how the UI labels an inherit switch. */
-export function describeInherited(resolved: Pick<ResolvedAutopilot, "enabled" | "source">): string {
-  const state = resolved.enabled ? "On" : "Off";
+export function describeInherited(
+  resolved: Pick<ResolvedAutopilot, "enabled" | "source"> & { preview?: boolean },
+): string {
+  const state = resolvedModeLabel({ enabled: resolved.enabled, preview: resolved.preview ?? false });
   return resolved.source === "default" ? `Inherit (${state} by default)` : `Inherit (${state} from ${resolved.source})`;
 }
 
@@ -272,7 +299,12 @@ export const AutopilotScopeEntry = z.object({
   mode: AutopilotMode,
   /** The config set at this scope only. */
   config: AutopilotConfig,
+  /** The last on-mode set at this scope, kept through Off, so a switch can restore it; null when never on here. */
+  lastOnMode: AutopilotOnMode.nullable(),
+  /** On or in Preview, from this scope or one above. */
   enabled: z.boolean(),
+  /** Enabled in Preview: its runs here are dry runs. */
+  preview: z.boolean(),
   source: AutopilotModeSource,
   /** The config the engine would use: defaults, then every scope's keys. */
   effectiveConfig: AutopilotConfig,
@@ -293,7 +325,7 @@ export const AutopilotEngineSettings = z.object({
   dailySpendCapUsd: z.number().positive().max(10_000).nullable(),
   /** No agent runs start between `start` and `end` (local time, may wrap midnight) while on. Equal times are no window. */
   quietHours: z.object({ enabled: z.boolean(), start: ClockTime, end: ClockTime }),
-  /** Record what would run, as skipped runs, and do nothing. */
+  /** Preview everything: every automation records what would run, as skipped runs, and does nothing. */
   dryRun: z.boolean(),
   /** Review rounds the PR review automation runs per PR, and Fix PRs' attempts on its review and failing checks. */
   prReviewRounds: z.number().int().min(1).max(10),
@@ -430,6 +462,8 @@ export const AutopilotOverview = z.object({
   needsYou: z.array(AutopilotNeed),
   /** Each automation's latest real run that has finished, for its row in the list; none for one that never ran. */
   lastRuns: z.array(z.object({ automation: z.string(), status: AutopilotRunStatus, at: z.string() })),
+  /** Each automation's dry runs ("would …") over the last 7 days, for its Preview hint; none for one with none. */
+  previewRuns: z.array(z.object({ automation: z.string(), count: z.number().int() })),
 });
 export type AutopilotOverview = z.infer<typeof AutopilotOverview>;
 

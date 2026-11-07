@@ -90,8 +90,9 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
         'Write a custom Autopilot automation for the user when they ask for one ("every morning, ...", "when a PR ' +
         'merges, ..."). It saves nothing that runs: the board keeps it as a draft for ' +
         `${AUTOMATION_DRAFT_TTL_DAYS} days and gives you a link to its import page, where the user reads it, confirms ` +
-        "any script, fills in inputs and tool slots, and imports it switched off. Give the user the link and say they " +
-        "must import it and switch it on; never claim it is set up. A draft with problems is refused with every problem " +
+        "any script, fills in inputs and tool slots, and imports it. It comes in in Preview: it records what it would do " +
+        "and does none of it (a check script still runs for real) until the user turns it on. Give the user the link and " +
+        "say they must import it and turn it on; never claim it is set up. A draft with problems is refused with every problem " +
         "listed: fix them all and call again. Each call makes a new draft.",
       inputSchema: {
         automation: z
@@ -136,7 +137,8 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
         const { bundle } = draft;
         const lines = [
           `Drafted "${bundle.name}". Nothing is saved or running yet: the user must open the draft, review it and ` +
-            "import it, and it comes in switched off.",
+            "import it. It comes in in Preview: it records what it would do and does none of it (a check script still " +
+            "runs for real) until the user turns it on.",
           `Import page: ${boardUrl(ctx)}${automationDraftPath(draft.id)}`,
           `It expires ${draft.expiresAt.slice(0, 10)} unless imported.`,
         ];

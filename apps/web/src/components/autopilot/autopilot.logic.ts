@@ -8,6 +8,7 @@ import {
   type AutopilotConfig,
   type AutopilotField,
   type AutopilotMode,
+  type AutopilotOnMode,
   type AutopilotRun,
   type AutopilotScopeEntry,
   type AutopilotStatus,
@@ -75,15 +76,46 @@ export function pillTooltip(state: PillState, activeRuns: number, subject: "proj
 
 export const AUTOPILOT_MODES: ReadonlyArray<{ value: AutopilotMode; label: string }> = [
   { value: "inherit", label: "Inherit" },
-  { value: "on", label: "On" },
   { value: "off", label: "Off" },
+  { value: "preview", label: "Preview" },
+  { value: "on", label: "On" },
 ];
 
 /**
  * The board is the top scope, so Inherit there only falls back to the built-in default, which is Off: its switch
- * offers On and Off alone.
+ * offers Off, Preview and On alone.
  */
 export const BOARD_MODES = AUTOPILOT_MODES.filter((mode) => mode.value !== "inherit");
+
+/**
+ * The mode a switch turns an automation back on in: the last on-mode its scope had, else Preview for one that has
+ * never made a real run (so it is tried first), else On.
+ */
+export const restoreMode = (entry: Pick<AutopilotScopeEntry, "lastOnMode">, hasRun: boolean): AutopilotOnMode =>
+  entry.lastOnMode ?? (hasRun ? "on" : "preview");
+
+/** What Preview means, for a Mode row; a custom automation with a check script says the script still runs. */
+export function modeDescription(
+  mode: "off" | "preview" | "on",
+  automation: Pick<AutopilotAutomation, "needsAgent">,
+  hasCheckScript: boolean,
+): string {
+  if (mode === "off") return "Nothing runs. Its settings are kept.";
+  if (mode === "on") {
+    return automation.needsAgent
+      ? "Runs for real and counts toward your limits."
+      : "Runs for real. It starts no agent, so the agent limits and quiet hours don't apply.";
+  }
+  return hasCheckScript
+    ? "Records what it would do, as runs marked Preview, and starts no agent. Its check script still runs for real, so it can tell what it would act on."
+    : "Records what it would do, as runs marked Preview, and does none of it.";
+}
+
+/** "Would have run 3 times this week." for the Preview hint. */
+export function previewHint(count: number): string {
+  if (count === 0) return "Nothing for it to do yet this week. Its Preview runs show up here as they come.";
+  return `Would have run ${count === 1 ? "once" : `${count} times`} this week. Did those look right?`;
+}
 
 /** The board switch's choice for a stored mode: no row (inherit) reads as Off. */
 export const boardSwitchValue = (mode: AutopilotMode): AutopilotMode => (mode === "inherit" ? "off" : mode);
@@ -95,7 +127,8 @@ export const boardSwitchValue = (mode: AutopilotMode): AutopilotMode => (mode ==
 export const boardModeToSave = (mode: AutopilotMode): AutopilotMode => (mode === "off" ? "inherit" : mode);
 
 /** What the board switch's row says about the choice. */
-export const boardSummary = (mode: AutopilotMode): string => (mode === "on" ? "On for the board" : "Off for the board");
+export const boardSummary = (mode: AutopilotMode): string =>
+  mode === "on" ? "On for the board" : mode === "preview" ? "In Preview for the board" : "Off for the board";
 
 /**
  * What the Inherit choice resolves to at a project or epic, e.g. "Inherit (On from board)". `parent` is the entry at
@@ -118,10 +151,15 @@ export function parentEntry(
 export interface ScopeRowModel {
   /** What the automation resolves to here, whether set at this scope or inherited. */
   checked: boolean;
+  /** On in Preview here: the row shows a Preview badge. */
+  preview: boolean;
   /** True while the scope sets nothing (Inherit): the switch is faded and there is nothing to reset. */
   inherited: boolean;
-  /** The mode a click on the switch saves. It is always an explicit On or Off; the reset button saves Inherit. */
-  nextMode: "on" | "off";
+  /**
+   * The mode a click on the switch saves: Off, or the last on-mode set here (On when there is none). Always explicit;
+   * the reset button saves Inherit.
+   */
+  nextMode: "on" | "preview" | "off";
   /** False when a click would turn on an automation that can't be (`blocked`). Turning off always works. */
   canToggle: boolean;
   blocked: string | null;
@@ -134,13 +172,15 @@ export interface ScopeRowModel {
  * `source` are what Inherit would give), so the row needs no entry from the parent scope.
  */
 export function scopeRowModel(
-  entry: Pick<AutopilotScopeEntry, "mode" | "enabled" | "source">,
+  entry: Pick<AutopilotScopeEntry, "mode" | "enabled" | "source"> &
+    Partial<Pick<AutopilotScopeEntry, "preview" | "lastOnMode">>,
   blocked: string | null,
   scope: "project" | "epic",
 ): ScopeRowModel {
   const inherited = entry.mode === "inherit";
-  const nextMode = entry.enabled ? "off" : "on";
-  const state = entry.enabled ? "On" : "Off";
+  const preview = entry.enabled && (entry.preview ?? false);
+  const nextMode = entry.enabled ? "off" : (entry.lastOnMode ?? "on");
+  const state = !entry.enabled ? "Off" : preview ? "In Preview" : "On";
   const note = !inherited
     ? `${state} for this ${scope}`
     : entry.source === "default"
@@ -148,9 +188,10 @@ export function scopeRowModel(
       : `${state}, following the ${entry.source}`;
   return {
     checked: entry.enabled,
+    preview,
     inherited,
     nextMode,
-    canToggle: !(nextMode === "on" && blocked),
+    canToggle: !(nextMode !== "off" && blocked),
     blocked,
     note,
   };
@@ -183,7 +224,9 @@ export function entryFor(
       automation: automation.key,
       mode: "inherit",
       config: {},
+      lastOnMode: null,
       enabled: false,
+      preview: false,
       source: "default",
       effectiveConfig: automation.defaults,
     }
@@ -257,7 +300,7 @@ export function runStatusLabel(run: Pick<AutopilotRun, "status" | "dryRun"> & { 
     case "failed":
       return "Failed";
     case "skipped":
-      return run.dryRun ? "Dry run" : "Skipped";
+      return run.dryRun ? "Preview" : "Skipped";
   }
 }
 

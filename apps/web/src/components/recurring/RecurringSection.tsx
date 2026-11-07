@@ -66,7 +66,7 @@ export function ProjectRuleRows({ project, withAdd = false }: { project: Project
   const templates = useTemplates();
   const paused = useBoard().data?.autopilot.paused ?? false;
   const dryRun = useAutopilotOverview().data?.engine.dryRun ?? false;
-  // A rule has no switch above it any more: it acts unless Autopilot is paused or only previewing.
+  // A rule has no switch above it any more: it acts unless Autopilot is paused or previewing everything.
   const running = !paused && !dryRun;
   const update = useUpdateRecurringRule();
   const remove = useDeleteRecurringRule();

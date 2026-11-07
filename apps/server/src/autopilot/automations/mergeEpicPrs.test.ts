@@ -252,6 +252,19 @@ describe("merge into epic branch", () => {
     expect(merges).toHaveLength(1);
   });
 
+  it("with Review PRs in Preview, still waits for a real review rather than merging unreviewed", async () => {
+    const { s, project, setPr, toReview, pass, turnOn, merges, reviewed } = setup();
+    turnOn();
+    s.autopilot.setScope("project", project.id, AUTOPILOT_REVIEW_PRS, { mode: "preview" });
+    toReview();
+    setPr();
+    await pass();
+    expect(merges).toHaveLength(0);
+    reviewed({ round: 1 });
+    await pass();
+    expect(merges).toHaveLength(1);
+  });
+
   it("flags the task Ready to merge into the epic branch when GitHub refuses, and notifies", async () => {
     const { s, task, setPr, toReview, pass, turnOn, runs, failMerge } = setup();
     turnOn();
@@ -322,7 +335,7 @@ describe("merge into epic branch", () => {
       engine: s.autopilot.engine(),
       now: new Date(),
       board: null,
-      projects: [{ project: s.projects.get(task.projectId), config: {} }],
+      projects: [{ project: s.projects.get(task.projectId), config: {}, dryRun: false }],
     };
     for (let i = 0; i < MERGE_ATTEMPTS + 1; i++) {
       const [candidate] = await mergeEpicPrs.check(ctx);

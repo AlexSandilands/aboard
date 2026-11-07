@@ -37,10 +37,19 @@ export interface Candidate {
 export interface ProjectScope<C> {
   project: Project;
   config: C;
+  /**
+   * Nothing runs for real here: Preview everything is set, or the automation is in Preview in the project and no epic
+   * of it switches it on for real. The engine still decides each candidate's dry run on its own task's scopes.
+   */
+  dryRun: boolean;
 }
 
 export interface CheckContext<C> {
   services: Services;
+  /**
+   * The engine settings, with `dryRun` set when nothing of this automation runs for real anywhere: Preview everything,
+   * or every scope it is on in is in Preview. Where scopes differ, `ProjectScope.dryRun` says it per project.
+   */
   engine: AutopilotEngineSettings;
   now: Date;
   /** The engine's clock, for work a check started that ends after the pass (`now` is the pass's time). */

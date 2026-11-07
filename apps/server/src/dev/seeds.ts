@@ -1160,16 +1160,34 @@ const dense: Scenario = (s, opts) => {
 };
 
 /**
- * The showcase board with Autopilot set up, for Settings → Autopilot: several automations on for the board (in dry
- * run, so the sandbox never starts an agent), a failed run to retry, an agent's draft to review and a custom
- * automation whose tool slot is empty, and recurring rules in three projects.
+ * The showcase board with Autopilot set up, for Settings → Autopilot: the agent automations in Preview (so the
+ * sandbox never starts an agent) with a few "would" runs this week, Auto-archive on, a failed run to retry, an agent's
+ * draft to review, a custom automation whose tool slot is empty and one with a check script, and recurring rules in three projects.
  */
 const autopilot: Scenario = (s, opts) => {
   showcase(s, opts);
-  s.autopilot.updateEngine({ dryRun: true, dailySpendCapUsd: 5, quietHours: { enabled: true } });
-  for (const key of ["start_planned", "review_prs", "fix_prs", "auto_archive", "digest"]) {
-    s.autopilot.setScope("board", null, key, { mode: "on" });
+  s.autopilot.updateEngine({ dailySpendCapUsd: 5, quietHours: { enabled: true } });
+  for (const key of ["start_planned", "review_prs", "fix_prs", "digest"]) {
+    s.autopilot.setScope("board", null, key, { mode: "preview" });
   }
+  s.autopilot.setScope("board", null, "auto_archive", { mode: "on" });
+  const [planned] = s.tasks.summaries({ status: "planned" });
+  for (const n of [1, 2, 3]) {
+    s.autopilot.record({
+      automation: "start_planned",
+      candidate: { dedupeKey: `seed-preview:${n}`, summary: `start a planned task (${n})`, taskId: planned?.id },
+      dryRun: true,
+    });
+  }
+  s.customAutomations.create({
+    name: "Flaky test report",
+    trigger: { kind: "schedule", schedule: { kind: "weekly", days: [1], time: "08:00" } },
+    action: {
+      kind: "agent",
+      prompt: "Open a task with the evidence for {{item.key}}.",
+      check: { language: "node", body: "// Reads the last week of CI runs; prints nothing in the sandbox.\n" },
+    },
+  });
   s.autopilot.setScope("board", null, "fix_prs", { config: { resolveThreads: false } });
   // Merge ready PRs (Into main off): an epic delivering through a branch of its own, and Review tasks flagged
   // Auto-merge, the last held for an approval only the user gives.
