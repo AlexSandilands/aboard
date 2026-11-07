@@ -1,6 +1,6 @@
 import type { BoardSnapshot, WhereInput } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { scopeIsOn, scopeToggle, turnsOn, whereScopes } from "./where.logic";
+import { ownSettingsLabel, scopeIsOn, scopeToggle, turnsOn, whereScopes } from "./where.logic";
 
 const project = (id: string, title: string, position: string, archivedAt: string | null = null) => ({
   id,
@@ -121,5 +121,23 @@ describe("turnsOn", () => {
     expect(turnsOn([{ target: { kind: "project", id: "p1" }, mode: "off" }])).toBe(false);
     expect(turnsOn([{ target: { kind: "project", id: "p1" }, mode: "inherit" }])).toBe(false);
     expect(turnsOn([])).toBe(false);
+  });
+});
+
+describe("ownSettingsLabel", () => {
+  const automation = {
+    fields: [
+      { key: "skill", label: "Skill", kind: "text" },
+      { key: "days", label: "After", kind: "number" },
+    ],
+  } as never;
+
+  it("names the settings a project sets for itself by their labels", () => {
+    expect(ownSettingsLabel(automation, { days: 3, skill: "x" })).toBe("After, Skill");
+  });
+
+  it("lists a key the automation no longer has by its name, and says nothing when there is none", () => {
+    expect(ownSettingsLabel(automation, { nudge: true })).toBe("nudge");
+    expect(ownSettingsLabel(automation, {})).toBeNull();
   });
 });

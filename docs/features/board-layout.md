@@ -199,7 +199,7 @@ Until the user chooses, sections collapse by content (`collapsedByDefault`):
 | Links                | The task has no PRs, issues, tickets or URLs      |
 | Relations            | The task blocks nothing and is blocked by nothing ([relations](relations.md)) |
 | Local review         | No review rounds                                  |
-| Autopilot            | Never: the settings are its content               |
+| Autopilot            | A task: never, the settings are its content. An epic (runs only): no run needs attention |
 | Details              | No description and no plan context                |
 | Activity             | Always: it's a log, not a summary                 |
 
@@ -230,7 +230,9 @@ runs alone.
 
 Under the settings come the run notice and the task's Autopilot runs (status, automation, what it did, runner, a thread
 link or session id, cost and the error), or "Autopilot hasn't run on this task". The collapsed header reads what it may do
-("May start, review · Priority", "Not automated", "For a person"), or the attention message when a run needs a look.
+("May start, review · Priority", "Not automated", "For a person"; "Runs on this epic" for an epic), from the same chips
+(`mayState`, so a task that follows the board's Auto-review counts review when the board has it on), or the attention
+message when a run needs a look.
 
 #### The due date
 

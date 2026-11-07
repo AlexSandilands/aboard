@@ -178,37 +178,70 @@ describe("whereInput", () => {
 });
 
 describe("edits", () => {
-  it("Everywhere switches the board on and leaves the rest, so Off projects become exceptions", () => {
-    const writes = whereEverywhere(input("inherit", { p1: "on", p2: "off" }));
-    expect(writes).toEqual([{ target: { kind: "board" }, mode: "on" }]);
-    expect(describeWhere(apply(input("inherit", { p1: "on", p2: "off" }), writes)).sentence).toBe(
-      "On everywhere except payments-api",
-    );
+  it("Everywhere switches the board on and drops the rows Only in… left, so Off projects are the exceptions", () => {
+    const from = input("inherit", { p1: "on", p2: "off" }, { e5: "on", e6: "off" });
+    const writes = whereEverywhere(from);
+    expect(writes).toEqual([
+      { target: { kind: "board" }, mode: "on" },
+      { target: { kind: "project", id: "p1" }, mode: "inherit" },
+      { target: { kind: "epic", id: "e5", projectId: "p1" }, mode: "inherit" },
+      { target: { kind: "epic", id: "e6", projectId: "p2" }, mode: "inherit" },
+    ]);
+    // An epic set the same as its project (On in a project that is on, Off in one that is Off) is no exception.
+    expect(describeWhere(apply(from, writes)).sentence).toBe("On everywhere except payments-api");
     expect(whereEverywhere(input("on"))).toEqual([]);
   });
 
-  it("Only in… turns the board off, the picked projects on and the others that were on back to Inherit", () => {
+  it("Everywhere then Switch off (the board back to Inherit) runs nowhere", () => {
+    const only = input("off", { p1: "on", p3: "on" }, { e5: "on" });
+    const everywhere = apply(only, whereEverywhere(only));
+    const off = apply(everywhere, [{ target: { kind: "board" }, mode: "inherit" }]);
+    for (const p of PROJECTS) expect(engineSays(off, p.id)).toBe(false);
+    for (const e of EPICS) expect(engineSays(off, e.projectId, e.id)).toBe(false);
+  });
+
+  it("Only in… turns the picked projects on, then the board off, then the others that were on back to Inherit", () => {
     const from = input("on", { p2: "off" });
     const writes = whereOnlyIn(from, currentOnProjects(from));
     expect(writes).toEqual([
-      { target: { kind: "board" }, mode: "inherit" },
       { target: { kind: "project", id: "p1" }, mode: "on" },
       { target: { kind: "project", id: "p3" }, mode: "on" },
       { target: { kind: "project", id: "p4" }, mode: "on" },
+      { target: { kind: "board" }, mode: "inherit" },
     ]);
     // Everywhere except payments-api, as Only in the rest: nothing changes where it runs.
     expect(sameReach(from, apply(from, writes))).toBe(true);
 
     const only = input("off", { p1: "on", p3: "on" });
     expect(whereOnlyIn(only, ["p3", "p4"])).toEqual([
-      { target: { kind: "project", id: "p1" }, mode: "inherit" },
       { target: { kind: "project", id: "p4" }, mode: "on" },
+      { target: { kind: "project", id: "p1" }, mode: "inherit" },
     ]);
     expect(describeWhere(apply(only, whereOnlyIn(only, ["p3", "p4"]))).sentence).toBe("On only in docs, infra");
     // Nothing picked: it runs nowhere.
     expect(describeWhere(apply(only, whereOnlyIn(only, []))).reach).toBe("nowhere");
     // No board write when it is already off.
     expect(whereOnlyIn(input("off"), ["p1"]).some((w) => w.target.kind === "board")).toBe(false);
+  });
+
+  it("never switches a project that stays on off along the way, each write being a request of its own", () => {
+    for (const board of MODES) {
+      for (const p1 of MODES) {
+        for (const p2 of MODES) {
+          for (const e5 of MODES) {
+            const from = input(board, { p1, p2 }, { e5 });
+            const stays = currentOnProjects(from);
+            for (const writes of [whereOnlyIn(from, stays), whereEverywhere(from)]) {
+              let step = from;
+              for (const write of writes) {
+                step = apply(step, [write]);
+                for (const id of stays) expect(engineSays(step, id)).toBe(true);
+              }
+            }
+          }
+        }
+      }
+    }
   });
 
   it("switches a project or epic so that it needs no row of its own when the scope above gives that", () => {

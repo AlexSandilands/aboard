@@ -37,10 +37,14 @@ turns an automation's modes at every scope into a reach and its exceptions: **Ev
 **Only in…** is the board off with some projects On; **nowhere** is neither. An exception is a project or epic whose own
 setting differs from what it would follow: a project Off under Everywhere, an epic set against its project (an epic
 set the same as its project is not one). "On everywhere except payments-api; epic #5 Off" is the sentence for the
-board On, payments-api Off and epic #5 Off. Nothing is stored for it: the edits (`whereEverywhere`, `whereOnlyIn`,
+board On, payments-api Off and epic #5 Off. Everywhere also drops the rows Only in… left (a project set On, an epic set the same as its project), so a later Switch off of the board really is off. Nothing is stored for it: the edits (`whereEverywhere`, `whereOnlyIn`,
 `whereProject`, `whereEpic`, `whereAddException`, `whereRemoveException`) return the plain `PUT` writes (a scope and a
 mode), and a toggle that gives what the scope above already gives saves Inherit rather than an override
-(`modeToBe`), so a project that is switched on and off again leaves no row. The tests run every board × project × epic
+(`modeToBe`), so a project that is switched on and off again leaves no row. Each write is its own request and the
+server acts on each, so the order is part of the contract: Only in… turns the picked projects On before the board goes
+off (nothing that stays on is ever off on the way, which would drop a Run now request or restart a schedule), and
+Everywhere turns the board on first. `useApplyWhere` sends them in order and the event stream holds back the switches'
+refetch until the last is in (`WHERE_MUTATION_KEY`). The tests run every board × project × epic
 combination against `resolveAutopilot`.
 
 An epic's setting covers only the tasks in it (`parent_id`). A task with no epic skips that level, and so does a
@@ -1604,8 +1608,9 @@ field, and for `skill` the review skill picker (built-in skill plus skills found
 such as the digest's own skill). The board's fields are edited in the detail, as above. A project's settings page (Settings → Project → Automations,
 `ProjectAutopilotSection`) is read only: each automation with the sentence saying where it runs, **On here** or
 **Off here**, and a **Change** button that opens that automation's detail (`autopilot.automations.<key>`). A project
-no longer has a form for its own config: a value already stored for a project still applies, but nothing in the UI sets
-or clears one. The lane and epic popovers are the widget's compact form (`WhereRow`, see
+no longer has a form for its own config: a value already stored for a project still applies over the board's, so its
+row says "This project sets its own: …" and has **Clear own settings** (it saves the scope's config as empty, which the
+server turns into removing the row when the mode is Inherit); nothing in the UI sets one. The lane and epic popovers are the widget's compact form (`WhereRow`, see
 [board-layout.md](board-layout.md#autopilot-on-the-board)). Config set at a scope is sent whole (the server replaces
 it), so editing one key sends the scope's other keys with it; the reset button beside a field's title (shown only
 while the key is set at that scope) removes the key so it inherits.

@@ -1,5 +1,6 @@
 import { reviewBadgeLabel, type TaskDetail, type TaskRelation } from "@repo/contracts";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
+import { mayState } from "./automation.logic";
 import { isSessionLink, type PlainLink } from "./links.logic";
 
 type PrLink = Extract<PlainLink, { kind: "pr" }>;
@@ -93,6 +94,7 @@ export function moveSection(order: ReadonlyArray<SectionId>, id: SectionId, over
 
 export type SectionTask = Pick<
   TaskDetail,
+  | "kind"
   | "labels"
   | "links"
   | "blockedBy"
@@ -132,8 +134,9 @@ export function collapsedByDefault(id: SectionId, task: SectionTask): boolean {
     case "relations":
       return task.blockedBy.length === 0 && task.blocks.length === 0;
     // The settings are the section's content, so it stays open: they're what you came to change.
+    // An epic has no settings of its own here, only the runs on it: open it when one needs a look.
     case "autopilot":
-      return false;
+      return task.kind === "epic" ? !task.attention.some((a) => a.kind === "autopilot") : false;
     case "review":
       return task.reviews.length === 0;
     case "details":
@@ -220,19 +223,21 @@ export function relationChipGroups(task: Pick<SectionTask, "blockedBy" | "blocks
 
 /**
  * What Autopilot may do with the task, as the collapsed Autopilot section says it: "May start, review", or "Not
- * automated". Start and merge count only when On; review counts when the task says so (the board's own Auto-review
- * setting isn't in the task), with the reviewer's model after it.
+ * automated". It reads the same chips the open section shows (`mayState`), so a task that follows the board's
+ * Auto-review counts review when the board has it on; the reviewer's model comes after it.
  */
 function autopilotSummary(
-  task: Pick<SectionTask, "autopilot" | "autoReview" | "reviewModel" | "autoMerge" | "priority" | "manual">,
+  task: Pick<SectionTask, "kind" | "autopilot" | "autoReview" | "reviewModel" | "autoMerge" | "priority" | "manual">,
+  globalReview: boolean,
 ): string {
+  // An epic has no flags: its section is only the runs.
+  if (task.kind === "epic") return "Runs on this epic";
   // A manual task has no Autopilot, review or merge settings that apply to it.
   if (task.manual) return task.priority ? "For a person · Priority" : "For a person";
-  const may = [
-    task.autopilot === true ? "start" : null,
-    task.autoReview === true ? "review" : null,
-    task.autoMerge === true ? "merge" : null,
-  ].filter((part) => part !== null);
+  const on = mayState(task, globalReview);
+  const may = [on.start ? "start" : null, on.review ? "review" : null, on.merge ? "merge" : null].filter(
+    (part) => part !== null,
+  );
   const reviewer =
     task.reviewModel === null || task.reviewModel === "inherit"
       ? null
@@ -245,7 +250,13 @@ const LINK_ATTENTION = new Set(["pr_checks_failing", "pr_changes_requested", "pr
 const SESSION_ATTENTION = new Set(["thread_needs_input", "thread_failed"]);
 
 /** The one-line summary a collapsed section header shows in place of its content. */
-export function summarizeSection(id: SectionId, task: SectionTask, nowMs: number = Date.now()): string {
+export function summarizeSection(
+  id: SectionId,
+  task: SectionTask,
+  nowMs: number = Date.now(),
+  /** The board's Auto-review setting, which a task that sets nothing follows. */
+  globalReview: boolean = false,
+): string {
   switch (id) {
     case "labels":
       return task.labels.length ? task.labels.join(", ") : "None";
@@ -276,7 +287,7 @@ export function summarizeSection(id: SectionId, task: SectionTask, nowMs: number
       return open ? plural(open, "open finding") : reviewBadgeLabel(task.review);
     }
     case "autopilot":
-      return task.attention.find((a) => a.kind === "autopilot")?.message ?? autopilotSummary(task);
+      return task.attention.find((a) => a.kind === "autopilot")?.message ?? autopilotSummary(task, globalReview);
     case "plan": {
       const { done, total } = task.progress;
       if (total === 0) return "No plan yet";

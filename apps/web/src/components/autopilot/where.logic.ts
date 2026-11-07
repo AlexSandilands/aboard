@@ -2,6 +2,7 @@ import {
   projectIsOn,
   whereEpic,
   whereProject,
+  type AutopilotAutomation,
   type BoardSnapshot,
   type WhereInput,
   type WhereWrite,
@@ -52,3 +53,17 @@ export function scopeIsOn(input: WhereInput, scope: PopoverScope): boolean | nul
 /** The writes for switching the automation on or off at this scope: an override only where the scope above differs. */
 export const scopeToggle = (input: WhereInput, scope: PopoverScope, on: boolean): WhereWrite[] =>
   scope.kind === "project" ? whereProject(input, scope.id, on) : whereEpic(input, scope.id, on);
+
+/**
+ * The settings a project sets for itself on an automation ("Budget, Skill"), or null when it sets none. They apply
+ * over the board's, and the project page is where they show and are cleared. A key the automation no longer has is
+ * listed by its name.
+ */
+export function ownSettingsLabel(
+  automation: Pick<AutopilotAutomation, "fields">,
+  config: Readonly<Record<string, unknown>>,
+): string | null {
+  const keys = Object.keys(config);
+  if (keys.length === 0) return null;
+  return keys.map((key) => automation.fields.find((f) => f.key === key)?.label ?? key).join(", ");
+}

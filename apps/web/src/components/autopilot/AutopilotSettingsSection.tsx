@@ -17,11 +17,11 @@ import {
 } from "~/components/settings/settingsLayout";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import { Button } from "~/components/ui/button";
-import { useUpdateAutopilotEngine } from "~/state/mutations";
-import { useAutopilotOverview } from "~/state/queries";
+import { useSetAutopilotScope, useUpdateAutopilotEngine } from "~/state/mutations";
+import { useAutopilotOverview, useAutopilotScope } from "~/state/queries";
 import { parseLimit } from "./autopilot.logic";
 import { TimeInput } from "./TimeInput";
-import { scopeIsOn } from "./where.logic";
+import { ownSettingsLabel, scopeIsOn } from "./where.logic";
 import { useWhere } from "./useWhere";
 import { BoardVariablesSection } from "./VariablesSection";
 
@@ -71,10 +71,21 @@ function ProjectAutomationRow({ automation, projectId }: { automation: Autopilot
   const { input, description } = useWhere(automation);
   const openSettings = useOpenSettings();
   const on = input ? scopeIsOn(input, { kind: "project", id: projectId }) : null;
+  // A setting the project made for itself still applies over the board's, and nowhere else shows it.
+  const own = useAutopilotScope(projectId).data?.find((e) => e.automation === automation.key)?.config ?? {};
+  const ownLabel = ownSettingsLabel(automation, own);
+  const reset = useSetAutopilotScope(projectId);
   return (
     <SettingsRow
       title={automation.title}
-      description={description ? description.sentence : "Loading..."}
+      description={
+        <>
+          {description ? description.sentence : "Loading..."}
+          {ownLabel ? (
+            <span className="block">This project sets its own: {ownLabel}. They apply over the board&apos;s.</span>
+          ) : null}
+        </>
+      }
       status={
         on === null ? null : (
           <span className="flex items-center gap-1.5">
@@ -84,14 +95,27 @@ function ProjectAutomationRow({ automation, projectId }: { automation: Autopilot
         )
       }
       control={
-        <Button
-          size="xs"
-          variant="outline"
-          aria-label={`Change where ${automation.title} runs`}
-          onClick={() => openSettings(`autopilot.automations.${automation.key}`)}
-        >
-          Change
-        </Button>
+        <>
+          {ownLabel ? (
+            <Button
+              size="xs"
+              variant="ghost-muted"
+              aria-label={`Clear ${automation.title}'s own settings for this project`}
+              disabled={reset.isPending}
+              onClick={() => reset.mutate({ automation: automation.key, config: () => ({}) })}
+            >
+              Clear own settings
+            </Button>
+          ) : null}
+          <Button
+            size="xs"
+            variant="outline"
+            aria-label={`Change where ${automation.title} runs`}
+            onClick={() => openSettings(`autopilot.automations.${automation.key}`)}
+          >
+            Change
+          </Button>
+        </>
       }
     />
   );

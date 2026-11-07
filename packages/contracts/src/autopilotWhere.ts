@@ -166,23 +166,46 @@ const writeIf = (writes: WhereWrite[], target: WhereTarget, current: AutopilotMo
   if (current !== next) writes.push({ target, mode: next });
 };
 
-/** The board on. Project and epic rows are left as they are: those set Off become the exceptions. */
+/**
+ * The board on, and the rows that only made sense under Only in… dropped: a project set On (redundant now, and it would
+ * keep the automation running there after the board is switched off) and an epic set the same as its project. Projects
+ * set Off stay, as the exceptions. The board goes first, so nothing is off on the way.
+ */
 export function whereEverywhere(input: WhereInput): WhereWrite[] {
-  return input.board === "on" ? [] : [{ target: { kind: "board" }, mode: "on" }];
+  const writes: WhereWrite[] = [];
+  if (input.board !== "on") writes.push({ target: { kind: "board" }, mode: "on" });
+  for (const project of input.projects) {
+    if (project.mode === "on") writes.push({ target: { kind: "project", id: project.id }, mode: "inherit" });
+  }
+  for (const epic of input.epics) {
+    const project = input.projects.find((p) => p.id === epic.projectId);
+    if (!project || epic.mode === "inherit") continue;
+    // With the board On, a project is on unless it is set Off.
+    if ((epic.mode === "on") === (project.mode !== "off")) {
+      writes.push({ target: { kind: "epic", id: epic.id, projectId: epic.projectId }, mode: "inherit" });
+    }
+  }
+  return writes;
 }
 
 /**
- * Only in these projects: the board off (Inherit, which is Off), those projects On, and any other project that was On
- * back to Inherit. A project already Off stays so; it is just redundant while the board is off.
+ * Only in these projects: those projects On, then the board off (Inherit, which is Off), then any other project that was
+ * On back to Inherit. A project already Off stays so; it is just redundant while the board is off. The order matters
+ * because each write is its own request and the server acts on each: a project in the set is On before the board goes
+ * off, so it is never off on the way (which would drop a Run now request or restart a schedule), and a refused write
+ * leaves it running where it was.
  */
 export function whereOnlyIn(input: WhereInput, projectIds: ReadonlyArray<string>): WhereWrite[] {
   const writes: WhereWrite[] = [];
+  for (const project of input.projects) {
+    if (projectIds.includes(project.id)) writeIf(writes, { kind: "project", id: project.id }, project.mode, "on");
+  }
   // The board is saved as Inherit rather than Off, as its own switch does: both resolve to Off.
   if (input.board !== "inherit" && input.board !== "off") writes.push({ target: { kind: "board" }, mode: "inherit" });
   for (const project of input.projects) {
-    const target: WhereTarget = { kind: "project", id: project.id };
-    if (projectIds.includes(project.id)) writeIf(writes, target, project.mode, "on");
-    else if (project.mode === "on") writes.push({ target, mode: "inherit" });
+    if (!projectIds.includes(project.id) && project.mode === "on") {
+      writes.push({ target: { kind: "project", id: project.id }, mode: "inherit" });
+    }
   }
   return writes;
 }

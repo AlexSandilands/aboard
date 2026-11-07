@@ -19,6 +19,7 @@ const NOW = Date.parse("2026-10-15T12:00:00Z");
 
 function task(patch: Partial<SectionTask> = {}): SectionTask {
   return {
+    kind: "task",
     labels: [],
     links: [],
     blockedBy: [],
@@ -196,8 +197,19 @@ describe("collapsedByDefault", () => {
     expect(collapsedByDefault("links", task({ links: [session, link] }))).toBe(false);
   });
 
-  it("keeps Autopilot open: the settings are its content", () => {
+  it("keeps Autopilot open on a task: the settings are its content", () => {
     expect(collapsedByDefault("autopilot", task())).toBe(false);
+  });
+
+  it("opens an epic's Autopilot only when a run needs attention: it has runs and no settings", () => {
+    const flagged = task({
+      kind: "epic",
+      attention: [{ kind: "autopilot", severity: "warning", message: "Merge epic PRs failed" }],
+    });
+    expect(collapsedByDefault("autopilot", task({ kind: "epic" }))).toBe(true);
+    expect(collapsedByDefault("autopilot", flagged)).toBe(false);
+    expect(summarizeSection("autopilot", task({ kind: "epic" }))).toBe("Runs on this epic");
+    expect(summarizeSection("autopilot", flagged)).toBe("Merge epic PRs failed");
   });
 
   it("says why Autopilot needs a look in its collapsed line", () => {
@@ -285,6 +297,9 @@ describe("summarizeSection", () => {
     expect(
       summarizeSection("autopilot", task({ reviewModel: { provider: "claude-code", model: "claude-opus-5-5" } })),
     ).toBe("Not automated · Reviewer claude-opus-5-5");
+    // A task that sets nothing follows the board's Auto-review, as its chip does.
+    expect(summarizeSection("autopilot", task(), NOW, true)).toBe("May review");
+    expect(summarizeSection("autopilot", task({ autoReview: false }), NOW, true)).toBe("Not automated");
     expect(summarizeSection("autopilot", task({ manual: true, autoReview: true }))).toBe("For a person");
     expect(summarizeSection("autopilot", task({ manual: true, priority: true }))).toBe("For a person · Priority");
   });

@@ -64,6 +64,7 @@ export function WhereItRuns({ automation }: { automation: AutopilotAutomation })
   };
   const candidates = whereCandidates(input);
   const everywhereWrites = whereEverywhere(input);
+  const onlyWrites = whereOnlyIn(input, currentOnProjects(input));
   const noProjects = scopes.projects.length === 0;
 
   return (
@@ -86,7 +87,7 @@ export function WhereItRuns({ automation }: { automation: AutopilotAutomation })
                 const choice = next[0];
                 if (choice === "everywhere" && !everywhere) save(everywhereWrites);
                 // Over Everywhere, "Only in…" starts from the projects it runs in now, so nothing changes until a chip does.
-                else if (choice === "only" && everywhere) save(whereOnlyIn(input, currentOnProjects(input)));
+                else if (choice === "only" && everywhere) save(onlyWrites);
               }}
             >
               <Toggle
@@ -97,7 +98,13 @@ export function WhereItRuns({ automation }: { automation: AutopilotAutomation })
               >
                 Everywhere
               </Toggle>
-              <Toggle value="only">Only in…</Toggle>
+              <Toggle
+                value="only"
+                disabled={Boolean(blocked) && everywhere && turnsOn(onlyWrites)}
+                title={blocked && everywhere && turnsOn(onlyWrites) ? blocked : undefined}
+              >
+                Only in…
+              </Toggle>
             </ToggleGroup>
             {everywhere ? (
               <p className="text-xs text-muted-foreground">Every project, new ones too.</p>
