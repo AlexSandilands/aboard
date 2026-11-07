@@ -287,7 +287,8 @@ describe("migrations", () => {
         ${setup}
       `);
       old.close();
-      return openDatabase(path);
+      // Before 043 seeds the PR automations' own budgets.
+      return openDatabase(path, { migrateTo: "042_task_trash.sql" });
     };
     const json = (db: DatabaseSync, sql: string, ...params: string[]): unknown => {
       const row = db.prepare(sql).get(...params) as Record<string, string | null> | undefined;
@@ -414,6 +415,83 @@ describe("migrations", () => {
       const db = before("");
       const columns = db.prepare("PRAGMA table_info(autopilot_runs)").all() as Array<{ name: string }>;
       expect(columns.map((c) => c.name)).toContain("model_json");
+      db.close();
+    });
+  });
+
+  describe("agent defaults (043)", () => {
+    const before = (setup: string): DatabaseSync => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const path = join(dir, "board.db");
+      const old = openDatabase(path, { migrateTo: "042_task_trash.sql" });
+      old.exec(setup);
+      old.close();
+      return openDatabase(path);
+    };
+    const json = (db: DatabaseSync, sql: string, ...params: string[]): unknown => {
+      const row = db.prepare(sql).get(...params) as { value: string } | undefined;
+      return row ? JSON.parse(row.value) : undefined;
+    };
+    const engine = (db: DatabaseSync) =>
+      json(db, "SELECT value_json AS value FROM settings WHERE key = 'autopilotEngine'");
+    const board = (db: DatabaseSync, automation: string) =>
+      json(
+        db,
+        "SELECT config_json AS value FROM autopilot_settings WHERE scope_kind = 'board' AND automation = ?",
+        automation,
+      );
+    const engineRow = (value: object) =>
+      `INSERT INTO settings (key, value_json) VALUES ('autopilotEngine', '${JSON.stringify(value)}');`;
+
+    it("moves changed PR values into Review PRs and Fix PRs, keeping what those set already", () => {
+      const db = before(`
+        ${engineRow({ maxConcurrent: 2, prReviewRounds: 5, prCommentRounds: 2, prFixThreshold: "minor" })}
+        INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at)
+          VALUES ('board', '', 'fix_prs', 'on', '{"onComments":false,"budgetUsd":4}', '');
+      `);
+      expect(engine(db)).toEqual({ maxConcurrent: 2 });
+      expect(board(db, "review_prs")).toEqual({ rounds: 5 });
+      expect(board(db, "fix_prs")).toEqual({
+        attempts: 5,
+        commentAttempts: 2,
+        fixThreshold: "minor",
+        onComments: false,
+        // Set by the user: kept. The timeout it never set keeps Fix PRs' old 30 minutes.
+        budgetUsd: 4,
+        timeoutMinutes: 30,
+      });
+      const mode = db.prepare("SELECT mode FROM autopilot_settings WHERE automation = 'fix_prs'").get() as {
+        mode: string;
+      };
+      expect(mode.mode).toBe("on");
+      db.close();
+    });
+
+    it("moves nothing for PR values left at their defaults", () => {
+      const db = before(engineRow({ prReviewRounds: 3, prCommentRounds: 5, prFixThreshold: "major", dryRun: true }));
+      expect(engine(db)).toEqual({ dryRun: true });
+      expect(board(db, "review_prs")).toBeUndefined();
+      expect(board(db, "fix_prs")).toBeUndefined();
+      db.close();
+    });
+
+    it("keeps the old budgets and timeouts of automations in use, at the scope that doesn't set them", () => {
+      const db = before(`
+        INSERT INTO projects (id, title, position, created_at, updated_at) VALUES ('p', 'P', 'a0', '', '');
+        INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES
+          ('project', 'p', 'review_prs', 'on', '{}', ''),
+          ('board', '', 'orchestrate', 'on', '{"timeoutMinutes":45}', ''),
+          ('board', '', 'digest', 'on', '{"mode":"summarised"}', ''),
+          ('board', '', 'start_planned', 'on', '{}', '');
+      `);
+      expect(board(db, "review_prs")).toEqual({ budgetUsd: 2, timeoutMinutes: 20 });
+      expect(board(db, "orchestrate")).toEqual({ budgetUsd: 3, timeoutMinutes: 45 });
+      expect(board(db, "digest")).toEqual({ mode: "summarised", budgetUsd: 1, timeoutMinutes: 15 });
+      // Its defaults were the board's defaults already.
+      expect(board(db, "start_planned")).toEqual({});
+      // Never touched, so never on: it takes the board's defaults.
+      expect(board(db, "fix_prs")).toBeUndefined();
+      expect(engine(db)).toBeUndefined();
       db.close();
     });
   });

@@ -221,6 +221,9 @@ describe("settingsPaletteEntries", () => {
 describe("the Autopilot tabs", () => {
   it("sends the old page's anchors to where they are now", () => {
     expect(redirectSettingsTarget("autopilot.engine")).toBe("autopilot.automations");
+    expect(redirectSettingsTarget("autopilot.engine.pr-review-rounds")).toBe("autopilot.automations.review_prs");
+    expect(redirectSettingsTarget("autopilot.limits.pr-fix-threshold")).toBe("autopilot.automations.fix_prs");
+    expect(redirectSettingsTarget("autopilot.limits.quiet-hours")).toBe("autopilot.limits.quiet-hours");
     expect(redirectSettingsTarget("autopilot.engine.settings")).toBe("autopilot.limits");
     expect(redirectSettingsTarget("autopilot.engine.quiet-hours")).toBe("autopilot.limits.quiet-hours");
     expect(redirectSettingsTarget("autopilot.engine.pause-all")).toBe("autopilot.automations.pause-all");

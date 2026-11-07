@@ -20,7 +20,11 @@ describe("the built-in catalogue", () => {
       "onChangesRequested",
       "onComments",
       "onAutopilotReview",
+      "fixThreshold",
+      "attempts",
+      "commentAttempts",
     ]);
+    expect(essentials("review_prs")).toEqual(["skill", "rounds"]);
     expect(essentials("orchestrate")).toEqual(["everyMinutes", "instructions"]);
     expect(essentials("auto_archive")).toEqual(["days"]);
     expect(essentials("digest")).toEqual(["mode", "time", "weekdaysOnly"]);

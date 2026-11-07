@@ -47,8 +47,10 @@ switch it on. Click a row to see it on the right:
   on the board"), and **All runs**;
 - **Where it runs**: the board's **On / Off** and the projects it's on in;
 - **Settings**: the few options most people change;
-- **Advanced**, closed: everything else, such as the runner, the model, budgets and timeouts. A dot on it means
-  something in there isn't the default.
+- **Advanced**, closed: everything else. For an automation that starts an agent it opens with two lines: the
+  **Model**, which comes from Settings → Agents → Operations and says what it runs on now, and **Runner, budget and
+  timeout**, which come from the [defaults for agent runs](#limits). Each has **Override**, to set it for this
+  automation alone, and each overridden value a reset. A dot on Advanced means something in there isn't the default.
 
 The board's switch is just **On / Off** (there's nothing above the board to inherit from, so an automation you
 haven't switched on is off); only projects and epics can follow the scope above (the ↺ button), and a project can
@@ -77,8 +79,7 @@ comments, from your own `gh` account. The review starts with a line naming this 
 comment carries a short mark. It only ever comments: it never approves or requests changes, and it never merges. The
 agent itself only reads the pull request and reports its findings; Autopilot posts them.
 
-- It reviews the PR again each time its head commit changes, up to **PR review rounds** (3 by default, in
-  Settings → Autopilot → Limits & safety) per PR. Drafts are skipped unless you turn on **Review drafts**; merged and closed PRs
+- It reviews the PR again each time its head commit changes, up to **Rounds per PR** (3 by default) per PR. Drafts are skipped unless you turn on **Review drafts**; merged and closed PRs
   are never reviewed.
 - With local review on for the task, the PR waits: it is reviewed once the task is in Review and its local review has
   finished. A PR on a task still in Backlog, Planned or In Progress isn't reviewed until then.
@@ -87,10 +88,11 @@ agent itself only reads the pull request and reports its findings; Autopilot pos
 - The findings stay on GitHub, not on the board, so they don't mix with local review findings. The task gets a
   note "Autopilot reviewed PR #N at …" linking the review. **All runs** on an automation (and in a scheduled custom automation's editor) opens the same list for that
 automation alone.
-- Points at or above the **fix threshold** (major by default) are the ones a fix would address. When the last
+- Points at or above the **fix threshold** (Fix PRs' **Fix findings at or above**, major by default) are the ones a
+  fix would address. When the last
   round still has some, the card says "Autopilot gave up" under Needs attention and you get a notification.
-- Its settings: the **review skill** it follows (the built-in one by default), **Review drafts**, the runner, the
-  **budget** ($2 by default) and the **timeout**. It always runs headless, since it must be held to read-only. It
+- Its settings: **Rounds per PR**, the **review skill** it follows (the built-in one by default), **Review drafts**,
+  and the model, budget and timeout. It always runs headless, since it must be held to read-only. It
   needs `gh` signed in to the PR's host and the PR's branch on `origin`, so a PR from a fork isn't reviewed.
 - Switching it on reviews every open PR already linked in the project, once per head commit. **Dry run** shows
   which first.
@@ -121,9 +123,9 @@ the PR's branch and replies on each thread, starting with Autopilot's mark and "
   earlier threads once it confirms the point is fixed.
 
 - Each reason is acted on once. A new failure on a new commit, or a newer comment, is a new reason.
-- It makes at most 2 attempts on one head commit. Per PR, fixes for Autopilot's review and failing checks get **PR
-  review rounds** (3 by default), and fixes for other people's comments and requests for changes get **PR comment
-  rounds** (5 by default), so a colleague's review bot can't use up the attempts Autopilot's own review needs. A
+- It makes at most 2 attempts on one head commit. Per PR, fixes for Autopilot's review and failing checks get **Attempts
+  on checks and reviews** (3 by default), and fixes for other people's comments and requests for changes get
+  **Attempts on comments** (5 by default), so a colleague's review bot can't use up the attempts Autopilot's own review needs. A
   thread your account answered last doesn't send it back. When
   one runs out the card says "Autopilot gave up" under Needs attention and you get a notification; the other still
   goes on.
@@ -131,15 +133,18 @@ the PR's branch and replies on each thread, starting with Autopilot's mark and "
   isn't on `origin`.
 - To fix a PR yourself, use **Fix in** on its row ([Fixing a PR](using-the-board.md#fixing-a-pr)). While Fix PRs is on for
   the task, the row says **Autopilot is fixing** or **Autopilot gave up** instead, with **Fix in** in its menu.
-- Its settings: the five switches, **Resolve threads it fixed**, a **Fix skill** to follow on top of the fix prompt, the runner, the **budget**
-  ($3 by default), the **timeout** (30 minutes) and **T3 Code access**.
+- Its settings: the five switches, **Fix findings at or above**, the two attempt limits, then under Advanced
+  **Resolve threads it fixed**, a **Fix skill** to follow on top of the fix prompt, the model, the runner, the budget,
+  the timeout and **T3 Code access**.
 
 You can add your own automations too: a trigger you pick and an agent prompt or a command to run. See
 [custom automations](custom-automations.md).
 
 ## How agents run
 
-An automation that needs an agent picks its **runner** in its settings:
+Where an agent runs, its budget, its timeout and its T3 Code access are set once for every automation, under
+**Defaults for agent runs** in Settings → Autopilot → Limits & safety; an automation can override any of them under
+its Advanced settings. The **runner**:
 
 - **Auto** (the default): a new T3 Code thread when T3 Code is connected, otherwise a headless Claude Code run.
 - **T3 Code only**: the thread gets the task's model (below), and never more access than T3 Code's
@@ -321,7 +326,10 @@ In **Settings → Autopilot → Limits & safety**:
 - **Agent runs at once**, a **daily run cap** and a **daily spend cap**.
 - **Quiet hours**: a window (local time, it may cross midnight) in which no agent runs start. Automations that
   only change the board still run.
-- **PR review rounds**, **PR comment rounds** and the **PR fix threshold** for Review PRs and Fix PRs.
+- **Defaults for agent runs**: where agents run (Auto, T3 Code or headless), the **budget** and **timeout** of a
+  headless run ($5 and 60 minutes by default) and **T3 Code access**. Every automation that starts an agent uses
+  these unless it overrides them. Models are set per kind of run in Settings → Agents → Operations.
+- Review PRs' rounds and Fix PRs' threshold and attempts are on those automations.
 - **Dry run**: record what each automation would do, and do nothing. Good for trying an automation out.
 - **Worktree retention**, and the **Variables** your custom automations read.
 

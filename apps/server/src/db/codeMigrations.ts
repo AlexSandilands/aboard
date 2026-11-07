@@ -1,6 +1,7 @@
 import {
   AgentHarness,
   AUTOPILOT_DIGEST,
+  AUTOPILOT_FIX_PRS,
   AUTOPILOT_ORCHESTRATE,
   AUTOPILOT_REVIEW_PRS,
   classifyLink,
@@ -26,6 +27,7 @@ export const CODE_MIGRATIONS: Readonly<Record<string, (db: Db) => void>> = {
   "036_ticket_systems_settings": jiraSettingsToTicketSystem,
   "040_providers_settings": seedProviders,
   "041_operation_models": operationModels,
+  "043_autopilot_agent_defaults": autopilotAgentDefaults,
 };
 
 /**
@@ -285,4 +287,74 @@ function operationModels(db: Db): void {
     upsert.run("modelTiers", JSON.stringify(next));
   }
   if (Array.isArray(profiles)) upsert.run("modelProfiles", JSON.stringify(profiles.map(renamed)));
+}
+
+/**
+ * Runner, budget, timeout and T3 access got board defaults (the engine's `agentDefaults`), and the PR rounds and fix
+ * threshold moved from the engine into Review PRs and Fix PRs, the only automations that read them. Nothing that ran
+ * before runs differently after:
+ * - An engine PR value the user changed goes into the board-scope config of the automations that read it, unless that
+ *   scope already sets the key; then the engine keys are dropped. Values left at their defaults need nothing.
+ * - Review PRs, Fix PRs, Orchestrate and the digest had budgets and timeouts of their own below the board's defaults.
+ *   Each one the user has a setting for (at any scope) keeps them in its board-scope config, unless that scope sets
+ *   them. One never touched was never on, so it simply takes the board's defaults from now on.
+ */
+function autopilotAgentDefaults(db: Db): void {
+  const upsertSetting = db.prepare(
+    "INSERT INTO settings (key, value_json) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json",
+  );
+  const boardRow = db.prepare(
+    "SELECT config_json FROM autopilot_settings WHERE scope_kind = 'board' AND scope_id = '' AND automation = ?",
+  );
+  const anyRow = db.prepare("SELECT 1 FROM autopilot_settings WHERE automation = ? LIMIT 1");
+  const insertBoard = db.prepare(
+    "INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES ('board', '', ?, 'inherit', ?, ?)",
+  );
+  const updateBoard = db.prepare(
+    "UPDATE autopilot_settings SET config_json = ? WHERE scope_kind = 'board' AND scope_id = '' AND automation = ?",
+  );
+  /** Sets the keys the automation's board scope doesn't set already. */
+  const setBoardKeys = (automation: string, values: Record<string, unknown>) => {
+    if (Object.keys(values).length === 0) return;
+    const row = boardRow.get(automation) as { config_json: string } | undefined;
+    if (!row) {
+      insertBoard.run(automation, JSON.stringify(values), new Date().toISOString());
+      return;
+    }
+    const config = JSON.parse(row.config_json) as Record<string, unknown>;
+    updateBoard.run(JSON.stringify({ ...values, ...config }), automation);
+  };
+
+  const ownLimits: Array<[string, { budgetUsd: number; timeoutMinutes: number }]> = [
+    [AUTOPILOT_REVIEW_PRS, { budgetUsd: 2, timeoutMinutes: 20 }],
+    [AUTOPILOT_FIX_PRS, { budgetUsd: 3, timeoutMinutes: 30 }],
+    [AUTOPILOT_ORCHESTRATE, { budgetUsd: 3, timeoutMinutes: 30 }],
+    [AUTOPILOT_DIGEST, { budgetUsd: 1, timeoutMinutes: 15 }],
+  ];
+  // Before anything below adds a row.
+  const inUse = new Set(ownLimits.map(([automation]) => automation).filter((a) => anyRow.get(a) !== undefined));
+
+  const engineRow = db.prepare("SELECT value_json FROM settings WHERE key = 'autopilotEngine'").get() as
+    | { value_json: string }
+    | undefined;
+  const engine = engineRow ? (JSON.parse(engineRow.value_json) as unknown) : null;
+  if (engine && typeof engine === "object") {
+    const { prReviewRounds, prCommentRounds, prFixThreshold, ...rest } = engine as Record<string, unknown>;
+    const changed = (value: unknown, def: unknown) => value !== undefined && value !== null && value !== def;
+    const review: Record<string, unknown> = {};
+    const fix: Record<string, unknown> = {};
+    if (changed(prReviewRounds, 3)) {
+      review.rounds = prReviewRounds;
+      fix.attempts = prReviewRounds;
+    }
+    if (changed(prCommentRounds, 5)) fix.commentAttempts = prCommentRounds;
+    if (changed(prFixThreshold, "major")) fix.fixThreshold = prFixThreshold;
+    setBoardKeys(AUTOPILOT_REVIEW_PRS, review);
+    setBoardKeys(AUTOPILOT_FIX_PRS, fix);
+    upsertSetting.run("autopilotEngine", JSON.stringify(rest));
+  }
+
+  for (const [automation, limits] of ownLimits) {
+    if (inUse.has(automation)) setBoardKeys(automation, limits);
+  }
 }

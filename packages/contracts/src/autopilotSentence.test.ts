@@ -4,7 +4,7 @@ import { automationSentence, limitsSummary, todaySummary } from "./autopilotSent
 import type { CustomDefinition } from "./customAutomations.ts";
 
 const say = (key: string, config: Record<string, unknown> = {}) =>
-  automationSentence({ key, description: "fallback" }, config, { engine: { prReviewRounds: 3 } });
+  automationSentence({ key, description: "fallback" }, config);
 
 describe("automationSentence", () => {
   it("reads a built-in's config", () => {
@@ -20,6 +20,7 @@ describe("automationSentence", () => {
       "with the security-review skill",
     );
     expect(say("review_prs")).toContain("up to 3 rounds per PR");
+    expect(say("review_prs", { rounds: 1 })).toContain("up to 1 round per PR");
     expect(say("start_planned", { skill: { source: "builtin" } })).toContain("following the default workflow");
   });
 
@@ -42,6 +43,9 @@ describe("automationSentence", () => {
         onAutopilotReview: false,
       }),
     ).toBe("Every trigger is off, so it never fixes anything.");
+    expect(say("fix_prs", { onChecks: false, onConflicts: false, fixThreshold: "minor" })).toContain(
+      "findings from Autopilot's review at minor or above",
+    );
   });
 
   it("falls back to the description for an automation it doesn't know", () => {

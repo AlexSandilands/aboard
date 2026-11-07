@@ -4,6 +4,7 @@ import {
   AGENT_HARNESSES,
   AUTOPILOT_FIX_PRS,
   AUTOPILOT_REVIEW_PRS,
+  FindingSeverity,
   sessionLabel,
   BRAND,
   ReviewSkillRef,
@@ -56,15 +57,15 @@ export const ATTEMPTS_PER_HEAD = 2;
 /**
  * Conflict-only fix attempts on one PR before Autopilot gives up on its conflicts. Merging the base branch in says
  * nothing about the PR's own code, and every merge into the base can conflict it again, so these don't use up
- * `prReviewRounds`; this only guards against a merge that keeps failing.
+ * `attempts`; this only guards against a merge that keeps failing.
  */
 export const CONFLICT_ATTEMPTS_PER_PR = 5;
 
 /**
  * The attempt budgets of one PR. `conflicts`: attempts that only merge the base branch in (`CONFLICT_ATTEMPTS_PER_PR`).
- * `comments`: other people's review comments and requests for changes (`prCommentRounds`), so a colleague's review bot
+ * `comments`: other people's review comments and requests for changes (`commentAttempts`), so a colleague's review bot
  * can't use up the attempts Autopilot's own review loop needs, nor the other way round. `review`: Autopilot's review
- * and failing checks (`prReviewRounds`).
+ * and failing checks (`attempts`).
  */
 export type FixBudget = "conflicts" | "review" | "comments";
 
@@ -400,13 +401,20 @@ const ConfigSchema = z.object({
   resolveThreads: z.boolean(),
   /** The skill the agent follows on top of the fix prompt; the built-in entry is the prompt alone. */
   skill: ReviewSkillRef,
+  // These three were engine settings (prReviewRounds, prCommentRounds, prFixThreshold) before
+  // 043_autopilot_agent_defaults. Review PRs reads the threshold too (fixThresholdFor): it decides what a review asks
+  // to have fixed.
+  /** Attempts per PR on failing checks and Autopilot's review. */
+  attempts: z.number().int().min(1).max(10),
+  /** Attempts per PR on other people's review comments and requests for changes. */
+  commentAttempts: z.number().int().min(1).max(10),
+  /** The lowest finding severity of Autopilot's review that gets fixed. */
+  fixThreshold: FindingSeverity,
 });
 type Config = z.infer<typeof ConfigSchema>;
 
 const DEFAULTS: Config = {
   ...RUNNER_DEFAULTS,
-  budgetUsd: 3,
-  timeoutMinutes: 30,
   onChecks: true,
   onConflicts: true,
   onChangesRequested: true,
@@ -414,6 +422,9 @@ const DEFAULTS: Config = {
   onAutopilotReview: true,
   resolveThreads: true,
   skill: { source: "builtin" },
+  attempts: 3,
+  commentAttempts: 5,
+  fixThreshold: "major",
 };
 
 const FIELDS: AutopilotField[] = [
@@ -451,6 +462,39 @@ const FIELDS: AutopilotField[] = [
     label: "Autopilot's review",
     kind: "boolean",
     help: "Fix what Review PRs found at or above the fix threshold.",
+  },
+  {
+    key: "fixThreshold",
+    label: "Fix findings at or above",
+    kind: "select",
+    tier: "essential",
+    help: "The lowest severity of Autopilot's review that gets fixed. Review PRs asks for fixes at or above it; its last round, nothing below it.",
+    options: [
+      { value: "blocking", label: "Blocking" },
+      { value: "major", label: "Major" },
+      { value: "minor", label: "Minor" },
+      { value: "nit", label: "Nit" },
+    ],
+  },
+  {
+    key: "attempts",
+    label: "Attempts on checks and reviews",
+    kind: "number",
+    tier: "essential",
+    min: 1,
+    max: 10,
+    unit: "attempts",
+    help: "Fixes of failing checks and Autopilot's review findings before it gives up on the PR.",
+  },
+  {
+    key: "commentAttempts",
+    label: "Attempts on comments",
+    kind: "number",
+    tier: "essential",
+    min: 1,
+    max: 10,
+    unit: "attempts",
+    help: "Fixes of people's review comments and requests for changes, counted apart so a review bot can't use up the others.",
   },
   {
     key: "resolveThreads",
@@ -500,7 +544,7 @@ export const fixPrs = defineAutomation({
   schema: ConfigSchema,
   fields: FIELDS,
   defaults: DEFAULTS,
-  check: ({ services, engine, projects, now }) =>
+  check: ({ services, projects, now }) =>
     projects.flatMap(({ project, config }): Candidate[] =>
       services.tasks.summaries({ projectId: project.id }).flatMap((task): Candidate[] => {
         // An integration epic's own PR into the default branch is fixed too, for conflicts only: the epic stays open
@@ -551,8 +595,8 @@ export const fixPrs = defineAutomation({
             budget === "conflicts"
               ? CONFLICT_ATTEMPTS_PER_PR
               : budget === "comments"
-                ? engine.prCommentRounds
-                : engine.prReviewRounds;
+                ? config.commentAttempts
+                : config.attempts;
           const counted = used.filter((f) => attemptBudget(f.triggers) !== "conflicts");
           const atHead = counted.filter((f) => f.headOid === snapshot.headOid).length;
           const gaveUp = (dedupeKey: string, reason: string): Candidate => ({

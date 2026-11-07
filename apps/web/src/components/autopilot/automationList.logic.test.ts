@@ -2,12 +2,16 @@ import type { AutopilotAutomation, AutopilotScopeEntry } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   advancedChanged,
+  advancedFieldNames,
+  agentFieldsTitle,
+  agentSummary,
   automationReach,
   groupAutomations,
   isOffEverywhere,
   lastRunText,
   rowSubline,
   selectedAutomation,
+  splitAgentFields,
   statusLine,
   whereText,
 } from "./automationList.logic";
@@ -101,5 +105,40 @@ describe("selectedAutomation", () => {
     expect(selectedAutomation(["a", "b"], "gone")).toBe("a");
     expect(selectedAutomation(["a", "b"], undefined)).toBe("a");
     expect(selectedAutomation([], "a")).toBeNull();
+  });
+});
+
+describe("agent fields", () => {
+  const fields = [
+    { key: "skill", label: "Review skill", kind: "skill" as const },
+    { key: "runner", label: "Runner", kind: "select" as const },
+    { key: "modelChoice", label: "Model", kind: "model" as const },
+    { key: "budgetUsd", label: "Budget", kind: "number" as const },
+    { key: "timeoutMinutes", label: "Timeout", kind: "number" as const },
+  ];
+
+  it("splits out the model and the fields the board's agent defaults cover", () => {
+    const { model, runner, rest } = splitAgentFields(fields);
+    expect(model?.key).toBe("modelChoice");
+    expect(runner.map((f) => f.key)).toEqual(["runner", "budgetUsd", "timeoutMinutes"]);
+    expect(rest.map((f) => f.key)).toEqual(["skill"]);
+    expect(advancedFieldNames(fields)).toEqual(["Agent", "Review skill"]);
+    expect(advancedFieldNames([fields[0]!])).toEqual(["Review skill"]);
+  });
+
+  it("titles the line by the fields it has", () => {
+    expect(agentFieldsTitle(splitAgentFields(fields).runner)).toBe("Runner, budget and timeout");
+    expect(agentFieldsTitle([{ key: "budgetUsd" }, { key: "timeoutMinutes" }])).toBe("Budget and timeout");
+    expect(agentFieldsTitle([{ key: "budgetUsd" }])).toBe("Budget");
+  });
+
+  it("summarises the effective values, and T3 access only when it isn't T3's default", () => {
+    const keys = [{ key: "runner" }, { key: "budgetUsd" }, { key: "timeoutMinutes" }, { key: "t3Access" }];
+    expect(agentSummary(keys, { runner: "auto", budgetUsd: 5, timeoutMinutes: 60, t3Access: "default" })).toBe(
+      "Auto · $5 · 60 min",
+    );
+    expect(agentSummary(keys, { runner: "headless", budgetUsd: 2.5, timeoutMinutes: 20, t3Access: "auto" })).toMatch(
+      /^Headless · \$2\.50 · 20 min · T3: /,
+    );
   });
 });
