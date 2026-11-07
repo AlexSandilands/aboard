@@ -66,7 +66,7 @@ describe("quickSetupChanges", () => {
     ]);
     expect(quickSetupWrites(changes).filter((w) => w.mode === "preview")).toHaveLength(5);
     const merge = changes.find((c) => c.automation === "merge_epic_prs");
-    expect(merge?.kind === "switch_on" && merge.detail).toContain("main stays off");
+    expect(merge?.kind === "switch_on" && merge.detail).toContain("Into main setting is left as it is");
   });
 
   it("starts them live when Preview is switched off", () => {

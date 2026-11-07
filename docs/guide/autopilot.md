@@ -18,7 +18,7 @@ board:
 - **Assist**: agents review and fix the PRs your tasks open, plus the digest, reminders and archiving. They never start
   work or merge.
 - **Hands-off**: agents also start the tasks you flag, keep epics moving and merge ready PRs into epic branches.
-  Merging into the default branch stays off.
+  Merging into the default branch is its own setting, which Quick setup leaves as it is.
 
 Automations that start an agent or act on GitHub start in [Preview](#trying-one-out-with-preview) unless you turn
 "Start agent automations in Preview" off. One already on is left as it is, and one a project switches off for itself

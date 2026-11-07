@@ -339,11 +339,14 @@ const BRANCH_CLEANUP = AutomationBundle.parse({
     kind: "script",
     language: "sh",
     body: `#!/bin/sh
-# Lists local branches already merged into the current branch's upstream default. Read-only: nothing is deleted.
+# Lists local branches already merged into origin's default branch. Read-only: nothing is deleted.
+git fetch --quiet origin || echo "Couldn't fetch origin: comparing with what is already here." >&2
 base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
 base=\${base:-main}
-echo "Branches merged into $base:"
-git branch --merged "$base" | grep -v -E "^\\*|^\\s*($base|main|master)$" || echo "(none)"
+git rev-parse --verify --quiet "origin/$base" >/dev/null || { echo "No origin/$base to compare with." >&2; exit 1; }
+echo "Branches merged into origin/$base:"
+merged=$(git branch --merged "origin/$base" | grep -v -E "^\\*|^\\s*($base|main|master)$") || true
+echo "\${merged:-(none)}"
 `,
     timeoutSeconds: 60,
   },

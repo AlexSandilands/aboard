@@ -56,6 +56,8 @@ export function AskToFix({
           task,
         })
       }
+      projectId={run.projectId}
+      writesCode
       variant={variant}
       triggerLabel="Ask an agent to fix"
     />

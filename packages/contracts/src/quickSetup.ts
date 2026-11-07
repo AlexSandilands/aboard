@@ -87,8 +87,7 @@ export const QUICK_SETUP_PRESETS: Record<QuickSetupLevel, QuickSetupPreset> = {
   hands_off: {
     level: "hands_off",
     label: "Hands-off",
-    blurb:
-      "Agents start the tasks you flag, keep them moving and merge ready PRs into epic branches. Main stays yours.",
+    blurb: "Agents start the tasks you flag, keep them moving and merge ready PRs into epic branches.",
     items: [
       {
         automation: AUTOPILOT_START_PLANNED,
@@ -104,7 +103,7 @@ export const QUICK_SETUP_PRESETS: Record<QuickSetupLevel, QuickSetupPreset> = {
       FIX_ITEM,
       {
         automation: AUTOPILOT_MERGE_EPIC_PRS,
-        detail: "Merges ready PRs into epic branches. Merging into main stays off.",
+        detail: "Merges ready PRs into epic branches. Its Into main setting is left as it is.",
         previewable: true,
       },
       UNSTICK_ITEM,

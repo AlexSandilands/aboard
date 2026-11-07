@@ -350,7 +350,7 @@ interface DialogsState {
     /** A thread that plans several of the project's tasks, linked to each. */
     | { kind: "plan"; projectId: string; taskIds: string[] }
     /** A thread that starts from a prompt the board built (Ask an agent on Settings → Autopilot), linked to nothing. */
-    | { kind: "prompt"; projectId: string; label: string; prompt: string }
+    | { kind: "prompt"; projectId: string; label: string; prompt: string; writesCode: boolean }
     | null;
   /** The open "New Claude Code / Copilot session" dialog: the task and the CLI it starts, and the PR link it fixes. */
   sessionLaunch: { taskId: string; harness: AgentHarness; fixLinkId?: string } | null;
@@ -370,7 +370,7 @@ interface DialogsState {
   openT3Launch: (taskId: string, fixLinkId?: string) => void;
   openProjectT3Launch: (projectId: string) => void;
   openPlanT3Launch: (projectId: string, taskIds: string[]) => void;
-  openPromptT3Launch: (projectId: string, label: string, prompt: string) => void;
+  openPromptT3Launch: (projectId: string, label: string, prompt: string, writesCode: boolean) => void;
   openPlanPicker: (projectId: string, target: PlanTarget) => void;
   closePlanPicker: () => void;
   openPlanSession: (projectId: string, taskIds: string[], harness: AgentHarness) => void;
@@ -439,7 +439,8 @@ export const useDialogs = create<DialogsState>()((set) => ({
   openT3Launch: (taskId, fixLinkId) => set({ t3Launch: { kind: "task", taskId, ...(fixLinkId ? { fixLinkId } : {}) } }),
   openProjectT3Launch: (projectId) => set({ t3Launch: { kind: "project", projectId } }),
   openPlanT3Launch: (projectId, taskIds) => set({ t3Launch: { kind: "plan", projectId, taskIds } }),
-  openPromptT3Launch: (projectId, label, prompt) => set({ t3Launch: { kind: "prompt", projectId, label, prompt } }),
+  openPromptT3Launch: (projectId, label, prompt, writesCode) =>
+    set({ t3Launch: { kind: "prompt", projectId, label, prompt, writesCode } }),
   openPlanPicker: (projectId, target) => set({ planPicker: { projectId, target } }),
   closePlanPicker: () => set({ planPicker: null }),
   openPlanSession: (projectId, taskIds, harness) => set({ planSession: { projectId, taskIds, harness } }),

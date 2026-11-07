@@ -278,6 +278,8 @@ export function AskAgentMenu({
   label,
   prompt,
   threadLabel,
+  projectId,
+  writesCode = false,
   variant = "ghost-muted",
   size = "xs",
   triggerLabel,
@@ -289,6 +291,10 @@ export function AskAgentMenu({
   prompt: () => string;
   /** Names the new thread's dialog ("Ask an agent to change Review PRs"). */
   threadLabel: string;
+  /** Offer only this project's thread (a failed run's), when it is known and can start one. */
+  projectId?: string | null;
+  /** The prompt may change the repo (fixing a run), so its thread starts where T3 would by default. */
+  writesCode?: boolean;
   variant?: "ghost-muted" | "outline" | "default";
   size?: "xs" | "sm" | "icon-xs";
   /** The trigger's text; without it the trigger is the icon alone, named by `label`. */
@@ -298,9 +304,10 @@ export function AskAgentMenu({
   const board = useBoard().data;
   const settings = useSettings().data;
   const t3 = board?.integrations.t3;
-  const projects = (board?.projects ?? []).filter(
+  const startable = (board?.projects ?? []).filter(
     (p) => p.archivedAt === null && t3 && canStartProjectT3Thread(p, t3, settings),
   );
+  const projects = startable.some((p) => p.id === projectId) ? startable.filter((p) => p.id === projectId) : startable;
   return (
     <Menu>
       <MenuTrigger
@@ -320,7 +327,7 @@ export function AskAgentMenu({
         {projects.map((project) => (
           <MenuItem
             key={project.id}
-            onClick={() => useDialogs.getState().openPromptT3Launch(project.id, threadLabel, prompt())}
+            onClick={() => useDialogs.getState().openPromptT3Launch(project.id, threadLabel, prompt(), writesCode)}
           >
             <T3Icon className="size-4.5 sm:size-4" />
             {projects.length > 1 ? `New T3 Code thread in ${project.title}…` : "New T3 Code thread…"}

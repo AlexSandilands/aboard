@@ -120,6 +120,7 @@ export function T3LaunchDialog() {
             project={project}
             label={target.label}
             prompt={target.prompt}
+            writesCode={target.writesCode}
             onDone={close}
           />
         ) : null}
@@ -240,11 +241,14 @@ function PromptLaunch({
   project,
   label,
   prompt,
+  writesCode,
   onDone,
 }: {
   project: Project;
   label: string;
   prompt: string;
+  /** A prompt that may change the repo (fixing a run) starts where T3 would by default; a draft needs no worktree. */
+  writesCode: boolean;
   onDone: () => void;
 }) {
   const options = useProjectT3LaunchOptions(project.id);
@@ -254,11 +258,13 @@ function PromptLaunch({
     promptFor: () => prompt,
     planToggle: false,
     initialPlan: false,
-    successDescription: "The agent will draft it for you to review on the Autopilot page.",
+    successDescription: writesCode
+      ? "The agent will look into it and tell you what it found."
+      : "Anything it drafts waits for your review on the Autopilot page.",
     copyPrompt: () => copyToClipboard(prompt, "prompt"),
     offerOpen: true,
-    // It writes no code in the project: a draft is saved on the board.
-    checkout: true,
+    // A draft is saved on the board and writes no code, so it needs no worktree.
+    checkout: !writesCode,
   };
   const starter: Starter = {
     isPending: mutation.isPending,

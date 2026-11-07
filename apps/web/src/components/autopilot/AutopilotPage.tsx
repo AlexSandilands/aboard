@@ -123,7 +123,8 @@ export function AutopilotAutomationsTab() {
     board: items.map((item) => item.entry),
     projects: projects.map((p, i) => ({ title: p.title, entries: scopes[i]?.data ?? [] })),
   };
-  const nothingOn = !listed.some((i) => !isOffEverywhere(i.reach));
+  // Not known until every project's scope has loaded: before that a project's own switch would be missed.
+  const nothingOn = scopes.every((s) => s.data) && !listed.some((i) => !isOffEverywhere(i.reach));
   return (
     <div className="space-y-6">
       <AutopilotTabs current="automations" />

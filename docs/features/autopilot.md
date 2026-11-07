@@ -1695,7 +1695,7 @@ Built-ins that are switched off stay in the main list, dimmed, so the gallery do
 `QUICK_SETUP_PRESETS` (`packages/contracts/src/quickSetup.ts`) names three one-off presets: **Notify** (Digest, Remind
 me about stuck tasks, Unblock dependents, Auto-archive Done), **Assist** (Review PRs, Fix PRs, Digest, stuck-task
 reminders, Auto-archive) and **Hands-off** (Start planned tasks, Orchestrate, Review PRs, Fix PRs, Merge ready PRs,
-stuck-task reminders, Auto-archive). Merging into main stays off: its setting isn't touched.
+stuck-task reminders, Auto-archive). Quick setup writes only each automation's mode: Merge ready PRs' Into main setting, like every other config, is left as it is.
 
 `quickSetupChanges(level, state)` is pure and drives both the list the card shows and the writes it makes
 (`quickSetupWrites`): each preset automation that is off or inherits at the **board** scope is switched on there; one
