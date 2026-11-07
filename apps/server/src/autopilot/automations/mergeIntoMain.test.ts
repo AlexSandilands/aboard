@@ -81,11 +81,12 @@ function setup() {
   });
   engines.push(engine);
   const project = s.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
-  const flaggedTask = (n: number, over: { autoMerge?: boolean } = {}) => {
+  const flaggedTask = (n: number, over: { autoMerge?: boolean; epicId?: string } = {}) => {
     const task = s.tasks.create({
       projectId: project.id,
       title: `Task ${n}`,
       plan,
+      ...(over.epicId ? { epicId: over.epicId } : {}),
       links: [{ value: `https://github.com/acme/app/pull/${n}` }],
     });
     s.tasks.update(task.id, { autoReview: false, autoMerge: over.autoMerge ?? true }, "user");
@@ -149,6 +150,21 @@ describe("Merge ready PRs: Into main", () => {
     expect(runs(task.id)).toEqual([]);
   });
 
+  it("follows an epic's own Into main over the project's", async () => {
+    const { s, project, flaggedTask, setPr, pass, turnOn, runs, merged } = setup();
+    const epic = s.tasks.createEpic({ projectId: project.id, title: "Billing" }, [], "user");
+    const task = flaggedTask(4, { epicId: epic.id });
+    setPr(task.id);
+    turnOn();
+    s.autopilot.setScope("epic", epic.id, AUTOPILOT_MERGE_EPIC_PRS, { config: { intoMain: false } }, project.id);
+    await pass();
+    expect(merged).toEqual([]);
+    expect(runs(task.id)).toEqual([]);
+    s.autopilot.setScope("epic", epic.id, AUTOPILOT_MERGE_EPIC_PRS, { mode: "inherit", config: {} }, project.id);
+    await pass();
+    expect(merged).toHaveLength(1);
+  });
+
   it("never merges a task that isn't flagged Auto-merge", async () => {
     const { flaggedTask, setPr, pass, turnOn, runs, merged } = setup();
     const task = flaggedTask(4, { autoMerge: false });
@@ -187,6 +203,7 @@ describe("Merge ready PRs: Into main", () => {
     const { s, flaggedTask, linkOf, setPr, pass, turnOn, runs, merged } = setup();
     const task = flaggedTask(4);
     setPr(task.id);
+    turnOn();
     const check = await mergeEpicPrs.check({
       services: s,
       engine: s.autopilot.engine(),

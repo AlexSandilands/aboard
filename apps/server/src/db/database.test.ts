@@ -306,7 +306,8 @@ describe("migrations", () => {
       expect(row(db, "merge_epic_prs")).toEqual({ mode: "on", config: { intoMain: true } });
       // On through the board but with May merge off: it keeps not merging into main.
       expect(row(db, "merge_epic_prs", "project", "a")).toEqual({ mode: "inherit", config: { intoMain: false } });
-      expect(row(db, "merge_epic_prs", "project", "b")).toBeUndefined();
+      // Orchestrate was off there, so nothing merged into main: the board's new Into main doesn't reach it.
+      expect(row(db, "merge_epic_prs", "project", "b")).toEqual({ mode: "inherit", config: { intoMain: false } });
       expect(row(db, "orchestrate")).toEqual({ mode: "on", config: { everyMinutes: 15 } });
       expect(row(db, "orchestrate", "project", "a")).toEqual({ mode: "inherit", config: {} });
       db.close();
@@ -326,6 +327,18 @@ describe("migrations", () => {
       expect(row(db, "merge_epic_prs", "project", "a")).toBeUndefined();
       expect(row(db, "merge_epic_prs", "project", "b")).toEqual({ mode: "on", config: { intoMain: true } });
       expect(row(db, "merge_epic_prs", "project", "c")).toEqual({ mode: "off", config: { intoMain: true } });
+      db.close();
+    });
+
+    it("adds no project row where everything came from the board, so a board Off for Merge ready PRs still holds", () => {
+      const db = before(
+        orchestrate("board", "", "on") +
+          orchestrate("project", "a", "inherit", '{"everyMinutes":10}') +
+          `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at)
+             VALUES ('board', '', 'merge_epic_prs', 'off', '{}', '');`,
+      );
+      expect(row(db, "merge_epic_prs")).toEqual({ mode: "off", config: { intoMain: true } });
+      expect(row(db, "merge_epic_prs", "project", "a")).toBeUndefined();
       db.close();
     });
 

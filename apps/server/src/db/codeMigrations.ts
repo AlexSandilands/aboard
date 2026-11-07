@@ -292,9 +292,12 @@ function operationModels(db: Db): void {
 /**
  * Orchestrate loses May merge, and Merge ready PRs (merge_epic_prs) gains Into main (#127). Wherever Orchestrate was
  * on with May merge (on unless switched off), Merge ready PRs is switched on with Into main at that scope, so tasks
- * flagged for auto-merge keep landing there. A project where Orchestrate was on but May merge off, under a board that
- * gets Into main, gets Into main off. An explicit Off for Merge ready PRs at a scope is the user's and stays. The
- * stored May merge values are dropped.
+ * flagged for auto-merge keep landing there. A project with a setting of its own where Orchestrate didn't merge
+ * (switched off there, or May merge off), under a board that gets Into main, gets Into main off. An explicit Off for
+ * Merge ready PRs at that scope is the user's and stays. A project that took both Orchestrate and May merge from the
+ * board gets no row: the board's covers it. One that switched Orchestrate on itself gets Merge ready PRs on, which turns
+ * Into epic branches on there too, even under a board that has it off: the two can't be separated, and keeping main
+ * merges is the point. The stored May merge values are dropped.
  */
 function mergeReadyPrs(db: Db): void {
   type Row = { scope_kind: string; scope_id: string; mode: string; config_json: string };
@@ -333,9 +336,13 @@ function mergeReadyPrs(db: Db): void {
   for (const row of orchestrate.filter((r) => r.scope_kind === "project")) {
     const on = row.mode === "on" || (row.mode === "inherit" && boardOn);
     const config = configOf(row);
-    const may = typeof config.mayMerge === "boolean" ? config.mayMerge : boardMay;
+    const ownMay = typeof config.mayMerge === "boolean";
+    const may = ownMay ? config.mayMerge === true : boardMay;
+    // Everything from the board: the board's row covers it (and an Off for Merge ready PRs there still holds).
+    if (row.mode === "inherit" && !ownMay) continue;
     if (on && may) setMerge("project", row.scope_id, true, true);
-    else if (on && boardIntoMain) setMerge("project", row.scope_id, false, false);
+    // Orchestrate off here, or on without May merge: nothing merged into main, so the board's new Into main mustn't.
+    else if (boardIntoMain) setMerge("project", row.scope_id, false, false);
   }
 
   const strip = db.prepare(

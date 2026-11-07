@@ -61,6 +61,14 @@ function mainRuns(runs: readonly AutopilotRun[], linkId: string, headOid: string
   };
 }
 
+/** Whether Into main is on for the task: its epic's setting, else its project's, else the board's (resolveAutopilot). */
+function intoMainOn(services: Services, task: TaskSummary): boolean {
+  const automation = services.autopilot.automations().find((a) => a.key === AUTOPILOT_MERGE_EPIC_PRS);
+  if (!automation) return false;
+  const resolved = services.autopilot.resolve(automation, task.projectId, task.parent?.id ?? null);
+  return resolved.enabled && resolved.config?.intoMain === true;
+}
+
 /** The tasks Into main looks at in a project: open tasks in Review flagged for auto-merge, not delivered through an epic's branch. */
 const flagged = (tasks: readonly TaskSummary[]) =>
   tasks.filter(
@@ -79,7 +87,7 @@ const flagged = (tasks: readonly TaskSummary[]) =>
  * by something only the user can settle (a required approval, two open PRs) gets one notice per PR head and reason.
  */
 export function mainCandidates(services: Services, tasks: readonly TaskSummary[], now: Date): Candidate[] {
-  const all = flagged(tasks);
+  const all = flagged(tasks).filter((t) => intoMainOn(services, t));
   if (all.length === 0) return [];
   const active = services.autopilot
     .status()
@@ -177,6 +185,9 @@ export async function mainMergeAction(
   actor: string,
 ): Promise<ActionResult> {
   const task = services.tasks.summary(taskId);
+  if (!intoMainOn(services, task)) {
+    return { status: "skipped", summary: `Didn't merge PR #${data.number}: Into main is off for #${task.number}` };
+  }
   const verdict = autoMergeVerdict(services, task, Date.now());
   if (verdict.kind !== "ready") {
     return { status: "skipped", summary: `Didn't merge PR #${data.number}: ${verdict.reason}`, output: RECHECK };

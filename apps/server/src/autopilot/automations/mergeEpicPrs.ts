@@ -260,11 +260,11 @@ export const mergeEpicPrs = defineAutomation({
     },
   ],
   defaults: { intoMain: false } satisfies MergeReadyConfig,
+  // Into main is read per task (intoMainOn), so an epic's own setting counts as well as the project's.
   check: ({ services, projects, now }) =>
-    projects.flatMap(({ project, config }): Candidate[] => {
+    projects.flatMap(({ project }): Candidate[] => {
       const tasks = services.tasks.summaries({ projectId: project.id });
-      const intoMain = config.intoMain ? mainCandidates(services, tasks, now) : [];
-      return [...intoMain, ...intoEpicBranches(services, tasks, now)];
+      return [...mainCandidates(services, tasks, now), ...intoEpicBranches(services, tasks, now)];
     }),
   act: async (candidate, { services, gitHosts, actor }): Promise<ActionResult> => {
     const data = candidate.data as MergeData | EpicPrData | MainMergeData | MainHoldData;

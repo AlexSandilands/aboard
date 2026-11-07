@@ -47,5 +47,5 @@ export function flaggedStatus(info: MergeTargetsInfo, intoMain: boolean): string
   const n = info.flagged.length;
   if (n === 0) return "No task is flagged Auto-merge";
   const which = `${n === 1 ? "1 task is" : `${n} tasks are`} flagged Auto-merge: ${refList(info.flagged)}`;
-  return intoMain ? which : `${which}. They wait for you while this is off`;
+  return intoMain ? which : `${which}. Autopilot leaves them to you (or an agent's merge_task_pr) while this is off`;
 }
