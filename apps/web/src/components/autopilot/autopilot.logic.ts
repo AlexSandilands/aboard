@@ -1,4 +1,6 @@
 import {
+  automationTitleOf,
+  DEFERRAL_TEXT,
   describeInherited,
   isRetried,
   ScheduledAgentRunOutput,
@@ -283,9 +285,13 @@ export function parseLimit(
 
 type BadgeVariant = "info" | "warning" | "error" | "success" | "outline";
 
-export function runStatusLabel(run: Pick<AutopilotRun, "status" | "dryRun"> & { dedupeKey?: string }): string {
+export function runStatusLabel(
+  run: Pick<AutopilotRun, "status" | "dryRun"> & { dedupeKey?: string; deferred?: AutopilotRun["deferred"] },
+): string {
   // A retried run's work went back to the engine; what it did itself is still the status below.
   if (run.dedupeKey && isRetried(run.dedupeKey)) return run.status === "failed" ? "Failed, retried" : "Retried";
+  // It stopped short so its work is done again later, which a plain "Skipped" would hide.
+  if (run.status === "skipped" && run.deferred) return `Deferred: ${DEFERRAL_TEXT[run.deferred]}`;
   switch (run.status) {
     case "queued":
       return "Queued";
@@ -300,7 +306,11 @@ export function runStatusLabel(run: Pick<AutopilotRun, "status" | "dryRun"> & { 
   }
 }
 
-export function runStatusVariant(status: AutopilotRun["status"]): BadgeVariant {
+export function runStatusVariant(
+  status: AutopilotRun["status"],
+  deferred: AutopilotRun["deferred"] = null,
+): BadgeVariant {
+  if (status === "skipped" && deferred) return "warning";
   switch (status) {
     case "queued":
     case "running":
@@ -321,12 +331,12 @@ export function formatCost(costUsd: number | null): string | null {
   return `$${costUsd.toFixed(2)}`;
 }
 
-/** The title of an automation by key, falling back to the key for one no longer in the catalogue. */
+/** What an automation is called, never its raw key: retired and removed ones get a plain name too. */
 export function automationTitle(
   automations: ReadonlyArray<Pick<AutopilotAutomation, "key" | "title">>,
   key: string,
 ): string {
-  return automations.find((a) => a.key === key)?.title ?? key;
+  return automationTitleOf(automations, key);
 }
 
 /**

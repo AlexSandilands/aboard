@@ -178,6 +178,31 @@ describe("scopes", () => {
   });
 });
 
+describe("auto-pause", () => {
+  it("leaves out a project the automation paused itself in, until it is resumed", async () => {
+    const { s, engine, project, other, runs } = setup();
+    s.tasks.create({ projectId: other.id, title: "Two", plan });
+    s.autopilot.setScope("board", null, "noop", { mode: "on" });
+    for (const n of [1, 2, 3]) {
+      const run = s.autopilot.record({
+        automation: "noop",
+        candidate: { dedupeKey: `failed:${n}`, summary: "x", projectId: project.id },
+        dryRun: false,
+      })!;
+      s.autopilot.start(run.id);
+      s.autopilot.finish(run.id, { status: "failed", error: "boom" });
+    }
+    expect(s.autopilot.isAutoPaused("noop", project.id)).toBe(true);
+    await settle(engine);
+    const acted = () => runs("noop").filter((r) => r.status === "succeeded");
+    expect(acted().map((r) => r.projectId)).toEqual([other.id]);
+
+    s.autopilot.resumeAutoPause("noop", project.id);
+    await settle(engine);
+    expect(acted().map((r) => r.projectId)).toContain(project.id);
+  });
+});
+
 describe("epic scope", () => {
   /** An epic holding one Planned task, next to the setup's loose task. */
   function withEpic() {
