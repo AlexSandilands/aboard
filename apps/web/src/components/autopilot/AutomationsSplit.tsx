@@ -13,9 +13,11 @@ import {
   automationSentence,
   customAutomationId,
   isOnMode,
+  OPERATIONS,
   splitFieldsByTier,
   type AutopilotAutomation,
-  type AutopilotOverview,
+  type AutopilotField,
+  type AutopilotScopeEntry,
   type CustomAutomation,
 } from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -62,15 +64,22 @@ import { Switch } from "~/components/ui/switch";
 import { toastManager } from "~/components/ui/toast";
 import { downloadText } from "~/lib/download";
 import { cn } from "~/lib/utils";
+import { inheritDetail } from "~/components/models/choicePicker.logic";
+import { operationTarget } from "~/components/models/operations.logic";
 import { useDeleteCustomAutomation, useExportCustomAutomation } from "~/state/customAutomations";
-import { AutomationField, type AutomationItem } from "./AutomationRows";
+import { useSettings } from "~/state/queries";
+import { AutomationField, type AutomationItem, type ConfigUpdate } from "./AutomationRows";
 import {
   advancedChanged,
+  advancedFieldNames,
+  agentFieldsTitle,
+  agentSummary,
   groupAutomations,
   isOffEverywhere,
   projectsStatus,
   rowSubline,
   selectedAutomation,
+  splitAgentFields,
   statusLine,
   type AutomationReach,
   type LastRun,
@@ -124,12 +133,10 @@ export const hasCheckScript = (custom: CustomAutomation | null): boolean =>
 /** The list and the picked automation's detail. The automation in `?automation=` is picked; with none, the first. */
 export function AutomationsSplit({
   items,
-  overview,
   pending,
   rejected,
 }: {
   items: ListedAutomation[];
-  overview: AutopilotOverview;
   pending: boolean;
   rejected: number;
 }) {
@@ -182,7 +189,6 @@ export function AutomationsSplit({
           <AutomationDetail
             key={selected.automation.key}
             item={selected}
-            overview={overview}
             pending={pending}
             rejected={rejected}
             onBack={() => select(undefined)}
@@ -249,13 +255,11 @@ function ListRow({
  */
 function AutomationDetail({
   item,
-  overview,
   pending,
   rejected,
   onBack,
 }: {
   item: ListedAutomation;
-  overview: AutopilotOverview;
   pending: boolean;
   rejected: number;
   onBack: () => void;
@@ -263,6 +267,7 @@ function AutomationDetail({
   const { automation, entry, reach, custom, lastRun, previewRuns, onMode, onConfig } = item;
   const navigate = useNavigate();
   const { essential, advanced } = splitFieldsByTier(automation.fields);
+  const agent = splitAgentFields(advanced);
   const on = isOnMode(entry.mode);
   const preview = entry.mode === "preview";
   const off = isOffEverywhere(reach);
@@ -332,7 +337,7 @@ function AutomationDetail({
       <DetailSection title="What it does">
         <div className="flex flex-col gap-3 px-3 py-3 @min-[32rem]/split:flex-row @min-[32rem]/split:items-start sm:px-4">
           <p className="min-w-0 flex-1 text-sm leading-relaxed text-foreground">
-            {automationSentence(automation, entry.effectiveConfig, { custom, engine: overview.engine })}
+            {automationSentence(automation, entry.effectiveConfig, { custom })}
           </p>
           <div className="shrink-0 self-start">
             <RunHistoryLink automation={automation.key} label="All runs" size="xs" />
@@ -414,9 +419,27 @@ function AutomationDetail({
       {advanced.length > 0 ? (
         <AdvancedSection
           changed={advancedChanged(automation, entry.effectiveConfig)}
-          fields={advanced.map((f) => f.label)}
+          fields={advancedFieldNames(advanced)}
         >
-          {advanced.map(field)}
+          {agent.model?.kind === "model" ? (
+            <ModelLine
+              automation={automation}
+              field={agent.model}
+              entry={entry}
+              rejected={rejected}
+              onConfig={onConfig}
+            />
+          ) : null}
+          {agent.runner.length > 0 ? (
+            <AgentDefaultsLine
+              automation={automation}
+              fields={agent.runner}
+              entry={entry}
+              rejected={rejected}
+              onConfig={onConfig}
+            />
+          ) : null}
+          {agent.rest.map(field)}
         </AdvancedSection>
       ) : null}
       {off && !custom ? (
@@ -425,6 +448,118 @@ function AutomationDetail({
         </p>
       ) : null}
     </DetailBody>
+  );
+}
+
+type FieldLineProps<F> = {
+  automation: AutopilotAutomation;
+  entry: AutopilotScopeEntry;
+  rejected: number;
+  onConfig: ConfigUpdate;
+} & F;
+
+/**
+ * The agent's model as one line: where it comes from (Agents → Operations, for runs of this kind) and what that resolves
+ * to, with Override. Once overridden here, or while overriding, it is the model picker with a reset.
+ */
+function ModelLine({
+  automation,
+  field,
+  entry,
+  rejected,
+  onConfig,
+}: FieldLineProps<{ field: Extract<AutopilotField, { kind: "model" }> }>) {
+  const settings = useSettings().data;
+  const [overriding, setOverriding] = useState(false);
+  const op = field.operation ?? "customTask";
+  if (overriding || field.key in entry.config || !settings) {
+    return (
+      <AutomationField
+        automation={automation}
+        field={field}
+        entry={entry}
+        projectId={null}
+        rejected={rejected}
+        onConfig={onConfig}
+      />
+    );
+  }
+  return (
+    <SettingsRow
+      id={`autopilot.automations.${automation.key}.model`}
+      title="Model"
+      description={
+        <>
+          From <SettingsLink to={operationTarget(op)}>Agents → Operations</SettingsLink> ({OPERATIONS[op].label}), for
+          every run of this kind.
+        </>
+      }
+      status={`Now: ${inheritDetail(op, { needs: field.needs }, settings)}`}
+      control={
+        <Button size="xs" variant="outline" onClick={() => setOverriding(true)}>
+          Override
+        </Button>
+      }
+    />
+  );
+}
+
+/**
+ * Runner, budget, timeout and T3 access as one line: the board's defaults from Limits & safety, or what this
+ * automation sets, with Override. Overriding opens a row per field, each with a reset; the line stays open while
+ * any of them is set here.
+ */
+function AgentDefaultsLine({
+  automation,
+  fields,
+  entry,
+  rejected,
+  onConfig,
+}: FieldLineProps<{ fields: AutopilotField[] }>) {
+  const [overriding, setOverriding] = useState(false);
+  const overridden = fields.filter((f) => f.key in entry.config);
+  const open = overriding || overridden.length > 0;
+  const summary = agentSummary(fields, entry.effectiveConfig);
+  return (
+    <>
+      <SettingsRow
+        id={`autopilot.automations.${automation.key}.agent`}
+        title={agentFieldsTitle(fields)}
+        description={
+          overridden.length > 0 ? (
+            <>
+              Set here: {overridden.map((f) => f.label.toLowerCase()).join(", ")}. The rest come from{" "}
+              <SettingsLink to="autopilot.limits.agent-defaults">Limits &amp; safety</SettingsLink>.
+            </>
+          ) : (
+            <>
+              The defaults from <SettingsLink to="autopilot.limits.agent-defaults">Limits &amp; safety</SettingsLink>.
+            </>
+          )
+        }
+        status={summary}
+        control={
+          overridden.length > 0 ? undefined : (
+            <Button size="xs" variant="outline" onClick={() => setOverriding(!open)}>
+              {open ? "Done" : "Override"}
+            </Button>
+          )
+        }
+      />
+      {open
+        ? fields.map((f) => (
+            <AutomationField
+              key={f.key}
+              automation={automation}
+              field={f}
+              entry={entry}
+              projectId={null}
+              rejected={rejected}
+              onConfig={onConfig}
+            />
+          ))
+        : null}
+    </>
   );
 }
 

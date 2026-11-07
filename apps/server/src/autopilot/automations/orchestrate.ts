@@ -21,7 +21,7 @@ import { z } from "zod";
 import { AppError } from "../../errors.ts";
 import type { Services } from "../../services/types.ts";
 import { agentHold, dailyCapHold } from "../limits.ts";
-import { RUNNER_OPTION_SHAPE, runnerFields } from "../runnerOptions.ts";
+import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE, runnerFields } from "../runnerOptions.ts";
 import { defineAutomation, type ActionResult, type Candidate } from "../types.ts";
 
 export { AUTOPILOT_ORCHESTRATE };
@@ -55,8 +55,8 @@ type OrchestrateConfig = z.infer<typeof schema>;
 const defaults: OrchestrateConfig = {
   everyMinutes: 30,
   instructions: "",
-  budgetUsd: 3,
-  timeoutMinutes: 30,
+  budgetUsd: RUNNER_DEFAULTS.budgetUsd,
+  timeoutMinutes: RUNNER_DEFAULTS.timeoutMinutes,
   modelChoice: INHERIT,
 };
 
