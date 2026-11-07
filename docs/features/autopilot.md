@@ -532,7 +532,9 @@ out the mode and the approval gate from the PR's history, and posts. The gate is
   run. `counted: false` is honoured for an approval or a ready-for-approval in `delta` or `followup`, so small re-checks
   don't walk a PR into the round limit. GitHub failing in passing while posting (`isTransientHostError`) skips the run
   with `output.retry`, and the next pass tries again under `<key>:a<n>`, up to `REPO_REVIEW_ATTEMPTS` (3); so does
-  GitHub failing in passing on the read before the post.
+  GitHub failing in passing on the read before the post. A try finds the post an earlier one made if GitHub took it
+  and still answered with an error (`postedSince`: a post of its own at this head after the plan's `lastPostAt`), and
+  then posts nothing.
 - **Hand-offs.** The head is read again first; a moved PR skips the run with nothing posted or written. One comment
   (`renderHandoff`): the header, the round, "Handed to @you for manual review (<reason>): <why>" or "Ready for
   @you's approval: <gate>", the summary, every point, the checklist, and that Autopilot looks again by itself on a push.
@@ -544,9 +546,10 @@ out the mode and the approval gate from the PR's history, and posts. The gate is
   with a `pr_ready` notification, and leaves it once a person reviews it, it is stopped, closed or merged, a new
   head comes, or its author leaves the list; the list also hides rows of projects where the source or Review PRs is
   off. While it waits, each poll works the gate out again at that head: a reason that changed is updated, and once the
-  gate passes (a required check re-run green, an issue linked) and Approve is on, it is approved with no agent run
-  (`approveReady`, key `…:approve:<hash of what held it>`, `counted=0`), on the review already done. If the gate fails
-  again at that moment, the new reason is stored, so a later pass that sees it pass gets a key of its own. Skips carry a typed `code`
+  gate passes (a required check re-run green, an issue linked) and Approve is on, the PR gets a fresh look
+  (`approveReady`, key `…:approve:<hash of when its wait was last written>`) that uses no round: the agent is told
+  it found the PR clean before and checks what can change without a push (new threads, issues that mention it), and
+  the server approves past the gate or, if it is held again, edits its Ready comment with the new reason. Skips carry a typed `code`
   (`ENDS_WAIT` lists the ones that end the wait).
 - **Afterwards.** Its own threads the review says are fixed, and disputes it accepted, are resolved
   (`resolveReviewThread`); accepted and rejected disputes get the agent's reply on the thread. An approval, or the

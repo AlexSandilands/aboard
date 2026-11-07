@@ -68,6 +68,11 @@ export interface RepoPrPlan {
   /** Why an approval isn't allowed, empty when it is. */
   gate: string[];
   lastHandoff: LastHandoff | null;
+  /**
+   * When Autopilot last posted on the PR (since the latest resume), in ms; 0 for never. A post of its own at this head
+   * after it means an earlier try landed (GitHub took it and still answered with an error), so a retry posts nothing.
+   */
+  lastPostAt: number;
   /** Autopilot's own unresolved threads, by their first comment's id. */
   ownThreads: Array<{ rootId: number; threadId: string; canResolve: boolean; replied: boolean }>;
 }
@@ -142,6 +147,18 @@ const asReason = (value: string | undefined): EscalationReason | null =>
       ? "gate"
       : null;
 
+/** Whether Autopilot posted on the PR at `head` after `since` (ms): a review or a hand-off comment, by its marker. */
+export function postedSince(pr: RepoPr, head: string, since: number): boolean {
+  const mine = (author: string | null, body: string) => {
+    const attrs = author === pr.viewer ? parseReviewMarker(body) : null;
+    return attrs !== null && attrs.head === head;
+  };
+  return (
+    pr.reviews.some((r) => mine(r.author, r.body) && ts(r.submittedAt) > since) ||
+    pr.comments.some((c) => mine(c.author, c.body) && Math.max(ts(c.createdAt), ts(c.editedAt) || 0) > since)
+  );
+}
+
 /** The approval gate: what stops Autopilot approving, whatever the review finds. */
 export function approvalGate(pr: RepoPr, settings: OtherPrsSettings): string[] {
   const gate: string[] = [];
@@ -213,11 +230,13 @@ export async function assessRepoPr(
     else legacyCounted += 1;
   };
   let ownPosts = 0;
+  let lastPostAt = 0;
   for (const r of pr.reviews) {
     const attrs = parseReviewMarker(r.body);
     if (!attrs || r.author !== me || !r.submittedAt || ts(r.submittedAt) <= since) continue;
     if (attrs.event !== undefined || attrs.finding !== undefined) continue;
     ownPosts += 1;
+    lastPostAt = Math.max(lastPostAt, ts(r.submittedAt));
     count(attrs);
     history.push({
       at: ts(r.submittedAt),
@@ -233,6 +252,7 @@ export async function assessRepoPr(
     const at = Math.max(ts(c.createdAt), ts(c.editedAt) || 0);
     if (at <= since) continue;
     ownPosts += 1;
+    lastPostAt = Math.max(lastPostAt, at);
     count(attrs);
     history.push({ at, kind: "escalated", head: attrs.head ?? "" });
     if (!lastHandoff || at >= lastHandoff.at) {
@@ -344,6 +364,7 @@ export async function assessRepoPr(
           }
         : null,
       ownThreads,
+      lastPostAt,
     },
   };
 }

@@ -1,7 +1,7 @@
 import { prReviewHeader, reviewMarker } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import type { RepoPr } from "../../integrations/gitHost.ts";
-import { approvalGate, assessRepoPr, otherPrsSettings, type Assessment } from "./repoPrAssess.ts";
+import { approvalGate, assessRepoPr, otherPrsSettings, postedSince, type Assessment } from "./repoPrAssess.ts";
 
 const ME = "owner";
 const AUTHOR = "alice";
@@ -327,5 +327,17 @@ describe("other people's PRs: the approval gate", () => {
 
   it("needs no issue when the setting is off", () => {
     expect(approvalGate(pr({ closingIssues: [] }), { ...settings, requireIssue: false })).toEqual([]);
+  });
+});
+
+describe("postedSince", () => {
+  it("finds a post of Autopilot's at this head after a time, by its marker", () => {
+    const since = Date.parse(ago(30));
+    const landed = handoff(A, "gate", ago(10));
+    expect(postedSince(pr({ comments: [landed] }), A, since)).toBe(true);
+    expect(postedSince(pr({ comments: [landed] }), B, since)).toBe(false);
+    expect(postedSince(pr({ comments: [handoff(A, "gate", ago(40))] }), A, since)).toBe(false);
+    expect(postedSince(pr({ reviews: [review({ head: A, verdict: "approve" }, ago(5))] }), A, since)).toBe(true);
+    expect(postedSince(pr({ comments: [{ ...landed, author: AUTHOR }] }), A, since)).toBe(false);
   });
 });

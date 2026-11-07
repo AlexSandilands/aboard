@@ -80,6 +80,7 @@ function setup() {
   /** Runs while the agent reviews: what changes on GitHub between the poll and the post. */
   let duringReview: (() => void) | null = null;
   let postErrors: string[] = [];
+  let landThenFail = false;
   let readErrors: string[] = [];
   let reads = 0;
   let onRead: ((n: number) => void) | null = null;
@@ -121,7 +122,27 @@ function setup() {
     },
     postComment: async (_ref, body) => {
       comments.push({ edit: null, body });
-      return posted();
+      const done = posted();
+      if (landThenFail) {
+        // GitHub kept it, then answered with an error.
+        pr = {
+          ...pr,
+          comments: [
+            ...pr.comments,
+            {
+              id: done.id,
+              nodeId: done.nodeId,
+              url: done.url,
+              author: ME,
+              body,
+              createdAt: new Date(Date.now() + 1000).toISOString(),
+              editedAt: null,
+            },
+          ],
+        };
+        throw new Error("HTTP 502: try again");
+      }
+      return done;
     },
     editComment: async (_host, nodeId, body) => {
       comments.push({ edit: nodeId, body });
@@ -181,6 +202,7 @@ function setup() {
     whileReviewing: (fn: (() => void) | null) => (duringReview = fn),
     failPosts: (...messages: string[]) => (postErrors = messages),
     failReads: (...messages: string[]) => (readErrors = messages),
+    landThenFail: (on: boolean) => (landThenFail = on),
     onRead: (fn: ((n: number) => void) | null) => {
       reads = 0;
       onRead = fn;
@@ -325,6 +347,19 @@ describe("other people's PRs: facts read again before posting", () => {
     expect(t.reviews).toHaveLength(1);
   });
 
+  it("doesn't post again when GitHub took a post but answered with an error", async () => {
+    const t = setup();
+    t.turnOn({ otherApprove: false });
+    t.landThenFail(true);
+    await t.pass();
+    expect(t.runs()[0]).toMatchObject({ status: "skipped", output: { retry: true } });
+    t.landThenFail(false);
+    await t.pass();
+    // The comment that landed is the hand-off at this head: nothing is posted again.
+    expect(t.comments).toHaveLength(1);
+    expect(t.runs().filter((r) => r.status === "failed")).toHaveLength(0);
+  });
+
   it("tries a post GitHub failed on in passing again on the next pass", async () => {
     const t = setup();
     t.turnOn();
@@ -338,7 +373,7 @@ describe("other people's PRs: facts read again before posting", () => {
 });
 
 describe("other people's PRs: waiting for the user's approval", () => {
-  it("approves without another review once the gate passes at the same head", async () => {
+  it("looks again, and approves, once the gate passes at the same head", async () => {
     const t = setup();
     t.turnOn();
     t.setPr({ checks: { pending: [], failing: ["test"], missing: [], latestAt: hourAgo() } });
@@ -360,14 +395,16 @@ describe("other people's PRs: waiting for the user's approval", () => {
       ],
     });
     await t.pass();
-    expect(t.requests).toHaveLength(1);
+    // A fresh look, not the old review: threads or issues may have come since. It uses no round.
+    expect(t.requests).toHaveLength(2);
+    expect(t.requests[1]!.prompt).toContain("only the approval gate held it; the gate passes now");
     expect(t.reviews).toHaveLength(1);
     expect(t.reviews[0]!.event).toBe("approve");
     expect(parseReviewMarker(t.reviews[0]!.body)).toMatchObject({ verdict: "approve", counted: "0" });
     expect(t.state()).toMatchObject({ outcome: "approved", readySince: null });
   });
 
-  it("approves on a later pass after the gate failed again at the moment it tried", async () => {
+  it("looks again on a later pass after the same check failed again at the moment it tried", async () => {
     const t = setup();
     t.turnOn();
     const failing = { checks: { pending: [], failing: ["test"], missing: [], latestAt: hourAgo() } };
@@ -390,11 +427,13 @@ describe("other people's PRs: waiting for the user's approval", () => {
     });
     // The poll sees it pass; by the read before the post it failed again (a flaky check).
     t.onRead((n) => {
-      if (n === 2) t.setPr({ checks: { pending: [], failing: ["lint"], missing: [], latestAt: hourAgo() } });
+      if (n === 2) t.setPr(failing);
     });
     await t.pass();
     expect(t.reviews).toHaveLength(0);
-    expect(t.state()?.reasonDetail).toBe("required checks not green: lint");
+    // Its Ready comment is edited, not posted again.
+    expect(t.comments.at(-1)!.edit).not.toBeNull();
+    expect(t.state()?.reasonDetail).toBe("required checks not green: test");
     t.onRead(null);
     t.setPr(passing);
     await t.pass();

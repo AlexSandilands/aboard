@@ -43,6 +43,7 @@ import {
   ENDS_WAIT,
   approvalGate,
   assessRepoPr,
+  postedSince,
   otherPrsSettings,
   standingBlock,
   type OtherPrsSettings,
@@ -187,7 +188,7 @@ export interface RepoPrData {
    * issue linked): approve on the review already done, with no agent.
    */
   approveReady?: boolean;
-  /** For `approveReady`: what held the approval until now (the stored wait reason). */
+  /** For `approveReady`: when the PR's wait was last written, so each new look at it gets a key of its own. */
   heldBy?: string;
   /** Which try at this review this is, from 1: a post GitHub failed on in passing is tried again. */
   attempt?: number;
@@ -309,11 +310,22 @@ async function pollProject(
               replyId: 0,
               resumed: false,
               gate: [],
-              lastHandoff: null,
+              // Its Ready comment, edited rather than posted again if the PR still has to wait.
+              lastHandoff: state?.handoffCommentId
+                ? {
+                    commentId: 0,
+                    nodeId: state.handoffCommentId,
+                    url: state.handoffCommentUrl ?? pr.url,
+                    head: pr.headOid,
+                    reason: "gate",
+                    latest: true,
+                  }
+                : null,
               ownThreads: [],
+              lastPostAt: Date.parse(state!.updatedAt),
             };
       items.push({
-        ...(approveReady ? { approveReady, heldBy: state?.reasonDetail ?? "" } : {}),
+        ...(approveReady ? { approveReady, heldBy: state?.updatedAt ?? "" } : {}),
         kind: "repo_pr",
         projectId: project.id,
         host,
@@ -406,10 +418,9 @@ export function otherPrCandidates(ctx: CheckContext<Record<string, unknown>>): C
       candidates.push({
         dedupeKey: attempt === 1 ? base : `${base}:a${attempt}`,
         summary: item.approveReady
-          ? `approve ${item.repo}#${item.number} at ${item.headOid.slice(0, 7)}: the gate passes now`
+          ? `look again at ${item.repo}#${item.number} at ${item.headOid.slice(0, 7)}: the gate passes now`
           : `review ${item.repo}#${item.number} by ${item.author} at ${item.headOid.slice(0, 7)} (${item.plan.mode}, round ${item.plan.round} of ${item.plan.maxRounds})`,
         projectId: project.id,
-        ...(item.approveReady ? { startsNoAgent: true } : {}),
         data: { ...item, attempt },
       });
     }
@@ -456,6 +467,11 @@ export function repoPrPrompt(item: RepoPrData, skill: string): string {
       ? `- The approval gate fails: ${plan.gate.join("; ")}. That is the user's to settle, not yours: judge the change on its merits. If it is clean, answer approve; the board then asks the user to approve it.`
       : "- The approval gate passes.",
     ...(plan.resumed ? ["- The user resumed Autopilot on this PR: judge it afresh."] : []),
+    ...(item.approveReady
+      ? [
+          "- You found this PR clean at this commit before, and only the approval gate held it; the gate passes now. Look again at what can change without a push: new review threads, new or reopened issues that mention it, the description. Answer approve only if it is still clean.",
+        ]
+      : []),
     "",
     "## Read",
     "",
@@ -826,44 +842,35 @@ export async function actRepoPr(
 
   const state = services.repoPrReviews.get(item.host, item.repo, item.number);
   let verdict: RepoPrReviewVerdict;
-  if (item.approveReady) {
-    // The review at this head found it clean; only the gate held the approval, and the poll saw it pass now.
-    verdict = {
-      decision: "approve",
-      summary: `Autopilot's review at \`${shortSha(item.headOid)}\` found this clean, and the approval gate passes now${state?.reasonDetail ? ` (it was held by: ${state.reasonDetail})` : ""}.`,
-      issues: [],
-      counted: false,
-    };
-  } else
-    try {
-      const result = await runner.start({
-        run,
-        label: `Review PRs · ${item.repo}#${item.number} round ${item.plan.round}`,
-        prompt: repoPrPrompt(item, skillText(config)),
-        operation: "prReview",
-        options: config,
-        access: "read-only",
-        runTools: { toolSet: "repoPrReview", target: { kind: "pr", ...ref } },
-        untrustedInput: true,
-        outputSchema: REPO_PR_REVIEW_OUTPUT_SCHEMA,
-        repo: project.workspaceRoot,
-        // A fork's branch isn't on origin: that review reads through the tools alone.
-        ...(project.workspaceRoot && !item.crossRepository
-          ? { checkout: { branch: item.headRef, tag: `pr${item.number}` }, expectHead: item.headOid }
-          : {}),
-      });
-      const parsed = RepoPrReviewVerdict.safeParse(result.output);
-      if (!parsed.success) {
-        throw new Error(`The reviewer's answer wasn't a decision: ${parsed.error.issues[0]?.message ?? "invalid"}`);
-      }
-      verdict = parsed.data;
-    } catch (error) {
-      if (error instanceof WorktreeHeadError) {
-        const now = await gitHosts.prHead(ref).catch(() => null);
-        if (error.moved || (now && now !== item.headOid)) return SKIP_MOVED(item.number);
-      }
-      throw error;
+  try {
+    const result = await runner.start({
+      run,
+      label: `Review PRs · ${item.repo}#${item.number} round ${item.plan.round}`,
+      prompt: repoPrPrompt(item, skillText(config)),
+      operation: "prReview",
+      options: config,
+      access: "read-only",
+      runTools: { toolSet: "repoPrReview", target: { kind: "pr", ...ref } },
+      untrustedInput: true,
+      outputSchema: REPO_PR_REVIEW_OUTPUT_SCHEMA,
+      repo: project.workspaceRoot,
+      // A fork's branch isn't on origin: that review reads through the tools alone.
+      ...(project.workspaceRoot && !item.crossRepository
+        ? { checkout: { branch: item.headRef, tag: `pr${item.number}` }, expectHead: item.headOid }
+        : {}),
+    });
+    const parsed = RepoPrReviewVerdict.safeParse(result.output);
+    if (!parsed.success) {
+      throw new Error(`The reviewer's answer wasn't a decision: ${parsed.error.issues[0]?.message ?? "invalid"}`);
     }
+    verdict = parsed.data;
+  } catch (error) {
+    if (error instanceof WorktreeHeadError) {
+      const now = await gitHosts.prHead(ref).catch(() => null);
+      if (error.moved || (now && now !== item.headOid)) return SKIP_MOVED(item.number);
+    }
+    throw error;
+  }
 
   // What the post rests on, read again now, not as the poll saw it minutes ago: the head, the user's stop, a person's
   // review, and the approval gate (a check re-run red, `Closes #n` removed). An approval is never posted on old facts.
@@ -874,23 +881,22 @@ export async function actRepoPr(
     return retryLater(error, item);
   }
   if (fresh.headOid !== item.headOid) return SKIP_MOVED(item.number);
+  // An earlier try's post that GitHub took while answering with an error: posting again would say it twice.
+  if (postedSince(fresh, item.headOid, item.plan.lastPostAt)) {
+    return { status: "skipped", summary: `PR #${item.number}: Autopilot already posted at this commit` };
+  }
   const block = standingBlock(fresh);
   if (block) return { status: "skipped", summary: `PR #${item.number}: ${block.why}, so nothing was posted` };
   const current: RepoPrData = { ...item, plan: { ...item.plan, gate: approvalGate(fresh, settings) } };
 
   const issues = normaliseIssues(verdict.issues);
   const settled = settleDecision(verdict, current, settings);
-  if (item.approveReady && settled.outcome !== "approved") {
-    // Still held: say why on Needs you. The new reason gives the next pass that sees the gate pass a key of its own.
-    if (state)
-      services.repoPrReviews.record({ ...state, reasonDetail: settled.why, updatedAt: new Date().toISOString() });
-    return { status: "skipped", summary: `PR #${item.number} still waits for your approval: ${settled.why}` };
-  }
   // A small re-check after an approval or a ready-for-approval uses no round, when the reviewer says so.
   const small = (settled.outcome === "approved" || settled.outcome === "ready") && verdict.counted === false;
+  // A look again because the gate passed at the same commit is never a round.
   const counted = !(
-    small &&
-    (item.plan.mode === "delta" || item.plan.mode === "followup" || item.approveReady === true)
+    item.approveReady === true ||
+    (small && (item.plan.mode === "delta" || item.plan.mode === "followup"))
   );
   const round = item.plan.round;
   let url: string | null = null;
