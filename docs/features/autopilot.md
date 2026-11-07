@@ -235,14 +235,15 @@ How each automation is doing, on its detail in Settings → Autopilot and in Nee
   - Start planned tasks is on but no ready Planned task (a plan, not blocked, not manual) in its projects is flagged,
     while some are Default → **Flag #9, #10 and #11** (`update_task`-style PATCH with `autopilot: true`; tasks switched
     Off by hand are left out).
-  - Orchestrate ran 40 or more times this week → **Every 2N minutes** (its board config). Whether a run changed
+  - Orchestrate ran 40 or more times this week since its board setting last changed → **Every 2N minutes** (its board
+    config; the count starts again once it changes, so the hint asks again only after the new interval has run often too). Whether a run changed
     anything isn't recorded, so the text says "if most runs found nothing to do".
   - A daily run or spend cap is reached today (`engineHints`, `automation: null`) → **See limits**.
 
   Hints show under the detail's header (`HintNotice`) and in Needs you, each with **Dismiss**
   (`POST /api/autopilot/hints/dismiss`, stored as the last 200 ids in the `autopilotDismissedHints` setting, which
-  stays with the machine like pause). A dismissed hint comes back only when its id changes: another cap, other tasks,
-  a newer failure, another day.
+  stays with the machine like pause). Applying a hint dismisses it too. A dismissed hint comes back only when its id
+  changes: a newer give-up or failure, other tasks, another interval, another day.
 - **Auto-pause.** After a real run in a project fails, `autoPauseAfter` (service `finish`) reads the automation's
   finished runs there since it was last resumed and counts failures in a row (`failureStreak`: a success ends the
   streak; skipped runs, dry runs and runs the board's restart failed neither count nor break it). At
