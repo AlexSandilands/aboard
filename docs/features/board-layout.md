@@ -186,9 +186,20 @@ toggles):
 | Relations    | `#N` chips, red for an open blocker, green once Done, outlined for what the task blocks; each opens its task       |
 | Automation   | Text only                                                                                                          |
 | Local review | The review badge                                                                                                   |
-| Autopilot    | Status pill of the run that needs attention, else the latest run                                                                                       |
+| Autopilot    | The run that needs attention as a **Needs attention** pill (warning or error colour), else the latest run's status  |
 | Plan         | The step bar (grey to-do, blue current, green done) with done/total and the current step                           |
 | Details, Activity | Text only                                                                                                     |
+
+**The attention icon.** A collapsed section that holds one of the task's attention reasons draws an `AttentionIcon`
+(its severity's colour) right after the title, whether its summary is plain or rich, so a warning the rich summary
+hides (a flagged Autopilot run reads "Done", PR and session chips carry no message) still shows. The message is the
+toggle's tooltip and part of its accessible name. `SECTION_ATTENTION` in `sections.logic.ts` is the one rule for which
+reasons belong where: Autopilot takes `autopilot`; Sessions `thread_needs_input` and `thread_failed`; Links
+`pr_checks_failing`, `pr_changes_requested` and `pr_conflict`; Plan `blocked_step`; Local review `review_stalled`,
+`review_stuck`, `review_failed` and `review_unattended`. `import_failed` and `agent_request` belong to no section: the
+callouts at the top of the panel show them. `sectionAttention` picks the reason to show, an error before a warning, and
+`summarizeSection` uses it too. An open section shows no icon (its content says it), and a collapse the user saved still
+wins: the icon makes the warning visible, it never forces the section open.
 
 Until the user chooses, sections collapse by content (`collapsedByDefault`):
 

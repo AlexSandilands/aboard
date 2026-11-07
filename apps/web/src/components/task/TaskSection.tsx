@@ -2,6 +2,7 @@
 import { ChevronRightIcon } from "lucide-react";
 import { useId, type ReactNode } from "react";
 
+import { AttentionIcon } from "~/components/board/attention";
 import { cn } from "~/lib/utils";
 import { useSectionFrame } from "./ManagedSections";
 
@@ -29,6 +30,7 @@ export function TaskSection({
   const frame = useSectionFrame();
   const expanded = frame?.expanded ?? true;
   const rich = !expanded && frame && summary ? summary : null;
+  const attention = frame?.attention ?? null;
   return (
     <section
       aria-labelledby={headingId}
@@ -44,6 +46,7 @@ export function TaskSection({
                 id={headingId}
                 aria-expanded={expanded}
                 onClick={frame.onToggle}
+                title={attention?.message}
                 className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md text-left text-2xs font-medium text-muted-foreground outline-none select-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <ChevronRightIcon
@@ -54,6 +57,15 @@ export function TaskSection({
                   )}
                 />
                 <span className="shrink-0">{title}</span>
+                {attention ? (
+                  <>
+                    <AttentionIcon severity={attention.severity} />
+                    {/* The icon is decorative: the message names the toggle, unless the summary already says it. */}
+                    {frame.summary.includes(attention.message) ? null : (
+                      <span className="sr-only">{attention.message}</span>
+                    )}
+                  </>
+                ) : null}
                 {frame.summary ? (
                   <span className={cn("min-w-0 truncate font-normal text-muted-foreground/80", rich && "sr-only")}>
                     {frame.summary}

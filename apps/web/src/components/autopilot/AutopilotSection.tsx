@@ -28,17 +28,19 @@ export function AutopilotSection({ task }: { task: TaskDetail }) {
   const shown = runs.find((run) => run.needsAttention && run.dismissedAt === null) ?? runs[0];
   const flag = dismissableRun(runs, task.attention);
   const flagged = task.attention.find((a) => a.kind === "autopilot");
+  // A flagged run reads "Done" or "Failed" by status, which hides that the user has something to dismiss in here.
+  const shownFlagged = !!shown && shown.needsAttention && shown.dismissedAt === null;
   return (
     <TaskSection
       title="Autopilot"
       summary={
         shown ? (
           <Badge
-            variant={runStatusVariant(shown.status, shown.deferred)}
+            variant={shownFlagged ? (flagged?.severity ?? "warning") : runStatusVariant(shown.status, shown.deferred)}
             size="sm"
             title={automationTitle(automations, shown.automation)}
           >
-            {runStatusLabel(shown)}
+            {shownFlagged ? "Needs attention" : runStatusLabel(shown)}
           </Badge>
         ) : undefined
       }
