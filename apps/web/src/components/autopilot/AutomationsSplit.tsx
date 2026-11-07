@@ -74,6 +74,8 @@ import {
 import { BOARD_MODES, boardModeToSave, boardSwitchValue } from "./autopilot.logic";
 import { bundleFilename } from "./customAutomationImport.logic";
 import { BlockedWarning, NeedsVariablesWarning } from "./InputsAndSlots";
+import { HintNotice, PausedRows, WeekSection } from "./HealthSections";
+import { hintsFor, pausedText, pausesFor } from "./health.logic";
 import { ModeSwitch } from "./ModeSwitch";
 import { RunHistoryLink } from "./RunHistoryLink";
 
@@ -144,6 +146,7 @@ export function AutomationsSplit({
                   <ListRow
                     key={item.automation.key}
                     item={item}
+                    paused={pausedText(pausesFor(overview.autoPaused, item.automation.key))}
                     pending={pending}
                     selected={item.automation.key === selectedKey}
                     onSelect={() => select(item.automation.key)}
@@ -179,11 +182,14 @@ export function AutomationsSplit({
 
 function ListRow({
   item,
+  paused,
   pending,
   selected,
   onSelect,
 }: {
   item: ListedAutomation;
+  /** "Paused in storefront" when it paused itself somewhere after failing. */
+  paused: string | null;
   pending: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -197,13 +203,15 @@ function ListRow({
       icon={<AutomationIcon automation={automation} />}
       title={automation.title}
       badge={
-        off ? null : lastRun?.status === "failed" ? (
+        off ? null : paused ? (
+          <StatusDot tone="warning" label={paused} />
+        ) : lastRun?.status === "failed" ? (
           <StatusDot tone="danger" label="Last run failed" />
         ) : (
           <StatusDot tone="success" label="On" />
         )
       }
-      subtitle={rowSubline(reach, lastRun)}
+      subtitle={paused && !off ? paused : rowSubline(reach, lastRun)}
       dimmed={off}
       selected={selected}
       onSelect={onSelect}
@@ -241,6 +249,8 @@ function AutomationDetail({
   const { automation, entry, reach, custom, onMode, onConfig } = item;
   const navigate = useNavigate();
   const { essential, advanced } = splitFieldsByTier(automation.fields);
+  const hints = hintsFor(overview.hints, automation.key);
+  const pauses = pausesFor(overview.autoPaused, automation.key);
   const on = entry.mode === "on";
   const off = isOffEverywhere(reach);
   const editCustom = (id: string) =>
@@ -294,14 +304,24 @@ function AutomationDetail({
           {automation.needs ? <NeedsVariablesWarning needs={automation.needs} /> : null}
         </div>
       ) : null}
+      {hints.length > 0 ? (
+        <div className="space-y-2 px-3 sm:px-4">
+          {hints.map((hint) => (
+            <HintNotice key={hint.id} hint={hint} target={{ onConfig }} />
+          ))}
+        </div>
+      ) : null}
       <DetailSection title="What it does">
         <div className="flex flex-col gap-3 px-3 py-3 @min-[32rem]/split:flex-row @min-[32rem]/split:items-start sm:px-4">
           <p className="min-w-0 flex-1 text-sm leading-relaxed text-foreground">
             {automationSentence(automation, entry.effectiveConfig, { custom, engine: overview.engine })}
           </p>
-          <div className="shrink-0 self-start">
-            <RunHistoryLink automation={automation.key} label="All runs" size="xs" />
-          </div>
+          {/* While it's on, This week links to its runs. */}
+          {off ? (
+            <div className="shrink-0 self-start">
+              <RunHistoryLink automation={automation.key} label="All runs" size="xs" />
+            </div>
+          ) : null}
         </div>
       </DetailSection>
       <DetailSection title="Where it runs">
@@ -334,7 +354,9 @@ function AutomationDetail({
           }
           status={reach.projects.length > 0 ? `On in ${reach.projects.join(", ")}` : "On in no project"}
         />
+        <PausedRows pauses={pauses} />
       </DetailSection>
+      {off ? null : <WeekSection automation={automation.key} />}
       {essential.length > 0 ? <DetailSection title="Settings">{essential.map(field)}</DetailSection> : null}
       {automation.key === AUTOPILOT_RECURRING ? (
         <DetailSection title="Rules">

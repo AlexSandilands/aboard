@@ -3,14 +3,14 @@
 // paths of their own; the tab bar ties them together.
 import {
   AUTOPILOT_ALL_RUNS,
+  automationTitleOf,
   canRetryRun,
   limitsSummary,
   todaySummary,
-  type AutopilotNeed,
   type AutopilotOverview,
 } from "@repo/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { AlertTriangleIcon, FilePenLineIcon, PauseIcon, PlayIcon, XCircleIcon } from "lucide-react";
+import { AlertTriangleIcon, FilePenLineIcon, PauseCircleIcon, PauseIcon, PlayIcon, XCircleIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   SettingsGroup,
@@ -25,6 +25,7 @@ import { SettingsScroller, SettingsTopBar } from "~/components/settings/Settings
 import { Button } from "~/components/ui/button";
 import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
+import { useResumeAutoPause } from "~/state/autopilotRunHistory";
 import { useCustomAutomations, useDismissAutomationDraft } from "~/state/customAutomations";
 import { useDismissAutopilotRun, useRetryAutopilotRun, useSetAutopilotPaused } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotProjectScopes, useBoard } from "~/state/queries";
@@ -32,6 +33,7 @@ import { useScopeAutomations } from "./AutomationRows";
 import { automationReach, isOffEverywhere } from "./automationList.logic";
 import { AutopilotLimits } from "./AutopilotSettingsSection";
 import { AutomationsSplit, customOf, type ListedAutomation } from "./AutomationsSplit";
+import { HINT_ICONS, useApplyHint, type HintTarget } from "./HealthSections";
 
 type Tab = "automations" | "runs" | "limits";
 
@@ -122,7 +124,14 @@ export function AutopilotAutomationsTab() {
         {overview.data && !message ? (
           <>
             <StatusStrip overview={overview.data} anyOn={listed.some((i) => !isOffEverywhere(i.reach))} />
-            <NeedsYou needs={overview.data.needsYou} onSelect={(key) => selectAutomation(key)} />
+            <NeedsYou
+              overview={overview.data}
+              onSelect={(key) => selectAutomation(key)}
+              targetFor={(key) => {
+                const item = listed.find((i) => i.automation.key === key);
+                return item ? { onConfig: item.onConfig } : undefined;
+              }}
+            />
             <section className="space-y-2.5">
               <AutomationsSplit items={listed} overview={overview.data} pending={pending} rejected={rejected} />
             </section>
@@ -196,19 +205,61 @@ function StatusStrip({ overview, anyOn }: { overview: AutopilotOverview; anyOn: 
   );
 }
 
-/** What only the user can sort out: failed runs, drafts to review and automations missing setup. Hidden when empty. */
-function NeedsYou({ needs, onSelect }: { needs: AutopilotNeed[]; onSelect: (automation: string) => void }) {
+/**
+ * What only the user can sort out: failed runs, automations that paused themselves in a project, drafts to review,
+ * automations missing setup, and tuning hints. Hidden when empty.
+ */
+function NeedsYou({
+  overview,
+  onSelect,
+  targetFor,
+}: {
+  overview: AutopilotOverview;
+  onSelect: (automation: string) => void;
+  targetFor: (automation: string) => HintTarget | undefined;
+}) {
   const retry = useRetryAutopilotRun();
   const dismissRun = useDismissAutopilotRun();
   const dismissDraft = useDismissAutomationDraft();
+  const resume = useResumeAutoPause();
+  const hint = useApplyHint();
   const navigate = useNavigate();
-  if (needs.length === 0) return null;
+  const { needsYou: needs, autoPaused, hints } = overview;
+  const titleOf = (key: string) => automationTitleOf(overview.automations, key);
+  const count = needs.length + autoPaused.length + hints.length;
+  if (count === 0) return null;
   return (
     <SettingsSection
       id="autopilot.automations.needs-you"
       title="Needs you"
-      headerAction={<span className="text-xs text-muted-foreground tabular-nums">{needs.length}</span>}
+      headerAction={<span className="text-xs text-muted-foreground tabular-nums">{count}</span>}
     >
+      {autoPaused.map((pause) => (
+        <SettingsRow
+          key={`paused:${pause.automation}:${pause.projectId}`}
+          title={
+            <NeedTitle icon={<PauseCircleIcon className="text-warning" />}>
+              {titleOf(pause.automation)} paused itself in {pause.projectTitle}
+            </NeedTitle>
+          }
+          description={`${pause.reason} · ${formatRelativeTimeLabel(pause.pausedAt)}`}
+          control={
+            <>
+              <Button
+                size="xs"
+                variant="outline"
+                disabled={resume.isPending}
+                onClick={() => resume.mutate({ automation: pause.automation, projectId: pause.projectId })}
+              >
+                Resume
+              </Button>
+              <Button size="xs" variant="ghost-muted" onClick={() => onSelect(pause.automation)}>
+                Open
+              </Button>
+            </>
+          }
+        />
+      ))}
       {needs.map((need) => {
         switch (need.kind) {
           case "failed_run":
@@ -297,6 +348,37 @@ function NeedsYou({ needs, onSelect }: { needs: AutopilotNeed[]; onSelect: (auto
             );
         }
       })}
+      {hints.map((h) => (
+        <SettingsRow
+          key={`hint:${h.id}`}
+          title={
+            <NeedTitle icon={HINT_ICONS[h.tone]}>
+              {h.automation ? `${titleOf(h.automation)}: ` : ""}
+              {h.text}
+            </NeedTitle>
+          }
+          control={
+            <>
+              <Button
+                size="xs"
+                variant="outline"
+                disabled={hint.pending}
+                onClick={() => void hint.apply(h, h.automation ? targetFor(h.automation) : undefined)}
+              >
+                {h.action.label}
+              </Button>
+              <Button
+                size="xs"
+                variant="ghost-muted"
+                disabled={hint.dismiss.isPending}
+                onClick={() => hint.dismiss.mutate(h.id)}
+              >
+                Dismiss
+              </Button>
+            </>
+          }
+        />
+      ))}
     </SettingsSection>
   );
 }
