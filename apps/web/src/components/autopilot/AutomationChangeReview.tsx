@@ -246,7 +246,14 @@ export function AutomationChangeReview({
         <Button
           variant="outline"
           disabled={!proposed.ok}
-          onClick={() => proposed.ok && onEditFirst(formFromCustom(proposed.def), scriptChanged)}
+          // The builder can't install the draft's skill, so its form names the skill as if it weren't saved.
+          onClick={() =>
+            proposed.ok &&
+            onEditFirst(
+              formFromCustom(proposedDefinition(current, bundle, { ...fill, installSkill: false })),
+              scriptChanged,
+            )
+          }
         >
           Edit first
         </Button>
