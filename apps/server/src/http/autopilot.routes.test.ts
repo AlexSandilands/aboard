@@ -112,7 +112,9 @@ describe("Autopilot REST routes", () => {
         automation: "archive",
         mode: "inherit",
         config: {},
+        lastOnMode: null,
         enabled: true,
+        preview: false,
         source: "board",
         effectiveConfig: { days: 7 },
       },
@@ -126,6 +128,47 @@ describe("Autopilot REST routes", () => {
     // Back to inherit with no config of its own: the row goes.
     await put(`/api/autopilot/projects/${h.project.id}/archive`, { mode: "inherit", config: {} });
     expect(h.db.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 1 });
+  });
+
+  it("takes Preview at every scope and remembers the last on-mode through Off", async () => {
+    const h = setup();
+    const epic = h.services.tasks.createEpic({ projectId: h.project.id, title: "E" }, [], "agent");
+    const put = (path: string, mode: string) =>
+      h.request(`/api/autopilot/${path}/archive`, { method: "PUT", json: { mode } });
+    const entry = async (res: Response) => ((await res.json()) as AutopilotScopeEntry[])[0]!;
+
+    expect(await entry(await put("board", "preview"))).toMatchObject({
+      mode: "preview",
+      enabled: true,
+      preview: true,
+      lastOnMode: "preview",
+      source: "board",
+    });
+    // Inherit shows the board's Preview.
+    const project = (await (
+      await h.request(`/api/autopilot/projects/${h.project.id}`)
+    ).json()) as AutopilotScopeEntry[];
+    expect(project[0]).toMatchObject({ mode: "inherit", enabled: true, preview: true, source: "board" });
+    expect(await entry(await put(`projects/${h.project.id}`, "on"))).toMatchObject({
+      preview: false,
+      lastOnMode: "on",
+    });
+    expect(await entry(await put(`projects/${h.project.id}/epics/${epic.id}`, "preview"))).toMatchObject({
+      enabled: true,
+      preview: true,
+      source: "epic",
+    });
+
+    // The board's Off saves inherit, and the row stays to remember Preview for the switch.
+    expect(await entry(await put("board", "inherit"))).toMatchObject({
+      mode: "inherit",
+      enabled: false,
+      lastOnMode: "preview",
+    });
+    expect(h.db.prepare("SELECT mode, last_on_mode FROM autopilot_settings WHERE scope_kind = 'board'").get()).toEqual({
+      mode: "inherit",
+      last_on_mode: "preview",
+    });
   });
 
   it("rejects unknown automations, scopes, config keys and bad values", async () => {
@@ -154,7 +197,9 @@ describe("Autopilot REST routes", () => {
         automation: "archive",
         mode: "inherit",
         config: {},
+        lastOnMode: null,
         enabled: true,
+        preview: false,
         source: "board",
         effectiveConfig: { days: 3 },
       },
@@ -207,7 +252,7 @@ describe("Autopilot REST routes", () => {
     // A row left from before the flag was set.
     h.db
       .prepare(
-        "INSERT INTO autopilot_settings VALUES ('epic', ?, 'project_wide', 'on', '{}', '2026-01-01T00:00:00.000Z')",
+        "INSERT INTO autopilot_settings VALUES ('epic', ?, 'project_wide', 'on', '{}', '2026-01-01T00:00:00.000Z', 'on')",
       )
       .run(epic.id);
     const automation = h.services.autopilot.automations().find((a) => a.key === "project_wide")!;

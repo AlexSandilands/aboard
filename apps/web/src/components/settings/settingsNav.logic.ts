@@ -138,6 +138,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
         "limits",
         "quiet hours",
         "dry run",
+        "preview everything",
         "caps",
         "concurrency",
         "variables",
@@ -245,6 +246,10 @@ export function automationOfTarget(target: string | null | undefined): string | 
 
 /** Where a setting went when Settings → Autopilot became tabs, by its old id; one ending in "." moves every row under it. */
 const MOVED_AUTOPILOT: ReadonlyArray<[string, string]> = [
+  // Dry run became Preview everything, under Limits → Advanced (the Safety section before).
+  ["autopilot.engine.dry-run", "autopilot.limits.preview-everything"],
+  ["autopilot.limits.dry-run", "autopilot.limits.preview-everything"],
+  ["autopilot.limits.safety", "autopilot.limits.advanced"],
   ["autopilot.engine.orchestrate.countdown", "board.appearance.autopilot-countdown"],
   ["autopilot.engine.orchestrate", "autopilot.automations.orchestrate"],
   ["autopilot.engine.pause-all", "autopilot.automations.pause-all"],
