@@ -267,8 +267,8 @@ prompt, skill name and allowed tools, any script or check script (in full), the 
 slots **without** their tools. It leaves out your projects, your epic and the tools you filled the slots with. If the
 automation names a skill you have installed, the skill's text goes in the file.
 
-To use someone's file: **+ Add automation → Import a file**, then choose the file (or one of the examples the app ships:
-**Improve prompts and skills** or **Review repo PRs**). Before anything is saved you see everything it
+To use someone's file: **+ Add automation → Import a file**, then choose the file (or the example the app ships:
+**Review repo PRs**). Before anything is saved you see everything it
 would run: the prompt, any command, script or check script (with its language), the tools it may use without asking and
 the skill's text. Treat it as code from a stranger, because once you turn it on it runs on
 your machine with your access. Then fill in its inputs and slots, optionally restrict it to projects, and import.
@@ -283,40 +283,12 @@ Autopilot list when its Preview runs look right and the orange warning is gone.
   it, so check the skill for anything private first.
 - An automation name you already use gets a number: `Triage (2)`.
 - A file made by a newer version of the app is refused, saying so.
-
-### Improve prompts and skills
-
-The first example audits how agents did and suggests changes to the text they run with. Every Monday at 07:00 it
-reads what happened in the project over the past week (`board_activity`: review rounds and findings, failed or
-retried Autopilot runs, blocked steps, stalls, agents' notes), looks closer at the few tasks that went worst (their
-session transcripts only when the notes don't say why), and suggests at most a few rewrites of your review and
-planning skills, your custom automations' prompts and the skills they name. You decide each one under
-**Settings → Tasks → Suggestions** ([Suggested changes](settings.md#suggested-changes)); it never edits anything
-itself.
-
-It comes with its own skill, `aboard-improve`, which keeps the suggestions few and lean:
-
-- each one cites the tasks that show the problem, at least two or one that cost a failed run or a blocked task;
-- it rewrites or deletes the sentence that caused the problem rather than adding one, and a suggestion that makes
-  the text longer says why in its first line;
-- one behaviour per suggestion, no generic advice ("be careful"), the target's own wording and layout kept;
-- with weak evidence it suggests nothing, which is a good week.
-
-Its handover remembers what it suggested, so the next run sees whether you accepted it and whether the problem went
-away. `get_editable_prompt` shows each prompt's recent suggestions and what you decided, so it never suggests again
-what you rejected. Text the board itself ships (its tool descriptions) can't be suggested to; if one of your
-projects is the board's own code, it adds a backlog task there instead.
-
-To use it: **Import → Example: Improve prompts and skills**, switch **Save the skill** on (without the skill it
-suggests nothing), and check the inputs: **Look back (whole days)** (7), **Most suggestions per run** (3) and **May
-suggest changes to** (`skills`, `prompts` or `all`). Switch it on in the projects to audit. It runs on the deep model
-tier, once per project it's on in. A run that finds another project's run already left a suggestion open for the
-same skill or prompt leaves it alone; two runs at the same moment can still both suggest, and the later one replaces
-the earlier (it stays in the history).
+- The "Improve prompts and skills" example that older versions shipped is now the built-in
+  [Improve automations](autopilot.md#improve-automations). One you imported earlier keeps working as it is.
 
 ### Review repo PRs
 
-The second example is a pull request reviewer built on a [check script](#check-scripts), for the repository of each
+The example is a pull request reviewer built on a [check script](#check-scripts), for the repository of each
 project it's on in. It also covers pull requests that aren't linked to a task, which the built-in **Review PRs** can't
 see. It needs the GitHub CLI (`gh`), signed in as the account that should post the reviews.
 

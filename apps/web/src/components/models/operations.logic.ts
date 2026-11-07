@@ -22,7 +22,7 @@ export const OPERATION_GROUPS: readonly OperationGroup[] = [
   {
     id: "autopilot",
     title: "Autopilot",
-    operations: ["taskRun", "orchestrate", "digest", "customTask", "customDetached"],
+    operations: ["taskRun", "orchestrate", "improve", "digest", "customTask", "customDetached"],
   },
   { id: "board", title: "Board tools", operations: ["launch", "issueImport", "ask"] },
 ];
@@ -36,6 +36,7 @@ export const OPERATION_DESCRIPTIONS: Record<OperationId, string> = {
   prReview: "Review PRs: reads a pull request and posts its review on GitHub.",
   prFix: "Fix PRs: works on a pull request's failed checks, conflicts and review comments.",
   orchestrate: "Orchestrate's check over a project's work every few minutes.",
+  improve: "Improve automations: the weekly audit that suggests changes to prompts and skills.",
   digest: "The digest written by an agent.",
   customTask: "A custom automation's agent that works on a task.",
   customDetached: "A custom automation's agent that runs on a schedule, with no task.",
