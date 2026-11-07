@@ -10,7 +10,7 @@ same services, so an agent's change reaches open browsers within a second.
         ▲                          ├─► services/* ─► SQLite transaction ─┤
         └──SSE /events◄── bus ◄────┤                     └── commit ─► BoardEvents ─► bus
  agents ──MCP POST /mcp────────────┘
- pollers (GitHub, T3 Code, review watchdog, Autopilot) ──► services/*
+ pollers (git hosts, T3 Code, review watchdog, Autopilot) ──► services/*
  headless runs ──MCP POST /mcp/run (run token) ──► run tools ──► GitHost (read-only)
 ```
 
@@ -160,16 +160,19 @@ Where the rules live: [task lifecycle](features/task-lifecycle.md), [plans](feat
 All optional, all in `apps/server/src/integrations/`, started together by `createIntegrations().start()`
 on independent timers:
 
-- **GitHub:** batched GraphQL for PR links on GitHub hosts (every 20 seconds for PRs that are changing, down to
-  every 30 minutes for finished ones), with the token `gh` holds,
-  and merging on request ([ADR 0006](decisions/0006-github-graphql-via-gh-token.md)). See
-  [github-prs.md](features/github-prs.md). What headless runs read from GitHub goes through a `GitHost`
-  (`integrations/gitHost.ts`, GitHub's in `githubHost.ts`, REST with the same token), served to the run as its
-  [run tools](features/autopilot.md#run-tools).
+- **Git hosts (GitHub):** every call to a git host goes through a `GitHost`, picked for a host name by the
+  `GitHosts` registry (`integrations/gitHost.ts`, `gitHosts.ts`; [ADR 0014](decisions/0014-git-hosts.md)). The
+  host-neutral PR poller (`prPoller.ts`) reads PR links in batches (every 20 seconds for PRs that are changing, down to
+  every 30 minutes for finished ones), and `prMerge.ts` merges on request with the board's own guards. GitHub's host
+  (`githubHost.ts`) uses GraphQL and REST with the token `gh` holds
+  ([ADR 0006](decisions/0006-github-graphql-via-gh-token.md)). See [github-prs.md](features/github-prs.md). What
+  headless runs read goes through the same `GitHost`, served to the run as its
+  [run tools](features/autopilot.md#run-tools). Nothing outside `integrations/github*.ts` imports `gh.ts`,
+  `githubApi.ts` or the GraphQL code.
 - **T3 Code:** discovery every 60 seconds from `~/.t3/userdata/server-runtime.json`, live thread status
   every 20 seconds while a browser is connected and a token is set, project import, and thread launches
   over T3's WebSocket RPC. See [agent-handoff.md](features/agent-handoff.md).
-- **Issue import:** not a timer. A task created with a `sourceUrl` starts a background job (`gh`, then
+- **Issue import:** not a timer. A task created with a `sourceUrl` starts a background job (the issue's git host, then
   `claude -p`); imports left pending by a restart resume at startup. See
   [issue-import.md](features/issue-import.md).
 - **Agent sessions:** every 20 seconds while a browser is connected and a session is linked, the status of

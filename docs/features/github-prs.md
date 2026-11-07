@@ -4,7 +4,9 @@ PR links on GitHub and GitHub Enterprise show their live state on the card (open
 checks, review, conflicts), and problems surface under **Needs attention**. A task in Review can merge
 its PR, or turn on auto-merge, from the board. The board calls GitHub's GraphQL API with the token the
 user's `gh` CLI holds, so it needs no token of its own
-([ADR 0006](../decisions/0006-github-graphql-via-gh-token.md)).
+([ADR 0006](../decisions/0006-github-graphql-via-gh-token.md)). GitHub is one git host kind behind the `GitHost`
+interface and the `GitHosts` registry ([ADR 0014](../decisions/0014-git-hosts.md)): the poller, the merges and
+Autopilot are host-neutral and reach GitHub only through it.
 
 ## How it works
 
@@ -20,18 +22,22 @@ parse URLs) gave a ref to links stored before this, as plain URLs or ref-less PR
 
 ### Hosts and sign-in
 
-- The poller only asks hosts that are GitHub: github.com, `*.ghe.com`, a host with a `github` DNS label
-  (`github.example.com`), or any host `gh` is signed in to. A link to `/a/b/pull/1` on some other site
+- The poller only asks hosts a git host kind serves (`GitHosts.forHost`, `integrations/gitHosts.ts`). For GitHub
+  that is github.com, `*.ghe.com`, a host with a `github` DNS label (`github.example.com`; `GITHUB_HOST.claimsHost`
+  in `packages/contracts/src/gitHosts.ts`), or any host `gh` is signed in to. A link to `/a/b/pull/1` on some other site
   is never sent anywhere.
 - And only hosts `gh` is signed in to, since that's where its token is sent. `gh auth status --json
-  hosts` is read every 10 minutes and shown per host in Settings. A `gh` too old for `--json` falls
+  hosts` and `gh --version` are read every 10 minutes (`githubStatus.ts`) and shown in Settings: the CLI and its
+  version, then each host and its account. `GET /api/integrations/status` returns them as `gitHosts`, one
+  `GitHostStatus` per kind. A `gh` too old for `--json` falls
   back to the exit code of `gh auth status`, which can't name hosts, so only github.com is used then.
 - The token is `gh auth token --hostname <host>`, kept in memory for five minutes (`githubApi.ts`).
   A 401 on a cached token asks `gh` once more before failing.
 
 ### Polling
 
-`apps/server/src/integrations/github.ts`:
+`apps/server/src/integrations/prPoller.ts`, which reads each batch with the host's `readSnapshots` (GitHub's GraphQL
+query and mapping are `githubSnapshot.ts`):
 
 - A tick every 20 seconds picks the `pr` links that are due (`prIsDue`, `integrations/prPolling.ts`), groups them
   by host and repo, and reads each group with one aliased query (`pollQuery`: `pr0`, `pr1`, … with numbers as
@@ -98,13 +104,14 @@ when it changed.
 The poller's snapshot (`state`, `headRef`, `headOid`, `isCrossRepository`) is what the **Review PRs** automation
 reads: it reviews an open (or, if asked, draft) PR once per head commit. The reviewer reads the PR (its overview,
 files, paged diff and comments) through the board's [run tools](autopilot.md#run-tools), which read GitHub's REST API
-with the same `gh` token through `GitHost` (`integrations/githubHost.ts`); it has no `gh` of its own. `postReview` posts the result with the
+with the same `gh` token through `GitHost` (`integrations/githubReads.ts`); it has no `gh` of its own. `postReview` posts the result with the
 `gh` token as one review with `event: COMMENT` (`addPullRequestReview`), after checking the PR's live head is the
 commit that was reviewed; inline comments GitHub refuses (a line outside the diff) go into the body. When GitHub
 answers a post with an error, `postReview` looks for the review among the account's own at that head
 (`findPostedReview`, starting with the review header) before reporting the failure, so a review that landed counts as
-posted. Its errors read "GitHub couldn't post the review: …" and keep their kind, which `isTransientGithubError` (also
-used by the epic merge) reads to tell what is worth another try. See
+posted. Its errors read "GitHub couldn't post the review: …" and keep their reason (`GitHostError`), which
+`isTransientHostError` (also used by the epic merge) reads to tell what is worth another try. Autopilot reaches all of
+this through `ctx.gitHosts` (`gitHostActions`), which sends each call to the host the PR is on. See
 [Autopilot](autopilot.md#automations).
 
 **Fix PRs** reads `checks`, `mergeable`, `reviewDecision`, `reviews` and `reviewComments` to decide when a PR needs
@@ -172,7 +179,7 @@ the default branch, for tasks the user allowed to be merged that way ([ADR 0008]
   local review going or blocking/major findings open, a Review PRs or Fix PRs run going, Review PRs (when on) not
   clean at the head, changes requested, checks not passing (or none for 10 minutes), not cleanly mergeable, GitHub saying it is blocked (a required check not reported yet) unless only a review is missing. Also when
   an approving review is still required, the account can't merge, or the repo doesn't allow the method asked for.
-- **Merging.** `GithubIntegration.mergeIntoDefaultBranch` reads the PR fresh, runs `checkAutopilotMergeTarget` with
+- **Merging.** `mergeIntoDefaultBranch` (`integrations/prMerge.ts`) reads the PR fresh with the host's `mergeTarget`, runs `checkAutopilotMergeTarget` with
   `into: "default"` (the base must be GitHub's default branch, and still the one the snapshot showed), stops with a
   `CONFLICT` and refreshes the link if the head moved, refuses unless GitHub's `mergeStateStatus` is `CLEAN`,
   `HAS_HOOKS` or `UNSTABLE` (so an admin's account never merges past a branch rule such as a required approval), then calls `mergePullRequest` with `expectedHeadOid` and the
@@ -254,7 +261,13 @@ still unknown, one merge mustn't finish a task whose other PR is open.
 | File                                                     | What it does                                                    |
 | -------------------------------------------------------- | --------------------------------------------------------------- |
 | `apps/server/src/integrations/githubApi.ts`              | API URLs, `gh` tokens, auth status, GraphQL with error and rate-limit handling |
-| `apps/server/src/integrations/github.ts`                 | Hosts, polling, `mapPrSnapshot`, `refresh`, `merge`             |
+| `apps/server/src/integrations/gitHost.ts`, `gitHosts.ts` | The `GitHost` interface, `GitHostError`, the registry and Autopilot's actions |
+| `apps/server/src/integrations/prPoller.ts`               | Polling, back-off, `viewTask`, `pollLink`, `refresh`            |
+| `apps/server/src/integrations/prMerge.ts`                | The panel merge, the epic and default-branch merges and their guards |
+| `apps/server/src/integrations/githubHost.ts`             | GitHub's `GitHost`: merges, reviews, threads, epic PRs, `agentHints` |
+| `apps/server/src/integrations/githubSnapshot.ts`         | `pollQuery`, `mapPrSnapshot`, each check's newest run           |
+| `apps/server/src/integrations/githubStatus.ts`           | `gh --version` and `gh auth status`                             |
+| `packages/contracts/src/gitHosts.ts`                     | Host kind definitions (`GITHUB_HOST`) and `GitHostStatus`       |
 | `apps/server/src/integrations/prPolling.ts`              | `prTier`, `prIsDue`: how often each PR is read                  |
 | `apps/server/src/integrations/gh.ts`                     | Running `gh`                                                    |
 | `apps/server/src/integrations/index.ts`                  | Starts the integrations, `refreshLink`, `mergePr`, `mergeTaskPr` |
@@ -263,7 +276,7 @@ still unknown, one merge mustn't finish a task whose other PR is open.
 | `apps/server/src/mcp/tools/merge.ts`                     | The `merge_task_pr` tool                                        |
 | `apps/server/src/services/links.ts`                      | Adding links, `setSnapshot`, `completeOnMerge`                  |
 | `apps/server/src/db/codeMigrations.ts`                   | Re-classifying stored PR links                                  |
-| `apps/server/src/test/fakeGithub.ts`                     | Fake `gh` and GraphQL API for tests                             |
+| `apps/server/src/test/fakeGithub.ts`                     | Fake `gh` and GraphQL API, and `createGithubStack`, for tests   |
 | `packages/contracts/src/links.ts`                        | URL and key classification                                      |
 | `packages/contracts/src/merge.ts`                        | `prMergeAction`, `pickMergeMethod`, `MergePrInput`              |
 | `packages/contracts/src/derive.ts`                       | `deriveAttention`                                               |

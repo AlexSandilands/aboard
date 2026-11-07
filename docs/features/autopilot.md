@@ -399,7 +399,7 @@ as comments only.
 
   Before the agent starts the runner checks the worktree is at the commit the run is about (`expectHead`,
   `WorktreeHeadError`) and, when it isn't, removes the worktree and its branch (the run records neither). A branch
-  that moved past the commit skips the run. So does a rewritten branch (a force-push) once `GithubActions.prHead`
+  that moved past the commit skips the run. So does a rewritten branch (a force-push) once `ctx.gitHosts.prHead`
   says GitHub's head is no longer that commit; if GitHub still says it is, the checkout is what's wrong (a stale
   `origin`, a fork's branch name that exists on `origin`, a PR in another repository) and the run fails, flagged,
   before any budget is spent. A read-only run may read the default branch (a PR from `main`), since it can't push.
@@ -410,7 +410,7 @@ as comments only.
 - **The server posts.** The agent answers with a summary and every point (severity, file, line, body, suggestion,
   `fyi`). `renderReview` builds one review from it: the summary under `📋 <displayName> Autopilot review`
   (`prReviewHeader`, from `BRAND`), points with no place in the diff and the FYI ones in the body, and the rest as
-  inline comments starting with `📋 <displayName> Autopilot · <severity>`. `GithubIntegration.postReview` sends it
+  inline comments starting with `📋 <displayName> Autopilot · <severity>`. `ctx.gitHosts.postReview` (GitHub's `GitHost`, `githubHost.ts`) sends it
   with the `gh` token as a GraphQL `addPullRequestReview` with `event: COMMENT`: it can never approve or request
   changes, and it comes from the user's own `gh` login. It first reads the PR's live head and refuses with
   `StaleReviewError` when that isn't the commit that was reviewed (a push while the agent worked): nothing is posted,
@@ -435,7 +435,7 @@ as comments only.
   head commit in full, round, counts, FYI count, threshold, actionable count and `handoff`). An answer that isn't a
   review fails the run, flagged, and nothing is posted; a review GitHub refuses fails it too, and so does an agent
   that failed (its text is the run's error: for an API error, such as a 403, `claudeFailure` says that text
-  rather than only the subtype). GitHub failing in passing (`isTransientGithubError`: "try again", "internal error",
+  rather than only the subtype). GitHub failing in passing (`isTransientHostError`: "try again", "internal error",
   `HTTP 5xx`, a timeout or the network) while posting ends the run `skipped` ("will retry"), not a round used, with
   `output.retry`; each try is a full review, as the agent runs again. The next pass reviews the same head again under the key `review:pr:<linkId>:<headOid>:<n>`, up to
   `REVIEW_ATTEMPTS` (3) tries, after which it fails, flagged. Any other failed run is never retried, so there is one
@@ -556,7 +556,7 @@ switched on, with no settings. Only epics with integration delivery ([epics](epi
   changes on GitHub; checks pass, or none has reported for `NO_CHECKS_WAIT_MS` (10 minutes) since the board first saw
   the head (`PrChanges.newHead`, else the link's creation: GitHub reports no checks for a moment after a push); and
   GitHub says it merges cleanly and isn't blocked on a check or rule (only a missing review is left to GitHub). The dedupe key is `merge:<linkId>:<headOid>`. The action re-checks all
-  of it, then calls `GithubIntegration.mergeIntoEpicBranch`: a fresh read of the PR and the repository's default
+  of it, then calls `ctx.gitHosts.mergeIntoEpicBranch` (`integrations/prMerge.ts`): a fresh read (the host's `mergeTarget`) of the PR and the repository's default
   branch, `checkAutopilotMergeTarget` (refuses the default branch, a base that isn't an `epic/` branch, and a PR
   retargeted since the check, with `MergeTargetError`), and `mergePullRequest` at `expectedHeadOid`. The method comes from the repository's `mergeCommitAllowed`,
   `squashMergeAllowed` and `rebaseMergeAllowed` as that same read says now, not the snapshot's `mergeMethods`, which
@@ -1415,7 +1415,8 @@ and tool rules only Claude Code can follow ([ADR 0013](../decisions/0013-board-s
   the PR's own text as untrusted.
 - **What they read through.** A `GitHost` (`integrations/gitHost.ts`): `getPr`, `listFiles` (with each file's patch),
   `getDiff(path, page)`, `getComments` (conversation comments, review bodies and inline comments with their ids,
-  oldest first) and `getIssue`. GitHub's (`integrations/githubHost.ts`) reads REST (`GithubApi.rest`) with the `gh`
+  oldest first) and `getIssue` (`GitHostReads`, found by the run's target host through the `GitHosts` registry). GitHub's
+  (`integrations/githubReads.ts`) reads REST (`GithubApi.rest`) with the `gh`
   token, 100 a page up to 30 pages; a file GitHub serves no patch for (binary, too large) says so.
 - **Which providers.** The `runTools` capability: Claude Code and Codex. A run with `runTools` adds the `runTools`
   need, so the resolver never picks the Copilot CLI for it, and it runs headless only.
@@ -1526,7 +1527,7 @@ One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` 
   it runs. Return `needsAttention: true` for a failure the user should see.
 
 An automation must never merge into the default branch itself, close or delete tasks, force-push or push to the
-default branch. Its own merge is Merge into epic branch's, through `GithubIntegration.mergeIntoEpicBranch`; an
+default branch. Its own merge is Merge into epic branch's, through `ctx.gitHosts.mergeIntoEpicBranch`; an
 agent it starts (Orchestrate's) reaches the default branch only through `merge_task_pr`, for flagged tasks.
 
 ### The UI
@@ -1611,7 +1612,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/integrations/headlessAgent.ts` | `claude -p` arguments for agent runs, the push deny rules, the outcome, the driver interface |
 | `apps/server/src/integrations/headlessDrivers.ts` | The Codex and Copilot CLI drivers, capabilities and the fallback to Claude Code |
 | `apps/server/src/mcp/runTokens.ts`, `mcp/runTools.ts` | Run tools: the tokens, `/mcp/run` and the tool sets |
-| `apps/server/src/integrations/gitHost.ts`, `githubHost.ts` | `GitHost`, the paging helpers, and GitHub's implementation |
+| `apps/server/src/integrations/gitHost.ts`, `githubReads.ts` | `GitHost`, the paging helpers, and GitHub's reads |
+| `apps/server/src/integrations/gitHosts.ts` | The `GitHosts` registry and `gitHostActions`, what `ctx.gitHosts` is |
 | `apps/server/src/autopilot/engine.ts` | The pass, the event and tick wiring |
 | `apps/server/src/autopilot/limits.ts` | `agentHold`: quiet hours, concurrency and the daily caps, for the engine and Orchestrate's state |
 | `apps/server/src/autopilot/automations/index.ts` | The catalogue |
@@ -1628,7 +1630,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `packages/contracts/src/runThreads.ts` | `t3RunWorking`: whether a T3 thread a run handed work to is still working on it, for Start planned, Fix PRs and the PR row |
 | `apps/server/src/autopilot/threads.ts` | `threadSeen`: whether the live poll has seen a thread lately |
 | `packages/contracts/src/prReview.ts` | The review verdict, `PrReviewRunOutput`, `currentPrReview`, the threshold rules, the header |
-| `apps/server/src/integrations/github.ts` | `postReview`: the comment review, with its head check and inline fallback; `mergeIntoEpicBranch`, `checkAutopilotMergeTarget`, `ensureEpicPr`, `setPrBody` |
+| `apps/server/src/integrations/githubHost.ts` | GitHub's `postReview` (the comment review, with its head check and inline fallback), `ensurePr`, `setPrBody`, review threads and `agentHints` (the fix prompt's `gh` commands) |
+| `apps/server/src/integrations/prMerge.ts` | `mergeIntoEpicBranch`, `checkAutopilotMergeTarget`, `epicMergeMethods` |
 | `apps/server/src/autopilot/automations/recurring.ts`, `services/recurring.ts` | Recurring tasks: the automation, and the rules' service |
 | `packages/contracts/src/recurring.ts` | Rule and schedule schemas, `nextDue`, `latestDue` |
 | `packages/contracts/src/customAutomations.ts` | Custom triggers, filters and actions, placeholders, the shell environment, the definition check |
