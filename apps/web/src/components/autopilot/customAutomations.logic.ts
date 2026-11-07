@@ -100,14 +100,6 @@ export interface CustomForm {
   timeoutSeconds: string;
 }
 
-export const TRIGGER_KINDS: ReadonlyArray<{ value: CustomTrigger["kind"]; label: string }> = [
-  { value: "status_change", label: "A task changes column" },
-  { value: "pr_event", label: "Something happens on a pull request" },
-  { value: "stale", label: "A task sits in a column too long" },
-  { value: "blocker_finished", label: "A task's last blocker finishes" },
-  { value: "schedule", label: "On a schedule" },
-];
-
 export const PR_EVENTS: ReadonlyArray<{ value: CustomPrEvent; label: string }> = [
   { value: "linked", label: "Linked to the task" },
   { value: "new_head", label: "Gets new commits" },

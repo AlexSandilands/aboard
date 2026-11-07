@@ -874,7 +874,7 @@ function sectionSummaries(form: CustomForm, projects: readonly Project[], epics:
   const details =
     form.actionKind === "agent"
       ? [
-          form.prompt.trim() ? `${form.prompt.trim().split("\n").length} line prompt` : "No prompt yet",
+          form.prompt.trim() ? `${form.prompt.trim().split("\n").length}-line prompt` : "No prompt yet",
           form.triggerKind === "schedule" && form.checkOn ? `${form.checkLanguage} check script` : null,
           form.skill.trim() ? `skill ${form.skill.trim()}` : null,
           parseAllowedTools(form.allowedTools).length > 0
@@ -885,7 +885,7 @@ function sectionSummaries(form: CustomForm, projects: readonly Project[], epics:
       : form.actionKind === "shell"
         ? [form.command.trim() || "No command yet", form.inputs.length > 0 ? `${form.inputs.length} inputs` : null]
         : [
-            `${form.body.split("\n").length} line ${form.language} script`,
+            `${form.body.split("\n").length}-line ${form.language} script`,
             form.inputs.length > 0 ? `${form.inputs.length} inputs` : null,
           ];
   const named = projects.filter((p) => form.projectIds.includes(p.id)).map((p) => p.title);
@@ -945,21 +945,21 @@ export function ReviewStep({
           <p className="text-sm leading-relaxed text-foreground">{sentence}</p>
         </Block>
         {sectionSummaries(form, projects, epics).map((section) => (
-          <SettingsRow
-            key={section.title}
-            title={section.title}
-            description={<span className="break-words">{section.text}</span>}
-            control={
-              <Button
-                size="xs"
-                variant="ghost-muted"
-                aria-label={`Edit ${section.title}`}
-                onClick={() => onStep(section.step)}
-              >
-                Edit
-              </Button>
-            }
-          />
+          // Its own row rather than a SettingsRow, so Edit stays beside the line on a phone instead of under it.
+          <div key={section.title} className="flex items-center gap-3 px-3 py-3 sm:px-4">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm text-foreground">{section.title}</div>
+              <div className="text-xs break-words text-muted-foreground">{section.text}</div>
+            </div>
+            <Button
+              size="xs"
+              variant="ghost-muted"
+              aria-label={`Edit ${section.title}`}
+              onClick={() => onStep(section.step)}
+            >
+              Edit
+            </Button>
+          </div>
         ))}
       </StepCard>
 
