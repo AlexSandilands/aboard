@@ -63,7 +63,7 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
     // `harness`: the CLI the fix starts in, as one that picks its own session id is told to link itself.
     handle((c) => {
       const { harness } = parseQuery(c, z.object({ harness: AgentHarness.optional() }));
-      return c.json(manualFix(services, idParam(c), harness));
+      return c.json(manualFix(services, idParam(c), (pr) => integrations.prAgentHints(pr), harness));
     }),
   );
   app.get(

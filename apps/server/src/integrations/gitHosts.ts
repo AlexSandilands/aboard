@@ -1,4 +1,5 @@
-import type { GitHostStatus, IssueRef, MergeMethod, PrRef, TaskLink } from "@repo/contracts";
+import { GITHUB_HOST } from "@repo/contracts";
+import type { GitHostDefinition, GitHostStatus, IssueRef, MergeMethod, PrRef, TaskLink } from "@repo/contracts";
 import { AppError } from "../errors.ts";
 import {
   GitHostError,
@@ -80,6 +81,10 @@ export interface GitHostActions {
   /** The PR's unresolved review threads and newest commits, read now. */
   reviewThreads(ref: PrRef): Promise<PrThreadState>;
   resolveReviewThread(host: string, threadId: string): Promise<void>;
+  /** The commands an agent fixing the PR runs, in its host's CLI. */
+  agentHints(pr: { host: string; repo: string; number: number }): PrAgentHints;
+  /** What the host serving `host` is called and which CLI it uses, for prompts and notes. */
+  definitionFor(host: string): GitHostDefinition;
 }
 
 /** The actions, each sent to the host serving its PR, after checking the CLI is signed in there. */
@@ -104,6 +109,8 @@ export function gitHostActions(hosts: GitHosts, merges: Pick<PrMerges, "mergeInt
     setPrBody: async (ref, body) => (await on(ref.host)).setPrBody(ref, body),
     reviewThreads: async (ref) => (await on(ref.host)).reviewThreads(ref),
     resolveReviewThread: async (host, threadId) => (await on(host)).resolveReviewThread(host, threadId),
+    agentHints: (pr) => hosts.agentHints(pr),
+    definitionFor: (host) => (hosts.forHost(host) ?? hosts.all()[0]!).definition,
   };
 }
 
@@ -155,4 +162,9 @@ export const NO_GIT_HOSTS: GitHostActions = {
   setPrBody: unavailable,
   reviewThreads: unavailable,
   resolveReviewThread: unavailable,
+  agentHints: () => {
+    throw new Error("No git host is available");
+  },
+  // Only names things in a prompt; GitHub's name is what every PR had before there were other hosts.
+  definitionFor: () => GITHUB_HOST,
 };

@@ -250,6 +250,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     t3Status: () => t3.status(),
     gitHostStatuses: () => hosts.statuses(),
     prHostHoldsTasks: (host) => hosts.holdsTasks(host),
+    prAgentHints: (pr) => hosts.agentHints(pr),
     runTools,
     start() {
       if (!deps.config.pollers || started) return;
