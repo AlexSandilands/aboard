@@ -11,7 +11,7 @@ import { AgentsPage } from "../agents/AgentsPage";
 import { AppearanceSection } from "../AppearanceSection";
 import { ArchivedProjectsSection } from "../ArchivedProjectsSection";
 import { BackupSection } from "../BackupSection";
-import { GithubSection } from "../IntegrationsSections";
+import { GitHostsSection } from "../IntegrationsSections";
 import { IssueImportSection } from "../IssueImportSection";
 import { KeybindingsSection } from "../KeybindingsSection";
 import { PlanSkillSection } from "../PlanSkillSection";
@@ -117,7 +117,7 @@ function IntegrationsContent() {
     <>
       <SettingsSubsection id="integrations.github">
         <WithSettings>
-          {(settings) => <GithubSection settings={settings} status={integrations.data?.github} />}
+          {(settings) => <GitHostsSection settings={settings} statuses={integrations.data?.gitHosts} />}
         </WithSettings>
       </SettingsSubsection>
       <SettingsSubsection id="integrations.tickets">
