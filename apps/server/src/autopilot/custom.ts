@@ -631,8 +631,10 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
           operation: "customTask",
           // The action's model is its author's choice, so a task label doesn't override it; the Model setting does.
           modelChoice: action.model,
-          options: ctx.config,
-          // Makes the run headless: a T3 thread can't be given extra tools. The push and merge deny rules still apply.
+          // Extra tools make the run headless: a T3 thread can't be given them. So it runs headless whatever the runner
+          // says, or a board default of T3 Code would fail every such automation. The push and merge deny rules still
+          // apply.
+          options: tools.length > 0 ? { ...ctx.config, runner: "headless" } : ctx.config,
           ...(tools.length > 0 ? { tools } : {}),
           ...(branch ? { workspace: { branch } } : {}),
         });

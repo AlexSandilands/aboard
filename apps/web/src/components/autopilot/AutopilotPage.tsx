@@ -125,7 +125,7 @@ export function AutopilotAutomationsTab() {
             <StatusStrip overview={overview.data} anyOn={listed.some((i) => !isOffEverywhere(i.reach))} />
             <NeedsYou needs={overview.data.needsYou} onSelect={(key) => selectAutomation(key)} />
             <section className="space-y-2.5">
-              <AutomationsSplit items={listed} overview={overview.data} pending={pending} rejected={rejected} />
+              <AutomationsSplit items={listed} pending={pending} rejected={rejected} />
             </section>
           </>
         ) : (

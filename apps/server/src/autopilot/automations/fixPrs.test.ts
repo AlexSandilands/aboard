@@ -231,6 +231,9 @@ function setup() {
     setThreadState: (patch: Partial<PrThreadState>) => (threadState = { ...threadState, ...patch }),
     failResolve: (message: string | Record<string, string> | null) => (failResolve = message),
     engineSettings: (patch: Partial<AutopilotEngineSettings>) => s.autopilot.updateEngine(patch),
+    /** Fix PRs' board-scope config: its attempts and threshold, once engine settings. */
+    fixSettings: (config: Record<string, unknown>) =>
+      s.autopilot.setScope("board", null, AUTOPILOT_FIX_PRS, { config }),
   };
 }
 
@@ -606,8 +609,8 @@ describe("fix PRs: limits", () => {
   });
 
   it("gives up once the PR's rounds are used, failed attempts included and skipped ones not", async () => {
-    const { requests, setPr, pass, turnOn, runs, engineSettings, failRunner } = setup();
-    engineSettings({ prReviewRounds: 2 });
+    const { requests, setPr, pass, turnOn, runs, failRunner, fixSettings } = setup();
+    fixSettings({ attempts: 2 });
     turnOn();
     failRunner(new WorktreeHeadError("moved", SHA_B, true));
     setPr({ checks: "failing" });
@@ -634,8 +637,8 @@ describe("fix PRs: limits", () => {
     const head = (n: number) => n.toString(16).padStart(40, "0");
 
     it("don't use up the rounds or the attempts per head that review points and checks have", async () => {
-      const { requests, setPr, pass, turnOn, runs, engineSettings } = setup();
-      engineSettings({ prReviewRounds: 2 });
+      const { requests, setPr, pass, turnOn, runs, fixSettings } = setup();
+      fixSettings({ attempts: 2 });
       turnOn();
       for (const n of [1, 2, 3]) {
         setPr({ mergeable: "conflicting", headOid: head(n) });
@@ -705,8 +708,8 @@ describe("fix PRs: limits", () => {
     });
 
     it("still run once the rounds and the attempts at that head are used, and once the checks are given up on", async () => {
-      const { requests, setPr, pass, turnOn, runs, engineSettings, linkId } = setup();
-      engineSettings({ prReviewRounds: 1 });
+      const { requests, setPr, pass, turnOn, runs, linkId, fixSettings } = setup();
+      fixSettings({ attempts: 1 });
       turnOn();
       setPr({ checks: "failing", headOid: head(1) });
       await pass();
@@ -729,8 +732,8 @@ describe("fix PRs: limits", () => {
     });
 
     it("count a mixed attempt as a round", async () => {
-      const { requests, setPr, pass, turnOn, runs, engineSettings } = setup();
-      engineSettings({ prReviewRounds: 1 });
+      const { requests, setPr, pass, turnOn, runs, fixSettings } = setup();
+      fixSettings({ attempts: 1 });
       turnOn();
       setPr({ checks: "failing", mergeable: "conflicting", headOid: head(1) });
       await pass();
@@ -769,8 +772,8 @@ describe("fix PRs: budgets", () => {
   });
 
   it("counts an attempt on Autopilot's review and a colleague's comments against both budgets", async () => {
-    const { requests, setPr, pass, turnOn, runs, reviewed, engineSettings, linkId } = setup();
-    engineSettings({ prCommentRounds: 1 });
+    const { requests, setPr, pass, turnOn, runs, reviewed, linkId, fixSettings } = setup();
+    fixSettings({ commentAttempts: 1 });
     turnOn();
     reviewed();
     setPr({ reviewComments: [comment(1)] });
@@ -785,8 +788,8 @@ describe("fix PRs: budgets", () => {
   });
 
   it("gives other people's comments attempts of their own, apart from Autopilot's review and checks", async () => {
-    const { requests, setPr, pass, turnOn, runs, engineSettings, linkId } = setup();
-    engineSettings({ prReviewRounds: 1, prCommentRounds: 2 });
+    const { requests, setPr, pass, turnOn, runs, linkId, fixSettings } = setup();
+    fixSettings({ attempts: 1, commentAttempts: 2 });
     turnOn();
     setPr({ checks: "failing", headOid: SHA_A });
     await pass();
@@ -809,8 +812,8 @@ describe("fix PRs: budgets", () => {
   });
 
   it("goes on with comments once the review's rounds are used", async () => {
-    const { requests, setPr, pass, turnOn, runs, engineSettings, linkId } = setup();
-    engineSettings({ prReviewRounds: 1 });
+    const { requests, setPr, pass, turnOn, runs, linkId, fixSettings } = setup();
+    fixSettings({ attempts: 1 });
     turnOn();
     setPr({ checks: "failing", headOid: SHA_A });
     await pass();
@@ -1162,7 +1165,7 @@ describe("manualFix: Fix in → on a PR", () => {
 
 describe("fix PRs: an integration epic's own PR", () => {
   it("fixes only its conflicts with the default branch, in a session of its own on the epic's branch", async () => {
-    const { s, project, requests, pass, turnOn, engineSettings } = setup();
+    const { s, project, requests, pass, turnOn, fixSettings } = setup();
     turnOn();
     const epic = s.tasks.createEpic({ projectId: project.id, title: "Checkout" }, [], "user");
     const pr = () => s.tasks.summary(epic.id).links.find((l) => l.kind === "pr")!;
@@ -1197,7 +1200,7 @@ describe("fix PRs: an integration epic's own PR", () => {
     expect(requests[0]!.prompt).toContain("never merge the pull request");
 
     // Conflicts have a budget of their own, so the epic's PR keeps being fixed past the PR rounds.
-    engineSettings({ prReviewRounds: 1 });
+    fixSettings({ attempts: 1 });
     for (const sha of [SHA_A, SHA_B]) {
       epicPr({ mergeable: "conflicting", headOid: sha });
       await pass();
