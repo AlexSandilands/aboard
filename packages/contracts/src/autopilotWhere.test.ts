@@ -17,10 +17,11 @@ import {
   type AutopilotModeRow,
   type WhereDescription,
   type WhereInput,
+  type WhereState,
   type WhereWrite,
 } from "./autopilotWhere.ts";
 
-const MODES: AutopilotMode[] = ["inherit", "on", "off"];
+const MODES: AutopilotMode[] = ["inherit", "on", "preview", "off"];
 const PROJECTS = [
   { id: "p1", title: "storefront" },
   { id: "p2", title: "payments-api" },
@@ -42,26 +43,35 @@ const input = (
   epics: EPICS.map((e) => ({ ...e, mode: epics[e.id] ?? "inherit" })),
 });
 
-/** What the engine's own rule says about a task in the project (and epic). */
-function engineSays(i: WhereInput, projectId: string, epicId?: string): boolean {
+/** What the engine's own rule says about a task in the project (and epic): off, in Preview or on. */
+function engineState(i: WhereInput, projectId: string, epicId?: string): WhereState {
   const project = i.projects.find((p) => p.id === projectId)!;
   const epic = i.epics.find((e) => e.id === epicId);
   const config = {};
-  return resolveAutopilot([
+  const resolved = resolveAutopilot([
     { scopeKind: "board", mode: i.board, config },
     { scopeKind: "project", mode: project.mode, config },
     epic ? { scopeKind: "epic", mode: epic.mode, config } : null,
-  ]).enabled;
+  ]);
+  return !resolved.enabled ? "off" : resolved.preview ? "preview" : "on";
 }
 
+const engineSays = (i: WhereInput, projectId: string, epicId?: string): boolean =>
+  engineState(i, projectId, epicId) !== "off";
+
 /** What the description alone says about the same task. */
-function descriptionSays(d: WhereDescription, projectId: string, epicId?: string): boolean {
-  const projectOn =
+function descriptionState(d: WhereDescription, projectId: string, epicId?: string): WhereState {
+  const own = d.exceptions.find((e) => e.scope === "project" && e.id === projectId);
+  const project: WhereState =
     d.reach === "everywhere"
-      ? !d.exceptions.some((e) => e.scope === "project" && e.id === projectId)
-      : d.projects.includes(projectId);
+      ? (own?.mode ?? d.state)
+      : d.projects.includes(projectId)
+        ? d.previewProjects.includes(projectId)
+          ? "preview"
+          : "on"
+        : "off";
   const epic = d.exceptions.find((e) => e.scope === "epic" && e.id === epicId);
-  return epic ? epic.mode === "on" : projectOn;
+  return epic ? epic.mode : project;
 }
 
 /** The input after the writes, as the server would store them. */
@@ -148,9 +158,9 @@ describe("describeWhere", () => {
             for (const e6 of MODES) {
               const i = input(board, { p1, p2 }, { e5, e6 });
               const d = describeWhere(i);
-              for (const p of PROJECTS) expect(descriptionSays(d, p.id)).toBe(engineSays(i, p.id));
+              for (const p of PROJECTS) expect(descriptionState(d, p.id)).toBe(engineState(i, p.id));
               for (const e of EPICS) {
-                expect(descriptionSays(d, e.projectId, e.id)).toBe(engineSays(i, e.projectId, e.id));
+                expect(descriptionState(d, e.projectId, e.id)).toBe(engineState(i, e.projectId, e.id));
               }
               // `on` is true exactly when the automation runs somewhere.
               const anywhere =
@@ -309,16 +319,20 @@ describe("edits", () => {
   });
 
   it("keeps where it runs the same under any single edit followed by its undo", () => {
-    for (const board of MODES) {
-      for (const p1 of MODES) {
-        for (const e5 of MODES) {
+    // + Exception offers On or Off, not Preview, so only those can be put back as they were.
+    const PUT_BACK = MODES.filter((m) => m !== "preview");
+    for (const board of PUT_BACK) {
+      for (const p1 of PUT_BACK) {
+        for (const e5 of PUT_BACK) {
           const i = input(board, { p1 }, { e5 });
           const d = describeWhere(i);
           // Remove every exception, then put each back: the places it runs are unchanged.
           let cleared = i;
           for (const ex of d.exceptions) cleared = apply(cleared, whereRemoveException(cleared, ex));
           for (const ex of d.exceptions) {
-            const back = whereCandidates(cleared).find((c) => c.id === ex.id && c.scope === ex.scope);
+            const back = whereCandidates(cleared).find(
+              (c) => c.id === ex.id && c.scope === ex.scope && c.mode === ex.mode,
+            );
             if (back) cleared = apply(cleared, whereAddException(back));
           }
           expect(sameReach(i, cleared)).toBe(true);
@@ -346,5 +360,59 @@ describe("applyWhereWrites", () => {
       { scopeKind: "board", scopeId: null, automation: "a", mode: "off" },
     ]);
     expect(rows).toHaveLength(3);
+  });
+});
+
+describe("Preview", () => {
+  it("reads a board in Preview as Preview, not On", () => {
+    expect(describeWhere(input("preview")).sentence).toBe("Preview everywhere");
+    expect(describeWhere(input("preview", { p2: "off" })).sentence).toBe("Preview everywhere except payments-api");
+    expect(describeWhere(input("preview", { p1: "on" })).sentence).toBe("Preview everywhere; storefront On");
+    expect(describeWhere(input("preview", {}, { e5: "off" })).sentence).toBe("Preview everywhere; epic #5 Off");
+  });
+
+  it("reads projects in Preview under Only in…", () => {
+    expect(describeWhere(input("off", { p1: "preview" })).sentence).toBe("Preview only in storefront");
+    const mixed = describeWhere(input("off", { p1: "on", p3: "preview" }));
+    expect(mixed).toMatchObject({ reach: "only", projects: ["p1", "p3"], previewProjects: ["p3"] });
+    expect(mixed.sentence).toBe("On only in storefront; Preview in docs");
+  });
+
+  it("counts an epic in Preview in a project that is off as running", () => {
+    expect(describeWhere(input("inherit", {}, { e5: "preview" }))).toMatchObject({ reach: "nowhere", on: true });
+  });
+
+  it("Everywhere keeps a board's Preview, turns an off board on in the mode asked, and drops the Only in… rows", () => {
+    expect(whereEverywhere(input("preview"))).toEqual([]);
+    expect(whereEverywhere(input("inherit"))).toEqual([{ target: { kind: "board" }, mode: "on" }]);
+    expect(whereEverywhere(input("inherit"), "preview")).toEqual([{ target: { kind: "board" }, mode: "preview" }]);
+    const from = input("off", { p1: "preview" }, { e5: "preview" });
+    const writes = whereEverywhere(from, "preview");
+    expect(writes).toEqual([
+      { target: { kind: "board" }, mode: "preview" },
+      { target: { kind: "project", id: "p1" }, mode: "inherit" },
+      { target: { kind: "epic", id: "e5", projectId: "p1" }, mode: "inherit" },
+    ]);
+    expect(engineState(apply(from, writes), "p1")).toBe("preview");
+  });
+
+  it("Only in… keeps the mode a project had, or the board's when it followed it", () => {
+    const from = input("preview", { p1: "on" });
+    const writes = whereOnlyIn(from, currentOnProjects(from));
+    expect(writes).toContainEqual({ target: { kind: "project", id: "p2" }, mode: "preview" });
+    expect(writes).not.toContainEqual({ target: { kind: "project", id: "p1" }, mode: "preview" });
+    const after = apply(from, writes);
+    expect(engineState(after, "p1")).toBe("on");
+    expect(engineState(after, "p2")).toBe("preview");
+  });
+
+  it("switching a scope on or off leaves its Preview alone when it already follows the right way", () => {
+    expect(whereProject(input("on", { p1: "preview" }), "p1", true)).toEqual([]);
+    expect(whereProject(input("preview"), "p1", false)).toEqual([
+      { target: { kind: "project", id: "p1" }, mode: "off" },
+    ]);
+    expect(whereProject(input("preview", { p1: "off" }), "p1", true)).toEqual([
+      { target: { kind: "project", id: "p1" }, mode: "inherit" },
+    ]);
   });
 });

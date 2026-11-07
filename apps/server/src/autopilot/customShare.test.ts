@@ -130,7 +130,7 @@ describe("importing a custom automation", () => {
     return exportOf(other, other.services.customAutomations.create(triage()));
   };
 
-  it("round-trips into an automation that is off, with the importer's inputs, tools and projects", async () => {
+  it("round-trips into an automation in Preview, with the importer's inputs, tools and projects", async () => {
     const bundle = await fileOf();
     const s = setup();
     const project = s.services.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
@@ -159,11 +159,11 @@ describe("importing a custom automation", () => {
         slots: [{ name: "jira", tools: ["mcp__atlassian__search"] }],
       },
     });
-    // Off until the user switches it on.
+    // In Preview until the user turns it on: it records what it would do.
     const entry = s.services.autopilot
       .scope("board", null)
       .find((e) => e.automation === customAutomationKey(automation.id));
-    expect(entry).toMatchObject({ mode: "inherit", enabled: false });
+    expect(entry).toMatchObject({ mode: "preview", enabled: true, preview: true });
   });
 
   it("renames the skill when its name is taken, and never overwrites the user's own", async () => {
@@ -299,11 +299,11 @@ describe("sharing a script", () => {
     expect(res.status).toBe(201);
     const { automation } = await s.json<{ automation: CustomAutomation }>(res);
     expect(automation.action).toMatchObject({ ...script, timeoutSeconds: 300 });
-    // Off until the user switches it on.
+    // In Preview until the user turns it on: it records what it would do.
     const entry = s.services.autopilot
       .scope("board", null)
       .find((e) => e.automation === customAutomationKey(automation.id));
-    expect(entry).toMatchObject({ mode: "inherit", enabled: false });
+    expect(entry).toMatchObject({ mode: "preview", enabled: true, preview: true });
   });
 
   it("refuses a confirmation the service wasn't given, whoever calls it", () => {

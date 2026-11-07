@@ -2,7 +2,7 @@ import type { AutopilotAutomation } from "@repo/contracts";
 import type { ReactNode } from "react";
 import { Skeleton } from "~/components/ui/skeleton";
 import { ScopeRow } from "./ScopeRow";
-import { scopeIsOn, scopeToggle, type PopoverScope } from "./where.logic";
+import { scopeState, scopeToggle, type PopoverScope } from "./where.logic";
 import { useWhere } from "./useWhere";
 
 /**
@@ -22,9 +22,9 @@ export function WhereRow({
   trailing?: ReactNode;
 }) {
   const { input, description, apply } = useWhere(automation);
-  const on = input ? scopeIsOn(input, scope) : null;
+  const state = input ? scopeState(input, scope) : null;
   // The board is still loading, or the scope was just archived or deleted: nothing true to show yet.
-  if (!input || !description || on === null) {
+  if (!input || !description || state === null) {
     return (
       <div className="flex min-h-9 items-center justify-between gap-2 py-1">
         <Skeleton className="h-3 w-28" />
@@ -37,7 +37,8 @@ export function WhereRow({
       name={automation.title}
       description={automation.description}
       label={`${automation.title} in ${title}`}
-      checked={on}
+      checked={state !== "off"}
+      preview={state === "preview"}
       where={description.sentence}
       blocked={automation.blocked}
       disabled={apply.isPending}

@@ -21,7 +21,7 @@ import { useSetAutopilotScope, useUpdateAutopilotEngine } from "~/state/mutation
 import { useAutopilotOverview, useAutopilotScope } from "~/state/queries";
 import { parseLimit } from "./autopilot.logic";
 import { TimeInput } from "./TimeInput";
-import { ownSettingsLabel, scopeIsOn } from "./where.logic";
+import { ownSettingsLabel, scopeState } from "./where.logic";
 import { useWhere } from "./useWhere";
 import { BoardVariablesSection } from "./VariablesSection";
 
@@ -70,7 +70,7 @@ export function ProjectAutopilotSection({ projectId }: { projectId: string }) {
 function ProjectAutomationRow({ automation, projectId }: { automation: AutopilotAutomation; projectId: string }) {
   const { input, description } = useWhere(automation);
   const openSettings = useOpenSettings();
-  const on = input ? scopeIsOn(input, { kind: "project", id: projectId }) : null;
+  const state = input ? scopeState(input, { kind: "project", id: projectId }) : null;
   // A setting the project made for itself still applies over the board's, and nowhere else shows it.
   const own = useAutopilotScope(projectId).data?.find((e) => e.automation === automation.key)?.config ?? {};
   const ownLabel = ownSettingsLabel(automation, own);
@@ -87,10 +87,13 @@ function ProjectAutomationRow({ automation, projectId }: { automation: Autopilot
         </>
       }
       status={
-        on === null ? null : (
+        state === null ? null : (
           <span className="flex items-center gap-1.5">
-            <StatusDot tone={on ? "success" : "muted"} label={on ? "On here" : "Off here"} />
-            {on ? "On here" : "Off here"}
+            <StatusDot
+              tone={state === "on" ? "success" : state === "preview" ? "warning" : "muted"}
+              label={state === "on" ? "On here" : state === "preview" ? "Preview here" : "Off here"}
+            />
+            {state === "on" ? "On here" : state === "preview" ? "Preview here" : "Off here"}
           </span>
         )
       }
@@ -267,14 +270,18 @@ function EngineSections({ engine }: { engine: AutopilotEngineSettings }) {
           }
         />
       </SettingsSection>
-      <SettingsSection id="autopilot.limits.safety" title="Safety">
+      <SettingsSection id="autopilot.limits.advanced" title="Advanced">
         <SettingsRow
-          id="autopilot.limits.dry-run"
-          title="Dry run"
-          description="Every automation records what it would do as a skipped run, and does nothing."
-          info="Turn it on to watch a new automation before trusting it. A custom automation's check script still runs, so it can tell what it would act on."
+          id="autopilot.limits.preview-everything"
+          title="Preview everything"
+          description="Every automation records what it would do, as runs marked Preview, and does nothing. Each automation also has a Preview mode of its own."
+          info="To try one new automation, set its own Mode to Preview instead: the others keep working. A custom automation's check script still runs for real, so it can tell what it would act on."
           control={
-            <Switch aria-label="Dry run" checked={engine.dryRun} onCheckedChange={(next) => save({ dryRun: next })} />
+            <Switch
+              aria-label="Preview everything"
+              checked={engine.dryRun}
+              onCheckedChange={(next) => save({ dryRun: next })}
+            />
           }
         />
         <SettingsRow

@@ -1,10 +1,12 @@
 import {
-  projectIsOn,
+  projectState,
+  stateOf,
   whereEpic,
   whereProject,
   type AutopilotAutomation,
   type BoardSnapshot,
   type WhereInput,
+  type WhereState,
   type WhereWrite,
 } from "@repo/contracts";
 
@@ -33,21 +35,28 @@ export function whereScopes(board: BoardSnapshot | undefined, epicScope: boolean
 }
 
 /** Whether any of the writes turns something on: refused by the server for an automation that is blocked. */
-export const turnsOn = (writes: ReadonlyArray<WhereWrite>): boolean => writes.some((w) => w.mode === "on");
+export const turnsOn = (writes: ReadonlyArray<WhereWrite>): boolean =>
+  writes.some((w) => w.mode === "on" || w.mode === "preview");
 
 /** The scope a popover is for: one project, or one epic. */
 export type PopoverScope = { kind: "project"; id: string } | { kind: "epic"; id: string };
 
-/** Whether the automation is on at this scope, as the engine resolves it; null when the scope isn't in `input`. */
-export function scopeIsOn(input: WhereInput, scope: PopoverScope): boolean | null {
+/** What the automation does at this scope, as the engine resolves it; null when the scope isn't in `input`. */
+export function scopeState(input: WhereInput, scope: PopoverScope): WhereState | null {
   if (scope.kind === "project") {
     const project = input.projects.find((p) => p.id === scope.id);
-    return project ? projectIsOn(input.board, project) : null;
+    return project ? projectState(input.board, project) : null;
   }
   const epic = input.epics.find((e) => e.id === scope.id);
   const project = epic && input.projects.find((p) => p.id === epic.projectId);
   if (!epic || !project) return null;
-  return epic.mode === "inherit" ? projectIsOn(input.board, project) : epic.mode === "on";
+  return stateOf(epic.mode, projectState(input.board, project));
+}
+
+/** Whether the automation runs at this scope (in Preview too); null when the scope isn't in `input`. */
+export function scopeIsOn(input: WhereInput, scope: PopoverScope): boolean | null {
+  const state = scopeState(input, scope);
+  return state === null ? null : state !== "off";
 }
 
 /** The writes for switching the automation on or off at this scope: an override only where the scope above differs. */

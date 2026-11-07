@@ -132,8 +132,9 @@ export function CustomAutomationEditorForm({
       <EditorHeader>
         <EditorTitle>{customId ? "Edit custom automation" : "New custom automation"}</EditorTitle>
         <p className="text-sm text-muted-foreground">
-          Say what to watch for and what to do. It is switched on and off per project like the built-in automations, and
-          keeps to the same pause, dry run and limits. It only acts on what happens after it is switched on.
+          Say what to watch for and what to do. A new one saves in Preview, recording what it would do until you turn it
+          on. It is switched per project like the built-in automations, keeps to the same pause and limits, and only
+          acts on what happens after it is turned on.
         </p>
       </EditorHeader>
       <div className="space-y-6">

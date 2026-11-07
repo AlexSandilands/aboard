@@ -1,6 +1,7 @@
 import { PauseIcon, TriangleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Alert, AlertAction, AlertDescription } from "~/components/ui/alert";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Switch } from "~/components/ui/switch";
@@ -58,14 +59,15 @@ export function PausedNotice({ onResume, disabled }: { onResume: () => void; dis
 /**
  * One automation at a project or epic: its name (the description is its tooltip), a muted line saying where it runs
  * overall ("On everywhere except storefront") and an on/off switch for this scope. The switch always shows what the
- * automation does here; the stored Inherit / On / Off is chosen for it (see `scopeToggle`), so there is nothing to
- * reset.
+ * automation does here; the stored Inherit / Off / Preview / On is chosen for it (see `scopeToggle`), so there is
+ * nothing to reset. Preview shows as a badge beside the name.
  */
 export function ScopeRow({
   name,
   description,
   label,
   checked,
+  preview = false,
   where,
   blocked,
   disabled,
@@ -77,6 +79,8 @@ export function ScopeRow({
   /** The switch's accessible name, e.g. "Review PRs in Aboard". */
   label: string;
   checked: boolean;
+  /** On in Preview here: it records what it would do and does none of it. */
+  preview?: boolean;
   /** Where it runs overall, under the name. */
   where?: string;
   /** Why it can't be turned on (an empty required tool slot); turning off still works. */
@@ -94,6 +98,11 @@ export function ScopeRow({
             <TooltipTrigger render={<span className="min-w-0 truncate text-xs font-medium" />}>{name}</TooltipTrigger>
             <TooltipPopup side="top">{description}</TooltipPopup>
           </Tooltip>
+          {preview ? (
+            <Badge variant="warning" size="sm" title="Records what it would do and does none of it">
+              Preview
+            </Badge>
+          ) : null}
           {blocked ? (
             <Tooltip>
               <TooltipTrigger

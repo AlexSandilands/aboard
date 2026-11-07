@@ -287,7 +287,8 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   automation runs overall ("On everywhere except storefront", the widget's sentence from `describeWhere`) and an on/off
   switch for this project. The switch always shows what the automation does here, and a click saves the project's
   switch the way the widget's exceptions do (`scopeToggle`: an override only when the board gives something else, so
-  turning it back leaves no row; there is no faded state or ↺). The rows read the same cached switches
+  turning it back leaves no row; there is no faded state or ↺). An automation in [Preview](autopilot.md#preview) here
+  is on, with an amber **Preview** badge by its name. The rows read the same cached switches
   (`useAutopilotModes`, one request for every scope) and save with `useApplyWhere`, so the popover, the project page
   and the widget never disagree. An automation that can't be turned on (`blocked`, an empty required tool slot)
   shows a ⚠ with the reason as its tooltip and its switch can only be turned off. Under Recurring tasks a calendar

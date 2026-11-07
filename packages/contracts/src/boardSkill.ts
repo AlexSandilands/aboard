@@ -124,7 +124,8 @@ Tasks are referenced as \`#42\`, steps as \`"2.3"\` (phase 2, step 3).
    When the user asks for an automation of their own ("every morning, triage new defects", "when a PR merges,
    ..."), \`draft_automation(automation, note)\` writes it as a draft in the shape of a shared automation file and
    returns a link to its import page. It saves nothing that runs: the user reviews it there, confirms any script,
-   fills in its inputs and tool slots, and imports it switched off. Give them the link and never say it is set up.
+   fills in its inputs and tool slots, and imports it in Preview (it records what it would do; a check script runs for
+   real) until they turn it on. Give them the link and never say it is set up.
    A refused draft lists every problem with where it is; fix them all and call again. Before you write one, use the
    \`${BRAND.id}-automations\` skill if it is installed: it covers the triggers, actions, variables, inputs, tool slots and script
    contract, and how to test a script and hand the draft over.
@@ -362,8 +363,9 @@ export const AUTOMATIONS_SKILL_BODY = `# Writing custom automations for ${BRAND.
 A custom automation is an Autopilot automation the user defines: a **trigger** (when), optional filters, and an **action**
 (what): an agent, a shell command or a script. You can't save or switch one on. You write it as a draft with
 \`draft_automation(automation, note)\`, which keeps it for 14 days and returns a link to its import page. The user reads
-it there (every script, command and prompt), confirms any script, fills in inputs and tool slots, and imports it
-**switched off**; they switch it on themselves. Nothing you write runs on its own.
+it there (every script, command and prompt), confirms any script, fills in inputs and tool slots, and imports it. It
+comes in **in Preview**: it records what it would do and does none of it, except that a **check script still runs for
+real** (to find what it would act on). The user turns it on themselves. Nothing else you write runs on its own.
 
 ## Before you draft
 
@@ -400,7 +402,8 @@ it there (every script, command and prompt), confirms any script, fills in input
 Statuses are \`backlog\`, \`planned\`, \`in_progress\`, \`review\`, \`done\`. Things to know:
 
 - It only acts on what happens **after** the user switches it on, so don't design around history. The exception is
-  \`stale\`: it also fires for every task already past the limit, so suggest a dry run first in your \`note\`.
+  \`stale\`: it also fires for every task already past the limit, so suggest watching its Preview runs first in your
+  \`note\`.
 - A **schedule has no task**: it runs once in each project it is switched on in, with no task or PR, and can't filter
   by label. Its agent runs headless in an empty temporary folder and is told the project's name and folder.
 - \`filters: {labels: [...]}\` narrows the task triggers to tasks with any of the labels. The user picks the projects and
@@ -689,8 +692,9 @@ Don't run a script that approves, merges, deletes or posts for real just to test
 a throwaway target.
 
 In your \`note\`, tell the user to read the script on the import page, then use **Test run** in the automation's editor (Settings →
-Autopilot → Automations, under Yours; the import page shows scripts read-only) and switch it on with **dry run** first: a dry run records what each run would have done, under **What it would run**, and does nothing
-(a dry run still runs a check script for real).
+Autopilot → Automations, under Yours; the import page shows scripts read-only), and to watch its **Preview** runs
+before turning it on: it imports in Preview, which records what each run would have done, under **What it would run**,
+and does nothing (Preview still runs a check script for real).
 
 ## Hand it over
 
@@ -702,8 +706,8 @@ Autopilot → Automations, under Yours; the import page shows scripts read-only)
 3. **Write the \`note\` for the user**, up to 2,000 characters: what it does and when, what it will touch (a command or
    script runs on their machine with their access), the variables to set and tool slots to fill, anything to check
    before importing (a Jira key, who is trusted), and what you tested.
-4. **Give the user the link from the result and say they must open it, read it, import it and switch it on.** Never say
-   the automation is set up or running: it isn't until they do.
+4. **Give the user the link from the result and say they must open it, read it, import it and turn it on.** Never say
+   the automation is set up or running: it isn't until they do (until then it only previews).
 
 ## Worked examples
 

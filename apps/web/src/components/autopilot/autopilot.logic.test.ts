@@ -1,6 +1,14 @@
 import type { AutopilotAutomation, AutopilotRun, AutopilotStatus } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  AUTOPILOT_MODES,
+  BOARD_MODES,
+  boardModeToSave,
+  boardSummary,
+  boardSwitchValue,
+  modeDescription,
+  previewHint,
+  restoreMode,
   automationTitle,
   dismissableRun,
   entryFor,
@@ -138,6 +146,54 @@ describe("active runs", () => {
   });
 });
 
+describe("board switch", () => {
+  it("offers Off, Preview and On, without Inherit", () => {
+    expect(BOARD_MODES.map((mode) => mode.value)).toEqual(["off", "preview", "on"]);
+    expect(AUTOPILOT_MODES.map((mode) => mode.value)).toEqual(["inherit", "off", "preview", "on"]);
+  });
+
+  it("shows no row (inherit) as Off", () => {
+    expect(boardSwitchValue("inherit")).toBe("off");
+    expect(boardSwitchValue("off")).toBe("off");
+    expect(boardSwitchValue("on")).toBe("on");
+  });
+
+  it("saves Off as inherit, so the row goes unless it holds config", () => {
+    expect(boardModeToSave("off")).toBe("inherit");
+    expect(boardModeToSave("on")).toBe("on");
+  });
+
+  it("summarises the choice without mentioning Inherit", () => {
+    expect(boardSummary("on")).toBe("On for the board");
+    expect(boardSummary("off")).toBe("Off for the board");
+    expect(boardSummary("inherit")).toBe("Off for the board");
+    expect(boardSummary("preview")).toBe("In Preview for the board");
+  });
+});
+
+describe("restoreMode", () => {
+  it("brings back the last on-mode, else Preview for one that never ran, else On", () => {
+    expect(restoreMode({ lastOnMode: "on" }, false)).toBe("on");
+    expect(restoreMode({ lastOnMode: "preview" }, true)).toBe("preview");
+    expect(restoreMode({ lastOnMode: null }, false)).toBe("preview");
+    expect(restoreMode({ lastOnMode: null }, true)).toBe("on");
+  });
+});
+
+describe("Preview wording", () => {
+  it("says a check script still runs for real, and only where there is one", () => {
+    expect(modeDescription("preview", { needsAgent: true }, true)).toMatch(/check script still runs for real/);
+    expect(modeDescription("preview", { needsAgent: true }, false)).not.toMatch(/script/);
+    expect(modeDescription("on", { needsAgent: false }, false)).toMatch(/starts no agent/);
+  });
+
+  it("counts the week's would-be runs", () => {
+    expect(previewHint(1)).toBe("Would have run once this week. Did those look right?");
+    expect(previewHint(3)).toBe("Would have run 3 times this week. Did those look right?");
+    expect(previewHint(0)).toMatch(/^Nothing for it to do yet/);
+  });
+});
+
 describe("config forms", () => {
   const automation = {
     key: "a",
@@ -207,7 +263,7 @@ describe("parseLimit", () => {
 
 describe("runs", () => {
   it("labels statuses, telling a dry run from a skip", () => {
-    expect(runStatusLabel({ status: "skipped", dryRun: true })).toBe("Dry run");
+    expect(runStatusLabel({ status: "skipped", dryRun: true })).toBe("Preview");
     expect(runStatusLabel({ status: "skipped", dryRun: false })).toBe("Skipped");
     expect(runStatusLabel({ status: "succeeded", dryRun: false })).toBe("Done");
     expect(runStatusLabel({ status: "failed", dryRun: false, dedupeKey: "retried:r1:review:pr:l1:abc" })).toBe(

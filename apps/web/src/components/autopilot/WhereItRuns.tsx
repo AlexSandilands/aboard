@@ -21,6 +21,9 @@ import { cn } from "~/lib/utils";
 import { turnsOn } from "./where.logic";
 import { useWhere } from "./useWhere";
 
+const modeLabel = (mode: "on" | "preview" | "off"): string =>
+  mode === "on" ? "On" : mode === "preview" ? "Preview" : "Off";
+
 /** An epic with its title ("epic #5 · Checkout redesign"), where the widget has room; a project is just its name. */
 function candidateLabel(
   candidate: Pick<WhereCandidate, "scope" | "id" | "label">,
@@ -36,7 +39,14 @@ function candidateLabel(
  * epic switches as the lane and epic popovers, so all three always agree. A blocked automation can't be switched on, so
  * every edit that would switch something on is disabled.
  */
-export function WhereItRuns({ automation }: { automation: AutopilotAutomation }) {
+export function WhereItRuns({
+  automation,
+  everywhereMode = "on",
+}: {
+  automation: AutopilotAutomation;
+  /** The mode Everywhere turns an off automation on in: On, or Preview for one that has never run. */
+  everywhereMode?: "on" | "preview";
+}) {
   const { input, description, scopes, apply, error } = useWhere(automation);
   if (!input || !description || !scopes) {
     return (
@@ -63,7 +73,10 @@ export function WhereItRuns({ automation }: { automation: AutopilotAutomation })
     if (writes.length > 0) apply.mutate(writes);
   };
   const candidates = whereCandidates(input);
-  const everywhereWrites = whereEverywhere(input);
+  const everywhereWrites = whereEverywhere(input, everywhereMode);
+  const allPreview =
+    description.state === "preview" ||
+    (description.projects.length > 0 && description.projects.every((id) => description.previewProjects.includes(id)));
   const onlyWrites = whereOnlyIn(input, currentOnProjects(input));
   const noProjects = scopes.projects.length === 0;
 
@@ -71,7 +84,10 @@ export function WhereItRuns({ automation }: { automation: AutopilotAutomation })
     <DetailSection title="Where it runs">
       <div className="space-y-3 px-3 py-3 sm:px-4">
         <p className="flex min-w-0 items-center gap-2 text-sm text-foreground">
-          <StatusDot tone={description.on ? "success" : "muted"} label={description.on ? "On" : "Off"} />
+          <StatusDot
+            tone={!description.on ? "muted" : allPreview ? "warning" : "success"}
+            label={!description.on ? "Off" : allPreview ? "Preview" : "On"}
+          />
           <span className="min-w-0 [overflow-wrap:anywhere]">{description.sentence}</span>
         </p>
         {noProjects ? (
@@ -112,6 +128,7 @@ export function WhereItRuns({ automation }: { automation: AutopilotAutomation })
               <div role="group" aria-label="Projects it runs in" className="flex flex-wrap gap-1.5">
                 {scopes.projects.map((project) => {
                   const on = description.projects.includes(project.id);
+                  const preview = description.previewProjects.includes(project.id);
                   const writes = whereProject(input, project.id, !on);
                   return (
                     <button
@@ -122,13 +139,16 @@ export function WhereItRuns({ automation }: { automation: AutopilotAutomation })
                       title={!on && blocked ? blocked : undefined}
                       className={cn(
                         "inline-flex max-w-full cursor-pointer items-center truncate rounded-full border px-2.5 py-0.5 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
-                        on
-                          ? "border-info/40 bg-info/12 text-info-foreground"
-                          : "border-border/60 text-muted-foreground hover:bg-accent/40 hover:text-foreground",
+                        on && preview
+                          ? "border-warning/40 bg-warning/12 text-warning-foreground"
+                          : on
+                            ? "border-info/40 bg-info/12 text-info-foreground"
+                            : "border-border/60 text-muted-foreground hover:bg-accent/40 hover:text-foreground",
                       )}
                       onClick={() => save(writes)}
                     >
                       {project.title}
+                      {preview ? <span className="ms-1 opacity-80">Preview</span> : null}
                     </button>
                   );
                 })}
@@ -190,7 +210,7 @@ function ExceptionChip({
           exception.mode === "on" ? "text-info-foreground" : "text-warning-foreground",
         )}
       >
-        {exception.mode === "on" ? "On" : "Off"}
+        {modeLabel(exception.mode)}
       </span>
       <Button
         size="icon-micro"
@@ -237,7 +257,7 @@ function ExceptionMenu({
           >
             <span className="flex min-w-0 flex-1 items-center justify-between gap-4 text-xs">
               <span className="min-w-0 truncate">{candidateLabel(candidate, epics)}</span>
-              <span className="shrink-0 text-muted-foreground">{candidate.mode === "on" ? "On" : "Off"}</span>
+              <span className="shrink-0 text-muted-foreground">{modeLabel(candidate.mode)}</span>
             </span>
           </MenuItem>
         ))}

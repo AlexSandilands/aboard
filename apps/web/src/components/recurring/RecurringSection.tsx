@@ -67,7 +67,8 @@ export function RecurringSection({ project }: { project: Project }) {
   const templates = useTemplates();
   const paused = useBoard().data?.autopilot.paused ?? false;
   const dryRun = useAutopilotOverview().data?.engine.dryRun ?? false;
-  const running = (automation?.enabled ?? false) && !paused && !dryRun;
+  // In Preview (its own or everything's) the rules only record the tasks they would make.
+  const running = (automation?.enabled ?? false) && !automation?.preview && !paused && !dryRun;
   const update = useUpdateRecurringRule();
   const remove = useDeleteRecurringRule();
   const addSuggested = useAddSuggestedRule(project.id);

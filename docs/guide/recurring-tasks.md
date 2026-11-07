@@ -33,6 +33,6 @@ Each rule shows when it is next due and what became of the last task it made. Th
   switch **Recurring tasks** on or lift Pause all, start from now: they don't catch up on slots that
   passed before. Only the board being off does.
 - A task made late has the date it was made in its title, not the date of the slot.
-- With **dry-run** on, it only records what it would create.
+- In **Preview** (its own, or Preview everything), it only records what it would create.
 
 Rules are part of the board's [backup](../features/backup.md). Agents can't see or change them.
