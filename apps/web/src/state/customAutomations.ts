@@ -1,14 +1,15 @@
-import type {
-  ApplyAutomationDraftInput,
-  AutomationBundle,
-  AutomationDraft,
-  CreateCustomAutomationInput,
-  CustomAutomation,
-  ImportAutomationInput,
-  ImportedAutomation,
-  TestScriptInput,
-  TestScriptResult,
-  UpdateCustomAutomationInput,
+import {
+  customAutomationKey,
+  type ApplyAutomationDraftInput,
+  type AutomationBundle,
+  type AutomationDraft,
+  type CreateCustomAutomationInput,
+  type CustomAutomation,
+  type ImportAutomationInput,
+  type ImportedAutomation,
+  type TestScriptInput,
+  type TestScriptResult,
+  type UpdateCustomAutomationInput,
 } from "@repo/contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "~/lib/api";
@@ -46,6 +47,17 @@ export const useCreateCustomAutomation = () =>
   useCustomMutation((input: CreateCustomAutomationInput) =>
     api<CustomAutomation>("/api/autopilot/custom", { body: input }),
   );
+
+/**
+ * "Save and turn on" for one just saved in Preview: On where it was made to start, the board for everywhere or each of
+ * its projects for Only in…, one write after another as Where it runs sends them.
+ */
+export const useTurnOnCustomAutomation = () =>
+  useCustomMutation(async ({ id, projectIds }: { id: string; projectIds: readonly string[] }) => {
+    const key = enc(customAutomationKey(id));
+    const paths = projectIds.length > 0 ? projectIds.map((p) => `projects/${enc(p)}`) : ["board"];
+    for (const path of paths) await api(`/api/autopilot/${path}/${key}`, { method: "PUT", body: { mode: "on" } });
+  });
 
 export const useUpdateCustomAutomation = () =>
   useCustomMutation(({ id, ...input }: UpdateCustomAutomationInput & { id: string }) =>

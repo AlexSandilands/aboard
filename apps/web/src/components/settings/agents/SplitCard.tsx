@@ -4,7 +4,7 @@
 import { ChevronLeftIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "~/lib/utils";
-import { SETTINGS_PICKER_WIDTH, SettingsGroup } from "../settingsLayout";
+import { InfoHover, SETTINGS_PICKER_WIDTH, SettingsGroup } from "../settingsLayout";
 
 /**
  * The look of a model picker as a settings control: the field border every other control in a row has, but wider
@@ -197,10 +197,26 @@ export function DetailHeader({
 }
 
 /** One titled part of the detail: a muted heading over a card of rows, inset like the list beside it. */
-export function DetailSection({ title, children }: { title: string; children: ReactNode }) {
+export function DetailSection({
+  title,
+  info,
+  children,
+}: {
+  title: string;
+  /** What the section is about, behind an info button beside its heading, so the heading needs no paragraph. */
+  info?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <section className="space-y-2 px-3 sm:px-4">
-      <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</h3>
+      <h3 className="flex items-center gap-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        {title}
+        {info ? (
+          <span className="normal-case tracking-normal">
+            <InfoHover label={`More about ${title}`}>{info}</InfoHover>
+          </span>
+        ) : null}
+      </h3>
       <SettingsGroup>{children}</SettingsGroup>
     </section>
   );

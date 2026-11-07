@@ -4,9 +4,11 @@ import {
   AGENT_DEFAULT_KEYS,
   AUTOMATION_GROUPS,
   fieldTier,
+  INHERIT,
   RUNNER_CHOICES,
   T3_RUNTIME_MODES,
   type AutomationGroup,
+  type AutopilotAgentDefaults,
   type AutopilotAutomation,
   type AutopilotField,
   type AutopilotConfig,
@@ -171,19 +173,73 @@ export function statusLine(reach: AutomationReach, preview = false): string {
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 /**
- * Whether any advanced field's value differs from the automation's default, so the closed Advanced section gets a
- * dot. Read from the effective config, so a value inherited from the board counts on a project too.
+ * What a field is when this scope doesn't set it: the board's agent default (Limits & safety) for runner, budget,
+ * timeout and T3 access, Inherit for the model, the automation's own default for the rest.
  */
-export function advancedChanged(
-  automation: Pick<AutopilotAutomation, "fields" | "defaults">,
-  effective: AutopilotConfig,
+export function fieldDefault(
+  automation: Pick<AutopilotAutomation, "defaults">,
+  field: Pick<AutopilotField, "key" | "kind">,
+  agentDefaults: Partial<AutopilotAgentDefaults> = {},
+): unknown {
+  if (AGENT_KEYS.has(field.key) && field.key in agentDefaults) {
+    return agentDefaults[field.key as keyof AutopilotAgentDefaults];
+  }
+  if (field.kind === "model") return automation.defaults[field.key] ?? INHERIT;
+  return automation.defaults[field.key];
+}
+
+/**
+ * Whether a field is set at this scope to something other than its default. Set by hand back to the default counts as
+ * unchanged, so its reset hides.
+ */
+export function fieldChanged(
+  automation: Pick<AutopilotAutomation, "defaults">,
+  field: Pick<AutopilotField, "key" | "kind">,
+  config: AutopilotConfig,
+  agentDefaults: Partial<AutopilotAgentDefaults> = {},
 ): boolean {
-  return automation.fields.some(
-    (field) =>
-      fieldTier(field) === "advanced" &&
-      field.key in effective &&
-      !same(effective[field.key], automation.defaults[field.key]),
-  );
+  return field.key in config && !same(config[field.key], fieldDefault(automation, field, agentDefaults));
+}
+
+/** How many advanced fields differ from their default, for the Advanced header's "Agent · 2 changed". */
+export function advancedChangedCount(
+  automation: Pick<AutopilotAutomation, "fields" | "defaults">,
+  config: AutopilotConfig,
+  agentDefaults: Partial<AutopilotAgentDefaults> = {},
+): number {
+  return automation.fields.filter(
+    (field) => fieldTier(field) === "advanced" && fieldChanged(automation, field, config, agentDefaults),
+  ).length;
+}
+
+/** A value as a reset's tooltip names it: "Reset to $5", "60 min", "Auto", "T3 Code's default", "Inherit". */
+export function fieldValueText(field: AutopilotField, value: unknown): string {
+  switch (field.key) {
+    case "runner":
+      return RUNNER_CHOICES.find((c) => c.value === value)?.short ?? String(value);
+    case "budgetUsd":
+      return typeof value === "number" ? money(value) : "no cap";
+    case "timeoutMinutes":
+      return typeof value === "number" ? `${value} min` : String(value);
+    case "t3Access":
+      return value === "default"
+        ? "T3 Code's default"
+        : (T3_RUNTIME_MODES.find((m) => m.value === value)?.label ?? String(value));
+  }
+  switch (field.kind) {
+    case "model":
+      return value === INHERIT || value === undefined ? "Inherit" : "the default";
+    case "boolean":
+      return value === true ? "on" : "off";
+    case "select":
+      return field.options.find((o) => o.value === value)?.label ?? String(value);
+    case "number":
+      return typeof value === "number" ? `${value}${field.unit ? ` ${field.unit}` : ""}` : "empty";
+    case "text":
+      return typeof value === "string" && value !== "" ? value : "empty";
+    default:
+      return "the default";
+  }
 }
 
 /** The selected automation: the one asked for when it exists, else the first listed. */

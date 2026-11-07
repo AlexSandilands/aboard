@@ -50,170 +50,332 @@ export function WhereItRuns({
   /** The mode Everywhere turns an off automation on in: On, or Preview for one that has never run. */
   everywhereMode?: "on" | "preview";
 }) {
-  const { input, description, scopes, apply, error } = useWhere(automation);
-  if (!input || !description || !scopes) {
-    return (
-      <DetailSection title="Where it runs">
-        <div className="space-y-2 px-3 py-3 sm:px-4">
-          {error ? (
-            <p role="alert" className="text-xs text-destructive-foreground">
-              Couldn&apos;t load where it runs: {error.message}
-            </p>
-          ) : (
-            <>
-              <Skeleton className="h-4 w-56" />
-              <Skeleton className="h-7 w-44" />
-            </>
-          )}
+  const where = useWhere(automation);
+  const { input, description, scopes, apply } = where;
+  return (
+    <DetailSection title="Where it runs">
+      {!input || !description || !scopes ? (
+        <WhereLoading error={where.error} />
+      ) : (
+        <div className="space-y-3 px-3 py-3 sm:px-4">
+          <LiveProjects automation={automation} everywhereMode={everywhereMode} where={where} />
+          <div className="flex flex-col gap-1.5 border-t border-border/50 pt-3">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-xs font-medium text-muted-foreground">Exceptions</h4>
+              <ExceptionMenu
+                candidates={whereCandidates(input)}
+                epics={scopes.epics}
+                blocked={automation.blocked}
+                disabled={apply.isPending}
+                onPick={(candidate) => apply.mutate(whereAddException(candidate))}
+              />
+            </div>
+            {description.exceptions.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                None. {automation.epicScope ? "A project or an epic" : "A project"} can run differently from the rest.
+              </p>
+            ) : (
+              <ul className="flex flex-wrap gap-1.5">
+                {description.exceptions.map((exception) => (
+                  <ExceptionChip
+                    key={`${exception.scope}:${exception.id}`}
+                    exception={exception}
+                    label={candidateLabel(exception, scopes.epics)}
+                    disabled={apply.isPending}
+                    onRemove={() => {
+                      const writes = whereRemoveException(input, exception);
+                      if (writes.length > 0) apply.mutate(writes);
+                    }}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
-      </DetailSection>
+      )}
+    </DetailSection>
+  );
+}
+
+function WhereLoading({ error }: { error: Error | null }) {
+  return (
+    <div className="space-y-2 px-3 py-3 sm:px-4">
+      {error ? (
+        <p role="alert" className="text-xs text-destructive-foreground">
+          Couldn&apos;t load where it runs: {error.message}
+        </p>
+      ) : (
+        <>
+          <Skeleton className="h-4 w-56" />
+          <Skeleton className="h-7 w-44" />
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The builder's Where step for a saved automation: the sentence and the projects of Where it runs, writing its
+ * switches as they change. Exceptions stay on the automation's page.
+ */
+export function WhereProjects({
+  automation,
+  everywhereMode = "preview",
+}: {
+  automation: AutopilotAutomation;
+  everywhereMode?: "on" | "preview";
+}) {
+  const where = useWhere(automation);
+  if (!where.input || !where.description || !where.scopes) {
+    return (
+      <div className="-mx-3 sm:-mx-4">
+        <WhereLoading error={where.error} />
+      </div>
     );
   }
+  return <LiveProjects automation={automation} everywhereMode={everywhereMode} where={where} />;
+}
 
+/** The sentence and Everywhere / Only in… with its projects, writing the automation's switches. */
+function LiveProjects({
+  automation,
+  everywhereMode,
+  where,
+}: {
+  automation: AutopilotAutomation;
+  everywhereMode: "on" | "preview";
+  where: ReturnType<typeof useWhere>;
+}) {
+  const { input, description, scopes, apply } = where;
+  if (!input || !description || !scopes) return null;
   const blocked = automation.blocked;
   const everywhere = description.reach === "everywhere";
   const save = (writes: Parameters<typeof apply.mutate>[0]) => {
     if (writes.length > 0) apply.mutate(writes);
   };
-  const candidates = whereCandidates(input);
   const everywhereWrites = whereEverywhere(input, everywhereMode);
   const allPreview =
     description.state === "preview" ||
     (description.projects.length > 0 && description.projects.every((id) => description.previewProjects.includes(id)));
+  // Over Everywhere, "Only in…" starts from the projects it runs in now, so nothing changes until a chip does.
   const onlyWrites = whereOnlyIn(input, currentOnProjects(input));
-  const noProjects = scopes.projects.length === 0;
+  const allIds = scopes.projects.map((p) => p.id);
 
   return (
-    <DetailSection title="Where it runs">
-      <div className="space-y-3 px-3 py-3 sm:px-4">
-        <p className="flex min-w-0 items-center gap-2 text-sm text-foreground">
-          <StatusDot
-            tone={!description.on ? "muted" : allPreview ? "warning" : "success"}
-            label={!description.on ? "Off" : allPreview ? "Preview" : "On"}
-          />
-          <span className="min-w-0 [overflow-wrap:anywhere]">{description.sentence}</span>
-        </p>
-        {noProjects ? (
-          <p className="text-xs text-muted-foreground">There are no projects yet.</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <ToggleGroup
-              aria-label={`Where ${automation.title} runs`}
-              className="self-start"
-              disabled={apply.isPending}
-              value={[everywhere ? "everywhere" : "only"]}
-              onValueChange={(next) => {
-                const choice = next[0];
-                if (choice === "everywhere" && !everywhere) save(everywhereWrites);
-                // Over Everywhere, "Only in…" starts from the projects it runs in now, so nothing changes until a chip does.
-                else if (choice === "only" && everywhere) save(onlyWrites);
-              }}
-            >
-              <Toggle
-                value="everywhere"
-                disabled={Boolean(blocked) && !everywhere}
-                title={!everywhere && blocked ? blocked : undefined}
-                className="data-pressed:bg-info/16 data-pressed:text-info-foreground dark:data-pressed:bg-info/24"
-              >
-                Everywhere
-              </Toggle>
-              <Toggle
-                value="only"
-                disabled={Boolean(blocked) && everywhere && turnsOn(onlyWrites)}
-                title={blocked && everywhere && turnsOn(onlyWrites) ? blocked : undefined}
-              >
-                Only in…
-              </Toggle>
-            </ToggleGroup>
-            {everywhere ? (
-              <p className="text-xs text-muted-foreground">Every project, new ones too.</p>
-            ) : usesProjectPicker(scopes.projects.length) ? (
-              <ProjectPicker
-                projects={scopes.projects}
-                on={description.projects}
-                preview={description.previewProjects}
-                blocked={blocked}
-                disabled={apply.isPending}
-                onToggle={(id, on) => save(whereProject(input, id, on))}
-                onAll={() =>
-                  save(
-                    whereOnlyIn(
-                      input,
-                      scopes.projects.map((p) => p.id),
-                    ),
-                  )
-                }
-                allTurnsOn={turnsOn(
-                  whereOnlyIn(
-                    input,
-                    scopes.projects.map((p) => p.id),
-                  ),
+    <>
+      <p className="flex min-w-0 items-center gap-2 text-sm text-foreground">
+        <StatusDot
+          tone={!description.on ? "muted" : allPreview ? "warning" : "success"}
+          label={!description.on ? "Off" : allPreview ? "Preview" : "On"}
+        />
+        <span className="min-w-0 [overflow-wrap:anywhere]">{description.sentence}</span>
+      </p>
+      <ProjectsChoice
+        label={`Where ${automation.title} runs`}
+        projects={scopes.projects}
+        everywhere={everywhere}
+        on={description.projects}
+        preview={description.previewProjects}
+        disabled={apply.isPending}
+        blocked={blocked}
+        everywhereBlocked={Boolean(blocked) && !everywhere}
+        onlyBlocked={Boolean(blocked) && everywhere && turnsOn(onlyWrites)}
+        toggleBlocked={(id, on) => Boolean(blocked) && turnsOn(whereProject(input, id, on))}
+        allBlocked={Boolean(blocked) && turnsOn(whereOnlyIn(input, allIds))}
+        onChoose={(choice) => {
+          if (choice === "everywhere" && !everywhere) save(everywhereWrites);
+          else if (choice === "only" && everywhere) save(onlyWrites);
+        }}
+        onToggle={(id, on) => save(whereProject(input, id, on))}
+        onAll={() => save(whereOnlyIn(input, allIds))}
+        onNone={() => save(whereOnlyIn(input, []))}
+      />
+    </>
+  );
+}
+
+/** "a", "a and b", "a, b, c and 2 more". */
+function namesPhrase(names: readonly string[]): string {
+  if (names.length <= 1) return names.join("");
+  if (names.length <= 3) return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
+}
+
+/**
+ * The builder's Where step for a new automation: the same choice as Where it runs, kept in the form and written as its
+ * switches when it is saved (in Preview, unless saved and turned on).
+ */
+export function DraftProjects({
+  projects,
+  everywhere,
+  projectIds,
+  onChange,
+}: {
+  projects: ReadonlyArray<{ id: string; title: string }>;
+  everywhere: boolean;
+  projectIds: readonly string[];
+  onChange: (next: { everywhere: boolean; projectIds: string[] }) => void;
+}) {
+  const picked = projects.filter((p) => projectIds.includes(p.id));
+  const sentence = everywhere
+    ? "Every project, new ones too"
+    : picked.length > 0
+      ? `Only in ${namesPhrase(picked.map((p) => p.title))}`
+      : "No project picked yet";
+  const ids = picked.map((p) => p.id);
+  return (
+    <>
+      <p className="flex min-w-0 items-center gap-2 text-sm text-foreground">
+        <StatusDot
+          tone={everywhere || picked.length > 0 ? "success" : "muted"}
+          label={everywhere || picked.length > 0 ? "Runs" : "Nowhere yet"}
+        />
+        <span className="min-w-0 [overflow-wrap:anywhere]">{sentence}</span>
+      </p>
+      <ProjectsChoice
+        label="Where it runs"
+        projects={projects}
+        everywhere={everywhere}
+        on={ids}
+        preview={[]}
+        disabled={false}
+        blocked={null}
+        hideEverywhereHint
+        onChoose={(choice) =>
+          onChange(
+            choice === "everywhere"
+              ? { everywhere: true, projectIds: ids }
+              : // From Everywhere, Only in… starts with every project picked, as the automation's page does.
+                { everywhere: false, projectIds: ids.length > 0 ? ids : projects.map((p) => p.id) },
+          )
+        }
+        onToggle={(id, on) =>
+          onChange({ everywhere: false, projectIds: on ? [...ids, id] : ids.filter((other) => other !== id) })
+        }
+        onAll={() => onChange({ everywhere: false, projectIds: projects.map((p) => p.id) })}
+        onNone={() => onChange({ everywhere: false, projectIds: [] })}
+      />
+    </>
+  );
+}
+
+const neverBlocked = (): boolean => false;
+
+/**
+ * Everywhere / Only in… and, under Only in…, the projects as chips, or a searchable picker past
+ * `usesProjectPicker`'s limit. Presentational: Where it runs saves each change as switches, the builder keeps it in its
+ * form until it is saved.
+ */
+function ProjectsChoice({
+  label,
+  projects,
+  everywhere,
+  on,
+  preview,
+  disabled,
+  blocked,
+  everywhereBlocked = false,
+  onlyBlocked = false,
+  toggleBlocked = neverBlocked,
+  allBlocked = false,
+  hideEverywhereHint = false,
+  onChoose,
+  onToggle,
+  onAll,
+  onNone,
+}: {
+  label: string;
+  projects: ReadonlyArray<{ id: string; title: string }>;
+  everywhere: boolean;
+  /** Ids of the projects it runs in (in Preview too). */
+  on: readonly string[];
+  preview: readonly string[];
+  disabled: boolean;
+  /** Why it can't be switched on, or null: shown on whatever would switch it on, which is disabled. */
+  blocked: string | null;
+  everywhereBlocked?: boolean;
+  onlyBlocked?: boolean;
+  toggleBlocked?: (id: string, on: boolean) => boolean;
+  allBlocked?: boolean;
+  /** The sentence above already says Everywhere is every project. */
+  hideEverywhereHint?: boolean;
+  onChoose: (choice: "everywhere" | "only") => void;
+  onToggle: (id: string, on: boolean) => void;
+  onAll: () => void;
+  onNone: () => void;
+}) {
+  if (projects.length === 0) return <p className="text-xs text-muted-foreground">There are no projects yet.</p>;
+  return (
+    <div className="flex flex-col gap-2">
+      <ToggleGroup
+        aria-label={label}
+        className="self-start"
+        disabled={disabled}
+        value={[everywhere ? "everywhere" : "only"]}
+        onValueChange={(next) => {
+          const choice = next[0];
+          if (choice === "everywhere" || choice === "only") onChoose(choice);
+        }}
+      >
+        <Toggle
+          value="everywhere"
+          disabled={everywhereBlocked}
+          title={everywhereBlocked && blocked ? blocked : undefined}
+          className="data-pressed:bg-info/16 data-pressed:text-info-foreground dark:data-pressed:bg-info/24"
+        >
+          Everywhere
+        </Toggle>
+        <Toggle value="only" disabled={onlyBlocked} title={onlyBlocked && blocked ? blocked : undefined}>
+          Only in…
+        </Toggle>
+      </ToggleGroup>
+      {everywhere ? (
+        hideEverywhereHint ? null : (
+          <p className="text-xs text-muted-foreground">Every project, new ones too.</p>
+        )
+      ) : usesProjectPicker(projects.length) ? (
+        <ProjectPicker
+          projects={projects}
+          on={on}
+          preview={preview}
+          blocked={blocked}
+          disabled={disabled}
+          onToggle={onToggle}
+          onAll={onAll}
+          allTurnsOn={allBlocked}
+          onNone={onNone}
+        />
+      ) : (
+        <div role="group" aria-label="Projects it runs in" className="flex flex-wrap gap-1.5">
+          {projects.map((project) => {
+            const isOn = on.includes(project.id);
+            const isPreview = preview.includes(project.id);
+            const turnOnBlocked = toggleBlocked(project.id, !isOn);
+            return (
+              <button
+                key={project.id}
+                type="button"
+                aria-pressed={isOn}
+                disabled={disabled || turnOnBlocked}
+                title={!isOn && blocked ? blocked : undefined}
+                className={cn(
+                  "inline-flex max-w-full cursor-pointer items-center truncate rounded-full border px-2.5 py-0.5 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
+                  isOn && isPreview
+                    ? "border-warning/40 bg-warning/12 text-warning-foreground"
+                    : isOn
+                      ? "border-info/40 bg-info/12 text-info-foreground"
+                      : "border-border/60 text-muted-foreground hover:bg-accent/40 hover:text-foreground",
                 )}
-                onNone={() => save(whereOnlyIn(input, []))}
-              />
-            ) : (
-              <div role="group" aria-label="Projects it runs in" className="flex flex-wrap gap-1.5">
-                {scopes.projects.map((project) => {
-                  const on = description.projects.includes(project.id);
-                  const preview = description.previewProjects.includes(project.id);
-                  const writes = whereProject(input, project.id, !on);
-                  return (
-                    <button
-                      key={project.id}
-                      type="button"
-                      aria-pressed={on}
-                      disabled={apply.isPending || (Boolean(blocked) && turnsOn(writes))}
-                      title={!on && blocked ? blocked : undefined}
-                      className={cn(
-                        "inline-flex max-w-full cursor-pointer items-center truncate rounded-full border px-2.5 py-0.5 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60",
-                        on && preview
-                          ? "border-warning/40 bg-warning/12 text-warning-foreground"
-                          : on
-                            ? "border-info/40 bg-info/12 text-info-foreground"
-                            : "border-border/60 text-muted-foreground hover:bg-accent/40 hover:text-foreground",
-                      )}
-                      onClick={() => save(writes)}
-                    >
-                      {project.title}
-                      {preview ? <span className="ms-1 opacity-80">Preview</span> : null}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-        <div className="flex flex-col gap-1.5 border-t border-border/50 pt-3">
-          <div className="flex items-center justify-between gap-2">
-            <h4 className="text-xs font-medium text-muted-foreground">Exceptions</h4>
-            <ExceptionMenu
-              candidates={candidates}
-              epics={scopes.epics}
-              blocked={blocked}
-              disabled={apply.isPending}
-              onPick={(candidate) => save(whereAddException(candidate))}
-            />
-          </div>
-          {description.exceptions.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              None. {automation.epicScope ? "A project or an epic" : "A project"} can run differently from the rest.
-            </p>
-          ) : (
-            <ul className="flex flex-wrap gap-1.5">
-              {description.exceptions.map((exception) => (
-                <ExceptionChip
-                  key={`${exception.scope}:${exception.id}`}
-                  exception={exception}
-                  label={candidateLabel(exception, scopes.epics)}
-                  disabled={apply.isPending}
-                  onRemove={() => save(whereRemoveException(input, exception))}
-                />
-              ))}
-            </ul>
-          )}
+                onClick={() => onToggle(project.id, !isOn)}
+              >
+                {project.title}
+                {isPreview ? <span className="ms-1 opacity-80">Preview</span> : null}
+              </button>
+            );
+          })}
         </div>
-      </div>
-    </DetailSection>
+      )}
+    </div>
   );
 }
 

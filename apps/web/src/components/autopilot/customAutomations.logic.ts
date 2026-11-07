@@ -71,11 +71,16 @@ export interface CustomForm {
   unit: "minutes" | "hours";
   staleStatus: TaskStatus;
   staleHours: string;
+  /**
+   * Where a new one starts: everywhere, or only in `projectIds` (CreateCustomAutomationInput.projectIds). An existing
+   * one's switches are edited in place by the Where step's Where it runs, so these are left as they start.
+   */
+  everywhere: boolean;
   projectIds: string[];
   /** Comma-separated, as typed. */
   labels: string;
-  /** "" is any (or no) epic. */
-  epicId: string;
+  /** Tasks in epics: false skips them, except in an epic switched on for itself. */
+  epicTasks: boolean;
   actionKind: "agent" | "shell" | "script";
   prompt: string;
   skill: string;
@@ -130,9 +135,10 @@ export function emptyCustomForm(): CustomForm {
     unit: "hours",
     staleStatus: "in_progress",
     staleHours: "48",
+    everywhere: true,
     projectIds: [],
     labels: "",
-    epicId: "",
+    epicTasks: true,
     actionKind: "agent",
     prompt: "",
     skill: "",
@@ -153,15 +159,20 @@ export function emptyCustomForm(): CustomForm {
   };
 }
 
-/** The form for a saved automation, or for any definition (a shared file's, an agent's draft). */
-export function formFromCustom(custom: CustomDefinition): CustomForm {
+/**
+ * The form for a saved automation, or for any definition (a shared file's, an agent's draft), with the projects a new
+ * one would start in, if any.
+ */
+export function formFromCustom(custom: CustomDefinition & { projectIds?: readonly string[] }): CustomForm {
+  const projectIds = [...(custom.projectIds ?? [])];
   const form: CustomForm = {
     ...emptyCustomForm(),
     name: custom.name,
+    everywhere: projectIds.length === 0,
+    projectIds,
     triggerKind: custom.trigger.kind,
-    projectIds: custom.filters.projectIds,
     labels: custom.filters.labels.join(", "),
-    epicId: custom.filters.epicId ?? "",
+    epicTasks: custom.filters.epicTasks,
     actionKind: custom.action.kind,
     inputs: custom.action.inputs.map(({ name, label, type, value, default: fallback }) => ({
       name,
@@ -276,10 +287,13 @@ export function customFormToInput(form: CustomForm): { ok: true; input: CreateIn
   } catch (error) {
     return { ok: false, error: (error as Error).message };
   }
+  const scheduled = form.triggerKind === "schedule";
   const parsed = CreateCustomAutomationInput.safeParse({
     name: form.name,
     trigger,
-    filters: { projectIds: form.projectIds, labels, epicId: form.epicId || null },
+    // A schedule has no task: the step hides what narrows tasks, and the definition can't carry it.
+    filters: scheduled ? { labels: [], epicTasks: true } : { labels, epicTasks: form.epicTasks },
+    projectIds: form.everywhere ? [] : form.projectIds,
     action:
       form.actionKind === "agent"
         ? {
@@ -411,12 +425,15 @@ export const blankSlot = (): FormSlot => ({ name: "", label: "", description: ""
 export const emptyFormSlots = (form: Pick<CustomForm, "slots">): FormSlot[] =>
   form.slots.filter((slot) => parseAllowedTools(slot.tools).length === 0);
 
-/** A task to preview the action with: the newest one the filters let through, in a project they allow. */
-export function sampleTask(input: Pick<CreateInput, "filters">, tasks: readonly TaskSummary[]): TaskSummary | null {
-  const filters = { projectIds: [], labels: [], epicId: null, ...input.filters };
+/** A task to preview the action with: the newest one the filters let through, in a project it starts in. */
+export function sampleTask(
+  input: Pick<CreateInput, "filters" | "projectIds">,
+  tasks: readonly TaskSummary[],
+): TaskSummary | null {
+  const filters = { labels: [], epicTasks: true, ...input.filters };
+  const projectIds = input.projectIds ?? [];
   const fits = tasks.filter(
-    (t) =>
-      (filters.projectIds.length === 0 || filters.projectIds.includes(t.projectId)) && customTaskMatches(filters, t),
+    (t) => (projectIds.length === 0 || projectIds.includes(t.projectId)) && customTaskMatches(filters, t),
   );
   return [...fits].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
 }
@@ -433,7 +450,10 @@ export function formSampleTask(form: CustomForm, tasks: readonly TaskSummary[]):
   } catch {
     // Labels typed so far that don't parse narrow nothing: the preview and save report them.
   }
-  return sampleTask({ filters: { projectIds: form.projectIds, labels, epicId: form.epicId || null } }, tasks);
+  return sampleTask(
+    { filters: { labels, epicTasks: form.epicTasks }, projectIds: form.everywhere ? [] : form.projectIds },
+    tasks,
+  );
 }
 
 /** What the preview shows for the repository URL, which the server reads from the folder's `origin` when it runs. */
@@ -452,7 +472,7 @@ export function previewAction(
 ): string | null {
   const project =
     projects.find((p) => p.id === task?.projectId) ??
-    projects.find((p) => input.filters?.projectIds?.includes(p.id)) ??
+    projects.find((p) => input.projectIds?.includes(p.id)) ??
     projects[0] ??
     null;
   const def = CreateCustomAutomationInput.parse(input);

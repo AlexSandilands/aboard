@@ -14,6 +14,8 @@ import { parseAllowedTools } from "./customAutomations.logic";
 export interface ImportDraft {
   inputs: Record<string, string>;
   slots: Record<string, string>;
+  /** Where it starts: everywhere, or only in `projectIds`. */
+  everywhere: boolean;
   projectIds: string[];
   installSkill: boolean;
   /** Ticked once they have read the file's scripts: the server refuses a file with one otherwise. */
@@ -31,11 +33,12 @@ export function readBundle(text: string): { ok: true; bundle: AutomationBundle }
   return parseAutomationBundle(json);
 }
 
-/** The inputs at the author's defaults, no tools, no projects, and the skill (if any) not installed until agreed to. */
+/** The inputs at the author's defaults, no tools, everywhere, and the skill (if any) not installed until agreed to. */
 export function initialDraft(bundle: AutomationBundle): ImportDraft {
   return {
     inputs: Object.fromEntries(bundle.inputs.map((input) => [input.name, inputStartValue(input)])),
     slots: Object.fromEntries(bundle.slots.map((slot) => [slot.name, ""])),
+    everywhere: true,
     projectIds: [],
     installSkill: false,
     confirmScript: false,
@@ -53,7 +56,7 @@ export function draftToRequest(
     bundle,
     inputs: draft.inputs,
     slots: Object.fromEntries(Object.entries(draft.slots).map(([name, text]) => [name, parseAllowedTools(text)])),
-    projectIds: draft.projectIds,
+    projectIds: draft.everywhere ? [] : draft.projectIds,
     installSkill: draft.installSkill,
     confirmScript: draft.confirmScript,
   };
@@ -65,6 +68,7 @@ export const needsScriptConfirm = (bundle: AutomationBundle, draft: Pick<ImportD
 
 /** Why this can't be imported as filled in (the server's checks, run first), or null. An empty slot is allowed. */
 export function importProblem(bundle: AutomationBundle, draft: ImportDraft): string | null {
+  if (!draft.everywhere && draft.projectIds.length === 0) return "Pick a project, or choose Everywhere";
   const request = draftToRequest(bundle, draft);
   const parsed = CreateCustomAutomationInput.safeParse(
     bundleToDefinition(bundle, {

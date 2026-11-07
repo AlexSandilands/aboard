@@ -13,7 +13,6 @@ const current: CustomAutomation = {
   ...CreateCustomAutomationInput.parse({
     name: "Flaky test report",
     trigger: { kind: "schedule", schedule: { kind: "weekly", days: [1], time: "08:00" } },
-    filters: { projectIds: ["p1"] },
     action: {
       kind: "agent",
       prompt: "Open a task for {{item.key}}.",
@@ -34,7 +33,7 @@ const draft = (change: (bundle: AutomationBundle) => AutomationBundle): Automati
   change(automationBundle(current));
 
 describe("proposedDefinition", () => {
-  it("keeps the automation's input values, slot tools, projects and epic", () => {
+  it("keeps the automation's input values and slot tools, and leaves where it runs out", () => {
     const next = proposedDefinition(
       current,
       draft((b) => ({
@@ -42,12 +41,26 @@ describe("proposedDefinition", () => {
         inputs: [...b.inputs, { name: "branch", label: "Branch", type: "text", default: "main" }],
       })),
     );
-    expect(next.filters.projectIds).toEqual(["p1"]);
+    expect(next).not.toHaveProperty("projectIds");
     expect(next.action.inputs.map((i) => [i.name, i.value])).toEqual([
       ["days", "3"],
       ["branch", "main"],
     ]);
     expect(next.action.kind === "agent" && next.action.slots[0]!.tools).toEqual(["mcp__ci__logs"]);
+  });
+});
+
+describe("Tasks in epics in a change", () => {
+  it("keeps the automation's own, since it is where it runs", () => {
+    const loose: CustomAutomation = {
+      ...current,
+      trigger: { kind: "status_change", to: "review", from: null },
+      action: { ...current.action, check: null } as CustomAutomation["action"],
+      filters: { labels: [], epicTasks: false },
+    };
+    const bundle = automationBundle(loose);
+    const next = proposedDefinition(loose, { ...bundle, filters: { labels: ["ui"], epicTasks: true } });
+    expect(next.filters).toEqual({ labels: ["ui"], epicTasks: false });
   });
 });
 

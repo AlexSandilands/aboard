@@ -53,7 +53,8 @@ export const DIGEST_FIELDS: AutopilotField[] = [
     label: "Digest",
     tier: "essential",
     kind: "select",
-    help: "Plain is a grouped list the board builds. Summarised has an agent write it up, and falls back to plain if that fails.",
+    help: "Plain is a list the board builds; Summarised is written up by an agent.",
+    info: "Plain is a grouped list the board builds. Summarised has an agent write it up, and falls back to plain if that fails.",
     options: [
       { value: "plain", label: "Plain list (no agent)" },
       { value: "summarised", label: "Written by an agent" },
@@ -75,6 +76,7 @@ export const DIGEST_FIELDS: AutopilotField[] = [
     label: "Agent model",
     kind: "model",
     operation: "digest",
-    help: "Inherit: the board's model for the digest, by default the Light tier. It needs a provider that can run with no tools.",
+    help: "From Agents → Operations unless set here.",
+    info: "Inherit: the board's model for the digest, by default the Light tier. It needs a provider that can run with no tools.",
   },
 ];

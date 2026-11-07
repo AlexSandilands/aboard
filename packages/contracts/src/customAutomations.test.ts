@@ -106,19 +106,19 @@ describe("a script action", () => {
 });
 
 describe("checkCustomDefinition", () => {
-  const filters = { projectIds: [], labels: [], epicId: null };
+  const filters = { labels: [], epicTasks: true };
   const shell = { kind: "shell" as const, command: "make", timeoutSeconds: 60, inputs: [] };
   const agent = CustomAction.parse({ kind: "agent", prompt: "Go" }) as Extract<CustomAction, { kind: "agent" }>;
   const schedule = CustomTrigger.parse({ kind: "schedule", schedule: { kind: "hourly", everyHours: 4 } });
 
-  it("allows a schedule with a shell command or an agent, and project filters only", () => {
+  it("allows a schedule with a shell command or an agent, and no task filters", () => {
     expect(checkCustomDefinition({ trigger: schedule, filters, action: shell })).toBeNull();
     expect(checkCustomDefinition({ trigger: schedule, filters, action: agent })).toBeNull();
-    expect(checkCustomDefinition({ trigger: schedule, filters: { ...filters, epicId: "e" }, action: shell })).toMatch(
-      /only filter by project/,
-    );
+    expect(
+      checkCustomDefinition({ trigger: schedule, filters: { ...filters, epicTasks: false }, action: shell }),
+    ).toMatch(/can't filter by label or skip tasks in epics/);
     expect(checkCustomDefinition({ trigger: schedule, filters: { ...filters, labels: ["x"] }, action: agent })).toMatch(
-      /only filter by project/,
+      /can't filter by label/,
     );
     expect(checkCustomDefinition({ trigger: schedule, filters, action: { ...agent, onPrBranch: true } })).toMatch(
       /no pull request/,
@@ -169,7 +169,7 @@ describe("checkCustomDefinition", () => {
 
 describe("inputs and tool slots", () => {
   const agent = (extra: Record<string, unknown> = {}) => CustomAction.parse({ kind: "agent", prompt: "Go", ...extra });
-  const filters = { projectIds: [], labels: [], epicId: null };
+  const filters = { labels: [], epicTasks: true };
   const trigger = CustomTrigger.parse({ kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } });
   const check = (action: CustomAction) => checkCustomDefinition({ trigger, filters, action });
   const jira = { name: "jira", label: "Jira tools", description: "search issues by JQL" };
@@ -413,7 +413,7 @@ describe("nextPrChanges", () => {
 });
 
 describe("check scripts", () => {
-  const filters = { projectIds: [], labels: [], epicId: null };
+  const filters = { labels: [], epicTasks: true };
   const schedule = CustomTrigger.parse({ kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } });
   const check = { language: "node", body: 'console.log(\'{"key":"a"}\')' };
   const agent = (extra: Record<string, unknown> = {}) =>
@@ -622,7 +622,7 @@ describe("variables", () => {
 
   it("accepts {{vars.x}} in a prompt and refuses it in a script or command", () => {
     const trigger = CustomTrigger.parse({ kind: "blocker_finished" });
-    const filters = { projectIds: [], labels: [], epicId: null };
+    const filters = { labels: [], epicTasks: true };
     expect(checkCustomDefinition({ trigger, filters, action: agent("Key {{vars.jira_key}}") })).toBeNull();
     expect(checkCustomDefinition({ trigger, filters, action: script("print({{vars.jira_key}})") })).toMatch(
       variableEnvName("jira_key"),
@@ -650,7 +650,7 @@ describe("inputs on shell and script actions", () => {
     expect(CustomAction.parse({ kind: "shell", command: "make" })).toMatchObject({ inputs: [] });
     expect(CustomAction.parse({ kind: "script", language: "sh", body: "x" })).toMatchObject({ inputs: [] });
     const trigger = CustomTrigger.parse({ kind: "blocker_finished" });
-    const filters = { projectIds: [], labels: [], epicId: null };
+    const filters = { labels: [], epicTasks: true };
     const input = { name: "days", label: "Days", type: "number", default: "7" };
     const action = CustomAction.parse({ kind: "shell", command: "make", inputs: [input, input] });
     expect(checkCustomDefinition({ trigger, filters, action })).toMatch(/declared twice/);

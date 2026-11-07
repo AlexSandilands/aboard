@@ -46,12 +46,13 @@ export function stepProblem(form: CustomForm, step: BuilderStep): string | null 
         ...form,
         name: form.name.trim() || NAME_PLACEHOLDER,
         labels: "",
-        projectIds: [],
-        epicId: "",
+        everywhere: true,
+        epicTasks: true,
       });
       return result.ok ? null : result.error;
     }
     case 3: {
+      if (!form.everywhere && form.projectIds.length === 0) return "Pick a project, or choose Everywhere";
       const result = customFormToInput({ ...form, name: form.name.trim() || NAME_PLACEHOLDER });
       return result.ok ? null : result.error;
     }
@@ -114,15 +115,16 @@ function listPhrase(items: readonly string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
 }
 
+/** Up to three projects by name, the rest counted, so a long pick can't swallow the sentence. */
+function projectsPhrase(names: readonly string[]): string {
+  return names.length <= 3 ? listPhrase(names) : `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
+}
+
 /**
  * The automation as one sentence, as far as it is filled in: when, what, and where. Read on every step, so it says
  * something sensible before the prompt is written or while a number is half-typed.
  */
-export function formSentence(
-  form: CustomForm,
-  projects: readonly Pick<Project, "id" | "title">[],
-  epics: readonly Pick<TaskSummary, "id" | "number" | "title">[] = [],
-): string {
+export function formSentence(form: CustomForm, projects: readonly Pick<Project, "id" | "title">[]): string {
   const trigger = triggerOf(form);
   const when = typeof trigger === "string" ? "When it is triggered" : describeCustomTrigger(trigger);
   const checking = form.actionKind === "agent" && form.triggerKind === "schedule" && form.checkOn;
@@ -144,7 +146,11 @@ export function formSentence(
     }
   })();
   const named = projects.filter((p) => form.projectIds.includes(p.id)).map((p) => p.title);
-  const where = named.length > 0 ? `in ${listPhrase(named)}` : "in every project it's switched on in";
+  const where = form.everywhere
+    ? "in every project"
+    : named.length > 0
+      ? `in ${projectsPhrase(named)}`
+      : "in no project yet";
   const narrowed: string[] = [];
   if (form.triggerKind !== "schedule") {
     const labels = form.labels
@@ -152,11 +158,18 @@ export function formSentence(
       .map((l) => l.trim())
       .filter(Boolean);
     if (labels.length > 0) narrowed.push(`on tasks labelled ${labels.join(" or ")}`);
-    const epic = epics.find((e) => e.id === form.epicId);
-    if (epic) narrowed.push(`in #${epic.number} ${epic.title}`);
+    if (!form.epicTasks) narrowed.push("skipping tasks in epics");
   }
   const end = /[.!?…”`]$/.test(what) ? "" : ".";
   return `${when}, ${what}${end} It runs ${[where, ...narrowed].join(", ")}.`;
+}
+
+/** The projects the form says it runs in: every project, or only the ones picked. */
+export function formProjects<P extends Pick<Project, "id">>(
+  form: Pick<CustomForm, "everywhere" | "projectIds">,
+  projects: readonly P[],
+): P[] {
+  return form.everywhere ? [...projects] : projects.filter((p) => form.projectIds.includes(p.id));
 }
 
 /** What the last step lists under "Right now this would run for". */
@@ -180,7 +193,7 @@ export function rightNow(
   projects: readonly Pick<Project, "id" | "title">[],
   now: Date,
 ): RightNow {
-  const inScope = projects.filter((p) => form.projectIds.length === 0 || form.projectIds.includes(p.id));
+  const inScope = formProjects(form, projects);
   if (form.triggerKind === "schedule") return { kind: "schedule", projects: inScope.map((p) => p.title) };
   const trigger = triggerOf(form);
   if (typeof trigger === "string" || trigger.kind !== "stale") return { kind: "events" };
@@ -201,7 +214,7 @@ export function rightNow(
         t.status === trigger.status &&
         Date.parse(t.statusChangedAt) <= cutoff &&
         (labels.length === 0 || labels.some((l) => t.labels.includes(l))) &&
-        (!form.epicId || t.parent?.id === form.epicId),
+        (form.epicTasks || !t.parent),
     )
     .sort((a, b) => a.statusChangedAt.localeCompare(b.statusChangedAt));
   return { kind: "tasks", tasks: due.slice(0, RIGHT_NOW_SHOWN), more: Math.max(0, due.length - RIGHT_NOW_SHOWN) };

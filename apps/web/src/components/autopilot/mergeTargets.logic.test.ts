@@ -38,17 +38,12 @@ describe("the statuses", () => {
     expect(refList(items)).toBe("#1 T1, #2 T2 and 1 more");
   });
 
-  it("says what each target would merge", () => {
-    expect(epicsStatus({ epics: [], flagged: [] })).toBe("No epic delivers through a branch of its own yet");
+  it("says one fact for each target", () => {
+    expect(epicsStatus({ epics: [], flagged: [] })).toBe("No epic uses one yet");
     expect(epicsStatus({ epics: [{ number: 5, title: "Checkout", branch: "epic/5" }], flagged: [] })).toBe(
-      "1 epic delivers this way: #5 Checkout",
+      "1 epic: #5 Checkout",
     );
-    expect(flaggedStatus({ epics: [], flagged: [] }, true)).toBe("No task is flagged Auto-merge");
-    expect(flaggedStatus({ epics: [], flagged: items.slice(0, 2) }, true)).toBe(
-      "2 tasks are flagged Auto-merge: #1 T1 and #2 T2. They merge once ready, wherever this is on",
-    );
-    expect(flaggedStatus({ epics: [], flagged: items.slice(0, 1) }, false)).toBe(
-      "1 task is flagged Auto-merge: #1 T1. Autopilot leaves them to you (or an agent's merge_task_pr) while this is off",
-    );
+    expect(flaggedStatus({ epics: [], flagged: [] })).toBe("No task is flagged Auto-merge");
+    expect(flaggedStatus({ epics: [], flagged: items.slice(0, 2) })).toBe("2 flagged: #1 T1 and #2 T2");
   });
 });

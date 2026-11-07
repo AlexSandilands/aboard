@@ -1102,8 +1102,28 @@ The editor is a five-step builder (When → Do → Details → Where → Review 
 steps in `BuilderSteps.tsx`): one form, so moving between steps keeps everything; `stepProblem` (`builder.logic.ts`)
 checks each step only for what it shows, and Save jumps to the first step with a problem. Review shows the
 sentence, what it would run for right now (`rightNow`: a stale trigger's tasks already past the limit), the prompt
-preview or a script's test run, and the name, pre-filled from the trigger and action. A new one saves in Preview, or
-**Save and turn on** sets the board's mode to On after it is created; an existing one opens at Review. Details for a
+preview or a script's test run, and the name, pre-filled from the trigger and action. A new one saves in Preview where
+the Where step put it, or **Save and turn on** switches it On there after it is created (`useTurnOnCustomAutomation`:
+the board, or each of its projects); an existing one opens at Review.
+
+**Where** decides where it runs with its switches, and nothing else: the same **Everywhere / Only in…** choice, chips
+and picker as the automation's [Where it runs](#the-ui) (`ProjectsChoice` in `WhereItRuns.tsx`). For a saved automation
+the step is `WhereProjects`, which writes its switches as they are picked, like its page; for a new one (or an import,
+or Edit first) it is `DraftProjects`, kept in the form (`everywhere`, `projectIds`) and sent as the create input's
+`projectIds`: empty saves a board row in Preview, otherwise a project row in Preview for each, with the board off. Under
+it, for a task trigger: **With any of these labels** (`filters.labels`) and a **Tasks in epics** switch
+(`filters.epicTasks`, default on). Off, a task in an epic is skipped unless that epic has a setting of its own for the
+automation (`epicsWithOwnSetting`, passed to `customTaskMatches`), so the epic popover still switches one epic on. A
+schedule has no task, so neither shows and the definition can't carry them (`checkCustomDefinition`).
+
+**The project and epic filters became switches** (`049_custom_filters_to_scopes`), so one place decides where it runs
+and no stored automation runs anywhere new or stops anywhere it ran. A non-empty `projectIds` filter becomes Only in
+those projects: each keeps the state it had (its own row, or the board's), the board goes off, and the projects left
+out and their epics' rows go to Inherit. An `epicId` filter becomes that epic's own row at the state the epic had (off
+when its project was off or left out), every other row of the automation goes to Inherit, and Tasks in epics turns off.
+Rows keep their config and last on-mode. Since Tasks in epics replaced the epic filter, it counts as where it runs: an
+agent's change (`replaces`, `applyDraft` and `proposedDefinition`) and a `PATCH` whose filters leave it out keep the
+automation's own. Details for a
 command ("Which command?") or a script ("The script") has a small amber **Runs as you** pill by its heading
 (`RunsAsYouBadge` in `ScriptWarning.tsx`) instead of an alert: its card opens on hover, on click or tap, and on
 keyboard focus, and Esc closes it (it stays closed until focus leaves the pill). It says the code runs on this machine
@@ -1236,7 +1256,7 @@ the automation. Runs stay, under the old key.
   accident, not a boundary. Every change publishes `autopilot.changed`.
 - **UI**: listed under **Yours** in Settings → Autopilot → Automations (`AutomationsSplit`), with the editor
   `CustomAutomationEditorForm` as a sub-page, `/settings/autopilot/custom/<id>`. The preview runs the same contracts helpers as the server
-  on the newest board task the filters let through (`customAutomations.logic.ts`). Switches are the usual rows and
+  on the newest board task the filters let through, in a project it runs in (`customAutomations.logic.ts`). Switches are the usual rows and
   lane popover entries, since those list the catalogue.
 
 #### Inputs and required tool slots
@@ -1427,8 +1447,8 @@ An automation is shared as a versioned JSON file, an `AutomationBundle` (`packag
 or script with inputs, so a board from before those says the file is newer instead of refusing it as invalid; a file
 below 3 that declares inputs on a command or script is refused). It holds the name, description,
 trigger, the filters' labels only, the action, the declared inputs of any action kind (`{name, label, type, default}`), an agent's declared slots (`{name, label, description}`) and
-optionally the `skill` as `{name, body}`. Not in it: project filters, the epic, arming, switches and slot tools, so the
-importer's own servers and projects are theirs to choose. `parseAutomationBundle` checks a file, telling one from a newer
+optionally the `skill` as `{name, body}`, and `filters.epicTasks` (missing reads as true). Not in it: where it runs,
+arming, switches and slot tools, so the importer's own servers and projects are theirs to choose. `parseAutomationBundle` checks a file, telling one from a newer
 `version` apart from a malformed one.
 
 **Scripts** (a `script` action, or an agent's `check`; `actionScripts` lists them) are someone else's code run as the
@@ -1447,12 +1467,13 @@ the git backup keep the whole `action_json`, so a script comes back as written.
 | `POST /api/autopilot/custom/import`    | Body `{bundle, inputs, slots, projectIds, installSkill, confirmScript}`; 201 `{automation, skill}`       |
 
 `customAutomations.importBundle` parses the file again (a body that isn't one is `VALIDATION`), fills the inputs and
-slots (`bundleToDefinition`; an input left out takes its default), restricts the filters to `projectIds`, gives it a free
+slots (`bundleToDefinition`; an input left out takes its default), starts it Only in `projectIds` when there are any (the
+import screen's Where it runs, `DraftProjects`), gives it a free
 name (`Name (2)`) and runs the usual definition check **before** writing anything, so a file that can't run leaves no
 skill behind. The skill goes to `~/.claude/skills/<name>/SKILL.md` (`installSkill` in `skills.ts`) only when
 `installSkill` is true; a name taken by any installed skill (folder or frontmatter name) becomes `<name>-2`, `-3`, with
 the frontmatter name rewritten, and the automation names what was written. Without `installSkill` it names no skill. It
-is saved like any new one, in Preview for the board. As when creating one, a shell or script action needs the board page's
+is saved like any new one, in Preview for the board (or those projects). As when creating one, a shell or script action needs the board page's
 `Origin`, and so does `installSkill` with a skill in the file: a skill persists into every later session that reads
 the user's skills. The skill's frontmatter `name:` is always set to the name it was installed as (added, with a
 frontmatter block, when missing), so a file can't install a skill under another name. Export carries only the skill's
@@ -1879,10 +1900,11 @@ One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` 
   UI renders (boolean, number, text, time, select, skill; a skill field's `builtinLabel` renames its built-in entry,
   and a text field's `multiline` makes it a text area). A field's `tier` is `essential` for what most people set,
   shown with the automation; anything else (and unset) sits under its closed Advanced section. Runner, model, budget,
-  timeout and T3 access are always advanced, and the detail pane shows them as two lines rather than a row each: the
-  Model ("From Agents → Operations (PR review)", what that resolves to, and Override) and "Runner, budget and
-  timeout" (the effective values, "The defaults from Limits & safety", and Override, which opens a row per field with
-  a reset; it stays open while any of them is set at the board). Add the automation's sentence to `automationSentence` too.
+  timeout and T3 access are always advanced, and the detail pane shows them as two lines rather than a row each, the
+  same for every automation (see [Advanced overrides](#advanced-overrides)). A field's `help` is one short line and
+  `info` the rest, behind an info button by its label; `inRowOf` draws a field's control in another field's row (Fix
+  PRs' threshold beside Autopilot's review) instead of a row of its own. Add the automation's sentence to
+  `automationSentence` too.
 - `check(ctx)`: reads the board and returns candidates, only for `ctx.projects` (and the board when `ctx.board`
   is set). It must be cheap: it runs every pass.
 - `act(candidate, ctx)`: does the work, with `ctx.actor` as the actor of any change, and returns the outcome.
@@ -1947,12 +1969,38 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
     unarchived epics (epics only for an automation with `epicScope`), writes through `useApplyWhere` (one PUT per write,
     shown at once and refetched on error), and a blocked automation can't be switched on or into Preview from it;
     **Settings**, the fields whose `tier` is `essential`; and **Advanced**, closed, with every other field.
-    Its heading gets a dot when an advanced value isn't the default (`advancedChanged`). A field without a tier is
-    advanced. A custom automation's trigger and action are edited in its editor (**Edit**,
+    Its heading says how many differ from their default ("Agent, Fix skill · 2 changed", `advancedChangedCount`). A
+    field without a tier is advanced. Every row has one short description line, the rest behind an info button
+    (`InfoHover`), as docs/reference/style.md asks. A custom automation's trigger and action are edited in its editor (**Edit**,
     `/settings/autopilot/custom/<id>`).
   - **Quick setup as the empty state**: while nothing is on at any scope (`isOffEverywhere` for every row), the tab shows
     [Quick setup](#quick-setup) above Needs you.
   - At phone width the card shows one side at a time: the list, then the detail with an **All automations** link back.
+#### Advanced overrides
+
+Every automation's Advanced section uses one pattern (`ModelLine`, `AgentDefaultsLine` and `AutomationField` in
+`AutomationsSplit.tsx` and `AutomationRows.tsx`, with the helpers in `automationList.logic.ts`):
+
+- **Closed**: one short line on where the value comes from, a "Now: …" status and **Override** on the right. The model
+  comes from Agents → Operations; runner, budget, timeout and T3 access from Limits & safety's
+  [agent defaults](#agent-defaults).
+- **A field's reset** (`SettingResetButton`, ↶) shows by its label only while the value differs from its default
+  (`fieldChanged`; the default is `fieldDefault`: the board's agent default for those four keys, Inherit for the model,
+  else the automation's own), and resets that field alone. Its tooltip names the default ("Reset to $5",
+  `fieldValueText`). Setting the default back by hand saves no key, so the ↶ hides and it follows the default again.
+  Resetting one keeps the group open.
+- **The group** ("Runner, budget, timeout and T3 access") says "N set here, the rest from Limits & safety" while
+  overriding, and its control becomes **↶ Reset**, which clears all four and closes it: also the way out when nothing
+  changed. Its field rows are tinted rather than indented, since an indent would push a row in the narrow detail pane
+  under its container breakpoint and stack its control.
+- **The model** is one row, so its ↶ shows the whole time it is overridden; that is its way back to the one-line row.
+- Controls follow docs/reference/style.md: one right edge, numbers in `UnitInput`, selects at `SETTINGS_TEXT_WIDTH`, the
+  model picker at `SETTINGS_PICKER_WIDTH`.
+
+The **Merge ready PRs** detail (`MergeTargets.tsx`) follows the same rule: what an integration branch is sits behind the
+**Merges into** heading's info button (`DetailSection`'s `info`), each target is one line with one fact from the board
+(`epicsStatus`, `flaggedStatus`), and Ready means is one line with the full definition behind its info button.
+
 #### The Add gallery
 
 `AddAutomationDialog` (`components/autopilot/`), opened by **+ Add automation**, is one place to start anything:
@@ -2144,7 +2192,7 @@ while the key is set at that scope) removes the key so it inherits.
 | `apps/server/src/db/migrations/034_autopilot_runs_automation_index.sql` | The index the history page's filter and paging read |
 | `apps/web/src/components/autopilot/RunHistory.tsx`, `RunHistoryRow.tsx`, `runHistory.logic.ts` | The run history page, a run's row, and the URL-to-filter logic |
 | `apps/web/src/components/autopilot/AutopilotPage.tsx` | Settings → Autopilot's tabs, the status strip and Needs you |
-| `apps/web/src/components/autopilot/AutomationsSplit.tsx`, `automationList.logic.ts` | The list and detail: groups, rows, dimming, the Advanced section and its dot |
+| `apps/web/src/components/autopilot/AutomationsSplit.tsx`, `automationList.logic.ts` | The list and detail: groups, rows, dimming, the Advanced section, its override pattern and change count |
 | `apps/web/src/components/autopilot/AutopilotSettingsSection.tsx` | The Limits & safety tab, and a project's read-only Autopilot list |
 | `packages/contracts/src/autopilotSentence.ts` | `automationSentence`, `limitsSummary`, `todaySummary` |
 | `apps/web/src/state/autopilotRunHistory.ts` | The history's infinite query, the delete preview and the delete |

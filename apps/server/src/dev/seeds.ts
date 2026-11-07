@@ -1351,12 +1351,37 @@ const autopilot: Scenario = (s, opts) => {
       slots: [{ name: "tracker", label: "Issue tracker search", description: "Finds issues by text." }],
     },
   });
+  // A task trigger, so its Where step has labels and Tasks in epics: only in the first project, skipping epics.
+  const firstProject = s.projects.list()[0];
+  s.customAutomations.create({
+    name: "Nudge stuck tasks",
+    trigger: { kind: "stale", status: "in_progress", hours: 48 },
+    filters: { labels: ["ui"], epicTasks: false },
+    projectIds: firstProject ? [firstProject.id] : [],
+    action: { kind: "agent", prompt: "Task #{{task.number}} has had no progress for two days. Find out why." },
+  });
 };
 
-export const SCENARIOS = { basic, review, threads, showcase, social, stats, dense, autopilot } satisfies Record<
-  string,
-  Scenario
->;
+/** Autopilot's board on more projects than Where it runs shows as chips, so it shows its project picker. */
+const crowded: Scenario = (s, opts) => {
+  autopilot(s, opts);
+  const names = ["billing-service", "auth-gateway", "admin-console", "search-indexer", "data-pipeline", "ios-widgets"];
+  const more = ["android-app", "design-system", "marketing-site", "infra-terraform", "notifications", "analytics-etl"];
+  const rest = ["partner-portal", "support-bot", "cli-tools", "billing-web", "ledger", "warehouse-sync"];
+  for (const title of [...names, ...more, ...rest]) s.projects.create({ title });
+};
+
+export const SCENARIOS = {
+  basic,
+  review,
+  threads,
+  showcase,
+  social,
+  stats,
+  dense,
+  autopilot,
+  crowded,
+} satisfies Record<string, Scenario>;
 export type ScenarioName = keyof typeof SCENARIOS;
 
 /** The made-up tracker the seeded tasks' keys (SHOP-77, PAY-88) belong to. */

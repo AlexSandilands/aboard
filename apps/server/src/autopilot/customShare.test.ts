@@ -75,7 +75,7 @@ const triageAction = (extra: Record<string, unknown> = {}): Action =>
 const triage = (action: Action = triageAction()): CreateCustomAutomationInput => ({
   name: "Triage",
   trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
-  filters: { projectIds: [] },
+  projectIds: [],
   action,
 });
 
@@ -89,7 +89,7 @@ describe("exporting a custom automation", () => {
     const project = s.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
     const custom = s.services.customAutomations.create({
       ...triage(triageAction({ slots: [{ ...jira, tools: ["mcp__issue-tracker__search_jira"] }] })),
-      filters: { projectIds: [project.id] },
+      projectIds: [project.id],
     });
     const bundle = await exportOf(s, custom);
     expect(bundle).toMatchObject({
@@ -149,7 +149,7 @@ describe("importing a custom automation", () => {
     expect(readFileSync(join(s.skillDir("triage"), "SKILL.md"), "utf8")).toBe(SKILL);
     expect(automation).toMatchObject({
       name: "Triage",
-      filters: { projectIds: [project.id], epicId: null },
+      filters: { labels: [], epicTasks: true },
       action: {
         kind: "agent",
         skill: "triage",
@@ -157,11 +157,14 @@ describe("importing a custom automation", () => {
         slots: [{ name: "jira", tools: ["mcp__atlassian__search"] }],
       },
     });
-    // In Preview until the user turns it on: it records what it would do.
+    // In Preview until the user turns it on (it records what it would do), only in the project picked.
     const entry = s.services.autopilot
-      .scope("board", null)
+      .scope("project", project.id)
       .find((e) => e.automation === customAutomationKey(automation.id));
     expect(entry).toMatchObject({ mode: "preview", enabled: true, preview: true });
+    expect(
+      s.services.autopilot.scope("board", null).find((e) => e.automation === customAutomationKey(automation.id)),
+    ).toMatchObject({ mode: "inherit", enabled: false });
   });
 
   it("renames the skill when its name is taken, and never overwrites the user's own", async () => {
@@ -269,7 +272,7 @@ describe("sharing a script", () => {
   const scriptAutomation = (): CreateCustomAutomationInput => ({
     name: "Check",
     trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
-    filters: { projectIds: [] },
+    projectIds: [],
     action: CustomAction.parse(script),
   });
   const post = (s: Setup, body: unknown, headers?: Record<string, string>) =>

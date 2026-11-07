@@ -11,7 +11,7 @@ code. One command does all of it; don't rebuild it by hand.
 
 ## Pick a mode
 
-- **Isolated (default):** `pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|autopilot|none]`. This checkout's server on
+- **Isolated (default):** `pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|autopilot|crowded|none]`. This checkout's server on
   a temp data dir and its own home folder for skills, pollers off, T3 Code integration off, Vite with hot reload. Use it for anything:
   web, server or contracts changes, and anything that writes.
 - **Desktop:** `pnpm sandbox --desktop [--seed ...]`. The isolated sandbox plus the Electron shell attached
@@ -43,6 +43,8 @@ Seeds (`apps/server/src/dev/seeds.ts`):
   No PRs, sessions or review rounds are backdated, so those charts stay flat.
 - `autopilot`: the showcase board with Autopilot set up for Settings → Autopilot: five automations on for the board
   in dry run (so no agent ever starts), a failed run, an agent's draft and a custom automation with an empty tool slot.
+- `crowded`: the `autopilot` board plus eighteen empty projects, past the eight Where it runs shows as chips, so it
+  shows its project picker.
 - `dense`: for checking rendering cost. A project with twenty cards in every column, one with an epic whose children
   span every column, fifteen cards spread across the columns beside the same fifteen in backlog, and a single card.
   Pair it with `--prod`.

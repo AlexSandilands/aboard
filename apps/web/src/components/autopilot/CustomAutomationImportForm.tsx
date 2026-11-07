@@ -1,10 +1,4 @@
-import {
-  actionScripts,
-  type AutomationBundle,
-  customAllowedTools,
-  customAutomationKey,
-  type AutomationExample,
-} from "@repo/contracts";
+import { actionScripts, type AutomationBundle, customAllowedTools, type AutomationExample } from "@repo/contracts";
 import { BotIcon, FileUpIcon, TriangleAlertIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { EditorFooter, EditorHeader, EditorPanel, EditorTitle } from "~/components/settings/EditorFrame";
@@ -19,8 +13,8 @@ import {
   useCustomAutomations,
   useDismissAutomationDraft,
   useImportCustomAutomation,
+  useTurnOnCustomAutomation,
 } from "~/state/customAutomations";
-import { useSetAutopilotScope } from "~/state/mutations";
 import { useBoard, useSettings } from "~/state/queries";
 import { AutomationChangeReview } from "./AutomationChangeReview";
 import { formFromBundle, formSentence } from "./builder.logic";
@@ -37,6 +31,7 @@ import { actionModelLabel, parseAllowedTools, type CustomForm } from "./customAu
 import { InputValueControl } from "./InputsAndSlots";
 import { ScriptWarning } from "./ScriptWarning";
 import { VariableNeedsList } from "./VariablesEditor";
+import { DraftProjects } from "./WhereItRuns";
 import { variableNeeds } from "./variables.logic";
 
 /** A file bigger than this isn't an automation. */
@@ -95,9 +90,11 @@ export function CustomAutomationImportForm({
   // The draft shown, until another file or example replaces it.
   const [fromDraft, setFromDraft] = useState<string | null>(null);
   const opened = useRef<string | null>(null);
-  const projects = board?.projects.filter((p) => p.archivedAt === null) ?? [];
+  const projects = (board?.projects.filter((p) => p.archivedAt === null) ?? []).sort((a, b) =>
+    a.position < b.position ? -1 : a.position > b.position ? 1 : 0,
+  );
   const customs = useCustomAutomations();
-  const setScope = useSetAutopilotScope(null);
+  const turnOn = useTurnOnCustomAutomation();
   const [mode, setMode] = useState<"preview" | "on">("preview");
   // "Edit first": the builder, opened on what this would import (or, for a change, on the automation it changes).
   const [editing, setEditing] = useState<{ form: CustomForm; customId: string | null; confirmScript: boolean } | null>(
@@ -110,7 +107,7 @@ export function CustomAutomationImportForm({
       ? variableNeeds(
           bundle.action,
           boardVariables,
-          projects.filter((p) => draft.projectIds.length === 0 || draft.projectIds.includes(p.id)),
+          draft.everywhere ? projects : projects.filter((p) => draft.projectIds.includes(p.id)),
         )
       : [];
 
@@ -163,8 +160,8 @@ export function CustomAutomationImportForm({
           });
         }
         if (mode === "on") {
-          setScope.mutate(
-            { automation: customAutomationKey(automation.id), mode: "on" },
+          turnOn.mutate(
+            { id: automation.id, projectIds: draftToRequest(bundle, draft).projectIds ?? [] },
             { onSettled: () => onDone(automation.id) },
           );
         } else onDone(automation.id);
@@ -178,7 +175,7 @@ export function CustomAutomationImportForm({
       const form = formFromBundle(bundle, {
         inputs: draft.inputs,
         slots: Object.fromEntries(Object.entries(draft.slots).map(([name, text]) => [name, parseAllowedTools(text)])),
-        projectIds: draft.projectIds,
+        projectIds: draftToRequest(bundle, draft).projectIds ?? [],
       });
       setEditing({ form, customId: null, confirmScript: actionScripts(bundle.action).length > 0 });
     } catch (caught) {
@@ -254,7 +251,11 @@ export function CustomAutomationImportForm({
   const sentence = (() => {
     if (!bundle || !draft) return null;
     try {
-      return formSentence(formFromBundle(bundle, { projectIds: draft.projectIds }), projects);
+      // Where it runs as picked here, Only in… with nothing picked included.
+      return formSentence(
+        { ...formFromBundle(bundle), everywhere: draft.everywhere, projectIds: draft.projectIds },
+        projects,
+      );
     } catch {
       return null;
     }
@@ -355,7 +356,7 @@ export function CustomAutomationImportForm({
                 {tools.length > 0 ? (
                   <Section
                     title="Tools it may use without asking"
-                    hint="They run unattended, with nobody to approve a call. Read them against your own MCP servers."
+                    hint="Nobody approves a call: check them against your own MCP servers."
                   >
                     <Code>{tools.join("\n")}</Code>
                   </Section>
@@ -417,7 +418,7 @@ export function CustomAutomationImportForm({
             {bundle.skill ? (
               <Section
                 title={`Skill: ${bundle.skill.name}`}
-                hint="Written to your skills folder (~/.claude/skills). A name you already use is kept apart, never overwritten."
+                hint="Written to ~/.claude/skills; a name you use already is kept apart."
               >
                 <Code tall>{bundle.skill.body}</Code>
                 <div className="flex items-center justify-between gap-4">
@@ -461,7 +462,7 @@ export function CustomAutomationImportForm({
             {bundle.slots.length > 0 ? (
               <Section
                 title="Tools it needs"
-                hint="One tool per line, from your own MCP servers (mcp__server__tool, or mcp__server for all of its tools). It can't be switched on until each is filled in."
+                hint="One tool per line (mcp__server__tool, or mcp__server for all of them). Needed to switch it on."
               >
                 <div className="flex flex-col gap-3">
                   {bundle.slots.map((slot) => (
@@ -489,26 +490,21 @@ export function CustomAutomationImportForm({
             {needs.length > 0 ? (
               <Section
                 title="Variables it reads"
-                hint="The file doesn't carry their values: they are yours. Set them for every project under Settings → Autopilot → Limits & safety → Variables, or in a project's settings. It doesn't run in a project where one has no value."
+                hint="Set their values under Limits & safety → Variables, or in a project's settings."
               >
                 <VariableNeedsList needs={needs} />
               </Section>
             ) : null}
 
-            <Section title="Only in these projects" hint="None picked is every project you switch it on in.">
-              <ToggleGroup
-                multiple
-                aria-label="Projects"
-                className="flex-wrap"
-                value={draft.projectIds}
-                onValueChange={(projectIds) => patch({ projectIds })}
-              >
-                {projects.map((p) => (
-                  <Toggle key={p.id} value={p.id}>
-                    {p.title}
-                  </Toggle>
-                ))}
-              </ToggleGroup>
+            <Section title="Where it runs">
+              <div className="flex flex-col gap-2">
+                <DraftProjects
+                  projects={projects}
+                  everywhere={draft.everywhere}
+                  projectIds={draft.projectIds}
+                  onChange={(next) => patch(next)}
+                />
+              </div>
             </Section>
 
             <Section
@@ -564,7 +560,7 @@ export function CustomAutomationImportForm({
             Boolean(problem) ||
             needsScriptConfirm(bundle, draft) ||
             importing.isPending ||
-            setScope.isPending
+            turnOn.isPending
           }
           onClick={submit}
         >

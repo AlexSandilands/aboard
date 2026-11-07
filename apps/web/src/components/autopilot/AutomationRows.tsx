@@ -16,11 +16,18 @@ import { skillOptions } from "~/components/review/review.logic";
 import { inheritDetail } from "~/components/models/choicePicker.logic";
 import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
 import { ReviewSkillSelect } from "~/components/settings/ReviewSettingsSection";
-import { SETTINGS_TEXT_WIDTH, SettingResetButton, SettingsRow, UnitInput } from "~/components/settings/settingsLayout";
+import {
+  SETTINGS_PICKER_WIDTH,
+  SETTINGS_TEXT_WIDTH,
+  SettingResetButton,
+  SettingsRow,
+  UnitInput,
+} from "~/components/settings/settingsLayout";
 import { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotScope, useSettings, useSkills } from "~/state/queries";
 import { toastManager } from "~/components/ui/toast";
 import { entryFor, fieldText, isClockTime, parseNumberField, withConfigValue } from "./autopilot.logic";
+import { fieldValueText } from "./automationList.logic";
 import { TimeInput } from "./TimeInput";
 
 /** Sets or clears one key of a scope's config, built from the latest saved config (see useSetAutopilotScope). */
@@ -72,6 +79,10 @@ export function AutomationField({
   description,
   info,
   status,
+  defaults,
+  alwaysReset = false,
+  onReset,
+  className,
   children,
 }: {
   automation: AutopilotAutomation;
@@ -84,33 +95,90 @@ export function AutomationField({
   description?: ReactNode;
   info?: ReactNode;
   status?: ReactNode;
+  /**
+   * What it is when not set here (fieldDefault). Given, the reset shows only while the value differs from it, its
+   * tooltip names it, and setting it back to it by hand clears the key, so it follows the default again.
+   */
+  defaults?: { value: unknown };
+  /** Show the reset even while unchanged: a single-field override's way back out (the model). */
+  alwaysReset?: boolean;
+  /** After the reset has cleared the key. */
+  onReset?: () => void;
+  className?: string;
   /** Shown under the row, e.g. an example. */
   children?: ReactNode;
 }) {
   const overridden = field.key in entry.config;
   const value = field.key in entry.effectiveConfig ? entry.effectiveConfig[field.key] : automation.defaults[field.key];
-  // Clearing a key that isn't set here changes nothing; the control puts the inherited value back.
+  const isDefault = (next: unknown) =>
+    defaults !== undefined && JSON.stringify(next ?? null) === JSON.stringify(defaults.value ?? null);
+  const changed = overridden && !(defaults && isDefault(entry.config[field.key]));
+  // The default saves as no key, so it follows the default when that changes. Clearing a key that isn't set here
+  // changes nothing; for an empty field the control then puts the inherited value back.
   const save = (next: unknown) => {
-    if (next === undefined && !overridden) return false;
-    onConfig((current) => withConfigValue(current, field.key, next));
+    const kept = next === undefined || isDefault(next) ? undefined : next;
+    if (kept === undefined && !overridden) return next !== undefined;
+    onConfig((current) => withConfigValue(current, field.key, kept));
     return true;
   };
-  const control = (
+  // Fields drawn in this one's row (`inRowOf`): their controls sit before its own, and its reset resets them too.
+  const companions = automation.fields.filter((f) => f.inRowOf === field.key);
+  // A paired field set back to the automation's default counts as unchanged, as the row's own does.
+  const atDefault = (f: AutopilotField, next: unknown) =>
+    JSON.stringify(next ?? null) === JSON.stringify(automation.defaults[f.key] ?? null);
+  const companionSet = companions.some((f) => f.key in entry.config && !atDefault(f, entry.config[f.key]));
+  const reset = () => {
+    if (overridden || companionSet) {
+      onConfig((current) =>
+        [field, ...companions].reduce((config, f) => withConfigValue(config, f.key, undefined), current),
+      );
+    }
+    onReset?.();
+  };
+  const own = (
     <FieldControl key={rejected} field={field} value={value} projectId={projectId} onSave={save} label={field.label} />
   );
+  const control =
+    companions.length === 0 ? (
+      own
+    ) : (
+      <div className="flex min-w-0 items-center gap-2 @min-[32rem]/settings-row:justify-end">
+        {companions.map((companion) => (
+          <FieldControl
+            key={`${companion.key}:${rejected}`}
+            field={companion}
+            value={
+              companion.key in entry.effectiveConfig
+                ? entry.effectiveConfig[companion.key]
+                : automation.defaults[companion.key]
+            }
+            projectId={projectId}
+            label={companion.label}
+            onSave={(next) => {
+              const kept = next === undefined || atDefault(companion, next) ? undefined : next;
+              if (kept === undefined && !(companion.key in entry.config)) return next !== undefined;
+              onConfig((current) => withConfigValue(current, companion.key, kept));
+              return true;
+            }}
+          />
+        ))}
+        {own}
+      </div>
+    );
   const multiline = field.kind === "text" && field.multiline;
   return (
     <SettingsRow
       title={field.label}
       description={description ?? field.help}
-      info={info}
+      info={info ?? field.info}
       status={status}
+      className={className}
       resetAction={
-        overridden ? (
+        changed || companionSet || alwaysReset ? (
           <SettingResetButton
             label={field.label}
-            to={projectId ? "the board's value" : "default"}
-            onClick={() => save(undefined)}
+            to={defaults ? fieldValueText(field, defaults.value) : projectId ? "the board's value" : "default"}
+            onClick={reset}
           />
         ) : undefined
       }
@@ -249,7 +317,7 @@ function ModelField({
       inherit={{ label: "Inherit", detail: inheritDetail(op, { needs: field.needs }, settings) }}
       ariaLabel={label}
       size="sm"
-      className={SETTINGS_TEXT_WIDTH}
+      className={SETTINGS_PICKER_WIDTH}
       onChange={(next) => onSave(next ?? INHERIT)}
     />
   );

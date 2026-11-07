@@ -53,6 +53,7 @@ describe("filling in an import", () => {
         require_approval: "true",
       },
       slots: { jira: "" },
+      everywhere: true,
       projectIds: [],
       installSkill: false,
       confirmScript: false,
@@ -76,6 +77,10 @@ describe("filling in an import", () => {
       /enter a number/,
     );
     expect(importProblem(bundle, { ...draft, slots: { jira: "Bash" } })).toMatch(/^Jira tools: /);
+    // Only in… needs a project, and sends the ones picked; Everywhere sends none.
+    expect(importProblem(bundle, { ...draft, everywhere: false })).toMatch(/Pick a project/);
+    expect(draftToRequest(bundle, { ...draft, everywhere: false, projectIds: ["p1"] }).projectIds).toEqual(["p1"]);
+    expect(draftToRequest(bundle, { ...draft, everywhere: true, projectIds: ["p1"] }).projectIds).toEqual([]);
   });
 });
 
@@ -84,7 +89,7 @@ describe("a file with a script", () => {
     automationBundle({
       name: "Check",
       trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
-      filters: { projectIds: [], labels: [], epicId: null },
+      filters: { labels: [], epicTasks: true },
       action: CustomAction.parse({ kind: "script", language: "sh", body: "echo hi" }),
     });
 

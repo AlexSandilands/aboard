@@ -192,9 +192,8 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
   const { trigger, filters, action } = custom;
   const isAgent = action.kind === "agent";
 
-  const inFilter = (project: Project) => filters.projectIds.length === 0 || filters.projectIds.includes(project.id);
-  const inScope = (ctx: CheckContext<Record<string, unknown>>) =>
-    ctx.projects.filter(({ project }) => inFilter(project));
+  // Where it runs is its switches: the engine hands the check only the projects they reach.
+  const inScope = (ctx: CheckContext<Record<string, unknown>>) => ctx.projects;
 
   // The variables the action names: a project with no value for one of them gets no run.
   const named = variablesNamedBy(action);
@@ -202,8 +201,6 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
   const lacking = (project: Project): string[] => (named.length > 0 ? missingVariables(action, varsOf(project)) : []);
   const scopeOf = async (project: Project | null): Promise<CustomScope> =>
     project ? { vars: varsOf(project), repoUrl: await deps.repoUrl(project.workspaceRoot) } : {};
-
-  const matches = (task: TaskSummary) => customTaskMatches(filters, task);
 
   const preview = (values: CustomValues, task: TaskSummary | null, services: Services, handover?: string | null) => {
     if (action.kind === "shell") return describeShellRun(action.command, values);
@@ -477,7 +474,7 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
           : projectPreview);
       const tasks = services.tasks.summaries({ projectId: project.id });
       const byId = new Map(tasks.map((t) => [t.id, t]));
-      const eligible = tasks.filter(matches);
+      const eligible = tasks.filter((task) => customTaskMatches(filters, task, ownEpics));
       const scopeChanged = services.customAutomations.scopeChangedAt([
         ...eligible.map((t) => t.id),
         ...new Set(eligible.flatMap((t) => (t.parent ? [t.parent.id] : []))),
@@ -537,9 +534,7 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
     ...(named.length > 0
       ? {
           needs: (projects: readonly Project[]) =>
-            describeMissingVariables(
-              projects.filter(inFilter).map((project) => ({ project: project.title, names: lacking(project) })),
-            ),
+            describeMissingVariables(projects.map((project) => ({ project: project.title, names: lacking(project) }))),
         }
       : {}),
     schema: isAgent ? AgentConfig : z.object({}),

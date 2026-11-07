@@ -35,6 +35,7 @@ export const CODE_MIGRATIONS: Readonly<Record<string, (db: Db) => void>> = {
   "044_autopilot_agent_defaults": autopilotAgentDefaults,
   "047_reminder_notifications": reminderNotifications,
   "048_recurring_without_switch": recurringWithoutSwitch,
+  "049_custom_filters_to_scopes": customFiltersToScopes,
 };
 
 /**
@@ -505,4 +506,91 @@ function recurringWithoutSwitch(db: Db): void {
     if (!on.has(id)) disable.run(id);
   }
   db.prepare("DELETE FROM autopilot_settings WHERE automation = ?").run(AUTOPILOT_RECURRING);
+}
+
+/**
+ * A custom automation's project and epic filters become its switches, so one place decides where it runs: a project
+ * filter is Only in those projects (each keeping the state it had, the rest and their epics off), and an epic filter is
+ * that epic's own setting at the state it had, everything else off and Tasks in epics off, so a project switched on
+ * later still leaves other epics' tasks alone. Nothing runs anywhere it didn't before, nor stops where it did.
+ */
+function customFiltersToScopes(db: Db): void {
+  type Row = { scope_kind: string; scope_id: string; mode: string };
+  type State = "on" | "preview" | "off";
+  const live = (mode: string | undefined): mode is "on" | "preview" => mode === "on" || mode === "preview";
+  const customs = db.prepare("SELECT id, filters_json FROM autopilot_custom").all() as Array<{
+    id: string;
+    filters_json: string;
+  }>;
+  const projects = (db.prepare("SELECT id FROM projects").all() as Array<{ id: string }>).map((p) => p.id);
+  const epicProject = db.prepare("SELECT project_id FROM tasks WHERE id = ? AND kind = 'epic'");
+  const writeFilters = db.prepare("UPDATE autopilot_custom SET filters_json = ? WHERE id = ?");
+  const now = new Date().toISOString();
+  const upsert = db.prepare(
+    `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at, last_on_mode)
+     VALUES (?, ?, ?, ?, '{}', ?, ?)
+     ON CONFLICT (scope_kind, scope_id, automation) DO UPDATE SET mode = excluded.mode, updated_at = excluded.updated_at,
+       last_on_mode = COALESCE(excluded.last_on_mode, autopilot_settings.last_on_mode)`,
+  );
+
+  for (const custom of customs) {
+    let filters: Record<string, unknown> = {};
+    try {
+      const parsed: unknown = JSON.parse(custom.filters_json);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) filters = parsed as Record<string, unknown>;
+    } catch {
+      // A malformed row parses as no filters, as the repository read it.
+    }
+    const projectIds = Array.isArray(filters.projectIds)
+      ? filters.projectIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+      : [];
+    const epicId = typeof filters.epicId === "string" && filters.epicId ? filters.epicId : null;
+    const labels = Array.isArray(filters.labels) ? filters.labels : [];
+    writeFilters.run(JSON.stringify({ labels, epicTasks: epicId === null }), custom.id);
+    if (projectIds.length === 0 && !epicId) continue;
+
+    const key = `custom:${custom.id}`;
+    const rows = db
+      .prepare("SELECT scope_kind, scope_id, mode FROM autopilot_settings WHERE automation = ?")
+      .all(key) as Row[];
+    const own = (kind: string, id: string) => rows.find((r) => r.scope_kind === kind && r.scope_id === id)?.mode;
+    const boardMode = own("board", "");
+    const boardState: State = live(boardMode) ? boardMode : "off";
+    const projectState = (id: string): State => {
+      if (projectIds.length > 0 && !projectIds.includes(id)) return "off";
+      const mode = own("project", id);
+      return mode === undefined || mode === "inherit" ? boardState : (mode as State);
+    };
+    // Rows only where there is one already or a state to keep: Inherit under a board that is off is off.
+    const set = (kind: string, id: string, state: State) => {
+      const mode = state === "off" ? "inherit" : state;
+      if (mode === "inherit" && own(kind, id) === undefined) return;
+      upsert.run(kind, id, key, mode, now, live(mode) ? mode : null);
+    };
+
+    if (epicId) {
+      const epic = epicProject.get(epicId) as { project_id: string } | undefined;
+      const epicMode = own("epic", epicId);
+      const epicState: State =
+        !epic || (projectIds.length > 0 && !projectIds.includes(epic.project_id))
+          ? "off"
+          : epicMode === undefined || epicMode === "inherit"
+            ? projectState(epic.project_id)
+            : (epicMode as State);
+      for (const row of rows) {
+        if (!(row.scope_kind === "epic" && row.scope_id === epicId)) set(row.scope_kind, row.scope_id, "off");
+      }
+      set("board", "", "off");
+      if (epic) set("epic", epicId, epicState);
+      continue;
+    }
+
+    const states = new Map(projects.map((id) => [id, projectState(id)]));
+    set("board", "", "off");
+    for (const id of projects) set("project", id, states.get(id)!);
+    for (const row of rows.filter((r) => r.scope_kind === "epic")) {
+      const epic = epicProject.get(row.scope_id) as { project_id: string } | undefined;
+      if (!epic || !projectIds.includes(epic.project_id)) set("epic", row.scope_id, "off");
+    }
+  }
 }

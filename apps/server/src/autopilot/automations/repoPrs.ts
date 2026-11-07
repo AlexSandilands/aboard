@@ -85,7 +85,8 @@ export const OTHER_PRS_ESSENTIAL_FIELDS: AutopilotField[] = [
     label: "Other people's PRs",
     kind: "boolean",
     tier: "essential",
-    help: "Also review open pull requests by the authors below that no task links to: approve them, ask for changes or hand them to you. Fix PRs never works on them.",
+    help: "Also review open PRs by the authors below that no task links to.",
+    info: "It approves them, asks for changes or hands them to you. Fix PRs never works on them.",
   },
   {
     key: "otherAuthors",
@@ -93,14 +94,16 @@ export const OTHER_PRS_ESSENTIAL_FIELDS: AutopilotField[] = [
     kind: "text",
     tier: "essential",
     placeholder: "alice, bob",
-    help: "The logins whose pull requests are reviewed, separated by commas. Your own are never reviewed this way.",
+    help: "Logins whose pull requests are reviewed, comma separated.",
+    info: "Your own are never reviewed this way.",
   },
   {
     key: "otherApprove",
     label: "Approve",
     kind: "boolean",
     tier: "essential",
-    help: "Approve as you when the review is clean and the gate passes (a linked issue, required checks green, no sensitive path). Off: a clean PR waits for your approval under Needs you.",
+    help: "Approve as you when the review is clean and the gate passes.",
+    info: "The gate: a linked issue, required checks green, no sensitive path. Off: a clean PR waits for your approval under Needs you.",
   },
 ];
 
@@ -116,7 +119,8 @@ export const OTHER_PRS_ADVANCED_FIELDS: AutopilotField[] = [
     label: "Sensitive paths",
     kind: "text",
     multiline: true,
-    help: "Other people's PRs that change one of these always wait for your approval. Comma separated: a name ending in / is a folder, a name with no / matches in any folder (*.lock), and * and ** are wildcards.",
+    help: "PRs that change one of these always wait for your approval.",
+    info: "Comma separated: a name ending in / is a folder, a name with no / matches in any folder (*.lock), and * and ** are wildcards.",
   },
   {
     key: "otherQuietMinutes",
@@ -142,7 +146,8 @@ export const OTHER_PRS_ADVANCED_FIELDS: AutopilotField[] = [
     kind: "number",
     min: 1,
     max: 10,
-    help: "Other people's PRs: reviews per PR before it is handed to you. A small re-approval after a push doesn't count.",
+    help: "Other people's PRs: reviews per PR before it is handed to you.",
+    info: "A small re-approval after a push doesn't count.",
   },
 ];
 

@@ -104,10 +104,10 @@ export function modeDescription(
   if (mode === "on") {
     return automation.needsAgent
       ? "Runs for real and counts toward your limits."
-      : "Runs for real. It starts no agent, so the agent limits and quiet hours don't apply.";
+      : "Runs for real. It starts no agent, so agent limits don't apply.";
   }
   return hasCheckScript
-    ? "Records what it would do, as runs marked Preview, and starts no agent. Its check script still runs for real, so it can tell what it would act on."
+    ? "Records what it would do; its check script still runs for real."
     : "Records what it would do, as runs marked Preview, and does none of it.";
 }
 

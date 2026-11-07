@@ -10,6 +10,7 @@ import {
   INHERIT,
   inputEnvName,
   type AutomationVariable,
+  type AutopilotAutomation,
   type ModelChoice,
   type OperationNeed,
   type Project,
@@ -43,6 +44,7 @@ import { cn } from "~/lib/utils";
 import { useSettings } from "~/state/queries";
 import {
   BUILDER_STEPS,
+  formProjects,
   hasMoreOptions,
   moreOptionsSummary,
   rightNow,
@@ -73,12 +75,15 @@ import { ScriptField, ScriptTest } from "./ScriptField";
 import { RunsAsYouBadge, ScriptWarning } from "./ScriptWarning";
 import { SdkStatusBar } from "./SdkStatusBar";
 import { VariableNeedsList } from "./VariablesEditor";
+import { DraftProjects, WhereProjects } from "./WhereItRuns";
 import { variableNeeds } from "./variables.logic";
 
 /** The shell a command runs in here, for the examples: PowerShell on Windows, sh elsewhere. */
 const COMMAND_SHELL = typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent) ? "powershell" : "sh";
 
-const INPUTS_FOR_CODE_HINT = `Values it reads as ${inputEnvName("<name>")} (or inputs on stdin, for a script), declared so whoever imports a shared file fills them in without editing the code.`;
+const INPUTS_FOR_CODE_HINT = `Values it reads as ${inputEnvName("<name>")}.`;
+const INPUTS_FOR_CODE_INFO =
+  "Or as inputs on stdin, for a script. Declared so whoever imports a shared file fills them in without editing the code.";
 
 /** What every step reads: the form, how to change it, and the board it is built against. */
 export interface StepProps {
@@ -89,6 +94,11 @@ export interface StepProps {
   epics: readonly TaskSummary[];
   tasks: readonly TaskSummary[];
   boardVariables: readonly AutomationVariable[];
+  /**
+   * The saved automation being edited, whose Where step writes its switches: undefined for a new one, null for a saved
+   * one whose catalogue entry hasn't loaded yet.
+   */
+  automation?: AutopilotAutomation | null;
 }
 
 /** The step's title and, under it, its body as one settings card. */
@@ -499,11 +509,13 @@ function MoreOptions({ form, children }: { form: CustomForm; children: ReactNode
 function SwitchRow({
   title,
   description,
+  info,
   checked,
   onCheckedChange,
 }: {
   title: string;
   description: string;
+  info?: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
 }) {
@@ -511,6 +523,7 @@ function SwitchRow({
     <SettingsRow
       title={title}
       description={description}
+      info={info}
       control={<Switch aria-label={title} checked={checked} onCheckedChange={onCheckedChange} />}
     />
   );
@@ -620,7 +633,8 @@ function AgentDetails({ form, patch, setForm, projects, boardVariables }: StepPr
           <>
             <SwitchRow
               title="Check first with a script"
-              description="Runs before any agent. Each JSON line it prints is an item, and each item it hasn't printed before starts an agent of its own; printing nothing starts nothing. In Preview the check still runs for real."
+              description="A script runs first; each item it prints starts an agent."
+              info="Each JSON line it prints is an item, and each item it hasn't printed before starts an agent of its own; printing nothing starts nothing. In Preview the check still runs for real."
               checked={form.checkOn}
               onCheckedChange={(checkOn) => setForm((current) => withCheck(current, checkOn))}
             />
@@ -639,7 +653,8 @@ function AgentDetails({ form, patch, setForm, projects, boardVariables }: StepPr
                 </Block>
                 <SwitchRow
                   title="Treat the items as untrusted"
-                  description="Items often carry text anyone can write, such as a pull request title or comment. On, each item's agent runs read-only with only this board's tools. It can't be combined with allowed tools or tool slots."
+                  description="Each item's agent runs read-only, with only this board's tools."
+                  info="Items often carry text anyone can write, such as a pull request title or comment. It can't be combined with allowed tools or tool slots."
                   checked={form.untrustedItems}
                   onCheckedChange={(untrustedItems) => patch({ untrustedItems })}
                 />
@@ -660,7 +675,7 @@ function AgentDetails({ form, patch, setForm, projects, boardVariables }: StepPr
         ) : (
           <SwitchRow
             title="Work on the pull request's branch"
-            description="When the task has an open pull request, the agent pushes to it instead of starting a new branch."
+            description="Pushes to the task's open pull request, not a new branch."
             checked={form.onPrBranch}
             onCheckedChange={(onPrBranch) => patch({ onPrBranch })}
           />
@@ -668,11 +683,12 @@ function AgentDetails({ form, patch, setForm, projects, boardVariables }: StepPr
         <Block>
           <Field
             label="Allowed tools"
-            hint={
+            hint="One per line: a whole MCP server or one of its tools."
+            info={
               <>
-                One per line. A whole MCP server (<code className="font-mono">mcp__issue-tracker</code>) or one of its
-                tools (<code className="font-mono">mcp__issue-tracker__search_jira</code>). The board&apos;s own tools
-                are always allowed.
+                A server (<code className="font-mono">mcp__issue-tracker</code>) or one tool (
+                <code className="font-mono">mcp__issue-tracker__search_jira</code>). The board&apos;s own tools are
+                always allowed.
               </>
             }
           >
@@ -701,13 +717,15 @@ function AgentDetails({ form, patch, setForm, projects, boardVariables }: StepPr
         <Block>
           <Field
             label="Inputs"
-            hint="Values the prompt reads as {{inputs.name}}. A shared file asks whoever imports it to fill them in, so they never edit the prompt."
+            hint="Values the prompt reads as {{inputs.name}}."
+            info="A shared file asks whoever imports it to fill them in, so they never edit the prompt."
           >
             <InputsField inputs={form.inputs} onChange={(inputs) => patch({ inputs })} />
           </Field>
           <Field
             label="Required tools"
-            hint="Tools it needs but can't name, since people use different MCP servers: Jira search, say. The prompt is told which tools fill each slot. Sharing it leaves the tools out."
+            hint="Tools it needs but can't name, such as Jira search."
+            info="People use different MCP servers, so the importer fills each slot with their own. The prompt is told which tools fill each slot. Sharing it leaves the tools out."
           >
             <SlotsField slots={form.slots} onChange={(slots) => patch({ slots })} />
           </Field>
@@ -740,7 +758,7 @@ function ScriptDetails({ form, patch, projects, tasks }: StepProps) {
       </Block>
       <MoreOptions form={form}>
         <Block>
-          <Field label="Inputs" hint={INPUTS_FOR_CODE_HINT}>
+          <Field label="Inputs" hint={INPUTS_FOR_CODE_HINT} info={INPUTS_FOR_CODE_INFO}>
             <InputsField inputs={form.inputs} onChange={(inputs) => patch({ inputs })} />
           </Field>
         </Block>
@@ -757,11 +775,12 @@ function CommandDetails({ form, patch, projects, boardVariables }: StepProps) {
       <Block>
         <Field
           label="Command"
-          hint={
+          hint="Runs in the project's folder, in sh (PowerShell on Windows)."
+          info={
             <>
-              Runs in the project&apos;s folder, in sh (PowerShell on Windows). It is never filled in: read values from
-              the environment, as <code className="font-mono">&quot;$NAME&quot;</code> in sh or{" "}
-              <code className="font-mono">$env:NAME</code> in PowerShell.
+              It is never filled in: read values from the environment, as{" "}
+              <code className="font-mono">&quot;$NAME&quot;</code> in sh or <code className="font-mono">$env:NAME</code>{" "}
+              in PowerShell.
             </>
           }
         >
@@ -805,7 +824,7 @@ function CommandDetails({ form, patch, projects, boardVariables }: StepProps) {
       </Block>
       <MoreOptions form={form}>
         <Block>
-          <Field label="Inputs" hint={INPUTS_FOR_CODE_HINT}>
+          <Field label="Inputs" hint={INPUTS_FOR_CODE_HINT} info={INPUTS_FOR_CODE_INFO}>
             <InputsField inputs={form.inputs} onChange={(inputs) => patch({ inputs })} />
           </Field>
         </Block>
@@ -814,61 +833,66 @@ function CommandDetails({ form, patch, projects, boardVariables }: StepProps) {
   );
 }
 
-/** Step 4: which projects, and for a task trigger, which tasks. None picked is everywhere it is switched on. */
-export function WhereStep({ form, patch, projects, epics }: StepProps) {
-  const inProjects = epics.filter((e) => form.projectIds.length === 0 || form.projectIds.includes(e.projectId));
+/**
+ * Step 4: where it runs, as the automation's page's Where it runs (a saved one's switches change as they are picked, a
+ * new one's are written when it is saved), and for a task trigger which tasks.
+ */
+export function WhereStep({ form, patch, projects, automation }: StepProps) {
+  const lanes = [...projects]
+    .sort((a, b) => (a.position < b.position ? -1 : a.position > b.position ? 1 : 0))
+    .map((p) => ({ id: p.id, title: p.title }));
   return (
     <StepCard title="Where?">
       <Block>
-        <Field
-          label="Only in these projects"
-          hint="None picked is every project it's switched on in. You switch it on per project in the Autopilot list, like the built-in ones."
-        >
-          <ToggleGroup
-            multiple
-            aria-label="Projects"
-            className="flex-wrap"
-            value={form.projectIds}
-            onValueChange={(projectIds) => patch({ projectIds })}
-          >
-            {projects.map((p) => (
-              <Toggle key={p.id} value={p.id}>
-                {p.title}
-              </Toggle>
-            ))}
-          </ToggleGroup>
+        <Field label="Projects">
+          <div className="flex flex-col gap-2">
+            {automation ? (
+              <WhereProjects automation={automation} />
+            ) : automation === null ? (
+              // A saved one's switches are edited in place; until its entry loads there is nothing to edit.
+              <p className="text-xs text-muted-foreground">Loading where it runs…</p>
+            ) : (
+              <DraftProjects
+                projects={lanes}
+                everywhere={form.everywhere}
+                projectIds={form.projectIds}
+                onChange={(next) => patch(next)}
+              />
+            )}
+          </div>
         </Field>
         {form.triggerKind === "schedule" ? null : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="With any of these labels" hint="Comma-separated; blank is any task.">
-              <Input
-                size="sm"
-                aria-label="Labels"
-                value={form.labels}
-                placeholder="ui, backend"
-                onChange={(event) => patch({ labels: event.currentTarget.value })}
-              />
-            </Field>
-            <Field label="In the epic">
-              <Choice
-                label="Epic"
-                value={form.epicId}
-                items={[
-                  { value: "", label: "Any task" },
-                  ...inProjects.map((e) => ({ value: e.id, label: `#${e.number} ${e.title}` })),
-                ]}
-                onChange={(epicId) => patch({ epicId })}
-              />
-            </Field>
-          </div>
+          <Field label="With any of these labels" hint="Comma-separated; blank is any task.">
+            <Input
+              size="sm"
+              aria-label="Labels"
+              value={form.labels}
+              placeholder="ui, backend"
+              onChange={(event) => patch({ labels: event.currentTarget.value })}
+            />
+          </Field>
         )}
       </Block>
+      {form.triggerKind === "schedule" ? null : (
+        <SettingsRow
+          title="Tasks in epics"
+          info="This sets the default. An epic's popover on the board can still switch it on or off for that epic."
+          description={`${form.epicTasks ? "Runs on tasks in epics too." : "Skips tasks in epics."} One epic is switched from its popover.`}
+          control={
+            <Switch
+              aria-label="Run on tasks in epics"
+              checked={form.epicTasks}
+              onCheckedChange={(epicTasks) => patch({ epicTasks })}
+            />
+          }
+        />
+      )}
     </StepCard>
   );
 }
 
 /** The one line the Review step shows for each earlier step, with an Edit that goes back to it. */
-function sectionSummaries(form: CustomForm, projects: readonly Project[], epics: readonly TaskSummary[]) {
+function sectionSummaries(form: CustomForm, projects: readonly Project[]) {
   const parsed = triggerOf(form);
   const trigger = typeof parsed === "string" ? parsed : describeCustomTrigger(parsed);
   const action = ACTIONS.find((a) => a.value === form.actionKind)!.title;
@@ -889,12 +913,11 @@ function sectionSummaries(form: CustomForm, projects: readonly Project[], epics:
             `${form.body.split("\n").length}-line ${form.language} script`,
             form.inputs.length > 0 ? `${form.inputs.length} inputs` : null,
           ];
-  const named = projects.filter((p) => form.projectIds.includes(p.id)).map((p) => p.title);
-  const epic = epics.find((e) => e.id === form.epicId);
+  const named = formProjects(form, projects).map((p) => p.title);
   const where = [
-    named.length > 0 ? named.join(", ") : "Every project it's switched on in",
+    form.everywhere ? "Every project" : named.length > 0 ? named.join(", ") : "No project yet",
     form.triggerKind !== "schedule" && form.labels.trim() ? `labels ${form.labels.trim()}` : null,
-    form.triggerKind !== "schedule" && epic ? `#${epic.number} ${epic.title}` : null,
+    form.triggerKind !== "schedule" && !form.epicTasks ? "skips tasks in epics" : null,
   ];
   const join = (parts: readonly (string | null)[]) => parts.filter(Boolean).join(" · ");
   return [
@@ -921,18 +944,14 @@ export function ReviewStep({
   isNew: boolean;
   onStep: (step: BuilderStep) => void;
 }) {
-  const { form, patch, projects, epics, tasks, boardVariables } = props;
+  const { form, patch, projects, tasks, boardVariables } = props;
   const isSchedule = form.triggerKind === "schedule";
   const [now] = useState(() => new Date());
   const result = customFormToInput({ ...form, name: form.name || "x" });
   const sample = result.ok && !isSchedule ? sampleTask(result.input, tasks) : null;
   const preview = result.ok ? previewAction(result.input, sample, projects, boardVariables) : null;
   const needs = result.ok
-    ? variableNeeds(
-        CustomAction.parse(result.input.action),
-        boardVariables,
-        projects.filter((p) => form.projectIds.length === 0 || form.projectIds.includes(p.id)),
-      )
+    ? variableNeeds(CustomAction.parse(result.input.action), boardVariables, formProjects(form, projects))
     : [];
   const due = rightNow(form, tasks, projects, now);
   const trigger = triggerOf(form);
@@ -945,7 +964,7 @@ export function ReviewStep({
         <Block>
           <p className="text-sm leading-relaxed text-foreground">{sentence}</p>
         </Block>
-        {sectionSummaries(form, projects, epics).map((section) => (
+        {sectionSummaries(form, projects).map((section) => (
           // Its own row rather than a SettingsRow, so Edit stays beside the line on a phone instead of under it.
           <div key={section.title} className="flex items-center gap-3 px-3 py-3 sm:px-4">
             <div className="min-w-0 flex-1">
@@ -1046,7 +1065,8 @@ export function ReviewStep({
           <Block>
             <Field
               label="Variables it reads"
-              hint="Found in what it names; one built at run time isn't seen. A project with no value for one gets no run of it, and the preview fills it in empty."
+              hint="A project with no value for one gets no run of it."
+              info="Found in what it names; one built at run time isn't seen. The preview fills a missing one in empty."
             >
               <VariableNeedsList needs={needs} />
             </Field>
