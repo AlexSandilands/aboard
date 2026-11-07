@@ -1,9 +1,10 @@
-import type {
-  BackupRemoteCheck,
-  BackupSetupInfo,
-  BackupStatus,
-  CreateBackupRepoResult,
-  UpdateSettingsInput,
+import {
+  gitHostDefinition,
+  type BackupRemoteCheck,
+  type BackupSetupInfo,
+  type BackupStatus,
+  type CreateBackupRepoResult,
+  type UpdateSettingsInput,
 } from "@repo/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -182,6 +183,7 @@ function SetupSteps({
   }
 
   if (step === "github") {
+    const host = gitHostDefinition(info.host.kind);
     const canContinue =
       choice === "none" || (choice === "create" ? !createBlocked && repoName.trim() : Boolean(verdict?.ok));
     return (
@@ -195,8 +197,10 @@ function SetupSteps({
             selected={choice === "create"}
             disabled={Boolean(createBlocked)}
             onSelect={() => setChoice("create")}
-            title="Create a private GitHub repo"
-            description={createBlocked ?? `With gh, as ${info.gh.login ?? "your GitHub account"}.`}
+            title={`Create a private ${host.label} repo`}
+            description={
+              createBlocked ?? `With ${host.cli.name}, as ${info.host.login ?? `your ${host.label} account`}.`
+            }
           >
             {choice === "create" ? (
               <Input aria-label="Repo name" value={repoName} onChange={(e) => setRepoName(e.currentTarget.value)} />
@@ -204,7 +208,7 @@ function SetupSteps({
           </ChoiceButton>
           {createBlocked ? (
             <Button className="self-start" size="sm" variant="outline" disabled={rechecking} onClick={onRecheck}>
-              {rechecking ? "Checking…" : "Check gh again"}
+              {rechecking ? "Checking…" : `Check ${host.cli.name} again`}
             </Button>
           ) : null}
           <ChoiceButton

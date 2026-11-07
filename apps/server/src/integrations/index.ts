@@ -15,12 +15,16 @@ import type { Services } from "../services/types.ts";
 import { createAgentModels, type AgentModelProbes } from "./agentModels.ts";
 import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
 import { createBackupIntegration, defaultRunGit, type RunGit } from "./backup.ts";
-import { defaultRunGh, type RunGh } from "./gh.ts";
+import type { RunGh } from "./gh.ts";
 import { createBackupSetup } from "./backupSetup.ts";
-import type { GitHost } from "./gitHost.ts";
+import type { GitHostReads } from "./gitHost.ts";
+import { createGitHosts, gitHostActions, gitHostIssues } from "./gitHosts.ts";
+import { createGithubHost } from "./githubHost.ts";
 import { createRunTokens } from "../mcp/runTokens.ts";
 import { RUN_TOOLS_PATH, type RunToolsContext } from "../mcp/runTools.ts";
-import { createGithubIntegration, messageOf } from "./github.ts";
+import { createPrMerges } from "./prMerge.ts";
+import { createPrPoller } from "./prPoller.ts";
+import { messageOf } from "./util.ts";
 import { mergeTaskPr } from "./mergeTaskPr.ts";
 import type { RunAgent } from "./headlessAgent.ts";
 import type { RunImport } from "./headlessImport.ts";
@@ -75,8 +79,8 @@ export interface IntegrationOverrides {
   /** The machine "Open in terminal" runs on, and how it starts a terminal. */
   terminalHost?: () => TerminalHost;
   spawnTerminal?: SpawnTerminal;
-  /** What run tools read instead of GitHub. */
-  gitHost?: GitHost;
+  /** What run tools read instead of the git host. */
+  gitHost?: GitHostReads;
   /** Carries out Autopilot's agent actions; replaces the T3 and headless runners entirely. */
   autopilotRunner?: Runner;
   /** Git for Autopilot's worktrees (the runner and their cleanup). */
@@ -94,15 +98,27 @@ export interface IntegrationOverrides {
   log?: Logger;
 }
 
-/** Builds the GitHub (GraphQL with a gh token) and T3 Code integrations, the review watchdog, backup and Autopilot. */
+/** Builds the git hosts (GitHub: GraphQL with a gh token) and T3 Code integrations, the review watchdog, backup and Autopilot. */
 export function createIntegrations(deps: IntegrationDeps, overrides: IntegrationOverrides = {}): Integrations {
-  const github = createGithubIntegration({
-    services: deps.services,
+  const github = createGithubHost({
     ...(overrides.runGh ? { runGh: overrides.runGh } : {}),
     ...(overrides.githubFetch ? { fetch: overrides.githubFetch } : {}),
+  });
+  const hosts = createGitHosts([github]);
+  const poller = createPrPoller({
+    services: deps.services,
+    hosts,
     ...(overrides.log ? { log: overrides.log } : {}),
   });
-  const runTools: RunToolsContext = { tokens: createRunTokens(), gitHost: overrides.gitHost ?? github.gitHost };
+  const merges = createPrMerges({
+    hosts,
+    tasks: () => deps.services().tasks,
+    refresh: (link, opts) => poller.reread(link, opts),
+  });
+  const runTools: RunToolsContext = {
+    tokens: createRunTokens(),
+    gitHost: overrides.gitHost ? () => overrides.gitHost! : (host) => hosts.forHost(host),
+  };
   const t3 = createT3Integration({
     t3Home: deps.config.t3Home,
     bus: deps.bus,
@@ -119,7 +135,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   });
   const importer = createIssueImporter({
     services: deps.services,
-    github,
+    issues: gitHostIssues(hosts),
     ...(overrides.runImport ? { runImport: overrides.runImport } : {}),
     ...(overrides.listMcpServers ? { listMcpServers: overrides.listMcpServers } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
@@ -137,8 +153,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   });
   const backupSetup = createBackupSetup({
     services: deps.services,
-    ghStatus: () => github.checkStatus(),
-    runGh: overrides.runGh ?? defaultRunGh,
+    host: github,
     runGit: overrides.runGit ?? defaultRunGit,
     defaultDir: deps.config.backupDefaultDir,
     instanceId: deps.config.instanceId,
@@ -212,7 +227,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     services: deps.services,
     bus: deps.bus,
     runner,
-    github,
+    gitHosts: gitHostActions(hosts, merges),
     runEnded: (run) => {
       if (run.sessionId) refreshSession(run.sessionId);
     },
@@ -233,13 +248,15 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
 
   const integrations: Integrations = {
     t3Status: () => t3.status(),
-    githubStatus: () => github.status(),
-    prHostHoldsTasks: (host) => github.holdsTasks(host),
+    gitHostStatuses: () => hosts.statuses(),
+    prHostHoldsTasks: (host) => hosts.holdsTasks(host),
+    prAgentHints: (pr) => hosts.agentHints(pr),
     runTools,
     start() {
       if (!deps.config.pollers || started) return;
       started = true;
-      github.start();
+      hosts.start();
+      poller.start();
       t3.start();
       reviews.start();
       backup.start();
@@ -252,7 +269,8 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     },
     stop() {
       started = false;
-      github.stop();
+      hosts.stop();
+      poller.stop();
       t3.stop();
       reviews.stop();
       backup.stop();
@@ -268,18 +286,19 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     importT3Projects: (ids) => t3.importProjects(ids),
     async refreshLink(linkId) {
       const link = deps.services().links.get(linkId);
-      if (await github.refresh(link)) return;
+      if (await poller.refresh(link)) return;
       if (await sessions.refresh(link)) return;
       await t3.refresh(link);
     },
     prLinked(linkId) {
-      void github.pollLink(linkId);
+      void poller.pollLink(linkId);
     },
-    taskViewed: (taskId) => github.viewTask(taskId),
+    taskViewed: (taskId) => poller.viewTask(taskId),
     async mergePr(linkId, input) {
-      await github.merge(deps.services().links.get(linkId), input);
+      await merges.merge(deps.services().links.get(linkId), input);
     },
-    mergeTaskPr: (taskId, input, actor) => mergeTaskPr({ services: deps.services(), github }, taskId, input, actor),
+    mergeTaskPr: (taskId, input, actor) =>
+      mergeTaskPr({ services: deps.services(), merges, hosts }, taskId, input, actor),
     async setEpicDelivery(epicId, delivery, actor) {
       const s = deps.services();
       const epic = s.tasks.summary(epicId);

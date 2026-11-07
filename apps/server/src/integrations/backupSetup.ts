@@ -6,17 +6,15 @@ import {
   type BackupRemoteCheck,
   type BackupSetupInfo,
   type CreateBackupRepoResult,
-  type GithubStatus,
+  type GitHostStatus,
 } from "@repo/contracts";
 import { AppError } from "../errors.ts";
 import { isBackupRepo, machineFolders } from "../services/backup/repo.ts";
 import type { Services } from "../services/types.ts";
 import { REPO_BOILERPLATE, type RunGit } from "./backup.ts";
-import { GhError, type RunGh } from "./gh.ts";
+import type { GitHost } from "./gitHost.ts";
 
-const GITHUB = "github.com";
-
-/** The guided backup setup: what the dialog starts from, creating a private repo with gh, and checking a remote. */
+/** The guided backup setup: what the dialog starts from, creating a private repo on the git host, and checking a remote. */
 export interface BackupSetup {
   info(): Promise<BackupSetupInfo>;
   createRepo(name: string): Promise<CreateBackupRepoResult>;
@@ -37,26 +35,32 @@ export function remoteFailure(stderr: string): Exclude<BackupRemoteCheck["status
 
 export function createBackupSetup(deps: {
   services: () => Services;
-  /** Re-detects gh and its sign-in, so a `gh auth login` made with the dialog open shows up. */
-  ghStatus: () => Promise<GithubStatus>;
-  runGh: RunGh;
+  /**
+   * The git host a new repo is made on. Its status is read again each time, so a sign-in made with the dialog open
+   * shows up.
+   */
+  host: Pick<GitHost, "kind" | "definition" | "checkStatus" | "createRepo">;
   runGit: RunGit;
   /** `<data dir>/backup`. */
   defaultDir: string;
   instanceId: string;
 }): BackupSetup {
-  const signedIn = (status: GithubStatus) => {
-    // A gh too old to list hosts only says whether it is signed in at all, which is to github.com.
-    if (status.hosts.length === 0) return { signedIn: status.authenticated, login: null };
-    const host = status.hosts.find((h) => h.host === GITHUB && h.authenticated);
-    return { signedIn: Boolean(host), login: host?.login ?? null };
+  const { host } = deps;
+  const { cli } = host.definition;
+  const { site } = host.definition;
+
+  const signedIn = (status: GitHostStatus) => {
+    // A CLI too old to list hosts only says whether it is signed in at all, which is to the main site.
+    if (status.accounts.length === 0) return { signedIn: status.authenticated, login: null };
+    const account = status.accounts.find((h) => h.host === site && h.authenticated);
+    return { signedIn: Boolean(account), login: account?.login ?? null };
   };
 
   const info = async (): Promise<BackupSetupInfo> => {
-    const status = await deps.ghStatus();
+    const status = await host.checkStatus();
     const settings = deps.services().settings.get();
     return {
-      gh: { available: status.available, ...signedIn(status) },
+      host: { kind: host.kind, available: status.available, ...signedIn(status) },
       defaultDir: deps.defaultDir,
       backupDir: settings.backupDir,
       backupRemote: settings.backupRemote,
@@ -67,43 +71,27 @@ export function createBackupSetup(deps: {
   };
 
   const createRepo = async (name: string): Promise<CreateBackupRepoResult> => {
-    const status = await deps.ghStatus();
-    if (!status.available) throw new AppError("VALIDATION", "The GitHub CLI (gh) isn't installed");
+    const status = await host.checkStatus();
+    if (!status.available) throw new AppError("VALIDATION", `The ${cli.label} (${cli.name}) isn't installed`);
     const { signedIn: ok, login } = signedIn(status);
-    if (!ok) throw new AppError("VALIDATION", "gh isn't signed in to GitHub: run `gh auth login`, then try again");
-    let stdout: string;
+    if (!ok) {
+      throw new AppError(
+        "VALIDATION",
+        `${cli.name} isn't signed in to ${host.definition.label}: run \`${cli.loginCommand()}\`, then try again`,
+      );
+    }
     try {
-      stdout = await deps.runGh([
-        "repo",
-        "create",
-        name,
-        "--private",
-        "--description",
-        `Backups of the ${BRAND.name} board`,
-      ]);
+      const repo = await host.createRepo(name, { description: `Backups of the ${BRAND.name} board` });
+      return { url: repo.webUrl, remote: repo.pushUrl };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (/already exists/i.test(message)) {
+      if (error instanceof AppError && error.code === "CONFLICT") {
         throw new AppError(
           "CONFLICT",
           `${login ?? "Your account"} already has a repo named ${name}: use it as an existing repo, or choose another name`,
         );
       }
-      throw new AppError("INTERNAL", `gh repo create: ${message}`);
+      throw error;
     }
-    // gh prints the new repo's page; owner/name come from it, since gh may have been signed in as someone else.
-    const url = stdout
-      .trim()
-      .split(/\s+/)
-      .find((word) => /^https:\/\/github\.com\/[^/]+\/[^/]+$/.test(word));
-    if (!url) throw new AppError("INTERNAL", `gh repo create printed no repo URL: ${stdout.trim()}`);
-    // Push the way gh tells git to: over SSH when the user chose that, else HTTPS, which gh signs git in for.
-    const protocol = await deps
-      .runGh(["config", "get", "git_protocol", "--host", GITHUB])
-      .then((out) => out.trim())
-      .catch((error: unknown) => (error instanceof GhError ? "" : Promise.reject(error)));
-    const path = url.slice(`https://${GITHUB}/`.length);
-    return { url, remote: protocol === "ssh" ? `git@${GITHUB}:${path}.git` : `${url}.git` };
   };
 
   const checkRemote = async (remote: string): Promise<BackupRemoteCheck> => {

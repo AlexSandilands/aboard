@@ -2,21 +2,12 @@ import type {
   AutopilotEngineSettings,
   AutopilotField,
   AutopilotRun,
-  MergeMethod,
   ModelChoice,
   OperationId,
-  PrRef,
   Project,
-  TaskLink,
 } from "@repo/contracts";
 import type { z } from "zod";
-import type {
-  EpicMergeInput,
-  EpicPrInput,
-  PostedReview,
-  PostReviewInput,
-  PrThreadState,
-} from "../integrations/github.ts";
+import type { GitHostActions } from "../integrations/gitHosts.ts";
 import type { AgentAccess } from "../integrations/headlessAgent.ts";
 import type { RunToolScope } from "../mcp/runTokens.ts";
 import type { Services } from "../services/types.ts";
@@ -76,42 +67,12 @@ export type RunPatch = Partial<
   >
 >;
 
-/**
- * What an action may do on GitHub, as the user's `gh` account: post a review, resolve review threads Autopilot
- * answered, merge a task's PR into its epic's integration branch (never into the default branch:
- * checkAutopilotMergeTarget), and open and describe the epic's draft PR (never merge it).
- */
-export interface GithubActions {
-  postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
-  /** The PR's head commit on GitHub now, in full. */
-  prHead(ref: PrRef): Promise<string>;
-  /** Merges the PR, with the method the repository allows (a merge commit if it can), and says which. */
-  mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<{ method: MergeMethod }>;
-  ensureEpicPr(input: EpicPrInput): Promise<{ number: number; url: string; created: boolean }>;
-  setPrBody(ref: PrRef, body: string): Promise<void>;
-  /** The PR's unresolved review threads and newest commits, read now. */
-  reviewThreads(ref: PrRef): Promise<PrThreadState>;
-  resolveReviewThread(host: string, threadId: string): Promise<void>;
-}
-
-const noGithub = () => Promise.reject(new Error("GitHub isn't available"));
-
-/** GitHub until one is configured: every action that needs it fails with a clear reason. */
-export const NO_GITHUB: GithubActions = {
-  postReview: noGithub,
-  prHead: noGithub,
-  mergeIntoEpicBranch: noGithub,
-  ensureEpicPr: noGithub,
-  setPrBody: noGithub,
-  reviewThreads: noGithub,
-  resolveReviewThread: noGithub,
-};
-
 export interface ActionContext<C> {
   services: Services;
   /** Starts agent work; only for automations with needsAgent. What it records goes on this run as it happens. */
   runner: { start(request: RunnerRequest): Promise<RunnerResult> };
-  github: GithubActions;
+  /** What it may do on the git host a PR is on (gitHostActions). */
+  gitHosts: GitHostActions;
   engine: AutopilotEngineSettings;
   /** Where the user opens the board, e.g. `http://127.0.0.1:5317`, for prompts that point an agent at a task. */
   boardUrl: string;

@@ -6,16 +6,13 @@ import {
   type PrSnapshot,
 } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  checkAutopilotMergeTarget,
-  MergeTargetError,
-  type EpicMergeInput,
-  type EpicPrInput,
-} from "../../integrations/github.ts";
+import type { EpicMergeInput, EpicPrInput } from "../../integrations/gitHost.ts";
+import { checkAutopilotMergeTarget, MergeTargetError } from "../../integrations/prMerge.ts";
 import { AppError } from "../../errors.ts";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
-import { NO_GITHUB, NO_RUNNER, type GithubActions } from "../types.ts";
+import { NO_GIT_HOSTS, type GitHostActions } from "../../integrations/gitHosts.ts";
+import { NO_RUNNER } from "../types.ts";
 import { NO_CHECKS_WAIT_MS } from "../mergeGate.ts";
 import { epicPrBody, epicPrTitle, MERGE_ATTEMPTS, mergeEpicPrs, parseConventionalHeader } from "./mergeEpicPrs.ts";
 import { reviewPrs } from "./reviewPrs.ts";
@@ -53,8 +50,8 @@ function setup() {
   let openError: Error | null = null;
   const h = createTestHarness({ integrations: { automations: [reviewPrs, mergeEpicPrs] } });
   const s = h.services;
-  const github: GithubActions = {
-    ...NO_GITHUB,
+  const gitHosts: GitHostActions = {
+    ...NO_GIT_HOSTS,
     mergeIntoEpicBranch: async (link, input) => {
       merges.push({ linkId: link.id, input });
       if (mergeError) throw mergeError;
@@ -82,7 +79,7 @@ function setup() {
     services: () => h.services,
     bus: h.bus,
     runner: NO_RUNNER,
-    github,
+    gitHosts,
     debounceMs: 5,
     tickMs: 1_000_000,
     log: { warn: () => {} },
@@ -337,7 +334,7 @@ describe("merge into epic branch", () => {
       const result = await mergeEpicPrs.act(candidate!, {
         services: s,
         runner: NO_RUNNER,
-        github: NO_GITHUB,
+        gitHosts: NO_GIT_HOSTS,
         engine: s.autopilot.engine(),
         boardUrl: "http://x",
         config: {},

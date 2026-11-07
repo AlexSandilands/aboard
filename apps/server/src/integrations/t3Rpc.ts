@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { messageOf } from "./github.ts";
+import { messageOf } from "./util.ts";
 import type { FetchFn } from "./t3.ts";
 
 // A one-shot client for T3 Code's WebSocket RPC (Effect RPC with JSON serialization). T3 has no HTTP

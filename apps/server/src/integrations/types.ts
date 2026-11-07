@@ -12,7 +12,7 @@ import type {
   EpicDelivery,
   ConnectT3Result,
   CreateBackupRepoResult,
-  GithubStatus,
+  GitHostStatus,
   LinkInput,
   MergeMethod,
   MergePrInput,
@@ -46,16 +46,20 @@ import type {
 } from "@repo/contracts";
 import type { DigestStart } from "../autopilot/digest.ts";
 import type { RunToolsContext } from "../mcp/runTools.ts";
+import type { PrAgentHints } from "./gitHost.ts";
 import type { MergeTaskPrResult } from "./mergeTaskPr.ts";
 import type { SessionTranscript } from "./sessionTranscript.ts";
 import type { TaskThreadInput, TaskThreadLaunch, ThreadLink } from "./t3.ts";
 
-/** Optional external integrations (GitHub via gh, T3 Code). Every method degrades gracefully. */
+/** Optional external integrations (git hosts such as GitHub via gh, T3 Code). Every method degrades gracefully. */
 export interface Integrations {
   t3Status(): T3IntegrationStatus;
-  githubStatus(): GithubStatus;
-  /** Whether an unfinished PR on the host keeps a Review task from Done (see GithubIntegration.holdsTasks). */
+  /** Each git host kind's CLI and sign-in, as last read. */
+  gitHostStatuses(): GitHostStatus[];
+  /** Whether an unfinished PR on the host keeps a Review task from Done (see GitHost.holdsTasks). */
   prHostHoldsTasks(host: string): boolean;
+  /** The commands an agent fixing the PR runs, in its host's CLI (GitHost.agentHints). */
+  prAgentHints(pr: { host: string; repo: string; number: number }): PrAgentHints;
   /** Board-served run tools: the live run tokens and the git host their tools read (`/mcp/run`). */
   readonly runTools: RunToolsContext;
   /** Starts background discovery/pollers. */

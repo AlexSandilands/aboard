@@ -1,6 +1,11 @@
 import type { RunGh } from "../integrations/gh.ts";
-import type { GraphqlPr, GraphqlRepo } from "../integrations/github.ts";
+import { createGitHosts, gitHostActions, gitHostIssues } from "../integrations/gitHosts.ts";
+import { createGithubHost } from "../integrations/githubHost.ts";
+import type { GraphqlPr, GraphqlRepo } from "../integrations/githubSnapshot.ts";
+import { createPrMerges } from "../integrations/prMerge.ts";
+import { createPrPoller, type PollLogger, type PrPollerServices } from "../integrations/prPoller.ts";
 import type { FetchFn } from "../integrations/t3.ts";
+import type { TasksService } from "../services/types.ts";
 
 export interface FakePr extends GraphqlPr {
   /** What the fresh read before a merge reports. */
@@ -309,5 +314,41 @@ export function fakePr(overrides: Partial<FakePr> = {}): FakePr {
       ],
     },
     ...overrides,
+  };
+}
+
+/**
+ * The board's git host pieces wired around one GitHub host, as integrations/index.ts wires them: the poller, the
+ * merges, Autopilot's actions and the host's status, flattened into one object for tests.
+ */
+export function createGithubStack(deps: {
+  services: () => PrPollerServices & { tasks: Pick<TasksService, "summary"> };
+  runGh?: RunGh;
+  fetch?: FetchFn;
+  log?: PollLogger;
+}) {
+  const host = createGithubHost({
+    ...(deps.runGh ? { runGh: deps.runGh } : {}),
+    ...(deps.fetch ? { fetch: deps.fetch } : {}),
+  });
+  const hosts = createGitHosts([host]);
+  const poller = createPrPoller({ services: deps.services, hosts, ...(deps.log ? { log: deps.log } : {}) });
+  const merges = createPrMerges({
+    hosts,
+    tasks: () => deps.services().tasks,
+    refresh: (link, opts) => poller.reread(link, opts),
+  });
+  const actions = gitHostActions(hosts, merges);
+  const issues = gitHostIssues(hosts);
+  return {
+    host,
+    hosts,
+    ...poller,
+    ...merges,
+    ...actions,
+    ...issues,
+    status: () => host.status(),
+    checkStatus: () => host.checkStatus(),
+    holdsTasks: (name: string) => hosts.holdsTasks(name),
   };
 }

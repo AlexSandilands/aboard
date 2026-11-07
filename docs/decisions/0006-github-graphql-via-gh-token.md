@@ -1,6 +1,6 @@
 # 0006 GitHub through its GraphQL API, with the token `gh` holds
 
-Status: Accepted
+Status: Accepted, refined by [0014](0014-git-hosts.md): GitHub is now one git host kind behind the GitHost registry
 
 ## Context
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { GitHostStatus } from "./gitHosts.ts";
 import { AutopilotStatus } from "./autopilot.ts";
 import { KeybindingOverrides } from "./keybindings.ts";
 import { LabelHue } from "./labels.ts";
@@ -1017,24 +1018,7 @@ export type UpdateSettingsInput = z.infer<typeof UpdateSettingsInput>;
 export const ConnectT3Input = z.object({ value: z.string().trim().min(1) });
 export type ConnectT3Input = z.infer<typeof ConnectT3Input>;
 
-export const GithubHostStatus = z.object({
-  host: z.string(),
-  login: z.string().nullable(),
-  authenticated: z.boolean(),
-});
-export type GithubHostStatus = z.infer<typeof GithubHostStatus>;
-
-export const GithubStatus = z.object({
-  available: z.boolean(),
-  /** Signed in to at least one host. */
-  authenticated: z.boolean(),
-  error: z.string().nullable(),
-  /** Hosts `gh` holds a login for. Empty when `gh` is too old to report them. */
-  hosts: z.array(GithubHostStatus),
-});
-export type GithubStatus = z.infer<typeof GithubStatus>;
-
-export const IntegrationsStatus = z.object({ t3: T3IntegrationStatus, github: GithubStatus });
+export const IntegrationsStatus = z.object({ t3: T3IntegrationStatus, gitHosts: z.array(GitHostStatus) });
 export type IntegrationsStatus = z.infer<typeof IntegrationsStatus>;
 
 export const ConnectT3Result = z.object({

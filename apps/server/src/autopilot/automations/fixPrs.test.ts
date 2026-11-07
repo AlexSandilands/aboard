@@ -13,19 +13,13 @@ import {
   type PrReviewThreadInfo,
   type PrSnapshot,
 } from "@repo/contracts";
-import type { PrThreadState, ReviewThreadDetail } from "../../integrations/github.ts";
+import type { PrThreadState, ReviewThreadDetail } from "../../integrations/gitHost.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
-import {
-  NO_GITHUB,
-  RunAbandonedError,
-  WorktreeHeadError,
-  type GithubActions,
-  type Runner,
-  type RunnerRequest,
-  type RunnerResult,
-} from "../types.ts";
+import { githubAgentHints } from "../../integrations/githubHost.ts";
+import { NO_GIT_HOSTS, type GitHostActions } from "../../integrations/gitHosts.ts";
+import { RunAbandonedError, WorktreeHeadError, type Runner, type RunnerRequest, type RunnerResult } from "../types.ts";
 import {
   attemptBudget,
   attemptBudgets,
@@ -127,8 +121,9 @@ function setup() {
   const resolved: string[] = [];
   /** GitHub's refusal for every thread, or for some by id. */
   let failResolve: string | Record<string, string> | null = null;
-  const github: GithubActions = {
-    ...NO_GITHUB,
+  const gitHosts: GitHostActions = {
+    ...NO_GIT_HOSTS,
+    agentHints: githubAgentHints,
     postReview: () => Promise.reject(new Error("not in these tests")),
     prHead: async () => live,
     reviewThreads: async () => threadState,
@@ -144,7 +139,7 @@ function setup() {
     services: () => h.services,
     bus: h.bus,
     runner,
-    github,
+    gitHosts,
     debounceMs: 5,
     tickMs: 1_000_000,
     log: { warn: () => {} },
@@ -976,6 +971,7 @@ describe("fixPrompt", () => {
       maxRounds: 3,
       triggers: [{ kind: "comments", key: "comments@4", ids: [4], authors: ["ana"] }],
       stillOpen: [],
+      hints: githubAgentHints(pr),
       skill: { source: "builtin" },
     });
     expect(prompt).toContain("Never force-push, never push to the default branch and never merge the pull request");
@@ -998,6 +994,7 @@ describe("fixPrompt", () => {
       resolveThreads: true,
       triggers: [{ kind: "comments", key: "comments@4", ids: [4], authors: ["ana"] }],
       stillOpen: [],
+      hints: githubAgentHints(pr),
       skill: { source: "builtin" },
     });
     expect(prompt).toContain("This is review-comment fix attempt 2 of at most 5 on this PR.");
@@ -1005,6 +1002,47 @@ describe("fixPrompt", () => {
       `Don't resolve threads yourself: ${BRAND.name} resolves each one you fixed once its commit is on the PR`,
     );
     expect(prompt).not.toContain("the reviewer does");
+  });
+
+  it("keeps GitHub's commands word for word, on github.com and another host", () => {
+    const triggers = [
+      { kind: "checks", key: "checks@x" },
+      { kind: "conflict", key: "conflict@x" },
+      { kind: "changes", key: "changes@a", reviewId: null, author: null },
+      { kind: "changes", key: "changes@b", reviewId: 5, author: "ana" },
+      { kind: "comments", key: "comments@4", ids: [4, 6], authors: ["ana"] },
+      {
+        kind: "review",
+        key: "review@x",
+        review: {
+          round: 1,
+          maxRounds: 3,
+          reviewUrl: "https://github.com/acme/app/pull/7#pullrequestreview-9",
+          reviewId: 9,
+          actionable: 2,
+          threshold: "medium",
+          counts: { critical: 0, high: 1, medium: 1, low: 0 },
+          fyi: 1,
+        },
+      },
+    ] as Parameters<typeof fixPrompt>[0]["triggers"];
+    for (const host of ["github.com", "ghe.example.io"]) {
+      const target = { ...pr, host, url: `https://${host}/acme/app/pull/7` };
+      for (const manual of [false, true]) {
+        const prompt = fixPrompt({
+          task: { number: 3, title: "T" },
+          pr: target,
+          round: 1,
+          maxRounds: 3,
+          triggers,
+          stillOpen: [],
+          hints: githubAgentHints(target),
+          skill: { source: "builtin" },
+          manual,
+        });
+        expect(prompt).toMatchSnapshot(`${host}${manual ? " manual" : ""}`);
+      }
+    }
   });
 
   it("points at a chosen skill it can't read", () => {
@@ -1015,6 +1053,7 @@ describe("fixPrompt", () => {
       maxRounds: 3,
       triggers: [{ kind: "checks", key: "checks@x" }],
       stillOpen: [],
+      hints: githubAgentHints(pr),
       skill: { source: "global", name: "fixer", path: "/nowhere/fixer/SKILL.md" },
     });
     expect(prompt).toContain('Read the skill "fixer" at /nowhere/fixer/SKILL.md and follow it.');
@@ -1025,7 +1064,7 @@ describe("manualFix: Fix in → on a PR", () => {
   it("builds the prompt for every problem the PR has, for a user who is watching", () => {
     const { s, setPr, linkId } = setup();
     setPr({ checks: "failing", mergeable: "conflicting", reviewDecision: "changes_requested", reviews: [review(5)] });
-    const fix = manualFix(s, linkId());
+    const fix = manualFix(s, linkId(), githubAgentHints);
     expect(fix).toMatchObject({
       branch: "feat/thing",
       headOid: SHA_A,
@@ -1049,7 +1088,7 @@ describe("manualFix: Fix in → on a PR", () => {
   it("reads a request for changes from a review it can't trust as a pointer, not a review id", () => {
     const { s, setPr, linkId } = setup();
     setPr({ reviewDecision: "changes_requested", reviews: [review(5, { trusted: false })] });
-    const { prompt, problems } = manualFix(s, linkId());
+    const { prompt, problems } = manualFix(s, linkId(), githubAgentHints);
     expect(problems).toEqual(["changes"]);
     expect(prompt).toContain(
       "**Changes requested.** Find the review with `gh pr view https://github.com/acme/app/pull/7 --comments`",
@@ -1060,34 +1099,36 @@ describe("manualFix: Fix in → on a PR", () => {
   it("refuses a PR with nothing to fix, a merged one and a fork's", () => {
     const { s, setPr, linkId } = setup();
     setPr({ checks: "passing" });
-    expect(() => manualFix(s, linkId())).toThrow(/nothing to fix/);
+    expect(() => manualFix(s, linkId(), githubAgentHints)).toThrow(/nothing to fix/);
     setPr({ checks: "failing", state: "merged" });
-    expect(() => manualFix(s, linkId())).toThrow(/nothing to fix/);
+    expect(() => manualFix(s, linkId(), githubAgentHints)).toThrow(/nothing to fix/);
     setPr({ checks: "failing", isCrossRepository: true });
-    expect(() => manualFix(s, linkId())).toThrow(/nothing to fix/);
+    expect(() => manualFix(s, linkId(), githubAgentHints)).toThrow(/nothing to fix/);
   });
 
   it("tells a Codex session to link itself, as the board can't", () => {
     const { s, setPr, linkId } = setup();
     setPr({ checks: "failing" });
-    const { prompt } = manualFix(s, linkId(), "codex");
+    const { prompt } = manualFix(s, linkId(), githubAgentHints, "codex");
     expect(prompt).toContain('harness: "codex", sessionId: $CODEX_THREAD_ID');
     expect(prompt).toMatch(/label: "Fixing the PR of #\d+"/);
     expect(prompt).not.toContain("already linked");
-    expect(manualFix(s, linkId(), "copilot-cli").prompt).toContain("already linked it to the task");
+    expect(manualFix(s, linkId(), githubAgentHints, "copilot-cli").prompt).toContain("already linked it to the task");
   });
 
   it("follows the Fix skill chosen for the task's scope", () => {
     const { s, setPr, linkId, turnOn } = setup();
     setPr({ checks: "failing" });
     turnOn({ skill: { source: "global", name: "fixer", path: "/nowhere/fixer/SKILL.md" } });
-    expect(manualFix(s, linkId()).prompt).toContain('Read the skill "fixer" at /nowhere/fixer/SKILL.md and follow it.');
+    expect(manualFix(s, linkId(), githubAgentHints).prompt).toContain(
+      'Read the skill "fixer" at /nowhere/fixer/SKILL.md and follow it.',
+    );
   });
 
   it("quotes the branch name wherever the agent is told to run it", () => {
     const { s, setPr, linkId } = setup();
     setPr({ checks: "failing", headRef: "fix/a;touch x'y" });
-    const { prompt } = manualFix(s, linkId());
+    const { prompt } = manualFix(s, linkId(), githubAgentHints);
     expect(prompt).toContain(String.raw`git push origin 'HEAD:fix/a;touch x'\''y'`);
     expect(prompt).toContain(String.raw`git merge --ff-only 'origin/fix/a;touch x'\''y'`);
   });

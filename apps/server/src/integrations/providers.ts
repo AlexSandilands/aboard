@@ -19,7 +19,7 @@ import {
 } from "@repo/contracts";
 import type { Services } from "../services/types.ts";
 import { claudeOutput, executableVersion, resolveExecutable } from "./claudeCli.ts";
-import { messageOf } from "./github.ts";
+import { messageOf } from "./util.ts";
 import type { TerminalHost } from "./terminal.ts";
 
 // The one place the board detects its providers, for Settings → Agents → Providers and everything that offers one: whether

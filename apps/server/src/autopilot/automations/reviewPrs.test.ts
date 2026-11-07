@@ -10,17 +10,11 @@ import {
   type PrSnapshot,
 } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
-import { StaleReviewError, type PostReviewInput, type ReviewThreadDetail } from "../../integrations/github.ts";
+import { StaleReviewError, type PostReviewInput, type ReviewThreadDetail } from "../../integrations/gitHost.ts";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
-import {
-  NO_GITHUB,
-  WorktreeHeadError,
-  type GithubActions,
-  type Runner,
-  type RunnerRequest,
-  type RunnerResult,
-} from "../types.ts";
+import { NO_GIT_HOSTS, type GitHostActions } from "../../integrations/gitHosts.ts";
+import { WorktreeHeadError, type Runner, type RunnerRequest, type RunnerResult } from "../types.ts";
 import { RUN_SERVER_NAME } from "../../mcp/runTokens.ts";
 import { REVIEW_ATTEMPTS, earlierReviews, renderReview, reviewHandoff, reviewPrs } from "./reviewPrs.ts";
 
@@ -87,8 +81,8 @@ function setup() {
   };
   const resolved: string[] = [];
   let threads: ReviewThreadDetail[] = [];
-  const github: GithubActions = {
-    ...NO_GITHUB,
+  const gitHosts: GitHostActions = {
+    ...NO_GIT_HOSTS,
     reviewThreads: async () => ({ headOid: live(), commits: [], threads }),
     resolveReviewThread: async (_host, id) => {
       resolved.push(id);
@@ -109,7 +103,7 @@ function setup() {
     services: () => h.services,
     bus: h.bus,
     runner,
-    github,
+    gitHosts,
     debounceMs: 5,
     tickMs: 1_000_000,
     log: { warn: () => {} },
@@ -705,8 +699,8 @@ describe("review PRs: the agent", () => {
     const result = await reviewPrs.act(candidate!, {
       services: s,
       runner: { start: () => Promise.reject(new Error("must not run")) },
-      github: {
-        ...NO_GITHUB,
+      gitHosts: {
+        ...NO_GIT_HOSTS,
         postReview: () => Promise.reject(new Error("must not post")),
         prHead: () => Promise.reject(new Error("must not read")),
       },

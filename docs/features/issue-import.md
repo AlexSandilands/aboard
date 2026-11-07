@@ -33,8 +33,9 @@ Imported tasks land in Backlog like any task created without a plan, and a sourc
 
 `integrations/issueImport.ts` runs up to three imports at once, in the server process.
 
-- **GitHub.** `gh issue view` reads the issue (`GithubIntegration.fetchIssue`), and its state is stored as
-  the `issue` link's snapshot. A headless CLI on the issue import operation's model and provider (the light tier by
+- **GitHub.** The git host the issue is on reads it (`getIssue` through `gitHostIssues`, `integrations/gitHosts.ts`;
+  GitHub's reads REST `repos/{o}/{r}/issues/{n}` with the token `gh` holds), and its state is stored as the `issue`
+  link's snapshot. Without `gh`, or without a login for the host, the import fails saying so. A headless CLI on the issue import operation's model and provider (the light tier by
   default, see [Settings](#settings)) then turns it into a concise title, a summary and labels. The issue text goes in
   the prompt, so on Claude Code the run has no tools and no MCP servers. On Codex, which has no tool-less run, it runs
   read-only and isolated (`codex exec --sandbox read-only --ignore-user-config --ignore-rules -c web_search="disabled"
@@ -79,9 +80,9 @@ reuses them.
 
 An issue that is an epic becomes one on the board, and its children become its tasks.
 
-- **Finding out.** GitHub: after `gh issue view`, the board reads the issue's sub-issues with
-  `gh api --paginate repos/{o}/{r}/issues/{n}/sub_issues --jq '.[].html_url'` (`fetchSubIssues`); an issue with any
-  is an epic. A failed read is logged and the issue imports as a task. A task already in an epic (an epic's own
+- **Finding out.** GitHub: after reading the issue, the board reads its sub-issues (`listSubIssues`: REST
+  `repos/{o}/{r}/issues/{n}/sub_issues`, paged, their `html_url`s once each); an issue with any is an epic. A host whose
+  `capabilities.subIssues` is off has none. A failed read is logged and the issue imports as a task. A task already in an epic (an epic's own
   child) isn't asked, since epics don't nest. Ticket: the prompt asks the run, when the ticket is an epic (as the
   system's instructions define it), to set `isEpic`, list its children as the instructions say, and return the keys of
   the first 50 in `children` and the count of all of them in `childTotal`. It doesn't read the children. Which tool and
@@ -239,7 +240,8 @@ over as that model on Claude Code; an install that never saved one now runs the 
 | `apps/server/src/integrations/issueImport.ts`| The background job                                                    |
 | `apps/server/src/integrations/headlessImport.ts` | Prompt, `claude` arguments, output, the write-tool deny rules     |
 | `apps/server/src/integrations/claudeCli.ts`  | Running `claude -p` and reading its result, shared with the reviewer  |
-| `apps/server/src/integrations/github.ts`     | `fetchIssue`, `fetchSubIssues`                                        |
+| `apps/server/src/integrations/gitHosts.ts`   | `gitHostIssues`: `getIssue`, `listSubIssues` on the issue's host      |
+| `apps/server/src/integrations/githubReads.ts`, `githubHost.ts` | GitHub's issue and sub-issue reads                   |
 | `apps/server/src/db/migrations/008_issue_imports.sql` | `task_imports`, and `issue` in `task_links`'s kinds          |
 | `apps/web/src/components/command/palette.logic.ts` | `issueImportRow`                                                |
 | `apps/web/src/components/task/ImportCallout.tsx`   | Pending and failed states in the panel; an epic's progress      |

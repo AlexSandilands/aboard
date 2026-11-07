@@ -10,8 +10,9 @@ import {
 } from "@repo/contracts";
 import { z } from "zod";
 import { AppError } from "../../errors.ts";
-import { MergeTargetError, messageOf } from "../../integrations/github.ts";
-import { isTransientGithubError } from "../../integrations/githubApi.ts";
+import { MergeTargetError } from "../../integrations/prMerge.ts";
+import { messageOf } from "../../integrations/util.ts";
+import { isTransientHostError } from "../../integrations/gitHost.ts";
 import { headSeenSince, isPrLink, notMergeable, type PrLink } from "../mergeGate.ts";
 import { defineAutomation, type ActionResult, type Candidate } from "../types.ts";
 
@@ -319,7 +320,7 @@ export const mergeEpicPrs = defineAutomation({
         return [...merges, upkeep];
       });
     }),
-  act: async (candidate, { services, github, actor }): Promise<ActionResult> => {
+  act: async (candidate, { services, gitHosts, actor }): Promise<ActionResult> => {
     const data = candidate.data as MergeData | EpicPrData;
     if (data.kind === "merge") {
       const task = services.tasks.summary(candidate.taskId!);
@@ -342,7 +343,7 @@ export const mergeEpicPrs = defineAutomation({
       if (reason) return { status: "skipped", summary: `Didn't merge PR #${data.number}: ${reason}`, output: RECHECK };
       let method: string;
       try {
-        ({ method } = await github.mergeIntoEpicBranch(link, { base: data.branch, headOid: data.headOid }));
+        ({ method } = await gitHosts.mergeIntoEpicBranch(link, { base: data.branch, headOid: data.headOid }));
       } catch (error) {
         if (error instanceof MergeTargetError) {
           return {
@@ -356,7 +357,7 @@ export const mergeEpicPrs = defineAutomation({
         const passing =
           (error instanceof AppError && error.code === "CONFLICT") ||
           MERGE_RACE.test(message) ||
-          isTransientGithubError(error);
+          isTransientHostError(error);
         if (passing && data.attempt < MERGE_ATTEMPTS) {
           return {
             status: "skipped",
@@ -379,7 +380,7 @@ export const mergeEpicPrs = defineAutomation({
       return { status: "skipped", summary: `Epic #${epic.number} no longer delivers through ${data.branch}` };
     }
     if (data.kind === "open_pr") {
-      const pr = await github.ensureEpicPr({
+      const pr = await gitHosts.ensureEpicPr({
         host: data.host,
         repo: data.repo,
         head: data.branch,
@@ -387,14 +388,14 @@ export const mergeEpicPrs = defineAutomation({
         body: data.body,
       });
       services.links.add(epic.id, { value: pr.url }, actor);
-      if (!pr.created) await github.setPrBody({ host: data.host, repo: data.repo, number: pr.number }, data.body);
+      if (!pr.created) await gitHosts.setPrBody({ host: data.host, repo: data.repo, number: pr.number }, data.body);
       return {
         summary: `${pr.created ? "Opened draft" : "Linked"} PR #${pr.number} from ${data.branch} for epic #${epic.number}`,
       };
     }
     const link = epic.links.find((l): l is PrLink => l.id === data.linkId && isPrLink(l));
     if (!link) return { status: "skipped", summary: "The epic's PR link was removed" };
-    await github.setPrBody(link.ref, data.body);
+    await gitHosts.setPrBody(link.ref, data.body);
     return { summary: `Updated the description of PR #${link.ref.number}` };
   },
 });

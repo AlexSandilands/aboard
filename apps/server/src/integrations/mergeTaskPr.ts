@@ -2,7 +2,8 @@ import { pickMergeMethod, type MergeMethod, type TaskSummary } from "@repo/contr
 import { headSeenSince, isPrLink, notMergeable, type PrLink } from "../autopilot/mergeGate.ts";
 import { AppError } from "../errors.ts";
 import type { Services } from "../services/types.ts";
-import { describeUnresolved, type GithubIntegration } from "./github.ts";
+import type { GitHosts } from "./gitHosts.ts";
+import { describeUnresolved, type PrMerges } from "./prMerge.ts";
 
 export interface MergeTaskPrResult {
   task: TaskSummary;
@@ -18,16 +19,16 @@ const refuse = (task: TaskSummary, why: string) =>
 /**
  * merge_task_pr (docs/features/github-prs.md#merge_task_pr): merges a task's one open PR into the default branch, the
  * only way the board merges there without the user clicking. Only for a task the user flagged for auto-merge, and only
- * once the gate Autopilot's epic merges use (notMergeable) finds nothing in the way. GitHub's own guard then checks the
- * PR still targets the default branch and still has the head that was checked. The merge moves the task to Done.
+ * once the gate Autopilot's epic merges use (notMergeable) finds nothing in the way. The host's fresh read then checks
+ * the PR still targets the default branch and still has the head that was checked. The merge moves the task to Done.
  */
 export async function mergeTaskPr(
-  deps: { services: Services; github: Pick<GithubIntegration, "mergeIntoDefaultBranch"> },
+  deps: { services: Services; merges: Pick<PrMerges, "mergeIntoDefaultBranch">; hosts: Pick<GitHosts, "resolve"> },
   taskId: string,
   input: { method?: MergeMethod | undefined },
   actor: string,
 ): Promise<MergeTaskPrResult> {
-  const { services, github } = deps;
+  const { services, merges, hosts } = deps;
   const task = services.tasks.summary(taskId);
   if (task.kind === "epic") throw refuse(task, "an epic has no pull request of its own");
   if (task.autoMerge !== true) {
@@ -59,7 +60,7 @@ export async function mergeTaskPr(
       `PR #${link.ref.number} comes from a fork; merge_task_pr only merges branches from the repository itself`,
     );
   }
-  // The gate's base check is GitHub's here: mergeIntoDefaultBranch refuses any base but the default branch.
+  // The gate's base check is the host's here: mergeIntoDefaultBranch refuses any base but the default branch.
   const timing = { now: Date.now(), headSince: headSeenSince(link, services.links.prChanges([link.id]).get(link.id)) };
   const reason = notMergeable(
     services,
@@ -81,14 +82,17 @@ export async function mergeTaskPr(
         : "it still needs an approving review",
     );
   }
-  if (snapshot?.canMerge === false) throw refuse(task, "the signed-in GitHub account can't merge it");
+  if (snapshot?.canMerge === false) {
+    const label = (await hosts.resolve(link.ref.host))?.definition.label ?? "git host";
+    throw refuse(task, `the signed-in ${label} account can't merge it`);
+  }
   const allowed = snapshot?.mergeMethods ?? [];
   if (input.method && allowed.length > 0 && !allowed.includes(input.method)) {
     throw refuse(task, `the repository doesn't allow ${input.method} merges (it allows ${allowed.join(", ")})`);
   }
   const method = input.method ?? pickMergeMethod(allowed, null) ?? "merge";
 
-  await github.mergeIntoDefaultBranch(link, { base: baseRef, headOid, method });
+  await merges.mergeIntoDefaultBranch(link, { base: baseRef, headOid, method });
 
   services.tasks.addNote(
     task.id,

@@ -1,16 +1,15 @@
 import { AUTOPILOT_ACTOR, type AutopilotEngineSettings, type AutopilotRun } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
-import { messageOf } from "../integrations/github.ts";
+import { NO_GIT_HOSTS, type GitHostActions } from "../integrations/gitHosts.ts";
+import { messageOf } from "../integrations/util.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
 import { agentHold } from "./limits.ts";
 import {
-  NO_GITHUB,
   NO_RUNNER,
   type Automation,
   type AutomationConfig,
   type Candidate,
-  type GithubActions,
   type Runner,
   type RunPatch,
 } from "./types.ts";
@@ -48,7 +47,7 @@ export function createAutopilotEngine(deps: {
   services: () => Services;
   bus: EventBus;
   runner?: Runner;
-  github?: GithubActions;
+  gitHosts?: GitHostActions;
   /** Where the user opens the board; actions put it in agent prompts. */
   boardUrl?: () => string;
   /** A run ended, so the board can show its headless session as finished or failed at once. */
@@ -59,7 +58,7 @@ export function createAutopilotEngine(deps: {
   log?: Logger;
 }): AutopilotEngine {
   const runner = deps.runner ?? NO_RUNNER;
-  const github = deps.github ?? NO_GITHUB;
+  const gitHosts = deps.gitHosts ?? NO_GIT_HOSTS;
   const now = deps.now ?? (() => new Date());
   const log = deps.log ?? console;
   const inFlight = new Set<Promise<void>>();
@@ -114,7 +113,7 @@ export function createAutopilotEngine(deps: {
         automation.act(candidate, {
           services: s,
           runner: { start: (request) => runner.start(request, update) },
-          github,
+          gitHosts,
           engine: s.autopilot.engine(),
           boardUrl: deps.boardUrl?.() ?? DEFAULT_BOARD_URL,
           config,

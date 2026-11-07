@@ -6,7 +6,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { pageDiff, type GitHost, type HostPrFile } from "../integrations/gitHost.ts";
+import { pageDiff, type GitHostReads, type HostPrFile } from "../integrations/gitHost.ts";
 import type { AgentJob } from "../integrations/headlessAgent.ts";
 import { RUN_SERVER_NAME, RUN_TOKEN_ENV, type RunToolScope } from "../mcp/runTokens.ts";
 import { RUN_TOOLS_PATH } from "../mcp/runTools.ts";
@@ -39,7 +39,7 @@ const FILES: HostPrFile[] = Array.from({ length: 25 }, (_, i) => ({
   patch: [`@@ -0,0 +1,600 @@`, ...Array.from({ length: 600 }, (_line, n) => `+mod${i} line ${n + 1}`)].join("\n"),
 }));
 
-const host: GitHost = {
+const host: GitHostReads = {
   getPr: async (ref) => ({
     number: ref.number,
     url: `https://${ref.host}/${ref.repo}/pull/${ref.number}`,

@@ -1,21 +1,23 @@
-import type { GithubStatus, TerminalInfo } from "@repo/contracts";
+import type { GitHostStatus, TerminalInfo } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { githubDot, terminalDot } from "./integrations.logic";
+import { gitHostDot, terminalDot } from "./integrations.logic";
 
-const gh = (patch: Partial<GithubStatus> = {}): GithubStatus => ({
+const gh = (patch: Partial<GitHostStatus> = {}): GitHostStatus => ({
+  kind: "github",
   available: true,
+  version: "2.96.0",
   authenticated: true,
   error: null,
-  hosts: [],
+  accounts: [],
   ...patch,
 });
 
 describe("integration dots", () => {
   it("GitHub warns when gh is missing, signed out, or a host has expired", () => {
-    expect(githubDot(gh()).tone).toBe("success");
-    expect(githubDot(gh({ available: false })).tone).toBe("warning");
-    expect(githubDot(gh({ authenticated: false })).tone).toBe("warning");
-    expect(githubDot(gh({ hosts: [{ host: "ghe.example.com", authenticated: false, login: null }] })).tone).toBe(
+    expect(gitHostDot(gh()).tone).toBe("success");
+    expect(gitHostDot(gh({ available: false }))).toEqual({ tone: "warning", label: "gh not found" });
+    expect(gitHostDot(gh({ authenticated: false })).tone).toBe("warning");
+    expect(gitHostDot(gh({ accounts: [{ host: "ghe.example.com", authenticated: false, login: null }] })).tone).toBe(
       "warning",
     );
   });

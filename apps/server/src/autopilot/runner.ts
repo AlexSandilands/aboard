@@ -20,7 +20,7 @@ import {
   type TaskSummary,
 } from "@repo/contracts";
 import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
-import { messageOf } from "../integrations/github.ts";
+import { messageOf } from "../integrations/util.ts";
 import {
   boardMcpConfig,
   mcpWaitEnv,

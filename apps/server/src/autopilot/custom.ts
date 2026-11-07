@@ -45,7 +45,7 @@ import {
 } from "@repo/contracts";
 import { z } from "zod";
 import type { RepoUrls } from "../integrations/gitRemote.ts";
-import { messageOf } from "../integrations/github.ts";
+import { messageOf } from "../integrations/util.ts";
 import { InterpreterMissingError, type RunScript } from "../integrations/scriptRunner.ts";
 import type { RunShell, ShellResult } from "../integrations/shellCommand.ts";
 import type { Services } from "../services/types.ts";

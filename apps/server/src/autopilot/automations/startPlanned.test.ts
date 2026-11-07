@@ -2,7 +2,8 @@ import type { AutopilotRun } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
-import { NO_GITHUB, RunAbandonedError, type Runner, type RunnerRequest } from "../types.ts";
+import { NO_GIT_HOSTS } from "../../integrations/gitHosts.ts";
+import { RunAbandonedError, type Runner, type RunnerRequest } from "../types.ts";
 import { AUTOPILOT_START_PLANNED, notStartable, START_POLL_MS, startPlanned } from "./startPlanned.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
@@ -707,7 +708,7 @@ describe("start planned tasks: skipped when no longer eligible", () => {
     const result = await startPlanned.act(candidate!, {
       services: s,
       runner: { start: () => Promise.reject(new Error("must not run")) },
-      github: NO_GITHUB,
+      gitHosts: NO_GIT_HOSTS,
       engine: s.autopilot.engine(),
       boardUrl: "http://127.0.0.1:5317",
       config: startPlanned.defaults,

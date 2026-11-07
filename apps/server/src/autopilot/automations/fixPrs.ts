@@ -32,7 +32,9 @@ import {
 import { z } from "zod";
 import { AppError } from "../../errors.ts";
 import { shQuote } from "../../integrations/terminal.ts";
-import { messageOf } from "../../integrations/github.ts";
+import type { PrAgentHints } from "../../integrations/gitHost.ts";
+import type { GitHostActions } from "../../integrations/gitHosts.ts";
+import { messageOf } from "../../integrations/util.ts";
 import type { Services } from "../../services/types.ts";
 import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE, runnerFields } from "../runnerOptions.ts";
 import { threadSeen } from "../threads.ts";
@@ -41,11 +43,10 @@ import {
   WorktreeHeadError,
   defineAutomation,
   type ActionResult,
-  type GithubActions,
   type Candidate,
   type RunnerResult,
 } from "../types.ts";
-import { hostFlag, prUrl } from "./reviewPrs.ts";
+import { prUrl } from "./reviewPrs.ts";
 
 export { AUTOPILOT_FIX_PRS };
 
@@ -273,6 +274,8 @@ export interface FixPromptInput {
   triggers: readonly FixTrigger[];
   stillOpen: readonly FixTriggerKind[];
   skill: ReviewSkillRef;
+  /** The commands for reading and replying on the PR, in its host's CLI (GitHost.agentHints). */
+  hints: PrAgentHints;
   /**
    * A fix the user started from the board ("Fix in →") and watches: the agent may ask, isn't told it is Autopilot, and
    * its replies carry no Autopilot marker. It runs in a worktree of its own, so the prompt says how to push the PR's branch.
@@ -299,10 +302,9 @@ export function fixPrompt({
   skill,
   manual = false,
   harness,
+  hints,
 }: FixPromptInput): string {
   const url = prUrl(pr);
-  const api = `repos/${pr.repo}/pulls/${pr.number}`;
-  const flag = hostFlag(pr);
   const lines = [
     manual
       ? `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task #${task.number} "${task.title}". The user asked you to fix what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. ${harness && !AGENT_HARNESSES[harness].presetSessionId ? selfLinkLine(harness, sessionLabel("fix", task.number)) : `${BRAND.name} started this session and already linked it to the task, so don't link it yourself.`}`
@@ -315,31 +317,31 @@ export function fixPrompt({
     switch (trigger.kind) {
       case "checks":
         lines.push(
-          `- **Failing checks.** See which with \`gh pr checks ${url}\` and read a failed run's log with \`gh run view <run id> --log-failed\`. Fix the cause in the code, not the check.`,
+          `- **Failing checks.** See which with \`${hints.checks}\` and read a failed run's log with \`${hints.runLog}\`. Fix the cause in the code, not the check.`,
         );
         break;
       case "conflict":
         lines.push(
-          `- **Merge conflicts** with the base branch. Find it with \`gh pr view ${url} --json baseRefName\`, then \`git fetch origin\` and \`git merge origin/<base>\`, resolve the conflicts and commit the merge. Never rebase: the branch can't be force-pushed.`,
+          `- **Merge conflicts** with the base branch. Find it with \`${hints.baseBranch}\`, then \`git fetch origin\` and \`git merge origin/<base>\`, resolve the conflicts and commit the merge. Never rebase: the branch can't be force-pushed.`,
         );
         break;
       case "changes":
         lines.push(
           trigger.reviewId === null
-            ? `- **Changes requested.** Find the review with \`gh pr view ${url} --comments\` and read its inline comments with \`gh api ${api}/comments${flag}\`.`
-            : `- **Changes requested**${trigger.author ? ` by @${trigger.author}` : ""}. Read the review with \`gh api ${api}/reviews/${trigger.reviewId}${flag}\` and its comments with \`gh api ${api}/reviews/${trigger.reviewId}/comments${flag}\`.`,
+            ? `- **Changes requested.** Find the review with \`${hints.conversation}\` and read its inline comments with \`${hints.inlineComments}\`.`
+            : `- **Changes requested**${trigger.author ? ` by @${trigger.author}` : ""}. Read the review with \`${hints.review(trigger.reviewId)}\` and its comments with \`${hints.reviewComments(trigger.reviewId)}\`.`,
         );
         break;
       case "comments":
         lines.push(
-          `- **New review comments**${trigger.authors.length > 0 ? ` from ${trigger.authors.map((a) => `@${a}`).join(", ")}` : ""} (comment ids ${trigger.ids.join(", ")}). Read each with \`gh api repos/${pr.repo}/pulls/comments/<comment id>${flag}\`.`,
+          `- **New review comments**${trigger.authors.length > 0 ? ` from ${trigger.authors.map((a) => `@${a}`).join(", ")}` : ""} (comment ids ${trigger.ids.join(", ")}). Read each with \`${hints.comment}\`.`,
         );
         break;
       case "review": {
         const { review } = trigger;
         const read =
           review.reviewId !== null
-            ? `\`gh api ${api}/reviews/${review.reviewId}${flag}\` (its summary) and \`gh api ${api}/reviews/${review.reviewId}/comments${flag}\` (its inline comments)`
+            ? `\`${hints.review(review.reviewId)}\` (its summary) and \`${hints.reviewComments(review.reviewId)}\` (its inline comments)`
             : review.reviewUrl;
         lines.push(
           `- **${BRAND.name} Autopilot's review** (round ${review.round} of ${review.maxRounds}, ${review.reviewUrl}): ${review.actionable} point${review.actionable === 1 ? "" : "s"} at or above **${review.threshold}** to fix (${describeCounts(review.counts)}${review.fyi > 0 ? `, ${review.fyi} FYI` : ""}). Read it with ${read}. Fix only the points rated ${review.threshold} or above. Leave the ones below it and everything under "FYI (no action needed)" alone.`,
@@ -364,8 +366,8 @@ export function fixPrompt({
       : `- Push your commits to the PR's branch \`${pr.headRef}\`.`,
     `- Never force-push, never push to the default branch and never merge the pull request; fix conflicts with a merge, not a rebase.`,
     manual
-      ? `- Reply on each review thread you addressed, or declined with a reason. Write the reply to \`${replyFile}\` in the worktree's root and post it with \`gh api ${api}/comments/<comment id>/replies -F body=@${replyFile}${flag}\`; delete the file afterwards and never commit it. Don't resolve threads: the reviewer does.`
-      : `- Once your commits are pushed, reply on each review thread you were sent to. Its first line is exactly \`${prFixedReply("<sha>")}\` (the pushed commit that fixes it) for a point you fixed, or \`${prDeclinedReply("<reason>")}\` for one you won't fix; say what you did below it. Write the reply to \`${replyFile}\` in the worktree's root and post it with \`gh api ${api}/comments/<comment id>/replies -F body=@${replyFile}${flag}\`; delete the file afterwards and never commit it. ${resolveThreads ? `Don't resolve threads yourself: ${BRAND.name} resolves each one you fixed once its commit is on the PR, and declined ones stay open for the reviewer.` : "Don't resolve threads: the reviewer does."}`,
+      ? `- Reply on each review thread you addressed, or declined with a reason. Write the reply to \`${replyFile}\` in the worktree's root and post it with \`${hints.reply(replyFile)}\`; delete the file afterwards and never commit it. Don't resolve threads: the reviewer does.`
+      : `- Once your commits are pushed, reply on each review thread you were sent to. Its first line is exactly \`${prFixedReply("<sha>")}\` (the pushed commit that fixes it) for a point you fixed, or \`${prDeclinedReply("<reason>")}\` for one you won't fix; say what you did below it. Write the reply to \`${replyFile}\` in the worktree's root and post it with \`${hints.reply(replyFile)}\`; delete the file afterwards and never commit it. ${resolveThreads ? `Don't resolve threads yourself: ${BRAND.name} resolves each one you fixed once its commit is on the PR, and declined ones stay open for the reviewer.` : "Don't resolve threads: the reviewer does."}`,
     manual
       ? `- The user is watching this session: if something is unclear or you can't fix it, say so instead of guessing.`
       : `- Nobody is watching this session, so you can't ask anything. If you can't fix something, say why in your reply or a note on task #${task.number}, and stop.`,
@@ -659,12 +661,12 @@ export const fixPrs = defineAutomation({
         });
       }),
     ),
-  act: async (candidate, { services, runner, github, config, run }): Promise<ActionResult> => {
+  act: async (candidate, { services, runner, gitHosts, config, run }): Promise<ActionResult> => {
     const given = candidate.data as FixData | GaveUpData | ResolveData;
     if ("gaveUp" in given) {
       return { summary: `${fixGaveUpPrefix(given.number)} ${given.reason}`, needsAttention: true };
     }
-    if ("resolve" in given) return resolveFixedThreads(given, github);
+    if ("resolve" in given) return resolveFixedThreads(given, gitHosts);
     const data = given;
     const task = services.tasks.summary(candidate.taskId!);
     const link = task.links.find((l) => l.id === data.linkId);
@@ -688,6 +690,7 @@ export const fixPrs = defineAutomation({
       triggers: data.triggers,
       stillOpen: data.stillOpen,
       skill: config.skill,
+      hints: gitHosts.agentHints(data),
     });
     const what = describeTriggers(data.triggers.map((t) => t.kind));
     // An epic's thread (if any) orchestrates its tasks; the epic's PR gets a session of its own.
@@ -726,7 +729,7 @@ export const fixPrs = defineAutomation({
       if (error instanceof WorktreeHeadError) {
         const live = error.moved
           ? null
-          : await github.prHead({ host: data.host, repo: data.repo, number: data.number }).catch(() => null);
+          : await gitHosts.prHead({ host: data.host, repo: data.repo, number: data.number }).catch(() => null);
         if (error.moved || (live && live !== data.headOid)) {
           return { status: "skipped", summary: `PR #${data.number} moved on before the fix started` };
         }
@@ -769,9 +772,9 @@ const threads = (n: number) => `${n} review thread${n === 1 ? "" : "s"}`;
  */
 async function resolveFixedThreads(
   data: ResolveData,
-  github: Pick<GithubActions, "reviewThreads" | "resolveReviewThread">,
+  gitHosts: Pick<GitHostActions, "reviewThreads" | "resolveReviewThread">,
 ): Promise<ActionResult> {
-  const state = await github.reviewThreads({ host: data.host, repo: data.repo, number: data.number });
+  const state = await gitHosts.reviewThreads({ host: data.host, repo: data.repo, number: data.number });
   const commits = state.commits.map((c) => c.toLowerCase());
   const wanted = new Set(data.threadIds);
   const read = state.threads.filter((t) => wanted.has(t.id));
@@ -788,7 +791,7 @@ async function resolveFixedThreads(
   const failed: string[] = [];
   for (const thread of onPr) {
     try {
-      await github.resolveReviewThread(data.host, thread.id);
+      await gitHosts.resolveReviewThread(data.host, thread.id);
     } catch (error) {
       failed.push(messageOf(error));
     }
@@ -811,7 +814,12 @@ async function resolveFixedThreads(
  * and Autopilot's review aren't listed (the user points the agent at those). The Fix skill of the task's scope is
  * followed when one is chosen, as it is for Autopilot's own attempts.
  */
-export function manualFix(services: Services, linkId: string, harness?: AgentHarness): PrFixInfo {
+export function manualFix(
+  services: Services,
+  linkId: string,
+  hintsFor: (pr: { host: string; repo: string; number: number }) => PrAgentHints,
+  harness?: AgentHarness,
+): PrFixInfo {
   const link = services.links.get(linkId);
   if (link.kind !== "pr" || !link.ref || !link.snapshot) {
     throw new AppError("VALIDATION", "Only a pull request that has been read from GitHub can be fixed");
@@ -850,6 +858,7 @@ export function manualFix(services: Services, linkId: string, harness?: AgentHar
     stillOpen: [],
     skill: skill?.success ? skill.data : { source: "builtin" },
     manual: true,
+    hints: hintsFor(ref),
     ...(harness ? { harness } : {}),
   });
   return { branch: headRef, headOid, number: ref.number, problems, prompt };

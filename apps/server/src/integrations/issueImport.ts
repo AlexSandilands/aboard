@@ -8,7 +8,8 @@ import {
 import { tmpdir } from "node:os";
 import type { ImportRecord } from "../db/repos/imports.ts";
 import type { ImportResult, Services } from "../services/types.ts";
-import { messageOf, type IssueDetails } from "./github.ts";
+import type { HostIssue } from "./gitHost.ts";
+import { messageOf } from "./util.ts";
 import { listConnectedMcpServers, runIssueImport, writeToolDenyRules, type RunImport } from "./headlessImport.ts";
 import type { Logger } from "./util.ts";
 
@@ -19,6 +20,9 @@ const CONCURRENCY = 3;
 const SERVERS_TTL_MS = 5 * 60_000;
 /** How much of a GitHub issue's body becomes the description when no model is available to summarise it. */
 const RAW_BODY_MAX = 4_000;
+
+/** What an import reads of an issue. */
+export type IssueDetails = Pick<HostIssue, "title" | "body" | "labels" | "state">;
 
 export interface IssueImporter {
   /** Queues the task's pending import; it runs in the background. */
@@ -37,9 +41,10 @@ export interface IssueImporter {
  */
 export function createIssueImporter(deps: {
   services: () => Services;
-  github: {
-    fetchIssue(ref: { host: string; repo: string; number: number }): Promise<IssueDetails>;
-    fetchSubIssues(ref: { host: string; repo: string; number: number }): Promise<string[]>;
+  /** The git host an issue is on (GitHosts' gitHostIssues). */
+  issues: {
+    getIssue(ref: { host: string; repo: string; number: number }): Promise<IssueDetails>;
+    listSubIssues(ref: { host: string; repo: string; number: number }): Promise<string[]>;
   };
   runImport?: RunImport;
   listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
@@ -69,7 +74,7 @@ export function createIssueImporter(deps: {
     const s = deps.services();
     const source = parseImportSource(record.sourceUrl, s.settings.get().ticketSystems);
     if (source?.kind !== "issue") throw new Error(`${record.sourceUrl} is not a GitHub issue`);
-    const issue = await deps.github.fetchIssue(source.ref);
+    const issue = await deps.issues.getIssue(source.ref);
     const link = issueLink(record.taskId);
     if (link) s.links.setSnapshot(link.id, { state: issue.state, title: issue.title });
     // An issue with sub-issues is GitHub's epic. Without them (or when they can't be read) it is a plain task. A task
@@ -77,7 +82,7 @@ export function createIssueImporter(deps: {
     const inEpic = s.tasks.summary(record.taskId).parent !== null;
     const subIssues = inEpic
       ? []
-      : await deps.github.fetchSubIssues(source.ref).catch((error: unknown) => {
+      : await deps.issues.listSubIssues(source.ref).catch((error: unknown) => {
           log.warn(`[import] ${record.sourceUrl}: couldn't read its sub-issues: ${messageOf(error)}`);
           return [];
         });

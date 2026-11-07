@@ -12,7 +12,7 @@ import {
 import type { Services } from "../services/types.ts";
 import { claudeOutput, executableVersion, resolveExecutable, runClaude } from "./claudeCli.ts";
 import { codexModelPages } from "./codexAppServer.ts";
-import { messageOf } from "./github.ts";
+import { messageOf } from "./util.ts";
 import type { TerminalHost } from "./terminal.ts";
 
 // The models each CLI says it can run, for the pickers in Settings → Agents → Models. Each CLI is asked only when the page

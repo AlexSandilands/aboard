@@ -181,11 +181,14 @@ pushed** row with **Connect GitHub** while no remote is (`backupState` in `backu
 remote only ever committed locally, and nothing used to say so. Both open `BackupSetupDialog`: folder → remote →
 first backup. The server side is `apps/server/src/integrations/backupSetup.ts`:
 
-- `GET /api/backup/setup-info`: gh installed and signed in to github.com (re-checked on each call, so a
-  `gh auth login` made with the dialog open shows up after "Check gh again"), the default folder
+- `GET /api/backup/setup-info`: `host` (`{kind, available, signedIn, login}`): the git host's CLI (gh) installed and
+  signed in to its main site, github.com (re-checked on each call, so a `gh auth login` made with the dialog open
+  shows up after "Check gh again"). The dialog words its hints from the kind's definition
+  (`packages/contracts/src/gitHosts.ts`: the CLI's name, login command and site). Then the default folder
   `<data dir>/backup`, the current folder, remote and machine name, and the repo name to offer
   (`<product id>-backup`).
-- `POST /api/backup/github-repo` runs `gh repo create <name> --private` and returns the clone URL: SSH when gh's
+- `POST /api/backup/github-repo` asks the host to make the repo (`GitHost.createRepo`; GitHub's runs
+  `gh repo create <name> --private` in `githubHost.ts`) and returns the clone URL: SSH when gh's
   `git_protocol` is `ssh`, else HTTPS, which `gh auth setup-git` signs git in for. A name the account already has
   is a `CONFLICT` that says to use it as an existing repo.
 - `POST /api/backup/check-remote` runs `git ls-remote` in a scratch folder: reachable, `auth_failed`, `not_found`
@@ -362,7 +365,7 @@ from; running tasks on another machine is #12.
 | `apps/server/src/backupCli.ts`                    | `pnpm backup export / import / restore-task`                         |
 | `apps/server/src/serverFile.ts`                   | `server.json` in the data dir, so the CLI can tell a server is up    |
 | `apps/server/src/db/database.ts`                  | `migrate(db, upTo)` and `schemaVersion`                              |
-| `apps/server/src/integrations/backupSetup.ts`     | Guided setup: setup info, `gh repo create`, checking a remote        |
+| `apps/server/src/integrations/backupSetup.ts`     | Guided setup: setup info, making the repo on the git host, checking a remote |
 | `apps/web/src/components/settings/BackupSection.tsx` | The Settings → Board → Data section                                     |
 | `apps/web/src/components/settings/RestoreDialog.tsx` | The Restore dialog: machine and commit, tasks or the whole board        |
 | `apps/web/src/components/settings/MoveTasksDialog.tsx` | Moving or copying tasks from another machine; its rules in `moveTasks.logic.ts` |

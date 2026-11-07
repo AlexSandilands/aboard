@@ -7,7 +7,7 @@ import {
   type TaskSummary,
 } from "@repo/contracts";
 import { z } from "zod";
-import { messageOf } from "../../integrations/github.ts";
+import { messageOf } from "../../integrations/util.ts";
 import type { Services } from "../../services/types.ts";
 import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE, runnerFields } from "../runnerOptions.ts";
 import { defineAutomation, RunAbandonedError, type ActionResult, type Candidate, type RunnerResult } from "../types.ts";

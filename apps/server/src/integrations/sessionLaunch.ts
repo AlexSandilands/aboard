@@ -38,7 +38,7 @@ import type { Services } from "../services/types.ts";
 import type { RunGit } from "./backup.ts";
 import { remoteRepo } from "./gitRemote.ts";
 import { resolveExecutable } from "./claudeCli.ts";
-import { messageOf } from "./github.ts";
+import { messageOf } from "./util.ts";
 import {
   copyCommand,
   displayLaunch,

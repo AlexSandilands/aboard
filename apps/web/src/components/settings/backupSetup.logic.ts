@@ -1,6 +1,12 @@
-import type { AppSettings, BackupRemoteCheck, BackupSetupInfo, BackupStatus } from "@repo/contracts";
+import {
+  gitHostDefinition,
+  type AppSettings,
+  type BackupRemoteCheck,
+  type BackupSetupInfo,
+  type BackupStatus,
+} from "@repo/contracts";
 
-/** How the GitHub step gets a remote: a new private repo made with gh, or a URL the user gives. */
+/** How the remote step gets a remote: a new private repo made with the host's CLI (gh), or a URL the user gives. */
 export type RemoteChoice = "create" | "existing" | "none";
 
 /** What the Backup section shows: a setup button, a local-only warning, or the configured rows alone. */
@@ -30,22 +36,24 @@ export function canResetBackup(
   return settings.backupEnabled || !!settings.backupDir || !!settings.backupRemote || !settings.machineNameIsDefault;
 }
 
-/** The choice the GitHub step starts on: creating a repo needs gh signed in, and a set remote is kept. */
+/** The choice the remote step starts on: creating a repo needs the CLI signed in, and a set remote is kept. */
 export function initialRemoteChoice(info: BackupSetupInfo): RemoteChoice {
   if (info.backupRemote) return "existing";
-  return info.gh.signedIn ? "create" : "existing";
+  return info.host.signedIn ? "create" : "existing";
 }
 
-/** The URL the existing-repo field starts with: the current remote, or where gh would have made the repo. */
+/** The URL the existing-repo field starts with: the current remote, or where the CLI would have made the repo. */
 export function suggestedRemote(info: BackupSetupInfo): string {
   if (info.backupRemote) return info.backupRemote;
-  return info.gh.login ? `https://github.com/${info.gh.login}/${info.suggestedRepoName}.git` : "";
+  const { site } = gitHostDefinition(info.host.kind);
+  return info.host.login ? `https://${site}/${info.host.login}/${info.suggestedRepoName}.git` : "";
 }
 
 /** Why "Create a private repo" is unavailable, or null when it can be used. */
 export function createUnavailableReason(info: BackupSetupInfo): string | null {
-  if (!info.gh.available) return "Needs the GitHub CLI (gh), which isn't installed.";
-  if (!info.gh.signedIn) return "Run gh auth login to sign gh in to GitHub, then check again.";
+  const { label, cli } = gitHostDefinition(info.host.kind);
+  if (!info.host.available) return `Needs the ${cli.label} (${cli.name}), which isn't installed.`;
+  if (!info.host.signedIn) return `Run ${cli.loginCommand()} to sign ${cli.name} in to ${label}, then check again.`;
   return null;
 }
 
