@@ -7,7 +7,8 @@ does in one sentence, switch it on or off, **Edit** it, **Export** it or **Delet
 
 ## Setting one up
 
-**Settings → Autopilot → + Add automation → New automation** (the last row of the list).
+**Settings → Autopilot → + Add automation → Start from scratch**. The same dialog has **Recipes** (small ready-made
+automations that open for you to read and import, in Preview), **Import a file** and **Ask an agent**.
 
 1. **When**: pick a trigger.
    - **A task changes column**: into a column, and optionally only from one (Done → In Progress catches reopened
@@ -266,7 +267,7 @@ prompt, skill name and allowed tools, any script or check script (in full), the 
 slots **without** their tools. It leaves out your projects, your epic and the tools you filled the slots with. If the
 automation names a skill you have installed, the skill's text goes in the file.
 
-To use someone's file: **+ Add automation → Import**, then choose the file (or the example the app ships:
+To use someone's file: **+ Add automation → Import a file**, then choose the file (or the example the app ships:
 **Review repo PRs**). Before anything is saved you see everything it
 would run: the prompt, any command, script or check script (with its language), the tools it may use without asking and
 the skill's text. Treat it as code from a stranger, because once you turn it on it runs on
@@ -342,6 +343,13 @@ With **Settings → Agents → Providers → Board skills** on, the agent also h
 how to pick a trigger and action, use your variables, inputs and tool slots, write a script that fails loudly and
 treats what it reads as data, and test it before handing it over. Without it the agent still has the tool, just
 less guidance.
+
+You don't need to know what to ask. **Ask an agent** (beside **+ Add automation**, and in the Add dialog) gives you a
+prompt to paste into your own agent, or starts a new T3 Code thread with it, which you can edit first. The same menu is
+on each automation as **Ask an agent to change this** (it hands over the automation's current definition and asks for a
+changed draft; for a built-in it tells you which settings to change) and on a failed run as **Ask an agent to fix**
+(with the error and the end of its output). There's no chat box: the agent works in your own session, and what it
+makes arrives as a draft.
 
 Drafts waiting for you are listed under **Needs you** at the top of Settings → Autopilot, with **Review** and
 **Dismiss**. Importing a

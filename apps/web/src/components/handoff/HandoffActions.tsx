@@ -11,12 +11,14 @@ import {
   type TaskSummary,
 } from "@repo/contracts";
 import { ClipboardCopyIcon, LightbulbIcon, ListTodoIcon, SparklesIcon, TerminalIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import type { SyntheticEvent } from "react";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { HarnessIcon, T3Icon, useHandoffClis } from "~/components/sessions/SessionParts";
 import { copyToClipboard } from "~/components/task/InlineInput";
+import { canStartProjectT3Thread } from "./handoff.logic";
 import { PrefetchSessionLaunchOptions, PrefetchT3LaunchOptions } from "./LaunchPrefetch";
 import { cn } from "~/lib/utils";
 import { useBoard, useFollowupEpicBranch, useSettings } from "~/state/queries";
@@ -262,6 +264,80 @@ export function HandoffMenu({
             </MenuItem>
           </>
         )}
+      </MenuPopup>
+    </Menu>
+  );
+}
+
+/**
+ * "Ask an agent" on Settings → Autopilot: hands a prompt the board built (see automationPrompts.ts) to the user's own
+ * agent, as a new T3 Code thread in a project (one item per project that can start one) or a prompt to paste. There is
+ * no chat box: the agent already has the board's MCP tools, and what it makes lands as a draft to review.
+ */
+export function AskAgentMenu({
+  label,
+  prompt,
+  threadLabel,
+  projectId,
+  writesCode = false,
+  variant = "ghost-muted",
+  size = "xs",
+  triggerLabel,
+  children,
+}: {
+  /** The trigger's accessible name when it shows no text. */
+  label: string;
+  /** Built when the menu is used, so a long definition isn't rendered for every row. */
+  prompt: () => string;
+  /** Names the new thread's dialog ("Ask an agent to change Review PRs"). */
+  threadLabel: string;
+  /** Offer only this project's thread (a failed run's), when it is known and can start one. */
+  projectId?: string | null;
+  /** The prompt may change the repo (fixing a run), so its thread starts where T3 would by default. */
+  writesCode?: boolean;
+  variant?: "ghost-muted" | "outline" | "default";
+  size?: "xs" | "sm" | "icon-xs";
+  /** The trigger's text; without it the trigger is the icon alone, named by `label`. */
+  triggerLabel?: string;
+  children?: ReactNode;
+}) {
+  const board = useBoard().data;
+  const settings = useSettings().data;
+  const t3 = board?.integrations.t3;
+  const startable = (board?.projects ?? []).filter(
+    (p) => p.archivedAt === null && t3 && canStartProjectT3Thread(p, t3, settings),
+  );
+  const projects = startable.some((p) => p.id === projectId) ? startable.filter((p) => p.id === projectId) : startable;
+  return (
+    <Menu>
+      <MenuTrigger
+        render={
+          <Button
+            variant={variant}
+            size={triggerLabel ? size : "icon-xs"}
+            aria-label={triggerLabel ? undefined : label}
+            title={label}
+          />
+        }
+      >
+        {children ?? <SparklesIcon />}
+        {triggerLabel}
+      </MenuTrigger>
+      <MenuPopup align="end">
+        {projects.map((project) => (
+          <MenuItem
+            key={project.id}
+            onClick={() => useDialogs.getState().openPromptT3Launch(project.id, threadLabel, prompt(), writesCode)}
+          >
+            <T3Icon className="size-4.5 sm:size-4" />
+            {projects.length > 1 ? `New T3 Code thread in ${project.title}…` : "New T3 Code thread…"}
+          </MenuItem>
+        ))}
+        {projects.length > 0 ? <MenuSeparator /> : null}
+        <MenuItem onClick={() => copyToClipboard(prompt(), "prompt")}>
+          <ClipboardCopyIcon />
+          Copy prompt
+        </MenuItem>
       </MenuPopup>
     </Menu>
   );
