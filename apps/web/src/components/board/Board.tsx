@@ -355,7 +355,12 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     return { cell, collapsed, visible: visibleCellTasks(cell, collapsed, [selectedTaskId, draggedId]).visible };
   };
 
+  // The dragged card's cell keeps its height until the drag ends (see handleDragStart).
+  const heldCellRef = useRef<HTMLElement | null>(null);
+
   const endDrag = () => {
+    heldCellRef.current?.style.removeProperty("min-height");
+    heldCellRef.current = null;
     setActiveId(null);
     setActiveCompact(false);
     setOverCell(null);
@@ -375,6 +380,15 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     // A card lifted out of the stuck lane is one line, so the lifted copy is too.
     const node = document.querySelector(`[data-task-card="${CSS.escape(String(event.active.id))}"]`);
     setActiveCompact(!!node?.closest("[data-stuck]"));
+    // The preview moves the card out of its cell. If that shrank its row, the lanes below (or, in the
+    // last lane, the scroll position) would move under a still pointer, the next measure would put the
+    // card back, the row would grow again, and so on until React stops with "Maximum update depth
+    // exceeded". Cells stretch to their row, so holding this one's height keeps the row from shrinking.
+    const cell = node?.closest<HTMLElement>("[data-board-cell]");
+    if (cell) {
+      cell.style.minHeight = `${cell.getBoundingClientRect().height}px`;
+      heldCellRef.current = cell;
+    }
   };
 
   const handleDragOver = (event: DragOverEvent) => {
