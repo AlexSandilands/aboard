@@ -129,7 +129,8 @@ export async function produceDigest(input: ProduceDigestInput): Promise<Produced
           label: "Digest",
           prompt: digestPrompt(plain, config.skill, skillText),
           operation: "digest",
-          options: config,
+          // A run with no task is headless whatever the board's runner is.
+          options: { ...config, runner: "headless" },
           // The plain digest has everything, and an agent with any tool could be steered by a task title.
           access: "none",
         });

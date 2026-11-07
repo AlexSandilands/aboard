@@ -449,8 +449,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
       title: "Update task fields",
       description:
         "Edit a task's title, description, plan context, labels, suggested model, reviewer model, Autopilot or auto-merge flag, due date, manual flag, or archive/unarchive it. " +
-        "The Autopilot flag lets the board start the task by itself, and the auto-merge flag lets merge_task_pr merge its PR " +
-        "into the default branch, so set either only after the user has said so, and dueDate (YYYY-MM-DD, null clears it) only when the user gives a date. To move the task to a different " +
+        "The Autopilot flag lets the board start the task by itself, and the auto-merge flag lets merge_task_pr (or " +
+        "Autopilot's Merge ready PRs, when its Into main is on) merge its PR into the default branch, so set either only after the user has said so, and dueDate (YYYY-MM-DD, null clears it) only when the user gives a date. To move the task to a different " +
         "project pass moveToProjectId or moveToWorkspacePath (the target project must already exist); that takes " +
         "it out of its epic unless you also pass an epic there. Pass epic to put the task in an epic (or move it " +
         "to another), or epic: null to take it out. Pass addBlockedBy / removeBlockedBy to set or clear the tasks " +

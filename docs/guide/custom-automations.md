@@ -1,9 +1,9 @@
 # Custom automations
 
 A custom automation is an Autopilot automation you define yourself: say what to watch for, and what to do. It
-sits in the Autopilot list next to the built-in ones, under **Yours**, with the same **Inherit / On / Off** switches
-per project, and keeps to the same pause, dry run, caps and quiet hours. Click it in the list to see what it does in
-one sentence, switch it on or off, **Edit** it, **Export** it or **Delete** it.
+sits in the Autopilot list next to the built-in ones, under **Yours**, with the same **Off / Preview / On** switches
+(and **Inherit** per project), and keeps to the same pause, caps and quiet hours. Click it in the list to see what it
+does in one sentence, switch it on or off, **Edit** it, **Export** it or **Delete** it.
 
 ## Setting one up
 
@@ -70,8 +70,9 @@ one sentence, switch it on or off, **Edit** it, **Export** it or **Delete** it.
      (`Write-Output`, `-match`, a `.ps1` script) is fine.
 4. The **Preview** shows exactly what would run for the newest task the filters let through: the filled prompt,
    or the command with its variables.
-5. Save it, then switch it **On** in the Autopilot list (for the board) or in a project's Autopilot settings, or
-   from the Autopilot pill on a lane. Like every automation, it is off until you switch it on.
+5. Save it. It starts in [Preview](autopilot.md#trying-one-out-with-preview): it records what it would do, and does
+   none of it. Once its Preview runs look right, turn it **On** on its page (**Turn on**, or its Mode), in a project's
+   Autopilot settings, or from the Autopilot pill on a lane.
 
 ## What it does
 
@@ -90,7 +91,8 @@ one sentence, switch it on or off, **Edit** it, **Export** it or **Delete** it.
 - A command that exits non-zero, or runs past its timeout (it's stopped), fails its run and puts the task under
   Needs attention. The run keeps the exit code and the end of its output, shown in the task panel's **Autopilot**
   section under **Output**.
-- With **dry run** on, each run records what it would have run, under **What it would run**, and does nothing.
+- In **Preview** (its own, or Preview everything), each run records what it would have run, under **What it would
+  run**, and does nothing.
 
 ## Scripts
 
@@ -189,7 +191,7 @@ that it never repeats work: **retry** the run (`POST /api/autopilot/runs/<id>/re
 the key. In both cases the board takes the same care as any retry: quiet hours, the caps and the switches still hold.
 
 A check starts only when an agent could: not in quiet hours, nor while the agent caps are full, and at most four
-checks and commands run at once. A **dry run** runs the check for real, so it can do whatever your script does, and
+checks and commands run at once. **Preview runs the check for real**, so it can do whatever your script does, and
 records what each agent would have been told instead of starting it.
 
 ### Items are untrusted by default
@@ -267,9 +269,10 @@ automation names a skill you have installed, the skill's text goes in the file.
 To use someone's file: **+ Add automation → Import**, then choose the file (or the example the app ships:
 **Review repo PRs**). Before anything is saved you see everything it
 would run: the prompt, any command, script or check script (with its language), the tools it may use without asking and
-the skill's text. Treat it as code from a stranger, because once you switch it on it runs on
+the skill's text. Treat it as code from a stranger, because once you turn it on it runs on
 your machine with your access. Then fill in its inputs and slots, optionally restrict it to projects, and import.
-It comes in **off**; switch it on in the Autopilot list when you have read it and the orange warning is gone.
+It comes in **in Preview**, which records what it would do (a check script still runs for real); turn it on in the
+Autopilot list when its Preview runs look right and the orange warning is gone.
 
 - A file with a script needs one more step: a switch that says you've read the script and understand it runs on your
   machine as you. **Import** waits for it.

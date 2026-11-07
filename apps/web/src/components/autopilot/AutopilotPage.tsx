@@ -113,6 +113,7 @@ export function AutopilotAutomationsTab() {
       projects.map((p, i) => ({ title: p.title, entries: scopes[i]?.data })),
     ),
     lastRun: overview.data?.lastRuns.find((r) => r.automation === item.automation.key),
+    previewRuns: overview.data?.previewRuns.find((r) => r.automation === item.automation.key)?.count ?? 0,
     custom: customOf(customs, item.automation.key),
   }));
   return (
@@ -124,7 +125,7 @@ export function AutopilotAutomationsTab() {
             <StatusStrip overview={overview.data} anyOn={listed.some((i) => !isOffEverywhere(i.reach))} />
             <NeedsYou needs={overview.data.needsYou} onSelect={(key) => selectAutomation(key)} />
             <section className="space-y-2.5">
-              <AutomationsSplit items={listed} overview={overview.data} pending={pending} rejected={rejected} />
+              <AutomationsSplit items={listed} pending={pending} rejected={rejected} />
             </section>
           </>
         ) : (
@@ -156,13 +157,13 @@ function StatusStrip({ overview, anyOn }: { overview: AutopilotOverview; anyOn: 
   const setPaused = useSetAutopilotPaused();
   const openSettings = useOpenSettings();
   const { paused } = overview;
-  // In dry run the automations only record what they would do, so the strip mustn't say plainly that they run.
+  // Under Preview everything the automations only record what they would do, so the strip mustn't say they run.
   const state = paused
     ? "Paused: no new runs start"
     : !anyOn
       ? "Nothing is on"
       : overview.engine.dryRun
-        ? "Running in dry run: nothing is done"
+        ? "Preview everything: nothing is done"
         : "Running";
   return (
     <SettingsGroup className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:px-4">
@@ -250,7 +251,7 @@ function NeedsYou({ needs, onSelect }: { needs: AutopilotNeed[]; onSelect: (auto
               <SettingsRow
                 key={`draft:${need.draftId}`}
                 title={<NeedTitle icon={<FilePenLineIcon className="text-info" />}>Draft · {need.name}</NeedTitle>}
-                description={`From ${need.createdBy} · ${formatRelativeTimeLabel(need.createdAt)}. Nothing runs until you import it.`}
+                description={`From ${need.createdBy} · ${formatRelativeTimeLabel(need.createdAt)}. It saves in Preview when you import it.`}
                 control={
                   <>
                     <Button

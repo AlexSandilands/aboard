@@ -221,6 +221,9 @@ describe("settingsPaletteEntries", () => {
 describe("the Autopilot tabs", () => {
   it("sends the old page's anchors to where they are now", () => {
     expect(redirectSettingsTarget("autopilot.engine")).toBe("autopilot.automations");
+    expect(redirectSettingsTarget("autopilot.engine.pr-review-rounds")).toBe("autopilot.automations.review_prs");
+    expect(redirectSettingsTarget("autopilot.limits.pr-fix-threshold")).toBe("autopilot.automations.fix_prs");
+    expect(redirectSettingsTarget("autopilot.limits.quiet-hours")).toBe("autopilot.limits.quiet-hours");
     expect(redirectSettingsTarget("autopilot.engine.settings")).toBe("autopilot.limits");
     expect(redirectSettingsTarget("autopilot.engine.quiet-hours")).toBe("autopilot.limits.quiet-hours");
     expect(redirectSettingsTarget("autopilot.engine.pause-all")).toBe("autopilot.automations.pause-all");
@@ -232,14 +235,15 @@ describe("the Autopilot tabs", () => {
     expect(redirectSettingsTarget("autopilot.custom")).toBe("autopilot.automations");
     expect(redirectSettingsTarget("autopilot.custom.variables.list")).toBe("autopilot.limits.variables.list");
     // Today's targets stay as they are.
-    expect(redirectSettingsTarget("autopilot.limits.dry-run")).toBe("autopilot.limits.dry-run");
+    expect(redirectSettingsTarget("autopilot.limits.preview-everything")).toBe("autopilot.limits.preview-everything");
+    expect(redirectSettingsTarget("autopilot.limits.dry-run")).toBe("autopilot.limits.preview-everything");
     expect(redirectSettingsTarget("autopilot.automations.digest")).toBe("autopilot.automations.digest");
   });
 
   it("parses an old anchor as the tab it is on now", () => {
     expect(parseSettingsTarget("autopilot.engine.dry-run")).toEqual({
       group: "autopilot",
-      anchor: "autopilot.limits.dry-run",
+      anchor: "autopilot.limits.preview-everything",
     });
   });
 
@@ -256,7 +260,7 @@ describe("the Autopilot tabs", () => {
     expect(automationOfTarget("autopilot.automations.custom:abc")).toBe("custom:abc");
     expect(automationOfTarget("autopilot.automations.pause-all")).toBeNull();
     expect(automationOfTarget("autopilot.automations")).toBeNull();
-    expect(automationOfTarget("autopilot.limits.dry-run")).toBeNull();
+    expect(automationOfTarget("autopilot.limits.preview-everything")).toBeNull();
   });
 
   it("counts the Runs and Limits tabs as pages, not editors", () => {

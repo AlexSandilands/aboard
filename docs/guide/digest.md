@@ -47,7 +47,7 @@ The agent gets the plain digest and rewrites it as a short update. It runs headl
 to the board, your files or any tools, so a task title can't make it read or do anything. The digest shows no images, since the agent's text could
 carry a link that sends it out when the page loads. If it fails, runs
 out of budget or answers nothing, you get the plain digest instead, with a line saying why. A quiet period never
-starts an agent. It waits out Autopilot's quiet hours, and goes plain while Pause all is set, in dry-run, or once
+starts an agent. It waits out Autopilot's quiet hours, and goes plain while Pause all is set, under Preview everything, or once
 today's spend cap is used up.
 
 How it works: [docs/features/autopilot.md](../features/autopilot.md#automations).

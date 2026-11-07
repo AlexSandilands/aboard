@@ -811,7 +811,9 @@ export function renderTaskDetail(
   if (runsOn) lines.push(`Runs on: ${runsOn}`);
   if (task.autopilot !== null) lines.push(`Autopilot: flagged ${task.autopilot ? "on" : "off"}`);
   if (task.autoMerge !== null) {
-    lines.push(`Auto-merge: ${task.autoMerge ? "on (merge_task_pr may merge its PR)" : "off"}`);
+    lines.push(
+      `Auto-merge: ${task.autoMerge ? "on (merge_task_pr, or Autopilot's Merge ready PRs with Into main on, may merge its PR)" : "off"}`,
+    );
   }
   if (task.priority) lines.push("Priority: yes (shown in the priority lane)");
   if (task.manual) {

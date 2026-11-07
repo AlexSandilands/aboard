@@ -604,7 +604,7 @@ export function createAutopilotRunner(deps: {
    * the pre-push guard, so an editing run never goes to a harness that lacks them (DriverNeeds.unguarded).
    */
   const startDetached = async (request: RunnerRequest, update: (patch: RunPatch) => void): Promise<RunnerResult> => {
-    const options = readRunnerOptions(request.options);
+    const options = readRunnerOptions(request.options, deps.services().autopilot.engine().agentDefaults);
     if (request.kind === "nudge") throw new Error("A run with no task has no thread to nudge");
     if (options.runner === "t3") throw new Error("A run with no task can't run in T3 Code");
     const settings = deps.services().settings.get();
@@ -663,7 +663,7 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
       if (!request.run.taskId) return startDetached(request, update);
       const task = taskOf(request.run.taskId);
       if (request.kind === "nudge") return nudge(request, task, update);
-      const options = readRunnerOptions(request.options);
+      const options = readRunnerOptions(request.options, deps.services().autopilot.engine().agentDefaults);
       // A T3 thread can't be held to read-only, given tools (its own or the board's run tools) or asked for structured
       // output.
       const headlessOnly =
