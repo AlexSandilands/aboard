@@ -1,12 +1,15 @@
 import type {
   AutopilotEngineSettings,
+  AutopilotRunDeferral,
   AutopilotField,
   AutopilotRun,
+  AutomationGroup,
   ModelChoice,
   OperationId,
   Project,
 } from "@repo/contracts";
 import type { z } from "zod";
+import type { RunGit } from "../integrations/backup.ts";
 import type { GitHostActions } from "../integrations/gitHosts.ts";
 import type { AgentAccess } from "../integrations/headlessAgent.ts";
 import type { RunToolScope } from "../mcp/runTokens.ts";
@@ -36,10 +39,19 @@ export interface Candidate {
 export interface ProjectScope<C> {
   project: Project;
   config: C;
+  /**
+   * Nothing runs for real here: Preview everything is set, or the automation is in Preview in the project and no epic
+   * of it switches it on for real. The engine still decides each candidate's dry run on its own task's scopes.
+   */
+  dryRun: boolean;
 }
 
 export interface CheckContext<C> {
   services: Services;
+  /**
+   * The engine settings, with `dryRun` set when nothing of this automation runs for real anywhere: Preview everything,
+   * or every scope it is on in is in Preview. Where scopes differ, `ProjectScope.dryRun` says it per project.
+   */
   engine: AutopilotEngineSettings;
   now: Date;
   /** The engine's clock, for work a check started that ends after the pass (`now` is the pass's time). */
@@ -57,6 +69,10 @@ export interface CheckContext<C> {
    * and has candidates once it ends; the engine's minute tick would get there too, only later.
    */
   wake?: () => void;
+  /** Reads on the git host, for a check that finds its work there (Review PRs' other people's PRs). */
+  gitHosts?: GitHostActions;
+  /** The repository a project's folder pushes to (its `origin`), or null when it has none the board can read. */
+  repoOf?: (project: Project) => Promise<{ host: string; repo: string } | null>;
 }
 
 /** What a runner recorded about an agent action. */
@@ -73,6 +89,8 @@ export interface ActionContext<C> {
   runner: { start(request: RunnerRequest): Promise<RunnerResult> };
   /** What it may do on the git host a PR is on (gitHostActions). */
   gitHosts: GitHostActions;
+  /** The machine's git, for reading a project's repository (its fetches wait their turn per repository). */
+  runGit: RunGit;
   engine: AutopilotEngineSettings;
   /** Where the user opens the board, e.g. `http://127.0.0.1:5317`, for prompts that point an agent at a task. */
   boardUrl: string;
@@ -91,6 +109,8 @@ export interface ActionResult extends RunPatch {
   /** Replaces the run's summary with what actually happened. */
   summary?: string;
   error?: string;
+  /** With `skipped`: the work was put off, not dropped (the PR's head moved), and is shown as Deferred. */
+  deferred?: AutopilotRunDeferral;
   /** Show the run's error (or summary) on the task under Needs attention. */
   needsAttention?: boolean;
   /** Kept on the run for later automations to read, e.g. the verdict of a review. */
@@ -99,9 +119,10 @@ export interface ActionResult extends RunPatch {
 
 /**
  * One automation: a deterministic check over board state and an action per candidate. The engine resolves scopes,
- * dedupes, applies the limits and records runs; the automation only finds work and does it. It must never merge into
- * the default branch, close or delete tasks, force-push or push to the default branch; the one merge it may make is a
- * task's PR into its epic's integration branch (docs/decisions/0008-autopilot-engine.md).
+ * dedupes, applies the limits and records runs; the automation only finds work and does it. It must never close or
+ * delete tasks, force-push or push to the default branch. It may merge only a task's PR into its epic's integration
+ * branch, or, through merge_task_pr's own path (GitHostActions.mergeAutoMergeTask), the PR of a task the user flagged
+ * for auto-merge into the default branch (docs/decisions/0008-autopilot-engine.md).
  */
 export interface Automation<C extends AutomationConfig = AutomationConfig> {
   key: string;
@@ -109,6 +130,8 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
   description: string;
   /** Starts an agent: counts against the concurrency and daily caps and waits out quiet hours. */
   needsAgent: boolean;
+  /** Where Settings → Autopilot lists it; unset is the user's own (a custom automation). */
+  group?: AutomationGroup;
   /**
    * The action can take long (a shell command, or waiting on an agent) without being an agent run for the caps, so
    * the engine doesn't hold up the rest of its pass for it. At most AUTOPILOT_BACKGROUND_MAX of these that aren't
@@ -122,15 +145,21 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
    */
   epicScope?: boolean;
   /**
+   * It has no switch at any scope: every project is on for it, and the user's own rules (Recurring tasks) decide what
+   * runs. The service refuses to switch it. Pause all still holds it back.
+   */
+  alwaysOn?: boolean;
+  /**
    * Why it can't work as it is (a custom automation with an empty required tool slot), or null. The service refuses to
    * switch it on, the UI says why, and its check finds nothing meanwhile.
    */
   blocked?: string | null;
   /**
    * Why it won't run in some of the projects it is on in (a custom automation naming a variable they have no value for),
-   * given those projects, or null. Shown on its row; its check skips them meanwhile.
+   * given those projects and each one's config (defaults, then the board's and the project's keys), or null. Shown on
+   * its row and under Needs you; its check skips them meanwhile.
    */
-  needs?: (projects: readonly Project[]) => string | null;
+  needs?: (projects: readonly Project[], configOf: (project: Project) => AutomationConfig) => string | null;
   /** Parses the merged config; it should give every field a default. */
   schema: z.ZodType<C>;
   /** How the UI renders the config form. */
@@ -182,6 +211,11 @@ export interface RunnerRequest {
    * project with no folder) still gets the safety note, without a branch name; leaving it out adds neither.
    */
   repo?: string | null;
+  /**
+   * A task-less read-only run only, with `repo`: works in a worktree of `repo` on `branch` (origin's copy) instead of an
+   * empty folder, named after `tag` (`pr42`), and removed when the run ends. Review PRs reads other people's PRs so.
+   */
+  checkout?: { branch: string; tag: string };
   /** Headless only: `read-only` can't edit files (a reviewer); `none` has no tools at all. Defaults to edit. */
   access?: AgentAccess;
   /** Headless only: tools allowed on top of the access's list, e.g. `Bash(gh pr review *)`. */
@@ -200,6 +234,8 @@ export interface RunnerRequest {
    * that works through the board (Orchestrate). Narrow the board's tools with `deniedTools`.
    */
   boardTools?: boolean;
+  /** With `boardTools`: the actor the board records the run's writes under, whatever the agent passes as `actor`. */
+  boardActor?: string;
   /**
    * Headless only: the board's run tools for this run (docs/decisions/0013-board-served-run-tools.md). The runner mints
    * a token bound to the run and this scope before the agent starts, points the CLI at `/mcp/run` with it, and revokes

@@ -8,10 +8,14 @@ import {
   type GitHost,
   type HostIssue,
   type PostedReview,
+  type OpenPrListing,
+  type PostedComment,
   type PostReviewInput,
   type PrAgentHints,
   type PrThreadState,
+  type RepoPr,
 } from "./gitHost.ts";
+import type { MergeTaskPrResult } from "./mergeTaskPr.ts";
 import type { PrMerges } from "./prMerge.ts";
 import { messageOf } from "./util.ts";
 
@@ -66,9 +70,10 @@ export function createGitHosts(hosts: readonly GitHost[]): GitHosts {
 
 /**
  * What an Autopilot action may do on a git host, as the user's signed-in account: post a review, resolve review
- * threads Autopilot answered, merge a task's PR into its epic's integration branch (never into the default branch:
- * checkAutopilotMergeTarget), and open and describe the epic's draft PR (never merge it). Each call goes to the host
- * the PR or repository is on.
+ * threads Autopilot answered, merge a task's PR into its epic's integration branch (checkAutopilotMergeTarget), merge
+ * a task flagged for auto-merge into the default branch through merge_task_pr's own path (mergeAutoMergeTask: the
+ * flag and the gate are checked there, so no automation can merge any other PR into the default branch), and open and
+ * describe the epic's draft PR (never merge it). Each call goes to the host the PR or repository is on.
  */
 export interface GitHostActions {
   postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
@@ -76,11 +81,31 @@ export interface GitHostActions {
   prHead(ref: PrRef): Promise<string>;
   /** Merges the PR, with the method the repository allows (a merge commit if it can), and says which. */
   mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<{ method: MergeMethod }>;
+  /**
+   * Merges the one open PR of a task flagged for auto-merge into the default branch, as merge_task_pr does (mergeTaskPr:
+   * it refuses, with the reason, a task that isn't flagged or isn't ready), at `expectedHeadOid`. Moves it to Done.
+   */
+  mergeAutoMergeTask(
+    taskId: string,
+    input: { expectedHeadOid: string; via: string },
+    actor: string,
+  ): Promise<MergeTaskPrResult>;
+  /** Reads a PR link again now and stores it (after a merge moved its base); never throws. */
+  rereadPr(link: TaskLink): Promise<void>;
   ensureEpicPr(input: EpicPrInput): Promise<{ number: number; url: string; created: boolean }>;
   setPrBody(ref: PrRef, body: string): Promise<void>;
   /** The PR's unresolved review threads and newest commits, read now. */
   reviewThreads(ref: PrRef): Promise<PrThreadState>;
   resolveReviewThread(host: string, threadId: string): Promise<void>;
+  /** Review PRs' other people's PRs: the repository's open PRs, and one read in full. */
+  listOpenPrs(host: string, repo: string): Promise<OpenPrListing[]>;
+  readRepoPr(ref: PrRef): Promise<RepoPr>;
+  /** Whether nothing the author wrote changed from `base` to `head` (only merges, or a rebase of the same change). */
+  unchangedSince(ref: PrRef, base: string, head: string, baseRef: string): Promise<boolean>;
+  /** A conversation comment on the PR, posted or edited (the hand-off comment), and a reply on a review thread. */
+  postComment(ref: PrRef, body: string): Promise<PostedComment>;
+  editComment(host: string, nodeId: string, body: string): Promise<PostedComment>;
+  replyOnThread(host: string, threadId: string, body: string): Promise<void>;
   /** The commands an agent fixing the PR runs, in its host's CLI. */
   agentHints(pr: { host: string; repo: string; number: number }): PrAgentHints;
   /** What the host serving `host` is called and which CLI it uses, for prompts and notes. */
@@ -88,7 +113,11 @@ export interface GitHostActions {
 }
 
 /** The actions, each sent to the host serving its PR, after checking the CLI is signed in there. */
-export function gitHostActions(hosts: GitHosts, merges: Pick<PrMerges, "mergeIntoEpicBranch">): GitHostActions {
+export function gitHostActions(
+  hosts: GitHosts,
+  merges: Pick<PrMerges, "mergeIntoEpicBranch">,
+  extra: Partial<Pick<GitHostActions, "mergeAutoMergeTask" | "rereadPr">> = {},
+): GitHostActions {
   const on = async (host: string): Promise<GitHost> => {
     const found = await hosts.resolve(host);
     if (!found) {
@@ -105,10 +134,18 @@ export function gitHostActions(hosts: GitHosts, merges: Pick<PrMerges, "mergeInt
     postReview: async (ref, input) => (await on(ref.host)).postReview(ref, input),
     prHead: async (ref) => (await on(ref.host)).prHead(ref),
     mergeIntoEpicBranch: (link, input) => merges.mergeIntoEpicBranch(link, input),
+    mergeAutoMergeTask: extra.mergeAutoMergeTask ?? unavailable,
+    rereadPr: extra.rereadPr ?? (() => Promise.resolve()),
     ensureEpicPr: async (input) => (await on(input.host)).ensurePr(input),
     setPrBody: async (ref, body) => (await on(ref.host)).setPrBody(ref, body),
     reviewThreads: async (ref) => (await on(ref.host)).reviewThreads(ref),
     resolveReviewThread: async (host, threadId) => (await on(host)).resolveReviewThread(host, threadId),
+    listOpenPrs: async (host, repo) => (await on(host)).listOpenPrs(host, repo),
+    readRepoPr: async (ref) => (await on(ref.host)).readRepoPr(ref),
+    unchangedSince: async (ref, base, head, baseRef) => (await on(ref.host)).unchangedSince(ref, base, head, baseRef),
+    postComment: async (ref, body) => (await on(ref.host)).postComment(ref, body),
+    editComment: async (host, nodeId, body) => (await on(host)).editComment(host, nodeId, body),
+    replyOnThread: async (host, threadId, body) => (await on(host)).replyOnThread(host, threadId, body),
     agentHints: (pr) => hosts.agentHints(pr),
     definitionFor: (host) => (hosts.forHost(host) ?? hosts.all()[0]!).definition,
   };
@@ -160,10 +197,18 @@ export const NO_GIT_HOSTS: GitHostActions = {
   postReview: unavailable,
   prHead: unavailable,
   mergeIntoEpicBranch: unavailable,
+  mergeAutoMergeTask: unavailable,
+  rereadPr: () => Promise.resolve(),
   ensureEpicPr: unavailable,
   setPrBody: unavailable,
   reviewThreads: unavailable,
   resolveReviewThread: unavailable,
+  listOpenPrs: unavailable,
+  readRepoPr: unavailable,
+  unchangedSince: unavailable,
+  postComment: unavailable,
+  editComment: unavailable,
+  replyOnThread: unavailable,
   agentHints: () => {
     throw new Error("No git host is available");
   },

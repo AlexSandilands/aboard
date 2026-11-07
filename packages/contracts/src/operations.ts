@@ -178,6 +178,7 @@ export const OperationId = z.enum([
   "prFix",
   "taskRun",
   "orchestrate",
+  "improve",
   "digest",
   "customTask",
   "customDetached",
@@ -230,6 +231,13 @@ export const OPERATIONS: Record<OperationId, OperationInfo> = {
     needs: ["untrusted", "toolRules"],
     taskScoped: false,
     default: { tier: "standard" },
+  },
+  improve: {
+    label: "Improve automations",
+    // Like Orchestrate: it reads text agents and people wrote, with the board's tools narrowed by rule.
+    needs: ["untrusted", "toolRules"],
+    taskScoped: false,
+    default: { tier: "deep" },
   },
   digest: { label: "Digest", needs: ["noTools"], taskScoped: false, default: { tier: "light" } },
   customTask: { label: "Custom automations on a task", needs: ["edit"], taskScoped: true, default: INHERIT },

@@ -273,6 +273,83 @@ describe("migrations", () => {
     });
   });
 
+  describe("merge ready PRs (043)", () => {
+    const before = (setup: string): DatabaseSync => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const path = join(dir, "board.db");
+      const old = openDatabase(path, { migrateTo: "042_task_trash.sql" });
+      old.exec(`
+        INSERT INTO projects (id, title, position, created_at, updated_at)
+          VALUES ('a', 'A', 'a0', '', ''), ('b', 'B', 'a1', '', ''), ('c', 'C', 'a2', '', '');
+        ${setup}
+      `);
+      old.close();
+      // Before 044 writes Orchestrate's old budget and timeout into its board row.
+      return openDatabase(path, { migrateTo: "043_merge_ready_prs" });
+    };
+    const row = (db: DatabaseSync, automation: string, kind = "board", id = "") => {
+      const found = db
+        .prepare(
+          "SELECT mode, config_json FROM autopilot_settings WHERE automation = ? AND scope_kind = ? AND scope_id = ?",
+        )
+        .get(automation, kind, id) as { mode: string; config_json: string } | undefined;
+      return found ? { mode: found.mode, config: JSON.parse(found.config_json) as unknown } : undefined;
+    };
+    const orchestrate = (kind: string, id: string, mode: string, config = "{}") =>
+      `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES ('${kind}', '${id}', 'orchestrate', '${mode}', '${config}', '');`;
+
+    it("switches Merge ready PRs on with Into main wherever Orchestrate was on with May merge", () => {
+      const db = before(
+        orchestrate("board", "", "on", '{"everyMinutes":15}') +
+          orchestrate("project", "a", "inherit", '{"mayMerge":false}') +
+          orchestrate("project", "b", "off"),
+      );
+      expect(row(db, "merge_epic_prs")).toEqual({ mode: "on", config: { intoMain: true } });
+      // On through the board but with May merge off: it keeps not merging into main.
+      expect(row(db, "merge_epic_prs", "project", "a")).toEqual({ mode: "inherit", config: { intoMain: false } });
+      // Orchestrate was off there, so nothing merged into main: the board's new Into main doesn't reach it.
+      expect(row(db, "merge_epic_prs", "project", "b")).toEqual({ mode: "inherit", config: { intoMain: false } });
+      expect(row(db, "orchestrate")).toEqual({ mode: "on", config: { everyMinutes: 15 } });
+      expect(row(db, "orchestrate", "project", "a")).toEqual({ mode: "inherit", config: {} });
+      db.close();
+    });
+
+    it("migrates a project of its own, and keeps an explicit Off for Merge ready PRs", () => {
+      const db = before(
+        orchestrate("board", "", "on", '{"mayMerge":false}') +
+          orchestrate("project", "a", "on") +
+          orchestrate("project", "b", "inherit", '{"mayMerge":true}') +
+          orchestrate("project", "c", "on", '{"mayMerge":true}') +
+          `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at)
+             VALUES ('project', 'c', 'merge_epic_prs', 'off', '{}', '');`,
+      );
+      expect(row(db, "merge_epic_prs")).toBeUndefined();
+      // Project a inherits the board's May merge (off); b sets its own (on) and is on through the board.
+      expect(row(db, "merge_epic_prs", "project", "a")).toBeUndefined();
+      expect(row(db, "merge_epic_prs", "project", "b")).toEqual({ mode: "on", config: { intoMain: true } });
+      expect(row(db, "merge_epic_prs", "project", "c")).toEqual({ mode: "off", config: { intoMain: true } });
+      db.close();
+    });
+
+    it("adds no project row where everything came from the board, so a board Off for Merge ready PRs still holds", () => {
+      const db = before(
+        orchestrate("board", "", "on") +
+          orchestrate("project", "a", "inherit", '{"everyMinutes":10}') +
+          `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at)
+             VALUES ('board', '', 'merge_epic_prs', 'off', '{}', '');`,
+      );
+      expect(row(db, "merge_epic_prs")).toEqual({ mode: "off", config: { intoMain: true } });
+      expect(row(db, "merge_epic_prs", "project", "a")).toBeUndefined();
+      db.close();
+    });
+
+    it("leaves Merge ready PRs alone where Orchestrate was never on", () => {
+      const db = before(orchestrate("board", "", "inherit", '{"mayMerge":true}'));
+      expect(row(db, "merge_epic_prs")).toBeUndefined();
+      db.close();
+    });
+  });
+
   describe("operation models (041)", () => {
     const before = (setup: string): DatabaseSync => {
       dir = mkdtempSync(join(tmpdir(), "board-db-"));
@@ -287,7 +364,8 @@ describe("migrations", () => {
         ${setup}
       `);
       old.close();
-      return openDatabase(path);
+      // Before 044 seeds the PR automations' own budgets.
+      return openDatabase(path, { migrateTo: "042_task_trash.sql" });
     };
     const json = (db: DatabaseSync, sql: string, ...params: string[]): unknown => {
       const row = db.prepare(sql).get(...params) as Record<string, string | null> | undefined;
@@ -415,6 +493,287 @@ describe("migrations", () => {
       const columns = db.prepare("PRAGMA table_info(autopilot_runs)").all() as Array<{ name: string }>;
       expect(columns.map((c) => c.name)).toContain("model_json");
       db.close();
+    });
+  });
+
+  describe("agent defaults (044)", () => {
+    const before = (setup: string): DatabaseSync => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const path = join(dir, "board.db");
+      const old = openDatabase(path, { migrateTo: "042_task_trash.sql" });
+      old.exec(setup);
+      old.close();
+      return openDatabase(path);
+    };
+    const json = (db: DatabaseSync, sql: string, ...params: string[]): unknown => {
+      const row = db.prepare(sql).get(...params) as { value: string } | undefined;
+      return row ? JSON.parse(row.value) : undefined;
+    };
+    const engine = (db: DatabaseSync) =>
+      json(db, "SELECT value_json AS value FROM settings WHERE key = 'autopilotEngine'");
+    const board = (db: DatabaseSync, automation: string) =>
+      json(
+        db,
+        "SELECT config_json AS value FROM autopilot_settings WHERE scope_kind = 'board' AND automation = ?",
+        automation,
+      );
+    const engineRow = (value: object) =>
+      `INSERT INTO settings (key, value_json) VALUES ('autopilotEngine', '${JSON.stringify(value)}');`;
+
+    it("moves changed PR values into Review PRs and Fix PRs, keeping what those set already", () => {
+      const db = before(`
+        ${engineRow({ maxConcurrent: 2, prReviewRounds: 5, prCommentRounds: 2, prFixThreshold: "minor" })}
+        INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at)
+          VALUES ('board', '', 'fix_prs', 'on', '{"onComments":false,"budgetUsd":4}', '');
+      `);
+      expect(engine(db)).toEqual({ maxConcurrent: 2 });
+      expect(board(db, "review_prs")).toEqual({ rounds: 5 });
+      expect(board(db, "fix_prs")).toEqual({
+        attempts: 5,
+        commentAttempts: 2,
+        fixThreshold: "minor",
+        onComments: false,
+        // Set by the user: kept. The timeout it never set keeps Fix PRs' old 30 minutes.
+        budgetUsd: 4,
+        timeoutMinutes: 30,
+      });
+      const mode = db.prepare("SELECT mode FROM autopilot_settings WHERE automation = 'fix_prs'").get() as {
+        mode: string;
+      };
+      expect(mode.mode).toBe("on");
+      db.close();
+    });
+
+    it("moves nothing for PR values left at their defaults", () => {
+      const db = before(engineRow({ prReviewRounds: 3, prCommentRounds: 5, prFixThreshold: "major", dryRun: true }));
+      expect(engine(db)).toEqual({ dryRun: true });
+      expect(board(db, "review_prs")).toBeUndefined();
+      expect(board(db, "fix_prs")).toBeUndefined();
+      db.close();
+    });
+
+    it("keeps the old budgets and timeouts of automations in use, at the scope that doesn't set them", () => {
+      const db = before(`
+        INSERT INTO projects (id, title, position, created_at, updated_at) VALUES ('p', 'P', 'a0', '', '');
+        INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES
+          ('project', 'p', 'review_prs', 'on', '{}', ''),
+          ('board', '', 'orchestrate', 'on', '{"timeoutMinutes":45}', ''),
+          ('board', '', 'digest', 'on', '{"mode":"summarised"}', ''),
+          ('board', '', 'start_planned', 'on', '{}', '');
+      `);
+      expect(board(db, "review_prs")).toEqual({ budgetUsd: 2, timeoutMinutes: 20 });
+      expect(board(db, "orchestrate")).toEqual({ budgetUsd: 3, timeoutMinutes: 45 });
+      expect(board(db, "digest")).toEqual({ mode: "summarised", budgetUsd: 1, timeoutMinutes: 15 });
+      // Its defaults were the board's defaults already.
+      expect(board(db, "start_planned")).toEqual({});
+      // Never touched, so never on: it takes the board's defaults.
+      expect(board(db, "fix_prs")).toBeUndefined();
+      expect(engine(db)).toBeUndefined();
+      db.close();
+    });
+  });
+
+  describe("reminders and Recurring tasks without switches (047, 048)", () => {
+    const before = (setup: string): DatabaseSync => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const path = join(dir, "board.db");
+      const old = openDatabase(path, { migrateTo: "042_task_trash.sql" });
+      old.exec(`
+        INSERT INTO projects (id, title, position, created_at, updated_at) VALUES
+          ('a', 'A', 'a0', '', ''), ('b', 'B', 'a1', '', ''), ('c', 'C', 'a2', '', '');
+        INSERT INTO tasks (id, number, project_id, title, status, position, created_by, created_at, updated_at, status_changed_at, kind)
+          VALUES ('e', 1, 'c', 'Epic', 'in_progress', 'a0', 'user', '', '', '', 'epic');
+        ${setup}
+      `);
+      old.close();
+      return openDatabase(path);
+    };
+    const kinds = (db: DatabaseSync) =>
+      (
+        JSON.parse(
+          (db.prepare("SELECT value_json FROM settings WHERE key = 'notifications'").get() as { value_json: string })
+            .value_json,
+        ) as { kinds: Record<string, boolean> }
+      ).kinds;
+    const rule = (id: string, projectId: string) =>
+      `INSERT INTO autopilot_recurring (id, project_id, name, schedule_json, enabled, last_due_at, created_at, updated_at)
+       VALUES ('${id}', '${projectId}', '${id}', '{}', 1, '', '', '');`;
+    const enabled = (db: DatabaseSync) =>
+      Object.fromEntries(
+        (db.prepare("SELECT id, enabled FROM autopilot_recurring").all() as Array<{ id: string; enabled: number }>).map(
+          (r) => [r.id, r.enabled === 1],
+        ),
+      );
+    const settingRow = (scope: string, id: string, automation: string, mode: string) =>
+      `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES ('${scope}', '${id}', '${automation}', '${mode}', '{}', '');`;
+
+    it("keeps the defaults on a new install", () => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const db = openDatabase(join(dir, "board.db"));
+      expect(db.prepare("SELECT 1 FROM settings WHERE key = 'notifications'").get()).toBeUndefined();
+      db.close();
+    });
+
+    it("turns each switch on where its automation was on in some project, off where it never was", () => {
+      const db = before(`
+        ${settingRow("board", "", "unstick", "on")}
+        ${settingRow("project", "a", "unstick", "off")}
+        ${settingRow("project", "b", "unstick", "off")}
+        ${settingRow("project", "c", "unstick", "inherit")}
+        ${settingRow("project", "a", "unblock_dependents", "off")}
+      `);
+      // Unstick: the board's On reaches project c.
+      expect(kinds(db)).toEqual({ thread_waited: true, task_quiet: true, task_unblocked: false });
+      expect(
+        db.prepare("SELECT 1 FROM autopilot_settings WHERE automation IN ('unstick', 'unblock_dependents')").get(),
+      ).toBeUndefined();
+      db.close();
+    });
+
+    it("is off for an automation only an epic had on when that epic is archived, and on when it isn't", () => {
+      const archived = before(`
+        ${settingRow("epic", "e", "unblock_dependents", "on")}
+        UPDATE tasks SET archived_at = '2026-01-01' WHERE id = 'e';
+      `);
+      expect(kinds(archived).task_unblocked).toBe(false);
+      archived.close();
+      rmSync(dir!, { recursive: true, force: true });
+      const live = before(settingRow("epic", "e", "unblock_dependents", "on"));
+      expect(kinds(live)).toEqual({ thread_waited: false, task_quiet: false, task_unblocked: true });
+      live.close();
+    });
+
+    it("keeps the other notification settings it finds", () => {
+      const db = before(`
+        INSERT INTO settings (key, value_json) VALUES ('notifications', '{"muteInQuietHours":false,"kinds":{"suggestion":false}}');
+        ${settingRow("project", "a", "unstick", "on")}
+      `);
+      expect(
+        JSON.parse(
+          (db.prepare("SELECT value_json FROM settings WHERE key = 'notifications'").get() as { value_json: string })
+            .value_json,
+        ),
+      ).toEqual({
+        muteInQuietHours: false,
+        kinds: { suggestion: false, thread_waited: true, task_quiet: true, task_unblocked: false },
+      });
+      db.close();
+    });
+
+    it("disables the rules of projects where Recurring tasks was effectively off, and drops its settings", () => {
+      const db = before(`
+        ${rule("ra", "a")} ${rule("rb", "b")} ${rule("rc", "c")}
+        ${settingRow("board", "", "recurring", "on")}
+        ${settingRow("project", "b", "recurring", "off")}
+      `);
+      // The board's On reaches a and c; b switched it off for itself.
+      expect(enabled(db)).toEqual({ ra: true, rb: false, rc: true });
+      expect(db.prepare("SELECT 1 FROM autopilot_settings WHERE automation = 'recurring'").get()).toBeUndefined();
+      db.close();
+    });
+
+    it("disables every rule when Recurring tasks was on nowhere, and keeps one a project switched on", () => {
+      const off = before(`${rule("ra", "a")} ${rule("rb", "b")}`);
+      expect(enabled(off)).toEqual({ ra: false, rb: false });
+      off.close();
+      rmSync(dir!, { recursive: true, force: true });
+      const some = before(`${rule("ra", "a")} ${rule("rb", "b")} ${settingRow("project", "a", "recurring", "on")}`);
+      expect(enabled(some)).toEqual({ ra: true, rb: false });
+      some.close();
+    });
+  });
+
+  describe("custom automation filters to switches (049)", () => {
+    const before = (filters: object, setup: string): DatabaseSync => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const path = join(dir, "board.db");
+      const old = openDatabase(path, { migrateTo: "048_recurring_without_switch" });
+      old.exec(`
+        INSERT INTO projects (id, title, position, created_at, updated_at) VALUES
+          ('a', 'A', 'a0', '', ''), ('b', 'B', 'a1', '', ''), ('c', 'C', 'a2', '', '');
+        INSERT INTO tasks (id, number, project_id, title, status, position, created_by, created_at, updated_at, status_changed_at, kind)
+          VALUES ('e', 1, 'a', 'Epic', 'in_progress', 'a0', 'user', '', '', '', 'epic'),
+                 ('f', 2, 'b', 'Other epic', 'in_progress', 'a1', 'user', '', '', '', 'epic');
+        INSERT INTO autopilot_custom (id, name, trigger_json, filters_json, action_json, armed_at, created_at, updated_at)
+          VALUES ('x', 'X', '{"kind":"blocker_finished"}', '${JSON.stringify(filters)}', '{}', '', '', '');
+        ${setup}
+      `);
+      old.close();
+      return openDatabase(path);
+    };
+    const row = (scope: string, id: string, mode: string, config = "{}") =>
+      `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES ('${scope}', '${id}', 'custom:x', '${mode}', '${config}', '');`;
+    const modes = (db: DatabaseSync) =>
+      Object.fromEntries(
+        (
+          db
+            .prepare("SELECT scope_kind, scope_id, mode FROM autopilot_settings WHERE automation = 'custom:x'")
+            .all() as Array<{ scope_kind: string; scope_id: string; mode: string }>
+        ).map((r) => [`${r.scope_kind}:${r.scope_id}`, r.mode]),
+      );
+    const filters = (db: DatabaseSync) =>
+      JSON.parse(
+        (db.prepare("SELECT filters_json FROM autopilot_custom WHERE id = 'x'").get() as { filters_json: string })
+          .filters_json,
+      ) as unknown;
+
+    it("keeps the labels and leaves the switches alone without a project or epic filter", () => {
+      const db = before({ projectIds: [], labels: ["ui"], epicId: null }, row("board", "", "on"));
+      expect(filters(db)).toEqual({ labels: ["ui"], epicTasks: true });
+      expect(modes(db)).toEqual({ "board:": "on" });
+      db.close();
+    });
+
+    it("turns a project filter into Only in those projects, each in the state it had", () => {
+      const db = before(
+        { projectIds: ["a", "b"], labels: [], epicId: null },
+        `${row("board", "", "preview")} ${row("project", "b", "on", '{"budgetUsd":2}')} ${row("project", "c", "on")}
+         ${row("epic", "f", "off")}`,
+      );
+      expect(filters(db)).toEqual({ labels: [], epicTasks: true });
+      // a followed the board's Preview; b keeps its own On (and config); c was filtered out; f's own Off stays.
+      expect(modes(db)).toEqual({
+        "board:": "inherit",
+        "project:a": "preview",
+        "project:b": "on",
+        "project:c": "inherit",
+        "epic:f": "off",
+      });
+      expect(
+        db.prepare("SELECT config_json FROM autopilot_settings WHERE scope_kind = 'project' AND scope_id = 'b'").get(),
+      ).toEqual({ config_json: '{"budgetUsd":2}' });
+      db.close();
+    });
+
+    it("switches off an epic of a project the filter left out", () => {
+      const db = before({ projectIds: ["a"], labels: [], epicId: null }, row("epic", "f", "on"));
+      expect(modes(db)).toEqual({ "epic:f": "inherit" });
+      db.close();
+    });
+
+    it("turns an epic filter into that epic's own setting, everything else off and Tasks in epics off", () => {
+      const db = before(
+        { projectIds: [], labels: ["ui"], epicId: "e" },
+        `${row("board", "", "on")} ${row("project", "b", "preview")} ${row("epic", "f", "on")}`,
+      );
+      expect(filters(db)).toEqual({ labels: ["ui"], epicTasks: false });
+      expect(modes(db)).toEqual({
+        "board:": "inherit",
+        "project:b": "inherit",
+        "epic:f": "inherit",
+        "epic:e": "on",
+      });
+      db.close();
+    });
+
+    it("leaves an epic filter off where it never ran: its project off, or left out by the project filter", () => {
+      const off = before({ projectIds: [], labels: [], epicId: "e" }, row("project", "b", "on"));
+      expect(modes(off)).toEqual({ "project:b": "inherit" });
+      off.close();
+      rmSync(dir!, { recursive: true, force: true });
+      const outside = before({ projectIds: ["b"], labels: [], epicId: "e" }, row("board", "", "on"));
+      expect(modes(outside)).toEqual({ "board:": "inherit" });
+      outside.close();
     });
   });
 });

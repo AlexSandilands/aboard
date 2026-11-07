@@ -1,7 +1,10 @@
 import { MergeMethod } from "@repo/contracts";
 import { actorField, run, taskField, taskResult, type ToolRegistrar } from "../shared.ts";
 
-/** merge_task_pr: the one way an agent merges into the default branch (docs/features/github-prs.md#merge_task_pr). */
+/**
+ * merge_task_pr: the one way an agent merges into the default branch (docs/features/github-prs.md#merge_task_pr).
+ * Autopilot's Merge ready PRs (Into main) merges through the same mergeTaskPr.
+ */
 export const registerMergeTools: ToolRegistrar = (server, { services, ctx, actor }) => {
   server.registerTool(
     "merge_task_pr",
@@ -15,7 +18,9 @@ export const registerMergeTools: ToolRegistrar = (server, { services, ctx, actor
         "running and none of Autopilot's review points left to fix, no changes requested, checks passing, and merges " +
         "cleanly. A refusal is not an error to work around: fix what it names, wait, or leave the merge to the user. " +
         "Never merge with gh or git instead. You choose which task's PR to merge and when: merge one at a time and let " +
-        "the others catch up, so they don't conflict. method defaults to one the repository allows.",
+        "the others catch up, so they don't conflict. Where the user has switched on Autopilot's Merge ready PRs with " +
+        "Into main, Autopilot merges flagged tasks by itself once this same check passes, so you needn't call it. " +
+        "method defaults to one the repository allows.",
       inputSchema: {
         task: taskField,
         method: MergeMethod.optional().describe("squash, merge or rebase. Omit it to use one the repository allows."),

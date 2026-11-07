@@ -2,52 +2,112 @@
 
 Autopilot lets the board act on its own. It is a list of **automations**, each of which watches the board and
 does something when it's needed. Everything is off until you switch it on, and Autopilot never closes or deletes a
-task, force-pushes, or pushes to the default branch. It merges in two cases only: a task's pull request into its
-epic's integration branch, for an epic you set to deliver that way ([Merge into epic branch](#merge-into-epic-branch)),
-and, through [Orchestrate](#orchestrate), a task's pull request into the default branch when you turned auto-merge on
-for that task.
+task, force-pushes, or pushes to the default branch. It merges in two cases only, both through
+[Merge ready PRs](#merge-ready-prs): a task's pull request into its epic's integration branch, for an epic you set to
+deliver that way, and, if you switch on **Into main**, a task's pull request into the default branch when you turned
+auto-merge on for that task.
 
 ## Switching automations on
 
+**Quick setup** is the fastest start. With nothing on, **Settings → Autopilot** opens on it (it's also behind **+ Add
+automation → Quick setup**). Pick a level and read the list, which says exactly what it would switch on for the whole
+board:
+
+- **Notify**: the digest, stuck-task reminders, a note when a blocker finishes, and archiving old Done tasks. No agent
+  starts and nothing is merged.
+- **Assist**: agents review and fix the PRs your tasks open, plus the digest, reminders and archiving. They never start
+  work or merge.
+- **Hands-off**: agents also start the tasks you flag, keep epics moving and merge ready PRs into epic branches.
+  Merging into the default branch is its own setting, which Quick setup leaves as it is.
+
+Automations that start an agent or act on GitHub start in [Preview](#trying-one-out-with-preview) unless you turn
+"Start agent automations in Preview" off. One already on is left as it is, and one a project switches off for itself
+stays off there. **Apply** switches them on once and remembers nothing: they are ordinary switches afterwards, so
+change any of them as usual.
+
 Each project's lane has an **Autopilot** pill. It's dim when nothing is on for the project, a calm ring when
-something is on, and animated while a run is going. Click it to see every automation with an on/off switch. A
-faded switch is following the board: hover it to see what that means ("On, following the board"). Flip it and the
-switch turns solid, meaning this project sets it itself; the **↺** button beside it goes back to following the board.
-To pin the value the board has now, flip the switch twice. The cog at the top opens **Settings → Autopilot**.
+something is on, and animated while a run is going. Click it to see every automation with an on/off switch for the
+project and a line saying where it runs overall ("On everywhere except storefront"). Flipping a switch makes this
+project an exception to the rest, or takes the exception away again when it matches the rest. The cog at the top opens
+**Settings → Autopilot**, where the same thing is edited for every project at once (see below).
 
 An **epic** has the same switch, in a small round **Autopilot** button on its band and in its panel's top bar. It
-covers only the tasks in that epic, and a faded switch follows the project ("On, following the project"). So you can
+covers only the tasks in that epic, and its switches follow the project until you set one. So you can
 switch an automation on for one epic in a project that has it off, or off for one epic in a project that has it
 on. The button looks like the pill: dim, a ring, or animated while one of the epic's tasks is being worked on.
-An epic only lists the automations that work on tasks in an epic (not Recurring tasks or the Digest, for
-instance). An archived epic has no button and no say.
+An epic only lists the automations that work on tasks in an epic (not the Digest, for instance). An archived epic has no button and no say.
 
 Auto-archive Done on an epic works on the epic as a whole: once the epic is finished (every task Done) and has been in
 Done for the set days, it is archived together with its tasks. A task in an epic is never archived on its own, and
 the epic's own switch and days decide.
 
 [Manual tasks](using-the-board.md#manual-tasks) are yours: no automation starts, reviews, fixes or reminds you
-about one. Unblock dependents still tells you when finishing one unblocks a task.
+about one. Notifications still tell you when finishing one unblocks a task.
 
-**Settings → Autopilot** has a switch for the whole board, and under each automation a **Settings**
-section with its options: which skill it follows, which runner, the model, and budgets and timeouts. A
-project can override those in its own settings. The board's switch is just **On / Off** (there's nothing above the
-board to inherit from, so an automation you haven't switched on is off); only projects and epics can follow the scope above (the ↺ button).
+**Settings → Autopilot** has three tabs: **Automations**, **Runs** and **Limits & safety**.
 
-## Remind me about stuck tasks
+**Automations** opens on a strip saying whether Autopilot is running or paused, how many agent runs it started today
+and what they cost, and your limits in one line, with **Pause all** beside it. Under it, **Needs you** lists what only
+you can sort out, and is hidden when there's nothing: a run that failed on a task (**Retry** or **Dismiss**; a
+run with no task, such as the digest's, shows as a red dot on its automation instead), someone else's pull request
+Review PRs found clean but left for you to approve (**Open PR**), an automation an agent drafted for you (**Review**
+or **Dismiss**), and an automation that can't run until you fill in a tool, a variable or a setting (**Fix**).
 
-**Remind me about stuck tasks** tells you when an In Progress task needs a look. It needs no agent, so it costs
-nothing and isn't held back by quiet hours or the run limits, and it changes nothing on the task. You get a note on
-the task and a notification when:
+Then every automation, in a list down the left grouped as **Ship work**, **Pull requests**, **Upkeep** and
+**Yours** (the ones you made or imported). Each row has the automation's switch for the whole board and says where
+it's on and how its last run went, led by anything the switch can't show: **Preview**, **Paused** in a project, or
+**Last run failed**. One that is off everywhere is greyed out but stays in the list, so you can switch it on. A
+project's own setting beats the board's, so when the board is off but some projects switched it on themselves, the
+switch sits half way and the row says "On in 5 projects"; switching it off then asks whether to turn it off
+everywhere (clearing those projects' own On) or only for the board. Click a row to see it on the right:
 
-- the task has had no activity for **No activity for** hours (24 by default): it also shows under **Needs attention**
-  until someone touches the task;
-- its T3 Code thread has been waiting on you for **Thread waiting for** minutes (30 by default).
+- one sentence saying what it does with your settings ("Every weekday at 09:00, write a plain list of what changed
+  on the board"), and **All runs**;
+- **Mode**: **Off**, **Preview** or **On** for the board (see [Trying one out with Preview](#trying-one-out-with-preview)).
+  When projects set their own On it says so, with **Turn off everywhere**;
+- **Where it runs**: one sentence saying where it is on ("On everywhere except payments-api; epic #5 Off"), **Everywhere**
+  or **Only in…** (then pick the projects: one chip each, or on a board with more than 8 projects a "5 of 20
+  projects" button that opens a searchable list), and its **Exceptions**: a project or epic that runs differently, each a chip
+  you can remove, with **+ Exception** to add one. The lane pill and the epic button edit the same thing, so they always
+  agree;
+- **Settings**: the few options most people change;
+- **Advanced**, closed: everything else. For an automation that starts an agent it opens with two lines: the
+  **Model**, which comes from Settings → Agents → Operations and says what it runs on now, and **Runner, budget and
+  timeout**, which come from the [defaults for agent runs](#limits). Each has **Override**, to set it for this
+  automation alone. A value you change gets a ↶ reset beside its name (its tooltip says what it goes back to), and
+  **↶ Reset** on the group puts all of them back. Advanced's heading counts what you've changed ("Agent · 2 changed").
+  The longer explanation of a setting is behind the ⓘ by its name.
 
-Each is reported once. It doesn't get anything moving again: that's [Orchestrate](#orchestrate). The two go well
-together, because Orchestrate leaves a thread that's waiting for you alone, and a thread stuck waiting holds one of
-your concurrency slots until you answer. This automation used to be called **Unstick stale tasks** and could also
-post a nudge into the thread; that option is gone (Orchestrate does it), and a leftover setting is ignored.
+The switch on each row is the shortcut for **Everywhere** (there's nothing above the board to inherit from, so an
+automation you haven't switched on is off). A project's own **Settings → Project → Automations** is a read-only list of
+what each automation does there, with a **Change** button that opens it here. On a phone the list and an automation take turns: tap a row, and **All
+automations** takes you back.
+
+**Recurring tasks** has no switch, in the list or in a lane's pill: each of its rules has its own, and its detail lists every
+project's rules ([Recurring tasks](recurring-tasks.md)).
+
+### Trying one out with Preview
+
+**Preview** lets you watch one automation before you trust it, while the others keep working. In Preview it does none
+of its work: each time it would act, it records a run marked **Preview** saying what it would have done ("Would start
+#12 …"), and no agent starts, no command runs and nothing on the board or GitHub changes. The one exception is a custom
+automation's **check script**: it still runs for real, so it can tell what it would act on, and the automation says so.
+
+An automation in Preview has an amber **Preview** badge in the list. Its page says how many times it would have run this
+week, with **See them** (its runs) and **Turn on**. Turning it on doesn't go back over what Preview saw: it acts on what
+happens from then. A project or an epic can be in Preview on its own too, from its Autopilot pill or settings.
+
+Automations you make, import or accept from an agent's draft start in Preview. The switch in the list remembers the
+mode an automation was last on in, so switching it off and on again brings back Preview or On; one that has never run
+comes back in Preview.
+
+## Reminders
+
+Two automations used to remind you: **Remind me about stuck tasks** and **Unblock dependents**. They need no agent, so
+they moved to **Settings → Board → Notifications** as three switches, which work in every project with no Autopilot
+switch: **A thread has waited on me for 30 min**, **In Progress work is quiet for 24 h** and **A task's last blocker
+finished**. See [notifications](notifications.md). Getting stalled work moving again is [Orchestrate](#orchestrate)'s
+job. Their old runs stay in the run history under their old names.
 
 ## Review PRs
 
@@ -56,22 +116,54 @@ comments, from your own `gh` account. The review starts with a line naming this 
 comment carries a short mark. It only ever comments: it never approves or requests changes, and it never merges. The
 agent itself only reads the pull request and reports its findings; Autopilot posts them.
 
-- It reviews the PR again each time its head commit changes, up to **PR review rounds** (3 by default, in
-  Settings → Autopilot) per PR. Drafts are skipped unless you turn on **Review drafts**; merged and closed PRs
+- It reviews the PR again each time its head commit changes, up to **Rounds per PR** (3 by default) per PR. Drafts are skipped unless you turn on **Review drafts**; merged and closed PRs
   are never reviewed.
 - With local review on for the task, the PR waits: it is reviewed once the task is in Review and its local review has
   finished. A PR on a task still in Backlog, Planned or In Progress isn't reviewed until then.
 - From the second round it looks for regressions and for points still not fixed, and keeps new small points in an
   "FYI (no action needed)" section. On the last round only major and blocking points count.
 - The findings stay on GitHub, not on the board, so they don't mix with local review findings. The task gets a
-  note "Autopilot reviewed PR #N at …" linking the review.
-- Points at or above the **fix threshold** (major by default) are the ones a fix would address. When the last
+  note "Autopilot reviewed PR #N at …" linking the review. **All runs** on an automation (and in a scheduled custom automation's editor) opens the same list for that
+automation alone.
+- Points at or above the **fix threshold** (Fix PRs' **Fix findings at or above**, major by default) are the ones a
+  fix would address. When the last
   round still has some, the card says "Autopilot gave up" under Needs attention and you get a notification.
-- Its settings: the **review skill** it follows (the built-in one by default), **Review drafts**, the runner, the
-  **budget** ($2 by default) and the **timeout**. It always runs headless, since it must be held to read-only. It
+- Its settings: **Rounds per PR**, the **review skill** it follows (the built-in one by default), **Review drafts**,
+  and the model, budget and timeout. It always runs headless, since it must be held to read-only. It
   needs `gh` signed in to the PR's host and the PR's branch on `origin`, so a PR from a fork isn't reviewed.
-- Switching it on reviews every open PR already linked in the project, once per head commit. **Dry run** shows
+- Switching it on reviews every open PR already linked in the project, once per head commit. **Preview** shows
   which first.
+
+### Other people's PRs
+
+Review PRs can also review your colleagues' pull requests, ones no task links to, and act on them as you: approve,
+ask for changes, or hand them to you. Turn on **Other people's PRs** in a project's Review PRs settings and list the
+**Authors** whose PRs it reviews (their GitHub logins, comma separated). On with no authors, it says **Needs setup**
+and does nothing. If you ran a custom automation that reviews PRs, switch it off in that project first; Review PRs
+reads what it posted (its hidden `autopilot-review` markers), so rounds, approvals and hand-offs carry over.
+
+- **When.** Every five minutes it reads the repository (the project folder's `origin`). It waits for the checks to
+  finish and then for a **Quiet period** (10 minutes), gives the author an hour (**Other reviewers' wait**) to answer
+  a new thread from another reviewer, and leaves drafts alone, PRs someone already approved or asked changes on (you by
+  hand included), and PRs a task works on.
+- **What it reads.** The PR, its diff, every review thread, the issues it closes, and open issues that mention it
+  (often a bug report against it), and the project's docs and decision records, in a read-only checkout.
+- **What it decides.** The agent only reads and answers. The board then:
+  - **approves** as you only when the review is clean, **Approve** is on and the **gate** passes: the PR closes an
+    issue (**Require a linked issue**), every required check (as the branch's rules require) is green, and it
+    changes no **Sensitive paths** (CI, tooling, `CODEOWNERS` and lockfiles by default);
+  - **asks for changes**, with blocking and major points on the lines they are about; minor points and nits are FYI;
+  - if the review is clean but the gate or the Approve switch stops it, comments **Ready for your approval** with why,
+    and lists the PR under **Needs you** with a notification. No task, no ping;
+  - **hands it to you** for a significant departure from the plan or an earlier decision, a new dependency, security
+    code it can't vouch for, a disagreement with the author it can't settle, a spec too vague to judge, or after
+    **Rounds** (3) reviews: one comment on the PR, and a manual task "Review PR #n: …" with a checklist and an
+    attention request. The same reason again edits that comment and adds a note, without asking again.
+- **Afterwards.** It reviews again when the author pushes: only what changed after an approval, whether the reason
+  is gone after a hand-off. Merges of the base branch alone (or a rebase of the same change) don't count. It resolves
+  its own threads once fixed, answers authors who reply on them, and closes its hand-off task when it approves later.
+- **Stopping it.** Comment `/autopilot stop` on a PR (from your account) to keep it off that PR, and
+  `/autopilot resume` to start afresh.
 
 ## Fix PRs
 
@@ -99,9 +191,9 @@ the PR's branch and replies on each thread, starting with Autopilot's mark and "
   earlier threads once it confirms the point is fixed.
 
 - Each reason is acted on once. A new failure on a new commit, or a newer comment, is a new reason.
-- It makes at most 2 attempts on one head commit. Per PR, fixes for Autopilot's review and failing checks get **PR
-  review rounds** (3 by default), and fixes for other people's comments and requests for changes get **PR comment
-  rounds** (5 by default), so a colleague's review bot can't use up the attempts Autopilot's own review needs. A
+- It makes at most 2 attempts on one head commit. Per PR, fixes for Autopilot's review and failing checks get **Attempts
+  on checks and reviews** (3 by default), and fixes for other people's comments and requests for changes get
+  **Attempts on comments** (5 by default), so a colleague's review bot can't use up the attempts Autopilot's own review needs. A
   thread your account answered last doesn't send it back. When
   one runs out the card says "Autopilot gave up" under Needs attention and you get a notification; the other still
   goes on.
@@ -109,15 +201,19 @@ the PR's branch and replies on each thread, starting with Autopilot's mark and "
   isn't on `origin`.
 - To fix a PR yourself, use **Fix in** on its row ([Fixing a PR](using-the-board.md#fixing-a-pr)). While Fix PRs is on for
   the task, the row says **Autopilot is fixing** or **Autopilot gave up** instead, with **Fix in** in its menu.
-- Its settings: the five switches, **Resolve threads it fixed**, a **Fix skill** to follow on top of the fix prompt, the runner, the **budget**
-  ($3 by default), the **timeout** (30 minutes) and **T3 Code access**.
+- Its settings: the five switches (**Autopilot's review** with its **Fix findings at or above** severity beside it), the
+  two attempt limits, then under Advanced
+  **Resolve threads it fixed**, a **Fix skill** to follow on top of the fix prompt, the model, the runner, the budget,
+  the timeout and **T3 Code access**.
 
 You can add your own automations too: a trigger you pick and an agent prompt or a command to run. See
 [custom automations](custom-automations.md).
 
 ## How agents run
 
-An automation that needs an agent picks its **runner** in its settings:
+Where an agent runs, its budget, its timeout and its T3 Code access are set once for every automation, under
+**Defaults for agent runs** in Settings → Autopilot → Limits & safety; an automation can override any of them under
+its Advanced settings. The **runner**:
 
 - **Auto** (the default): a new T3 Code thread when T3 Code is connected, otherwise a headless Claude Code run.
 - **T3 Code only**: the thread gets the task's model (below), and never more access than T3 Code's
@@ -158,7 +254,7 @@ kept.
 ## Start planned tasks
 
 The one that does the work: it starts an agent on a task you've planned. Switch it on per project or for the
-board, then flag the tasks you want it to take: **Autopilot: On** in the task panel's Automation section. A task flagged
+board, then flag the tasks you want it to take: turn on **start it** under **Autopilot may** in the task panel's Autopilot section. A task flagged
 Default or Off is never started.
 
 A task is picked up when it's in **Planned**, flagged On, has a plan and nothing unfinished blocks it, and the
@@ -183,10 +279,40 @@ see (T3 Code closed, the thread deleted) stops holding it after ten minutes.
 
 It tries a task once each time it enters Planned. If the run fails, or the task is still in Planned when the
 grace period ends, the card goes under **Needs attention** with "Autopilot couldn't start this task" and you get
-a notification; nothing retries. Move the task out of Planned and back in to try again. Try it first with
-**Dry run** to see which tasks it would start.
+a notification; nothing retries. Move the task out of Planned and back in to try again. Try it first in
+**Preview** to see which tasks it would start.
 
-## Merge into epic branch
+## Merge ready PRs
+
+**Merge ready PRs** merges a task's pull request once it is ready: into its epic's branch if the epic has one, or into
+main if you flagged the task **Auto-merge** and switched **Into main** on. It needs no agent, so it costs nothing.
+Ready means all of these hold:
+
+- the task is in Review;
+- its local review has finished with no blocking or major finding open, and Review PRs (when it's on) found nothing at
+  or above the fix threshold at the current commit;
+- no reviewer asked for changes;
+- its checks pass (a repository with no checks waits ten minutes after each push, in case they just haven't started);
+- it merges cleanly.
+
+Anything else waits. Where only you can settle it (GitHub wants an approving review, say), the task shows why under
+**Needs attention** and you get a notification.
+
+It has two targets:
+
+- **Into epic branches** is on whenever the automation is on. A task in an epic with its own branch merges into that
+  branch, never into main. Example: #12 Card vault is in epic #5, which delivers through `epic/5-one-page-checkout`;
+  when #12's pull request is ready it merges there, and the epic's own pull request into main stays yours.
+- **Into main** is off unless you switch it on. Only tasks you flagged **merge it** (under **Autopilot may** in the task panel's
+  Autopilot section) merge into main, through the same check the `merge_task_pr` tool uses. It merges one pull
+  request at a time per repository and reads the others again after each merge, so a pull request that conflicts
+  with the one that just landed waits for a fix instead of merging. Example: #4 Fix currency rounding is flagged
+  Auto-merge; once its pull request is ready it merges into main and #4 goes to Done.
+
+Switch it on for the board, a project or an epic in **Settings → Autopilot → Merge ready PRs**, and **Into main** there
+too.
+
+### Integration branches
 
 For an epic whose tasks build on each other, waiting for you to merge each pull request before the next task can
 start means the epic stops every time a task is done. An epic can instead deliver through an **integration branch**:
@@ -201,11 +327,8 @@ start means the epic stops every time a task is done. An epic can instead delive
   badge and press **Mark merged into main**.
 - The epic's tasks start from that branch and open their pull requests against it: Start planned tasks, the
   hand-off prompts and **New T3 Code thread…** all default to it.
-- **Merge into epic branch** merges a task's pull request into the epic's branch once all of
-  these hold: the task is in Review, its local review has finished with no blocking or major finding open, Review
-  PRs (when it's on) found nothing at or above the fix threshold at the current commit, no reviewer asked for
-  changes, its checks pass (a repository with no checks waits ten minutes after each push, in case they just
-  haven't started) and it merges cleanly. The task then goes to Done, so the tasks it blocks can start from the updated branch.
+- **Merge ready PRs** merges a task's pull request into the epic's branch once it is ready (above). The task then
+  goes to Done, so the tasks it blocks can start from the updated branch.
 - It merges with a merge commit if the repository allows one, otherwise a squash, otherwise a rebase, going by the
   repository's settings when it merges (and moving to the next method if GitHub refuses one, for example because of a
   branch rule). A squash-only repository therefore gets squashed task commits on the epic's branch. That can
@@ -219,17 +342,21 @@ start means the epic stops every time a task is done. An epic can instead delive
   the default branch, Fix PRs merges the default branch in. **Only you merge that pull request.**
 - You can go back to pull requests to main until one of the epic's tasks has started.
 
-Switch **Merge into epic branch** on for the epic (or its project). It needs no agent and has no settings.
+Switch **Merge ready PRs** on for the epic (or its project).
 
-## Letting an agent merge into the default branch
+## Auto-merge into the default branch
 
-Autopilot never merges into the default branch. An agent you run (one orchestrating an epic, say) can, with the
-`merge_task_pr` tool, but only for a task you've allowed it on: set **Auto-merge** to On in the task panel's
-Automation section, or tell the agent to turn it on (`update_task` with `autoMerge: "on"`). The board can't tell an
-agent from you, so any agent with the board's tools could set it; agents are told to only when you ask. The board then merges the task's pull request only once it is in
-Review, its local review and Autopilot's review are finished and clean, nobody requested changes, its checks pass and
-it merges cleanly, and only at the commit it checked. The agent picks the order, so the tasks' pull requests don't
-conflict. Without the flag, the tool refuses and the merge stays yours.
+A task's pull request reaches the default branch without you only when you've allowed it on that task: set
+**merge it** under **Autopilot may** in the task panel's Autopilot section, or tell an agent to turn it on (`update_task` with
+`autoMerge: "on"`). The board can't tell an agent from you, so any agent with the board's tools could set it; agents
+are told to only when you ask. Then two things may merge it, both through the same check (ready, above), and only at
+the commit it checked:
+
+- **Merge ready PRs** with **Into main** on, by itself, one at a time per repository;
+- an agent you run (one orchestrating an epic, say), with the `merge_task_pr` tool. The agent picks the order, so the
+  tasks' pull requests don't conflict.
+
+Without the flag both refuse and the merge stays yours.
 
 ## Orchestrate
 
@@ -239,8 +366,7 @@ its work moving, like a T3 Code thread you'd leave watching the board:
 - it nudges a task's thread that has gone quiet, or starts one when the task has none working;
 - it retries an Autopilot run that failed or was cut short (a review lost to a board restart, say);
 - it tells a thread to fix failing checks or conflicts, and re-runs a flaky CI job once;
-- with **May merge** on (the default), it merges ready pull requests of tasks you turned **auto-merge** on for, one
-  at a time, and checks the others are still green afterwards. Turn it off to have it only list them;
+- it lists the pull requests that look ready to merge. It never merges: [Merge ready PRs](#merge-ready-prs) does that;
 - it flags a task under **Needs attention** when only you can decide something.
 
 It works through the board's tools and `gh`, never edits code, and runs only while the project has work going on, so
@@ -249,16 +375,16 @@ the board's layout for me to check"): they're added to its prompt and win where 
 handover for the next, so it remembers what it's waiting on. Switch it on per project or for the board; it counts
 against the agent limits below.
 
-Orchestrate has its own area in **Settings → Autopilot**, above the other automations: its switch and settings, and **View all runs**, which opens
-its [run history](#run-history). What is per project is set in the project's own settings; its next check and
-**Run now** are in the lane's popover (below).
+Orchestrate is in **Settings → Autopilot** like the others, under Ship work: its switch, **Every** and **Extra
+instructions**, and **All runs**, which opens its [run history](#run-history). What is per project is set in the
+project's own settings; its next check and **Run now** are in the lane's popover (below).
 
 Orchestrate sits at the top of the lane's Autopilot popover, in a card of its own. It shows when the next check
 is ("Next check in 12:34"). A check is a look, not a promise of a run: when the next one won't
 run, the section says why instead (idle with nothing to check, paused, quiet hours, today's cap reached). **▶ Run
 now** runs it for the project straight away, even when it's idle, unless it is already running, Autopilot is paused,
 it's quiet hours or a daily cap is reached; then a message says so. While it's on, the lane's pill shows the time to
-the next check too (`Autopilot · 12m`). Switch that off under **Settings → Autopilot → Orchestrate → Countdown on
+the next check too (`Autopilot · 12m`). Switch that off under **Settings → Appearance → Autopilot countdown on
 lanes**. **History** in the popover's card opens the run history filtered to that project.
 
 A failed run on a task can also be retried by hand: **Retry** on the run in the task panel's Autopilot section.
@@ -268,22 +394,61 @@ same section. It clears the flag and nothing else: the run stays as it was and A
 unlike Retry it can't repeat something that already took effect (such as posting a second review). A new problem on
 the task flags it again.
 
+## Improve automations
+
+**Improve automations** audits how agents did and suggests changes to the text they run with. It is off until you
+switch it on, and it runs once a week (**Day** and **Time**, Monday 07:00 by default) in each project it is on in.
+It reads what happened over the last **Look back** days (7): review rounds and findings, failed or retried
+Autopilot runs, blocked steps, stalls and agents' notes. It looks closer at the few tasks that went worst, and at
+their session transcripts only when the notes don't say why. Then it suggests at most **Most suggestions per run**
+(3) rewrites of your review and planning skills, your custom automations' prompts and the skills they name
+(**May suggest changes to** narrows that to skills or prompts). You decide each one under
+**Settings → Tasks → Suggestions** ([Suggested changes](settings.md#suggested-changes)). It never edits anything
+itself: its only tools besides reading are `suggest_change` and an attention request, and a suggestion over the limit,
+or for a kind of target you didn't allow, is dropped. A project where nothing happened in the look-back window is
+skipped, so an idle project costs nothing.
+
+Its skill is built in, so it can't run without it and quietly propose nothing. The skill keeps suggestions few and lean:
+
+- each one cites the tasks that show the problem: at least two, or one that cost a failed run or a blocked task;
+- it rewrites or deletes the sentence that caused the problem rather than adding one, and a suggestion that makes
+  the text longer says why in its first line;
+- one behaviour per suggestion, no generic advice ("be careful"), the target's own wording and layout kept;
+- with weak evidence it suggests nothing, which is a good week.
+
+To use your own rules instead, pick a skill under **Improve skill**. If that skill's file has gone missing the run
+fails and says which skill it couldn't read, instead of running without one; pick another, or **Built-in**.
+
+Its handover remembers what it suggested, so the next run sees whether you accepted it and whether the problem went
+away, and `get_editable_prompt` shows what you decided, so it doesn't suggest again what you rejected. Text the
+board itself ships (its tool descriptions) can't be suggested to; the agent says so in its summary. It runs on the Deep
+model tier (change it under **Settings → Agents → Models**) and counts against the agent limits. Switching it on
+doesn't catch up on weeks before: the first run is the first slot after you switch it on. Several runs at the same
+moment can both suggest for one skill; the later one replaces the earlier, which stays in the history.
+
 Other automations have their own guides: [Recurring tasks](recurring-tasks.md) and the
 [Digest of what changed](digest.md).
 
 ## Run history
 
-**View all runs** (in Orchestrate's area, and in a scheduled custom automation's editor) and **All runs** (beside the
-Automations heading) open a page listing every run, newest first, with more loading as you scroll. Each run shows its
-status, project, when it ran, what it said it did and, for a scheduled agent, the handover it left, folded away. Narrow
-the list by project and time (the last 24 hours, 7 or 30 days, or a range of days), and search by run id, project name,
-a task as `#12`, or any word of the summary or handover. The filters are in the page's address, so you can bookmark a
-view.
+The **Runs** tab of Settings → Autopilot lists every run, newest first, with more loading as you scroll. Each run shows its
+status, automation, project and task, when it ran, what it said it did or why it failed, and what it cost. Click a run
+to open the rest: its full output (the error output for a failure), the handover a scheduled agent left, the model,
+and links to open its thread and its session. A failed run has its actions on its row, open or closed: **Retry** when
+it can be tried again, and **Ask an agent**, which hands the error and output to an agent session.
 
-You can clear out old runs from this page. Tick runs and choose **Delete selected**, or choose **Delete all matching…**
-to delete everything the filters match: set a custom range ending on a date, say, then delete. The box tells you how many
-will go before you confirm, and that runs aren't in backups, so a delete can't be undone. Autopilot never deletes runs
-by itself.
+A run that stopped because the pull request moved on while it worked shows as **Deferred: head moved**: nothing went
+wrong, and Autopilot acts on the new commit next.
+
+Narrow the list by automation, outcome (failed, succeeded, deferred, skipped, dry run or running), project and time
+(the last 24 hours, 7 or 30 days, or a range of days), and search by run id, project name, a task as `#12`, or any word
+of the summary or handover. Automations that no longer exist are listed by their old names. The filters are in the
+page's address, so you can bookmark a view.
+
+You can clear out old runs from **Clean up…** under the list. **Select runs to delete** lets you tick runs and choose
+**Delete selected**; **Delete all matching…** deletes everything the filters match: set a custom range ending on a
+date, say, then delete. The box tells you how many will go before you confirm, and that runs aren't in backups, so a
+delete can't be undone. Autopilot never deletes runs by itself.
 
 Some runs stay even when you ask, because Autopilot still reads them. The box says how many it kept and why:
 
@@ -293,18 +458,44 @@ Some runs stay even when you ask, because Autopilot still reads them. The box sa
 - the latest answer of each scheduled agent in each project (its next run is handed that handover);
 - runs less than a day old.
 
+## How each automation is doing
+
+Pick an automation that is on in Settings → Autopilot to see its **This week**: how many runs it made, how many failed,
+what it spent, a bar for each day and its last few runs.
+
+Autopilot also reads those numbers for **hints**, simple rules with a one-click fix. They show on the automation and
+under **Needs you**:
+
+- Fix PRs gave up on several PRs at its attempt limit: **Raise** the limit by one.
+- An automation failed 3 of its last 5 runs: **Ask an agent to fix** copies a prompt with the errors.
+- Start planned tasks is on, but none of your Planned tasks is flagged for Autopilot: **Flag** them.
+- Orchestrate runs very often: run it less often.
+- Today's run or spend cap is reached: see your limits.
+
+**Dismiss** a hint you don't want; it comes back only if the situation changes.
+
+**Auto-pause.** When an automation fails 3 times in a row in a project, it pauses itself there and you get a
+notification. It keeps running in your other projects. The automation's row says where it is paused, and its detail
+and Needs you show why, with **Resume**. Resuming starts the count again.
+
 ## Limits
 
-In **Settings → Autopilot**:
+In **Settings → Autopilot → Limits & safety**:
 
 - **Agent runs at once**, a **daily run cap** and a **daily spend cap**.
 - **Quiet hours**: a window (local time, it may cross midnight) in which no agent runs start. Automations that
   only change the board still run.
-- **Dry run**: record what each automation would do, and do nothing. Good for trying an automation out.
+- **Defaults for agent runs**: where agents run (Auto, T3 Code or headless), the **budget** and **timeout** of a
+  headless run ($5 and 60 minutes by default) and **T3 Code access**. Every automation that starts an agent uses
+  these unless it overrides them. Models are set per kind of run in Settings → Agents → Operations.
+- Review PRs' rounds and Fix PRs' threshold and attempts are on those automations.
+- Under **Advanced**, **Preview everything**: every automation records what it would do, and does nothing. To try one
+  automation, put just that one in [Preview](#trying-one-out-with-preview) instead. Also **Worktree retention**.
+- The **Variables** your custom automations read.
 
 ## Pausing
 
-**Pause all** stops every new run at once, whatever the switches say. It's in Settings and in the board header,
+**Pause all** stops every new run at once, whatever the switches say. It's on the Automations tab and in the board header,
 where it turns into a **Resume** button while it's set. Runs already going finish.
 
 ## Seeing what it did

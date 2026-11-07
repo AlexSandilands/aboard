@@ -2,7 +2,7 @@
  * `pnpm sandbox`: runs this checkout's board on its own ports so a change can be tried in the browser
  * without touching the board the user runs from main.
  *
- *   pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|none]   isolated: own server, temp data dir, seeded (default)
+ *   pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|autopilot|crowded|none]   isolated: own server, temp data dir, seeded (default)
  *   pnpm sandbox --desktop                            also opens the Electron shell on the sandbox (isolated only)
  *   pnpm sandbox --prod                               serves a production build instead of Vite's dev server (no hot reload)
  *   pnpm sandbox --live                               Vite only, on the real server's data (writes are rejected)
@@ -339,7 +339,7 @@ function parseArgs(argv: string[], isScenarioName: (name: string) => boolean) {
   }
   if (live && desktop) fail("--desktop has no effect with --live: the shell must never attach to the real board");
   if (!seed || (seed !== "none" && !isScenarioName(seed)))
-    fail(`unknown seed "${seed}" (basic, review, threads, showcase, social, stats, dense, none)`);
+    fail(`unknown seed "${seed}" (basic, review, threads, showcase, social, stats, dense, autopilot, crowded, none)`);
   if (live && seedIndex >= 0) fail("--seed has no effect with --live, which shows the real board");
   return { live, seed, desktop, prod };
 }

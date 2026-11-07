@@ -3,7 +3,6 @@ import { EpicDeliveryControl } from "~/components/task/EpicDelivery";
 import { cn } from "~/lib/utils";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotEpicScope, useAutopilotOverview, useAutopilotStatus } from "~/state/queries";
 import { epicActiveRuns, epicPillState, hasEpicAutomations, pillTooltip } from "./autopilot.logic";
 import { PILL_CLASS_NAME, PillIcon } from "./AutopilotPill";
@@ -28,7 +27,6 @@ export function AutopilotEpicButton({
   const overview = useAutopilotOverview();
   const status = useAutopilotStatus();
   const scope = useAutopilotEpicScope(epic.projectId, epic.id);
-  const set = useSetAutopilotScope(epic.projectId, undefined, epic.id);
   if (!overview.data || !hasEpicAutomations(overview.data.automations) || epic.archivedAt !== null) return null;
 
   const state = epicPillState(status, epic.id, scope.data);
@@ -55,7 +53,7 @@ export function AutopilotEpicButton({
         <TooltipPopup>{tooltip}</TooltipPopup>
       </Tooltip>
       <PopoverPopup align="end" width="lg" padding="compact">
-        <ScopePopover title={`epic #${epic.number}`} entries={scope.data} set={set} error={scope.error} epic>
+        <ScopePopover title={`epic #${epic.number}`} scope={{ kind: "epic", id: epic.id }} error={scope.error}>
           {/* Integration delivery is what lets Autopilot carry an epic unattended, so it is chosen here too. */}
           <ScopeCard className="py-2">
             <EpicDeliveryControl epic={epic} />

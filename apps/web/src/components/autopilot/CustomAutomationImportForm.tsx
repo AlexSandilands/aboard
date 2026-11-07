@@ -1,10 +1,4 @@
-import {
-  actionScripts,
-  type AutomationBundle,
-  customAllowedTools,
-  describeCustomTrigger,
-  type AutomationExample,
-} from "@repo/contracts";
+import { actionScripts, type AutomationBundle, customAllowedTools, type AutomationExample } from "@repo/contracts";
 import { BotIcon, FileUpIcon, TriangleAlertIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { EditorFooter, EditorHeader, EditorPanel, EditorTitle } from "~/components/settings/EditorFrame";
@@ -14,8 +8,17 @@ import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { toastManager } from "~/components/ui/toast";
-import { useAutomationDraft, useDismissAutomationDraft, useImportCustomAutomation } from "~/state/customAutomations";
+import {
+  useAutomationDraft,
+  useCustomAutomations,
+  useDismissAutomationDraft,
+  useImportCustomAutomation,
+  useTurnOnCustomAutomation,
+} from "~/state/customAutomations";
 import { useBoard, useSettings } from "~/state/queries";
+import { AutomationChangeReview } from "./AutomationChangeReview";
+import { formFromBundle, formSentence } from "./builder.logic";
+import { CustomAutomationEditorForm } from "./CustomAutomationEditorForm";
 import {
   draftToRequest,
   importProblem,
@@ -24,10 +27,11 @@ import {
   readBundle,
   type ImportDraft,
 } from "./customAutomationImport.logic";
-import { actionModelLabel } from "./customAutomations.logic";
+import { actionModelLabel, parseAllowedTools, type CustomForm } from "./customAutomations.logic";
 import { InputValueControl } from "./InputsAndSlots";
 import { ScriptWarning } from "./ScriptWarning";
 import { VariableNeedsList } from "./VariablesEditor";
+import { DraftProjects } from "./WhereItRuns";
 import { variableNeeds } from "./variables.logic";
 
 /** A file bigger than this isn't an automation. */
@@ -54,25 +58,29 @@ function Code({ children, tall }: { children: string; tall?: boolean }) {
 }
 
 /**
- * Importing a shared automation: pick the file, read everything it would run (it is someone else's, and runs on this
- * machine), fill in its inputs and tool slots, choose projects. Nothing is saved until Import, and it comes in off.
- * With `draftId` it opens an automation an agent drafted (docs/features/autopilot.md#drafts), read with the same care.
+ * The builder's review step for an automation someone else wrote: a shared file, or an agent's draft
+ * (docs/features/autopilot.md#drafts). Read everything it would run (it runs on this machine), fill in its inputs and
+ * tool slots, choose projects, then Import it (in Preview or on), or Edit first in the builder. Nothing is saved until
+ * then. A draft that replaces one of the user's automations opens the before/after review instead.
  */
 export function CustomAutomationImportForm({
   examples,
+  initial,
   draftId,
   onDone,
   onCancel,
 }: {
   examples?: readonly AutomationExample[];
+  /** A bundle to open with (a recipe from the Add gallery), read like a file; the user can still load another. */
+  initial?: AutomationBundle | undefined;
   /** An agent's draft to open; importing it deletes it. */
   draftId?: string | undefined;
   /** Called with the new automation's id. */
   onDone: (id: string) => void;
   onCancel: () => void;
 }) {
-  const [bundle, setBundle] = useState<AutomationBundle | null>(null);
-  const [draft, setDraft] = useState<ImportDraft | null>(null);
+  const [bundle, setBundle] = useState<AutomationBundle | null>(initial ?? null);
+  const [draft, setDraft] = useState<ImportDraft | null>(() => (initial ? initialDraft(initial) : null));
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const board = useBoard().data;
@@ -82,7 +90,16 @@ export function CustomAutomationImportForm({
   // The draft shown, until another file or example replaces it.
   const [fromDraft, setFromDraft] = useState<string | null>(null);
   const opened = useRef<string | null>(null);
-  const projects = board?.projects.filter((p) => p.archivedAt === null) ?? [];
+  const projects = (board?.projects.filter((p) => p.archivedAt === null) ?? []).sort((a, b) =>
+    a.position < b.position ? -1 : a.position > b.position ? 1 : 0,
+  );
+  const customs = useCustomAutomations();
+  const turnOn = useTurnOnCustomAutomation();
+  const [mode, setMode] = useState<"preview" | "on">("preview");
+  // "Edit first": the builder, opened on what this would import (or, for a change, on the automation it changes).
+  const [editing, setEditing] = useState<{ form: CustomForm; customId: string | null; confirmScript: boolean } | null>(
+    null,
+  );
   const settings = useSettings().data;
   const boardVariables = settings?.automationVariables ?? [];
   const needs =
@@ -90,7 +107,7 @@ export function CustomAutomationImportForm({
       ? variableNeeds(
           bundle.action,
           boardVariables,
-          projects.filter((p) => draft.projectIds.length === 0 || draft.projectIds.includes(p.id)),
+          draft.everywhere ? projects : projects.filter((p) => draft.projectIds.includes(p.id)),
         )
       : [];
 
@@ -142,10 +159,107 @@ export function CustomAutomationImportForm({
             description: "You already had a skill with the file's name, so it was kept apart.",
           });
         }
-        onDone(automation.id);
+        if (mode === "on") {
+          turnOn.mutate(
+            { id: automation.id, projectIds: draftToRequest(bundle, draft).projectIds ?? [] },
+            { onSettled: () => onDone(automation.id) },
+          );
+        } else onDone(automation.id);
       },
     });
   };
+
+  const editFirst = () => {
+    if (!bundle || !draft) return;
+    try {
+      const form = formFromBundle(bundle, {
+        inputs: draft.inputs,
+        slots: Object.fromEntries(Object.entries(draft.slots).map(([name, text]) => [name, parseAllowedTools(text)])),
+        projectIds: draftToRequest(bundle, draft).projectIds ?? [],
+      });
+      setEditing({ form, customId: null, confirmScript: actionScripts(bundle.action).length > 0 });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    }
+  };
+
+  if (editing) {
+    return (
+      <CustomAutomationEditorForm
+        customId={editing.customId}
+        initial={editing.form}
+        startStep={2}
+        draftId={shownDraft?.id}
+        confirmScript={editing.confirmScript}
+        title={editing.customId ? "Edit the change first" : "Edit before importing"}
+        notice={
+          <p className="text-sm text-muted-foreground">
+            {editing.customId
+              ? "The change is filled in. Saving changes the automation in place and removes the draft."
+              : `Saving makes it as you leave it${shownDraft ? " and removes the draft" : ""}.`}
+            {bundle?.skill
+              ? ` The skill it carries (${bundle.skill.name}) isn't saved this way: import it as it is to save the skill.`
+              : ""}
+          </p>
+        }
+        onDone={onDone}
+        onCancel={() => setEditing(null)}
+      />
+    );
+  }
+
+  const target = shownDraft?.replaces ? customs.data?.find((c) => c.id === shownDraft.replaces) : undefined;
+  if (shownDraft?.replaces) {
+    if (target) {
+      return (
+        <AutomationChangeReview
+          draft={shownDraft}
+          current={target}
+          onDone={onDone}
+          onCancel={onCancel}
+          onEditFirst={(form, confirmScript) => setEditing({ form, customId: target.id, confirmScript })}
+        />
+      );
+    }
+    if (customs.data) {
+      return (
+        <>
+          <EditorHeader>
+            <EditorTitle>Review a change</EditorTitle>
+          </EditorHeader>
+          <p role="alert" className="px-3 text-sm text-muted-foreground sm:px-4">
+            The automation this draft changes was deleted, so there is nothing to apply it to.
+          </p>
+          <EditorFooter>
+            <Button variant="ghost" onClick={onCancel}>
+              Back
+            </Button>
+            <Button
+              variant="outline"
+              disabled={dismissing.isPending}
+              onClick={() => dismissing.mutate(shownDraft.id, { onSuccess: onCancel })}
+            >
+              Dismiss draft
+            </Button>
+          </EditorFooter>
+        </>
+      );
+    }
+  }
+
+  // What it does in one sentence, read like the builder's last step; a file that can't make a form shows none.
+  const sentence = (() => {
+    if (!bundle || !draft) return null;
+    try {
+      // Where it runs as picked here, Only in… with nothing picked included.
+      return formSentence(
+        { ...formFromBundle(bundle), everywhere: draft.everywhere, projectIds: draft.projectIds },
+        projects,
+      );
+    } catch {
+      return null;
+    }
+  })();
 
   const { action } = bundle ?? {};
   const tools = action ? customAllowedTools(action) : [];
@@ -154,10 +268,12 @@ export function CustomAutomationImportForm({
   return (
     <>
       <EditorHeader>
-        <EditorTitle>Import an automation</EditorTitle>
+        <EditorTitle>{shownDraft ? "Review the draft" : "Import an automation"}</EditorTitle>
         <p className="text-sm text-muted-foreground">
-          Pick a file someone shared. You read what it would run, fill in its inputs and the tools it needs, and choose
-          where it applies. It comes in switched off.
+          {shownDraft
+            ? "Read what it would run before you import it: fill in its inputs and the tools it needs, and choose where it applies."
+            : "Pick a file someone shared. You read what it would run, fill in its inputs and the tools it needs, and choose where it applies."}{" "}
+          It comes in in Preview, recording what it would do, unless you choose On.
         </p>
       </EditorHeader>
       <EditorPanel className="space-y-4">
@@ -203,8 +319,9 @@ export function CustomAutomationImportForm({
             <AlertDescription>
               {shownDraft.note ? <p className="whitespace-pre-wrap">{shownDraft.note}</p> : null}
               <p>
-                An agent can only draft an automation: nothing runs until you import it and switch it on. Read it as
-                carefully as a file from someone else. It is kept until {shownDraft.expiresAt.slice(0, 10)}.
+                An agent can only draft an automation: nothing is saved until you import it, and then it only records
+                what it would do (in Preview) until you turn it on. Read it as carefully as a file from someone else. It
+                is kept until {shownDraft.expiresAt.slice(0, 10)}.
               </p>
             </AlertDescription>
           </Alert>
@@ -216,18 +333,16 @@ export function CustomAutomationImportForm({
               <TriangleAlertIcon />
               <AlertTitle>Read all of this before you import it</AlertTitle>
               <AlertDescription>
-                This was written by someone else. Once you switch it on, it runs on this machine with your access, so
-                what it says below is what it will do. Nothing is saved until you import.
+                This was written by someone else. Once you turn it on, it runs on this machine with your access, so what
+                it says below is what it will do. Nothing is saved until you import, and it imports in Preview, where a
+                check script already runs for real.
               </AlertDescription>
             </Alert>
 
-            <Section title="Automation">
+            <Section title="What it does">
               <p className="text-sm font-medium">{bundle.name}</p>
               {bundle.description ? <p className="text-sm text-muted-foreground">{bundle.description}</p> : null}
-              <p className="text-xs text-muted-foreground">
-                {describeCustomTrigger(bundle.trigger)}
-                {bundle.filters.labels.length > 0 ? `, on tasks labelled ${bundle.filters.labels.join(" or ")}` : ""}
-              </p>
+              {sentence ? <p className="text-sm leading-relaxed">{sentence}</p> : null}
             </Section>
 
             {action.kind === "agent" ? (
@@ -241,7 +356,7 @@ export function CustomAutomationImportForm({
                 {tools.length > 0 ? (
                   <Section
                     title="Tools it may use without asking"
-                    hint="They run unattended, with nobody to approve a call. Read them against your own MCP servers."
+                    hint="Nobody approves a call: check them against your own MCP servers."
                   >
                     <Code>{tools.join("\n")}</Code>
                   </Section>
@@ -303,7 +418,7 @@ export function CustomAutomationImportForm({
             {bundle.skill ? (
               <Section
                 title={`Skill: ${bundle.skill.name}`}
-                hint="Written to your skills folder (~/.claude/skills). A name you already use is kept apart, never overwritten."
+                hint="Written to ~/.claude/skills; a name you use already is kept apart."
               >
                 <Code tall>{bundle.skill.body}</Code>
                 <div className="flex items-center justify-between gap-4">
@@ -347,7 +462,7 @@ export function CustomAutomationImportForm({
             {bundle.slots.length > 0 ? (
               <Section
                 title="Tools it needs"
-                hint="One tool per line, from your own MCP servers (mcp__server__tool, or mcp__server for all of its tools). It can't be switched on until each is filled in."
+                hint="One tool per line (mcp__server__tool, or mcp__server for all of them). Needed to switch it on."
               >
                 <div className="flex flex-col gap-3">
                   {bundle.slots.map((slot) => (
@@ -375,25 +490,40 @@ export function CustomAutomationImportForm({
             {needs.length > 0 ? (
               <Section
                 title="Variables it reads"
-                hint="The file doesn't carry their values: they are yours. Set them for every project under Settings → Autopilot → Custom automations, or in a project's settings. It doesn't run in a project where one has no value."
+                hint="Set their values under Limits & safety → Variables, or in a project's settings."
               >
                 <VariableNeedsList needs={needs} />
               </Section>
             ) : null}
 
-            <Section title="Only in these projects" hint="None picked is every project you switch it on in.">
+            <Section title="Where it runs">
+              <div className="flex flex-col gap-2">
+                <DraftProjects
+                  projects={projects}
+                  everywhere={draft.everywhere}
+                  projectIds={draft.projectIds}
+                  onChange={(next) => patch(next)}
+                />
+              </div>
+            </Section>
+
+            <Section
+              title="Saves in"
+              hint={
+                mode === "preview"
+                  ? `Preview records what it would do and does none of it${scripts.some((s) => s.role === "check") ? ", but its check script still runs for real" : ""}. Switch it on once its Preview runs look right.`
+                  : "On acts for real in every project it is switched on in, from now."
+              }
+            >
               <ToggleGroup
-                multiple
-                aria-label="Projects"
-                className="flex-wrap"
-                value={draft.projectIds}
-                onValueChange={(projectIds) => patch({ projectIds })}
+                aria-label="Saves in"
+                value={[mode]}
+                onValueChange={(next) => {
+                  if (next[0] === "preview" || next[0] === "on") setMode(next[0]);
+                }}
               >
-                {projects.map((p) => (
-                  <Toggle key={p.id} value={p.id}>
-                    {p.title}
-                  </Toggle>
-                ))}
+                <Toggle value="preview">Preview</Toggle>
+                <Toggle value="on">On</Toggle>
               </ToggleGroup>
             </Section>
 
@@ -418,11 +548,23 @@ export function CustomAutomationImportForm({
             Dismiss draft
           </Button>
         ) : null}
+        {bundle && draft ? (
+          <Button variant="outline" onClick={editFirst}>
+            Edit first
+          </Button>
+        ) : null}
         <Button
-          disabled={!bundle || !draft || Boolean(problem) || needsScriptConfirm(bundle, draft) || importing.isPending}
+          disabled={
+            !bundle ||
+            !draft ||
+            Boolean(problem) ||
+            needsScriptConfirm(bundle, draft) ||
+            importing.isPending ||
+            turnOn.isPending
+          }
           onClick={submit}
         >
-          Import automation
+          Import
         </Button>
       </EditorFooter>
     </>

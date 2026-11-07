@@ -43,9 +43,11 @@ const FIELDS: AutopilotField[] = [
   {
     key: "skill",
     label: "Implement skill",
+    tier: "essential",
     kind: "skill",
     builtinLabel: "Default workflow",
-    help: "What the agent follows to do the work. The default is the board's own workflow, from the hand-off prompt.",
+    help: "What the agent follows to do the work.",
+    info: "The default is the board's own workflow, from the hand-off prompt.",
   },
   ...runnerFields("taskRun"),
   {
@@ -62,7 +64,8 @@ const FIELDS: AutopilotField[] = [
     min: 1,
     max: 1440,
     unit: "minutes",
-    help: "The agent moves the task to In Progress itself. A task still in Planned after this long is flagged.",
+    help: "A task still in Planned after this long is flagged.",
+    info: "The agent moves the task to In Progress itself; one that hasn't by then is flagged.",
   },
 ];
 
@@ -176,10 +179,12 @@ export const startPlanned = defineAutomation({
   description:
     "Starts an agent on each Planned task whose Autopilot flag is On, once it has a plan and nothing blocks it.",
   needsAgent: true,
+  group: "ship",
   schema: ConfigSchema,
   fields: FIELDS,
   defaults: DEFAULTS,
   check: ({ services, projects, engine, now }) => {
+    const self = services.autopilot.automations().find((a) => a.key === AUTOPILOT_START_PLANNED);
     // Priority tasks first, whatever their project; then project order, then board position.
     const candidates = projects
       .flatMap(({ project }, projectIndex) =>
@@ -197,24 +202,42 @@ export const startPlanned = defineAutomation({
           a.projectIndex - b.projectIndex ||
           (a.task.position < b.task.position ? -1 : a.task.position > b.task.position ? 1 : 0),
       )
-      .map(({ task }): Candidate => ({
-        dedupeKey: `start:${task.id}:${task.statusChangedAt}`,
-        summary: `start #${task.number} "${task.title}"`,
-        taskId: task.id,
-      }));
+      .flatMap(({ task }) => {
+        // As the engine resolves the task (its epic, project or the board). Off there, the engine drops it, so it must
+        // take no room; in Preview the engine only records it, so it takes none either.
+        const resolved = self && services.autopilot.resolve(self, task.projectId, task.parent?.id ?? null);
+        if (resolved && !resolved.enabled) return [];
+        return [
+          {
+            candidate: {
+              dedupeKey: `start:${task.id}:${task.statusChangedAt}`,
+              summary: `start #${task.number} "${task.title}"`,
+              taskId: task.id,
+            } satisfies Candidate,
+            preview: engine.dryRun || (resolved?.preview ?? false),
+          },
+        ];
+      });
+    const previewed = candidates.filter((c) => c.preview).map((c) => c.candidate);
     // A dry run only previews, whatever is working.
-    if (engine.dryRun) return candidates;
+    if (engine.dryRun) return previewed;
     // Tasks that already had their attempt (failed, or still starting) are the engine's to skip: they mustn't use up
     // the room the tasks below them need.
-    const fresh = candidates.filter((c) => !services.autopilot.hasRun(AUTOPILOT_START_PLANNED, c.dedupeKey, false));
-    if (fresh.length === 0) return fresh;
+    const fresh = candidates
+      .filter((c) => !c.preview)
+      .map((c) => c.candidate)
+      .filter((c) => !services.autopilot.hasRun(AUTOPILOT_START_PLANNED, c.dedupeKey, false));
+    if (fresh.length === 0) return previewed;
     // The engine's cap counts runs, which for T3 end once the thread starts: leave room for the threads still working.
     const agents = services.autopilot
       .automations()
       .filter((a) => a.needsAgent)
       .map((a) => a.key);
     const running = services.autopilot.usage(agents, new Date(0).toISOString()).active;
-    return fresh.slice(0, Math.max(0, engine.maxConcurrent - running - workingAgents(services, now)));
+    return [
+      ...fresh.slice(0, Math.max(0, engine.maxConcurrent - running - workingAgents(services, now))),
+      ...previewed,
+    ];
   },
   act: async (candidate, { services, runner, run, config, boardUrl }) => {
     const task = services.tasks.summary(candidate.taskId!);

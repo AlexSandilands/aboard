@@ -37,7 +37,7 @@ describe("suggestions", () => {
     const custom = h.s.customAutomations.create({
       name: "Triage",
       trigger: { kind: "status_change", to: "review" },
-      filters: { projectIds: [project.id] },
+      projectIds: [project.id],
       action: { kind: "agent", prompt: "Look at {{task.title}}.", skill: "triage" },
     });
 

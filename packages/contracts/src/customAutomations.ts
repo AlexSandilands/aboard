@@ -69,13 +69,18 @@ export const CustomTrigger = z.discriminatedUnion("kind", [
 ]);
 export type CustomTrigger = z.infer<typeof CustomTrigger>;
 
-/** Narrows a trigger to the tasks it applies to. Empty lists match everything. */
+/**
+ * Narrows a trigger to the tasks it applies to. Where it runs (projects, epics) is its switches, not a filter
+ * (docs/features/autopilot.md#custom-automations).
+ */
 export const CustomFilters = z.object({
-  projectIds: z.array(z.string().min(1)).default([]),
-  /** Any of these labels (normalised). */
+  /** Any of these labels (normalised). Empty matches every task. */
   labels: z.array(z.string().trim().min(1)).default([]),
-  /** Only tasks in this epic. */
-  epicId: z.string().min(1).nullable().default(null),
+  /**
+   * Tasks in epics: false skips a task in an epic unless that epic has a setting of its own for the automation (its
+   * popover switches it on there). A default, so an epic's own switch still wins.
+   */
+  epicTasks: z.boolean().default(true),
 });
 export type CustomFilters = z.infer<typeof CustomFilters>;
 
@@ -222,7 +227,7 @@ export type CustomAction = z.infer<typeof CustomAction>;
 const Definition = {
   name: z.string().trim().min(1).max(CUSTOM_NAME_MAX),
   trigger: CustomTrigger,
-  filters: CustomFilters.default({ projectIds: [], labels: [], epicId: null }),
+  filters: CustomFilters.default({ labels: [], epicTasks: true }),
   action: CustomAction,
 };
 
@@ -268,11 +273,24 @@ export function customArmedAt(
   return times.filter((t): t is string => Boolean(t)).reduce((a, b) => (Date.parse(b) > Date.parse(a) ? b : a));
 }
 
-export const CreateCustomAutomationInput = z.object(Definition);
+export const CreateCustomAutomationInput = z.object({
+  ...Definition,
+  /**
+   * Where it starts, in Preview like any new automation: Only in these projects, or the whole board when empty. Its
+   * switches, not part of the definition: change them afterwards through the scopes.
+   */
+  projectIds: z.array(z.string().min(1)).default([]),
+});
 export type CreateCustomAutomationInput = z.input<typeof CreateCustomAutomationInput>;
 
-// The filters' default would fill in a patch that leaves them out, widening the automation to every project.
-export const UpdateCustomAutomationInput = z.object({ ...Definition, filters: CustomFilters }).partial();
+// Without defaults, so a patch that leaves out the filters, or one of them, keeps what the automation has (the service
+// merges them over the current ones) rather than resetting it: Tasks in epics turning back on, say.
+export const UpdateCustomAutomationInput = z
+  .object({
+    ...Definition,
+    filters: z.object({ labels: CustomFilters.shape.labels.removeDefault(), epicTasks: z.boolean() }).partial(),
+  })
+  .partial();
 export type UpdateCustomAutomationInput = z.input<typeof UpdateCustomAutomationInput>;
 
 // ── Placeholders and the shell environment ──────────────────────────────
@@ -564,13 +582,20 @@ export function prOfTask(task: Pick<TaskSummary, "links">, linkId?: string): PrL
   return (linkId ? prs.find((l) => l.id === linkId) : null) ?? open.at(-1) ?? prs.at(-1) ?? null;
 }
 
-/** Whether a task passes the filters (projects aside, which the scopes decide with them). Epics never do. */
-export function customTaskMatches(filters: CustomFilters, task: TaskSummary): boolean {
+/**
+ * Whether a task passes the filters (where it runs aside, which the scopes decide). Epics never do. `ownEpics` are the
+ * epics with a setting of their own for the automation, which take their tasks in even when `epicTasks` is off.
+ */
+export function customTaskMatches(
+  filters: CustomFilters,
+  task: TaskSummary,
+  ownEpics: ReadonlySet<string> = new Set(),
+): boolean {
   return (
     task.kind !== "epic" &&
     task.archivedAt === null &&
     (filters.labels.length === 0 || task.labels.some((l) => filters.labels.includes(l))) &&
-    (!filters.epicId || task.parent?.id === filters.epicId)
+    (filters.epicTasks || !task.parent || ownEpics.has(task.parent.id))
   );
 }
 
@@ -827,8 +852,8 @@ export function inputValueProblem(type: AutomationInputType, value: string): str
 /** Why a definition can't be saved, or null. Rules a field schema can't express alone. */
 export function checkCustomDefinition(def: Pick<CustomDefinition, "trigger" | "filters" | "action">): string | null {
   const { trigger, filters, action } = def;
-  if (trigger.kind === "schedule" && (filters.labels.length > 0 || filters.epicId)) {
-    return "A schedule has no task, so it can only filter by project";
+  if (trigger.kind === "schedule" && (filters.labels.length > 0 || !filters.epicTasks)) {
+    return "A schedule has no task, so it can't filter by label or skip tasks in epics";
   }
   if (trigger.kind === "schedule" && action.kind === "agent" && action.onPrBranch) {
     return "A schedule has no pull request, so its agent can't work on a PR's branch";

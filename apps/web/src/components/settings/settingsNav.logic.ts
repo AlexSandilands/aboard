@@ -121,9 +121,29 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
   {
     id: "autopilot",
     label: "Autopilot",
+    // Three tabs of one page, each a sub-section: the list of automations, their run history, and the engine's limits.
     sections: [
-      section("autopilot.engine", "Autopilot", ["automations", "quiet hours", "pause", "dry run", "limits"]),
-      section("autopilot.custom", "Custom automations", ["triggers", "commands"]),
+      section("autopilot.automations", "Automations", [
+        "custom automations",
+        "needs you",
+        "pause",
+        "orchestrate",
+        "triggers",
+        "commands",
+        "drafts",
+        "import",
+      ]),
+      section("autopilot.runs", "Runs", ["run history", "history", "failed runs", "handover", "delete runs"]),
+      section("autopilot.limits", "Limits & safety", [
+        "limits",
+        "quiet hours",
+        "dry run",
+        "preview everything",
+        "caps",
+        "concurrency",
+        "variables",
+        "worktrees",
+      ]),
     ],
   },
   {
@@ -143,7 +163,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
       section("project.plan-skill", "Planning skill"),
       section("project.review-skill", "Review skill"),
       section("project.models", "Reviewer model", ["models", "review model", "board reviewer"]),
-      section("project.autopilot", "Autopilot overrides", ["automations"]),
+      section("project.autopilot", "Automations", ["automations"]),
       section("project.recurring", "Recurring tasks", ["schedule", "rules"]),
       section("project.danger-zone", "Danger zone", ["archive", "delete"]),
     ],
@@ -204,6 +224,63 @@ function movedToAgents(target: string): string {
   return target;
 }
 
+/** The Autopilot tab a target is on. */
+export type AutopilotTab = "automations" | "runs" | "limits";
+
+export function autopilotTabOf(target: string | null | undefined): AutopilotTab {
+  if (target === "autopilot.runs" || target?.startsWith("autopilot.runs.")) return "runs";
+  if (target === "autopilot.limits" || target?.startsWith("autopilot.limits.")) return "limits";
+  return "automations";
+}
+
+/** Rows of the Automations tab that aren't automations. */
+const AUTOMATIONS_TAB_ROWS: ReadonlySet<string> = new Set(["pause-all", "needs-you"]);
+
+/** The automation a target selects (`autopilot.automations.review_prs` → review_prs), or null. */
+export function automationOfTarget(target: string | null | undefined): string | null {
+  const prefix = "autopilot.automations.";
+  if (!target?.startsWith(prefix)) return null;
+  const key = target.slice(prefix.length);
+  return key === "" || AUTOMATIONS_TAB_ROWS.has(key) ? null : key;
+}
+
+/** Where a setting went when Settings → Autopilot became tabs, by its old id; one ending in "." moves every row under it. */
+const MOVED_AUTOPILOT: ReadonlyArray<[string, string]> = [
+  // The PR rounds and fix threshold moved into the PR automations themselves.
+  ["autopilot.engine.pr-review-rounds", "autopilot.automations.review_prs"],
+  ["autopilot.limits.pr-review-rounds", "autopilot.automations.review_prs"],
+  ["autopilot.engine.pr-comment-rounds", "autopilot.automations.fix_prs"],
+  ["autopilot.limits.pr-comment-rounds", "autopilot.automations.fix_prs"],
+  ["autopilot.engine.pr-fix-threshold", "autopilot.automations.fix_prs"],
+  ["autopilot.limits.pr-fix-threshold", "autopilot.automations.fix_prs"],
+  ["autopilot.limits.pull-requests", "autopilot.automations.fix_prs"],
+  // Dry run became Preview everything, under Limits → Advanced (the Safety section before).
+  ["autopilot.engine.dry-run", "autopilot.limits.preview-everything"],
+  ["autopilot.limits.dry-run", "autopilot.limits.preview-everything"],
+  ["autopilot.limits.safety", "autopilot.limits.advanced"],
+  ["autopilot.engine.orchestrate.countdown", "board.appearance.autopilot-countdown"],
+  ["autopilot.engine.orchestrate", "autopilot.automations.orchestrate"],
+  ["autopilot.engine.pause-all", "autopilot.automations.pause-all"],
+  ["autopilot.engine.settings", "autopilot.limits"],
+  ["autopilot.engine.automation-", "autopilot.automations."],
+  ["autopilot.engine.", "autopilot.limits."],
+  ["autopilot.engine", "autopilot.automations"],
+  ["autopilot.custom.variables", "autopilot.limits.variables"],
+  ["autopilot.custom", "autopilot.automations"],
+];
+
+function movedAutopilot(target: string): string {
+  for (const [old, moved] of MOVED_AUTOPILOT) {
+    // A prefix ending in "-" or "." keeps what follows it; any other matches itself and the rows under it.
+    if (old.endsWith(".") || old.endsWith("-")) {
+      if (target.startsWith(old)) return moved + target.slice(old.length);
+    } else if (target === old || target.startsWith(`${old}.`)) {
+      return moved + target.slice(old.length);
+    }
+  }
+  return target;
+}
+
 /**
  * A target from before it moved: a provider's from before providers had their own page
  * (`integrations.claude-code.cli-path`, a bookmark or an old link) and anything on the old Providers and Models pages
@@ -211,6 +288,7 @@ function movedToAgents(target: string): string {
  * page. Any other target as it is.
  */
 export function redirectSettingsTarget(target: string): string {
+  if (target.startsWith("autopilot.")) return movedAutopilot(target);
   for (const [old, moved] of MOVED_TARGETS) {
     if (old.endsWith(".") ? target.startsWith(old) : target === old) {
       return movedToAgents(old.endsWith(".") ? moved + target.slice(old.length) : moved);
@@ -271,7 +349,7 @@ export function editorListSection(group: SettingsGroupId): string {
     case "tasks":
       return "tasks.new-tasks";
     case "autopilot":
-      return "autopilot.custom";
+      return "autopilot.automations";
     case "project":
       return "project.recurring";
     default:
@@ -312,6 +390,16 @@ export function resolveSettingsProject<P extends { id: string }>(
 ): P | null {
   const byId = (id: string | null | undefined) => (id ? projects.find((p) => p.id === id) : undefined);
   return byId(requested) ?? byId(fallback) ?? projects[0] ?? null;
+}
+
+/**
+ * Whether a settings path is an editor sub-page (`/settings/autopilot/custom/new`) rather than a page: the Autopilot
+ * tabs at `/settings/autopilot/runs/…` and `/settings/autopilot/limits` are pages.
+ */
+export function isEditorPath(pathname: string): boolean {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts.length <= 2) return false;
+  return !(parts[1] === "autopilot" && (parts[2] === "runs" || parts[2] === "limits"));
 }
 
 /** The top bar's crumbs: Settings, the group, then the editor open on a sub-page. */

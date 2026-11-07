@@ -1,4 +1,4 @@
-import type { TaskLink, TaskRelation, TaskReview, TaskReviewSummary } from "@repo/contracts";
+import type { AttentionReason, TaskLink, TaskRelation, TaskReview, TaskReviewSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import type { PlainLink } from "./links.logic";
 import {
@@ -9,7 +9,9 @@ import {
   moveSection,
   normalizeSectionLayout,
   relationChipGroups,
+  SECTION_ATTENTION,
   SECTION_IDS,
+  sectionAttention,
   summarizeSection,
   type SectionTask,
   withCollapseChoice,
@@ -19,6 +21,7 @@ const NOW = Date.parse("2026-10-15T12:00:00Z");
 
 function task(patch: Partial<SectionTask> = {}): SectionTask {
   return {
+    kind: "task",
     labels: [],
     links: [],
     blockedBy: [],
@@ -76,9 +79,8 @@ describe("normalizeSectionLayout", () => {
       "sessions",
       "links",
       "relations",
-      "automation",
-      "review",
       "autopilot",
+      "review",
       "details",
     ]);
   });
@@ -100,7 +102,6 @@ describe("normalizeSectionLayout", () => {
       "sessions",
       "links",
       "relations",
-      "automation",
       "review",
       "autopilot",
       "details",
@@ -109,25 +110,14 @@ describe("normalizeSectionLayout", () => {
   });
 
   it("keeps Sessions where the user put it once it is saved", () => {
-    const order = [
-      "sessions",
-      "plan",
-      "labels",
-      "links",
-      "relations",
-      "automation",
-      "review",
-      "autopilot",
-      "details",
-      "activity",
-    ];
+    const order = ["sessions", "plan", "labels", "links", "relations", "review", "autopilot", "details", "activity"];
     expect(normalizeSectionLayout({ order }).order).toEqual(order);
   });
 
-  it("places Automation before Local review in a layout saved without it", () => {
-    const saved = ["review", "plan", "sessions", "labels", "links", "relations", "autopilot", "details", "activity"];
-    expect(normalizeSectionLayout({ order: saved }).order).toEqual([
-      "automation",
+  it("drops the Automation section a saved layout still names: it is part of Autopilot now", () => {
+    const saved = ["automation", "review", "plan", "sessions", "labels", "links", "relations", "autopilot", "details"];
+    const layout = normalizeSectionLayout({ order: saved, hidden: ["automation"], collapsed: { automation: true } });
+    expect(layout.order).toEqual([
       "review",
       "plan",
       "sessions",
@@ -138,6 +128,8 @@ describe("normalizeSectionLayout", () => {
       "details",
       "activity",
     ]);
+    expect(layout.hidden).toEqual([]);
+    expect(layout.collapsed).toEqual({});
   });
 
   it("hides Sessions with Links in a layout saved before Sessions existed", () => {
@@ -185,7 +177,6 @@ describe("collapsedByDefault", () => {
       "links",
       "relations",
       "review",
-      "autopilot",
       "details",
       "activity",
     ]);
@@ -198,7 +189,7 @@ describe("collapsedByDefault", () => {
       reviews: [round([])],
       planContext: "Why",
     });
-    expect(SECTION_IDS.filter((id) => collapsedByDefault(id, full))).toEqual(["sessions", "autopilot", "activity"]);
+    expect(SECTION_IDS.filter((id) => collapsedByDefault(id, full))).toEqual(["sessions", "activity"]);
   });
 
   it("opens Sessions and Links by their own kind of link", () => {
@@ -208,14 +199,23 @@ describe("collapsedByDefault", () => {
     expect(collapsedByDefault("links", task({ links: [session, link] }))).toBe(false);
   });
 
-  it("keeps Automation open: the settings are its content", () => {
-    expect(collapsedByDefault("automation", task())).toBe(false);
+  it("keeps Autopilot open on a task: the settings are its content", () => {
+    expect(collapsedByDefault("autopilot", task())).toBe(false);
   });
 
-  it("opens Autopilot only when a run needs attention", () => {
-    const flagged = task({ attention: [{ kind: "autopilot", severity: "warning", message: "Start planned failed" }] });
-    expect(collapsedByDefault("autopilot", task())).toBe(true);
+  it("opens an epic's Autopilot only when a run needs attention: it has runs and no settings", () => {
+    const flagged = task({
+      kind: "epic",
+      attention: [{ kind: "autopilot", severity: "warning", message: "Merge epic PRs failed" }],
+    });
+    expect(collapsedByDefault("autopilot", task({ kind: "epic" }))).toBe(true);
     expect(collapsedByDefault("autopilot", flagged)).toBe(false);
+    expect(summarizeSection("autopilot", task({ kind: "epic" }))).toBe("Runs on this epic");
+    expect(summarizeSection("autopilot", flagged)).toBe("Merge epic PRs failed");
+  });
+
+  it("says why Autopilot needs a look in its collapsed line", () => {
+    const flagged = task({ attention: [{ kind: "autopilot", severity: "warning", message: "Start planned failed" }] });
     expect(summarizeSection("autopilot", flagged)).toBe("Start planned failed");
   });
 
@@ -242,6 +242,54 @@ describe("firstLine", () => {
     expect(firstLine("> quoted `code`")).toBe("quoted code");
     expect(firstLine("  \n ")).toBeNull();
     expect(firstLine(null)).toBeNull();
+  });
+});
+
+describe("sectionAttention", () => {
+  const reason = (kind: AttentionReason["kind"], severity: AttentionReason["severity"] = "warning") => ({
+    kind,
+    severity,
+    message: `${kind} message`,
+  });
+  const EXPECTED = {
+    autopilot: ["autopilot"],
+    sessions: ["thread_needs_input", "thread_failed"],
+    links: ["pr_checks_failing", "pr_changes_requested", "pr_conflict"],
+    plan: ["blocked_step"],
+    review: ["review_stalled", "review_stuck", "review_failed", "review_unattended"],
+  } as const;
+
+  it("maps each kind to its section", () => {
+    expect(SECTION_ATTENTION).toEqual(EXPECTED);
+    for (const [id, kinds] of Object.entries(EXPECTED)) {
+      for (const kind of kinds) {
+        const shown = sectionAttention(id as keyof typeof EXPECTED, task({ attention: [reason(kind)] }));
+        expect(shown?.kind).toBe(kind);
+      }
+    }
+  });
+
+  it("leaves import_failed and agent_request to their own callouts", () => {
+    const attention = [reason("import_failed", "error"), reason("agent_request")];
+    for (const id of SECTION_IDS) expect(sectionAttention(id, task({ attention }))).toBeNull();
+  });
+
+  it("ignores reasons that belong to another section", () => {
+    const attention = [reason("pr_conflict", "error")];
+    expect(sectionAttention("sessions", task({ attention }))).toBeNull();
+    expect(sectionAttention("links", task({ attention }))?.kind).toBe("pr_conflict");
+  });
+
+  it("picks an error before a warning, else the first", () => {
+    const warning = reason("pr_changes_requested");
+    const error = reason("pr_checks_failing", "error");
+    expect(sectionAttention("links", task({ attention: [warning, error] }))).toEqual(error);
+    expect(sectionAttention("links", task({ attention: [warning, reason("pr_conflict")] }))).toEqual(warning);
+  });
+
+  it("is null when the task has no reasons, or the section takes none", () => {
+    expect(sectionAttention("links", task())).toBeNull();
+    expect(sectionAttention("labels", task({ attention: [reason("pr_conflict", "error")] }))).toBeNull();
   });
 });
 
@@ -283,21 +331,27 @@ describe("summarizeSection", () => {
     ).toBe("blocked by #4 · blocks #8");
   });
 
-  it("automation names the settings that differ from their default", () => {
-    expect(summarizeSection("automation", task())).toBe("Defaults");
-    expect(summarizeSection("automation", task({ autopilot: true, autoMerge: false, priority: true }))).toBe(
-      "Autopilot on · Auto-merge off · Priority",
+  it("autopilot says what it may do with the task", () => {
+    expect(summarizeSection("autopilot", task())).toBe("Not automated");
+    expect(summarizeSection("autopilot", task({ autopilot: true, autoMerge: false, priority: true }))).toBe(
+      "May start · Priority",
     );
-    expect(summarizeSection("automation", task({ autopilot: false, autoReview: true }))).toBe(
-      "Autopilot off · Auto-review on",
+    expect(summarizeSection("autopilot", task({ autopilot: true, autoReview: true, autoMerge: true }))).toBe(
+      "May start, review, merge",
     );
-    expect(summarizeSection("automation", task({ autoReview: true, reviewModel: { tier: "deep" } }))).toBe(
-      "Auto-review on · Reviewer deep",
+    // An explicit Off reads like Default: nothing is on.
+    expect(summarizeSection("autopilot", task({ autopilot: false, autoReview: false }))).toBe("Not automated");
+    expect(summarizeSection("autopilot", task({ autoReview: true, reviewModel: { tier: "deep" } }))).toBe(
+      "May review · Reviewer deep",
     );
     expect(
-      summarizeSection("automation", task({ reviewModel: { provider: "claude-code", model: "claude-opus-5-5" } })),
-    ).toBe("Reviewer claude-opus-5-5");
-    expect(summarizeSection("automation", task({ manual: true, autoReview: true }))).toBe("Manual task");
+      summarizeSection("autopilot", task({ reviewModel: { provider: "claude-code", model: "claude-opus-5-5" } })),
+    ).toBe("Not automated · Reviewer claude-opus-5-5");
+    // A task that sets nothing follows the board's Auto-review, as its chip does.
+    expect(summarizeSection("autopilot", task(), NOW, true)).toBe("May review");
+    expect(summarizeSection("autopilot", task({ autoReview: false }), NOW, true)).toBe("Not automated");
+    expect(summarizeSection("autopilot", task({ manual: true, autoReview: true }))).toBe("For a person");
+    expect(summarizeSection("autopilot", task({ manual: true, priority: true }))).toBe("For a person · Priority");
   });
 
   it("review", () => {

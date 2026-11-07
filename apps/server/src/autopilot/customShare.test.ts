@@ -2,8 +2,6 @@ import {
   AUTOMATION_BUNDLE_VERSION,
   SCRIPT_BUNDLE_VERSION,
   PLAIN_BUNDLE_VERSION,
-  BRAND,
-  AUTOMATION_EXAMPLES,
   customAutomationKey,
   CustomAction,
   automationBundle as automationBundleOf,
@@ -77,7 +75,7 @@ const triageAction = (extra: Record<string, unknown> = {}): Action =>
 const triage = (action: Action = triageAction()): CreateCustomAutomationInput => ({
   name: "Triage",
   trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
-  filters: { projectIds: [] },
+  projectIds: [],
   action,
 });
 
@@ -91,7 +89,7 @@ describe("exporting a custom automation", () => {
     const project = s.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
     const custom = s.services.customAutomations.create({
       ...triage(triageAction({ slots: [{ ...jira, tools: ["mcp__issue-tracker__search_jira"] }] })),
-      filters: { projectIds: [project.id] },
+      projectIds: [project.id],
     });
     const bundle = await exportOf(s, custom);
     expect(bundle).toMatchObject({
@@ -130,7 +128,7 @@ describe("importing a custom automation", () => {
     return exportOf(other, other.services.customAutomations.create(triage()));
   };
 
-  it("round-trips into an automation that is off, with the importer's inputs, tools and projects", async () => {
+  it("round-trips into an automation in Preview, with the importer's inputs, tools and projects", async () => {
     const bundle = await fileOf();
     const s = setup();
     const project = s.services.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
@@ -151,7 +149,7 @@ describe("importing a custom automation", () => {
     expect(readFileSync(join(s.skillDir("triage"), "SKILL.md"), "utf8")).toBe(SKILL);
     expect(automation).toMatchObject({
       name: "Triage",
-      filters: { projectIds: [project.id], epicId: null },
+      filters: { labels: [], epicTasks: true },
       action: {
         kind: "agent",
         skill: "triage",
@@ -159,11 +157,14 @@ describe("importing a custom automation", () => {
         slots: [{ name: "jira", tools: ["mcp__atlassian__search"] }],
       },
     });
-    // Off until the user switches it on.
+    // In Preview until the user turns it on (it records what it would do), only in the project picked.
     const entry = s.services.autopilot
-      .scope("board", null)
+      .scope("project", project.id)
       .find((e) => e.automation === customAutomationKey(automation.id));
-    expect(entry).toMatchObject({ mode: "inherit", enabled: false });
+    expect(entry).toMatchObject({ mode: "preview", enabled: true, preview: true });
+    expect(
+      s.services.autopilot.scope("board", null).find((e) => e.automation === customAutomationKey(automation.id)),
+    ).toMatchObject({ mode: "inherit", enabled: false });
   });
 
   it("renames the skill when its name is taken, and never overwrites the user's own", async () => {
@@ -271,7 +272,7 @@ describe("sharing a script", () => {
   const scriptAutomation = (): CreateCustomAutomationInput => ({
     name: "Check",
     trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
-    filters: { projectIds: [] },
+    projectIds: [],
     action: CustomAction.parse(script),
   });
   const post = (s: Setup, body: unknown, headers?: Record<string, string>) =>
@@ -299,11 +300,11 @@ describe("sharing a script", () => {
     expect(res.status).toBe(201);
     const { automation } = await s.json<{ automation: CustomAutomation }>(res);
     expect(automation.action).toMatchObject({ ...script, timeoutSeconds: 300 });
-    // Off until the user switches it on.
+    // In Preview until the user turns it on: it records what it would do.
     const entry = s.services.autopilot
       .scope("board", null)
       .find((e) => e.automation === customAutomationKey(automation.id));
-    expect(entry).toMatchObject({ mode: "inherit", enabled: false });
+    expect(entry).toMatchObject({ mode: "preview", enabled: true, preview: true });
   });
 
   it("refuses a confirmation the service wasn't given, whoever calls it", () => {
@@ -365,37 +366,5 @@ describe("a required tool slot", () => {
     await s.engine.pass();
     await s.engine.idle();
     expect(s.agentRuns).toHaveLength(1);
-  });
-});
-
-describe("the Improve example", () => {
-  it("imports with its skill, and its weekly run uses the skill on the deep tier with the filled inputs", async () => {
-    // Eight days on, so a weekly slot has come whatever today is.
-    const s = setup(8 * 24 * 3_600_000);
-    const project = s.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
-    const bundle = AUTOMATION_EXAMPLES.find((e) => e.id === "improve")!.bundle;
-    const res = await s.request("/api/autopilot/custom/import", {
-      method: "POST",
-      json: { bundle, inputs: { max_suggestions: "1" }, projectIds: [project.id], installSkill: true },
-      headers: ORIGIN,
-    });
-    expect(res.status).toBe(201);
-    const { automation } = await s.json<{ automation: CustomAutomation }>(res);
-    const skill = `${BRAND.id}-improve`;
-    expect(automation.action).toMatchObject({ skill, model: { tier: "deep" } });
-    expect(readFileSync(join(s.skillDir(skill), "SKILL.md"), "utf8")).toContain(`name: ${skill}`);
-
-    s.services.autopilot.setScope("board", null, customAutomationKey(automation.id), { mode: "on" });
-    await s.engine.pass();
-    await s.engine.idle();
-    expect(s.agentRuns).toHaveLength(1);
-    const request = s.agentRuns[0]!;
-    expect(request.modelChoice).toEqual({ tier: "deep" });
-    expect(request.tools).toEqual(["Skill"]);
-    expect(request.prompt).toContain(`Use the ${skill} skill.`);
-    expect(request.prompt).toContain('since "7d"');
-    expect(request.prompt).toContain("at most 1 changes");
-    expect(request.prompt).toContain("You may suggest changes to: all.");
-    expect(request.prompt).toContain("Project folder: /work/alpha");
   });
 });

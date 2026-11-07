@@ -1,13 +1,12 @@
-import type { AutopilotMode } from "@repo/contracts";
-import { PauseIcon, TriangleAlertIcon, Undo2Icon } from "lucide-react";
+import { PauseIcon, TriangleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Alert, AlertAction, AlertDescription } from "~/components/ui/alert";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Switch } from "~/components/ui/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
-import type { ScopeRowModel } from "./autopilot.logic";
 
 /** A muted label above a ScopeCard, for a group of rows that has no card of its own to say what it is. */
 export function ScopeSectionLabel({ children }: { children: ReactNode }) {
@@ -58,79 +57,69 @@ export function PausedNotice({ onResume, disabled }: { onResume: () => void; dis
 }
 
 /**
- * One automation at a project or epic: its name (the description is its tooltip) and an on/off switch. The switch is
- * faded while it follows the scope above and solid once this scope sets it, which also shows ↺ to follow again. The
- * stored Inherit / On / Off model is unchanged: a click saves an explicit On or Off, ↺ saves Inherit.
+ * One automation at a project or epic: its name (the description is its tooltip), a muted line saying where it runs
+ * overall ("On everywhere except storefront") and an on/off switch for this scope. The switch always shows what the
+ * automation does here; the stored Inherit / Off / Preview / On is chosen for it (see `scopeToggle`), so there is
+ * nothing to reset. Preview shows as a badge beside the name.
  */
 export function ScopeRow({
   name,
   description,
   label,
-  model,
-  scope,
+  checked,
+  preview = false,
+  where,
+  blocked,
   disabled,
   onChange,
-  trailing,
 }: {
   name: string;
   description: string;
-  /** The switch's accessible name, e.g. "Review PRs in Aboard"; where its state comes from is added to it. */
+  /** The switch's accessible name, e.g. "Review PRs in Aboard". */
   label: string;
-  model: ScopeRowModel;
-  scope: "project" | "epic";
+  checked: boolean;
+  /** On in Preview here: it records what it would do and does none of it. */
+  preview?: boolean;
+  /** Where it runs overall, under the name. */
+  where?: string;
+  /** Why it can't be turned on (an empty required tool slot); turning off still works. */
+  blocked: string | null;
   disabled?: boolean;
-  onChange: (mode: AutopilotMode) => void;
-  /** Icon buttons after the name, such as a link to the automation's own page. */
-  trailing?: ReactNode;
+  onChange: (on: boolean) => void;
 }) {
-  const parent = scope === "epic" ? "project" : "board";
   return (
     <div className="flex min-h-9 items-center gap-2 py-1">
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <Tooltip>
-          <TooltipTrigger render={<span className="min-w-0 truncate text-xs font-medium" />}>{name}</TooltipTrigger>
-          <TooltipPopup side="top">{description}</TooltipPopup>
-        </Tooltip>
-        {model.blocked ? (
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 items-center gap-1.5">
           <Tooltip>
-            <TooltipTrigger render={<span role="img" aria-label={`${name} can't be turned on`} className="shrink-0" />}>
-              <TriangleAlertIcon className="size-3.5 text-warning" />
-            </TooltipTrigger>
-            <TooltipPopup side="top">{model.blocked}</TooltipPopup>
+            <TooltipTrigger render={<span className="min-w-0 truncate text-xs font-medium" />}>{name}</TooltipTrigger>
+            <TooltipPopup side="top">{description}</TooltipPopup>
           </Tooltip>
-        ) : null}
-        {trailing}
+          {preview ? (
+            <Badge variant="warning" size="sm" title="Records what it would do and does none of it">
+              Preview
+            </Badge>
+          ) : null}
+          {blocked ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={<span role="img" aria-label={`${name} can't be turned on`} className="shrink-0" />}
+              >
+                <TriangleAlertIcon className="size-3.5 text-warning" />
+              </TooltipTrigger>
+              <TooltipPopup side="top">{blocked}</TooltipPopup>
+            </Tooltip>
+          ) : null}
+        </div>
+        {where ? <span className="truncate text-2xs text-muted-foreground">{where}</span> : null}
       </div>
-      {model.inherited ? null : (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                size="icon-micro"
-                variant="ghost-muted"
-                aria-label={`Reset ${name} to follow the ${parent}`}
-                disabled={disabled}
-                onClick={() => onChange("inherit")}
-              />
-            }
-          >
-            <Undo2Icon />
-          </TooltipTrigger>
-          <TooltipPopup side="top">Follow the {parent} again</TooltipPopup>
-        </Tooltip>
-      )}
-      <Tooltip>
-        <TooltipTrigger render={<span className={cn("inline-flex", model.inherited && "opacity-55")} />}>
-          <Switch
-            size="sm"
-            aria-label={`${label}: ${model.note}`}
-            checked={model.checked}
-            disabled={disabled || !model.canToggle}
-            onCheckedChange={() => onChange(model.nextMode)}
-          />
-        </TooltipTrigger>
-        <TooltipPopup side="top">{model.note}</TooltipPopup>
-      </Tooltip>
+      <Switch
+        size="sm"
+        aria-label={where ? `${label}: ${where}` : label}
+        checked={checked}
+        disabled={disabled || (!checked && Boolean(blocked))}
+        onCheckedChange={onChange}
+      />
     </div>
   );
 }

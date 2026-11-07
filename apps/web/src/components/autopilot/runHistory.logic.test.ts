@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  runSessionLink,
+  shortSessionId,
+  threadLinkLabel,
   deleteTitle,
   describeRunFilter,
   isNarrowed,
@@ -63,6 +66,19 @@ describe("runHistoryFilter", () => {
   });
 });
 
+describe("outcome", () => {
+  it("parses a known outcome, drops another, and carries it to the filter and the query", () => {
+    expect(RunHistorySearch.parse({ outcome: "deferred" }).outcome).toBe("deferred");
+    expect(RunHistorySearch.parse({ outcome: "nope" }).outcome).toBeUndefined();
+    const filter = runHistoryFilter("all", { outcome: "failed" }, new Date());
+    expect(filter.outcome).toBe("failed");
+    expect(runHistoryParams(filter).get("outcome")).toBe("failed");
+    expect(isNarrowed({ outcome: "failed" })).toBe(true);
+    expect(describeRunFilter("Fix PRs", null, { outcome: "failed" })).toBe("failed Fix PRs runs");
+    expect(describeRunFilter(null, null, { outcome: "deferred" })).toBe("Deferred runs of every automation");
+  });
+});
+
 describe("localDayStart", () => {
   it("rolls over month ends", () => {
     expect(localDayStart("2026-01-31", 1)).toBe(new Date(2026, 1, 1).toISOString());
@@ -114,5 +130,27 @@ describe("filter text", () => {
     ).toBe("1 still queued or running; 3 less than a day old");
     expect(deleteTitle(1)).toBe("Delete 1 run?");
     expect(deleteTitle(12)).toBe("Delete 12 runs?");
+  });
+});
+
+describe("run links", () => {
+  const sessionLink = {
+    id: "l1",
+    kind: "agent_session" as const,
+    ref: { harness: "claude-code" as const, sessionId: "s-123456789", cwd: "/w" },
+  };
+  const tasks = [{ id: "t1", links: [sessionLink] as never[] }];
+
+  it("finds the session link a run's session was linked as on its task", () => {
+    expect(runSessionLink(tasks, { taskId: "t1", sessionId: "s-123456789" })?.id).toBe("l1");
+    expect(runSessionLink(tasks, { taskId: "t1", sessionId: "other" })).toBeNull();
+    expect(runSessionLink(tasks, { taskId: null, sessionId: "s-123456789" })).toBeNull();
+    expect(runSessionLink(undefined, { taskId: "t1", sessionId: "s-123456789" })).toBeNull();
+  });
+
+  it("shortens a session id and names where a thread opens", () => {
+    expect(shortSessionId("6f1c2e0a-9d3b-4c52")).toBe("6f1c2e0a");
+    expect(threadLinkLabel("t3code://threads/x")).toBe("Open in T3 Code");
+    expect(threadLinkLabel("https://example.com/t")).toBe("Open thread");
   });
 });

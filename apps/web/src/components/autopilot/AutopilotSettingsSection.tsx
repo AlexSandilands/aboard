@@ -1,7 +1,9 @@
 import {
-  AUTOPILOT_ALL_RUNS,
+  RUNNER_CHOICES,
+  T3_RUNTIME_MODES,
+  type AutopilotAgentDefaults,
+  type AutopilotAutomation,
   type AutopilotEngineSettings,
-  type FindingSeverity,
   type UpdateAutopilotEngineInput,
 } from "@repo/contracts";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
@@ -9,239 +11,322 @@ import { Switch } from "~/components/ui/switch";
 import { toastManager } from "~/components/ui/toast";
 import {
   SETTINGS_TEXT_WIDTH,
+  SettingsLink,
   SettingsNote,
   SettingsRow,
   SettingsSection,
-  SettingsSectionHeader,
+  StatusDot,
   UnitInput,
 } from "~/components/settings/settingsLayout";
-import { useSetAutopilotPaused, useUpdateAutopilotEngine } from "~/state/mutations";
-import { useAutopilotOverview } from "~/state/queries";
-import { AutomationRows, AutomationSections } from "./AutomationRows";
-import { OrchestrateSettings } from "./OrchestrateSettings";
-import { RunHistoryLink } from "./RunHistoryLink";
-import { parseLimit } from "./autopilot.logic";
+import { useOpenSettings } from "~/components/settings/settingsNavigation";
+import { Button } from "~/components/ui/button";
+import { useSetAutopilotScope, useUpdateAutopilotEngine } from "~/state/mutations";
+import { useAutopilotOverview, useAutopilotScope } from "~/state/queries";
+import { parseLimit, scopeAutomations } from "./autopilot.logic";
 import { TimeInput } from "./TimeInput";
+import { ownSettingsLabel, scopeState } from "./where.logic";
+import { useWhere } from "./useWhere";
+import { BoardVariablesSection } from "./VariablesSection";
 
-const FIX_THRESHOLDS: ReadonlyArray<{ value: FindingSeverity; label: string }> = [
-  { value: "blocking", label: "Blocking only" },
-  { value: "major", label: "Major and up" },
-  { value: "minor", label: "Minor and up" },
-  { value: "nit", label: "Everything" },
+// The row's description says what Auto means, so the select uses the short names.
+const RUNNER_OPTIONS = RUNNER_CHOICES.map(({ value, short }) => ({ value, label: short }));
+
+const T3_ACCESS_OPTIONS: ReadonlyArray<{ value: AutopilotAgentDefaults["t3Access"]; label: string }> = [
+  { value: "default", label: "T3 Code's default" },
+  ...T3_RUNTIME_MODES.map((m) => ({ value: m.value, label: m.label })),
 ];
 
-/**
- * Settings → Autopilot: Pause all and the engine's limits, Orchestrate's own area, then the board-level switch and
- * config of every other automation, one folded section each. Reads and writes its own queries.
- */
-export function AutopilotEngineSection() {
+/** Settings → Autopilot → Limits & safety: the engine's limits, then the variables custom automations read. */
+export function AutopilotLimits() {
   const overview = useAutopilotOverview();
-  return (
-    <>
-      <SettingsSection id="autopilot.engine.settings" title="Autopilot">
-        {overview.data ? (
-          <EngineRows paused={overview.data.paused} engine={overview.data.engine} />
-        ) : (
-          <SettingsNote>{overview.error ? overview.error.message : "Loading Autopilot..."}</SettingsNote>
-        )}
+  if (!overview.data) {
+    return (
+      <SettingsSection title="Limits & safety">
+        <SettingsNote>{overview.error ? overview.error.message : "Loading Autopilot..."}</SettingsNote>
       </SettingsSection>
-      <OrchestrateSettings />
-      <section className="space-y-2.5">
-        <SettingsSectionHeader
-          title="Automations"
-          headerAction={<RunHistoryLink automation={AUTOPILOT_ALL_RUNS} label="All runs" size="xs" />}
-        />
-        <AutomationSections />
-      </section>
-    </>
-  );
+    );
+  }
+  return <EngineSections engine={overview.data.engine} />;
 }
 
-/** A project's own Autopilot switches and config, in its settings. */
+/**
+ * A project's Autopilot in its settings, read only: what each automation does here and why, with a Change link to the
+ * automation's Where it runs in Settings → Autopilot. The one place that edits where an automation runs, besides the
+ * lane's pill, is that widget.
+ */
 export function ProjectAutopilotSection({ projectId }: { projectId: string }) {
+  const overview = useAutopilotOverview();
+  // Recurring tasks has no switch (each rule has its own, in the project's Recurring tasks section).
+  const automations = scopeAutomations(overview.data?.automations ?? [], false);
   return (
-    <SettingsSection id="project.autopilot.automations" title="Autopilot overrides">
-      <AutomationRows projectId={projectId} />
+    <SettingsSection id="project.autopilot.automations" title="Automations">
+      {!overview.data ? (
+        <SettingsNote>{overview.error ? overview.error.message : "Loading automations..."}</SettingsNote>
+      ) : automations.length === 0 ? (
+        <SettingsNote>No automations are installed yet.</SettingsNote>
+      ) : (
+        automations.map((automation) => (
+          <ProjectAutomationRow key={automation.key} automation={automation} projectId={projectId} />
+        ))
+      )}
     </SettingsSection>
   );
 }
 
-function EngineRows({ paused, engine }: { paused: boolean; engine: AutopilotEngineSettings }) {
-  const setPaused = useSetAutopilotPaused();
+function ProjectAutomationRow({ automation, projectId }: { automation: AutopilotAutomation; projectId: string }) {
+  const { input, description } = useWhere(automation);
+  const openSettings = useOpenSettings();
+  const state = input ? scopeState(input, { kind: "project", id: projectId }) : null;
+  // A setting the project made for itself still applies over the board's, and nowhere else shows it.
+  const own = useAutopilotScope(projectId).data?.find((e) => e.automation === automation.key)?.config ?? {};
+  const ownLabel = ownSettingsLabel(automation, own);
+  const reset = useSetAutopilotScope(projectId);
+  return (
+    <SettingsRow
+      title={automation.title}
+      description={
+        <>
+          {description ? description.sentence : "Loading..."}
+          {ownLabel ? (
+            <span className="block">This project sets its own: {ownLabel}. They apply over the board&apos;s.</span>
+          ) : null}
+        </>
+      }
+      status={
+        state === null ? null : (
+          <span className="flex items-center gap-1.5">
+            <StatusDot
+              tone={state === "on" ? "success" : state === "preview" ? "warning" : "muted"}
+              label={state === "on" ? "On here" : state === "preview" ? "Preview here" : "Off here"}
+            />
+            {state === "on" ? "On here" : state === "preview" ? "Preview here" : "Off here"}
+          </span>
+        )
+      }
+      control={
+        <>
+          {ownLabel ? (
+            <Button
+              size="xs"
+              variant="ghost-muted"
+              aria-label={`Clear ${automation.title}'s own settings for this project`}
+              disabled={reset.isPending}
+              onClick={() => reset.mutate({ automation: automation.key, config: () => ({}) })}
+            >
+              Clear own settings
+            </Button>
+          ) : null}
+          <Button
+            size="xs"
+            variant="outline"
+            aria-label={`Change where ${automation.title} runs`}
+            onClick={() => openSettings(`autopilot.automations.${automation.key}`)}
+          >
+            Change
+          </Button>
+        </>
+      }
+    />
+  );
+}
+
+/** The engine's settings in three cards: spending and timing, the defaults for agent runs, and safety. */
+function EngineSections({ engine }: { engine: AutopilotEngineSettings }) {
   const update = useUpdateAutopilotEngine();
   const save = (input: UpdateAutopilotEngineInput) => update.mutate(input);
   return (
     <>
-      <SettingsRow
-        id="autopilot.engine.pause-all"
-        title="Pause all"
-        description="Stops every new Autopilot run, whatever the switches say."
-        info="Runs already going finish. A backup restore never lifts it."
-        control={<Switch aria-label="Pause all" checked={paused} onCheckedChange={(next) => setPaused.mutate(next)} />}
-      />
-      <SettingsRow
-        id="autopilot.engine.dry-run"
-        title="Dry run"
-        description="Records what each automation would do as a skipped run, and does nothing."
-        info="Turn it on to watch a new automation before trusting it."
-        control={
-          <Switch aria-label="Dry run" checked={engine.dryRun} onCheckedChange={(next) => save({ dryRun: next })} />
-        }
-      />
-      <SettingsRow
-        id="autopilot.engine.max-concurrent"
-        title="Agent runs at once"
-        description="How many of Autopilot's agent runs can be open at once. Not a limit on your machine."
-        info="Counts runs Autopilot has open. A T3 thread Autopilot started counts only against Start planned, while it is working; threads you start yourself never count."
-        control={
-          <LimitInput
-            label="Agent runs at once"
-            value={engine.maxConcurrent}
-            min={1}
-            max={10}
-            integer
-            required
-            onSave={(next) => save({ maxConcurrent: next ?? 1 })}
-          />
-        }
-      />
-      <SettingsRow
-        id="autopilot.engine.daily-run-cap"
-        title="Daily run cap"
-        description="The most agent runs to start per day (local time). Empty is no cap."
-        control={
-          <LimitInput
-            label="Daily run cap"
-            value={engine.dailyRunCap}
-            min={1}
-            max={1000}
-            integer
-            unit="runs"
-            onSave={(next) => save({ dailyRunCap: next })}
-          />
-        }
-      />
-      <SettingsRow
-        id="autopilot.engine.daily-spend-cap"
-        title="Daily spend cap"
-        description="No more agent runs start once today's have cost this much (local time). Empty is no cap."
-        control={
-          <LimitInput
-            label="Daily spend cap"
-            value={engine.dailySpendCapUsd}
-            min={0.01}
-            max={10000}
-            integer={false}
-            unit="USD"
-            onSave={(next) => save({ dailySpendCapUsd: next })}
-          />
-        }
-      />
-      <SettingsRow
-        id="autopilot.engine.quiet-hours"
-        title="Quiet hours"
-        description="No agent runs start in this window (local time)."
-        info="The window may cross midnight. Automations that only change the board still run."
-        control={
-          <>
-            <TimeInput
-              label="Quiet hours start"
-              value={engine.quietHours.start}
-              disabled={!engine.quietHours.enabled}
-              onSave={(start) => save({ quietHours: { start } })}
+      <SettingsSection id="autopilot.limits.spending" title="Spending & timing">
+        <SettingsRow
+          id="autopilot.limits.max-concurrent"
+          title="Agent runs at once"
+          description="How many of Autopilot's agent runs can be open at once."
+          info="Counts runs Autopilot has open. A T3 thread Autopilot started counts only against Start planned, while it is working; threads you start yourself never count."
+          control={
+            <LimitInput
+              label="Agent runs at once"
+              value={engine.maxConcurrent}
+              min={1}
+              max={10}
+              integer
+              required
+              onSave={(next) => save({ maxConcurrent: next ?? 1 })}
             />
-            <span className="text-xs text-muted-foreground">to</span>
-            <TimeInput
-              label="Quiet hours end"
-              value={engine.quietHours.end}
-              disabled={!engine.quietHours.enabled}
-              onSave={(end) => save({ quietHours: { end } })}
+          }
+        />
+        <SettingsRow
+          id="autopilot.limits.daily-run-cap"
+          title="Daily run cap"
+          description="The most agent runs to start per day (local time). Empty is no cap."
+          control={
+            <LimitInput
+              label="Daily run cap"
+              value={engine.dailyRunCap}
+              min={1}
+              max={1000}
+              integer
+              unit="runs"
+              onSave={(next) => save({ dailyRunCap: next })}
             />
+          }
+        />
+        <SettingsRow
+          id="autopilot.limits.daily-spend-cap"
+          title="Daily spend cap"
+          description="No more runs start once today's cost this much. Empty is no cap."
+          control={
+            <LimitInput
+              label="Daily spend cap"
+              value={engine.dailySpendCapUsd}
+              min={0.01}
+              max={10000}
+              integer={false}
+              unit="USD"
+              onSave={(next) => save({ dailySpendCapUsd: next })}
+            />
+          }
+        />
+        <SettingsRow
+          id="autopilot.limits.quiet-hours"
+          title="Quiet hours"
+          description="No agent runs start in this window (local time)."
+          info="The window may cross midnight. Automations that only change the board still run."
+          control={
+            <>
+              <TimeInput
+                label="Quiet hours start"
+                value={engine.quietHours.start}
+                disabled={!engine.quietHours.enabled}
+                onSave={(start) => save({ quietHours: { start } })}
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <TimeInput
+                label="Quiet hours end"
+                value={engine.quietHours.end}
+                disabled={!engine.quietHours.enabled}
+                onSave={(end) => save({ quietHours: { end } })}
+              />
+              <Switch
+                aria-label="Quiet hours"
+                checked={engine.quietHours.enabled}
+                onCheckedChange={(enabled) => save({ quietHours: { enabled } })}
+              />
+            </>
+          }
+        />
+      </SettingsSection>
+      <SettingsSection
+        id="autopilot.limits.agent-defaults"
+        title="Defaults for agent runs"
+        headerAction={
+          <span className="text-xs text-muted-foreground">
+            Models: <SettingsLink to="agents.operations">Agents → Operations</SettingsLink>
+          </span>
+        }
+      >
+        <SettingsRow
+          id="autopilot.limits.runner"
+          title="Where agents run"
+          description="Where its runs start."
+          info="Auto: a T3 Code thread when T3 Code is connected, else a headless CLI in a worktree. Some runs are always headless, whatever this says: Review PRs, runs with no task (the digest, scheduled automations) and custom automations that give their agent extra tools."
+          control={
+            <OptionSelect
+              label="Where agents run"
+              options={RUNNER_OPTIONS}
+              value={engine.agentDefaults.runner}
+              onSave={(runner) => save({ agentDefaults: { runner } })}
+            />
+          }
+        />
+        <SettingsRow
+          id="autopilot.limits.budget"
+          title="Budget per headless run"
+          description="Claude Code only."
+          info="Codex and Copilot CLI runs have no spending cap and report no cost: only the timeout stops them."
+          control={
+            <LimitInput
+              label="Budget per headless run"
+              value={engine.agentDefaults.budgetUsd}
+              min={0.5}
+              max={100}
+              integer={false}
+              required
+              unit="USD"
+              onSave={(next) => {
+                if (next !== null) save({ agentDefaults: { budgetUsd: next } });
+              }}
+            />
+          }
+        />
+        <SettingsRow
+          id="autopilot.limits.timeout"
+          title="Timeout per headless run"
+          description="Stops a run after this long."
+          control={
+            <LimitInput
+              label="Timeout per headless run"
+              value={engine.agentDefaults.timeoutMinutes}
+              min={1}
+              max={1440}
+              integer
+              required
+              unit="minutes"
+              onSave={(next) => {
+                if (next !== null) save({ agentDefaults: { timeoutMinutes: next } });
+              }}
+            />
+          }
+        />
+        <SettingsRow
+          id="autopilot.limits.t3-access"
+          title="T3 Code access"
+          description="Never more than T3 Code's own default."
+          info="The most access a T3 Code thread that Autopilot starts gets."
+          control={
+            <OptionSelect
+              label="T3 Code access"
+              options={T3_ACCESS_OPTIONS}
+              value={engine.agentDefaults.t3Access}
+              onSave={(t3Access) => save({ agentDefaults: { t3Access } })}
+            />
+          }
+        />
+        <SettingsNote>Each automation can override these under its Advanced settings.</SettingsNote>
+      </SettingsSection>
+      <SettingsSection id="autopilot.limits.advanced" title="Advanced">
+        <SettingsRow
+          id="autopilot.limits.preview-everything"
+          title="Preview everything"
+          description="Every automation records what it would do, and does nothing."
+          info="Its runs are marked Preview. To try one new automation, set its own Mode to Preview instead: the others keep working. A custom automation's check script still runs for real, so it can tell what it would act on."
+          control={
             <Switch
-              aria-label="Quiet hours"
-              checked={engine.quietHours.enabled}
-              onCheckedChange={(enabled) => save({ quietHours: { enabled } })}
+              aria-label="Preview everything"
+              checked={engine.dryRun}
+              onCheckedChange={(next) => save({ dryRun: next })}
             />
-          </>
-        }
-      />
-      <SettingsRow
-        id="autopilot.engine.pr-review-rounds"
-        title="PR review rounds"
-        description="How many review rounds the PR review automation runs, and Fix PRs' attempts on its review and failing checks."
-        control={
-          <LimitInput
-            label="PR review rounds"
-            value={engine.prReviewRounds}
-            min={1}
-            max={10}
-            integer
-            required
-            unit="rounds"
-            onSave={(next) => save({ prReviewRounds: next ?? 3 })}
-          />
-        }
-      />
-      <SettingsRow
-        id="autopilot.engine.pr-comment-rounds"
-        title="PR comment rounds"
-        description="How many attempts Fix PRs makes on other people's review comments and requests for changes."
-        control={
-          <LimitInput
-            label="PR comment rounds"
-            value={engine.prCommentRounds}
-            min={1}
-            max={10}
-            integer
-            required
-            unit="rounds"
-            onSave={(next) => save({ prCommentRounds: next ?? 5 })}
-          />
-        }
-      />
-      <SettingsRow
-        id="autopilot.engine.pr-fix-threshold"
-        title="PR fix threshold"
-        description="The lowest severity the PR automations ask an agent to fix."
-        control={
-          <Select
-            items={FIX_THRESHOLDS}
-            value={engine.prFixThreshold}
-            onValueChange={(value) => {
-              if (value) save({ prFixThreshold: value });
-            }}
-          >
-            <SelectTrigger size="sm" className={SETTINGS_TEXT_WIDTH} aria-label="PR fix threshold">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectPopup>
-              {FIX_THRESHOLDS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectPopup>
-          </Select>
-        }
-      />
-      <SettingsRow
-        id="autopilot.engine.worktree-retention"
-        title="Worktree retention"
-        description="How long a finished headless run's worktree is kept while its PR is unmerged."
-        info="Worktrees with uncommitted changes are always kept."
-        control={
-          <LimitInput
-            label="Worktree retention"
-            value={engine.worktreeRetentionDays}
-            min={1}
-            max={365}
-            integer
-            required
-            unit="days"
-            onSave={(next) => save({ worktreeRetentionDays: next ?? 7 })}
-          />
-        }
-      />
+          }
+        />
+        <SettingsRow
+          id="autopilot.limits.worktree-retention"
+          title="Worktree retention"
+          description="How long a finished headless run's worktree is kept while its PR is unmerged."
+          info="Worktrees with uncommitted changes are always kept."
+          control={
+            <LimitInput
+              label="Worktree retention"
+              value={engine.worktreeRetentionDays}
+              min={1}
+              max={365}
+              integer
+              required
+              unit="days"
+              onSave={(next) => save({ worktreeRetentionDays: next ?? 7 })}
+            />
+          }
+        />
+      </SettingsSection>
+      <BoardVariablesSection />
     </>
   );
 }
@@ -293,5 +378,39 @@ function LimitInput({
         if (event.key === "Enter") event.currentTarget.blur();
       }}
     />
+  );
+}
+
+/** A select of fixed options, saved when one is picked. */
+function OptionSelect<V extends string>({
+  label,
+  options,
+  value,
+  onSave,
+}: {
+  label: string;
+  options: ReadonlyArray<{ value: V; label: string }>;
+  value: V;
+  onSave: (next: V) => void;
+}) {
+  return (
+    <Select
+      items={options}
+      value={value}
+      onValueChange={(next) => {
+        if (next !== null && next !== value) onSave(next);
+      }}
+    >
+      <SelectTrigger size="sm" className={SETTINGS_TEXT_WIDTH} aria-label={label}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectPopup>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectPopup>
+    </Select>
   );
 }

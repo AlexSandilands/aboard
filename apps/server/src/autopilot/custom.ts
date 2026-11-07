@@ -47,7 +47,7 @@ import { z } from "zod";
 import type { RepoUrls } from "../integrations/gitRemote.ts";
 import { messageOf } from "../integrations/util.ts";
 import { InterpreterMissingError, type RunScript } from "../integrations/scriptRunner.ts";
-import type { RunShell, ShellResult } from "../integrations/shellCommand.ts";
+import { SHELL_OUTPUT_TAIL, type RunShell, type ShellResult } from "../integrations/shellCommand.ts";
 import type { Services } from "../services/types.ts";
 import { ORCHESTRATE_BOARD_TOOLS, ORCHESTRATE_DENIED_BOARD_TOOLS } from "./automations/orchestrate.ts";
 import { AUTOPILOT_BACKGROUND_MAX } from "./engine.ts";
@@ -192,9 +192,8 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
   const { trigger, filters, action } = custom;
   const isAgent = action.kind === "agent";
 
-  const inFilter = (project: Project) => filters.projectIds.length === 0 || filters.projectIds.includes(project.id);
-  const inScope = (ctx: CheckContext<Record<string, unknown>>) =>
-    ctx.projects.filter(({ project }) => inFilter(project));
+  // Where it runs is its switches: the engine hands the check only the projects they reach.
+  const inScope = (ctx: CheckContext<Record<string, unknown>>) => ctx.projects;
 
   // The variables the action names: a project with no value for one of them gets no run.
   const named = variablesNamedBy(action);
@@ -202,8 +201,6 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
   const lacking = (project: Project): string[] => (named.length > 0 ? missingVariables(action, varsOf(project)) : []);
   const scopeOf = async (project: Project | null): Promise<CustomScope> =>
     project ? { vars: varsOf(project), repoUrl: await deps.repoUrl(project.workspaceRoot) } : {};
-
-  const matches = (task: TaskSummary) => customTaskMatches(filters, task);
 
   const preview = (values: CustomValues, task: TaskSummary | null, services: Services, handover?: string | null) => {
     if (action.kind === "shell") return describeShellRun(action.command, values);
@@ -231,12 +228,17 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
 
   /** Runs the check script and reads what it printed. Never throws: a failure is a state of its own. */
   const runCheck = async (project: Project, values: CustomValues): Promise<CheckState> => {
-    const failed = (what: string, error: string, ran?: { output: string; exitCode: number | null }): CheckState => ({
+    const failed = (
+      what: string,
+      error: string,
+      ran?: { output: string; stderr: string; exitCode: number | null },
+    ): CheckState => ({
       kind: "failed",
       failure: {
         summary: `The check of "${custom.name}" in ${project.title} ${what}`,
         error,
-        output: ran?.output || null,
+        // What it said went wrong is on stderr; the interleaved tail can be all items printed before it failed.
+        output: ran?.stderr.trim() ? ran.stderr.slice(-SHELL_OUTPUT_TAIL) : ran?.output || null,
         exitCode: ran?.exitCode ?? null,
       },
     });
@@ -288,6 +290,8 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
     previousStamp: string | null,
     /** The stamp of the slot `at` falls in, or null. */
     slotStampAt: (at: Date) => string | null,
+    /** Nothing runs for real in the project (Preview, or Preview everything): the script still does. */
+    dryRun: boolean,
   ): Candidate[] => {
     const { services, engine, now } = ctx;
     const runKey = `${custom.id}:${project.id}`;
@@ -306,9 +310,9 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
     if (!current) {
       // Its failure this slot is already recorded (the run's act forgot it, or a restart did): run again only once
       // that run is retried, which retires its key.
-      if (services.autopilot.hasRun(automationKey, failedKey(stamp), engine.dryRun)) return [];
+      if (services.autopilot.hasRun(automationKey, failedKey(stamp), dryRun)) return [];
       // No agent could start now, so the items would only wait: run the script once one can. A dry run starts none.
-      if (!engine.dryRun && agentHold(services, engine, now)) return [];
+      if (!dryRun && agentHold(services, engine, now)) return [];
       // Scripts aren't agent runs, so the agent caps don't bound them: this does, across automations and projects.
       const running = [...deps.checkRuns.values()].filter((r) => r.state.kind === "running").length;
       if (running >= AUTOPILOT_BACKGROUND_MAX) return [];
@@ -347,7 +351,7 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
     const printed = state.items.length + state.dropped;
     const fresh = state.items
       .map((item) => ({ item, dedupeKey: `check:${project.id}:${item.key}` }))
-      .filter(({ dedupeKey }) => !services.autopilot.hasRun(automationKey, dedupeKey, engine.dryRun))
+      .filter(({ dedupeKey }) => !services.autopilot.hasRun(automationKey, dedupeKey, dryRun))
       .slice(0, CHECK_NEW_ITEMS_MAX);
     return fresh.map(({ item, dedupeKey }): Candidate => {
       const data = { item } satisfies CustomData;
@@ -356,9 +360,9 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
         summary: `start an agent for ${item.key} in ${project.title}`,
         projectId: project.id,
         data,
-        ...(engine.dryRun
+        ...(dryRun
           ? {
-              preview: `The check script really ran (a dry run still runs it) and printed ${printed} item${printed === 1 ? "" : "s"}${
+              preview: `The check script really ran (Preview still runs it) and printed ${printed} item${printed === 1 ? "" : "s"}${
                 state.dropped > 0 ? `, of which ${state.dropped} past the limit were dropped` : ""
               }. This one's agent would start with:\n\n${preview(customValues(custom, project, null, data, scope), null, services)}`,
             }
@@ -371,10 +375,10 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
     if (blocked) return [];
     // A project missing a variable the action names gets no run; a dry run says so, once per project and names.
     const needs: Candidate[] = [];
-    const scoped = inScope(ctx).filter(({ project }) => {
+    const scoped = inScope(ctx).filter(({ project, dryRun }) => {
       const missing = lacking(project);
       if (missing.length === 0) return true;
-      if (ctx.engine.dryRun) {
+      if (dryRun) {
         const list = missing.map((name) => `\`${name}\``).join(", ");
         needs.push({
           dedupeKey: `needs:${project.id}:${missing.join(",")}`,
@@ -411,7 +415,7 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
               .map((r) => r.projectId)
           : [],
       );
-      return scoped.flatMap(({ project }): Candidate[] => {
+      return scoped.flatMap(({ project, dryRun }): Candidate[] => {
         const armedAt = customArmedAt(custom, { projectId: project.id });
         const slotAt = (at: Date) =>
           s.kind === "hourly"
@@ -435,6 +439,7 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
               const due = slotAt(at);
               return due ? localStamp(due) : null;
             },
+            dryRun,
           );
         }
         if (busy.has(project.id)) return [];
@@ -456,10 +461,20 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
     }
     // The same for every project, so read once per pass.
     const ownEpics = services.autopilot.epicsWithOwnSetting({ key: customAutomationKey(custom.id) });
-    return scoped.flatMap(({ project }) => {
+    const self = services.autopilot.automations().find((a) => a.key === customAutomationKey(custom.id));
+    return scoped.flatMap(({ project, dryRun }) => {
+      // Whether a task's run would be a dry run: its own epic's setting when it has one, else the project's (which may
+      // be in Preview while a live epic makes the project as a whole not dry).
+      const projectPreview =
+        ctx.engine.dryRun || (self ? services.autopilot.resolve(self, project.id).preview : dryRun);
+      const dryFor = (task: TaskSummary): boolean =>
+        ctx.engine.dryRun ||
+        (task.parent && ownEpics.has(task.parent.id) && self
+          ? services.autopilot.resolve(self, project.id, task.parent.id).preview
+          : projectPreview);
       const tasks = services.tasks.summaries({ projectId: project.id });
       const byId = new Map(tasks.map((t) => [t.id, t]));
-      const eligible = tasks.filter(matches);
+      const eligible = tasks.filter((task) => customTaskMatches(filters, task, ownEpics));
       const scopeChanged = services.customAutomations.scopeChangedAt([
         ...eligible.map((t) => t.id),
         ...new Set(eligible.flatMap((t) => (t.parent ? [t.parent.id] : []))),
@@ -491,13 +506,14 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
           services,
         ).map(({ key, data, what }): Candidate => {
           // Only build the preview (it reads the task's detail) for candidates the engine hasn't seen yet.
-          const fresh = !services.autopilot.hasRun(customAutomationKey(custom.id), key, ctx.engine.dryRun);
+          const dry = dryFor(task);
+          const fresh = !services.autopilot.hasRun(customAutomationKey(custom.id), key, dry);
           return {
             dedupeKey: key,
             summary: `${isAgent ? "start an agent on" : `run "${custom.name}" for`} #${task.number} (${what})`,
             taskId: task.id,
             data,
-            ...(fresh && ctx.engine.dryRun
+            ...(fresh && dry
               ? { preview: preview(customValues(custom, project, task, data, scopes.get(project.id)), task, services) }
               : {}),
           };
@@ -518,9 +534,7 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
     ...(named.length > 0
       ? {
           needs: (projects: readonly Project[]) =>
-            describeMissingVariables(
-              projects.filter(inFilter).map((project) => ({ project: project.title, names: lacking(project) })),
-            ),
+            describeMissingVariables(projects.map((project) => ({ project: project.title, names: lacking(project) }))),
         }
       : {}),
     schema: isAgent ? AgentConfig : z.object({}),
@@ -617,8 +631,10 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
           operation: "customTask",
           // The action's model is its author's choice, so a task label doesn't override it; the Model setting does.
           modelChoice: action.model,
-          options: ctx.config,
-          // Makes the run headless: a T3 thread can't be given extra tools. The push and merge deny rules still apply.
+          // Extra tools make the run headless: a T3 thread can't be given them. So it runs headless whatever the runner
+          // says, or a board default of T3 Code would fail every such automation. The push and merge deny rules still
+          // apply.
+          options: tools.length > 0 ? { ...ctx.config, runner: "headless" } : ctx.config,
           ...(tools.length > 0 ? { tools } : {}),
           ...(branch ? { workspace: { branch } } : {}),
         });

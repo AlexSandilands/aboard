@@ -4,6 +4,7 @@ import {
   AGENT_HARNESSES,
   AUTOPILOT_FIX_PRS,
   AUTOPILOT_REVIEW_PRS,
+  FindingSeverity,
   sessionLabel,
   BRAND,
   ReviewSkillRef,
@@ -56,15 +57,15 @@ export const ATTEMPTS_PER_HEAD = 2;
 /**
  * Conflict-only fix attempts on one PR before Autopilot gives up on its conflicts. Merging the base branch in says
  * nothing about the PR's own code, and every merge into the base can conflict it again, so these don't use up
- * `prReviewRounds`; this only guards against a merge that keeps failing.
+ * `attempts`; this only guards against a merge that keeps failing.
  */
 export const CONFLICT_ATTEMPTS_PER_PR = 5;
 
 /**
  * The attempt budgets of one PR. `conflicts`: attempts that only merge the base branch in (`CONFLICT_ATTEMPTS_PER_PR`).
- * `comments`: other people's review comments and requests for changes (`prCommentRounds`), so a colleague's review bot
+ * `comments`: other people's review comments and requests for changes (`commentAttempts`), so a colleague's review bot
  * can't use up the attempts Autopilot's own review loop needs, nor the other way round. `review`: Autopilot's review
- * and failing checks (`prReviewRounds`).
+ * and failing checks (`attempts`).
  */
 export type FixBudget = "conflicts" | "review" | "comments";
 
@@ -346,6 +347,12 @@ export function fixPrompt({
         lines.push(
           `- **${BRAND.name} Autopilot's review** (round ${review.round} of ${review.maxRounds}, ${review.reviewUrl}): ${review.actionable} point${review.actionable === 1 ? "" : "s"} at or above **${review.threshold}** to fix (${describeCounts(review.counts)}${review.fyi > 0 ? `, ${review.fyi} FYI` : ""}). Read it with ${read}. Fix only the points rated ${review.threshold} or above. Leave the ones below it and everything under "FYI (no action needed)" alone.`,
         );
+        if (review.openFrom) {
+          const from = review.openFrom;
+          lines.push(
+            `  That review only checked how merge conflicts were resolved. Most of the points to fix were raised in the earlier review ${from.reviewUrl} and are still open: read it with ${from.reviewId !== null ? `\`${hints.review(from.reviewId)}\` and \`${hints.reviewComments(from.reviewId)}\`` : "that link"}.`,
+          );
+        }
         break;
       }
     }
@@ -400,13 +407,20 @@ const ConfigSchema = z.object({
   resolveThreads: z.boolean(),
   /** The skill the agent follows on top of the fix prompt; the built-in entry is the prompt alone. */
   skill: ReviewSkillRef,
+  // These three were engine settings (prReviewRounds, prCommentRounds, prFixThreshold) before
+  // 044_autopilot_agent_defaults. Review PRs reads the threshold too (fixThresholdFor): it decides what a review asks
+  // to have fixed.
+  /** Attempts per PR on failing checks and Autopilot's review. */
+  attempts: z.number().int().min(1).max(10),
+  /** Attempts per PR on other people's review comments and requests for changes. */
+  commentAttempts: z.number().int().min(1).max(10),
+  /** The lowest finding severity of Autopilot's review that gets fixed. */
+  fixThreshold: FindingSeverity,
 });
 type Config = z.infer<typeof ConfigSchema>;
 
 const DEFAULTS: Config = {
   ...RUNNER_DEFAULTS,
-  budgetUsd: 3,
-  timeoutMinutes: 30,
   onChecks: true,
   onConflicts: true,
   onChangesRequested: true,
@@ -414,39 +428,91 @@ const DEFAULTS: Config = {
   onAutopilotReview: true,
   resolveThreads: true,
   skill: { source: "builtin" },
+  attempts: 3,
+  commentAttempts: 5,
+  fixThreshold: "major",
 };
 
 const FIELDS: AutopilotField[] = [
-  { key: "onChecks", label: "Failing checks", kind: "boolean", help: "Fix the PR when its checks fail." },
+  {
+    key: "onChecks",
+    label: "Failing checks",
+    kind: "boolean",
+    tier: "essential",
+    help: "Fix the PR when its checks fail.",
+  },
   {
     key: "onConflicts",
+    tier: "essential",
     label: "Merge conflicts",
     kind: "boolean",
-    help: "Merge the base branch in when the PR conflicts with it.",
+    help: "Merge the base branch in when it conflicts.",
   },
   {
     key: "onChangesRequested",
+    tier: "essential",
     label: "Changes requested",
     kind: "boolean",
-    help: "Address a review that requests changes.",
+    help: "Address reviews that request changes.",
   },
   {
     key: "onComments",
+    tier: "essential",
     label: "Review comments",
     kind: "boolean",
-    help: "Address new review comments from people with access to the repository. Your own don't count: Autopilot posts as you.",
+    help: "Address new comments from people with access.",
+    info: "New review comments from people with access to the repository. Your own don't count: Autopilot posts as you.",
   },
   {
     key: "onAutopilotReview",
+    tier: "essential",
     label: "Autopilot's review",
     kind: "boolean",
-    help: "Fix what Review PRs found at or above the fix threshold.",
+    help: "Fix findings at or above this severity.",
+    info: "The lowest severity of Review PRs' findings that gets fixed. Review PRs asks for fixes at or above it; on its last round, nothing below it gets fixed.",
+  },
+  {
+    key: "fixThreshold",
+    label: "Fix findings at or above",
+    kind: "select",
+    tier: "essential",
+    // Drawn in Autopilot's review's row, beside its switch: the two are one setting to the reader.
+    inRowOf: "onAutopilotReview",
+    options: [
+      { value: "blocking", label: "Blocking" },
+      { value: "major", label: "Major" },
+      { value: "minor", label: "Minor" },
+      { value: "nit", label: "Nit" },
+    ],
+  },
+  {
+    key: "attempts",
+    label: "Attempts on checks and reviews",
+    kind: "number",
+    tier: "essential",
+    min: 1,
+    max: 10,
+    unit: "attempts",
+    help: "Tries before it gives up on the PR.",
+    info: "Fixes of failing checks and Autopilot's review findings. Keep it at least Review PRs' rounds, or the last round's findings go unfixed.",
+  },
+  {
+    key: "commentAttempts",
+    label: "Attempts on comments",
+    kind: "number",
+    tier: "essential",
+    min: 1,
+    max: 10,
+    unit: "attempts",
+    help: "Counted apart from checks and reviews.",
+    info: "Fixes of people's review comments and requests for changes, counted apart so a review bot can't use up the others.",
   },
   {
     key: "resolveThreads",
     label: "Resolve threads it fixed",
     kind: "boolean",
-    help: "Resolve each review thread Autopilot replied it fixed, once that commit is on the PR, so a repository that requires conversations resolved can merge. Threads it declined stay open.",
+    help: "Once the fix is on the PR, so the PR can merge.",
+    info: "Resolves each review thread Autopilot replied it fixed, once that commit is on the PR, so a repository that requires conversations resolved can merge. Threads it declined stay open.",
   },
   {
     key: "skill",
@@ -486,10 +552,11 @@ export const fixPrs = defineAutomation({
   description:
     "Fixes linked pull requests when checks fail, they conflict, a reviewer asks for changes or comments, or Autopilot's review finds issues.",
   needsAgent: true,
+  group: "prs",
   schema: ConfigSchema,
   fields: FIELDS,
   defaults: DEFAULTS,
-  check: ({ services, engine, projects, now }) =>
+  check: ({ services, projects, now }) =>
     projects.flatMap(({ project, config }): Candidate[] =>
       services.tasks.summaries({ projectId: project.id }).flatMap((task): Candidate[] => {
         // An integration epic's own PR into the default branch is fixed too, for conflicts only: the epic stays open
@@ -540,8 +607,8 @@ export const fixPrs = defineAutomation({
             budget === "conflicts"
               ? CONFLICT_ATTEMPTS_PER_PR
               : budget === "comments"
-                ? engine.prCommentRounds
-                : engine.prReviewRounds;
+                ? config.commentAttempts
+                : config.attempts;
           const counted = used.filter((f) => attemptBudget(f.triggers) !== "conflicts");
           const atHead = counted.filter((f) => f.headOid === snapshot.headOid).length;
           const gaveUp = (dedupeKey: string, reason: string): Candidate => ({
@@ -676,7 +743,11 @@ export const fixPrs = defineAutomation({
       return { status: "skipped", summary: `PR #${data.number} is ${state}` };
     }
     if (headOid !== data.headOid) {
-      return { status: "skipped", summary: `PR #${data.number} moved on to ${shortSha(headOid ?? "")}` };
+      return {
+        status: "skipped",
+        deferred: "head_moved",
+        summary: `PR #${data.number} moved on to ${shortSha(headOid ?? "")}`,
+      };
     }
 
     const prompt = fixPrompt({
@@ -731,7 +802,11 @@ export const fixPrs = defineAutomation({
           ? null
           : await gitHosts.prHead({ host: data.host, repo: data.repo, number: data.number }).catch(() => null);
         if (error.moved || (live && live !== data.headOid)) {
-          return { status: "skipped", summary: `PR #${data.number} moved on before the fix started` };
+          return {
+            status: "skipped",
+            deferred: "head_moved",
+            summary: `PR #${data.number} moved on before the fix started`,
+          };
         }
       }
       throw error;

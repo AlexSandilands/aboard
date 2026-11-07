@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   AUTOPILOT_RECURRING,
+  automationTitleOf,
   customAutomationId,
   effectiveVariables,
   epicArmKey,
@@ -33,6 +34,7 @@ import { createPlans, type PlansModule } from "./plans.ts";
 import { createProjectsService } from "./projects.ts";
 import { createRelations, type RelationsModule } from "./relations.ts";
 import { createRecurringService } from "./recurring.ts";
+import { createRepoPrReviewsService } from "./repoPrReviews.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
 import { createSkillSyncService, type HarnessHomes } from "./skillSync.ts";
@@ -134,6 +136,7 @@ export function createServices(deps: ServiceDeps): Services {
     repoUrl,
     boardVariables,
     notifications,
+    builtIn: () => builtIn.map((a) => ({ key: a.key, title: a.title })),
   });
   // Outlives the catalogue entries, which are rebuilt on every call.
   const checkRuns = createCheckRuns();
@@ -186,6 +189,7 @@ export function createServices(deps: ServiceDeps): Services {
     notifications,
     social: createSocialService(core, { resolveTask: (ref) => tasks.service.resolveId(ref) }),
     attention,
+    repoPrReviews: createRepoPrReviewsService(core, { notifications }),
     autopilot: createAutopilotService(core, {
       automations,
       notifications,
@@ -204,6 +208,8 @@ export function createServices(deps: ServiceDeps): Services {
         const customId = customAutomationId(automation);
         if (customId) customAutomations.rearm(customId, epicIds.map(epicArmKey));
       },
+      plannedTasks: (projectIds) =>
+        projectIds.flatMap((projectId) => tasks.service.summaries({ projectId, status: "planned" })),
     }),
     recurring,
     customAutomations,
@@ -216,12 +222,12 @@ export function createServices(deps: ServiceDeps): Services {
     }),
     skillSync: createSkillSyncService(core, { userHome: deps.userHome, harnessHomes: deps.harnessHomes }),
     activity: createActivityService(core, {
-      automationTitle: (key) => automations().find((a) => a.key === key)?.title ?? key,
+      automationTitle: (key) => automationTitleOf(automations(), key),
     }),
     stats: createStatsService(core, { runGit: deps.runGit ?? defaultRunGit }),
     digests: createDigestsService(core, {
       notifications,
-      automationTitle: (key) => automations().find((a) => a.key === key)?.title ?? key,
+      automationTitle: (key) => automationTitleOf(automations(), key),
     }),
   };
 }

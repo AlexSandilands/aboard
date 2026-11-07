@@ -1,15 +1,22 @@
-import { AUTOPILOT_ALL_RUNS, AUTOPILOT_ORCHESTRATE } from "@repo/contracts";
+import { AUTOPILOT_ALL_RUNS } from "@repo/contracts";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { useSettingsNav } from "~/state/ui";
-import { editorListSection, parseSettingsTarget, providerOfTarget, type SettingsGroupId } from "./settingsNav.logic";
+import {
+  automationOfTarget,
+  autopilotTabOf,
+  editorListSection,
+  parseSettingsTarget,
+  providerOfTarget,
+  type SettingsGroupId,
+} from "./settingsNav.logic";
 
 /** History state for opening an editor sub-page from its list, so leaving it can step back instead. */
 export const FROM_SETTINGS_LIST = { settingsEditorFromList: true } as const;
 
 /**
  * Opens Settings at a target: a group (`"autopilot"`), a section (`"project.recurring"`) or a row
- * (`"autopilot.engine.quiet-hours"`). `project` picks the project page's project; a Providers target
+ * (`"autopilot.limits.quiet-hours"`). `project` picks the project page's project; a Providers target
  * (`"agents.providers.codex.cli-path"`) picks the provider. The anchor goes in the URL hash
  * and is scrolled to once it renders, which the router can't do for content still loading. `highlight` flashes it
  * once it is in view.
@@ -20,13 +27,41 @@ export function useOpenSettings() {
     (target = "board", options: { project?: string; replace?: boolean; highlight?: boolean } = {}) => {
       const parsed = parseSettingsTarget(target) ?? { group: "board" as const, anchor: null };
       useSettingsNav.getState().requestScroll(parsed.anchor ?? parsed.group, options.highlight);
+      // The Autopilot page's Runs and Limits tabs have paths of their own.
+      if (parsed.group === "autopilot" && autopilotTabOf(parsed.anchor) !== "automations") {
+        const hash = parsed.anchor ?? "";
+        if (autopilotTabOf(parsed.anchor) === "runs") {
+          void navigate({
+            to: "/settings/autopilot/runs/$automation",
+            params: { automation: AUTOPILOT_ALL_RUNS },
+            hash,
+            hashScrollIntoView: false,
+            replace: options.replace,
+          });
+        } else {
+          void navigate({
+            to: "/settings/autopilot/limits",
+            hash,
+            hashScrollIntoView: false,
+            replace: options.replace,
+          });
+        }
+        return;
+      }
+      const automation = automationOfTarget(parsed.anchor);
       // A provider's section or row selects that provider on the Providers page.
       const provider = providerOfTarget(parsed.anchor);
       void navigate({
         to: "/settings/$group",
         params: { group: parsed.group },
         search:
-          parsed.group === "project" && options.project ? { project: options.project } : provider ? { provider } : {},
+          parsed.group === "project" && options.project
+            ? { project: options.project }
+            : provider
+              ? { provider }
+              : automation
+                ? { automation }
+                : {},
         hash: parsed.anchor ?? "",
         hashScrollIntoView: false,
         replace: options.replace,
@@ -56,33 +91,6 @@ export function useLeaveEditor() {
     },
     [router, openSettings],
   );
-}
-
-/**
- * Leaves a run history page for the Autopilot settings, scrolled to where its link was: Orchestrate's area, the list of
- * automations, or the custom automations. Steps back in history when the page was opened from there (as
- * `useLeaveEditor`).
- */
-export function useLeaveRunHistory(automation: string) {
-  const router = useRouter();
-  const openSettings = useOpenSettings();
-  return useCallback(() => {
-    const section =
-      automation === AUTOPILOT_ORCHESTRATE
-        ? "autopilot.engine.orchestrate"
-        : automation === AUTOPILOT_ALL_RUNS
-          ? "autopilot.engine"
-          : "autopilot.custom";
-    if (router.state.location.state.settingsEditorFromList && router.history.canGoBack()) {
-      // A custom automation's history is opened from its editor, which is what Back returns to: nothing to scroll.
-      if (automation === AUTOPILOT_ORCHESTRATE || automation === AUTOPILOT_ALL_RUNS) {
-        useSettingsNav.getState().requestScroll(section);
-      }
-      router.history.back();
-      return;
-    }
-    openSettings(section);
-  }, [router, openSettings, automation]);
 }
 
 /** Back to the board, as it was when Settings opened. */

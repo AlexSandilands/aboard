@@ -1,9 +1,10 @@
 // Settings → Agents' one layout: a card with a list down the left and the selected item's settings on the right
 // (stacked on a narrow page). Providers and Models are both this card, so the page reads as one system however many
 // providers or models there are: each is a row in a list, never a column.
+import { ChevronLeftIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "~/lib/utils";
-import { SETTINGS_PICKER_WIDTH, SettingsGroup } from "../settingsLayout";
+import { InfoHover, SETTINGS_PICKER_WIDTH, SettingsGroup } from "../settingsLayout";
 
 /**
  * The look of a model picker as a settings control: the field border every other control in a row has, but wider
@@ -15,15 +16,51 @@ export const CONTROL_PICKER = cn(
   SETTINGS_PICKER_WIDTH,
 );
 
-export function SplitCard({ list, children }: { list: ReactNode; children: ReactNode }) {
+/**
+ * The card. Narrower than 48rem it stacks the list over the detail; with `detailOpen` set it shows one at a time
+ * instead, as a phone would: the list, or the detail once something is picked (the detail then needs a way back,
+ * `SplitBack`).
+ */
+export function SplitCard({
+  list,
+  children,
+  detailOpen,
+}: {
+  list: ReactNode;
+  children: ReactNode;
+  detailOpen?: boolean;
+}) {
+  const oneAtATime = detailOpen !== undefined;
   return (
     <div className="@container/split">
       <SettingsGroup className="overflow-hidden @min-[48rem]/split:grid @min-[48rem]/split:grid-cols-[16rem_minmax(0,1fr)] [&>*+*]:border-t-0">
-        <div className="border-b border-border/60 bg-muted/10 @min-[48rem]/split:border-r @min-[48rem]/split:border-b-0">
+        <div
+          className={cn(
+            "border-b border-border/60 bg-muted/10 @min-[48rem]/split:border-r @min-[48rem]/split:border-b-0",
+            oneAtATime && "border-b-0",
+            oneAtATime && detailOpen && "hidden @min-[48rem]/split:block",
+          )}
+        >
           {list}
         </div>
-        <div className="min-w-0">{children}</div>
+        <div className={cn("min-w-0", oneAtATime && !detailOpen && "hidden @min-[48rem]/split:block")}>{children}</div>
       </SettingsGroup>
+    </div>
+  );
+}
+
+/** The detail's way back to the list when the card shows one at a time; hidden once both fit side by side. */
+export function SplitBack({ label, onBack }: { label: string; onBack: () => void }) {
+  return (
+    <div className="px-3 @min-[48rem]/split:hidden sm:px-4">
+      <button
+        type="button"
+        className="-ms-1 inline-flex h-7 cursor-pointer items-center gap-1 rounded-md px-1 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={onBack}
+      >
+        <ChevronLeftIcon aria-hidden className="size-3.5" />
+        {label}
+      </button>
     </div>
   );
 }
@@ -61,15 +98,18 @@ export function SplitListItem({
   selected,
   onSelect,
   trailing,
+  dimmed = false,
 }: {
   id?: string;
   icon: ReactNode;
   title: string;
   badge?: ReactNode;
-  subtitle?: string | null;
+  subtitle?: ReactNode;
   selected: boolean;
   onSelect: () => void;
   trailing?: ReactNode;
+  /** Switched off: its mark and name fade, as a switched-off provider's do, and its switch stays as it is. */
+  dimmed?: boolean;
 }) {
   return (
     <div
@@ -86,9 +126,9 @@ export function SplitListItem({
         className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 py-3 ps-3 text-left outline-none focus-visible:bg-muted/25 sm:ps-4"
         onClick={onSelect}
       >
-        {icon}
+        <span className={cn("flex shrink-0", dimmed && "opacity-50")}>{icon}</span>
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2 text-sm text-foreground">
+          <span className={cn("flex items-center gap-2 text-sm", dimmed ? "text-muted-foreground" : "text-foreground")}>
             <span className="truncate">{title}</span>
             {badge}
           </span>
@@ -157,10 +197,26 @@ export function DetailHeader({
 }
 
 /** One titled part of the detail: a muted heading over a card of rows, inset like the list beside it. */
-export function DetailSection({ title, children }: { title: string; children: ReactNode }) {
+export function DetailSection({
+  title,
+  info,
+  children,
+}: {
+  title: string;
+  /** What the section is about, behind an info button beside its heading, so the heading needs no paragraph. */
+  info?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <section className="space-y-2 px-3 sm:px-4">
-      <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</h3>
+      <h3 className="flex items-center gap-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        {title}
+        {info ? (
+          <span className="normal-case tracking-normal">
+            <InfoHover label={`More about ${title}`}>{info}</InfoHover>
+          </span>
+        ) : null}
+      </h3>
       <SettingsGroup>{children}</SettingsGroup>
     </section>
   );

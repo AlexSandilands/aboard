@@ -91,8 +91,10 @@ export const AutomationBundle = z
     /** What it does, for the person importing it. */
     description: z.string().trim().max(1_000).default(""),
     trigger: CustomTrigger,
-    /** Only what travels: the projects and the epic are the sharer's. */
-    filters: z.object({ labels: z.array(z.string().trim().min(1)).default([]) }).default({ labels: [] }),
+    /** Only what travels: where it runs (projects, epics) is the sharer's. */
+    filters: z
+      .object({ labels: z.array(z.string().trim().min(1)).default([]), epicTasks: z.boolean().default(true) })
+      .default({ labels: [], epicTasks: true }),
     /** The action's own `inputs` (and an agent's `slots`) are ignored: they are declared next to it. */
     action: CustomAction,
     inputs: z.array(AutomationInputDecl).max(CUSTOM_INPUTS_MAX).default([]),
@@ -171,7 +173,7 @@ export function automationBundle(
     name: def.name,
     description: "",
     trigger: def.trigger,
-    filters: { labels: def.filters.labels },
+    filters: { labels: def.filters.labels, epicTasks: def.filters.epicTasks },
     // Variables aren't in the file: their values are the sharer's, and the importer's board says which it needs.
     action: action.kind === "agent" ? { ...action, inputs: [], slots: [] } : { ...action, inputs: [] },
     inputs: action.inputs.map(({ name, label, type, value }) => ({ name, label, type, default: value })),
@@ -191,7 +193,7 @@ export interface BundleFill {
   inputs?: Record<string, string>;
   /** The tools filling each slot by name; a slot left out stays empty. */
   slots?: Record<string, readonly string[]>;
-  /** The projects to restrict it to; none is every project it is switched on in. */
+  /** Only in these projects, or everywhere when none (CreateCustomAutomationInput.projectIds). */
   projectIds?: readonly string[];
   /**
    * The skill the action ends up naming. Leave it out to keep what the file says, except that a file with a skill of
@@ -210,7 +212,8 @@ export function bundleToDefinition(bundle: AutomationBundle, fill: BundleFill = 
   return {
     name: bundle.name,
     trigger: bundle.trigger,
-    filters: { projectIds: [...(fill.projectIds ?? [])], labels: bundle.filters.labels, epicId: null },
+    filters: { labels: bundle.filters.labels, epicTasks: bundle.filters.epicTasks },
+    projectIds: [...(fill.projectIds ?? [])],
     action:
       action.kind === "agent"
         ? {
@@ -229,6 +232,7 @@ export const ImportAutomationInput = z.object({
   bundle: z.unknown(),
   inputs: z.record(z.string(), z.string()).default({}),
   slots: z.record(z.string(), z.array(z.string())).default({}),
+  /** Only in these projects (in Preview), or everywhere when empty: its switches, like a new automation's. */
   projectIds: z.array(z.string().min(1)).default([]),
   /** Write the file's skill into the user's skills. Only after they've seen it. */
   installSkill: z.boolean().default(false),

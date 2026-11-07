@@ -26,7 +26,7 @@ const withCheck = (agent: CustomAction, check: unknown): CustomAction => Object.
 const definition = (): CustomDefinition => ({
   name: "Triage",
   trigger: CustomTrigger.parse({ kind: "status_change", to: "review" }),
-  filters: { projectIds: ["p1"], labels: ["bug"], epicId: "e1" },
+  filters: { labels: ["bug"], epicTasks: false },
   action: CustomAction.parse({
     kind: "agent",
     prompt: "Run {{inputs.jql}}",
@@ -38,19 +38,17 @@ const definition = (): CustomDefinition => ({
 });
 
 describe("automation bundles", () => {
-  it("leaves out the sharer's projects, epic and slot tools, and keeps input values as defaults", () => {
+  it("leaves out the sharer's slot tools, and keeps input values as defaults and the filters", () => {
     const bundle = automationBundle(definition(), { name: "triage", body: "---\nname: triage\n---\nDo it" });
     expect(bundle).toMatchObject({
       format: AUTOMATION_BUNDLE_FORMAT,
       version: PLAIN_BUNDLE_VERSION,
-      filters: { labels: ["bug"] },
+      filters: { labels: ["bug"], epicTasks: false },
       inputs: [{ name: "jql", default: "type = Bug" }],
       slots: [{ name: "jira", label: "Jira tools", description: "search" }],
       skill: { name: "triage" },
     });
     const json = JSON.stringify(bundle);
-    expect(json).not.toContain("p1");
-    expect(json).not.toContain("e1");
     expect(json).not.toContain("search_jira");
     expect(bundle.action).toMatchObject({ kind: "agent", allowedTools: ["WebFetch"], inputs: [], slots: [] });
   });
@@ -65,7 +63,8 @@ describe("automation bundles", () => {
     });
     const def = CreateCustomAutomationInput.parse(input);
     expect(checkCustomDefinition(def)).toBeNull();
-    expect(def.filters).toEqual({ projectIds: ["p2"], labels: ["bug"], epicId: null });
+    expect(def.filters).toEqual({ labels: ["bug"], epicTasks: false });
+    expect(def.projectIds).toEqual(["p2"]);
     expect(def.action).toMatchObject({
       inputs: [{ name: "jql", value: "project = X", default: "type = Bug" }],
       slots: [{ name: "jira", tools: ["mcp__atlassian__search"] }],

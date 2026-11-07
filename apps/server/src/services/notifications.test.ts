@@ -583,8 +583,16 @@ describe("defaults", () => {
     const h = setup();
     const s = h.s;
     const fresh = createTestHarness().services.settings.get().notifications.kinds;
-    expect(fresh).toMatchObject({ autopilot_notice: false, autopilot_failed: true, review_finished: true });
-    expect(Object.values({ ...fresh, autopilot_notice: true }).every(Boolean)).toBe(true);
+    expect(fresh).toMatchObject({
+      autopilot_notice: false,
+      // News, not something that needs the user.
+      task_unblocked: false,
+      autopilot_failed: true,
+      review_finished: true,
+      thread_waited: true,
+      task_quiet: true,
+    });
+    expect(Object.values({ ...fresh, autopilot_notice: true, task_unblocked: true }).every(Boolean)).toBe(true);
 
     // Saving one switch stores only that one, so the other kinds keep following the defaults.
     s.settings.update({ notifications: { kinds: { suggestion: false } } });

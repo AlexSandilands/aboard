@@ -26,6 +26,11 @@ export const DraftAutomationInput = z.object({
   automation: z.record(z.string(), z.unknown()),
   /** What it is for and anything the user should check, shown above it on the import page. */
   note: z.string().trim().max(AUTOMATION_DRAFT_NOTE_MAX).default(""),
+  /**
+   * The custom automation this is a new version of: its id, its key (`custom:<id>`) or its name. Applying the draft
+   * then changes that automation in place, keeping its id, switches and run history.
+   */
+  replaces: z.string().trim().min(1).optional(),
 });
 export type DraftAutomationInput = z.input<typeof DraftAutomationInput>;
 
@@ -34,11 +39,26 @@ export interface AutomationDraft {
   id: string;
   bundle: AutomationBundle;
   note: string;
+  /** The id of the custom automation it proposes a new version of, or null for a new automation. */
+  replaces: string | null;
   /** The actor that drafted it, e.g. `claude-code`. */
   createdBy: string;
   createdAt: string;
   expiresAt: string;
 }
+
+/** What applying a draft that replaces an automation sends: what the reader filled in for what is new in it. */
+export const ApplyAutomationDraftInput = z.object({
+  /** Values for inputs; one left out keeps the automation's current value, or a new input's default. */
+  inputs: z.record(z.string(), z.string()).default({}),
+  /** Tools for slots; one left out keeps the automation's current tools for a slot of that name. */
+  slots: z.record(z.string(), z.array(z.string())).default({}),
+  /** Write the draft's skill into the user's skills. Only after they've seen it. */
+  installSkill: z.boolean().default(false),
+  /** The reader has read the changed scripts and agrees they run on their machine. Required when a script changed. */
+  confirmScript: z.boolean().default(false),
+});
+export type ApplyAutomationDraftInput = z.input<typeof ApplyAutomationDraftInput>;
 
 /** Where the user reviews and imports a draft, relative to the board's URL. */
 export const automationDraftPath = (id: string): string =>

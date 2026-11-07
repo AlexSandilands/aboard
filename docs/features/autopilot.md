@@ -1,7 +1,7 @@
 # Autopilot
 
-Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), #90 (digest), #94 (start planned tasks), #95
-(PR review), #97 (custom automations), in epic #101; #123 (Merge into epic branch); #135 (sharing custom automations); #241 (agents' drafts).
+Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks, now reminders), #90 (digest), #94 (start planned tasks), #95
+(PR review), #21 (other people's PRs), #97 (custom automations), in epic #101; #123 (Merge into epic branch), #127 (Merge ready PRs); #135 (sharing custom automations); #241 (agents' drafts).
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per epic, per project or
 for the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
@@ -15,13 +15,14 @@ settings UI. The digest's header button and panel are in [board-layout.md](board
 
 ### Switches and scopes
 
-Each automation has a mode at each scope: **Inherit**, **On** or **Off**. The most specific scope that isn't
-Inherit wins: epic over project over board. With nothing set anywhere, an automation is off.
+Each automation has a mode at each scope: **Inherit**, **Off**, **Preview** or **On**. The most specific scope that
+isn't Inherit wins: epic over project over board. With nothing set anywhere, an automation is off. [Preview](#preview)
+is on, but every run it makes is a dry run.
 
 The board is the top scope, so Inherit there would only fall back to that default, which is the same as Off. The
-board's switch therefore offers **On** and **Off** only (`BOARD_MODES`); no row reads as Off, and picking Off saves
-`inherit`, which drops the row unless it still holds config. The server still accepts all three modes at every
-scope, so the API and old rows are unchanged. Projects and epics keep Inherit / On / Off.
+board's switch therefore offers **Off**, **Preview** and **On** only (`BOARD_MODES`); no row reads as Off, and picking
+Off saves `inherit`, which drops the row unless it still holds config or a last on-mode. The server accepts every mode
+at every scope. Projects and epics offer Inherit / Off / Preview / On.
 
 | Board | Project | Epic    | Effective      |
 | ----- | ------- | ------- | -------------- |
@@ -31,6 +32,23 @@ scope, so the API and old rows are unchanged. Projects and epics keep Inherit / 
 | Off   | On      | Inherit | On (project)   |
 | Off   | Off     | On      | On (epic)      |
 | On    | On      | Off     | Off (epic)     |
+| On    | Preview | Inherit | Preview (project) |
+| Preview | Inherit | On    | On (epic)      |
+
+**Where it runs** is the same rows read as one sentence. `describeWhere` (`packages/contracts/src/autopilotWhere.ts`)
+turns an automation's modes at every scope into a reach and its exceptions: **Everywhere** is the board On;
+**Only in…** is the board off with some projects On; **nowhere** is neither. An exception is a project or epic whose own
+setting differs from what it would follow: a project Off under Everywhere, an epic set against its project (an epic
+set the same as its project is not one). "On everywhere except payments-api; epic #5 Off" is the sentence for the
+board On, payments-api Off and epic #5 Off. Everywhere also drops the rows Only in… left (a project set On, an epic set the same as its project), so a later Switch off of the board really is off. Nothing is stored for it: the edits (`whereEverywhere`, `whereOnlyIn`,
+`whereProject`, `whereEpic`, `whereAddException`, `whereRemoveException`) return the plain `PUT` writes (a scope and a
+mode), and a toggle that gives what the scope above already gives saves Inherit rather than an override
+(`modeToBe`), so a project that is switched on and off again leaves no row. Each write is its own request and the
+server acts on each, so the order is part of the contract: Only in… turns the picked projects On before the board goes
+off (nothing that stays on is ever off on the way, which would drop a Run now request or restart a schedule), and
+Everywhere turns the board on first. `useApplyWhere` sends them in order and the event stream holds back the switches'
+refetch until the last is in (`WHERE_MUTATION_KEY`). The tests run every board × project × epic
+combination against `resolveAutopilot`.
 
 An epic's setting covers only the tasks in it (`parent_id`). A task with no epic skips that level, and so does a
 task whose epic is archived: an archived epic no longer counts (unarchive it and its rows apply again). The epic
@@ -45,9 +63,10 @@ epic button's state ignores it, the epic's scope entries don't list it, `PUT` of
 `projectsWithEpicOn` skip the epic level).
 
 Each automation also has config (a skill, a budget, a number of days). Config keys merge the same way, board
-first, then project, then epic, over the automation's defaults, whatever the modes: a project can tune an
+first, then project, then epic, over the automation's defaults (with the board's [agent defaults](#agent-defaults)
+laid over them), whatever the modes: a project can tune an
 automation the board switches on, and an epic can tune one for its tasks. `resolveAutopilot` in `packages/contracts/src/autopilot.ts` is the rule, and
-`describeInherited` gives the UI its "Inherit (On from board)" label.
+`describeInherited` gives the UI its "Inherit (On from board)" (or "Preview from board") label.
 
 Rows live in `autopilot_settings`, keyed by scope and automation. The board scope has an empty `scope_id`. The
 service reads or sets an epic scope only for an epic in the project it is given (`NOT_FOUND` otherwise: another
@@ -61,6 +80,45 @@ drops every candidate whose task doesn't resolve to on, using the task's own epi
 config, while `act` gets the task's effective config, epic keys included; a config key that changes what a `check`
 finds can't be tuned per epic.
 
+### Preview
+
+Preview is a per-automation dry run: try one new automation while the others keep working. `resolveAutopilot` counts
+`preview` as enabled and sets `preview`, so the check runs where it would, and the engine records each candidate whose
+task (or project, or the board for a task-less one) resolves to Preview as a dry run: a `skipped` run with "Would …"
+as its summary, exactly as under [Preview everything](#engine-settings-and-pause) (`engine.dryRun`), which still
+previews every automation at once.
+
+- **What still runs.** Nothing the action would do: no agent, no shell command or script action, no change to the
+  board or GitHub. A custom automation's **check script** is the exception: it runs for real, to find what it would act
+  on, so its preview can say what it printed. The UI says so wherever an automation has one.
+- **Per scope.** A project, or an epic, can be in Preview while the rest is On, and the other way round. A check is
+  handed `ProjectScope.dryRun` per project (true when no scope reaching the project is live: neither the project's own
+  resolution nor an epic of it switched On) and `engine.dryRun` set when nothing of the automation is live anywhere, so
+  checks that read the dry-run flag (dedupe of custom checks, Orchestrate's slots, Start planned's room) read the right
+  one. The engine still decides each candidate by its own task's scopes.
+- **Turning it on.** Going from Preview to On counts as switching it on (`onEnabled`, `onEpicEnabled`): a custom
+  automation re-arms and Recurring tasks restarts, so On acts on what happens from then, not on what Preview saw. Dry
+  runs are deduped apart from real ones, so the Preview runs stay as history.
+- **Start planned's room.** Its check resolves each task as the engine will: a task that resolves Off (outside an epic
+  that is on, in a project that is off) is left out, and one in Preview is handed over outside the slots, since the
+  engine only records it. Neither can take the room a live task needs.
+- **A custom automation's preview text** is built per task: its epic's mode when the epic has its own setting, else
+  its project's, so a task in a Preview epic of a live project still gets "what it would run".
+- **Elsewhere.** The merge gate counts Review PRs in Preview (or under Preview everything) as on, so a merge still
+  waits for its review: that review doesn't come until it is turned on, which holds merges back rather than letting a
+  PR through unreviewed. A Recurring section in Preview says no task is made.
+- **New automations save in Preview.** Creating, importing or importing a draft writes a board row in Preview
+  (`customAutomations` insert), with `last_on_mode` Preview.
+- **The last on-mode.** `autopilot_settings.last_on_mode` (migration 043, which also widens the mode CHECK) keeps the
+  last of On or Preview a scope was set to, through Off and Inherit; the row stays while it holds one. Such a row, at
+  Inherit with no config, isn't an epic's own setting (`epicsWithOwnSetting`), so the epic still follows its project. Scope entries
+  carry it as `lastOnMode`, with `preview`. The list's switch turns an automation back on in it, or, with none, in
+  Preview for one that has never made a real run and On for one that has (`restoreMode`). The lane and epic popovers'
+  switches turn on in it, or On.
+- **How often it would have run.** `overview.previewRuns` counts each automation's dry runs over the last 7 days
+  (`PREVIEW_WINDOW_MS`, `autopilotRuns.dryRunCountsSince`), for the detail's "Would have run N times this week" notice
+  and its **Turn on**.
+
 ### Engine settings and pause
 
 Engine-wide settings are one `autopilotEngine` key in the `settings` table, and Pause all is
@@ -72,14 +130,35 @@ Engine-wide settings are one `autopilotEngine` key in the `settings` table, and 
 | `dailyRunCap`          | none            | Agent runs started per local day                                    |
 | `dailySpendCapUsd`     | none            | What agent runs created today may cost before no more start          |
 | `quietHours`           | off, 22:00–07:00 | No agent runs start in the window (local time; may wrap midnight; equal ends are no window) |
-| `dryRun`               | off             | Record what would run, and do nothing                                |
-| `prReviewRounds`       | 3               | Rounds the PR review automation runs per PR, and Fix PRs' attempts on its review and failing checks |
-| `prCommentRounds`      | 5               | Fix PRs' attempts per PR on other people's review comments and requests for changes |
-| `prFixThreshold`       | major           | The lowest finding severity the PR automations ask an agent to fix   |
+| `dryRun`               | off             | Preview everything: every automation records what would run, and does nothing |
 | `worktreeRetentionDays` | 7              | Days a finished headless run's worktree is kept when its PR hasn't merged |
+| `agentDefaults`        | auto, $5, 60 min, T3's default | What agent automations run with unless they override it ([below](#agent-defaults)) |
 
 Quiet hours and the caps only hold back automations with `needsAgent`; board-only actions (archiving a card)
-go ahead. **Pause all** stops every new run; runs already going finish. Backups carry the engine settings but not
+go ahead.
+
+#### Agent defaults
+
+`agentDefaults` (`AutopilotAgentDefaults` in contracts) is the runner, budget, timeout and T3 access every agent
+automation runs with: Settings → Autopilot → Limits & safety → Defaults for agent runs. An automation's config only
+overrides it. The service lays it over the automation's own defaults (`agentDefaultsFor` in
+`autopilot/runnerOptions.ts`, used by `resolve`, the scope entries and the overview's `defaults`), key by key, for
+the keys the automation has a default for and whose value its schema accepts: Orchestrate has no runner or T3 access,
+and Review PRs, which takes only Auto or Headless, keeps its own runner when the board's is T3 Code. So a key comes
+from the most specific scope that sets it, else the board's agent default, else the automation's built-in default
+(`readRunnerOptions(config, board)` falls back the same way). The model isn't one of them: each kind of run has its
+model in Agents → Operations ([Models](#models)), and an automation's Model field defaults to Inherit. A run with no
+task (the digest, a scheduled custom automation) and a custom agent given extra tools are always headless, whatever
+the board's runner, so a board default of T3 Code can't make them fail.
+
+Review rounds, comment rounds and the fix threshold were engine settings (`prReviewRounds`, `prCommentRounds`,
+`prFixThreshold`) until `044_autopilot_agent_defaults`, a code migration, moved them into
+Review PRs (`rounds`) and Fix PRs (`attempts`, `commentAttempts`, `fixThreshold`; see [Automations](#automations)): a value
+the user had changed goes into those automations' board-scope config (unless that scope sets the key already), and
+the engine keys are dropped. Review PRs, Fix PRs, Orchestrate and the digest had budgets and timeouts of their own
+below the old shared defaults ($2/20 min, $3/30, $3/30, $1/15); the migration writes them into the board-scope config of
+each one that has any setting row, so nothing that ran changes, and the user sees them as overrides. One never touched
+was never on, and takes the board's defaults. **Pause all** stops every new run; runs already going finish. Backups carry the engine settings but not
 the pause, so a restore never lifts it.
 
 ### A pass
@@ -95,7 +174,8 @@ so they need no hook of their own. Events published while the engine itself writ
    task.
 4. Drops candidates outside the scopes it's on in (per task: its epic, then its project), and candidates whose
    dedupe key already has a run.
-5. In dry-run, records a `skipped` run with "Would …" as its summary and moves on.
+5. Under Preview everything, or where the candidate resolves to Preview, records a `skipped` run with "Would …" as its
+   summary and moves on.
 6. For agent automations, holds the candidate in quiet hours, at the concurrency cap or at a daily cap. Held
    candidates aren't recorded, so a later pass picks them up. A candidate with `startsNoAgent` (Fix PRs giving up)
    isn't held: it starts no agent, so the caps and quiet hours don't apply to it, and it counts toward neither the daily run cap nor the concurrency count.
@@ -115,7 +195,7 @@ it, since retrying would redo nothing yet drop it from the rounds and attempts. 
 `canRetryRun` in contracts) and its attention flag is lifted, and the task logs an `autopilot_run` entry with status
 `retried` under the caller. The old key is free, so the next pass acts on it again if `check` still finds the work,
 under the switches, pause, quiet hours and caps as usual: retrying lifts no limit, which is why agents may call it.
-Automations that count runs by key (Review PRs' rounds, Fix PRs' attempts, Merge into epic branch's tries) no longer
+Automations that count runs by key (Review PRs' rounds, Fix PRs' attempts, Merge ready PRs' tries) no longer
 count the retried one. This replaces pushing an empty commit to get a new head reviewed after a board restart failed
 the review. Dry-run runs are deduped
 apart from real ones (the unique key is automation, dedupe key and `dry_run`), so turning dry-run off doesn't
@@ -127,8 +207,15 @@ hide work it only previewed.
 `runner`, `session_id`, `thread_url`, `worktree_path` and `cost_usd`. An action can leave a structured result in
 `output_json` (`ActionResult.output`, `AutopilotRun.output`) for a later automation to read; Review PRs leaves its
 verdict there. A custom automation's shell or script action fills in `exit_code` and `detail` (the output's tail); a dry run
-of a custom automation keeps in `detail` what it would have run (`Candidate.preview`). Runs are history, so backups
+of a custom automation keeps in `detail` what it would have run (`Candidate.preview`). The UI labels a dry run
+**Preview**. Runs are history, so backups
 leave them out.
+
+- **Deferred runs.** A skipped run whose work comes again later says why in `deferred` (migration 045,
+  `AutopilotRunDeferral`, `ActionResult.deferred`). Today that is only `head_moved`: Review PRs, Fix PRs and Merge into
+  epic branch stopped because the PR's head moved before or while they ran, so the new head is acted on next. The UI
+  shows these as **Deferred: head moved** (`runStatusLabel`, a warning badge), not as a plain skip, and the history's
+  outcome filter has them apart. The status stays `skipped`, so dedupe keys, rounds and attempts read them as before.
 
 - A task's runs log `autopilot_run` activity under the actor `autopilot`: when it starts, when it ends, and
   once for a dry-run preview.
@@ -156,8 +243,24 @@ leave them out.
 ### Run history
 
 The Run history page (`/settings/autopilot/runs/$automation`, `RunHistory`) lists every run of one automation, newest
-first, or of all of them with `all`. Orchestrate's area, a custom automation's editor and the Automations heading link to
-it. It is for reading what scheduled agents did, since their runs have no task panel, and for clearing out old runs.
+first, or of all of them with `all`: the Runs tab of Settings → Autopilot. An automation's detail and a custom
+automation's editor link to its own. It is for reading what scheduled agents did, since their runs have no task panel, and for clearing out old runs.
+
+- **Plain names.** Every run shows its automation's name, never its key: `automationTitleOf` (contracts,
+  `autopilotRunHistory.ts`) takes the catalogue's title, then `RETIRED_AUTOMATION_TITLES` for automations the board
+  no longer has (`unstick`, `unblock_dependents`, `fix_pr_findings`), "Removed custom automation" for a deleted custom
+  one, and otherwise the key made readable. The server's titles (activity, digests, Needs you, notifications) and the
+  Stats page's table use it too.
+- **A row** shows its status, automation, project and task, the error or summary, cost and age. What you can _do_ with
+  it sits in its header, right of cost and age, whether it is open or closed: **↻ Retry** when `canRetryRun` allows it
+  (judged against the loaded runs, so a superseded run offers none) and, on a failure, **Ask an agent ▾** (`AskToFix`,
+  the hand-off menu described under [Ask an agent](#ask-an-agent) below), so a failed run can be handled without
+  opening it. Clicking it opens what the run kept: its summary under an error, the output (**Error output** on a
+  failure), a scheduled agent's handover, and a details list of cost, model, runner, times and run id. What it can
+  _open_ is a link in that list: **Thread** ("Open in T3 Code ↗" for a T3 deep link, "Open thread ↗" for a web URL)
+  and **Session** ("Open session ↗", which opens the session in a terminal as the task panel does when it is linked
+  on the run's task (`runSessionLink`), then the short id, the whole one in its tooltip). The task panel's Autopilot
+  section places them the same way: Retry on the run's first line, the thread and session links on the line under it.
 
 - **The list.** `GET /api/autopilot/runs/history` (`ListAutopilotRunsQuery`, `AutopilotRunPage` in
   `packages/contracts/src/autopilotRunHistory.ts`) takes `automation` (a key or `all`) and optionally `projectId`,
@@ -171,11 +274,16 @@ it. It is for reading what scheduled agents did, since their runs have no task p
   (`automation`, `created_at`, `id`). The page uses an infinite query (`useAutopilotRunHistory`) loading the next page
   as the end of the list comes into view. `autopilot.changed` refetches it, and a refetch takes each cursor from the page
   before it, so a new run moves the pages along instead of dropping a run between two.
-- **Filters in the URL.** Search params `project`, `range` (`24h`, `7d`, `30d` or `custom`), `since` and `until`
-  (local calendar days, both included, only with `custom`) and `q` (`RunHistorySearch`, `runHistoryFilter` in
-  `runHistory.logic.ts`), so a filtered page can be linked to. A preset counts from when it was chosen.
-- **Deleting, by hand only.** Nothing deletes runs by itself: there is no retention setting and no sweep. The page
-  can delete the ticked runs, or every run the filters match (**Delete all matching…**, which with no filter is the
+- **Filters in the URL.** The automation is the path's `$automation` (the page's Automation select navigates, keeping
+  the rest; retired automations are listed too). Search params `project`, `range` (`24h`, `7d`, `30d` or `custom`),
+  `since` and `until` (local calendar days, both included, only with `custom`), `outcome` and `q` (`RunHistorySearch`,
+  `runHistoryFilter` in `runHistory.logic.ts`), so a filtered page can be linked to. A preset counts from when it was
+  chosen. `outcome` (`AutopilotRunOutcome`, the chips under the filters) is `failed`, `succeeded`, `deferred` (skipped
+  with a deferral), `skipped` (the other real skips), `preview` (dry run) or `active` (queued or running); the list's
+  `outcome` query param filters the same way (`OUTCOME_CLAUSE` in the runs repo).
+- **Deleting, by hand only.** Nothing deletes runs by itself: there is no retention setting and no sweep. Deleting
+  sits under **Clean up…** below the list, out of the way: **Select runs to delete** shows a checkbox per run and a bar
+  with **Delete selected**, and **Delete all matching…** deletes every run the filters match (**Delete all matching…**, which with no filter is the
   automation's whole history, so with a time range it clears, say, everything before a date).
   `POST /api/autopilot/runs/delete` takes `{ ids }` (at most 500, `RUN_DELETE_IDS_MAX`; the page stops ticking there) or `{ filter }` (the same filter as the list, without paging) and
   `preview`. A preview counts and deletes nothing, which is what the confirm dialog shows before it asks; a real delete
@@ -185,11 +293,56 @@ it. It is for reading what scheduled agents did, since their runs have no task p
 - **What is always kept.** Runs are more than history: the engine reads them. A delete leaves a run alone, with the
   first of these as the reason, when it is: **queued or running**; one whose **worktree is still on disk** (the
   worktree cleanup finds worktrees through the row); **on a task that isn't done or archived**, since dedupe keys
-  (`hasRun`), Review PRs rounds, Fix PRs attempts, Merge into epic branch tries and the attention flag read the task's
+  (`hasRun`), Review PRs rounds, Fix PRs attempts, Merge ready PRs tries and the attention flag read the task's
   runs; a **custom or Auto-archive run on a task** (their dedupe keys follow the task's own state, so without the run Auto-archive would archive a task someone unarchived, and a custom trigger that still holds would fire again); the **latest succeeded answer of a scheduled agent** in its project (`lastScheduledAnswer`, what the next run is
   handed); or **less than a day old** (`RUN_DELETE_MIN_AGE_MS`), so deleting a just-finished run can't free a slot's
   dedupe key (Orchestrate would run the slot again) or make a notice repeat. The other automations are safe without their old runs: Recurring tasks has its cursor, the Digest and Start planned follow state that has moved on, and Review PRs, Fix PRs and Merge into epic branch key on a PR head or sit on tasks that are open while it matters. Everything else, including every older run
   of a Done task, can go. `keptReasons` has each reason with its count (`KEPT_REASON_TEXT`).
+
+### Health and hints
+
+How each automation is doing, on its detail in Settings → Autopilot and in Needs you.
+
+- **This week.** `GET /api/autopilot/automations/:automation/week` (`AutomationWeek` in
+  `packages/contracts/src/autopilotHealth.ts`, `AutopilotService.week`) covers today and the six local days before it:
+  real runs that acted (`runs`, skipped ones did nothing), `failed`, `deferred`, `spendUsd`, `wouldRun` (dry-run
+  records), `gaveUp` (distinct PRs Fix PRs gave up on, by attempt budget: `review` or `comments`, read from its
+  `fix:gave_up:` dedupe keys), a bar per day, and its last five real finished runs. 404 for an automation the board
+  doesn't have. The detail's **This week** section (`WeekSection` in `HealthSections.tsx`) shows it while the
+  automation is on anywhere, with an All runs link. Its query sits under the runs keys, so `autopilot.changed`
+  refetches it.
+- **Tuning hints** are rules, no model: pure functions in `autopilotHealth.ts` the overview runs for every automation
+  that is on somewhere (`hints` in `AutopilotOverview`). Each has a stable `id` naming the situation, a tone, its text
+  and one action (`AutopilotHintAction`):
+  - Fix PRs gave up on 2 or more PRs this week at an attempt cap below 10 → **Raise to N+1** (Fix PRs' `attempts` or
+    `commentAttempts`, set in its board config).
+  - 3 or more of the last 5 runs failed (board restarts aside) → **Ask an agent to fix**, which copies
+    `fixAutomationPrompt` and dismisses the hint until the next failure.
+  - Start planned tasks is on but no ready Planned task (a plan, not blocked, not manual) in its projects is flagged,
+    while some are Default → **Flag #9, #10 and #11** (`update_task`-style PATCH with `autopilot: true`; tasks switched
+    Off by hand are left out).
+  - Orchestrate ran 40 or more times this week since its board setting last changed → **Every 2N minutes** (its board
+    config; the count starts again once it changes, so the hint asks again only after the new interval has run often too). Whether a run changed
+    anything isn't recorded, so the text says "if most runs found nothing to do".
+  - A daily run or spend cap is reached today (`engineHints`, `automation: null`) → **See limits**.
+
+  Hints show under the detail's header (`HintNotice`) and in Needs you, each with **Dismiss**
+  (`POST /api/autopilot/hints/dismiss`, stored as the last 200 ids in the `autopilotDismissedHints` setting, which
+  stays with the machine like pause). Applying a hint dismisses it too. A dismissed hint comes back only when its id
+  changes: a newer give-up or failure, other tasks, another interval, another day.
+- **Auto-pause.** After a real run in a project fails, `autoPauseAfter` (service `finish`) reads the automation's
+  finished runs there since it was last resumed and counts failures in a row (`failureStreak`: a success ends the
+  streak; skipped runs, dry runs and runs the board's restart failed neither count nor break it). At
+  `AUTOPILOT_AUTO_PAUSE_FAILURES` (3) it pauses the automation in that project (`autopilot_auto_pauses`, migration 045)
+  with a reason ("Failed 3 times in a row. The last: …"), publishes `autopilot.changed` and sends an
+  `autopilot_failed` notification. The engine then leaves the project out of the automation's check (a custom
+  automation's check script doesn't run there either) and drops its candidates; other projects go on. The overview
+  lists the pauses (`autoPaused`): the list row's subline reads **Paused** (amber) "in storefront", the detail's Where it
+  runs a row per project with the reason and **Resume**, and Needs you the same. Resume
+  (`POST /api/autopilot/auto-pauses/resume`, `{ automation, projectId }`; 409 when it isn't paused) lifts it, counts
+  failures again only from then (`counted_from`), marks the notification read, and calls `onEnabled` as lifting Pause
+  all does, so automations with a schedule of their own don't catch up. Board-wide runs (no project) never pause.
+  Auto-pauses aren't in backups.
 
 ### Needs attention
 
@@ -219,7 +372,7 @@ past an earlier flag in that very millisecond.
 Default never auto-starts a task; only On does, so an automation that starts work (Start planned tasks) checks
 for `task.autopilot === true` on top of its scope being on. The flag does nothing by itself.
 
-- The user sets it in the task panel's Automation section. Agents set it with `autopilot: "default" | "on" | "off"`
+- The user sets it in the task panel's Autopilot section, as the **start it** chip (On saves On; off saves Default). Agents set it with `autopilot: "default" | "on" | "off"`
   on `update_task`, `create_task` and `add_to_backlog`, and only after the user has said so. A change is logged
   as an `updated` activity entry naming `autopilot`.
 - After `set_plan` or `create_task`, when Start planned tasks resolves On for the task (its epic, project or the board)
@@ -233,8 +386,8 @@ for `task.autopilot === true` on top of its scope being on. The flag does nothin
 
 A manual task (`task.manual`, see [task-lifecycle.md](task-lifecycle.md#manual-tasks)) is for a person, so the
 automations that act on tasks pass it over: Start planned tasks (`notStartable`; `workingAgents` still counts a
-thread that is working on a task turned manual mid-run, since nothing stops that agent), Remind me about stuck tasks, Review PRs, Fix PRs, and Orchestrate (`orchestrateNeedsLooking` ignores it, and
-its prompt tells the agent to leave manual tasks alone). Unblock dependents still fires when a manual blocker
+thread that is working on a task turned manual mid-run, since nothing stops that agent), the quiet-task and waiting-thread reminders, Review PRs, Fix PRs, and Orchestrate (`orchestrateNeedsLooking` ignores it, and
+its prompt tells the agent to leave manual tasks alone). The unblocked notification still fires when a manual blocker
 finishes, since the task it unblocks is code; Auto-archive still tidies it away once Done.
 
 ### API
@@ -245,9 +398,10 @@ switches nothing on either, since only the user's import saves the automation it
 
 | Route                                           | Does                                                   |
 | ----------------------------------------------- | ------------------------------------------------------ |
-| `GET /api/autopilot`                            | Pause, engine settings and the catalogue (with each automation's field descriptors and defaults) |
+| `GET /api/autopilot`                            | Pause, engine settings and the catalogue (with each automation's group, field descriptors and defaults), plus today's agent runs and spend, Needs you, auto-pauses, tuning hints and each automation's last finished run, for the settings page |
 | `PATCH /api/autopilot/engine`                   | Updates engine settings; `quietHours` may be partial   |
 | `POST /api/autopilot/pause`, `/resume`          | Pause all, and back                                    |
+| `GET /api/autopilot/modes`                      | Every switch that is set (not Inherit) at any scope, as `{ scopeKind, scopeId, automation, mode }`: the one read the Where it runs widget needs for its exceptions, instead of a scope per project and epic |
 | `GET /api/autopilot/board`, `/projects/:id`, `/projects/:id/epics/:epicId` | Each automation at that scope: its own mode and config, and what it resolves to (an epic's through its project and the board) |
 | `PUT /api/autopilot/board/:automation`, `/projects/:id/:automation`, `/projects/:id/epics/:epicId/:automation` | Sets mode and/or config; Inherit with no config removes the row |
 | `GET /api/autopilot/runs?taskId=` or `?projectId=` | Runs, newest first (`limit`, default 50)            |
@@ -255,6 +409,9 @@ switches nothing on either, since only the user's import saves the automation it
 | `POST /api/autopilot/runs/delete`               | Deletes runs by hand, or with `preview` counts what would go (see [Run history](#run-history)) |
 | `POST /api/autopilot/runs/:id/retry`            | Retries a failed or skipped run (see [A pass](#a-pass)) |
 | `POST /api/autopilot/runs/:id/dismiss`          | Dismisses a flagged run's attention flag (see [Needs attention](#needs-attention)) |
+| `GET /api/autopilot/automations/:automation/week` | An automation's last seven days (see [Health and hints](#health-and-hints)) |
+| `POST /api/autopilot/hints/dismiss`             | Dismisses a tuning hint by id                          |
+| `POST /api/autopilot/auto-pauses/resume`        | Resumes an automation that paused itself in a project  |
 | `GET /api/autopilot/orchestrate/:projectId`     | Orchestrate in one project: next slot, what holds it, Run now, the latest run |
 | `POST /api/autopilot/orchestrate/:projectId/run` | Orchestrate's Run now (202), or 409 with why it can't start |
 
@@ -281,37 +438,22 @@ Done and comes back. The engine resolves a candidate that is an epic on the epic
 archive #N with its K tasks after D days in Done". Unarchiving such a task, or reopening it, unarchives its epic
 ([epics.md](epics.md#joining-and-leaving)).
 
-**Unblock dependents** (`unblock_dependents`, #92; `automations/unblockDependents.ts`). Needs no agent and is off until
-switched on, with no settings. When the last unfinished blocker of a task reaches Done (or is closed as completed or
-duplicate), it logs a note "Unblocked: #N finished" on the dependent and sends an `autopilot_notice` notification.
-A partially unblocked dependent waits. It starts nothing: a flagged Planned dependent just becomes eligible for Start
-planned tasks on the next tick. It only reports blockers that finished in the last 24 hours, so switching it on doesn't announce old work. The scope is the dependent's project. The dedupe key is
-`unblock:<dependentId>:<latest blocker statusChangedAt>`, so reopening a blocker and finishing it again notifies
-again, while two blockers finishing together give one notification.
+**Reminders, no longer automations.** Remind me about stuck tasks (`unstick`, #88) and Unblock dependents
+(`unblock_dependents`, #92) needed no agent and only notified, so they left the catalogue: they are the `task_quiet`,
+`thread_waited` and `task_unblocked` notification settings, found by `sendReminders` on the engine's pass
+(`autopilot/reminders.ts`, [notifications.md](notifications.md#what-produces-a-notification)). They have no scopes, no
+config (24 hours quiet and 30 minutes waiting are fixed, as their labels say), and no runs: the run history keeps the old ones, named by
+`RETIRED_AUTOMATION_TITLES`, and a Needs-attention reason from an old Unstick run still clears on new activity
+(`attentionFor`). Getting stalled work moving again is Orchestrate's job (below). Migration `047_reminder_notifications`
+turned each switch on where its automation was effectively on, and dropped the automations' `autopilot_settings` rows.
 
-**Remind me about stuck tasks** (`unstick`, #88; `automations/unstick.ts`; first called "Unstick stale tasks", and
-the key stayed). Needs no agent and is off until switched on. It is a reminder to the user and acts on nothing:
-getting stalled work moving again is Orchestrate's job (below). It is still worth having beside it, because
-Orchestrate leaves a task that is waiting on the user alone, and a thread stuck waiting holds a concurrency slot
-for Start planned tasks. It is also the free option for someone who doesn't run Orchestrate (no agent, no caps, no
-quiet hours). Watches tasks In Progress for two things, each reported once:
-
-- **Quiet**: no activity for `staleHours` (default 24). Activity is any activity entry not written by `autopilot`
-  (its own notes and run entries don't count), or the move into In Progress. Puts "Stale: no activity for 26h" under
-  Needs attention, which clears on the next activity by anyone else (or when the task changes status). The dedupe
-  key is `stale:<taskId>:<lastActivityAt>`.
-- **Waiting**: the task's latest T3 thread has waited on input or approval for `waitingMinutes` (default 30), by
-  the snapshot's `lastActivityAt`. The thread already shows its own Needs attention reason, so only the run and the
-  notification are added. The dedupe key is `waiting:<threadLinkId>:<lastActivityAt>`.
-
-Either way it logs a note under `autopilot` and sends an `autopilot_notice`. It used to be able to post a nudge into
-the thread (`nudge`, `nudgeMessage`); that went to Orchestrate. A row that still holds those keys is not an error:
-`setScope` ignores stored keys the automation no longer declares and drops them on the next save, so the forms,
-which send a scope's whole config back, keep working. A key that was never stored is still a `VALIDATION` error.
-
-**Recurring tasks** (`recurring`, #89; `automations/recurring.ts`). Needs no agent and is off until switched on
-per project. Makes a task from a template on a schedule; the rules are rows in `autopilot_recurring` (below), and
-this automation's own switch decides whether a project's rules run. It has no config of its own.
+**Recurring tasks** (`recurring`, #89; `automations/recurring.ts`). Needs no agent and has no switch: it is `alwaysOn`, so
+every project is on for it (`resolve` and `enabledProjects` say so, which is what the engine and Pause all's restart use), while its
+scope entries stay Inherit and not enabled, so a lane's pill doesn't read On because of it, and `setScope` refuses it
+with a `VALIDATION`, and a rule that is enabled runs. Pause all still holds it back; quiet hours and the caps never
+did (it needs no agent). Makes a task from a template on a schedule; the rules are rows in `autopilot_recurring` (below).
+It has no config of its own. Migration `048_recurring_without_switch` disabled the rules of every project where it was
+effectively off, and dropped its settings rows.
 
 - A rule has a name, a template (board-wide or the project's, with a title pattern), a schedule, whether its tasks
   carry the Autopilot flag (On), and an enabled switch. The schedule is `weekly` (weekdays and a time) or `every`
@@ -331,15 +473,18 @@ this automation's own switch decides whether a project's rules run. It has no co
   (closed tasks are Done) and not archived. A deleted template fails the run with "pick another one".
 - Whatever the outcome, `act` moves the cursor to the slot (`recurring.handled`), so the next pass looks for the
   slot after it, and never moves it back. The cursor is also what stops a duplicate when runs are gone (a restore
-  doesn't bring runs back). Dry-run records "Would …" and leaves the cursor, so turning it off makes the task.
+  doesn't bring runs back). Preview everything records "Would …" and leaves the cursor, so turning it off makes the
+  task. The automation's own Preview does too, but turning it On restarts the rules (`onEnabled`), so a slot only
+  previewed is not made.
 - A rule's cursor starts at its creation time, and is set again when the rule is switched on or its schedule
-  changes, so slots from before that aren't caught up. The same goes for the automation: when its switch turns on
-  for a project (its own, or the board's), or Pause all is lifted, `AutopilotService` calls `onEnabled` and the
-  project's rules restart from now (`recurring.restart`). Only downtime of the board itself catches up.
+  changes, so slots from before that aren't caught up. The same goes for Pause all: when it is lifted,
+  `AutopilotService` calls `onEnabled` for every project and the rules restart from now (`recurring.restart`). Only
+  downtime of the board itself catches up.
 - Rules are managed in the project's settings (**Recurring tasks**, `components/recurring/`), which also offers
-  example rules: adding one creates a template for the project (reusing one of the same name) and the rule.
-  The automation's own switch is the project's Autopilot section like any other; the lane pill's popover links to
-  these settings with an icon button beside Recurring tasks (`useOpenSettings()("project.recurring", { project })`), scrolled to the section.
+  example rules: adding one creates a template for the project (reusing one of the same name) and the rule. The
+  Recurring tasks row in Settings → Autopilot has no switch (`alwaysOn` hides it, and `scopeAutomations` leaves it out
+  of the lane and epic popovers); its detail lists every project's rules (`RecurringRulesByProject`), each with its
+  switch, next run, last task and a **New rule** for that project, sharing `ProjectRuleRows` with the project's page.
 
 #### Recurring rules API
 
@@ -356,7 +501,8 @@ Every change publishes `autopilot.changed`, which the web app uses to refetch th
 
 **Review PRs** (`review_prs`, #95; `automations/reviewPrs.ts`, contract in `packages/contracts/src/prReview.ts`).
 Needs an agent and is off until switched on. Reviews a pull request linked to a task and posts the review on GitHub,
-as comments only.
+as comments only. With [Other people's PRs](#other-peoples-prs) on, it also reviews other people's open PRs and
+approves, asks for changes or hands them to the user.
 
 - **Trigger.** A `pr` link whose snapshot (from the `gh` poller) is open, or draft when **Review drafts** is on
   (off by default), and has a `headOid` and `headRef`. Merged and closed PRs, PRs from forks (`isCrossRepository`:
@@ -371,11 +517,54 @@ as comments only.
   loop ends (clean, or the round limit, stuck included) the PR's current head is reviewed as usual; a failed round
   isn't waited on, and tasks with auto-review off are never held back.
 - **One at a time, and rounds.** While a review of the PR is queued or running, a new head commit waits; the next
-  pass reviews the latest head with the earlier review in view. A PR gets at most `prReviewRounds` reviews (engine
-  setting, default 3): the rounds used are its real review runs, a failed one included and a skipped one (which
-  posted nothing) not. Once they are used up, a new head commit isn't reviewed. The fix automation (Fix PRs) counts its
-  attempts on Autopilot's review and failing checks against the same limit; each fix is followed by at most one new
-  head and so one review. Other people's comments have a budget of their own (`prCommentRounds`, below).
+  pass reviews the latest head with the earlier review in view. A PR gets at most **Rounds per PR** reviews (`rounds`,
+  default 3): the rounds used are its real review runs, a failed one included and a skipped one (which
+  posted nothing) not, and neither a carried verdict nor a resolution review (below: their output has a `basis`,
+  `isCountedReview`). Every new head still gets a run, rounds left or not, so nothing is skipped silently (see Head
+  moves, below). Fix PRs counts its
+  attempts on Autopilot's review and failing checks against a limit of its own (`attempts`, also 3 by default); each
+  fix is followed by at most one new head and so one review. Other people's comments have a budget of their own
+  (`commentAttempts`, below).
+- **Head moves: base merges and the last round.** When the PR already has a verdict, `act` first asks git how the head
+  got from that verdict's head to the new one (`autopilot/headMove.ts`): `fetchForHeadMove` fetches the PR's base and
+  head branches into the project's checkout (its fetch waits its turn at the same per-repository gate as the runner's
+  worktrees), then `classifyHeadMove` reads the history. Only merges of the base branch in leave the PR's own change as
+  it was reviewed, so only those are let off a round: every first-parent commit since the reviewed head must be a
+  two-parent merge whose other parent is already on `origin/<baseRef>`. Each is then checked against git's own
+  merge (`git merge-tree --write-tree`, git 2.38+): the same tree is a clean merge, a different one (conflicts
+  resolved by hand, or an edit slipped into the merge) a resolved one. Anything else (a commit of the PR's own, a
+  rewrite or force-push, a merge of another branch, the base merged the other way round) is a change.
+  - **Clean base merge: the verdict is carried.** No agent runs and nothing is posted: the run succeeds with the last
+    verdict at the new head (`basis: "carried"`, `carriedFrom: <old head>`, the same `round`, `handoff` and review
+    id), and the task gets a note "Autopilot carried its review of PR #N … No review round used". This holds for any
+    verdict, so a clean one lets Merge ready PRs merge and a `fix` one is still Fix PRs' to act on (once: its
+    trigger key is the review id, which the carry keeps).
+  - **Hand-resolved base merge: a resolution review**, not counted. The prompt says round N already covered the
+    PR's own change and asks the reviewer to check only how the conflicts were resolved (a side's change lost or
+    doubled, code that no longer fits the other side, markers left in, unrelated edits), with `git show
+    --remerge-diff` of the resolved merges inlined as untrusted text (cut at `MAX_REMERGE_DIFF`, 40,000 characters).
+    It is posted like any review, headed "Conflict resolution review (not counted), after round N of M"; its output
+    has `basis: "conflict_review"` and the last counted round. Its verdict also counts what the review before it left
+    open (counts, `actionable` and so `handoff`; the posted body names that review, and `openFrom` points Fix PRs at
+    it), since the merge didn't change the
+    PR's own code: a clean resolution can't wave through points nobody fixed. A git too old to check a merge (no `merge-tree
+    --write-tree`) treats it as resolved, and one with no `--remerge-diff` gets a full review instead, still
+    uncounted. At most `CONFLICT_REVIEWS_PER_PR` (5) per PR, as many as Fix PRs' conflict attempts; past that the run
+    is skipped, flagged: "PR #N merged <base> in with conflicts resolved by hand again, after 5 conflict resolution
+    reviews …". A resolution review that fails is flagged like any failure but keeps its `basis`, so it costs no
+    round.
+  - **A change of the PR's own** is a counted round while rounds are left. With none left the run is skipped and
+    flagged, so the card says why the PR waits: "PR #N changed after Review PRs' last round (round 3, at `<sha>`):
+    `<reason>`. Review and merge it yourself, or retry this run to allow one more round." Retrying it (the run's
+    Retry, or `retry_autopilot_run`) grants exactly one more round for that PR at that head: the retried run keeps
+    `output.roundsUsedUp`, and a retried notice whose (retired) key is of the PR's current head adds one to its rounds.
+    A later head goes back to the configured rounds, and a notice of an older head can't be retried (the board calls it
+    history), so no round is banked for later. A resolution review after a granted round still says "round 4 of 4"
+    (`maxRounds` is at least that of the review it follows). Retrying the conflict-review notice
+    (`output.conflictReviewsUsedUp`) allows one more resolution review the same way.
+  - **When git can't tell** (a project with no folder, a base branch the poller hasn't read, a fetch that fails, a
+    commit git doesn't have), the move counts as a change: it may cost a round, but never lets code through
+    unreviewed. A PR with no verdict yet is always a counted round.
 - **Resolving its own threads.** From round 2 the prompt asks the reviewer to list, in the verdict's optional `fixed`,
   the comment ids of earlier Autopilot inline comments whose point is fixed at this commit. After posting,
   `resolveConfirmedThreads` reads the threads fresh (`reviewThreads`) and resolves those (`resolveReviewThread`), only where the thread's first comment is in
@@ -404,7 +593,8 @@ as comments only.
   `origin`, a fork's branch name that exists on `origin`, a PR in another repository) and the run fails, flagged,
   before any budget is spent. A read-only run may read the default branch (a PR from `main`), since it can't push.
   A review has to be held to read-only, which a T3 thread can't be, so the runner setting is Auto or Headless and
-  both run headless. It has its own budget (default $2) and timeout (20 minutes), and follows the **Review skill**
+  both run headless. Its budget and timeout are the board's [agent defaults](#agent-defaults) unless it overrides
+  them, and it follows the **Review skill**
   chosen (the built-in `aboard-review` by default; a skill on disk is inlined into the prompt). The prompt calls the
   PR's text untrusted, and says nothing is recorded on the board.
 - **The server posts.** The agent answers with a summary and every point (severity, file, line, body, suggestion,
@@ -423,8 +613,9 @@ as comments only.
   couldn't post the review: …", so a card doesn't read like an Aboard or Claude failure. The agent doesn't post
   itself because Claude Code's permission rules can't scope `gh api` writes to a review (and can't see an `event`
   inside a heredoc), it refuses a JSON payload in a heredoc, and `gh api -f` can't build the inline comments reliably.
-- **Verdict.** The board counts the non-FYI points by severity; those at or above the **fix threshold** (engine
-  setting, default major) are the actionable ones.
+- **Verdict.** The board counts the non-FYI points by severity; those at or above the **fix threshold** are the
+  actionable ones. The threshold is Fix PRs' `fixThreshold` (default major), resolved where the task is
+  (`fixThresholdFor`), whether Fix PRs is on or not, since what gets fixed is Fix PRs' call.
 - **Anti-spiral.** From round 2 the prompt carries the round ("round 2 of 3"), the earlier Autopilot reviews with
   their URLs and counts, and the rules: look for regressions and earlier points still unfixed, don't raise again
   what was fixed or declined with a reason, and mark new minors and nits `fyi` (they go in an "FYI (no action
@@ -443,11 +634,123 @@ as comments only.
 - **Hand-off.** `handoff` says what comes next: `clean` (nothing at or above the bar: the loop ends), `fix`
   (something is, with rounds left) or `gave_up` (something is, on the last round: the run ends flagged "Autopilot
   gave up…", which shows under Needs attention and sends an `autopilot_failed` notification). The fix automation
-  reads `currentPrReview(runs, linkId, snapshot.headOid)`: the newest finished review of the link, and only while
-  its `headOid` is the PR's current head, so a superseded or stale verdict is never acted on. The review ids on the
+  reads `currentPrReview(runs, linkId, snapshot.headOid)`: the newest finished review of the link (highest round; on a
+  tie, which a carried verdict or a resolution review makes, the newer run), and only while its `headOid` is the PR's
+  current head, so a superseded or stale verdict is never acted on. The review ids on the
   runs are how it tells Autopilot's own reviews from other people's.
 - **Limits.** Switching the automation on reviews every open PR already linked in the project, once per head
   commit; dry run shows which first.
+
+#### Other people's PRs
+
+Board task #21 (epic #123). Review PRs' second source, off until **Other people's PRs** (`otherPrs`) is on in a
+project's config: open pull requests of the project's repository, by the logins in **Authors** (`otherAuthors`), that
+no task works on. It replaces the custom "Autopilot PR review" automation the owner ran, and the shipped **Review repo
+PRs** example. The difference that matters: the agent only reads and answers; the **server** finds the PRs, works
+out the mode and the approval gate from the PR's history, and posts. The gate is code, not a line in a prompt.
+`automations/repoPrs.ts` (poll, prompt, posting, board writes), `repoPrAssess.ts` (which PRs and how), contract in
+`packages/contracts/src/repoPrReview.ts`.
+
+- **Settings.** Essentials: **Other people's PRs**, **Authors** (comma separated, `parseLogins`: lower-cased, a
+  leading `@` dropped) and **Approve** (`otherApprove`, off by default). Advanced: **Require a linked issue** (on),
+  **Sensitive paths** (`DEFAULT_SENSITIVE_PATHS`: `.github/`, `tools/`, `CODEOWNERS`, `*.lock`, `package-lock.json`,
+  `pnpm-lock.yaml`, `go.sum`; `dir/` is a root folder, a name with no `/` matches in any folder, `*` stops at `/`,
+  `**` doesn't: `matchesPathPattern`), **Quiet period** (10 minutes), **Other reviewers' wait** (60 minutes) and
+  **Rounds** (3). On with no authors, the automation's `needs` (which now gets each project's config) says "Needs
+  setup: Other people's PRs is on with no authors in: …" on its row and under Needs you, instead of silently doing
+  nothing.
+- **Finding PRs.** The check can't read GitHub in a pass, so `otherPrCandidates` starts a read per project in the
+  background every `OTHER_PRS_POLL_MS` (5 minutes, or at once when the settings change) and wakes the engine when it
+  ends; each pass offers what the latest read found. The repository is the project folder's `origin`
+  (`CheckContext.repoOf`, `createRepoUrls`), and the reads go through `CheckContext.gitHosts`: `listOpenPrs` (the
+  newest 100 open PRs), then `readRepoPr` for each one by a listed author (`REPO_PR_QUERY`, one GraphQL query: closing
+  issues, files, the newest 100 commits with parent counts, the head's checks with `isRequired`, latest reviews,
+  reviews, comments with edit times, threads with comments, dismissed reviews and the open issues of the same
+  repository that mention it). The base branch's required checks also come from its rulesets (REST
+  `rules/branches/<base>`) and its classic branch protection (`baseRef.branchProtectionRule
+  .requiredStatusCheckContexts`), so a required check that never reported is seen. Drafts, PRs linked to a task that isn't
+  manual (those are the task source's and Fix PRs'), and PRs of anyone else are skipped. A read that fails becomes a
+  failed task-less run, once a day per error, so it isn't silent.
+- **History from the markers.** Nothing about a PR's history has to be remembered: everything Autopilot posts ends
+  with a hidden marker, the same one the custom automation wrote, so switching over keeps rounds, approvals,
+  hand-offs and stops. A review ends `<!-- autopilot-review head=<sha> verdict=approve|changes counted=1|0 round=<n> -->`,
+  a hand-off comment `<!-- autopilot-review event=escalated head=<sha> reason=<reason> round=<n> counted=1 -->`, an
+  inline point `<!-- autopilot-review finding -->`. Old posts without `round` count one round each when counted;
+  v1 hand-offs have no reason and v2's `no_issue` reads as `gate`. `/autopilot stop` and `/autopilot resume`
+  (`parseControlCommand`, at the start of a comment, any case) count only from the signed-in account and without a
+  marker; the newest wins, and a resume starts the history afresh.
+- **Which PR, which mode** (`assessRepoPr`, a port of the custom automation's check):
+  - skipped while stopped, while a person's approval or request for changes stands (the user's hand review too:
+    it has no marker), while any counted check is pending, until the quiet period has passed since the head commit and
+    its last check, and while another reviewer's unresolved thread is younger than the wait and the author hasn't
+    answered in it;
+  - the newest of Autopilot's reviews, its hand-offs and the user's own approval that someone else's push dismissed
+    (`REVIEW_DISMISSED_EVENT`) sets the mode: none is `full`; the same head after an approval or a hand-off is skipped;
+    the same head after changes is a `dispute` only once the author replied on one of Autopilot's open threads (the
+    reply's id goes in the key), else skipped; a newer head after an approval is `delta` (skipped when its approval
+    still stands and nothing the author wrote changed); after a hand-off, `followup` (skipped likewise); else
+    `full`. `full`, `dispute` and `followup` past the rounds become `cap_reached`;
+  - "nothing the author wrote changed" is `GitHost.unchangedSince`: the PR's change against its base branch
+    (`compare <base>...<old head>` and `...<new head>`) is the same patch, hunk line numbers ignored. That holds after
+    merging the base branch in or rebasing onto it, and fails for a merge of any other branch, an edited merge, and any
+    file GitHub serves no patch for (binary, too large), which can't be compared. A hand-off edited later counts from
+    its edit.
+  - The key is `review:repo:<host>/<repo>#<n>:<head12>:r<resume id>[:c<reply id>]`; one review of a PR runs at a time.
+- **The gate** (`approvalGate`): a closing issue (when required), every required check finished, green and reported,
+  at most 100 files (all of them read), no sensitive path. The rulesets' required checks must be readable (anyone who
+  can read the repository can): a failure to read them fails the read of the PR, so it is judged on a later pass, never
+  as if nothing were required. Classic branch protection's list may be hidden from an account without admin rights;
+  then only the checks GitHub marks `isRequired` on the head count. The agent is told the reasons but not asked to obey them.
+- **The review.** A task-less, read-only headless run with `untrustedInput`, in a worktree of the project's checkout
+  at the PR's head (`RunnerRequest.checkout`: removed when the run ends; a fork's PR gets an empty folder), on the
+  `repoPrReview` [run tools](#run-tools): the PR review set plus `pr_threads` and `repo_issue`. `repoPrPrompt` gives
+  it the mode, the base commit, the round, the closing and the mentioning issues (the bug report a past approval
+  missed), the gate, what to read (the project's docs and decision records), the severity scale (only blocking and
+  major hold up approval), a concurrency and contract checklist, when a recorded decision is a departure and when it
+  isn't, and the review skill chosen for Review PRs (inlined). It answers `RepoPrReviewVerdict`
+  (`REPO_PR_REVIEW_OUTPUT_SCHEMA`): the PR review's answer plus `decision` (approve, request_changes, escalate), an
+  `escalation` (reason: departure, dependency, security, dispute or vague; one line; a checklist), `disputes` per
+  thread of its own (accepted, rejected, unsure, with a reply) and `counted`.
+- **Read again before posting.** The poll can be minutes old by the time the agent answers, so `actRepoPr` reads the PR
+  again (`readRepoPr`) before it posts anything: a moved head skips the run, `/autopilot stop`, a person's standing
+  review or a closed PR skips it with nothing posted (`standingBlock`), and the gate is worked out afresh, so an
+  approval never rests on a check that has since turned red or a `Closes #n` that was removed.
+- **What the server does with it** (`settleDecision`). Minor points and nits are always FYI. An approval with a
+  blocking or major point open is a request for changes, and a request for changes with none open is a clean
+  review (minor points never block a merge). A request for changes in `cap_reached` is a hand-off for
+  `cap`. An approval with the gate failing, or with **Approve** off, is `ready`. Only a clean approval past the gate
+  is posted as one: `postReview` with `event: "approve"` (or `request_changes`, blocking and major points inline,
+  folded into the body when GitHub refuses them), refused with `StaleReviewError` if the head moved, which skips the
+  run. `counted: false` is honoured for an approval or a ready-for-approval in `delta` or `followup`, so small re-checks
+  don't walk a PR into the round limit. GitHub failing in passing while posting (`isTransientHostError`) skips the run
+  with `output.retry`, and the next pass tries again under `<key>:a<n>`, up to `REPO_REVIEW_ATTEMPTS` (3); so does
+  GitHub failing in passing on the read before the post. A try finds the post an earlier one made if GitHub took it
+  and still answered with an error (`postedSince`: a post of its own at this head after the plan's `lastPostAt`), and
+  then posts nothing.
+- **Hand-offs.** The head is read again first; a moved PR skips the run with nothing posted or written. One comment
+  (`renderHandoff`): the header, the round, "Handed to @you for manual review (<reason>): <why>" or "Ready for
+  @you's approval: <gate>", the summary, every point, the checklist, and that Autopilot looks again by itself on a push.
+  When the latest hand-off on the PR has the same reason, that comment is edited (`GitHost.editComment`) instead of
+  another posted. A real escalation finds the open manual task for the PR (the one remembered, one linking the PR,
+  or one titled `Review PR #n:`) or creates one (manual, label `review`, the PR linked, the checklist), and asks for
+  attention only when the task is new or the reason changed; a repeat adds a note. A `ready` PR makes no task and
+  pings nobody: it goes under **Needs you** (`AutopilotNeed` kind `pr_approval`, from `repo_pr_reviews.ready_since`)
+  with a `pr_ready` notification, and leaves it once a person reviews it, it is stopped, closed or merged, a new
+  head comes, or its author leaves the list; the list also hides rows of projects where the source or Review PRs is
+  off. While it waits, each poll works the gate out again at that head: a reason that changed is updated, and once the
+  gate passes (a required check re-run green, an issue linked) and Approve is on, the PR gets a fresh look
+  (`approveReady`, key `…:approve:<hash of when its wait was last written>`) that uses no round: the agent is told
+  it found the PR clean before and checks what can change without a push (new threads, issues that mention it), and
+  the server approves past the gate or, if it is held again, edits its Ready comment with the new reason. Skips carry a typed `code`
+  (`ENDS_WAIT` lists the ones that end the wait).
+- **Afterwards.** Its own threads the review says are fixed, and disputes it accepted, are resolved
+  (`resolveReviewThread`); accepted and rejected disputes get the agent's reply on the thread. An approval, or the
+  first review after a resume, closes the PR's hand-off task (a note, attention cleared, Done). Fix PRs never acts
+  on these PRs: they have no task.
+- **What the board keeps.** `repo_pr_reviews` (migration 046, `services/repoPrReviews.ts`), keyed by host, repository
+  and number: the last head, round, outcome and reason, the hand-off comment to edit, the manual task and
+  `ready_since`. The run's output is `RepoPrReviewRunOutput`. Neither is in backups; the markers on GitHub are the
+  history.
 
 **Fix PRs** (`fix_prs`, #96; `automations/fixPrs.ts`). Needs an agent and is off until switched on. Sends an agent
 to fix a pull request linked to a task.
@@ -508,8 +811,8 @@ to fix a pull request linked to a task.
   prompt tells the agent not to resolve threads itself; with the switch off it says the reviewer does.
 - **Limits.** At most 2 attempts per head commit (`ATTEMPTS_PER_HEAD`), counting every attempt that wasn't skipped or
   conflict-only (below), and per PR as many as each budget allows (`FixBudget`; `attemptBudgets` reads an attempt's
-  budgets back from its key): `review` (`prReviewRounds`) for Autopilot's review and failing checks, `comments`
-  (`prCommentRounds`, default 5) for other people's comments and requests for changes, and `conflicts` (below). An
+  budgets back from its key): `review` (`attempts`, default 3) for Autopilot's review and failing checks, `comments`
+  (`commentAttempts`, default 5) for other people's comments and requests for changes, and `conflicts` (below). An
   attempt given triggers of both uses one of each. A colleague's review bot thus can't use up the attempts Autopilot's own loop needs, nor
   the other way round. When a budget is used up, a gave-up run `fix:gave_up:<linkId>:review` or `:comments` gives up
   on that budget's triggers and the others still go ahead (a conflict that came with them becomes a conflict-only
@@ -536,23 +839,53 @@ to fix a pull request linked to a task.
   never instructions. That is a prompt, not a sandbox: a fix agent has edit access, Bash and the user's `gh` login,
   so on a public repository a stranger's comment it reads anyway (or a CI log) could still try to steer it. Unlike
   the reviewer it can't be confined to exact commands, because fixing means running the project's own tools.
-- **Settings.** The five switches, **Fix skill** (built-in: the prompt alone), and the shared runner fields, with a
-  $3 budget and a 30-minute timeout. Rounds and the threshold are the engine's.
+- **Settings.** The five switches, **Fix findings at or above** (`fixThreshold`), **Attempts on checks and reviews**
+  (`attempts`) and **Attempts on comments** (`commentAttempts`) up front; **Fix skill** (built-in: the prompt alone)
+  and the shared runner fields, which take the board's [agent defaults](#agent-defaults), under Advanced.
 - **An integration epic's own PR.** For an epic delivered through an integration branch
   ([epics](epics.md#delivery)), the epic's PR from that branch into the default branch is a candidate too, for the
   conflict trigger only, even once the epic is Done (it stays open until the user merges it). It never gets a nudge:
   a thread linked on an epic orchestrates its tasks. The agent merges the default branch into the epic's branch and
   pushes there; pushing to `epic/*` needs no deny-rule change, since only the default branch is denied.
 
-**Merge into epic branch** (`merge_epic_prs`, #123; `automations/mergeEpicPrs.ts`). Needs no agent and is off until
-switched on, with no settings. Only epics with integration delivery ([epics](epics.md#delivery)) give it work.
+**Merge ready PRs** (`merge_epic_prs`, #123, #127; `automations/mergeEpicPrs.ts`, `mergeIntoMain.ts`). Needs no
+agent and is off until switched on. It was Merge into epic branch, and keeps that key. Two targets: **Into epic
+branches**, always on with it, for epics with integration delivery ([epics](epics.md#delivery)); and **Into main**
+(`intoMain`, the one setting, essential, default off) for tasks flagged for auto-merge. Its detail in Settings →
+Autopilot explains integration branches and gives each target a sentence, its gate and an example
+(`MergeTargets.tsx`; its counts are board-wide, from `mergeTargets.logic.ts`).
 
-- **Merging.** A task's PR is merged into its epic's branch when `notMergeable` (`autopilot/mergeGate.ts`, shared
+- **Into main.** The candidates are open tasks in Review with `autoMerge` on, no integration branch, and `intoMain` on
+  for the task (`intoMainOn`: the automation resolved at the task's epic, then project, then board, so an epic's own
+  setting counts; checked again in the action). Each goes through
+  `autoMergeVerdict` (`integrations/mergeTaskPr.ts`), the rules `merge_task_pr` refuses by: the task's one unfinished
+  PR (unpolled ones count), not from a fork, passing `notMergeable` against its own base, no required approval still
+  missing, and an account that can merge. `ready` makes a merge candidate `main:<linkId>:<headOid>` (retries
+  `:<n>`, up to `MAIN_MERGE_ATTEMPTS`, 3, as for the epic merges below); `wait` makes nothing; `yours` (an approval
+  GitHub requires, two open PRs, a fork, an account that can't merge) makes one skipped, flagged notice per PR head
+  and reason (`main-hold:<linkId>:<headOid>:<hash>`), "Ready to merge into main, but Autopilot won't merge #N by
+  itself: …". **One at a time per repository:** at most one merge candidate per `host/repo` per pass, in order (a
+  task blocked by another flagged task after it, then by number), none while a run of this automation on a
+  default-branch task of that repository is queued or running, and none for a PR whose link was last read
+  (`syncedAt`) before the latest merge into its base that the board saw in the project (`PrChanges.merged` of any
+  merged PR link there), so a PR the merge left conflicting waits for its next read. The action checks the verdict
+  again at the same link and head, then calls `ctx.gitHosts.mergeAutoMergeTask`, which runs `mergeTaskPr` itself with
+  `expectedHeadOid` (the flag and gate again, then `mergeIntoDefaultBranch`: `checkAutopilotMergeTarget` with
+  `into: "default"`, the host's fresh merge state, the head). Its note on the task says "with Autopilot's Merge ready
+  PRs". Then it rereads (`rereadPr`, the poller's `reread`) the repository's other open PRs of flagged tasks. A
+  refusal from `mergeTaskPr` (something changed since the re-check) skips as a re-check; a race, "try again in a
+  minute" or a network error retries; anything else ends "Ready to merge into main: … Merge it yourself." flagged;
+  `MergeTargetError` fails the run, flagged.
+
+- **Into epic branches: merging.** A task's PR is merged into its epic's branch when `notMergeable` (`autopilot/mergeGate.ts`, shared
   with [`merge_task_pr`](github-prs.md#merge_task_pr)) finds nothing in the way: the task
   is in Review; the PR is open (not a draft), from origin, with the epic's branch as its base (`PrSnapshot.baseRef`,
   `baseRefName` in the poll) and a head commit; the local review isn't going (`reviewIsInProgress`) and left no
   blocking or major finding open; no Review PRs or Fix PRs run of the task is queued or running; when Review PRs is
-  on for the task, its review of the current head (`currentPrReview`) has nothing actionable; no reviewer requested
+  on for the task, its review of the current head (`currentPrReview`) has nothing actionable (a verdict Review PRs
+  carried across a base merge counts, so a PR that only merged the epic's branch in after its last round still
+  merges; one whose own code changed after it waits, and Review PRs' run says why under Needs attention); no reviewer
+  requested
   changes on GitHub; checks pass, or none has reported for `NO_CHECKS_WAIT_MS` (10 minutes) since the board first saw
   the head (`PrChanges.newHead`, else the link's creation: GitHub reports no checks for a moment after a push); and
   GitHub says it merges cleanly and isn't blocked on a check or rule (only a missing review is left to GitHub). The dedupe key is `merge:<linkId>:<headOid>`. The action re-checks all
@@ -567,7 +900,7 @@ switched on, with no settings. Only epics with integration delivery ([epics](epi
   task's unmerged branch, which is accepted because tasks normally start from the epic's branch once their blockers
   are Done. A run that ended "Merge it yourself" is settled for that head (`mergeRuns`) and isn't reconsidered by a
   fix or a settings change: use `retry_autopilot_run` or push to the PR.
-  The refreshed snapshot says merged, which moves the task to Done (`completeIfPrsDone`), so Unblock dependents
+  The refreshed snapshot says merged, which moves the task to Done (`completeIfPrsDone`), so the unblocked notification
   notifies and Start planned starts what waited on it, from the updated branch.
 - **Refused.** A failure another try may get past (another PR merged into the branch first, a push, GitHub still
   computing mergeability, the network) ends the run skipped with `output.retry`, and the next pass tries the same
@@ -592,6 +925,12 @@ switched on, with no settings. Only epics with integration delivery ([epics](epi
   its state, its PRs into the branch, its latest Autopilot review counts and its local review), current: the key
   `epic-pr-body:<linkId>:<hash of the body>` changes exactly when the body does, so nothing in it is a time. A closed
   epic PR is left alone. Nothing in Autopilot merges it.
+
+**Improve automations** (`improve_automations`, #133; `automations/improveAutomations.ts`). Needs an agent, is in the
+Upkeep group and is off until switched on. A weekly (`weekday`, `time`) task-less headless agent per project that audits
+recent runs, failures and review rounds and writes at most `maxSuggestions` Suggestions through `suggest_change`; the
+design, tools and cap are in [suggestions.md](suggestions.md#the-improve-automation). Its `improve` operation defaults to
+the Deep tier.
 
 **Orchestrate** (`orchestrate`, #138; `automations/orchestrate.ts`). Needs an agent and is off until switched on.
 The built-in version of the T3 Code "babysitter" threads: a scheduled agent per project that keeps its work moving.
@@ -632,18 +971,18 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   token, in a temporary folder of its own outside the run's, removed afterwards) and pass it with
   `--strict-mcp-config --mcp-config`. On top of that, the `gh` reads in `ORCHESTRATE_TOOLS` (`gh pr view|checks|list|diff`, `gh run list|view`, and `gh run rerun` for a flaky CI
   job). The rules match each command, and a compound one is refused if any part isn't allowed, so the prompt tells it to run each `gh` command on its own (no loops, pipes or `&&`) and that a refusal is about the command's shape, not that Bash is off. It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
-  for any task), `retry_autopilot_run`, `request_attention` and `merge_task_pr`. Because it reads text anyone can
+  for any task), `retry_autopilot_run` and `request_attention`. Because it reads text anyone can
   write (PR comments, CI logs), it gets only the board tools in `ORCHESTRATE_BOARD_TOOLS` (reads, `add_note`, `request_attention`, the
-  thread tools, `retry_autopilot_run`, `merge_task_pr`); every other board tool is in `ORCHESTRATE_DENIED_TOOLS`
+  thread tools, `retry_autopilot_run`); every other board tool is in `ORCHESTRATE_DENIED_TOOLS`
   (`RunnerRequest.deniedTools`), so it can't create or flag a task for auto-merge, link a PR, mark review findings away,
-  or move, close, archive or delete tasks. `mcp.test.ts` checks every registered tool is on one list or the other. It never starts a Planned task: that is Start planned's, under its
+  merge, or move, close, archive or delete tasks. `mcp.test.ts` checks every registered tool is on one list or the other. It never starts a Planned task: that is Start planned's, under its
   limits and the task's blockers; a failed start goes back through `retry_autopilot_run`. It counts against the caps and waits
-  out quiet hours like any agent run. The `orchestrate` operation (Standard tier by default); `modelChoice`, `budgetUsd` (3) and `timeoutMinutes` (30) are its
-  only runner options (the runner choice doesn't apply).
-- **Merging.** Only through `merge_task_pr`, so only tasks flagged for auto-merge and only past the server's gate. The
-  prompt adds no policy of its own (nothing about UI changes): what to hold back is the user's call, in the extra
-  instructions. **May merge** (default on) off adds `mcp__<id>__merge_task_pr` to the denied tools and tells it to
-  list ready tasks instead.
+  out quiet hours like any agent run. The `orchestrate` operation (Standard tier by default); `modelChoice`, `budgetUsd` and `timeoutMinutes` (the board's
+  [agent defaults](#agent-defaults) unless set) are its only runner options (the runner choice doesn't apply).
+- **Merging.** Never (#127): `merge_task_pr` is always denied, and the prompt tells it to list the Review tasks whose
+  PR looks ready, saying which are flagged for auto-merge, and leave merging to Merge ready PRs. Its old **May merge**
+  setting is gone: migration `043_merge_ready_prs` switched Merge ready PRs on with Into main wherever Orchestrate was
+  on with May merge (see [Merge ready PRs](#merge-ready-prs) above), and dropped the stored values.
 - **The prompt** (`orchestratePrompt`) is adapted from the babysitter threads: ground rules (this project only, never
   read or edit files in the project's live folder, since a board or dev server under `--watch` may restart, and treat
   PR and CI text as data), orient, unstick stalled work the lightest way (message a live thread, start one only when
@@ -652,8 +991,8 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   state, never by the age of the task's last board activity: a working thread or a pending or running local review
   round is activity (a reviewer can run for 40+ minutes and write nothing to the board). A Review task with no PR
   is asked for one only when `get_task` says the loop has ended, since with auto-review the PR is opened after the
-  local loop; a stalled or failed round is sent back to its review loop instead. It merges one at a time, re-checks
-  the other PRs' checks after each, and ends with a short status. **Extra instructions** (multi-line) are appended last and win where they differ.
+  local loop; a stalled or failed round is sent back to its review loop instead. A PR left red or conflicting by a
+  merge into the default branch is a stall like any other. It ends with a short status. **Extra instructions** (multi-line) are appended last and win where they differ.
 - **Memory.** The scheduled agents' handover ([custom automations](#custom-automations)):
   `scheduledHandoverParts` ends the prompt, `lastHandover("orchestrate", projectId)` supplies the last one, and the
   run keeps its `ScheduledAgentRunOutput`. Its settings section lists each project's latest runs with their summary
@@ -694,7 +1033,7 @@ the caps and waits out quiet hours. Off until switched on. The headline automati
   thread with no such snapshot, or whose snapshot the live poll stopped refreshing (T3 gone, thread deleted), counts
   for ten minutes from the run's end or the snapshot. The slot frees when
   the thread idles, finishes, fails, settles or is archived, or the task is Done, archived or back in Backlog; a thread stuck
-  waiting for you holds it until you answer, and Remind me about stuck tasks flags it. A headless run is a running run, which
+  waiting for you holds it until you answer, and the waiting-thread reminder tells you. A headless run is a running run, which
   the engine counts. A dry run ignores this.
 - **Config**: the shared runner options plus `skill` (a `ReviewSkillRef`; built-in means the default workflow, labelled
   by the field's `builtinLabel`), `baseRef` (the worktree's start; blank is the default branch) and `graceMinutes`
@@ -759,6 +1098,39 @@ Every change publishes `autopilot.changed`, which the web app uses to refetch th
 
 Automations the user defines (#97, sharing #135, scripts and checks #225; guide: [custom automations](../guide/custom-automations.md)).
 An action is an agent (on a schedule, optionally gated by a [check script](#check-scripts)), a shell command or a script.
+The editor is a five-step builder (When → Do → Details → Where → Review & try, `CustomAutomationEditorForm` with the
+steps in `BuilderSteps.tsx`): one form, so moving between steps keeps everything; `stepProblem` (`builder.logic.ts`)
+checks each step only for what it shows, and Save jumps to the first step with a problem. Review shows the
+sentence, what it would run for right now (`rightNow`: a stale trigger's tasks already past the limit), the prompt
+preview or a script's test run, and the name, pre-filled from the trigger and action. A new one saves in Preview where
+the Where step put it, or **Save and turn on** switches it On there after it is created (`useTurnOnCustomAutomation`:
+the board, or each of its projects); an existing one opens at Review.
+
+**Where** decides where it runs with its switches, and nothing else: the same **Everywhere / Only in…** choice, chips
+and picker as the automation's [Where it runs](#the-ui) (`ProjectsChoice` in `WhereItRuns.tsx`). For a saved automation
+the step is `WhereProjects`, which writes its switches as they are picked, like its page; for a new one (or an import,
+or Edit first) it is `DraftProjects`, kept in the form (`everywhere`, `projectIds`) and sent as the create input's
+`projectIds`: empty saves a board row in Preview, otherwise a project row in Preview for each, with the board off. Under
+it, for a task trigger: **With any of these labels** (`filters.labels`) and a **Tasks in epics** switch
+(`filters.epicTasks`, default on). Off, a task in an epic is skipped unless that epic has a setting of its own for the
+automation (`epicsWithOwnSetting`, passed to `customTaskMatches`), so the epic popover still switches one epic on. A
+schedule has no task, so neither shows and the definition can't carry them (`checkCustomDefinition`).
+
+**The project and epic filters became switches** (`049_custom_filters_to_scopes`), so one place decides where it runs
+and no stored automation runs anywhere new or stops anywhere it ran. A non-empty `projectIds` filter becomes Only in
+those projects: each keeps the state it had (its own row, or the board's), the board goes off, and the projects left
+out and their epics' rows go to Inherit. An `epicId` filter becomes that epic's own row at the state the epic had (off
+when its project was off or left out), every other row of the automation goes to Inherit, and Tasks in epics turns off.
+Rows keep their config and last on-mode. Since Tasks in epics replaced the epic filter, it counts as where it runs: an
+agent's change (`replaces`, `applyDraft` and `proposedDefinition`) and a `PATCH` whose filters leave it out keep the
+automation's own. Details for a
+command ("Which command?") or a script ("The script") has a small amber **Runs as you** pill by its heading
+(`RunsAsYouBadge` in `ScriptWarning.tsx`) instead of an alert: its card opens on hover, on click or tap, and on
+keyboard focus, and Esc closes it (it stays closed until focus leaves the pill). It says the code runs on this machine
+as the user, with their logins, can do anything they can in the project's folder, and that text from GitHub can come
+from anyone who can comment; a command's adds the Windows advice (let the program read the variable itself, since
+PowerShell doesn't escape quotes and npm and pnpm hand arguments to cmd.exe). Code someone else wrote keeps the full
+`ScriptWarning`: the import page, an agent's draft or change, and the script confirmation.
 Each row of
 `autopilot_custom` (name, `trigger_json`, `filters_json`, `action_json`, `armed_at`) is a catalogue entry
 `custom:<id>`, built by `customAutomation` (`autopilot/custom.ts`). The service's catalogue is a function
@@ -882,9 +1254,9 @@ the automation. Runs stay, under the old key.
   action is (or stays) a shell command, a script or an agent with a check script needs an `Origin` header, which browsers send and the guard checks is the
   board's; agents and scripts usually send none. It's a guard rail against an agent setting up a command by
   accident, not a boundary. Every change publishes `autopilot.changed`.
-- **UI**: **Settings → Autopilot → Custom automations** (`CustomAutomationsSection`, the editor
-  `CustomAutomationEditorForm` as a sub-page, `/settings/autopilot/custom/<id>`). The preview runs the same contracts helpers as the server
-  on the newest board task the filters let through (`customAutomations.logic.ts`). Switches are the usual rows and
+- **UI**: listed under **Yours** in Settings → Autopilot → Automations (`AutomationsSplit`), with the editor
+  `CustomAutomationEditorForm` as a sub-page, `/settings/autopilot/custom/<id>`. The preview runs the same contracts helpers as the server
+  on the newest board task the filters let through, in a project it runs in (`customAutomations.logic.ts`). Switches are the usual rows and
   lane popover entries, since those list the catalogue.
 
 #### Inputs and required tool slots
@@ -921,8 +1293,8 @@ Named values an automation reads instead of branching on the project (#238): a J
 most 50 per list; `automationVariables.ts` in contracts).
 
 - **Where they live.** The board's are the `automationVariables` setting (`PATCH /api/settings`, edited under **Settings →
-  Autopilot → Custom automations → Variables**); a project's overrides are `projects.variables_json` (migration 036,
-  `PATCH /api/projects/:id` with `variables`, edited under the project's Autopilot overrides). `effectiveVariables` lays
+  Autopilot → Limits & safety → Variables**); a project's overrides are `projects.variables_json` (migration 036,
+  `PATCH /api/projects/:id` with `variables`, edited under the project's Automations section). `effectiveVariables` lays
   the project's over the board's. Both writes publish `autopilot.changed`, since a row's "Needs" line depends on them.
 - **How they are read.** A prompt reads `{{vars.<name>}}`; a command, script or check reads `<PREFIX>_VAR_<NAME>`
   (`variableEnvName`) or stdin's `vars`. Like inputs they are filled in once and never read again for placeholders, and
@@ -987,7 +1359,7 @@ schedule takes one for now (`checkCustomDefinition`); task triggers would need a
   takes it from the same output (a finished agent run asks for a pass). Printing nothing is a quiet pass: no run.
 - **A failed check** (non-zero exit, timeout, a missing interpreter, output past `STDOUT_MAX`, a bad line) becomes one
   candidate `check-failed:<projectId>:<slot stamp>:<updatedAt>` (`CHECK_FAILED_KEY_PREFIX`) with `startsNoAgent`, which `act`
-  records as a failed run with the error, the output tail and the exit code. No task, so nothing is flagged; the
+  records as a failed run with the error, the tail of what it printed to stderr (or, with nothing there, of all its output) and the exit code. No task, so nothing is flagged; the
   automation's run history shows it. `act` then forgets the failure, and that run's key keeps the slot's check from
   running again until it is retried (which retires the key), the automation is edited (a new `updatedAt`) or the next
   slot comes. Like Fix PRs' give-ups, these runs
@@ -1004,13 +1376,14 @@ schedule takes one for now (`checkCustomDefinition`); task triggers would need a
   (Orchestrate's deny list plus starting, messaging or retrying other agents' work and merging). What is left reads the
   board, adds notes and asks the user. Allowed tools and slots can't be used with it, so the definition check refuses
   them; off, the agents get a scheduled agent's access and the action's tools.
-- **Dry run.** The check really runs (the preview says so), and each new item is recorded as a skipped run whose
+- **Dry run and Preview.** The check really runs (the preview says so), and each new item is recorded as a skipped run whose
   preview is its agent's filled prompt; a failed check records a skipped run with the failure.
 - **Sharing and the editor.** The bundle carries the check with the action (a version 2 file, imported only with the
   script confirmation; see [Sharing automations](#sharing-automations)), and the import page shows it and says how its
   items' agents run.
 - **In the editor.** A schedule's agent form has **Check first with a script**: a switch that reveals the
-  [script editor](#the-script-editor), the untrusted-items switch (with a warning when it is turned off) and `ScriptWarning`.
+  [script editor](#the-script-editor), the untrusted-items switch (with a warning when it is turned off) and `ScriptWarning`
+  (the check has no heading of its own for the Runs as you badge).
   The section is hidden for the other triggers, and `customFormToInput` leaves a check out unless the trigger is a
   schedule, so what was typed survives switching the trigger and back. The prompt hint names `{{item}}` and
   `{{item.<field>}}` while a check is on.
@@ -1074,8 +1447,8 @@ An automation is shared as a versioned JSON file, an `AutomationBundle` (`packag
 or script with inputs, so a board from before those says the file is newer instead of refusing it as invalid; a file
 below 3 that declares inputs on a command or script is refused). It holds the name, description,
 trigger, the filters' labels only, the action, the declared inputs of any action kind (`{name, label, type, default}`), an agent's declared slots (`{name, label, description}`) and
-optionally the `skill` as `{name, body}`. Not in it: project filters, the epic, arming, switches and slot tools, so the
-importer's own servers and projects are theirs to choose. `parseAutomationBundle` checks a file, telling one from a newer
+optionally the `skill` as `{name, body}`, and `filters.epicTasks` (missing reads as true). Not in it: where it runs,
+arming, switches and slot tools, so the importer's own servers and projects are theirs to choose. `parseAutomationBundle` checks a file, telling one from a newer
 `version` apart from a malformed one.
 
 **Scripts** (a `script` action, or an agent's `check`; `actionScripts` lists them) are someone else's code run as the
@@ -1094,12 +1467,13 @@ the git backup keep the whole `action_json`, so a script comes back as written.
 | `POST /api/autopilot/custom/import`    | Body `{bundle, inputs, slots, projectIds, installSkill, confirmScript}`; 201 `{automation, skill}`       |
 
 `customAutomations.importBundle` parses the file again (a body that isn't one is `VALIDATION`), fills the inputs and
-slots (`bundleToDefinition`; an input left out takes its default), restricts the filters to `projectIds`, gives it a free
+slots (`bundleToDefinition`; an input left out takes its default), starts it Only in `projectIds` when there are any (the
+import screen's Where it runs, `DraftProjects`), gives it a free
 name (`Name (2)`) and runs the usual definition check **before** writing anything, so a file that can't run leaves no
 skill behind. The skill goes to `~/.claude/skills/<name>/SKILL.md` (`installSkill` in `skills.ts`) only when
 `installSkill` is true; a name taken by any installed skill (folder or frontmatter name) becomes `<name>-2`, `-3`, with
 the frontmatter name rewritten, and the automation names what was written. Without `installSkill` it names no skill. It
-is saved like any new one, with no switches, so it is off. As when creating one, a shell or script action needs the board page's
+is saved like any new one, in Preview for the board (or those projects). As when creating one, a shell or script action needs the board page's
 `Origin`, and so does `installSkill` with a skill in the file: a skill persists into every later session that reads
 the user's skills. The skill's frontmatter `name:` is always set to the name it was installed as (added, with a
 frontmatter block, when missing), so a file can't install a skill under another name. Export carries only the skill's
@@ -1111,33 +1485,11 @@ text in full, as untrusted, before **Import**. A file with a script also shows `
 the editor too: it runs as you and can do anything you can, such as approve PRs through `gh`; text it reads from GitHub
 comes from anyone who can comment, so it should check who wrote it) and a switch ("I've read the script above and I understand it runs on my machine as me"), which
 **Import** waits for. It also offers the
-files in `AUTOMATION_EXAMPLES` (`automationExamples.ts`). **Improve prompts and skills** (#134) is a weekly (Monday 07:00)
-scheduled agent on the `deep` tier with the inputs `look_back_days`, `max_suggestions` and `targets`, `allowedTools:
-["Skill"]` (a headless run is denied the Skill tool otherwise) and its own skill, `<brand id>-improve`, in the file.
-The skill holds the method and the rules that keep suggestions lean (evidence from at least two tasks or one costly
-one, one behaviour each, rewrite or delete rather than add, no growth without a stated reason); the prompt holds the
-inputs. Each run audits its own project (`board_activity` with the project's folder), proposes through
-`suggest_change`, and hands over what it proposed, what was accepted and what to watch; `get_editable_prompt` lists a
-target's recent suggestions with their status, so it can leave an open one alone and not repeat a rejected one.
+file in `AUTOMATION_EXAMPLES` (`automationExamples.ts`). The "Improve prompts and skills" example that was here is now the built-in
+[Improve automations](suggestions.md#the-improve-automation); a copy someone imported is an ordinary custom automation and is unaffected.
 
-**Review repo PRs** (#230) is the example of a [check script](#check-scripts): a version 2 file, since it carries one. A
-schedule every 5 minutes, an agent action with `check` (`REVIEW_PRS_CHECK_SCRIPT`, Node, 120 seconds) and the inputs
-`trusted_logins`, `max_rounds`, `look_back_days` (7) and `review_outside_contributors` (a boolean, off). The script runs `gh repo view`, then one `gh api graphql` query for the open PRs
-(the first 50 by update, with a stderr note when there are more: labels, the last 100 reviews with `commit.oid`, the last 100 comments) and prints one item per
-PR that needs a review (only PRs whose `updatedAt` is within `look_back_days`, so a first run isn't a flood of old PRs; the script prints no cap of its own, since the board drops remembered keys only after it, and a failed review would hold a slot; the board's 50 new items per pass and the agent caps do that job); it holds no state, since GitHub is the memory. A PR is skipped when its author isn't the viewer, in `trusted_logins` or an OWNER, MEMBER or COLLABORATOR (`authorAssociation`) unless `review_outside_contributors` is on, since the agent reads the PR's text with the user's `gh`; when it is a draft, has the
-`no-autopilot` label, or its latest valid `/stop-review` or `/re-review` is a stop
-(a line start, any case, the last command wins; `/stop-review` counts from the PR's author, the viewer or
-`trusted_logins`, `/re-review` only from the viewer or `trusted_logins`, since each starts an agent past the round limit; a
-null author never counts). A review counts when the viewer
-posted it and its body holds `prReviewMarker()`, the one Review PRs' reviews carry, so this skips what Review PRs posted (not the reverse: Review PRs decides from the board's runs, so a linked PR can be reviewed twice); a review at
-`headRefOid` ends the PR's turn. Otherwise the PR is listed unless the reviews already number `max_rounds`; a
-`/re-review` newer than the last review (by `submittedAt`; a pending review has none) lists it regardless. A dismissed review isn't an opt-out: GitHub only lets a review that approved or requested changes be dismissed, and the example posts comment reviews. The key is `<repo>#<number>:<head, 7 characters>:<count of
-/re-review commands>`, so a push and a request each make a new one, and the board's key memory means a review that
-failed isn't retried every slot. Each item's agent (`untrustedItems: false`, since it runs `gh` to read the PR and
-post one `--comment` review headed `prReviewHeader()`, which an untrusted-item agent can't) is told in its prompt to
-read only and never approve or request changes; nothing in the bundle approves. The risk of that choice, text from
-anyone who can open a PR read by an agent with the user's access, is stated in the guide and on the import page's
-warning. `reviewRepoPrs.test.ts` runs the script under Node with `child_process.execFileSync` replaced by a fake `gh`.
+**Review repo PRs** (#230), an example check script that commented on any repository PR, was retired by #21: Review
+PRs' [other people's PRs](#other-peoples-prs) does it as a built-in, and an imported copy keeps working until deleted.
 
 ### Drafts
 
@@ -1158,13 +1510,31 @@ on the REST writes is unchanged, so this opens no path to setting up a command o
 - **What the agent is told.** The import page's URL (`automationDraftPath`, `/settings/autopilot/custom/import?draft=<id>`
   on the board's URL), the expiry, whether a script needs confirming (or, for a command, reading), the slots to fill and, per variable
   the action reads, the projects with no value for it, so the agent can tell the user. The result says nothing is set
-  up until the user imports it. Orchestrate's agent is denied the tool.
-- **The user.** Each draft sends an `automation_draft` notification (task-less; the inbox opens Custom automations).
+  up until the user imports it, and that it then saves in Preview. Orchestrate's agent is denied the tool.
+- **The user.** Each draft sends an `automation_draft` notification (task-less; the inbox opens Needs you in Settings → Autopilot).
   That section lists the drafts with **Review** and **Dismiss**. The import page with `?draft=` loads it
   (`GET /api/autopilot/drafts/:id`, NOT_FOUND once gone) into the same untrusted preview, script confirmation, inputs and
   slots as a file, under a banner naming who drafted it and their note, and sends `draftId` with the import, which
   deletes the draft once the automation is saved. **Dismiss draft** is `DELETE /api/autopilot/drafts/:id`. Every change
   publishes `autopilot.changed`.
+- **Review, or Edit first.** The import page is the builder's review step for someone else's automation: the
+  `formSentence` sentence, the read-first sections, **Saves in** Preview or On (On sets the board's mode after the
+  import), and **Edit first**, which opens the builder (`CustomAutomationEditorForm`) at Details on `formFromBundle`
+  with what was filled in. Saving there creates it over the ordinary route (Origin-guarded) and dismisses the draft;
+  a skill the file carries isn't installed that way. Opened on a script (or, for a change, a changed one), the builder's
+  `confirmScript` holds Save until the same "I've read it" switch is on, so editing first doesn't skip it.
+- **Changes (`replaces`).** A draft can name the custom automation it is a new version of: `replaces` takes its id,
+  `custom:<id>` key or exact name, resolved on drafting (a built-in's key or title is refused as VALIDATION, anything
+  else unknown as NOT_FOUND) and stored as the id (`autopilot_drafts.replaces`, migration 044; no foreign key, so a
+  draft whose automation was deleted says so when applied). Needs you shows it as **Change to <name>**
+  (`AutopilotNeed.replaces`), and the page opens `AutomationChangeReview`: per field, a line diff of the current and
+  proposed definition (`changeReview.logic.ts`), the agent's note as **Why**, and a warning for tools it adds.
+  **Apply change** is `POST /api/autopilot/drafts/:id/apply` → `customAutomations.applyDraft`: the draft's definition
+  with input values and slot tools kept by name (new ones from the request), the automation's own projects and epic,
+  saved with `update`, so the id, switches and run history stay (a changed trigger, filters or variables re-arm it, as
+  any edit does). A changed script needs `confirmScript`, checked in the service; the route holds a draft with code or
+  a skill install to the board's Origin, as the import route does. **Keep current** dismisses the draft; **Edit first**
+  opens the builder on the automation with the change filled in, and its **Save changes** dismisses the draft.
 
 ### Runners
 
@@ -1212,7 +1582,7 @@ with that error.
 - Headless only: **`access: "none"`** gives the agent no tools at all (no built-in tools, no MCP servers), for one that
   must work from its prompt alone.
 - Headless only: **`access: "read-only"`** for agents that only read (a reviewer), **`tools`** to allow more
-  (`Bash(gh pr review *)`), **`deniedTools`** to deny more (Orchestrate with May merge off), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
+  (`Bash(gh pr review *)`), **`deniedTools`** to deny more (Orchestrate's `ORCHESTRATE_DENIED_TOOLS`), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
   can't be held to these, so a request with any of them runs headless under Auto, and fails under T3 only.
   Also headless only: **`untrustedInput`** for a read-only agent that reads text anyone can write (no MCP servers or
   checkout settings, file tools limited to the worktree, only exact git commands), **`runTools`**, the board-served
@@ -1220,7 +1590,8 @@ with that error.
   agent starts (`WorktreeHeadError`, with `moved` when the branch is ahead of it).
 
 Every agent automation spreads the shared runner options into its config (`autopilot/runnerOptions.ts`:
-`RUNNER_OPTION_SHAPE`, `RUNNER_FIELDS`, `RUNNER_DEFAULTS`):
+`RUNNER_OPTION_SHAPE`, `RUNNER_FIELDS`, `RUNNER_DEFAULTS`). All but the model take the board's
+[agent defaults](#agent-defaults) where no scope sets them; the defaults below are those defaults' own:
 
 | Option           | Default | Meaning                                                                          |
 | ---------------- | ------- | -------------------------------------------------------------------------------- |
@@ -1395,7 +1766,8 @@ A headless run that reads a git host gets that host's reads as tools the board s
 and tool rules only Claude Code can follow ([ADR 0013](../decisions/0013-board-served-run-tools.md)):
 
 - **The scope.** `RunnerRequest.runTools` is `{toolSet, target}` (`mcp/runTokens.ts`): one tool set per kind of
-  operation and the one thing it reads. Today the set is `prReview` and the target a PR.
+  operation and the one thing it reads. The sets are `prReview` (a task's PR) and `repoPrReview` (another person's
+  PR); the target is a PR.
 - **The token.** `runOnDriver` mints one before the agent starts (`RunTokens.mint`, through the runner's `runTools`
   dep): 32 random bytes, kept in memory by its SHA-256 only, alive for the run's timeout plus five minutes and never
   more than a day (`RUN_TOKEN_MAX_TTL_MS`). It writes the MCP config (`runToolsMcpConfig`) to a temp folder of its own
@@ -1413,6 +1785,10 @@ and tool rules only Claude Code can follow ([ADR 0013](../decisions/0013-board-s
   `(continued)`, each result names its page, the count and the next call, and only a line longer than half a page is
   cut, with a marker. The file list is read once per run (`RunGrant.cache`) however many pages follow. Results mark
   the PR's own text as untrusted.
+- **The other-people's-PR set** (`repoPrReview`): the same four, plus `pr_threads(page?)` (every review thread,
+  resolved or not, each comment with its id and author, Autopilot's own threads marked, read through
+  `GitHost.readRepoPr`) and `repo_issue(number)` (one issue of the PR's own repository: the issues it closes and the
+  open ones that mention it). Neither reads another repository.
 - **What they read through.** A `GitHost` (`integrations/gitHost.ts`): `getPr`, `listFiles` (with each file's patch),
   `getDiff(path, page)`, `getComments` (conversation comments, review bodies and inline comments with their ids,
   oldest first) and `getIssue` (`GitHostReads`, found by the run's target host through the `GitHosts` registry). GitHub's
@@ -1458,6 +1834,7 @@ each with what it needs from the provider and a default that is a tier or inheri
 | Board reviewer (`boardReviewer`)             | standard | structured output, tool rules           |
 | PR review (`prReview`)                       | standard | structured output, untrusted lockdown, run tools |
 | Orchestrate (`orchestrate`)                  | standard | untrusted lockdown, tool rules          |
+| Improve automations (`improve`)              | deep    | untrusted lockdown, tool rules           |
 | Digest (`digest`)                            | light   | no tools                                 |
 | Custom agents on a task (`customTask`)       | inherit | edit                                     |
 | Custom agents without a task (`customDetached`) | light | nothing                                 |
@@ -1517,18 +1894,27 @@ One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` 
   action that isn't an agent run (a digest waiting on its summary): the engine doesn't wait for it before the next
   candidate. Agent actions always go on in the background.
 - `epicScope` (optional, default true): false when no candidate is ever a task in an epic, so an epic can't switch it.
+- `group`: the heading Settings → Autopilot lists it under (`ship`, `prs` or `upkeep`; unset is `yours`, as for a
+  custom automation).
 - `schema`, `fields`, `defaults`: the config, parsed with zod over the defaults; `fields` describe the form the
   UI renders (boolean, number, text, time, select, skill; a skill field's `builtinLabel` renames its built-in entry,
-  and a text field's `multiline` makes it a text area).
+  and a text field's `multiline` makes it a text area). A field's `tier` is `essential` for what most people set,
+  shown with the automation; anything else (and unset) sits under its closed Advanced section. Runner, model, budget,
+  timeout and T3 access are always advanced, and the detail pane shows them as two lines rather than a row each, the
+  same for every automation (see [Advanced overrides](#advanced-overrides)). A field's `help` is one short line and
+  `info` the rest, behind an info button by its label; `inRowOf` draws a field's control in another field's row (Fix
+  PRs' threshold beside Autopilot's review) instead of a row of its own. Add the automation's sentence to
+  `automationSentence` too.
 - `check(ctx)`: reads the board and returns candidates, only for `ctx.projects` (and the board when `ctx.board`
   is set). It must be cheap: it runs every pass.
 - `act(candidate, ctx)`: does the work, with `ctx.actor` as the actor of any change, and returns the outcome.
   Agent work goes through `ctx.runner.start` (see [Runners](#runners)); `ctx.update` records runner details while
   it runs. Return `needsAttention: true` for a failure the user should see.
 
-An automation must never merge into the default branch itself, close or delete tasks, force-push or push to the
-default branch. Its own merge is Merge into epic branch's, through `ctx.gitHosts.mergeIntoEpicBranch`; an
-agent it starts (Orchestrate's) reaches the default branch only through `merge_task_pr`, for flagged tasks.
+An automation must never close or delete tasks, force-push or push to the default branch. Its merges are Merge ready
+PRs': into an epic's branch through `ctx.gitHosts.mergeIntoEpicBranch`, and into the default branch only through
+`ctx.gitHosts.mergeAutoMergeTask`, which is `merge_task_pr`'s own `mergeTaskPr` (the auto-merge flag and the gate are
+checked there). No agent an automation starts merges: Orchestrate is denied `merge_task_pr`.
 
 ### The UI
 
@@ -1536,21 +1922,161 @@ How Autopilot looks on the board (the lane pill, the epic button, the header pau
 task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-board). The settings are in
 `components/autopilot/`:
 
-- **Settings → Autopilot** (`AutopilotEngineSection`, self-contained: it reads and writes its own queries):
-  Pause all, dry run, concurrency, the daily caps, quiet hours (a switch and a start and end time), PR review
-  rounds, the fix threshold and worktree retention. A number that is out of range is put back with a toast; an empty cap means no cap.
-- **Orchestrate** (`OrchestrateSettings`, section `autopilot.engine.orchestrate`), between the engine settings and the
-  Automations heading: its board switch and config (the same `AutomationField` rows), the **Countdown on lanes** switch for the lane pill's timer
-  (`showAutopilotTimer`, a per-browser display preference) and a **View
-  all runs** row that opens its [run history](#run-history). It is left out of the folded list below. The Automations
-  heading has an **All runs** link to the history of every automation.
-- **Automations** (`AutomationSections`): one folded section per other automation with its On / Off switch at
-  the board in the header (no Inherit; see [Switches and scopes](#switches-and-scopes)); opening it shows what it does and a form generated from its `fields`: a switch, number, text, 24-hour time
-  or select per field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is
-  stored as a `ReviewSkillRef`, and an unset one is the built-in skill, labelled with the field's `builtinLabel` when
-  it has one, such as the digest's own skill). A project's settings page shows them as rows
-  (`AutomationRows`, the config behind a **Settings** disclosure), where Inherit follows the board; an epic's switches (its button's popover) follow its project. The lane and epic popovers show them as a faded switch while it follows the scope above and a solid one with a ↺ reset once set (see [board-layout.md](board-layout.md#autopilot-on-the-board)). Config set at a scope is sent whole (the server replaces it), so editing one
-  key sends the scope's other keys with it; the reset button beside a field's title (shown only while the key is set at that scope) removes the key so it inherits.
+**Settings → Autopilot** is three tabs (`AutopilotTabs` in `AutopilotPage.tsx`), each a sidebar entry:
+
+- **Automations** (`/settings/autopilot`, section `autopilot.automations`, `AutopilotAutomationsTab`):
+  - **The status strip**: Running, Paused or Nothing is on; today's agent runs and spend (`overview.today`,
+    `todaySummary`) and the limits in one line (`limitsSummary`, both in `packages/contracts/src/autopilotSentence.ts`);
+    **Pause all** (`autopilot.automations.pause-all`) and a link to Limits & safety.
+  - **Needs you** (`autopilot.automations.needs-you`, hidden when empty), from `overview.needsYou` (`AutopilotNeed`,
+    built by the service's `overview()`): failed runs whose flag still stands on their task (one per task, the latest;
+    **Retry** when `canRetryRun`, **Dismiss**), other people's PRs Review PRs found clean that only the user can
+    approve (kind `pr_approval`, oldest first, **Open PR**), drafts agents wrote (**Review** opens the import page,
+    **Dismiss**), and automations that can't run as set up, their `blocked` or `needs` (**Fix** picks the built-in, or opens a
+    custom one's editor).
+  - **The list and detail** (`AutomationsSplit`), the Providers page's `SplitCard`. Every automation is listed once,
+    under its `group` heading (`AUTOMATION_GROUPS`: Ship work, Pull requests, Upkeep, then Yours for custom
+    automations, which have no group of their own). A row has an icon, the name with the row's full width (no marker
+    beside it: the switch says On or Off), a subline (`rowSubline`, from each project's scope and `overview.lastRuns`),
+    and its board switch (on saves the mode `restoreMode` gives); that switch, and the detail header's **Switch on**
+    (`useBoardMode`), turn it on as Everywhere, so the rows Only in… left go too and a later off is off everywhere (while
+    it is already on or in Preview, only the board's own row changes). The subline says where it is on and how its last
+    run went ("every project · ✓ 2m"), led by what the switch can't show, as a coloured word: **Paused** (amber) "in
+    storefront", **Preview** (amber), **Last run failed** (red) "· 3m ago". A project's own setting beats the board's,
+    so with the board off and some projects set On it does run there: the switch is then **mixed** (`switchState`, a
+    centred thumb on a tinted track) and the subline reads "On in 5 projects". Switching off a mixed automation, or one
+    whose board is on while projects or epics set their own On (`whereOwnOn`), asks first (`SwitchOffDialog`): **Off
+    everywhere** (`whereOffEverywhere`: the board and every own On or Preview back to Inherit; rows set Off stay) or,
+    when the board is on, **Board only**, which leaves those projects running; a plain one saves the board's `inherit`.
+    An
+    automation off on the board and in every project is dimmed, as a switched-off provider is; its switch stays.
+    **+ Add automation** opens [the Add gallery](#the-add-gallery), and **Ask an agent** beside it is
+    [the hand-off](#ask-an-agent). `?automation=<key>` picks a row; with none, the first is shown.
+  - **The detail**: a header with the status line (`statusLine`, "Preview · …" in Preview, "On in 5 projects · Off for
+    the board" when mixed, agreeing with the list switch) and **Switch on/off** (Switch off when mixed),
+    plus **Export** and **Delete** for a custom automation; in Preview, a notice with how often it would have run this
+    week (`previewHint`), **See them** (its run history) and **Turn on**; **What it does**, one sentence read from its
+    effective config (`automationSentence`; a custom automation's from its trigger and action) with **All runs**, and
+    the **Mode · for the board** row, the board's Off · Preview · On, saying what the mode does (`modeDescription`;
+    with a check script, that it still runs for real; when mixed, "**Off for the board.** On in 5 projects, which
+    set their own." (a project only in Preview is named as Preview) with a **Turn off everywhere** link); **Where it runs** (`WhereItRuns`): the sentence (`describeWhere`, "Preview
+    everywhere", "On only in storefront; Preview in docs"), an **Everywhere / Only in…** control with the projects as
+    chips under Only in… (amber when only in Preview; past `PROJECT_CHIPS_MAX`, 8 projects, one "5 of 20 projects ▾"
+    button instead, opening a searchable checklist with All and None, `ProjectPicker`), and **Exceptions** as removable chips (a project's or epic's own
+    setting, with the mode it has: On, Preview or Off) with **+ Exception**, which offers the projects not yet Off under
+    Everywhere and the epics that aren't exceptions yet, each with the mode it would be given (On or Off). Everywhere
+    turns an off automation on in the mode `restoreMode` gives. It reads `useAutopilotModes` and the board's projects and
+    unarchived epics (epics only for an automation with `epicScope`), writes through `useApplyWhere` (one PUT per write,
+    shown at once and refetched on error), and a blocked automation can't be switched on or into Preview from it;
+    **Settings**, the fields whose `tier` is `essential`; and **Advanced**, closed, with every other field.
+    Its heading says how many differ from their default ("Agent, Fix skill · 2 changed", `advancedChangedCount`). A
+    field without a tier is advanced. Every row has one short description line, the rest behind an info button
+    (`InfoHover`), as docs/reference/style.md asks. A custom automation's trigger and action are edited in its editor (**Edit**,
+    `/settings/autopilot/custom/<id>`).
+  - **Quick setup as the empty state**: while nothing is on at any scope (`isOffEverywhere` for every row), the tab shows
+    [Quick setup](#quick-setup) above Needs you.
+  - At phone width the card shows one side at a time: the list, then the detail with an **All automations** link back.
+#### Advanced overrides
+
+Every automation's Advanced section uses one pattern (`ModelLine`, `AgentDefaultsLine` and `AutomationField` in
+`AutomationsSplit.tsx` and `AutomationRows.tsx`, with the helpers in `automationList.logic.ts`):
+
+- **Closed**: one short line on where the value comes from, a "Now: …" status and **Override** on the right. The model
+  comes from Agents → Operations; runner, budget, timeout and T3 access from Limits & safety's
+  [agent defaults](#agent-defaults).
+- **A field's reset** (`SettingResetButton`, ↶) shows by its label only while the value differs from its default
+  (`fieldChanged`; the default is `fieldDefault`: the board's agent default for those four keys, Inherit for the model,
+  else the automation's own), and resets that field alone. Its tooltip names the default ("Reset to $5",
+  `fieldValueText`). Setting the default back by hand saves no key, so the ↶ hides and it follows the default again.
+  Resetting one keeps the group open.
+- **The group** ("Runner, budget, timeout and T3 access") says "N set here, the rest from Limits & safety" while
+  overriding, and its control becomes **↶ Reset**, which clears all four and closes it: also the way out when nothing
+  changed. Its field rows are tinted rather than indented, since an indent would push a row in the narrow detail pane
+  under its container breakpoint and stack its control.
+- **The model** is one row, so its ↶ shows the whole time it is overridden; that is its way back to the one-line row.
+- Controls follow docs/reference/style.md: one right edge, numbers in `UnitInput`, selects at `SETTINGS_TEXT_WIDTH`, the
+  model picker at `SETTINGS_PICKER_WIDTH`.
+
+The **Merge ready PRs** detail (`MergeTargets.tsx`) follows the same rule: what an integration branch is sits behind the
+**Merges into** heading's info button (`DetailSection`'s `info`), each target is one line with one fact from the board
+(`epicsStatus`, `flaggedStatus`), and Ready means is one line with the full definition behind its info button.
+
+#### The Add gallery
+
+`AddAutomationDialog` (`components/autopilot/`), opened by **+ Add automation**, is one place to start anything:
+
+- **Quick setup**, a row with **Choose…** that opens [the card](#quick-setup) inside the dialog.
+- **Quickest: ask your agent**, with the [Ask an agent](#ask-an-agent) menu.
+- **Recipes** (`AUTOMATION_RECIPES`, `automationExamples.ts`): ready-made custom automations as bundles. A card opens the
+  import page with `?recipe=<id>`, where the bundle is read like a shared file and saves in Preview. They are plain
+  custom automations; nothing marks one as a recipe afterwards. A recurring-task rule is not a recipe: it needs a
+  project and a template.
+- **Import a file** (the import page) and **Start from scratch** (the editor, `/settings/autopilot/custom/new`).
+
+Built-ins that are switched off stay in the main list, dimmed, so the gallery doesn't repeat them.
+
+#### Quick setup
+
+`QUICK_SETUP_PRESETS` (`packages/contracts/src/quickSetup.ts`) names three one-off presets: **Notify** (Digest, Remind
+me about stuck tasks, Unblock dependents, Auto-archive Done), **Assist** (Review PRs, Fix PRs, Digest, stuck-task
+reminders, Auto-archive) and **Hands-off** (Start planned tasks, Orchestrate, Review PRs, Fix PRs, Merge ready PRs,
+stuck-task reminders, Auto-archive). Quick setup writes only each automation's mode: Merge ready PRs' Into main setting, like every other config, is left as it is.
+
+`quickSetupChanges(level, state)` is pure and drives both the list the card shows and the writes it makes
+(`quickSetupWrites`): each preset automation that is off or inherits at the **board** scope is switched on there; one
+already On or in Preview is listed as "already on" and left alone; one with `blocked` is listed and skipped. A project
+that switches one Off for itself is named in the row ("Stays off in …"), since the board write doesn't override it.
+Automations that start an agent or act on GitHub start in **Preview** while "Start agent automations in Preview"
+(on by default) is on; the rest start On.
+
+Apply (`useApplyQuickSetup`) sends the writes one after another through the board scope's `PUT`, since the server has
+no batch; a refused write is reported in one toast and doesn't stop the others. **Nothing stores the level**: the writes
+are ordinary board switches, and the next Quick setup reads what is on then.
+
+#### Ask an agent
+
+There is no chat box. `AskAgentMenu` (`handoff/HandoffActions.tsx`) hands a prompt to the user's own agent as **New T3
+Code thread…** (one item per project that can start one, `canStartProjectT3Thread`; the dialog's `prompt` launch kind
+shows the prompt for editing first and starts it in a project thread linked to nothing) or **Copy prompt**. It sits
+beside **Add automation** (`createAutomationPrompt`), as **Ask an agent to change this** in each automation's detail
+header (`changeAutomationPrompt`) and as **Ask an agent to fix** on a failed run in Needs you and the Runs tab
+(`fixRunPrompt`), all in `packages/contracts/src/automationPrompts.ts`.
+
+The prompts name the `aboard-automations` skill and `draft_automation`. A custom automation's prompt carries its id and
+definition (as a shared-file bundle, cut at 6,000 characters), and the agent drafts a replacement for the user to
+review; a built-in's tells the agent it can't change settings and should say which to change. A fix prompt carries the
+run's summary, error, exit code and the last lines of its output, and `retry_autopilot_run` when the run was on a
+task. They all say a draft isn't active until the user imports it. A session in a CLI harness isn't offered: those
+launchers are task- and planning-specific.
+
+- **Runs** (`/settings/autopilot/runs/$automation`): the [run history](#run-history) of every automation (`all`) or
+  one.
+- **Limits & safety** (`/settings/autopilot/limits`, `AutopilotLimits`): spending and timing (concurrency, the daily
+  caps, quiet hours), the defaults for agent runs ([agent defaults](#agent-defaults), with a link to Agents →
+  Operations for the models), **Advanced** (`autopilot.limits.advanced`: **Preview everything**, `engine.dryRun`, and
+  worktree retention), and the board's variables. A number that is out of range is put back with a toast; an empty cap means
+  no cap.
+
+Old links still work: `redirectSettingsTarget` sends `autopilot.engine.*` to the limits rows or, for
+`autopilot.engine.automation-<key>` and `autopilot.engine.orchestrate`, to `autopilot.automations.<key>` (which picks
+it), and `autopilot.custom` to the list (its variables to Limits & safety). The old Dry run and Safety anchors go to
+Preview everything and Advanced. The router redirects such a hash to the
+tab's path. Orchestrate's **Countdown on lanes** (`showAutopilotTimer`, a per-browser display preference) is
+**Autopilot countdown on lanes** in Settings → Appearance.
+
+The fields are a form generated from the automation's `fields`: a switch, number, text, 24-hour time or select per
+field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is stored as a
+`ReviewSkillRef`, and an unset one is the built-in skill, labelled with the field's `builtinLabel` when it has one,
+such as the digest's own skill). The board's fields are edited in the detail, as above. A project's settings page (Settings → Project → Automations,
+`ProjectAutopilotSection`) is read only: each automation with the sentence saying where it runs, **On here** or
+**Off here**, and a **Change** button that opens that automation's detail (`autopilot.automations.<key>`). A project
+no longer has a form for its own config: a value already stored for a project still applies over the board's, so its
+row says "This project sets its own: …" and has **Clear own settings** (it saves the scope's config as empty, which the
+server turns into removing the row when the mode is Inherit); nothing in the UI sets one. The lane and epic popovers are the widget's compact form (`WhereRow`, see
+[board-layout.md](board-layout.md#autopilot-on-the-board)). Config set at a scope is sent whole (the server replaces
+it), so editing one key sends the scope's other keys with it; the reset button beside a field's title (shown only
+while the key is set at that scope) removes the key so it inherits.
+
 - Saves reach the server one at a time per scope, each built from the latest saved config when it runs, so two quick
   edits can't undo each other. The server's reply goes straight into the query cache, and `autopilot.changed`
   (which every settings change also publishes) refetches the scopes, so another window's edit shows up too. The
@@ -1622,10 +2148,15 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/autopilot/automations/startPlanned.ts` | Start planned tasks |
 | `apps/server/src/autopilot/automations/orchestrate.ts` | Orchestrate: the schedule, Run now, its state, the tools it gets and `orchestratePrompt` |
 | `apps/server/src/mcp/tools/autopilot.ts` | `retry_autopilot_run`, `draft_automation` |
-| `apps/server/src/autopilot/automations/unstick.ts` | Remind me about stuck tasks (`unstick`) |
-| `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |
+| `apps/server/src/autopilot/reminders.ts` | The quiet-task, waiting-thread and unblocked reminders (`sendReminders`) |
+| `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off, carried verdicts and resolution reviews |
+| `apps/server/src/autopilot/headMove.ts` | `classifyHeadMove`: whether a PR's head moved only by merging its base in, and whether git made those merges on its own |
+| `apps/server/src/autopilot/automations/repoPrs.ts`, `repoPrAssess.ts` | Review PRs' other people's PRs: settings, the poll, which PRs and their mode and gate, the prompt, posting and hand-offs |
+| `apps/server/src/integrations/githubRepoPrs.ts` | GitHub's reads and writes for other people's PRs: the open PRs, one PR in full, `unchangedSince`, comments |
+| `packages/contracts/src/repoPrReview.ts` | The other-people's-PR verdict, run output, markers, `/autopilot` commands and sensitive paths |
 | `apps/server/src/autopilot/automations/fixPrs.ts` | Fix PRs: the triggers, batching, the limits and the fix prompt |
-| `apps/server/src/autopilot/automations/mergeEpicPrs.ts` | Merge into epic branch: `notMergeable`, the merge, the epic's draft PR and `epicPrBody` |
+| `apps/server/src/autopilot/automations/mergeEpicPrs.ts` | Merge ready PRs: Into epic branches (the merge, the epic's draft PR and `epicPrBody`) and the dispatch to Into main |
+| `apps/server/src/autopilot/automations/mergeIntoMain.ts` | Merge ready PRs' Into main: candidates one per repository, the hold notice and the merge through `mergeAutoMergeTask` |
 | `apps/server/src/autopilot/epicBranch.ts` | `ensureEpicBranch`: making an epic's integration branch on origin |
 | `packages/contracts/src/runThreads.ts` | `t3RunWorking`: whether a T3 thread a run handed work to is still working on it, for Start planned, Fix PRs and the PR row |
 | `apps/server/src/autopilot/threads.ts` | `threadSeen`: whether the live poll has seen a thread lately |
@@ -1637,26 +2168,32 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `packages/contracts/src/customAutomations.ts` | Custom triggers, filters and actions, placeholders, the shell environment, the definition check |
 | `apps/server/src/autopilot/custom.ts`, `services/customAutomations.ts` | Custom automations as catalogue entries, and their service |
 | `apps/server/src/integrations/shellCommand.ts`, `scriptRunner.ts`, `captureProcess.ts` | Running a shell or script action, and the spawn they share |
+| `packages/contracts/src/quickSetup.ts` | Quick setup's presets and `quickSetupChanges` |
+| `packages/contracts/src/automationPrompts.ts` | The Ask an agent prompts: create, change this, fix this run |
+| `apps/web/src/components/autopilot/AddAutomationDialog.tsx`, `QuickSetup.tsx`, `AskAgentButtons.tsx` | The Add gallery, the Quick setup card, and the change and fix menus |
 | `packages/contracts/src/automationVariables.ts` | Variables: the schema and `effectiveVariables` |
 | `packages/contracts/src/automationSdk.ts` | What a script can read, and the snippets the editor's panel shows |
 | `apps/server/src/integrations/gitRemote.ts` | `remoteRepo`, `repoWebUrl` and the cached repository URL per folder |
 | `apps/server/src/db/migrations/036_project_variables.sql` | `projects.variables_json`, a project's variable overrides |
 | `apps/web/src/components/autopilot/VariablesEditor.tsx`, `VariablesSection.tsx`, `variables.logic.ts`, `SdkStatusBar.tsx`, `InsertChips.tsx` | The variables editors, the "Variables it reads" list, the insert chips and the status line |
-| `apps/web/src/components/autopilot/CustomAutomation*.tsx` | The custom automation list and editor |
+| `apps/web/src/components/autopilot/CustomAutomation*.tsx` | The custom automation editor and import page |
 | `apps/web/src/components/autopilot/ScriptField.tsx`, `ScriptEditor*.tsx`, `scripts.logic.ts` | The script editor (CodeMirror, lazy), language notes, starters, the test run panel |
 | `apps/server/src/services/testScript.ts` | Running a draft script once for the editor's test run |
-| `packages/contracts/src/automationBundle.ts`, `automationExamples.ts` | The shareable file (version 2 with a script), and the shipped examples, with the "Review repo PRs" check script |
+| `packages/contracts/src/automationBundle.ts`, `automationExamples.ts` | The shareable file (version 2 with a script), and the shipped example |
 | `apps/server/src/autopilot/reviewRepoPrs.test.ts` | The example's bundle, and its script run against a fake `gh` |
 | `packages/contracts/src/automationDrafts.ts`, `apps/server/src/db/repos/autopilotDrafts.ts` | Agents' drafts: the input, the check, the caps, and their table (migration 037) |
 | `apps/server/src/autopilot/automations/digest.ts`, `autopilot/digest.ts` | Digest of what changed: the automation, making a digest (plain, summarised, the fallback) and "digest now" |
 | `apps/server/src/autopilot/digestBuilder.ts`, `digestConfig.ts` | The plain digest's Markdown, and the automation's config |
 | `apps/server/src/services/digests.ts`, `db/repos/autopilotDigests.ts` | Collecting the period's activity, storing digests, the inbox notification |
 | `packages/contracts/src/digest.ts` | `Digest`, `dueDigestSlot` |
-| `apps/web/src/components/recurring/` | The rule list, editor and examples on the project settings page |
+| `apps/web/src/components/recurring/` | The rule rows (shared by the project page and Settings → Autopilot), editor and examples |
 | `apps/server/src/http/routes/autopilot.ts` | The REST routes |
 | `packages/contracts/src/autopilotRunHistory.ts` | The run history's filter, query and page, and the delete's input, result and kept reasons |
 | `apps/server/src/db/migrations/034_autopilot_runs_automation_index.sql` | The index the history page's filter and paging read |
 | `apps/web/src/components/autopilot/RunHistory.tsx`, `RunHistoryRow.tsx`, `runHistory.logic.ts` | The run history page, a run's row, and the URL-to-filter logic |
-| `apps/web/src/components/autopilot/OrchestrateSettings.tsx` | Orchestrate's area in Settings → Autopilot |
+| `apps/web/src/components/autopilot/AutopilotPage.tsx` | Settings → Autopilot's tabs, the status strip and Needs you |
+| `apps/web/src/components/autopilot/AutomationsSplit.tsx`, `automationList.logic.ts` | The list and detail: groups, rows, dimming, the Advanced section, its override pattern and change count |
+| `apps/web/src/components/autopilot/AutopilotSettingsSection.tsx` | The Limits & safety tab, and a project's read-only Autopilot list |
+| `packages/contracts/src/autopilotSentence.ts` | `automationSentence`, `limitsSummary`, `todaySummary` |
 | `apps/web/src/state/autopilotRunHistory.ts` | The history's infinite query, the delete preview and the delete |
 | `apps/web/src/components/autopilot/` | The pill, epic button, their shared popover (`ScopePopover`), badge, panel section and settings (`autopilot.logic.ts` holds the tested logic) |

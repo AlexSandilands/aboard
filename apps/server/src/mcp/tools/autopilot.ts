@@ -28,8 +28,9 @@ function missingVariables(services: Services, draft: AutomationDraft): string[] 
 }
 
 /**
- * retry_autopilot_run, which lifts no limit (the engine decides whether there is still work, under the user's switches,
- * pause and caps), and draft_automation, which saves nothing that runs: only the user's import on the board's page
+ * retry_autopilot_run, which lifts no limit but one (the engine decides whether there is still work, under the user's
+ * switches, pause and caps; retrying Review PRs' "rounds used up" notice allows the PR one more review round, which its
+ * description says to do only when the user asks), and draft_automation, which saves nothing that runs: only the user's import on the board's page
  * does. Neither switches Autopilot on or changes what it may do.
  */
 export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, actor }) => {
@@ -42,7 +43,9 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
         "interrupted (get_task shows it under attention or in recent activity). Clears its attention flag; on its next " +
         "pass, within a minute, the automation acts again if there is still work, under the user's switches, pause and " +
         "limits. Rounds and attempts no longer count the retried run. Use it instead of pushing an empty commit to " +
-        "re-trigger a review. Retry a run once its cause is gone: one that fails the same way again wastes a run.",
+        "re-trigger a review. Retry a run once its cause is gone: one that fails the same way again wastes a run. " +
+        "Retrying Review PRs' notice that a PR changed after its last review round (or after its last conflict " +
+        "resolution review) allows that PR one more review: do that only when the user asks for it.",
       inputSchema: {
         task: taskField,
         automation: z
@@ -85,14 +88,17 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
   server.registerTool(
     "draft_automation",
     {
-      title: "Draft a custom automation for the user to import",
+      title: "Draft a custom automation, or a change to one, for the user to review",
       description:
         'Write a custom Autopilot automation for the user when they ask for one ("every morning, ...", "when a PR ' +
-        'merges, ..."). It saves nothing that runs: the board keeps it as a draft for ' +
-        `${AUTOMATION_DRAFT_TTL_DAYS} days and gives you a link to its import page, where the user reads it, confirms ` +
-        "any script, fills in inputs and tool slots, and imports it switched off. Give the user the link and say they " +
-        "must import it and switch it on; never claim it is set up. A draft with problems is refused with every problem " +
-        "listed: fix them all and call again. Each call makes a new draft.",
+        'merges, ..."), or a new version of one of their custom automations with replaces. It saves nothing that runs: ' +
+        `the board keeps it as a draft for ${AUTOMATION_DRAFT_TTL_DAYS} days and gives you a link to its review page. ` +
+        "For a new automation the user reads it, confirms any script, fills in inputs and tool slots, and imports it; " +
+        "it comes in in Preview, where it records what it would do and does none of it (a check script still runs for " +
+        "real) until the user turns it on. For a change (replaces) the user sees a before/after diff and applies it: " +
+        "the automation changes in place and keeps its id, switches, projects and run history. Give the user the link " +
+        "and say they must review it; never claim it is set up or changed. A draft with problems is refused with every " +
+        "problem listed: fix them all and call again. Each call makes a new draft.",
       inputSchema: {
         automation: z
           .record(z.string(), z.unknown())
@@ -102,8 +108,9 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
               "from?} (statuses backlog|planned|in_progress|review|done), {kind: 'pr_event', event: " +
               "linked|new_head|checks_failing|conflict|merged}, {kind: 'stale', status, hours}, {kind: " +
               "'blocker_finished'} or {kind: 'schedule', schedule: {kind: 'weekly', days: [0-6, 0 is Sunday], time: " +
-              "'HH:MM'} | {kind: 'hourly', everyHours} | {kind: 'minutes', everyMinutes (5-1440)}}; filters: {labels} " +
-              "(not for a schedule); action, one of {kind: 'agent', prompt, skill?, model?: {tier: light|standard|deep} " +
+              "'HH:MM'} | {kind: 'hourly', everyHours} | {kind: 'minutes', everyMinutes (5-1440)}}; filters: {labels, " +
+              "epicTasks?: false to skip tasks in epics} (not for a schedule; where it runs, projects and epics, is " +
+              "the user's to pick, so never name them; a change with replaces keeps the automation's own epicTasks); action, one of {kind: 'agent', prompt, skill?, model?: {tier: light|standard|deep} " +
               "(omit it to inherit the automation's Model setting, then the task's), " +
               "onPrBranch?, allowedTools?: ['mcp__server__tool'], check?: {language, body, timeoutSeconds?}, " +
               "untrustedItems?}, {kind: 'shell', command, timeoutSeconds?} or {kind: 'script', language: " +
@@ -124,43 +131,70 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
             "To the user, shown above the draft: what it is for and anything to check before importing it (tools to " +
               "fill in, variables to set).",
           ),
+        replaces: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe(
+            "To change one of the user's custom automations instead of adding one: its id, its key (custom:<id>) or " +
+              "its exact name. Send the whole new version (everything you didn't mean to change, as it is now): the " +
+              "user sees the difference and applies it in place. Not for built-in automations, which have settings " +
+              "instead. Leave it out for a new automation.",
+          ),
         actor: actorField,
       },
     },
     (args) =>
       run(() => {
         const draft = services.customAutomations.draft(
-          { automation: args.automation, note: args.note ?? "" },
+          { automation: args.automation, note: args.note ?? "", ...(args.replaces ? { replaces: args.replaces } : {}) },
           actor(args.actor),
         );
         const { bundle } = draft;
-        const lines = [
-          `Drafted "${bundle.name}". Nothing is saved or running yet: the user must open the draft, review it and ` +
-            "import it, and it comes in switched off.",
-          `Import page: ${boardUrl(ctx)}${automationDraftPath(draft.id)}`,
-          `It expires ${draft.expiresAt.slice(0, 10)} unless imported.`,
-        ];
+        const target = draft.replaces ? services.customAutomations.get(draft.replaces) : null;
+        const lines = target
+          ? [
+              `Proposed a change to "${target.name}". Nothing has changed yet: the user must open the draft, read the ` +
+                "difference and apply it. Applying changes the automation in place: it keeps its id, its switches " +
+                "(Off, Preview or On), where it runs and its run history.",
+              `Review page: ${boardUrl(ctx)}${automationDraftPath(draft.id)}`,
+              `It expires ${draft.expiresAt.slice(0, 10)} unless applied.`,
+            ]
+          : [
+              `Drafted "${bundle.name}". Nothing is saved or running yet: the user must open the draft, review it and ` +
+                "import it. It comes in in Preview: it records what it would do and does none of it (a check script " +
+                "still runs for real) until the user turns it on.",
+              `Import page: ${boardUrl(ctx)}${automationDraftPath(draft.id)}`,
+              `It expires ${draft.expiresAt.slice(0, 10)} unless imported.`,
+            ];
         if (actionScripts(bundle.action).length > 0) {
           lines.push(
-            "It runs a script on the user's machine, so they must read it and confirm the script on the import page.",
+            "It runs a script on the user's machine, so they must read it and confirm the script on the review page.",
           );
         } else if (bundle.action.kind === "shell") {
           lines.push("It runs a command on the user's machine, so they must read it before importing it.");
         }
         if (bundle.slots.length > 0) {
           lines.push(
-            `The user fills these tool slots with their own MCP tools when importing: ${bundle.slots.map((s) => s.label).join(", ")}.`,
+            target
+              ? `Tool slots keep the user's tools when their name is unchanged; the user fills new ones: ${bundle.slots.map((s) => s.label).join(", ")}.`
+              : `The user fills these tool slots with their own MCP tools when importing: ${bundle.slots.map((s) => s.label).join(", ")}.`,
           );
         }
         const missing = missingVariables(services, draft);
         if (missing.length > 0) {
           lines.push(
             "Variables it reads that have no value, so it skips those projects until the user sets them (Settings → " +
-              "Autopilot → Custom automations → Variables, or a project's settings):",
+              "Autopilot → Limits & safety → Variables, or a project's settings):",
             ...missing,
           );
         }
-        lines.push("Tell the user it is waiting for them, with the link.");
+        lines.push(
+          target
+            ? "Tell the user the change is waiting for them to review, with the link."
+            : "Tell the user it is waiting for them, with the link.",
+        );
         return textResult(lines.join("\n"));
       }),
   );

@@ -1,5 +1,11 @@
-import { AUTOPILOT_ALL_RUNS, RUN_DELETE_IDS_MAX, type AutopilotRun, type AutopilotRunFilter } from "@repo/contracts";
-import { ChevronLeftIcon, SearchIcon, Trash2Icon } from "lucide-react";
+import {
+  AUTOPILOT_ALL_RUNS,
+  RETIRED_AUTOMATION_TITLES,
+  RUN_DELETE_IDS_MAX,
+  type AutopilotRun,
+  type AutopilotRunFilter,
+} from "@repo/contracts";
+import { ListChecksIcon, SearchIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { SettingsGroup } from "~/components/settings/settingsLayout";
 import { Button } from "~/components/ui/button";
@@ -13,6 +19,7 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Spinner } from "~/components/ui/spinner";
 import { toastManager } from "~/components/ui/toast";
@@ -20,17 +27,20 @@ import { useDebouncedValue } from "~/hooks/useDebouncedValue";
 import { useAutopilotRunHistory, useDeleteAutopilotRuns, useDeleteRunsPreview } from "~/state/autopilotRunHistory";
 import { useAutopilotOverview, useBoard } from "~/state/queries";
 import { automationTitle } from "./autopilot.logic";
+import { cn } from "~/lib/utils";
 import {
   deleteTitle,
   describeRunFilter,
   isNarrowed,
   keptText,
+  RUN_OUTCOMES,
   RUN_RANGES,
   runHistoryFilter,
   runsOfPages,
   type RunHistorySearch,
   type RunRange,
 } from "./runHistory.logic";
+import { AskToFix } from "./AskAgentButtons";
 import { RunHistoryRow } from "./RunHistoryRow";
 
 const ALL_PROJECTS = "all";
@@ -40,27 +50,29 @@ const NO_SELECTION: ReadonlySet<string> = new Set();
 type DeleteTarget = { kind: "ids"; ids: string[] } | { kind: "filter" };
 
 /**
- * Every run of an automation (or of all of them), newest first, loading more as you scroll, filtered by project and
- * time and searchable. Runs can be deleted by hand, ticked or all matching the filters: nothing ever deletes them by
- * itself. The filters live in the URL (`search`), so a page can be linked to and survives a reload.
+ * Every run of an automation (or of all of them), newest first, loading more as you scroll, filtered by automation,
+ * outcome, project and time and searchable. A row opens to what the run kept. Deleting is out of the way under Clean
+ * up…: ticked runs, or all matching the filters; nothing ever deletes runs by itself. The filters live in the URL (the
+ * automation in the path, the rest in `search`), so a page can be linked to and survives a reload.
  */
 export function RunHistory({
   automation,
   search,
   onSearch,
-  onBack,
+  onAutomation,
 }: {
   /** An automation's key, or `AUTOPILOT_ALL_RUNS`. */
   automation: string;
   search: RunHistorySearch;
   onSearch: (next: RunHistorySearch) => void;
-  onBack: () => void;
+  /** Shows another automation's runs (or every one's, with `AUTOPILOT_ALL_RUNS`), keeping the other filters. */
+  onAutomation: (automation: string) => void;
 }) {
   const overview = useAutopilotOverview();
   const board = useBoard();
   const projects = board.data?.projects.filter((p) => p.archivedAt === null) ?? [];
-  const title =
-    automation === AUTOPILOT_ALL_RUNS ? null : automationTitle(overview.data?.automations ?? [], automation);
+  const catalogue = overview.data?.automations ?? [];
+  const title = automation === AUTOPILOT_ALL_RUNS ? null : automationTitle(catalogue, automation);
 
   // A preset's "last 7 days" is counted from when the filters last changed, so the list doesn't shift as the clock
   // moves.
@@ -69,10 +81,10 @@ export function RunHistory({
     setAsOf(new Date());
     onSearch(next);
   };
-  const { project, range, since, until, q } = search;
+  const { project, range, since, until, outcome, q } = search;
   const filter = useMemo(
-    () => runHistoryFilter(automation, { project, range, since, until, q }, asOf),
-    [automation, project, range, since, until, q, asOf],
+    () => runHistoryFilter(automation, { project, range, since, until, outcome, q }, asOf),
+    [automation, project, range, since, until, outcome, q, asOf],
   );
   const history = useAutopilotRunHistory(filter);
   const runs = runsOfPages(history.data?.pages);
@@ -82,6 +94,8 @@ export function RunHistory({
     key: filterKey,
     ids: NO_SELECTION,
   });
+  const [selecting, setSelecting] = useState(false);
+  const [opened, setOpened] = useState<ReadonlySet<string>>(NO_SELECTION);
   // Ticks belong to the list they were made in: another filter starts clean.
   const selected = selection.key === filterKey ? selection.ids : NO_SELECTION;
   const ticked = runs.filter((r) => selected.has(r.id)).map((r) => r.id);
@@ -92,77 +106,94 @@ export function RunHistory({
 
   const taskNumbers = useMemo(() => new Map(board.data?.tasks.map((t) => [t.id, t.number]) ?? []), [board.data?.tasks]);
   const projectTitle = (id: string | null) => projects.find((p) => p.id === id)?.title ?? null;
+  const automationItems = [
+    { value: AUTOPILOT_ALL_RUNS, label: "All automations" },
+    ...catalogue.map((a) => ({ value: a.key, label: a.title })),
+    // Retired ones still have runs worth finding, under their old names.
+    ...Object.entries(RETIRED_AUTOMATION_TITLES)
+      .filter(([key]) => !catalogue.some((a) => a.key === key))
+      .map(([key, label]) => ({ value: key, label: `${label} (retired)` })),
+  ];
+  if (!automationItems.some((i) => i.value === automation)) {
+    automationItems.push({ value: automation, label: automationTitle(catalogue, automation) });
+  }
 
   return (
-    <div className="flex flex-col gap-4 px-3 sm:px-4">
-      <div className="flex flex-col gap-2">
-        <Button variant="ghost-muted" size="sm" className="-ms-2 w-fit" onClick={onBack}>
-          <ChevronLeftIcon />
-          Autopilot settings
-        </Button>
-        <h1 className="font-semibold text-xl leading-none">Run history{title ? `: ${title}` : ""}</h1>
-        <p className="max-w-xl text-xs text-muted-foreground">
-          {title ? `Every ${title} run` : "Every run of every automation"}, newest first. Runs are only deleted when you
-          delete them here.
-        </p>
-      </div>
+    <div className="flex flex-col gap-3 px-3 sm:px-4">
+      <p className="max-w-xl text-xs text-muted-foreground">
+        {title ? `Every ${title} run` : "Every run of every automation"}, newest first. Open a run for its output,
+        handover and thread.
+      </p>
 
-      <FilterBar search={search} projects={projects} onSearch={changeSearch} />
+      <FilterBar
+        search={search}
+        projects={projects}
+        automation={automation}
+        automations={automationItems}
+        onAutomation={onAutomation}
+        onSearch={changeSearch}
+      />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            aria-label="Select all loaded runs"
-            className="size-3.5 cursor-pointer accent-primary"
-            checked={runs.length > 0 && ticked.length === Math.min(runs.length, RUN_DELETE_IDS_MAX)}
-            ref={(el) => {
-              if (el) el.indeterminate = ticked.length > 0 && ticked.length < Math.min(runs.length, RUN_DELETE_IDS_MAX);
-            }}
-            disabled={runs.length === 0}
-            onChange={(event) =>
-              setTicked(
-                event.currentTarget.checked
-                  ? new Set(runs.slice(0, RUN_DELETE_IDS_MAX).map((r) => r.id))
-                  : NO_SELECTION,
-              )
-            }
-          />
-          {full
-            ? `${ticked.length} selected, the most one delete takes`
-            : ticked.length > 0
-              ? `${ticked.length} selected`
-              : "Select all loaded"}
-        </label>
-        <div className="ms-auto flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="destructive-outline"
-            disabled={ticked.length === 0}
-            onClick={() => setTarget({ kind: "ids", ids: ticked })}
-          >
-            <Trash2Icon />
-            Delete selected
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive-outline"
-            disabled={runs.length === 0}
-            onClick={() => setTarget({ kind: "filter" })}
-          >
-            <Trash2Icon />
-            {isNarrowed(search) ? "Delete all matching…" : "Delete all…"}
-          </Button>
+      {selecting ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              aria-label="Select all loaded runs"
+              className="size-3.5 cursor-pointer accent-primary"
+              checked={runs.length > 0 && ticked.length === Math.min(runs.length, RUN_DELETE_IDS_MAX)}
+              ref={(el) => {
+                if (el) {
+                  el.indeterminate = ticked.length > 0 && ticked.length < Math.min(runs.length, RUN_DELETE_IDS_MAX);
+                }
+              }}
+              disabled={runs.length === 0}
+              onChange={(event) =>
+                setTicked(
+                  event.currentTarget.checked
+                    ? new Set(runs.slice(0, RUN_DELETE_IDS_MAX).map((r) => r.id))
+                    : NO_SELECTION,
+                )
+              }
+            />
+            {full
+              ? `${ticked.length} selected, the most one delete takes`
+              : ticked.length > 0
+                ? `${ticked.length} selected`
+                : "Select all loaded"}
+          </label>
+          <div className="ms-auto flex items-center gap-2">
+            <Button
+              size="xs"
+              variant="destructive-outline"
+              disabled={ticked.length === 0}
+              onClick={() => setTarget({ kind: "ids", ids: ticked })}
+            >
+              <Trash2Icon />
+              Delete selected
+            </Button>
+            <Button
+              size="xs"
+              variant="ghost-muted"
+              onClick={() => {
+                setSelecting(false);
+                setTicked(NO_SELECTION);
+              }}
+            >
+              Done
+            </Button>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <RunList
         runs={runs}
         loading={history.isPending}
         error={history.error?.message ?? null}
         narrowed={isNarrowed(search)}
-        showAutomation={automation === AUTOPILOT_ALL_RUNS}
-        automationTitles={overview.data?.automations ?? []}
+        automationTitles={catalogue}
+        paused={new Set(overview.data?.autoPaused.map((p) => `${p.automation}:${p.projectId}`) ?? [])}
+        selecting={selecting}
         selected={selected}
         selectionFull={full}
         onTick={(id, on) => {
@@ -171,11 +202,35 @@ export function RunHistory({
           else next.delete(id);
           setTicked(next);
         }}
+        opened={opened}
+        onOpen={(id, open) => {
+          const next = new Set(opened);
+          if (open) next.add(id);
+          else next.delete(id);
+          setOpened(next);
+        }}
         projectTitle={projectTitle}
         taskNumber={(id) => (id ? (taskNumbers.get(id) ?? null) : null)}
         hasMore={history.hasNextPage}
         loadingMore={history.isFetchingNextPage}
         onLoadMore={() => void history.fetchNextPage()}
+        cleanUp={
+          <Menu>
+            <MenuTrigger render={<Button size="xs" variant="ghost-muted" disabled={runs.length === 0} />}>
+              Clean up…
+            </MenuTrigger>
+            <MenuPopup align="end">
+              <MenuItem onClick={() => setSelecting(true)}>
+                <ListChecksIcon />
+                Select runs to delete
+              </MenuItem>
+              <MenuItem variant="destructive" onClick={() => setTarget({ kind: "filter" })}>
+                <Trash2Icon />
+                {isNarrowed(search) || title ? "Delete all matching…" : "Delete all…"}
+              </MenuItem>
+            </MenuPopup>
+          </Menu>
+        }
       />
 
       <DeleteDialog
@@ -192,10 +247,16 @@ export function RunHistory({
 function FilterBar({
   search,
   projects,
+  automation,
+  automations,
+  onAutomation,
   onSearch,
 }: {
   search: RunHistorySearch;
   projects: ReadonlyArray<{ id: string; title: string }>;
+  automation: string;
+  automations: ReadonlyArray<{ value: string; label: string }>;
+  onAutomation: (automation: string) => void;
   onSearch: (next: RunHistorySearch) => void;
 }) {
   // The box keeps what is typed; the URL, and so the query, follows once typing pauses.
@@ -212,80 +273,118 @@ function FilterBar({
   ];
   const range: RunRange = search.range ?? "all";
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-48 flex-1">
-        <SearchIcon className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          aria-label="Search runs"
-          size="sm"
-          className="ps-8"
-          placeholder="Search run id, project, #12, summary or handover"
-          value={text}
-          onChange={(event) => setText(event.currentTarget.value)}
-        />
-      </div>
-      <Select
-        items={projectItems}
-        value={search.project ?? ALL_PROJECTS}
-        onValueChange={(value) => {
-          if (value !== null) onSearch({ ...search, project: value === ALL_PROJECTS ? undefined : value });
-        }}
-      >
-        <SelectTrigger size="sm" className="sm:w-44" aria-label="Project">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectPopup>
-          {projectItems.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
-              {item.label}
-            </SelectItem>
-          ))}
-        </SelectPopup>
-      </Select>
-      <Select
-        items={RUN_RANGES}
-        value={range}
-        onValueChange={(value) => {
-          if (value === null) return;
-          const next = value === "all" ? undefined : value;
-          // Days only mean something in a custom range; leaving it forgets them.
-          onSearch({ ...search, range: next, ...(next === "custom" ? {} : { since: undefined, until: undefined }) });
-        }}
-      >
-        <SelectTrigger size="sm" className="sm:w-40" aria-label="Time">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectPopup>
-          {RUN_RANGES.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
-              {item.label}
-            </SelectItem>
-          ))}
-        </SelectPopup>
-      </Select>
-      {search.range === "custom" ? (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-48 flex-1">
+          <SearchIcon className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
-            type="date"
-            aria-label="From"
+            aria-label="Search runs"
             size="sm"
-            className="w-36"
-            value={search.since ?? ""}
-            max={search.until}
-            onChange={(event) => onSearch({ ...search, since: event.currentTarget.value || undefined })}
-          />
-          to
-          <Input
-            type="date"
-            aria-label="Until (included)"
-            size="sm"
-            className="w-36"
-            value={search.until ?? ""}
-            min={search.since}
-            onChange={(event) => onSearch({ ...search, until: event.currentTarget.value || undefined })}
+            className="ps-8"
+            placeholder="Search: #12, summary, run id"
+            value={text}
+            onChange={(event) => setText(event.currentTarget.value)}
           />
         </div>
-      ) : null}
+        <Select
+          items={automations}
+          value={automation}
+          onValueChange={(value) => {
+            if (value !== null && value !== automation) onAutomation(value);
+          }}
+        >
+          <SelectTrigger size="sm" className="sm:w-48" aria-label="Automation">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectPopup>
+            {automations.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+        <Select
+          items={projectItems}
+          value={search.project ?? ALL_PROJECTS}
+          onValueChange={(value) => {
+            if (value !== null) onSearch({ ...search, project: value === ALL_PROJECTS ? undefined : value });
+          }}
+        >
+          <SelectTrigger size="sm" className="sm:w-44" aria-label="Project">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectPopup>
+            {projectItems.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+        <Select
+          items={RUN_RANGES}
+          value={range}
+          onValueChange={(value) => {
+            if (value === null) return;
+            const next = value === "all" ? undefined : value;
+            // Days only mean something in a custom range; leaving it forgets them.
+            onSearch({ ...search, range: next, ...(next === "custom" ? {} : { since: undefined, until: undefined }) });
+          }}
+        >
+          <SelectTrigger size="sm" className="sm:w-40" aria-label="Time">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectPopup>
+            {RUN_RANGES.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+        {search.range === "custom" ? (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Input
+              type="date"
+              aria-label="From"
+              size="sm"
+              className="w-36"
+              value={search.since ?? ""}
+              max={search.until}
+              onChange={(event) => onSearch({ ...search, since: event.currentTarget.value || undefined })}
+            />
+            to
+            <Input
+              type="date"
+              aria-label="Until (included)"
+              size="sm"
+              className="w-36"
+              value={search.until ?? ""}
+              min={search.since}
+              onChange={(event) => onSearch({ ...search, until: event.currentTarget.value || undefined })}
+            />
+          </div>
+        ) : null}
+      </div>
+      <div role="group" aria-label="Outcome" className="flex flex-wrap items-center gap-1.5">
+        {[{ value: undefined, label: "Any outcome" }, ...RUN_OUTCOMES].map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            aria-pressed={search.outcome === item.value}
+            className={cn(
+              "cursor-pointer rounded-full border px-2.5 py-0.5 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+              search.outcome === item.value
+                ? "border-foreground/30 bg-accent text-foreground"
+                : "border-border/60 text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => onSearch({ ...search, outcome: item.value })}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -295,32 +394,42 @@ function RunList({
   loading,
   error,
   narrowed,
-  showAutomation,
   automationTitles,
+  paused,
+  selecting,
   selected,
   selectionFull,
   onTick,
+  opened,
+  onOpen,
   projectTitle,
   taskNumber,
   hasMore,
   loadingMore,
   onLoadMore,
+  cleanUp,
 }: {
   runs: AutopilotRun[];
   loading: boolean;
   error: string | null;
   narrowed: boolean;
-  showAutomation: boolean;
   automationTitles: ReadonlyArray<{ key: string; title: string }>;
+  /** `automation:projectId` of each auto-pause. */
+  paused: ReadonlySet<string>;
+  selecting: boolean;
   selected: ReadonlySet<string>;
   /** Nothing more can be ticked. */
   selectionFull: boolean;
   onTick: (id: string, on: boolean) => void;
+  opened: ReadonlySet<string>;
+  onOpen: (id: string, open: boolean) => void;
   projectTitle: (id: string | null) => string | null;
   taskNumber: (id: string | null) => number | null;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
+  /** The Clean up… menu, under the list. */
+  cleanUp: React.ReactNode;
 }) {
   // Loads the next page when the end of the list comes near. A ref callback that is new on each render, so the end
   // is observed again after every page: one that doesn't fill the screen goes on to the next.
@@ -361,28 +470,48 @@ function RunList({
             <RunHistoryRow
               key={run.id}
               run={run}
-              automation={showAutomation ? automationTitle(automationTitles, run.automation) : null}
+              others={runs}
+              automation={automationTitle(automationTitles, run.automation)}
               projectTitle={projectTitle(run.projectId)}
               taskNumber={taskNumber(run.taskId)}
+              open={opened.has(run.id)}
+              paused={paused.has(`${run.automation}:${run.projectId}`)}
+              onOpenChange={(open) => onOpen(run.id, open)}
+              selecting={selecting}
               checked={selected.has(run.id)}
               disabled={selectionFull && !selected.has(run.id)}
               onCheckedChange={(on) => onTick(run.id, on)}
+              action={
+                run.status === "failed" && !run.dryRun ? (
+                  <AskToFix
+                    run={run}
+                    automationTitle={automationTitle(automationTitles, run.automation)}
+                    task={taskNumber(run.taskId) === null ? null : `#${taskNumber(run.taskId)}`}
+                    variant="outline"
+                    triggerLabel="Ask an agent"
+                    caret
+                  />
+                ) : undefined
+              }
             />
           ))}
         </ul>
       </SettingsGroup>
-      <div ref={watchEnd} className="flex min-h-8 items-center justify-center text-xs text-muted-foreground">
-        {hasMore ? (
-          loadingMore ? (
-            <Spinner className="size-3.5" />
+      <div className="flex min-h-8 items-center gap-2 text-xs text-muted-foreground">
+        <div ref={watchEnd} className="flex flex-1 items-center">
+          {hasMore ? (
+            loadingMore ? (
+              <Spinner className="size-3.5" />
+            ) : (
+              <Button size="sm" variant="ghost-muted" onClick={onLoadMore}>
+                Load more
+              </Button>
+            )
           ) : (
-            <Button size="sm" variant="ghost-muted" onClick={onLoadMore}>
-              Load more
-            </Button>
-          )
-        ) : (
-          `${runs.length} run${runs.length === 1 ? "" : "s"}`
-        )}
+            `${runs.length} run${runs.length === 1 ? "" : "s"}`
+          )}
+        </div>
+        {cleanUp}
       </div>
     </>
   );

@@ -84,7 +84,7 @@ function seed() {
   const custom = s.customAutomations.create({
     name: "Notify",
     trigger: { kind: "status_change", to: "review" },
-    filters: { projectIds: [project.id] },
+    projectIds: [project.id],
     action: { kind: "shell", command: "./notify.sh" },
   });
   s.autopilot.setScope("board", null, `custom:${custom.id}`, { mode: "on" });
@@ -320,7 +320,9 @@ describe("restore", () => {
           .projects.list()
           .find((p) => p.title === "Alpha")?.variables,
       ).toEqual([{ name: "jira_key", value: "ALP" }]);
-      expect(restored.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 3 });
+      // The two rows above, the first custom automation's Preview in Alpha (it was made Only in Alpha) and its On, and
+      // the second's Preview (new ones save in Preview).
+      expect(restored.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 5 });
       // By name: the two are made in the same millisecond, so their stored order is their random ids'.
       expect(restored.prepare("SELECT name, action_json FROM autopilot_custom ORDER BY name DESC").all()).toEqual([
         {
