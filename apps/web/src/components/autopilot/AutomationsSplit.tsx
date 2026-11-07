@@ -72,6 +72,7 @@ import {
 import { BOARD_MODES, boardModeToSave, boardSwitchValue } from "./autopilot.logic";
 import { bundleFilename } from "./customAutomationImport.logic";
 import { BlockedWarning, NeedsVariablesWarning } from "./InputsAndSlots";
+import { MergeTargets } from "./MergeTargets";
 import { ModeSwitch } from "./ModeSwitch";
 import { RecurringRulesByProject } from "~/components/recurring/RecurringSection";
 import { RunHistoryLink } from "./RunHistoryLink";
@@ -341,7 +342,11 @@ function AutomationDetail({
           />
         </DetailSection>
       )}
-      {essential.length > 0 ? <DetailSection title="Settings">{essential.map(field)}</DetailSection> : null}
+      {automation.key === AUTOPILOT_MERGE_EPIC_PRS ? (
+        <MergeTargets automation={automation} entry={entry} rejected={rejected} onConfig={onConfig} />
+      ) : essential.length > 0 ? (
+        <DetailSection title="Settings">{essential.map(field)}</DetailSection>
+      ) : null}
       {custom ? (
         <DetailSection title="Trigger and action">
           <SettingsRow

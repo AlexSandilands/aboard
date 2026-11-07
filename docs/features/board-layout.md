@@ -231,7 +231,7 @@ today, red overdue. A change logs `updated` with `fields: ["dueDate"]`. Agents s
 
 The task's own automation settings live in one place (`AutomationSection`, #168): **Autopilot** (Default / On / Off,
 whether Start planned tasks may start it), **Auto-review** (Default / On / Off, whether moving to Review opens a local
-review round), **Reviewer** (the task's [reviewer model](local-review.md#the-reviewer-model) in the shared model picker: Inherit, which names what the project's or board's comes down to, a tier, a custom model or a provider's model; shown only while auto-review is effectively on), **Auto-merge** (Default / On / Off, whether `merge_task_pr` may merge its PR; Default reads as off) and a
+review round), **Reviewer** (the task's [reviewer model](local-review.md#the-reviewer-model) in the shared model picker: Inherit, which names what the project's or board's comes down to, a tier, a custom model or a provider's model; shown only while auto-review is effectively on), **Auto-merge** (Default / On / Off, whether its PR may merge into the default branch without the user: by `merge_task_pr`, or by Autopilot's Merge ready PRs with Into main on; Default reads as off) and a
 **Priority** switch. Each saves through `useUpdateTask` as soon as it changes. The actions menu's "Mark as priority" and the
 card's star stay as shortcuts to the same field. Local review's header only shows whether auto-review is on, as plain text; with Automation hidden, show it again from **Customize sections** to change it. Each row's hint is a tooltip and also its group's description, so screen readers read it.
 An epic has none of these (no plan to start, no PR, no priority), so the panel leaves the section out for it, like Plan and

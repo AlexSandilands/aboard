@@ -273,6 +273,82 @@ describe("migrations", () => {
     });
   });
 
+  describe("merge ready PRs (043)", () => {
+    const before = (setup: string): DatabaseSync => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const path = join(dir, "board.db");
+      const old = openDatabase(path, { migrateTo: "042_task_trash.sql" });
+      old.exec(`
+        INSERT INTO projects (id, title, position, created_at, updated_at)
+          VALUES ('a', 'A', 'a0', '', ''), ('b', 'B', 'a1', '', ''), ('c', 'C', 'a2', '', '');
+        ${setup}
+      `);
+      old.close();
+      return openDatabase(path);
+    };
+    const row = (db: DatabaseSync, automation: string, kind = "board", id = "") => {
+      const found = db
+        .prepare(
+          "SELECT mode, config_json FROM autopilot_settings WHERE automation = ? AND scope_kind = ? AND scope_id = ?",
+        )
+        .get(automation, kind, id) as { mode: string; config_json: string } | undefined;
+      return found ? { mode: found.mode, config: JSON.parse(found.config_json) as unknown } : undefined;
+    };
+    const orchestrate = (kind: string, id: string, mode: string, config = "{}") =>
+      `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES ('${kind}', '${id}', 'orchestrate', '${mode}', '${config}', '');`;
+
+    it("switches Merge ready PRs on with Into main wherever Orchestrate was on with May merge", () => {
+      const db = before(
+        orchestrate("board", "", "on", '{"everyMinutes":15}') +
+          orchestrate("project", "a", "inherit", '{"mayMerge":false}') +
+          orchestrate("project", "b", "off"),
+      );
+      expect(row(db, "merge_epic_prs")).toEqual({ mode: "on", config: { intoMain: true } });
+      // On through the board but with May merge off: it keeps not merging into main.
+      expect(row(db, "merge_epic_prs", "project", "a")).toEqual({ mode: "inherit", config: { intoMain: false } });
+      // Orchestrate was off there, so nothing merged into main: the board's new Into main doesn't reach it.
+      expect(row(db, "merge_epic_prs", "project", "b")).toEqual({ mode: "inherit", config: { intoMain: false } });
+      expect(row(db, "orchestrate")).toEqual({ mode: "on", config: { everyMinutes: 15 } });
+      expect(row(db, "orchestrate", "project", "a")).toEqual({ mode: "inherit", config: {} });
+      db.close();
+    });
+
+    it("migrates a project of its own, and keeps an explicit Off for Merge ready PRs", () => {
+      const db = before(
+        orchestrate("board", "", "on", '{"mayMerge":false}') +
+          orchestrate("project", "a", "on") +
+          orchestrate("project", "b", "inherit", '{"mayMerge":true}') +
+          orchestrate("project", "c", "on", '{"mayMerge":true}') +
+          `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at)
+             VALUES ('project', 'c', 'merge_epic_prs', 'off', '{}', '');`,
+      );
+      expect(row(db, "merge_epic_prs")).toBeUndefined();
+      // Project a inherits the board's May merge (off); b sets its own (on) and is on through the board.
+      expect(row(db, "merge_epic_prs", "project", "a")).toBeUndefined();
+      expect(row(db, "merge_epic_prs", "project", "b")).toEqual({ mode: "on", config: { intoMain: true } });
+      expect(row(db, "merge_epic_prs", "project", "c")).toEqual({ mode: "off", config: { intoMain: true } });
+      db.close();
+    });
+
+    it("adds no project row where everything came from the board, so a board Off for Merge ready PRs still holds", () => {
+      const db = before(
+        orchestrate("board", "", "on") +
+          orchestrate("project", "a", "inherit", '{"everyMinutes":10}') +
+          `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at)
+             VALUES ('board', '', 'merge_epic_prs', 'off', '{}', '');`,
+      );
+      expect(row(db, "merge_epic_prs")).toEqual({ mode: "off", config: { intoMain: true } });
+      expect(row(db, "merge_epic_prs", "project", "a")).toBeUndefined();
+      db.close();
+    });
+
+    it("leaves Merge ready PRs alone where Orchestrate was never on", () => {
+      const db = before(orchestrate("board", "", "inherit", '{"mayMerge":true}'));
+      expect(row(db, "merge_epic_prs")).toBeUndefined();
+      db.close();
+    });
+  });
+
   describe("operation models (041)", () => {
     const before = (setup: string): DatabaseSync => {
       dir = mkdtempSync(join(tmpdir(), "board-db-"));
@@ -418,7 +494,7 @@ describe("migrations", () => {
     });
   });
 
-  describe("reminders and Recurring tasks without switches (043, 044)", () => {
+  describe("reminders and Recurring tasks without switches (044, 045)", () => {
     const before = (setup: string): DatabaseSync => {
       dir = mkdtempSync(join(tmpdir(), "board-db-"));
       const path = join(dir, "board.db");

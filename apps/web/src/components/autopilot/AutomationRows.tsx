@@ -8,7 +8,7 @@ import {
   type AutopilotScopeEntry,
 } from "@repo/contracts";
 import { ChevronRightIcon } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
@@ -209,6 +209,10 @@ export function AutomationField({
   projectId,
   rejected,
   onConfig,
+  description,
+  info,
+  status,
+  children,
 }: {
   automation: AutopilotAutomation;
   field: AutopilotField;
@@ -216,6 +220,12 @@ export function AutomationField({
   projectId: string | null;
   rejected: number;
   onConfig: ConfigUpdate;
+  /** In place of the field's help, for a detail that explains it at more length (Merge ready PRs' targets). */
+  description?: ReactNode;
+  info?: ReactNode;
+  status?: ReactNode;
+  /** Shown under the row, e.g. an example. */
+  children?: ReactNode;
 }) {
   const overridden = field.key in entry.config;
   const value = field.key in entry.effectiveConfig ? entry.effectiveConfig[field.key] : automation.defaults[field.key];
@@ -232,7 +242,9 @@ export function AutomationField({
   return (
     <SettingsRow
       title={field.label}
-      description={field.help}
+      description={description ?? field.help}
+      info={info}
+      status={status}
       resetAction={
         overridden ? (
           <SettingResetButton
@@ -245,6 +257,7 @@ export function AutomationField({
       control={multiline ? undefined : control}
     >
       {multiline ? <div className="mt-3">{control}</div> : null}
+      {children}
     </SettingsRow>
   );
 }

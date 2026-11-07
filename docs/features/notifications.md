@@ -47,7 +47,7 @@ reminded of once more, with another note, each month. They were the Remind me ab
 is gone: a quiet task no longer gets a "Stale" reason on its card and in the sidebar's Needs attention list, because
 that came from the automation's run, and a reminder records none; the inbox notice is the signal now; the
 two keys stay in `RETIRED_AUTOMATION_TITLES` so their old runs show a plain name. `board_activity` and the stats read
-the stalls from these notifications as well as from those old runs. Migration `043_reminder_notifications` set the
+the stalls from these notifications as well as from those old runs. Migration `044_reminder_notifications` set the
 three switches: each of the two automations' effective state somewhere (the project's mode, else the board's, or an
 unarchived epic with it On) became the setting, and an install with no projects or Autopilot settings keeps the defaults
 (on, on, and off for `task_unblocked`).
