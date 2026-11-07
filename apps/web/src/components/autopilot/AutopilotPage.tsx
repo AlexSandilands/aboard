@@ -139,13 +139,7 @@ export function AutopilotAutomationsTab() {
             ) : null}
             <NeedsYou needs={overview.data.needsYou} onSelect={(key) => selectAutomation(key)} />
             <section className="space-y-2.5">
-              <AutomationsSplit
-                items={listed}
-                overview={overview.data}
-                pending={pending}
-                rejected={rejected}
-                quickSetup={quickSetup}
-              />
+              <AutomationsSplit items={listed} pending={pending} rejected={rejected} quickSetup={quickSetup} />
             </section>
           </>
         ) : (
