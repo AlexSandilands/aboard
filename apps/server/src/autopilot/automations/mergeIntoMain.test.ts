@@ -208,7 +208,7 @@ describe("Merge ready PRs: Into main", () => {
       services: s,
       engine: s.autopilot.engine(),
       now: new Date(),
-      projects: [{ project: s.projects.get(task.projectId), config: { intoMain: true } }],
+      projects: [{ project: s.projects.get(task.projectId), config: { intoMain: true }, dryRun: false }],
       board: null,
     });
     const candidate = check.find((c) => c.taskId === task.id)!;

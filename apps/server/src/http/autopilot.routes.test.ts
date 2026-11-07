@@ -54,20 +54,30 @@ describe("Autopilot REST routes", () => {
     const overview = (await (await h.request("/api/autopilot")).json()) as AutopilotOverview;
     expect(overview).toMatchObject({
       paused: false,
-      engine: { maxConcurrent: 1, dryRun: false, quietHours: { enabled: false }, prReviewRounds: 3 },
+      engine: {
+        maxConcurrent: 1,
+        dryRun: false,
+        quietHours: { enabled: false },
+        agentDefaults: { runner: "auto", budgetUsd: 5 },
+      },
       automations: [{ key: "archive", needsAgent: false, epicScope: true, defaults: { days: 14 } }],
     });
 
     const res = await h.request("/api/autopilot/engine", {
       method: "PATCH",
-      json: { maxConcurrent: 2, quietHours: { enabled: true, start: "21:30" }, prFixThreshold: "minor" },
+      json: { maxConcurrent: 2, quietHours: { enabled: true, start: "21:30" }, agentDefaults: { timeoutMinutes: 30 } },
     });
     expect((await res.json()) as AutopilotEngineSettings).toMatchObject({
       maxConcurrent: 2,
       quietHours: { enabled: true, start: "21:30", end: "07:00" },
-      prFixThreshold: "minor",
+      agentDefaults: { runner: "auto", budgetUsd: 5, timeoutMinutes: 30, t3Access: "default" },
     });
-    for (const json of [{ maxConcurrent: 0 }, { quietHours: { start: "25:00" } }, { prFixThreshold: "huge" }]) {
+    for (const json of [
+      { maxConcurrent: 0 },
+      { quietHours: { start: "25:00" } },
+      { agentDefaults: { runner: "cloud" } },
+      { agentDefaults: { budgetUsd: 0 } },
+    ]) {
       expect((await h.request("/api/autopilot/engine", { method: "PATCH", json })).status).toBe(400);
     }
   });

@@ -201,6 +201,42 @@ describe("start planned tasks: eligibility", () => {
   });
 });
 
+describe("start planned tasks: agent settings", () => {
+  it("runs with the automation's settings, then the board's agent defaults, then the built-in ones", async () => {
+    const { s, task, pass, requests, turnOn, project } = setup();
+    s.autopilot.updateEngine({ maxConcurrent: 10 });
+    // Built-in: nothing set anywhere.
+    turnOn();
+    task("One");
+    await pass();
+    expect(requests[0]!.options).toMatchObject({
+      runner: "auto",
+      budgetUsd: 5,
+      timeoutMinutes: 60,
+      t3Access: "default",
+    });
+
+    // The board's defaults, from Limits & safety.
+    s.autopilot.updateEngine({ agentDefaults: { runner: "headless", budgetUsd: 2 } });
+    task("Two");
+    await pass();
+    expect(requests[1]!.options).toMatchObject({ runner: "headless", budgetUsd: 2, timeoutMinutes: 60 });
+
+    // The automation's own: the board scope, then the project's, over the board's defaults.
+    s.autopilot.setScope("board", null, AUTOPILOT_START_PLANNED, { config: { timeoutMinutes: 30 } });
+    turnOn({ budgetUsd: 7 });
+    task("Three");
+    await pass();
+    expect(requests[2]!.options).toMatchObject({ runner: "headless", budgetUsd: 7, timeoutMinutes: 30 });
+
+    // What the settings page shows: the board's defaults as the defaults, and the merged config as effective.
+    const overview = s.autopilot.overview().automations.find((a) => a.key === AUTOPILOT_START_PLANNED)!;
+    expect(overview.defaults).toMatchObject({ runner: "headless", budgetUsd: 2, timeoutMinutes: 60 });
+    const entry = s.autopilot.scope("project", project.id).find((e) => e.automation === AUTOPILOT_START_PLANNED)!;
+    expect(entry.effectiveConfig).toMatchObject({ runner: "headless", budgetUsd: 7, timeoutMinutes: 30 });
+  });
+});
+
 describe("start planned tasks: preview", () => {
   it("records tasks in a Preview epic without taking the room a live task needs", async () => {
     const { s, task, pass, requests, runs, turnOn } = setup();
