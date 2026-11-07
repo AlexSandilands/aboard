@@ -444,6 +444,14 @@ export function createAutopilotRunsRepo(sql: Sql) {
          ) WHERE n = 1`,
       );
     },
+    /** Dry runs ("would …") per automation made since `since`, for the Preview hint. */
+    dryRunCountsSince(since: string): { automation: string; count: number }[] {
+      return sql.all<{ automation: string; count: number }>(
+        `SELECT automation, COUNT(*) AS count FROM autopilot_runs
+         WHERE dry_run = 1 AND created_at >= ? GROUP BY automation ORDER BY automation`,
+        since,
+      );
+    },
     /**
      * Real failed runs whose needs-attention flag still stands on their task, by the rules `attentionFor` uses for each
      * run (not dismissed, written since the task last changed status, no later success of the same automation on it),

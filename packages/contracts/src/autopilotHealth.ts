@@ -81,7 +81,7 @@ export type DismissHintInput = z.infer<typeof DismissHintInput>;
 
 /** Real runs of the week before Orchestrate is told it runs more often than it needs in a project. */
 export const ORCHESTRATE_BUSY_RUNS = 40;
-/** The most attempts the engine allows (AutopilotEngineSettings' PR rounds). */
+/** The most attempts Fix PRs allows per budget (its `attempts` and `commentAttempts` fields). */
 const MAX_PR_ROUNDS = 10;
 /** The longest Orchestrate interval, in minutes. */
 const MAX_ORCHESTRATE_MINUTES = 1440;
@@ -89,7 +89,6 @@ const MAX_ORCHESTRATE_MINUTES = 1440;
 export interface AutomationHintInput {
   automation: Pick<AutopilotAutomation, "key" | "title">;
   week: AutomationWeek;
-  engine: Pick<AutopilotEngineSettings, "prReviewRounds" | "prCommentRounds">;
   /** Its effective config at the board scope. */
   boardConfig: AutopilotConfig;
   /**
@@ -137,18 +136,18 @@ export function fixAutomationPrompt(
  * an agent), Start planned on with nothing flagged (flag them), and Orchestrate running often (less often).
  */
 export function automationHints(input: AutomationHintInput): AutopilotHint[] {
-  const { automation, week, engine, boardConfig, planned } = input;
+  const { automation, week, boardConfig, planned } = input;
   const hints: AutopilotHint[] = [];
   const key = automation.key;
 
   const budgets = [
-    { budget: "review", count: week.gaveUp.review, field: "prReviewRounds", what: "on its review and failing checks" },
-    { budget: "comments", count: week.gaveUp.comments, field: "prCommentRounds", what: "on review comments" },
+    { budget: "review", count: week.gaveUp.review, field: "attempts", what: "on checks and reviews" },
+    { budget: "comments", count: week.gaveUp.comments, field: "commentAttempts", what: "on review comments" },
   ] as const;
   for (const { budget, count, field, what } of budgets) {
-    const cap = engine[field];
+    const cap = boardConfig[field];
     const newest = week.lastGaveUp[budget];
-    if (count < 2 || cap >= MAX_PR_ROUNDS || !newest) continue;
+    if (typeof cap !== "number" || count < 2 || cap >= MAX_PR_ROUNDS || !newest) continue;
     hints.push({
       // Keyed by the newest give-up, not the cap: raising the cap dismisses it, and only a give-up after that (at the
       // new cap) brings it back, though the week still counts the older ones.
@@ -156,11 +155,7 @@ export function automationHints(input: AutomationHintInput): AutopilotHint[] {
       automation: key,
       tone: "warning",
       text: `Gave up on ${plural(count, "PR")} this week after running out of attempts ${what} (the limit is ${cap}).`,
-      action: {
-        kind: "engine",
-        label: `Raise to ${cap + 1}`,
-        patch: field === "prReviewRounds" ? { prReviewRounds: cap + 1 } : { prCommentRounds: cap + 1 },
-      },
+      action: { kind: "board_config", label: `Raise to ${cap + 1}`, key: field, value: cap + 1 },
       done: `Attempts ${what}: ${cap} → ${cap + 1}`,
     });
   }

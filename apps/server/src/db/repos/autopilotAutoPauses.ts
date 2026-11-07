@@ -1,6 +1,6 @@
 import type { Sql } from "./sql.ts";
 
-/** An automation's auto-pause state in one project (see migration 043). */
+/** An automation's auto-pause state in one project (see migration 045). */
 export interface AutoPauseRow {
   automation: string;
   projectId: string;

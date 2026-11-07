@@ -13,7 +13,7 @@ import { toastManager } from "~/components/ui/toast";
 import { formatElapsedDurationLabel, formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import { useAutomationWeek, useDismissHint, useResumeAutoPause } from "~/state/autopilotRunHistory";
-import { useUpdateAutopilotEngine, useUpdateTask } from "~/state/mutations";
+import { useUpdateTask } from "~/state/mutations";
 import { copyFixPrompt } from "./askAgent";
 import type { ConfigUpdate } from "./AutomationRows";
 import { formatCost, runStatusLabel, runStatusVariant, withConfigValue } from "./autopilot.logic";
@@ -115,7 +115,6 @@ export interface HintTarget {
 
 /** Carries out a hint's one click. */
 export function useApplyHint() {
-  const engine = useUpdateAutopilotEngine();
   const updateTask = useUpdateTask();
   const navigate = useNavigate();
   const dismiss = useDismissHint();
@@ -127,9 +126,6 @@ export function useApplyHint() {
   const apply = async (hint: AutopilotHint, target: HintTarget | undefined) => {
     const { action } = hint;
     switch (action.kind) {
-      case "engine":
-        engine.mutate(action.patch, { onSuccess: () => applied(hint) });
-        return;
       case "board_config":
         if (!target) return;
         target.onConfig((current) => withConfigValue(current, action.key, action.value));
@@ -149,7 +145,7 @@ export function useApplyHint() {
         return;
     }
   };
-  return { apply, pending: engine.isPending || updateTask.isPending, dismiss };
+  return { apply, pending: updateTask.isPending, dismiss };
 }
 
 export const HINT_ICONS: Record<AutopilotHint["tone"], ReactNode> = {

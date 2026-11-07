@@ -113,7 +113,9 @@ Tasks are referenced as \`#42\`, steps as \`"2.3"\` (phase 2, step 3).
    branch. Set it only when the user says so. The board refuses the merge, with the reason, until the task is in
    Review, its local review and Autopilot's review are finished and clean, nobody requested changes, its checks pass
    and it merges cleanly. Fix what it names or wait; never merge with \`gh\` or \`git\` instead. When several flagged
-   tasks are ready, merge one at a time so the rest don't conflict.
+   tasks are ready, merge one at a time so the rest don't conflict. Where the user has switched on Autopilot's
+   **Merge ready PRs** with **Into main**, Autopilot merges flagged tasks by itself once they pass that same check,
+   so you needn't call it.
 
    When an Autopilot run on a task failed or was cut short (a review or a start a board restart interrupted),
    \`retry_autopilot_run(task)\` hands it back to Autopilot, which acts again on its next pass if there is still
@@ -122,7 +124,8 @@ Tasks are referenced as \`#42\`, steps as \`"2.3"\` (phase 2, step 3).
    When the user asks for an automation of their own ("every morning, triage new defects", "when a PR merges,
    ..."), \`draft_automation(automation, note)\` writes it as a draft in the shape of a shared automation file and
    returns a link to its import page. It saves nothing that runs: the user reviews it there, confirms any script,
-   fills in its inputs and tool slots, and imports it switched off. Give them the link and never say it is set up.
+   fills in its inputs and tool slots, and imports it in Preview (it records what it would do; a check script runs for
+   real) until they turn it on. Give them the link and never say it is set up.
    A refused draft lists every problem with where it is; fix them all and call again. Before you write one, use the
    \`${BRAND.id}-automations\` skill if it is installed: it covers the triggers, actions, variables, inputs, tool slots and script
    contract, and how to test a script and hand the draft over.
@@ -360,8 +363,9 @@ export const AUTOMATIONS_SKILL_BODY = `# Writing custom automations for ${BRAND.
 A custom automation is an Autopilot automation the user defines: a **trigger** (when), optional filters, and an **action**
 (what): an agent, a shell command or a script. You can't save or switch one on. You write it as a draft with
 \`draft_automation(automation, note)\`, which keeps it for 14 days and returns a link to its import page. The user reads
-it there (every script, command and prompt), confirms any script, fills in inputs and tool slots, and imports it
-**switched off**; they switch it on themselves. Nothing you write runs on its own.
+it there (every script, command and prompt), confirms any script, fills in inputs and tool slots, and imports it. It
+comes in **in Preview**: it records what it would do and does none of it, except that a **check script still runs for
+real** (to find what it would act on). The user turns it on themselves. Nothing else you write runs on its own.
 
 ## Before you draft
 
@@ -398,7 +402,8 @@ it there (every script, command and prompt), confirms any script, fills in input
 Statuses are \`backlog\`, \`planned\`, \`in_progress\`, \`review\`, \`done\`. Things to know:
 
 - It only acts on what happens **after** the user switches it on, so don't design around history. The exception is
-  \`stale\`: it also fires for every task already past the limit, so suggest a dry run first in your \`note\`.
+  \`stale\`: it also fires for every task already past the limit, so suggest watching its Preview runs first in your
+  \`note\`.
 - A **schedule has no task**: it runs once in each project it is switched on in, with no task or PR, and can't filter
   by label. Its agent runs headless in an empty temporary folder and is told the project's name and folder.
 - \`filters: {labels: [...]}\` narrows the task triggers to tasks with any of the labels. The user picks the projects and
@@ -687,8 +692,9 @@ Don't run a script that approves, merges, deletes or posts for real just to test
 a throwaway target.
 
 In your \`note\`, tell the user to read the script on the import page, then use **Test run** in the automation's editor (Settings →
-Autopilot → Automations, under Yours; the import page shows scripts read-only) and switch it on with **dry run** first: a dry run records what each run would have done, under **What it would run**, and does nothing
-(a dry run still runs a check script for real).
+Autopilot → Automations, under Yours; the import page shows scripts read-only), and to watch its **Preview** runs
+before turning it on: it imports in Preview, which records what each run would have done, under **What it would run**,
+and does nothing (Preview still runs a check script for real).
 
 ## Hand it over
 
@@ -700,8 +706,8 @@ Autopilot → Automations, under Yours; the import page shows scripts read-only)
 3. **Write the \`note\` for the user**, up to 2,000 characters: what it does and when, what it will touch (a command or
    script runs on their machine with their access), the variables to set and tool slots to fill, anything to check
    before importing (a Jira key, who is trusted), and what you tested.
-4. **Give the user the link from the result and say they must open it, read it, import it and switch it on.** Never say
-   the automation is set up or running: it isn't until they do.
+4. **Give the user the link from the result and say they must open it, read it, import it and turn it on.** Never say
+   the automation is set up or running: it isn't until they do (until then it only previews).
 
 ## Worked examples
 
@@ -840,7 +846,7 @@ Track work on the user's local task board via the \`${BRAND.id}\` MCP server (Ba
 - **Manual tasks:** \`manual: true\` on \`create_task\` / \`add_to_backlog\` / \`update_task\` makes a to-do for a person (an access request, a sign-off). It needs no plan, and agents and Autopilot leave it alone: never work on a task marked manual. Block your own task on one with \`blockedBy\` when your work waits on a person.
 - **Due date:** \`update_task(dueDate: "YYYY-MM-DD" | null)\`. Set it only when the user gives a date.
 - **Priority:** \`priority: true | false\` on \`create_task\` / \`add_to_backlog\` / \`update_task\` puts a task in the lane above every project, and Autopilot starts it first. Set it only when the user asks.
-- **Auto-merge:** \`autoMerge: "on"\` on \`create_task\` / \`add_to_backlog\` / \`update_task\` lets \`merge_task_pr(task)\` merge the task's PR into the default branch once it's reviewed, green and mergeable (the board refuses, with the reason, until then). Set it only when the user says so; never merge with \`gh\`/\`git\` instead. A failed or interrupted Autopilot run on a task: \`retry_autopilot_run(task)\`, never an empty commit.
+- **Auto-merge:** \`autoMerge: "on"\` on \`create_task\` / \`add_to_backlog\` / \`update_task\` lets \`merge_task_pr(task)\` merge the task's PR into the default branch once it's reviewed, green and mergeable (the board refuses, with the reason, until then); with Autopilot's Merge ready PRs (Into main) on, Autopilot merges it by itself. Set it only when the user says so; never merge with \`gh\`/\`git\` instead. A failed or interrupted Autopilot run on a task: \`retry_autopilot_run(task)\`, never an empty commit.
 - **Templates:** the user keeps task templates (Bug, Spike, Feature, their own). \`list_templates\` shows them; \`template: "Bug"\` on \`add_to_backlog\` / \`create_task\` starts from one: description, labels and plan fill in what you leave out (a \`labels\` you pass replaces the template's), \`create_task\` needs no plan when the template has one. \`add_to_backlog\` keeps it in Backlog. You can't create or edit templates.
 - **Keep steps current:** \`update_step\` → \`in_progress\` when starting, \`done\` when finished, one call per step the moment it changes, never saved up for the end of a phase (if steps can only be verified together, still mark each \`in_progress\` as you start it and \`done\` once written, with testing as its own step); \`blocked\` + \`appendNotes\` when stuck or before asking the user a question and waiting (say what you need; back to \`in_progress\` once answered). \`add_steps\` for new work, \`update_plan\` to change many steps at once (notes, moves, phase renames), not to catch up on statuses. \`set_plan\` REPLACES the whole plan (steps not passed back with their id are deleted, status and notes too): only for writing or rewriting a plan, never to update a few steps.
 - **UI changes need a screen capture:** a task that changes what the user sees (components, styles, layout, \`ui\` label) has a Screen capture step in its plan (\`add_steps\` one if it doesn't, then \`update_plan\` it ahead of any review or PR step). Open the changed surface in a real browser in each state you introduced (menus open, warnings showing, narrow phone width where relevant), save JPEG/WebP screenshots (each under 5 MB), look at every one, fix what's wrong, then attach them with \`update_step(step, status: "done", images: [absolute paths])\` before moving to \`review\`.

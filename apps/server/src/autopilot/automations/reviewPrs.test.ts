@@ -1,4 +1,5 @@
 import {
+  AUTOPILOT_FIX_PRS,
   AUTOPILOT_REVIEW_PRS,
   BRAND,
   currentPrReview,
@@ -17,6 +18,7 @@ import { NO_GIT_HOSTS, type GitHostActions } from "../../integrations/gitHosts.t
 import { WorktreeHeadError, type Runner, type RunnerRequest, type RunnerResult } from "../types.ts";
 import { RUN_SERVER_NAME } from "../../mcp/runTokens.ts";
 import { REVIEW_ATTEMPTS, earlierReviews, renderReview, reviewHandoff, reviewPrs } from "./reviewPrs.ts";
+import { fixPrs } from "./fixPrs.ts";
 
 const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
 const SHA_A = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
@@ -98,7 +100,7 @@ function setup() {
     },
     prHead: async () => live(),
   };
-  const h = createTestHarness({ integrations: { automations: [reviewPrs] } });
+  const h = createTestHarness({ integrations: { automations: [reviewPrs, fixPrs] } });
   const engine = createAutopilotEngine({
     services: () => h.services,
     bus: h.bus,
@@ -162,6 +164,13 @@ function setup() {
     pass,
     turnOn,
     engineSettings: (patch: Partial<AutopilotEngineSettings>) => s.autopilot.updateEngine(patch),
+    /** Review PRs' board-scope config (rounds) and Fix PRs' (the fix threshold the review applies). */
+    prSettings: ({ rounds, fixThreshold }: { rounds?: number; fixThreshold?: string }) => {
+      if (rounds !== undefined) s.autopilot.setScope("board", null, AUTOPILOT_REVIEW_PRS, { config: { rounds } });
+      if (fixThreshold !== undefined) {
+        s.autopilot.setScope("board", null, AUTOPILOT_FIX_PRS, { config: { fixThreshold } });
+      }
+    },
     runs,
     notes,
     resolved,
@@ -472,9 +481,9 @@ describe("review PRs: triggers", () => {
     expect(requests.at(-1)!.prompt).toContain("review round 1 of 3");
   });
 
-  it("stops after the rounds the engine allows for a PR", async () => {
-    const { requests, setPr, pass, turnOn, engineSettings } = setup();
-    engineSettings({ prReviewRounds: 2 });
+  it("stops after the rounds set for a PR", async () => {
+    const { requests, setPr, pass, turnOn, prSettings } = setup();
+    prSettings({ rounds: 2 });
     turnOn();
     for (const sha of [SHA_A, SHA_B, SHA_C]) {
       setPr({ headOid: sha });
@@ -484,8 +493,8 @@ describe("review PRs: triggers", () => {
   });
 
   it("counts a failed review as a round used", async () => {
-    const { setPr, pass, turnOn, requests, failPost, engineSettings, runs } = setup();
-    engineSettings({ prReviewRounds: 2 });
+    const { setPr, pass, turnOn, requests, failPost, prSettings, runs } = setup();
+    prSettings({ rounds: 2 });
     turnOn();
     // Round 1 fails after the agent ran: it used its round.
     failPost("GitHub said no");
@@ -520,7 +529,7 @@ describe("review PRs: triggers", () => {
   });
 
   it("records what it would do in dry-run, and starts nothing", async () => {
-    const { requests, setPr, pass, turnOn, engineSettings, s, task } = setup();
+    const { requests, setPr, pass, turnOn, s, task, engineSettings } = setup();
     engineSettings({ dryRun: true });
     turnOn();
     setPr();
@@ -553,7 +562,8 @@ describe("review PRs: the agent", () => {
       expectHead: SHA_A,
     });
     expect(request!.outputSchema).toMatchObject({ required: ["summary", "issues"] });
-    expect(request!.options).toMatchObject({ runner: "headless", budgetUsd: 2 });
+    // The board's agent defaults: Auto, which for a review is headless.
+    expect(request!.options).toMatchObject({ runner: "auto", budgetUsd: 5, timeoutMinutes: 60 });
   });
 
   it("reads this PR through the board's run tools, and has no gh rules to write to GitHub with", async () => {
@@ -690,7 +700,7 @@ describe("review PRs: the agent", () => {
       services: s,
       engine: s.autopilot.engine(),
       now: new Date(),
-      projects: s.projects.list().map((project) => ({ project, config: reviewPrs.defaults })),
+      projects: s.projects.list().map((project) => ({ project, config: reviewPrs.defaults, dryRun: false })),
       board: null,
     });
     expect(candidate).toBeDefined();
@@ -829,9 +839,9 @@ describe("review PRs: verdict, threshold and hand-off", () => {
     expect(prReviewOutput(runs()[0]!)).toMatchObject({ handoff: "clean", actionable: 0 });
   });
 
-  it("honours a lower fix threshold from the engine settings", async () => {
-    const { setPr, pass, turnOn, setIssues, runs, engineSettings } = setup();
-    engineSettings({ prFixThreshold: "minor" });
+  it("honours a lower fix threshold set on Fix PRs", async () => {
+    const { setPr, pass, turnOn, setIssues, runs, prSettings } = setup();
+    prSettings({ fixThreshold: "minor" });
     setIssues([issue("minor")]);
     turnOn();
     setPr();
@@ -840,8 +850,8 @@ describe("review PRs: verdict, threshold and hand-off", () => {
   });
 
   it("raises the bar to major on the last round, and says so in the prompt", async () => {
-    const { requests, setPr, pass, turnOn, setIssues, runs, engineSettings } = setup();
-    engineSettings({ prFixThreshold: "nit", prReviewRounds: 2 });
+    const { requests, setPr, pass, turnOn, setIssues, runs, prSettings } = setup();
+    prSettings({ fixThreshold: "nit", rounds: 2 });
     turnOn();
     setIssues([issue("nit")]);
     setPr();
@@ -857,8 +867,8 @@ describe("review PRs: verdict, threshold and hand-off", () => {
   });
 
   it("gives up on the last round with issues still open: Needs attention and a notification", async () => {
-    const { s, task, setPr, pass, turnOn, setIssues, runs, engineSettings } = setup();
-    engineSettings({ prReviewRounds: 2 });
+    const { s, task, setPr, pass, turnOn, setIssues, runs, prSettings } = setup();
+    prSettings({ rounds: 2 });
     setIssues([issue("major")]);
     turnOn();
     setPr();

@@ -1,4 +1,4 @@
-import type { AutopilotMode, AutopilotScopeKind, AutopilotSetting } from "@repo/contracts";
+import type { AutopilotMode, AutopilotOnMode, AutopilotScopeKind, AutopilotSetting } from "@repo/contracts";
 import type { Sql } from "./sql.ts";
 
 interface SettingRow {
@@ -8,6 +8,7 @@ interface SettingRow {
   mode: AutopilotMode;
   config_json: string;
   updated_at: string;
+  last_on_mode: AutopilotOnMode | null;
 }
 
 const toSetting = (r: SettingRow): AutopilotSetting => ({
@@ -17,6 +18,7 @@ const toSetting = (r: SettingRow): AutopilotSetting => ({
   automation: r.automation,
   mode: r.mode,
   config: JSON.parse(r.config_json || "{}") as Record<string, unknown>,
+  lastOnMode: r.last_on_mode ?? null,
   updatedAt: r.updated_at,
 });
 
@@ -39,16 +41,18 @@ export function createAutopilotSettingsRepo(sql: Sql) {
     },
     upsert(s: AutopilotSetting): void {
       sql.run(
-        `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)
+        `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at, last_on_mode)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (scope_kind, scope_id, automation)
-         DO UPDATE SET mode = excluded.mode, config_json = excluded.config_json, updated_at = excluded.updated_at`,
+         DO UPDATE SET mode = excluded.mode, config_json = excluded.config_json, updated_at = excluded.updated_at,
+           last_on_mode = excluded.last_on_mode`,
         s.scopeKind,
         s.scopeId ?? "",
         s.automation,
         s.mode,
         JSON.stringify(s.config),
         s.updatedAt,
+        s.lastOnMode ?? null,
       );
     },
     delete(kind: AutopilotScopeKind, id: string | null, automation: string): void {

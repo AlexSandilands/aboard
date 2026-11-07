@@ -12,9 +12,12 @@ import {
   AUTOPILOT_UNSTICK,
   automationSentence,
   customAutomationId,
+  isOnMode,
+  OPERATIONS,
   splitFieldsByTier,
   type AutopilotAutomation,
-  type AutopilotOverview,
+  type AutopilotField,
+  type AutopilotScopeEntry,
   type CustomAutomation,
 } from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -24,6 +27,7 @@ import {
   BotIcon,
   ChevronRightIcon,
   ClockAlertIcon,
+  EyeIcon,
   FileUpIcon,
   GitMergeIcon,
   type LucideIcon,
@@ -51,6 +55,7 @@ import {
 } from "~/components/settings/agents/SplitCard";
 import { FROM_SETTINGS_LIST } from "~/components/settings/settingsNavigation";
 import { ConfirmDialog } from "~/components/task/ConfirmDialog";
+import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
@@ -59,23 +64,41 @@ import { Switch } from "~/components/ui/switch";
 import { toastManager } from "~/components/ui/toast";
 import { downloadText } from "~/lib/download";
 import { cn } from "~/lib/utils";
+import { inheritDetail } from "~/components/models/choicePicker.logic";
+import { operationTarget } from "~/components/models/operations.logic";
 import { useDeleteCustomAutomation, useExportCustomAutomation } from "~/state/customAutomations";
-import { AutomationField, type AutomationItem } from "./AutomationRows";
+import { useAutopilotOverview } from "~/state/queries";
+import { useSettings } from "~/state/queries";
+import { AutomationField, type AutomationItem, type ConfigUpdate } from "./AutomationRows";
 import {
   advancedChanged,
+  advancedFieldNames,
+  agentFieldsTitle,
+  agentSummary,
   groupAutomations,
   isOffEverywhere,
+  projectsStatus,
   rowSubline,
   selectedAutomation,
+  splitAgentFields,
   statusLine,
   type AutomationReach,
   type LastRun,
 } from "./automationList.logic";
-import { BOARD_MODES, boardModeToSave, boardSwitchValue } from "./autopilot.logic";
+import {
+  BOARD_MODES,
+  boardModeToSave,
+  boardSummary,
+  boardSwitchValue,
+  modeDescription,
+  previewHint,
+  restoreMode,
+} from "./autopilot.logic";
 import { bundleFilename } from "./customAutomationImport.logic";
 import { BlockedWarning, NeedsVariablesWarning } from "./InputsAndSlots";
 import { HintNotice, PausedRows, WeekSection } from "./HealthSections";
 import { hintsFor, pausedText, pausesFor } from "./health.logic";
+import { MergeTargets } from "./MergeTargets";
 import { ModeSwitch } from "./ModeSwitch";
 import { RunHistoryLink } from "./RunHistoryLink";
 
@@ -101,24 +124,29 @@ function AutomationIcon({ automation, className }: { automation: AutopilotAutoma
 export interface ListedAutomation extends AutomationItem {
   reach: AutomationReach;
   lastRun: LastRun | undefined;
+  /** Its "would …" runs over the last 7 days. */
+  previewRuns: number;
   custom: CustomAutomation | null;
 }
+
+/** A custom automation whose agent action starts from a check script, which still runs for real in Preview. */
+export const hasCheckScript = (custom: CustomAutomation | null): boolean =>
+  custom?.action.kind === "agent" && custom.action.check !== null;
 
 /** The list and the picked automation's detail. The automation in `?automation=` is picked; with none, the first. */
 export function AutomationsSplit({
   items,
-  overview,
   pending,
   rejected,
 }: {
   items: ListedAutomation[];
-  overview: AutopilotOverview;
   pending: boolean;
   rejected: number;
 }) {
   const navigate = useNavigate();
   const requested = useSearch({ strict: false, select: (search) => search.automation });
   const [adding, setAdding] = useState(false);
+  const autoPaused = useAutopilotOverview().data?.autoPaused ?? [];
   const groups = groupAutomations(items);
   const ordered = groups.flatMap((g) => g.items);
   const selectedKey = selectedAutomation(
@@ -146,7 +174,7 @@ export function AutomationsSplit({
                   <ListRow
                     key={item.automation.key}
                     item={item}
-                    paused={pausedText(pausesFor(overview.autoPaused, item.automation.key))}
+                    paused={pausedText(pausesFor(autoPaused, item.automation.key))}
                     pending={pending}
                     selected={item.automation.key === selectedKey}
                     onSelect={() => select(item.automation.key)}
@@ -166,7 +194,6 @@ export function AutomationsSplit({
           <AutomationDetail
             key={selected.automation.key}
             item={selected}
-            overview={overview}
             pending={pending}
             rejected={rejected}
             onBack={() => select(undefined)}
@@ -195,7 +222,7 @@ function ListRow({
   onSelect: () => void;
 }) {
   const { automation, entry, reach, lastRun, onMode } = item;
-  const on = entry.mode === "on";
+  const on = isOnMode(entry.mode);
   const off = isOffEverywhere(reach);
   return (
     <SplitListItem
@@ -205,6 +232,8 @@ function ListRow({
       badge={
         off ? null : paused ? (
           <StatusDot tone="warning" label={paused} />
+        ) : entry.mode === "preview" ? (
+          <PreviewBadge />
         ) : lastRun?.status === "failed" ? (
           <StatusDot tone="danger" label="Last run failed" />
         ) : (
@@ -222,7 +251,8 @@ function ListRow({
           checked={on}
           disabled={pending || (!on && Boolean(automation.blocked))}
           title={!on && automation.blocked ? automation.blocked : undefined}
-          onCheckedChange={(next) => onMode(next ? "on" : "inherit")}
+          // Back on in the mode it was last on in, or Preview for one that has never run.
+          onCheckedChange={(next) => onMode(next ? restoreMode(entry, lastRun !== undefined) : "inherit")}
         />
       }
     />
@@ -235,24 +265,26 @@ function ListRow({
  */
 function AutomationDetail({
   item,
-  overview,
   pending,
   rejected,
   onBack,
 }: {
   item: ListedAutomation;
-  overview: AutopilotOverview;
   pending: boolean;
   rejected: number;
   onBack: () => void;
 }) {
-  const { automation, entry, reach, custom, onMode, onConfig } = item;
+  const { automation, entry, reach, custom, lastRun, previewRuns, onMode, onConfig } = item;
   const navigate = useNavigate();
   const { essential, advanced } = splitFieldsByTier(automation.fields);
-  const hints = hintsFor(overview.hints, automation.key);
-  const pauses = pausesFor(overview.autoPaused, automation.key);
-  const on = entry.mode === "on";
+  const overview = useAutopilotOverview().data;
+  const hints = hintsFor(overview?.hints ?? [], automation.key);
+  const pauses = pausesFor(overview?.autoPaused ?? [], automation.key);
+  const agent = splitAgentFields(advanced);
+  const on = isOnMode(entry.mode);
+  const preview = entry.mode === "preview";
   const off = isOffEverywhere(reach);
+  const checkScript = hasCheckScript(custom);
   const editCustom = (id: string) =>
     void navigate({ to: "/settings/autopilot/custom/$customId", params: { customId: id }, state: FROM_SETTINGS_LIST });
   const field = (f: (typeof automation.fields)[number]) => (
@@ -275,8 +307,11 @@ function AutomationDetail({
         title={automation.title}
         subtitle={
           <span className="flex items-center gap-1.5">
-            <StatusDot tone={off ? "muted" : "success"} label={off ? "Off" : "On"} />
-            <span className="truncate">{statusLine(reach)}</span>
+            <StatusDot
+              tone={off ? "muted" : preview ? "warning" : "success"}
+              label={off ? "Off" : preview ? "Preview" : "On"}
+            />
+            <span className="truncate">{statusLine(reach, preview)}</span>
             {custom ? (
               <Badge variant="outline" size="sm">
                 Custom
@@ -290,7 +325,7 @@ function AutomationDetail({
               size="xs"
               variant="ghost-muted"
               disabled={pending || (!on && Boolean(automation.blocked))}
-              onClick={() => onMode(on ? "inherit" : "on")}
+              onClick={() => onMode(on ? "inherit" : restoreMode(entry, lastRun !== undefined))}
             >
               {on ? "Switch off" : "Switch on"}
             </Button>
@@ -311,10 +346,18 @@ function AutomationDetail({
           ))}
         </div>
       ) : null}
+      {preview ? (
+        <PreviewNotice
+          count={previewRuns}
+          automation={automation.key}
+          disabled={pending || Boolean(automation.blocked)}
+          onTurnOn={() => onMode("on")}
+        />
+      ) : null}
       <DetailSection title="What it does">
         <div className="flex flex-col gap-3 px-3 py-3 @min-[32rem]/split:flex-row @min-[32rem]/split:items-start sm:px-4">
           <p className="min-w-0 flex-1 text-sm leading-relaxed text-foreground">
-            {automationSentence(automation, entry.effectiveConfig, { custom, engine: overview.engine })}
+            {automationSentence(automation, entry.effectiveConfig, { custom })}
           </p>
           {/* While it's on, This week links to its runs. */}
           {off ? (
@@ -323,12 +366,15 @@ function AutomationDetail({
             </div>
           ) : null}
         </div>
-      </DetailSection>
-      <DetailSection title="Where it runs">
         <SettingsRow
           id={`autopilot.automations.${automation.key}.board`}
-          title="Whole board"
-          description="On for the board: every project, unless a project or epic switches it off for itself."
+          title="Mode"
+          description={modeDescription(
+            boardSwitchValue(entry.mode) as "off" | "preview" | "on",
+            automation,
+            checkScript,
+          )}
+          info="Off: nothing runs. Preview: each time it would act, a run marked Preview is recorded instead; no agent starts and nothing on the board or on GitHub changes. A custom automation's check script is the exception: it runs for real. New, imported and drafted automations save in Preview."
           control={
             <ModeSwitch
               label={`${automation.title} for the board`}
@@ -339,6 +385,13 @@ function AutomationDetail({
               onChange={(mode) => onMode(boardModeToSave(mode))}
             />
           }
+        />
+      </DetailSection>
+      <DetailSection title="Where it runs">
+        <SettingsRow
+          title="Whole board"
+          description="Every project follows the mode above, unless a project or epic sets its own."
+          status={boardSummary(entry.mode)}
         />
         <SettingsRow
           title="Projects"
@@ -352,12 +405,16 @@ function AutomationDetail({
                 : ""}
             </>
           }
-          status={reach.projects.length > 0 ? `On in ${reach.projects.join(", ")}` : "On in no project"}
+          status={projectsStatus(reach)}
         />
         <PausedRows pauses={pauses} />
       </DetailSection>
       {off ? null : <WeekSection automation={automation.key} />}
-      {essential.length > 0 ? <DetailSection title="Settings">{essential.map(field)}</DetailSection> : null}
+      {automation.key === AUTOPILOT_MERGE_EPIC_PRS ? (
+        <MergeTargets automation={automation} entry={entry} rejected={rejected} onConfig={onConfig} />
+      ) : essential.length > 0 ? (
+        <DetailSection title="Settings">{essential.map(field)}</DetailSection>
+      ) : null}
       {automation.key === AUTOPILOT_RECURRING ? (
         <DetailSection title="Rules">
           <SettingsRow
@@ -387,9 +444,27 @@ function AutomationDetail({
       {advanced.length > 0 ? (
         <AdvancedSection
           changed={advancedChanged(automation, entry.effectiveConfig)}
-          fields={advanced.map((f) => f.label)}
+          fields={advancedFieldNames(advanced)}
         >
-          {advanced.map(field)}
+          {agent.model?.kind === "model" ? (
+            <ModelLine
+              automation={automation}
+              field={agent.model}
+              entry={entry}
+              rejected={rejected}
+              onConfig={onConfig}
+            />
+          ) : null}
+          {agent.runner.length > 0 ? (
+            <AgentDefaultsLine
+              automation={automation}
+              fields={agent.runner}
+              entry={entry}
+              rejected={rejected}
+              onConfig={onConfig}
+            />
+          ) : null}
+          {agent.rest.map(field)}
         </AdvancedSection>
       ) : null}
       {off && !custom ? (
@@ -398,6 +473,158 @@ function AutomationDetail({
         </p>
       ) : null}
     </DetailBody>
+  );
+}
+
+type FieldLineProps<F> = {
+  automation: AutopilotAutomation;
+  entry: AutopilotScopeEntry;
+  rejected: number;
+  onConfig: ConfigUpdate;
+} & F;
+
+/**
+ * The agent's model as one line: where it comes from (Agents → Operations, for runs of this kind) and what that resolves
+ * to, with Override. Once overridden here, or while overriding, it is the model picker with a reset.
+ */
+function ModelLine({
+  automation,
+  field,
+  entry,
+  rejected,
+  onConfig,
+}: FieldLineProps<{ field: Extract<AutopilotField, { kind: "model" }> }>) {
+  const settings = useSettings().data;
+  const [overriding, setOverriding] = useState(false);
+  const op = field.operation ?? "customTask";
+  if (overriding || field.key in entry.config || !settings) {
+    return (
+      <AutomationField
+        automation={automation}
+        field={field}
+        entry={entry}
+        projectId={null}
+        rejected={rejected}
+        onConfig={onConfig}
+      />
+    );
+  }
+  return (
+    <SettingsRow
+      id={`autopilot.automations.${automation.key}.model`}
+      title="Model"
+      description={
+        <>
+          From <SettingsLink to={operationTarget(op)}>Agents → Operations</SettingsLink> ({OPERATIONS[op].label}), for
+          every run of this kind.
+        </>
+      }
+      status={`Now: ${inheritDetail(op, { needs: field.needs }, settings)}`}
+      control={
+        <Button size="xs" variant="outline" onClick={() => setOverriding(true)}>
+          Override
+        </Button>
+      }
+    />
+  );
+}
+
+/**
+ * Runner, budget, timeout and T3 access as one line: the board's defaults from Limits & safety, or what this
+ * automation sets, with Override. Overriding opens a row per field, each with a reset; the line stays open while
+ * any of them is set here.
+ */
+function AgentDefaultsLine({
+  automation,
+  fields,
+  entry,
+  rejected,
+  onConfig,
+}: FieldLineProps<{ fields: AutopilotField[] }>) {
+  const [overriding, setOverriding] = useState(false);
+  const overridden = fields.filter((f) => f.key in entry.config);
+  const open = overriding || overridden.length > 0;
+  const summary = agentSummary(fields, entry.effectiveConfig);
+  return (
+    <>
+      <SettingsRow
+        id={`autopilot.automations.${automation.key}.agent`}
+        title={agentFieldsTitle(fields)}
+        description={
+          overridden.length > 0 ? (
+            <>
+              Set here: {overridden.map((f) => f.label.toLowerCase()).join(", ")}. The rest come from{" "}
+              <SettingsLink to="autopilot.limits.agent-defaults">Limits &amp; safety</SettingsLink>.
+            </>
+          ) : (
+            <>
+              The defaults from <SettingsLink to="autopilot.limits.agent-defaults">Limits &amp; safety</SettingsLink>.
+            </>
+          )
+        }
+        status={summary}
+        control={
+          overridden.length > 0 ? undefined : (
+            <Button size="xs" variant="outline" onClick={() => setOverriding(!open)}>
+              {open ? "Done" : "Override"}
+            </Button>
+          )
+        }
+      />
+      {open
+        ? fields.map((f) => (
+            <AutomationField
+              key={f.key}
+              automation={automation}
+              field={f}
+              entry={entry}
+              projectId={null}
+              rejected={rejected}
+              onConfig={onConfig}
+            />
+          ))
+        : null}
+    </>
+  );
+}
+
+/** Beside a list row's name: the automation only records what it would do. */
+function PreviewBadge() {
+  return (
+    <Badge variant="warning" size="sm" title="In Preview: it records what it would do and does none of it">
+      Preview
+    </Badge>
+  );
+}
+
+/** Over an automation in Preview: how often it would have run this week, its runs, and Turn on. */
+function PreviewNotice({
+  count,
+  automation,
+  disabled,
+  onTurnOn,
+}: {
+  count: number;
+  automation: string;
+  disabled: boolean;
+  onTurnOn: () => void;
+}) {
+  return (
+    <div className="px-3 sm:px-4">
+      <Alert variant="warning">
+        <EyeIcon />
+        {/* The buttons sit under the text, so a narrow detail pane doesn't squeeze it into a column. */}
+        <AlertDescription>
+          <p>{previewHint(count)}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            <Button size="xs" variant="warning-outline" disabled={disabled} onClick={onTurnOn}>
+              Turn on
+            </Button>
+            {count > 0 ? <RunHistoryLink automation={automation} label="See them" size="xs" /> : null}
+          </div>
+        </AlertDescription>
+      </Alert>
+    </div>
   );
 }
 
@@ -505,7 +732,7 @@ function AddAutomationDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     {
       icon: FileUpIcon,
       title: "Import",
-      blurb: "From a file someone shared, or one of the examples. It comes in switched off.",
+      blurb: "From a file someone shared, or one of the examples. It comes in in Preview.",
       go: () => void navigate({ to: "/settings/autopilot/custom/import", state: FROM_SETTINGS_LIST }),
     },
   ];

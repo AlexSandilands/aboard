@@ -2,10 +2,10 @@
 
 Autopilot lets the board act on its own. It is a list of **automations**, each of which watches the board and
 does something when it's needed. Everything is off until you switch it on, and Autopilot never closes or deletes a
-task, force-pushes, or pushes to the default branch. It merges in two cases only: a task's pull request into its
-epic's integration branch, for an epic you set to deliver that way ([Merge into epic branch](#merge-into-epic-branch)),
-and, through [Orchestrate](#orchestrate), a task's pull request into the default branch when you turned auto-merge on
-for that task.
+task, force-pushes, or pushes to the default branch. It merges in two cases only, both through
+[Merge ready PRs](#merge-ready-prs): a task's pull request into its epic's integration branch, for an epic you set to
+deliver that way, and, if you switch on **Into main**, a task's pull request into the default branch when you turned
+auto-merge on for that task.
 
 ## Switching automations on
 
@@ -45,15 +45,33 @@ switch it on. Click a row to see it on the right:
 
 - one sentence saying what it does with your settings ("Every weekday at 09:00, write a plain list of what changed
   on the board"), and **All runs**;
-- **Where it runs**: the board's **On / Off** and the projects it's on in;
+- **Mode**: **Off**, **Preview** or **On** for the board (see [Trying one out with Preview](#trying-one-out-with-preview));
+- **Where it runs**: the board's mode and the projects it's on in;
 - **Settings**: the few options most people change;
-- **Advanced**, closed: everything else, such as the runner, the model, budgets and timeouts. A dot on it means
-  something in there isn't the default.
+- **Advanced**, closed: everything else. For an automation that starts an agent it opens with two lines: the
+  **Model**, which comes from Settings → Agents → Operations and says what it runs on now, and **Runner, budget and
+  timeout**, which come from the [defaults for agent runs](#limits). Each has **Override**, to set it for this
+  automation alone, and each overridden value a reset. A dot on Advanced means something in there isn't the default.
 
-The board's switch is just **On / Off** (there's nothing above the board to inherit from, so an automation you
-haven't switched on is off); only projects and epics can follow the scope above (the ↺ button), and a project can
+The board's switch is just **Off / Preview / On** (there's nothing above the board to inherit from, so an automation
+you haven't switched on is off); only projects and epics can follow the scope above (the ↺ button), and a project can
 override the options in its own settings. On a phone the list and an automation take turns: tap a row, and **All
 automations** takes you back.
+
+### Trying one out with Preview
+
+**Preview** lets you watch one automation before you trust it, while the others keep working. In Preview it does none
+of its work: each time it would act, it records a run marked **Preview** saying what it would have done ("Would start
+#12 …"), and no agent starts, no command runs and nothing on the board or GitHub changes. The one exception is a custom
+automation's **check script**: it still runs for real, so it can tell what it would act on, and the automation says so.
+
+An automation in Preview has an amber **Preview** badge in the list. Its page says how many times it would have run this
+week, with **See them** (its runs) and **Turn on**. Turning it on doesn't go back over what Preview saw: it acts on what
+happens from then. A project or an epic can be in Preview on its own too, from its Autopilot pill or settings.
+
+Automations you make, import or accept from an agent's draft start in Preview. The switch in the list remembers the
+mode an automation was last on in, so switching it off and on again brings back Preview or On; one that has never run
+comes back in Preview.
 
 ## Remind me about stuck tasks
 
@@ -77,8 +95,7 @@ comments, from your own `gh` account. The review starts with a line naming this 
 comment carries a short mark. It only ever comments: it never approves or requests changes, and it never merges. The
 agent itself only reads the pull request and reports its findings; Autopilot posts them.
 
-- It reviews the PR again each time its head commit changes, up to **PR review rounds** (3 by default, in
-  Settings → Autopilot → Limits & safety) per PR. Drafts are skipped unless you turn on **Review drafts**; merged and closed PRs
+- It reviews the PR again each time its head commit changes, up to **Rounds per PR** (3 by default) per PR. Drafts are skipped unless you turn on **Review drafts**; merged and closed PRs
   are never reviewed.
 - With local review on for the task, the PR waits: it is reviewed once the task is in Review and its local review has
   finished. A PR on a task still in Backlog, Planned or In Progress isn't reviewed until then.
@@ -87,12 +104,13 @@ agent itself only reads the pull request and reports its findings; Autopilot pos
 - The findings stay on GitHub, not on the board, so they don't mix with local review findings. The task gets a
   note "Autopilot reviewed PR #N at …" linking the review. **All runs** on an automation (and in a scheduled custom automation's editor) opens the same list for that
 automation alone.
-- Points at or above the **fix threshold** (major by default) are the ones a fix would address. When the last
+- Points at or above the **fix threshold** (Fix PRs' **Fix findings at or above**, major by default) are the ones a
+  fix would address. When the last
   round still has some, the card says "Autopilot gave up" under Needs attention and you get a notification.
-- Its settings: the **review skill** it follows (the built-in one by default), **Review drafts**, the runner, the
-  **budget** ($2 by default) and the **timeout**. It always runs headless, since it must be held to read-only. It
+- Its settings: **Rounds per PR**, the **review skill** it follows (the built-in one by default), **Review drafts**,
+  and the model, budget and timeout. It always runs headless, since it must be held to read-only. It
   needs `gh` signed in to the PR's host and the PR's branch on `origin`, so a PR from a fork isn't reviewed.
-- Switching it on reviews every open PR already linked in the project, once per head commit. **Dry run** shows
+- Switching it on reviews every open PR already linked in the project, once per head commit. **Preview** shows
   which first.
 
 ## Fix PRs
@@ -121,9 +139,9 @@ the PR's branch and replies on each thread, starting with Autopilot's mark and "
   earlier threads once it confirms the point is fixed.
 
 - Each reason is acted on once. A new failure on a new commit, or a newer comment, is a new reason.
-- It makes at most 2 attempts on one head commit. Per PR, fixes for Autopilot's review and failing checks get **PR
-  review rounds** (3 by default), and fixes for other people's comments and requests for changes get **PR comment
-  rounds** (5 by default), so a colleague's review bot can't use up the attempts Autopilot's own review needs. A
+- It makes at most 2 attempts on one head commit. Per PR, fixes for Autopilot's review and failing checks get **Attempts
+  on checks and reviews** (3 by default), and fixes for other people's comments and requests for changes get
+  **Attempts on comments** (5 by default), so a colleague's review bot can't use up the attempts Autopilot's own review needs. A
   thread your account answered last doesn't send it back. When
   one runs out the card says "Autopilot gave up" under Needs attention and you get a notification; the other still
   goes on.
@@ -131,15 +149,18 @@ the PR's branch and replies on each thread, starting with Autopilot's mark and "
   isn't on `origin`.
 - To fix a PR yourself, use **Fix in** on its row ([Fixing a PR](using-the-board.md#fixing-a-pr)). While Fix PRs is on for
   the task, the row says **Autopilot is fixing** or **Autopilot gave up** instead, with **Fix in** in its menu.
-- Its settings: the five switches, **Resolve threads it fixed**, a **Fix skill** to follow on top of the fix prompt, the runner, the **budget**
-  ($3 by default), the **timeout** (30 minutes) and **T3 Code access**.
+- Its settings: the five switches, **Fix findings at or above**, the two attempt limits, then under Advanced
+  **Resolve threads it fixed**, a **Fix skill** to follow on top of the fix prompt, the model, the runner, the budget,
+  the timeout and **T3 Code access**.
 
 You can add your own automations too: a trigger you pick and an agent prompt or a command to run. See
 [custom automations](custom-automations.md).
 
 ## How agents run
 
-An automation that needs an agent picks its **runner** in its settings:
+Where an agent runs, its budget, its timeout and its T3 Code access are set once for every automation, under
+**Defaults for agent runs** in Settings → Autopilot → Limits & safety; an automation can override any of them under
+its Advanced settings. The **runner**:
 
 - **Auto** (the default): a new T3 Code thread when T3 Code is connected, otherwise a headless Claude Code run.
 - **T3 Code only**: the thread gets the task's model (below), and never more access than T3 Code's
@@ -205,10 +226,40 @@ see (T3 Code closed, the thread deleted) stops holding it after ten minutes.
 
 It tries a task once each time it enters Planned. If the run fails, or the task is still in Planned when the
 grace period ends, the card goes under **Needs attention** with "Autopilot couldn't start this task" and you get
-a notification; nothing retries. Move the task out of Planned and back in to try again. Try it first with
-**Dry run** to see which tasks it would start.
+a notification; nothing retries. Move the task out of Planned and back in to try again. Try it first in
+**Preview** to see which tasks it would start.
 
-## Merge into epic branch
+## Merge ready PRs
+
+**Merge ready PRs** merges a task's pull request once it is ready: into its epic's branch if the epic has one, or into
+main if you flagged the task **Auto-merge** and switched **Into main** on. It needs no agent, so it costs nothing.
+Ready means all of these hold:
+
+- the task is in Review;
+- its local review has finished with no blocking or major finding open, and Review PRs (when it's on) found nothing at
+  or above the fix threshold at the current commit;
+- no reviewer asked for changes;
+- its checks pass (a repository with no checks waits ten minutes after each push, in case they just haven't started);
+- it merges cleanly.
+
+Anything else waits. Where only you can settle it (GitHub wants an approving review, say), the task shows why under
+**Needs attention** and you get a notification.
+
+It has two targets:
+
+- **Into epic branches** is on whenever the automation is on. A task in an epic with its own branch merges into that
+  branch, never into main. Example: #12 Card vault is in epic #5, which delivers through `epic/5-one-page-checkout`;
+  when #12's pull request is ready it merges there, and the epic's own pull request into main stays yours.
+- **Into main** is off unless you switch it on. Only tasks you flagged **Auto-merge** (in the task panel's
+  Automation section) merge into main, through the same check the `merge_task_pr` tool uses. It merges one pull
+  request at a time per repository and reads the others again after each merge, so a pull request that conflicts
+  with the one that just landed waits for a fix instead of merging. Example: #4 Fix currency rounding is flagged
+  Auto-merge; once its pull request is ready it merges into main and #4 goes to Done.
+
+Switch it on for the board, a project or an epic in **Settings → Autopilot → Merge ready PRs**, and **Into main** there
+too.
+
+### Integration branches
 
 For an epic whose tasks build on each other, waiting for you to merge each pull request before the next task can
 start means the epic stops every time a task is done. An epic can instead deliver through an **integration branch**:
@@ -223,11 +274,8 @@ start means the epic stops every time a task is done. An epic can instead delive
   badge and press **Mark merged into main**.
 - The epic's tasks start from that branch and open their pull requests against it: Start planned tasks, the
   hand-off prompts and **New T3 Code thread…** all default to it.
-- **Merge into epic branch** merges a task's pull request into the epic's branch once all of
-  these hold: the task is in Review, its local review has finished with no blocking or major finding open, Review
-  PRs (when it's on) found nothing at or above the fix threshold at the current commit, no reviewer asked for
-  changes, its checks pass (a repository with no checks waits ten minutes after each push, in case they just
-  haven't started) and it merges cleanly. The task then goes to Done, so the tasks it blocks can start from the updated branch.
+- **Merge ready PRs** merges a task's pull request into the epic's branch once it is ready (above). The task then
+  goes to Done, so the tasks it blocks can start from the updated branch.
 - It merges with a merge commit if the repository allows one, otherwise a squash, otherwise a rebase, going by the
   repository's settings when it merges (and moving to the next method if GitHub refuses one, for example because of a
   branch rule). A squash-only repository therefore gets squashed task commits on the epic's branch. That can
@@ -241,17 +289,21 @@ start means the epic stops every time a task is done. An epic can instead delive
   the default branch, Fix PRs merges the default branch in. **Only you merge that pull request.**
 - You can go back to pull requests to main until one of the epic's tasks has started.
 
-Switch **Merge into epic branch** on for the epic (or its project). It needs no agent and has no settings.
+Switch **Merge ready PRs** on for the epic (or its project).
 
-## Letting an agent merge into the default branch
+## Auto-merge into the default branch
 
-Autopilot never merges into the default branch. An agent you run (one orchestrating an epic, say) can, with the
-`merge_task_pr` tool, but only for a task you've allowed it on: set **Auto-merge** to On in the task panel's
-Automation section, or tell the agent to turn it on (`update_task` with `autoMerge: "on"`). The board can't tell an
-agent from you, so any agent with the board's tools could set it; agents are told to only when you ask. The board then merges the task's pull request only once it is in
-Review, its local review and Autopilot's review are finished and clean, nobody requested changes, its checks pass and
-it merges cleanly, and only at the commit it checked. The agent picks the order, so the tasks' pull requests don't
-conflict. Without the flag, the tool refuses and the merge stays yours.
+A task's pull request reaches the default branch without you only when you've allowed it on that task: set
+**Auto-merge** to On in the task panel's Automation section, or tell an agent to turn it on (`update_task` with
+`autoMerge: "on"`). The board can't tell an agent from you, so any agent with the board's tools could set it; agents
+are told to only when you ask. Then two things may merge it, both through the same check (ready, above), and only at
+the commit it checked:
+
+- **Merge ready PRs** with **Into main** on, by itself, one at a time per repository;
+- an agent you run (one orchestrating an epic, say), with the `merge_task_pr` tool. The agent picks the order, so the
+  tasks' pull requests don't conflict.
+
+Without the flag both refuse and the merge stays yours.
 
 ## Orchestrate
 
@@ -261,8 +313,7 @@ its work moving, like a T3 Code thread you'd leave watching the board:
 - it nudges a task's thread that has gone quiet, or starts one when the task has none working;
 - it retries an Autopilot run that failed or was cut short (a review lost to a board restart, say);
 - it tells a thread to fix failing checks or conflicts, and re-runs a flaky CI job once;
-- with **May merge** on (the default), it merges ready pull requests of tasks you turned **auto-merge** on for, one
-  at a time, and checks the others are still green afterwards. Turn it off to have it only list them;
+- it lists the pull requests that look ready to merge. It never merges: [Merge ready PRs](#merge-ready-prs) does that;
 - it flags a task under **Needs attention** when only you can decide something.
 
 It works through the board's tools and `gh`, never edits code, and runs only while the project has work going on, so
@@ -349,9 +400,13 @@ In **Settings → Autopilot → Limits & safety**:
 - **Agent runs at once**, a **daily run cap** and a **daily spend cap**.
 - **Quiet hours**: a window (local time, it may cross midnight) in which no agent runs start. Automations that
   only change the board still run.
-- **PR review rounds**, **PR comment rounds** and the **PR fix threshold** for Review PRs and Fix PRs.
-- **Dry run**: record what each automation would do, and do nothing. Good for trying an automation out.
-- **Worktree retention**, and the **Variables** your custom automations read.
+- **Defaults for agent runs**: where agents run (Auto, T3 Code or headless), the **budget** and **timeout** of a
+  headless run ($5 and 60 minutes by default) and **T3 Code access**. Every automation that starts an agent uses
+  these unless it overrides them. Models are set per kind of run in Settings → Agents → Operations.
+- Review PRs' rounds and Fix PRs' threshold and attempts are on those automations.
+- Under **Advanced**, **Preview everything**: every automation records what it would do, and does nothing. To try one
+  automation, put just that one in [Preview](#trying-one-out-with-preview) instead. Also **Worktree retention**.
+- The **Variables** your custom automations read.
 
 ## Pausing
 
