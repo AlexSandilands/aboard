@@ -155,11 +155,17 @@ export function createTasksService(
     return trashed?.deletedAt ? deletedError(trashed) : notFound("Task", ref.trim());
   };
 
-  /** A task in the trash, by uuid, "#42" or "42". */
-  const trashedRecord = (ref: string): TaskRecord => {
+  /** A task in the trash or not, by uuid, "#42" or "42"; NOT_FOUND once it is purged. */
+  const anyRecord = (ref: string): TaskRecord => {
     const number = /^#?(\d+)$/.exec(ref.trim());
     const task = number ? repos.tasks.byNumberAny(Number(number[1])) : repos.tasks.getAny(ref.trim());
     if (!task) throw notFound("Task", ref.trim());
+    return task;
+  };
+
+  /** A task in the trash, by uuid, "#42" or "42". */
+  const trashedRecord = (ref: string): TaskRecord => {
+    const task = anyRecord(ref);
     if (task.deletedAt === null) throw new AppError("VALIDATION", `#${task.number} is not in the trash`);
     return task;
   };
@@ -1015,10 +1021,13 @@ export function createTasksService(
 
     restore(refs, actor) {
       return core.write((fx) => {
-        // All checked before any comes back: an Undo lists an epic and the tasks deleted with it, and restoring the
-        // epic takes those back first, so they are skipped below rather than refused. Epics first, so a task doesn't
-        // come back loose while its epic is still in the trash a step behind it.
-        const tasks = refs.map(trashedRecord).sort((a, b) => Number(b.kind === "epic") - Number(a.kind === "epic"));
+        // A task already back (an epic restored it, or it came back from Settings before Undo) is skipped, so one
+        // stale id doesn't cost the rest. Epics first, so a task doesn't come back loose while its epic is still in the
+        // trash a step behind it.
+        const tasks = refs
+          .map(anyRecord)
+          .filter((t) => t.deletedAt !== null)
+          .sort((a, b) => Number(b.kind === "epic") - Number(a.kind === "epic"));
         const restored: string[] = [];
         for (const task of tasks) {
           const current = repos.tasks.getAny(task.id);

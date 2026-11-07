@@ -331,8 +331,10 @@ describe("events", () => {
       expect(detail.events.slice(-2).map((e) => e.type)).toEqual(["deleted", "restored"]);
       expect(s.tasks.summaries({ status: "planned" }).map((t) => t.id)).toEqual([later.id, task.id]);
       expect(s.tasks.trash()).toEqual([]);
-      // Restoring again is a mistake the caller made, not a no-op.
-      expectCode(() => s.tasks.restore([task.id], "user"), "VALIDATION");
+      // Restoring again does nothing, and doesn't stop the others in the same call.
+      const other = s.tasks.create({ projectId: project.id, title: "Other" });
+      s.tasks.delete([other.id], {}, "user");
+      expect(s.tasks.restore([task.id, other.id], "user")).toEqual([other.id]);
     });
 
     it("deletes an epic with its tasks and restores them together", () => {

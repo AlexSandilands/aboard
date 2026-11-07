@@ -203,8 +203,8 @@ export interface TasksService {
   delete(ids: readonly string[], opts: { withTasks?: boolean }, actor: string): string[];
   /**
    * Brings tasks back out of the trash in one write, each to the end of its lane, an epic with the tasks deleted
-   * together with it (listing those too is fine). Throws VALIDATION for a task that wasn't in the trash. Returns the
-   * ids restored.
+   * together with it. A task that is already back is skipped, so a stale Undo still restores the rest; one purged
+   * since is NOT_FOUND. Returns the ids restored.
    */
   restore(ids: readonly string[], actor: string): string[];
   /** The trash, most recently deleted first. */

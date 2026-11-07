@@ -221,7 +221,6 @@ export function useSetLabelColor(opts?: MutationOpts) {
   });
 }
 
-/** Permanently deletes a task; the server only allows it for archived tasks. */
 /**
  * Moves tasks to the trash: one through DELETE (with its epic's tasks when `withTasks`), several in one bulk write.
  * Resolves with the ids that went, for Undo.

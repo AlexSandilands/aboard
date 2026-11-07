@@ -161,7 +161,7 @@ reference to a trashed task (`#N` or its id) fails with `NOT_FOUND: Task #N was 
   logs `restored`, and republishes it. It rejoins its epic while that one is live, unarchived and in the same
   project; otherwise it comes back loose. An epic brings back the tasks that share its stamp
   (`trashedWith`), not ones deleted on their own. Epics are restored first, so an Undo's full id list (an epic
-  and its tasks) works in any order. Restoring a task that wasn't in the trash is `VALIDATION`.
+  and its tasks) works in any order. A task already back is skipped, so a stale Undo still restores the rest; one purged since is `NOT_FOUND`.
 - **Purge** (`tasks.purge(refs)`, Settings → **Delete now**, `POST /api/tasks/trash/purge`; `purgeExpired()` at
   startup and every hour in `server.ts`) removes the row for good: the plan, links, events, review rounds and
   relations cascade, an epic takes the tasks deleted with it, tasks closed against it keep their resolution and log
