@@ -1042,6 +1042,29 @@ describe("custom automations: actions", () => {
     expect(s.notifications.list().items.filter((n) => n.kind === "autopilot_failed")).toHaveLength(2);
   });
 
+  it("runs an agent given tools headless, even when the board's runner is T3 Code", async () => {
+    const { s, task, define, pass, agentRuns } = setup();
+    s.autopilot.updateEngine({ agentDefaults: { runner: "t3" } });
+    define({
+      name: "Tools",
+      trigger: { kind: "status_change", to: "review" },
+      action: { kind: "agent", prompt: "Look at {{task.title}}", allowedTools: ["mcp__issue-tracker__search_jira"] },
+    });
+    define({
+      name: "Plain",
+      trigger: { kind: "status_change", to: "review" },
+      action: { kind: "agent", prompt: "Go" },
+    });
+    const t = task("Board runner");
+    s.tasks.move(t.id, { status: "review" }, "agent");
+    await pass();
+    const withTools = agentRuns.find((r) => (r.tools?.length ?? 0) > 0)!;
+    const plain = agentRuns.find((r) => !r.tools)!;
+    expect(withTools.options).toMatchObject({ runner: "headless" });
+    // Without tools it follows the board's runner.
+    expect(plain.options).toMatchObject({ runner: "t3" });
+  });
+
   it("records the filled prompt or the command in a dry run, and runs nothing", async () => {
     const { s, task, define, pass, runsOf, shellRuns, agentRuns } = setup();
     s.autopilot.updateEngine({ dryRun: true });

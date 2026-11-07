@@ -151,7 +151,7 @@ function EngineSections({ engine }: { engine: AutopilotEngineSettings }) {
           id="autopilot.limits.runner"
           title="Where agents run"
           description="Auto: a T3 Code thread when T3 Code is connected, else a headless CLI in a worktree."
-          info="Review PRs always runs headless, and runs with no task (the digest, scheduled automations) too."
+          info="Some runs are always headless, whatever this says: Review PRs, runs with no task (the digest, scheduled automations) and custom automations that give their agent extra tools."
           control={
             <OptionSelect
               label="Where agents run"

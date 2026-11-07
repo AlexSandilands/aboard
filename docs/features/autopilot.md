@@ -91,7 +91,8 @@ and Review PRs, which takes only Auto or Headless, keeps its own runner when the
 from the most specific scope that sets it, else the board's agent default, else the automation's built-in default
 (`readRunnerOptions(config, board)` falls back the same way). The model isn't one of them: each kind of run has its
 model in Agents → Operations ([Models](#models)), and an automation's Model field defaults to Inherit. A run with no
-task (the digest, a scheduled custom automation) is always headless, whatever the board's runner.
+task (the digest, a scheduled custom automation) and a custom agent given extra tools are always headless, whatever
+the board's runner, so a board default of T3 Code can't make them fail.
 
 Review rounds, comment rounds and the fix threshold were engine settings (`prReviewRounds`, `prCommentRounds`,
 `prFixThreshold`) until `043_autopilot_agent_defaults`, a code migration, moved them into

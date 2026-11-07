@@ -484,7 +484,7 @@ const FIELDS: AutopilotField[] = [
     min: 1,
     max: 10,
     unit: "attempts",
-    help: "Fixes of failing checks and Autopilot's review findings before it gives up on the PR.",
+    help: "Fixes of failing checks and Autopilot's review findings before it gives up on the PR. Keep it at least Review PRs' rounds, or the last rounds' findings go unfixed.",
   },
   {
     key: "commentAttempts",

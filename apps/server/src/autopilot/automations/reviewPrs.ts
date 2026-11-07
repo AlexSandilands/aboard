@@ -353,7 +353,7 @@ export const reviewPrs = defineAutomation({
       min: 1,
       max: 10,
       unit: "rounds",
-      help: "Reviews of one PR, each after new commits. The last round asks for no fixes below the fix threshold.",
+      help: "Reviews of one PR, each after new commits. The last round asks for no fixes below the fix threshold. Fix PRs' attempts on checks and reviews should be at least this.",
     },
     {
       key: "reviewDrafts",

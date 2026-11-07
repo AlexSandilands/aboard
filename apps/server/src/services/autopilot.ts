@@ -54,7 +54,8 @@ export const AUTOPILOT_PAUSED_KEY = "autopilotPaused";
 
 /** The engine settings stored, over the defaults; a value that no longer parses falls back to them. */
 export function loadAutopilotEngine(repos: Repos): AutopilotEngineSettings {
-  const raw = repos.settings.all().get(AUTOPILOT_ENGINE_KEY);
+  // One row, not the whole table: the service reads it on every resolve, for the agent defaults.
+  const raw = repos.settings.get(AUTOPILOT_ENGINE_KEY);
   const stored = raw && typeof raw === "object" ? (raw as Partial<Record<keyof AutopilotEngineSettings, unknown>>) : {};
   const agentDefaults = stored.agentDefaults && typeof stored.agentDefaults === "object" ? stored.agentDefaults : {};
   const parsed = AutopilotEngineSettings.safeParse({
