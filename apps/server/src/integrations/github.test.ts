@@ -378,6 +378,19 @@ describe("a check's newest run", () => {
     );
   });
 
+  it("tells workflowless runs apart by app", () => {
+    const byApp = (name: string, databaseId: number, conclusion: string, app: number) => ({
+      ...run(name, databaseId, conclusion, null),
+      checkSuite: { app: { databaseId: app }, workflowRun: null },
+    });
+    expect(
+      snapshot(required(byApp("build", 1, "FAILURE", 10)), required(byApp("build", 2, "SUCCESS", 20))).checks,
+    ).toBe("failing");
+    expect(
+      snapshot(required(byApp("build", 1, "FAILURE", 10)), required(byApp("build", 2, "SUCCESS", 10))).checks,
+    ).toBe("passing");
+  });
+
   it("falls back to the name alone when a run has no workflow", () => {
     expect(snapshot(required(run("lint", 1, "FAILURE", null)), required(run("lint", 2, "SUCCESS", null))).checks).toBe(
       "passing",
@@ -403,7 +416,9 @@ describe("a check's newest run", () => {
 
 describe("pollQuery", () => {
   it("asks for each check run's name, id and workflow", () => {
-    expect(pollQuery([4]).query).toContain("name databaseId checkSuite { workflowRun { workflow { databaseId } } }");
+    expect(pollQuery([4]).query).toContain(
+      "name databaseId checkSuite { app { databaseId } workflowRun { workflow { databaseId } } }",
+    );
   });
 
   it("aliases each PR and passes numbers as variables", () => {

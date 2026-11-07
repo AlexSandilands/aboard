@@ -56,11 +56,12 @@ const RollupItem = z
     state: z.string().nullish(),
     /** Whether the base branch requires this check to merge this PR (`isRequired(pullRequestNumber:)`). */
     isRequired: z.boolean().nullish(),
-    /** CheckRun only: the check's name, its run id (newer runs have higher ids) and its workflow's id. */
+    /** CheckRun only: the check's name, its run id (newer runs have higher ids) and its workflow's id, or the app's when it has no workflow. */
     name: z.string().nullish(),
     databaseId: z.number().nullish(),
     checkSuite: z
       .object({
+        app: z.object({ databaseId: z.number().nullish() }).nullish(),
         workflowRun: z.object({ workflow: z.object({ databaseId: z.number().nullish() }).nullish() }).nullish(),
       })
       .nullish(),
@@ -290,14 +291,17 @@ type Rollup = ReadonlyArray<z.infer<typeof RollupItem>> | null | undefined;
  * Each check's newest run only. The rollup lists every run on the head commit, including ones a newer run replaced
  * (a workflow's `cancel-in-progress`, a re-run, a PR edit re-triggering it); GitHub's merge box judges a check by its
  * newest run, so an older cancelled or failed one must not count. A check is its name within its workflow, so a
- * same-named job in another workflow stays; runs without a name or id, and status contexts (which the rollup already
+ * same-named job in another workflow (or a run from another app) stays; runs without a name or id, and status contexts (which the rollup already
  * reduces to the latest), pass through. Newer runs have higher ids. Order is kept.
  */
 function latestRuns(rollup: NonNullable<Rollup>): NonNullable<Rollup> {
+  // Runs outside a workflow (a third-party app) are told apart by app, as GitHub lists them separately.
+  const workflowOrApp = (item: NonNullable<Rollup>[number]): string => {
+    const workflow = item.checkSuite?.workflowRun?.workflow?.databaseId;
+    return workflow != null ? `w${workflow}` : `a${item.checkSuite?.app?.databaseId ?? ""}`;
+  };
   const key = (item: NonNullable<Rollup>[number]): string | null =>
-    item.name && item.databaseId != null
-      ? `${item.checkSuite?.workflowRun?.workflow?.databaseId ?? ""}\u0000${item.name}`
-      : null;
+    item.name && item.databaseId != null ? `${workflowOrApp(item)}\u0000${item.name}` : null;
   const newest = new Map<string, number>();
   for (const item of rollup) {
     const k = key(item);
@@ -439,7 +443,7 @@ const prFields = (
       ${THREAD_FIELDS}
       commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
         __typename
-        ... on CheckRun { name databaseId checkSuite { workflowRun { workflow { databaseId } } } status conclusion isRequired(pullRequestNumber: ${numberVar}) }
+        ... on CheckRun { name databaseId checkSuite { app { databaseId } workflowRun { workflow { databaseId } } } status conclusion isRequired(pullRequestNumber: ${numberVar}) }
         ... on StatusContext { state isRequired(pullRequestNumber: ${numberVar}) }
       } } } } } }`;
 
