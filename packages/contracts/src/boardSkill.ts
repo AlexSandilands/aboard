@@ -420,7 +420,8 @@ Statuses are \`backlog\`, \`planned\`, \`in_progress\`, \`review\`, \`done\`. Th
   by label. Its agent runs headless in an empty temporary folder and is told the project's name and folder.
 - \`filters: {labels: [...]}\` narrows the task triggers to tasks with any of the labels, and \`epicTasks: false\` skips
   tasks in epics (an epic the user switches on for itself still counts). Where it runs, which projects and which epics,
-  is the user's to pick when they import it, so don't try to name them.
+  is the user's to pick when they import it, so don't try to name them. A change to an existing automation (\`replaces\`)
+  keeps its own \`epicTasks\`, whatever the draft says.
 - Each thing is done once: the same move never gets a second run.
 
 ## What a prompt, command or script can read

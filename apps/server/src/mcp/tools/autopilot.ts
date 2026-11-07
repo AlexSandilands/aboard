@@ -110,7 +110,7 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
               "'blocker_finished'} or {kind: 'schedule', schedule: {kind: 'weekly', days: [0-6, 0 is Sunday], time: " +
               "'HH:MM'} | {kind: 'hourly', everyHours} | {kind: 'minutes', everyMinutes (5-1440)}}; filters: {labels, " +
               "epicTasks?: false to skip tasks in epics} (not for a schedule; where it runs, projects and epics, is " +
-              "the user's to pick, so never name them); action, one of {kind: 'agent', prompt, skill?, model?: {tier: light|standard|deep} " +
+              "the user's to pick, so never name them; a change with replaces keeps the automation's own epicTasks); action, one of {kind: 'agent', prompt, skill?, model?: {tier: light|standard|deep} " +
               "(omit it to inherit the automation's Model setting, then the task's), " +
               "onPrBranch?, allowedTools?: ['mcp__server__tool'], check?: {language, body, timeoutSeconds?}, " +
               "untrustedItems?}, {kind: 'shell', command, timeoutSeconds?} or {kind: 'script', language: " +

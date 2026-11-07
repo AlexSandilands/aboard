@@ -1121,7 +1121,9 @@ and no stored automation runs anywhere new or stops anywhere it ran. A non-empty
 those projects: each keeps the state it had (its own row, or the board's), the board goes off, and the projects left
 out and their epics' rows go to Inherit. An `epicId` filter becomes that epic's own row at the state the epic had (off
 when its project was off or left out), every other row of the automation goes to Inherit, and Tasks in epics turns off.
-Rows keep their config and last on-mode. Details for a
+Rows keep their config and last on-mode. Since Tasks in epics replaced the epic filter, it counts as where it runs: an
+agent's change (`replaces`, `applyDraft` and `proposedDefinition`) and a `PATCH` whose filters leave it out keep the
+automation's own. Details for a
 command ("Which command?") or a script ("The script") has a small amber **Runs as you** pill by its heading
 (`RunsAsYouBadge` in `ScriptWarning.tsx`) instead of an alert: its card opens on hover, on click or tap, and on
 keyboard focus, and Esc closes it (it stays closed until focus leaves the pill). It says the code runs on this machine
