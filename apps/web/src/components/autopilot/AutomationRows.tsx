@@ -16,11 +16,18 @@ import { skillOptions } from "~/components/review/review.logic";
 import { inheritDetail } from "~/components/models/choicePicker.logic";
 import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
 import { ReviewSkillSelect } from "~/components/settings/ReviewSettingsSection";
-import { SETTINGS_TEXT_WIDTH, SettingResetButton, SettingsRow, UnitInput } from "~/components/settings/settingsLayout";
+import {
+  SETTINGS_PICKER_WIDTH,
+  SETTINGS_TEXT_WIDTH,
+  SettingResetButton,
+  SettingsRow,
+  UnitInput,
+} from "~/components/settings/settingsLayout";
 import { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotScope, useSettings, useSkills } from "~/state/queries";
 import { toastManager } from "~/components/ui/toast";
 import { entryFor, fieldText, isClockTime, parseNumberField, withConfigValue } from "./autopilot.logic";
+import { fieldValueText } from "./automationList.logic";
 import { TimeInput } from "./TimeInput";
 
 /** Sets or clears one key of a scope's config, built from the latest saved config (see useSetAutopilotScope). */
@@ -72,6 +79,10 @@ export function AutomationField({
   description,
   info,
   status,
+  defaults,
+  alwaysReset = false,
+  onReset,
+  className,
   children,
 }: {
   automation: AutopilotAutomation;
@@ -84,16 +95,35 @@ export function AutomationField({
   description?: ReactNode;
   info?: ReactNode;
   status?: ReactNode;
+  /**
+   * What it is when not set here (fieldDefault). Given, the reset shows only while the value differs from it, its
+   * tooltip names it, and setting it back to it by hand clears the key, so it follows the default again.
+   */
+  defaults?: { value: unknown };
+  /** Show the reset even while unchanged: a single-field override's way back out (the model). */
+  alwaysReset?: boolean;
+  /** After the reset has cleared the key. */
+  onReset?: () => void;
+  className?: string;
   /** Shown under the row, e.g. an example. */
   children?: ReactNode;
 }) {
   const overridden = field.key in entry.config;
   const value = field.key in entry.effectiveConfig ? entry.effectiveConfig[field.key] : automation.defaults[field.key];
-  // Clearing a key that isn't set here changes nothing; the control puts the inherited value back.
+  const isDefault = (next: unknown) =>
+    defaults !== undefined && JSON.stringify(next ?? null) === JSON.stringify(defaults.value ?? null);
+  const changed = overridden && !(defaults && isDefault(entry.config[field.key]));
+  // The default saves as no key, so it follows the default when that changes. Clearing a key that isn't set here
+  // changes nothing; for an empty field the control then puts the inherited value back.
   const save = (next: unknown) => {
-    if (next === undefined && !overridden) return false;
-    onConfig((current) => withConfigValue(current, field.key, next));
+    const kept = next === undefined || isDefault(next) ? undefined : next;
+    if (kept === undefined && !overridden) return next !== undefined;
+    onConfig((current) => withConfigValue(current, field.key, kept));
     return true;
+  };
+  const reset = () => {
+    if (overridden) onConfig((current) => withConfigValue(current, field.key, undefined));
+    onReset?.();
   };
   const control = (
     <FieldControl key={rejected} field={field} value={value} projectId={projectId} onSave={save} label={field.label} />
@@ -103,14 +133,15 @@ export function AutomationField({
     <SettingsRow
       title={field.label}
       description={description ?? field.help}
-      info={info}
+      info={info ?? field.info}
       status={status}
+      className={className}
       resetAction={
-        overridden ? (
+        changed || alwaysReset ? (
           <SettingResetButton
             label={field.label}
-            to={projectId ? "the board's value" : "default"}
-            onClick={() => save(undefined)}
+            to={defaults ? fieldValueText(field, defaults.value) : projectId ? "the board's value" : "default"}
+            onClick={reset}
           />
         ) : undefined
       }
@@ -249,7 +280,7 @@ function ModelField({
       inherit={{ label: "Inherit", detail: inheritDetail(op, { needs: field.needs }, settings) }}
       ariaLabel={label}
       size="sm"
-      className={SETTINGS_TEXT_WIDTH}
+      className={SETTINGS_PICKER_WIDTH}
       onChange={(next) => onSave(next ?? INHERIT)}
     />
   );

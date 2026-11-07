@@ -187,7 +187,10 @@ export type AutopilotFieldTier = z.infer<typeof AutopilotFieldTier>;
 const FieldBase = {
   key: z.string(),
   label: z.string(),
+  /** One short line under the label (docs/reference/style.md: one description line per settings row). */
   help: z.string().optional(),
+  /** The detail that doesn't fit that line, behind an info button beside the label. */
+  info: z.string().optional(),
   tier: AutopilotFieldTier.optional(),
 };
 

@@ -20,6 +20,7 @@ import {
   whereEverywhere,
   whereOffEverywhere,
   whereOwnOn,
+  type AutopilotAgentDefaults,
   type AutopilotAutomation,
   type AutopilotMode,
   type AutopilotField,
@@ -41,6 +42,7 @@ import {
   ScanSearchIcon,
   SparklesIcon,
   SquareTerminalIcon,
+  Undo2Icon,
   WorkflowIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -84,8 +86,10 @@ import { useAutopilotOverview } from "~/state/queries";
 import { useSettings } from "~/state/queries";
 import { AutomationField, type AutomationItem, type ConfigUpdate } from "./AutomationRows";
 import {
-  advancedChanged,
+  advancedChangedCount,
   advancedFieldNames,
+  fieldChanged,
+  fieldDefault,
   agentFieldsTitle,
   agentSummary,
   groupAutomations,
@@ -107,6 +111,7 @@ import {
   modeDescription,
   previewHint,
   restoreMode,
+  withConfigValue,
 } from "./autopilot.logic";
 import { AddAutomationDialog } from "./AddAutomationDialog";
 import { AskToChange } from "./AskAgentButtons";
@@ -466,6 +471,7 @@ function AutomationDetail({
   const navigate = useNavigate();
   const { essential, advanced } = splitFieldsByTier(automation.fields);
   const overview = useAutopilotOverview().data;
+  const agentDefaults = overview?.engine.agentDefaults ?? {};
   const hints = hintsFor(overview?.hints ?? [], automation.key);
   const pauses = pausesFor(overview?.autoPaused ?? [], automation.key);
   const agent = splitAgentFields(advanced);
@@ -644,7 +650,7 @@ function AutomationDetail({
       ) : null}
       {advanced.length > 0 ? (
         <AdvancedSection
-          changed={advancedChanged(automation, entry.effectiveConfig)}
+          changed={advancedChangedCount(automation, entry.config, agentDefaults)}
           fields={advancedFieldNames(advanced)}
         >
           {agent.model?.kind === "model" ? (
@@ -654,6 +660,7 @@ function AutomationDetail({
               entry={entry}
               rejected={rejected}
               onConfig={onConfig}
+              agentDefaults={agentDefaults}
             />
           ) : null}
           {agent.runner.length > 0 ? (
@@ -663,9 +670,21 @@ function AutomationDetail({
               entry={entry}
               rejected={rejected}
               onConfig={onConfig}
+              agentDefaults={agentDefaults}
             />
           ) : null}
-          {agent.rest.map(field)}
+          {agent.rest.map((f) => (
+            <AutomationField
+              key={f.key}
+              automation={automation}
+              field={f}
+              entry={entry}
+              projectId={null}
+              rejected={rejected}
+              onConfig={onConfig}
+              defaults={{ value: fieldDefault(automation, f, agentDefaults) }}
+            />
+          ))}
         </AdvancedSection>
       ) : null}
       {off && !custom ? (
@@ -683,11 +702,13 @@ type FieldLineProps<F> = {
   entry: AutopilotScopeEntry;
   rejected: number;
   onConfig: ConfigUpdate;
+  /** Limits & safety's agent defaults, what the agent's fields are when not set here. */
+  agentDefaults: Partial<AutopilotAgentDefaults>;
 } & F;
 
 /**
- * The agent's model as one line: where it comes from (Agents → Operations, for runs of this kind) and what that resolves
- * to, with Override. Once overridden here, or while overriding, it is the model picker with a reset.
+ * The agent's model as one line: where it comes from (Agents → Operations, for runs of this kind), what that resolves
+ * to, and Override. Overriding, or once set here, it is the model picker with a ↶ the whole time, its way back out.
  */
 function ModelLine({
   automation,
@@ -695,11 +716,13 @@ function ModelLine({
   entry,
   rejected,
   onConfig,
+  agentDefaults,
 }: FieldLineProps<{ field: Extract<AutopilotField, { kind: "model" }> }>) {
   const settings = useSettings().data;
   const [overriding, setOverriding] = useState(false);
   const op = field.operation ?? "customTask";
-  if (overriding || field.key in entry.config || !settings) {
+  const changed = fieldChanged(automation, field, entry.config, agentDefaults);
+  if (overriding || changed || !settings) {
     return (
       <AutomationField
         automation={automation}
@@ -708,6 +731,9 @@ function ModelLine({
         projectId={null}
         rejected={rejected}
         onConfig={onConfig}
+        defaults={{ value: fieldDefault(automation, field, agentDefaults) }}
+        alwaysReset
+        onReset={() => setOverriding(false)}
       />
     );
   }
@@ -717,10 +743,11 @@ function ModelLine({
       title="Model"
       description={
         <>
-          From <SettingsLink to={operationTarget(op)}>Agents → Operations</SettingsLink> ({OPERATIONS[op].label}), for
-          every run of this kind.
+          From <SettingsLink to={operationTarget(op)}>Agents → Operations</SettingsLink> unless set here.
         </>
       }
+      infoLabel="More about Model"
+      info={`${OPERATIONS[op].label}: the board's model for this kind of run, else the task's own (a custom model one of its labels picks, else its suggested tier).`}
       status={`Now: ${inheritDetail(op, { needs: field.needs }, settings)}`}
       control={
         <Button size="xs" variant="outline" onClick={() => setOverriding(true)}>
@@ -732,9 +759,9 @@ function ModelLine({
 }
 
 /**
- * Runner, budget, timeout and T3 access as one line: the board's defaults from Limits & safety, or what this
- * automation sets, with Override. Overriding opens a row per field, each with a reset; the line stays open while
- * any of them is set here.
+ * Runner, budget, timeout and T3 access as one line: the board's defaults from Limits & safety, or how many are set
+ * here, with what they come to now. Override opens a row per field; a field's ↶ shows only while it differs from its
+ * default and resets that field alone, and the line's ↶ Reset puts them all back and closes it.
  */
 function AgentDefaultsLine({
   automation,
@@ -742,33 +769,46 @@ function AgentDefaultsLine({
   entry,
   rejected,
   onConfig,
+  agentDefaults,
 }: FieldLineProps<{ fields: AutopilotField[] }>) {
   const [overriding, setOverriding] = useState(false);
-  const overridden = fields.filter((f) => f.key in entry.config);
-  const open = overriding || overridden.length > 0;
+  const changed = fields.filter((f) => fieldChanged(automation, f, entry.config, agentDefaults));
+  const open = overriding || changed.length > 0;
   const summary = agentSummary(fields, entry.effectiveConfig);
+  const limits = <SettingsLink to="autopilot.limits.agent-defaults">Limits &amp; safety</SettingsLink>;
+  const resetAll = () => {
+    onConfig((current) => fields.reduce((config, f) => withConfigValue(config, f.key, undefined), current));
+    setOverriding(false);
+  };
   return (
     <>
       <SettingsRow
         id={`autopilot.automations.${automation.key}.agent`}
         title={agentFieldsTitle(fields)}
         description={
-          overridden.length > 0 ? (
+          changed.length > 0 ? (
             <>
-              Set here: {overridden.map((f) => f.label.toLowerCase()).join(", ")}. The rest come from{" "}
-              <SettingsLink to="autopilot.limits.agent-defaults">Limits &amp; safety</SettingsLink>.
+              {changed.length} set here, the rest from {limits}.
             </>
           ) : (
-            <>
-              The defaults from <SettingsLink to="autopilot.limits.agent-defaults">Limits &amp; safety</SettingsLink>.
-            </>
+            <>The defaults from {limits}.</>
           )
         }
-        status={summary}
+        status={summary ? `Now: ${summary}` : undefined}
         control={
-          overridden.length > 0 ? undefined : (
-            <Button size="xs" variant="outline" onClick={() => setOverriding(!open)}>
-              {open ? "Done" : "Override"}
+          open ? (
+            <Button
+              size="xs"
+              variant="outline"
+              title={`Put all ${fields.length} back to Limits & safety`}
+              onClick={resetAll}
+            >
+              <Undo2Icon />
+              Reset
+            </Button>
+          ) : (
+            <Button size="xs" variant="outline" onClick={() => setOverriding(true)}>
+              Override
             </Button>
           )
         }
@@ -783,6 +823,10 @@ function AgentDefaultsLine({
               projectId={null}
               rejected={rejected}
               onConfig={onConfig}
+              defaults={{ value: fieldDefault(automation, f, agentDefaults) }}
+              // Resetting one field keeps the others open, even when it was the last one set here.
+              onReset={() => setOverriding(true)}
+              className="ps-6 sm:ps-8"
             />
           ))
         : null}
@@ -821,13 +865,14 @@ function PreviewNotice({
   );
 }
 
-/** The rest of an automation's settings, closed until asked for; a dot says something in it isn't the default. */
+/** The rest of an automation's settings, closed until asked for; its header counts what isn't the default. */
 function AdvancedSection({
   changed,
   fields,
   children,
 }: {
-  changed: boolean;
+  /** How many fields in it differ from their default. */
+  changed: number;
   fields: string[];
   children: React.ReactNode;
 }) {
@@ -848,15 +893,10 @@ function AdvancedSection({
             )}
           />
           <span className="text-sm text-foreground">Advanced</span>
-          {changed ? (
-            <span
-              role="img"
-              aria-label="Changed from the default"
-              title="Something here isn't the default"
-              className="size-1.5 shrink-0 rounded-full bg-info"
-            />
-          ) : null}
-          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{fields.join(", ")}</span>
+          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+            {fields.join(", ")}
+            {changed > 0 ? <span className="text-info-foreground"> · {changed} changed</span> : null}
+          </span>
         </CollapsibleTrigger>
         <CollapsiblePanel className="border-t border-border/50 [&>div>*+*]:border-t [&>div>*+*]:border-border/50">
           <div>{children}</div>

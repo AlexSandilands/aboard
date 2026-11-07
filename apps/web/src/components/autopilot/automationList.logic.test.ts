@@ -1,8 +1,11 @@
 import type { AutopilotAutomation, AutopilotScopeEntry } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
-  advancedChanged,
+  advancedChangedCount,
   advancedFieldNames,
+  fieldChanged,
+  fieldDefault,
+  fieldValueText,
   agentFieldsTitle,
   agentSummary,
   automationReach,
@@ -145,24 +148,50 @@ describe("where an automation is on", () => {
 
 const off3 = () => automationReach("a", entry("a", false), [{ title: "p", entries: [entry("a", false)] }]);
 
-describe("advancedChanged", () => {
+describe("advanced fields against their defaults", () => {
+  const budget = { key: "budgetUsd", label: "Headless budget", kind: "number" as const, unit: "USD" };
+  const model = { key: "model", label: "Model", kind: "model" as const };
   const automation = {
     fields: [
       { key: "days", label: "Days", kind: "number" as const, tier: "essential" as const },
-      { key: "budget", label: "Budget", kind: "number" as const },
+      budget,
+      model,
       { key: "skill", label: "Skill", kind: "skill" as const, tier: "advanced" as const },
     ],
-    defaults: { days: 14, budget: 5, skill: { source: "builtin" } },
+    defaults: { days: 14, budgetUsd: 5, skill: { source: "builtin" } },
   };
+  // Limits & safety's agent defaults beat the automation's own.
+  const agentDefaults = { budgetUsd: 10 };
 
-  it("is set when an advanced value isn't its default", () => {
-    expect(advancedChanged(automation, { days: 14, budget: 5, skill: { source: "builtin" } })).toBe(false);
-    expect(advancedChanged(automation, { budget: 7 })).toBe(true);
-    expect(advancedChanged(automation, { skill: { source: "global", name: "mine" } })).toBe(true);
+  it("counts what is set here and differs from its default, the board's agent default for the agent's keys", () => {
+    expect(advancedChangedCount(automation, {}, agentDefaults)).toBe(0);
+    // Set by hand to the default: unchanged.
+    expect(advancedChangedCount(automation, { budgetUsd: 10, model: "inherit" }, agentDefaults)).toBe(0);
+    expect(advancedChangedCount(automation, { budgetUsd: 5 }, agentDefaults)).toBe(1);
+    expect(
+      advancedChangedCount(
+        automation,
+        { budgetUsd: 7, model: { tier: "deep" }, skill: { source: "global", name: "mine" } },
+        agentDefaults,
+      ),
+    ).toBe(3);
+    expect(fieldChanged(automation, budget, { budgetUsd: 10 }, agentDefaults)).toBe(false);
+    expect(fieldDefault(automation, budget, agentDefaults)).toBe(10);
+    expect(fieldDefault(automation, model)).toBe("inherit");
   });
 
   it("ignores essential fields, which show anyway", () => {
-    expect(advancedChanged(automation, { days: 30 })).toBe(false);
+    expect(advancedChangedCount(automation, { days: 30 })).toBe(0);
+  });
+
+  it("names a default the way its reset says it", () => {
+    expect(fieldValueText(budget, 5)).toBe("$5");
+    expect(fieldValueText({ key: "timeoutMinutes", label: "T", kind: "number" }, 60)).toBe("60 min");
+    expect(fieldValueText({ key: "runner", label: "R", kind: "select", options: [] }, "auto")).toBe("Auto");
+    expect(fieldValueText({ key: "t3Access", label: "T3", kind: "select", options: [] }, "default")).toBe(
+      "T3 Code's default",
+    );
+    expect(fieldValueText(model, "inherit")).toBe("Inherit");
   });
 });
 
