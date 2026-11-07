@@ -115,7 +115,7 @@ run.
 
   ```json
   {
-    "automation": "Review repo PRs",
+    "automation": "Triage bug reports",
     "project": {
       "id": "…",
       "name": "aboard",
@@ -264,8 +264,8 @@ prompt, skill name and allowed tools, any script or check script (in full), the 
 slots **without** their tools. It leaves out your projects, your epic and the tools you filled the slots with. If the
 automation names a skill you have installed, the skill's text goes in the file.
 
-To use someone's file: **+ Add automation → Import**, then choose the file (or one of the examples the app ships:
-**Improve prompts and skills** or **Review repo PRs**). Before anything is saved you see everything it
+To use someone's file: **+ Add automation → Import**, then choose the file (or the example the app ships,
+**Improve prompts and skills**). Before anything is saved you see everything it
 would run: the prompt, any command, script or check script (with its language), the tools it may use without asking and
 the skill's text. Treat it as code from a stranger, because once you switch it on it runs on
 your machine with your access. Then fill in its inputs and slots, optionally restrict it to projects, and import.
@@ -310,50 +310,17 @@ tier, once per project it's on in. A run that finds another project's run alread
 same skill or prompt leaves it alone; two runs at the same moment can still both suggest, and the later one replaces
 the earlier (it stays in the history).
 
-### Review repo PRs
+### Reviewing pull requests
 
-The second example is a pull request reviewer built on a [check script](#check-scripts), for the repository of each
-project it's on in. It also covers pull requests that aren't linked to a task, which the built-in **Review PRs** can't
-see. It needs the GitHub CLI (`gh`), signed in as the account that should post the reviews.
+An earlier version shipped a second example, **Review repo PRs**, that commented on any pull request of the
+repository. It is gone: the built-in **Review PRs** now does that with its **Other people's PRs** setting, and it can
+approve (past a gate the board checks itself), ask for changes or hand a pull request to you
+([Review PRs](autopilot.md#review-prs)). An automation you imported from it keeps working until you delete it.
 
-Every five minutes a Node script asks GitHub for the project's open pull requests and prints each one that has no
-review of this kind **at its head commit** (every review carries the commit it was made at, so GitHub is the memory,
-not a file). The board starts one agent for each. It reads the pull request with `gh` and posts one review as a
-**comment**, under the same header Review PRs uses. It never approves or requests changes: there is no such code in the
-script, and the agent is told not to.
-
-It reviews only pull requests from people who can be trusted with your access: the repository's owners, members and
-collaborators, your own account and the **Trusted GitHub logins**. A stranger's pull request is left alone, since its
-text would go to an agent that runs `gh` as you; turn on **Also review PRs from people with no write access** to
-include them. To keep the first run from reviewing every old open pull request, it only looks at those updated in the
-last **Only PRs updated in the last (days)** (7 by default). The board starts at most 50 new agents in a pass and
-keeps to the agent caps, so the rest follow.
-
-The script leaves a pull request alone when it is a draft or has a `no-autopilot` label. In the comments it reads two
-commands, only at the start of a line, and only from the people who may give each one, never from anyone else:
-
-- `/stop-review` stops the reviews. It counts from the **pull request's author**, the account running `gh` or a login
-  in Trusted GitHub logins. The latest command wins, so a later `/re-review` starts them again.
-- `/re-review` asks for another review of the same commit. It counts only from the **account running `gh` or a trusted
-  login**, not from the pull request's author, because each request starts an agent. The number of `/re-review`
-  comments is in the key (`owner/repo#41:3f2a9c1:1`) beside the head commit, so a push and a request each make a new
-  item.
-
-Only reviews posted by your own account count, so pasting the header into a review can't keep a pull request out. It
-reviews each pull request at most **Most automatic reviews per PR** times (3 by default); a `/re-review` goes past
-that, since someone you trust asked.
-
-It looks at the 50 most recently updated open pull requests, and at the last 100 comments and reviews of each; a
-repository with more has the rest left out, and the script says so on stderr, which a test run shows.
-
-To use it: **Import → Example: Review repo PRs**, read the script, enter your trusted logins if any, pick the
-projects, and switch it on. It comes in with **Treat the items as untrusted** off, because the agent has to run `gh` to
-read the pull request and post its review, which an agent of untrusted items can't. A pull request's title, description,
-comments and code are text its author wrote, and the agent reads them with your access: that is why outside
-contributors are off by default, and why you should only turn them on for repositories where a stranger's text is
-acceptable to it. If **Review PRs** is on for the same project, this example skips a pull request that Review PRs
-already reviewed at its head commit (it sees the review on GitHub), but Review PRs doesn't see this one's reviews, so
-a pull request linked to a task can get a second review from it. Switch one of them off for a project to avoid that.
+If you run a custom automation that reviews pull requests (the example, or one of your own), switch it off in a
+project before you turn on **Other people's PRs** there, or both review the same pull requests. Review PRs reads
+what an earlier `Autopilot PR review` automation posted (its hidden `autopilot-review` markers), so rounds, approvals,
+hand-offs and `/autopilot stop` carry over.
 
 ## Asking an agent for one
 

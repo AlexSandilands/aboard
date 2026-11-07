@@ -192,9 +192,10 @@ text when both are present.
 
 A second, separate server: `POST /mcp/run` serves one headless Autopilot run the tools of its operation, bound to its
 target, with a run token as its credential (`mcp/runTools.ts`, [ADR 0013](../decisions/0013-board-served-run-tools.md)).
-Today that is the PR review set: `pr_overview`, `pr_files`, `pr_diff` and `pr_comments`, read-only and paged. These
-tools are not in the board's `/mcp` server, and the board's tools are not in a run's. Their descriptions follow the
-rules below, and the review prompt (`reviewPrompt`) is the one place that tells agents about them. See
+Today that is the PR review set: `pr_overview`, `pr_files`, `pr_diff` and `pr_comments`, read-only and paged, and
+for another person's PR the same plus `pr_threads` and `repo_issue` (`repoPrReview`). These tools are not in the
+board's `/mcp` server, and the board's tools are not in a run's. Their descriptions follow the rules below, and the
+review prompts (`reviewPrompt`, and `repoPrPrompt` for other people's PRs) are the places that tell agents about them. See
 [autopilot.md](autopilot.md#run-tools).
 
 ### board_activity

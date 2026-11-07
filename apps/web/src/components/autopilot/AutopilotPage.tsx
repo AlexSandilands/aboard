@@ -10,7 +10,7 @@ import {
   type AutopilotOverview,
 } from "@repo/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { AlertTriangleIcon, FilePenLineIcon, PauseIcon, PlayIcon, XCircleIcon } from "lucide-react";
+import { AlertTriangleIcon, FilePenLineIcon, GitPullRequestIcon, PauseIcon, PlayIcon, XCircleIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   SettingsGroup,
@@ -275,6 +275,29 @@ function NeedsYou({ needs, onSelect }: { needs: AutopilotNeed[]; onSelect: (auto
                       Dismiss
                     </Button>
                   </>
+                }
+              />
+            );
+          case "pr_approval":
+            return (
+              <SettingsRow
+                key={`pr:${need.url}`}
+                title={
+                  <NeedTitle icon={<GitPullRequestIcon className="text-info" />}>
+                    Ready for your approval · {need.pr} {need.title}
+                  </NeedTitle>
+                }
+                description={`${need.author ? `By ${need.author} · ` : ""}${need.reason} · ${formatRelativeTimeLabel(need.since)}`}
+                control={
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    render={
+                      <a href={need.url} target="_blank" rel="noreferrer" aria-label={`Open ${need.pr} on GitHub`} />
+                    }
+                  >
+                    Open PR
+                  </Button>
                 }
               />
             );

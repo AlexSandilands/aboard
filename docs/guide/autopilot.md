@@ -34,9 +34,9 @@ about one. Unblock dependents still tells you when finishing one unblocks a task
 **Automations** opens on a strip saying whether Autopilot is running or paused, how many agent runs it started today
 and what they cost, and your limits in one line, with **Pause all** beside it. Under it, **Needs you** lists what only
 you can sort out, and is hidden when there's nothing: a run that failed on a task (**Retry** or **Dismiss**; a
-run with no task, such as the digest's, shows as a red dot on its automation instead), an automation an
-agent drafted for you (**Review** or **Dismiss**), and an automation that can't run until you fill in a tool or a
-variable (**Fix**).
+run with no task, such as the digest's, shows as a red dot on its automation instead), someone else's pull request
+Review PRs found clean but left for you to approve (**Open PR**), an automation an agent drafted for you (**Review**
+or **Dismiss**), and an automation that can't run until you fill in a tool, a variable or a setting (**Fix**).
 
 Then every automation, in a list down the left grouped as **Ship work**, **Pull requests**, **Upkeep** and
 **Yours** (the ones you made or imported). Each row has the automation's switch for the whole board and says where
@@ -94,6 +94,37 @@ automation alone.
   needs `gh` signed in to the PR's host and the PR's branch on `origin`, so a PR from a fork isn't reviewed.
 - Switching it on reviews every open PR already linked in the project, once per head commit. **Dry run** shows
   which first.
+
+### Other people's PRs
+
+Review PRs can also review your colleagues' pull requests, ones no task links to, and act on them as you: approve,
+ask for changes, or hand them to you. Turn on **Other people's PRs** in a project's Review PRs settings and list the
+**Authors** whose PRs it reviews (their GitHub logins, comma separated). On with no authors, it says **Needs setup**
+and does nothing. If you ran a custom automation that reviews PRs, switch it off in that project first; Review PRs
+reads what it posted (its hidden `autopilot-review` markers), so rounds, approvals and hand-offs carry over.
+
+- **When.** Every five minutes it reads the repository (the project folder's `origin`). It waits for the checks to
+  finish and then for a **Quiet period** (10 minutes), gives the author an hour (**Other reviewers' wait**) to answer
+  a new thread from another reviewer, and leaves drafts alone, PRs someone already approved or asked changes on (you by
+  hand included), and PRs a task works on.
+- **What it reads.** The PR, its diff, every review thread, the issues it closes, and open issues that mention it
+  (often a bug report against it), and the project's docs and decision records, in a read-only checkout.
+- **What it decides.** The agent only reads and answers. The board then:
+  - **approves** as you only when the review is clean, **Approve** is on and the **gate** passes: the PR closes an
+    issue (**Require a linked issue**), every required check (as the branch's rules require) is green, and it
+    changes no **Sensitive paths** (CI, tooling, `CODEOWNERS` and lockfiles by default);
+  - **asks for changes**, with blocking and major points on the lines they are about; minor points and nits are FYI;
+  - if the review is clean but the gate or the Approve switch stops it, comments **Ready for your approval** with why,
+    and lists the PR under **Needs you** with a notification. No task, no ping;
+  - **hands it to you** for a significant departure from the plan or an earlier decision, a new dependency, security
+    code it can't vouch for, a disagreement with the author it can't settle, a spec too vague to judge, or after
+    **Rounds** (3) reviews: one comment on the PR, and a manual task "Review PR #n: …" with a checklist and an
+    attention request. The same reason again edits that comment and adds a note, without asking again.
+- **Afterwards.** It reviews again when the author pushes: only what changed after an approval, whether the reason
+  is gone after a hand-off. Merges of the base branch alone (or a rebase of the same change) don't count. It resolves
+  its own threads once fixed, answers authors who reply on them, and closes its hand-off task when it approves later.
+- **Stopping it.** Comment `/autopilot stop` on a PR (from your account) to keep it off that PR, and
+  `/autopilot resume` to start afresh.
 
 ## Fix PRs
 
