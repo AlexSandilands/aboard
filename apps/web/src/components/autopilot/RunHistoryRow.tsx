@@ -1,4 +1,5 @@
 import type { AutopilotRun } from "@repo/contracts";
+import type { ReactNode } from "react";
 import { Badge } from "~/components/ui/badge";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { formatCost, runStatusLabel, runStatusVariant, scheduledAnswerOf } from "./autopilot.logic";
@@ -15,6 +16,7 @@ export function RunHistoryRow({
   checked,
   disabled = false,
   onCheckedChange,
+  action,
 }: {
   run: AutopilotRun;
   /** The automation's title, shown when the list mixes automations; null when the page is about one. */
@@ -25,6 +27,8 @@ export function RunHistoryRow({
   checked: boolean;
   disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
+  /** Under a failed run: "Ask an agent to fix". */
+  action?: ReactNode;
 }) {
   const answer = scheduledAnswerOf(run);
   const at = run.finishedAt ?? run.startedAt ?? run.createdAt;
@@ -59,6 +63,7 @@ export function RunHistoryRow({
         </div>
         {run.error ? <p className="text-destructive-foreground [overflow-wrap:anywhere]">{run.error}</p> : null}
         {summary ? <p className="text-muted-foreground [overflow-wrap:anywhere]">{summary}</p> : null}
+        {action ? <div className="mt-1">{action}</div> : null}
         {answer ? (
           <details className="text-2xs text-muted-foreground">
             <summary className="w-fit cursor-pointer rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">

@@ -60,19 +60,22 @@ function Code({ children, tall }: { children: string; tall?: boolean }) {
  */
 export function CustomAutomationImportForm({
   examples,
+  initial,
   draftId,
   onDone,
   onCancel,
 }: {
   examples?: readonly AutomationExample[];
+  /** A bundle to open with (a recipe from the Add gallery), read like a file; the user can still load another. */
+  initial?: AutomationBundle | undefined;
   /** An agent's draft to open; importing it deletes it. */
   draftId?: string | undefined;
   /** Called with the new automation's id. */
   onDone: (id: string) => void;
   onCancel: () => void;
 }) {
-  const [bundle, setBundle] = useState<AutomationBundle | null>(null);
-  const [draft, setDraft] = useState<ImportDraft | null>(null);
+  const [bundle, setBundle] = useState<AutomationBundle | null>(initial ?? null);
+  const [draft, setDraft] = useState<ImportDraft | null>(() => (initial ? initialDraft(initial) : null));
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const board = useBoard().data;

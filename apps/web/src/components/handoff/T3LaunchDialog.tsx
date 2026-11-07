@@ -97,7 +97,7 @@ export function T3LaunchDialog() {
   const board = useBoard().data;
   const task = target?.kind === "task" ? board?.tasks.find((t) => t.id === target.taskId) : undefined;
   const project =
-    target?.kind === "project" || target?.kind === "plan"
+    target?.kind === "project" || target?.kind === "plan" || target?.kind === "prompt"
       ? board?.projects.find((p) => p.id === target.projectId)
       : undefined;
   return (
@@ -113,6 +113,16 @@ export function T3LaunchDialog() {
         ) : null}
         {project && target?.kind === "project" ? (
           <ProjectLaunch key={project.id} project={project} onDone={close} />
+        ) : null}
+        {project && target?.kind === "prompt" ? (
+          <PromptLaunch
+            key={`${project.id}:${target.label}`}
+            project={project}
+            label={target.label}
+            prompt={target.prompt}
+            writesCode={target.writesCode}
+            onDone={close}
+          />
         ) : null}
         {project && target?.kind === "plan" ? (
           <PlanLaunch key={project.id} project={project} taskIds={target.taskIds} onDone={close} />
@@ -218,6 +228,43 @@ function ProjectLaunch({ project, onDone }: { project: Project; onDone: () => vo
     successDescription: `The new thread will propose epics for ${project.title}.`,
     copyPrompt: () => copySuggestEpicsPrompt(project),
     offerOpen: true,
+  };
+  const starter: Starter = {
+    isPending: mutation.isPending,
+    start: (input, callbacks) => mutation.mutate({ projectId: project.id, ...input }, callbacks),
+  };
+  return <LaunchContent subject={subject} options={options} starter={starter} onDone={onDone} />;
+}
+
+/** Ask an agent on Settings → Autopilot: the board's prompt in a new thread in the project, which can be edited first. */
+function PromptLaunch({
+  project,
+  label,
+  prompt,
+  writesCode,
+  onDone,
+}: {
+  project: Project;
+  label: string;
+  prompt: string;
+  /** A prompt that may change the repo (fixing a run) starts where T3 would by default; a draft needs no worktree. */
+  writesCode: boolean;
+  onDone: () => void;
+}) {
+  const options = useProjectT3LaunchOptions(project.id);
+  const mutation = useStartProjectT3Thread({ silent: true });
+  const subject: LaunchSubject = {
+    label: `${label} · ${project.title}`,
+    promptFor: () => prompt,
+    planToggle: false,
+    initialPlan: false,
+    successDescription: writesCode
+      ? "The agent will look into it and tell you what it found."
+      : "Anything it drafts waits for your review on the Autopilot page.",
+    copyPrompt: () => copyToClipboard(prompt, "prompt"),
+    offerOpen: true,
+    // A draft is saved on the board and writes no code, so it needs no worktree.
+    checkout: !writesCode,
   };
   const starter: Starter = {
     isPending: mutation.isPending,
