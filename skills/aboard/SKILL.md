@@ -109,7 +109,9 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    branch. Set it only when the user says so. The board refuses the merge, with the reason, until the task is in
    Review, its local review and Autopilot's review are finished and clean, nobody requested changes, its checks pass
    and it merges cleanly. Fix what it names or wait; never merge with `gh` or `git` instead. When several flagged
-   tasks are ready, merge one at a time so the rest don't conflict.
+   tasks are ready, merge one at a time so the rest don't conflict. Where the user has switched on Autopilot's
+   **Merge ready PRs** with **Into main**, Autopilot merges flagged tasks by itself once they pass that same check,
+   so you needn't call it.
 
    When an Autopilot run on a task failed or was cut short (a review or a start a board restart interrupted),
    `retry_autopilot_run(task)` hands it back to Autopilot, which acts again on its next pass if there is still
