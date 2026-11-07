@@ -1171,6 +1171,32 @@ const autopilot: Scenario = (s, opts) => {
     s.autopilot.setScope("board", null, key, { mode: "on" });
   }
   s.autopilot.setScope("board", null, "fix_prs", { config: { resolveThreads: false } });
+  // Review PRs' other people's PRs: on with nobody listed in one project (Needs setup), and a colleague's PR it found
+  // clean but left for the user to approve (Needs you).
+  const [first] = s.projects.list();
+  if (first) {
+    s.autopilot.setScope("project", first.id, "review_prs", { config: { otherPrs: true, otherAuthors: "" } });
+    const now = new Date().toISOString();
+    s.repoPrReviews.record({
+      host: "github.com",
+      repo: "acme/storefront",
+      number: 418,
+      projectId: first.id,
+      url: "https://github.com/acme/storefront/pull/418",
+      title: "Pin the payment SDK and update the CI matrix",
+      author: "mara-k",
+      headOid: "4f1c2e9a0b7d3c5e8f6a1b2c3d4e5f6a7b8c9d0e",
+      round: 1,
+      outcome: "ready",
+      reason: "gate",
+      reasonDetail: "touches sensitive paths: .github/workflows/ci.yml, pnpm-lock.yaml",
+      handoffCommentId: null,
+      handoffCommentUrl: null,
+      taskId: null,
+      readySince: now,
+      updatedAt: now,
+    });
+  }
   s.customAutomations.draft(
     {
       automation: {

@@ -106,7 +106,7 @@ export const OTHER_PRS_ADVANCED_FIELDS: AutopilotField[] = [
     label: "Sensitive paths",
     kind: "text",
     multiline: true,
-    help: "Other people's PRs that change one of these always wait for your approval. Comma separated: `dir/` is a folder, a name with no `/` matches in any folder (`*.lock`), `*` and `**` are wildcards.",
+    help: "Other people's PRs that change one of these always wait for your approval. Comma separated: a name ending in / is a folder, a name with no / matches in any folder (*.lock), and * and ** are wildcards.",
   },
   {
     key: "otherQuietMinutes",
