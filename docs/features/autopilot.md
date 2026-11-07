@@ -863,6 +863,12 @@ Every change publishes `autopilot.changed`, which the web app uses to refetch th
 
 Automations the user defines (#97, sharing #135, scripts and checks #225; guide: [custom automations](../guide/custom-automations.md)).
 An action is an agent (on a schedule, optionally gated by a [check script](#check-scripts)), a shell command or a script.
+The editor is a five-step builder (When → Do → Details → Where → Review & try, `CustomAutomationEditorForm` with the
+steps in `BuilderSteps.tsx`): one form, so moving between steps keeps everything; `stepProblem` (`builder.logic.ts`)
+checks each step only for what it shows, and Save jumps to the first step with a problem. Review shows the
+sentence, what it would run for right now (`rightNow`: a stale trigger's tasks already past the limit), the prompt
+preview or a script's test run, and the name, pre-filled from the trigger and action. A new one saves in Preview, or
+**Save and turn on** sets the board's mode to On after it is created; an existing one opens at Review.
 Each row of
 `autopilot_custom` (name, `trigger_json`, `filters_json`, `action_json`, `armed_at`) is a catalogue entry
 `custom:<id>`, built by `customAutomation` (`autopilot/custom.ts`). The service's catalogue is a function
@@ -1263,6 +1269,23 @@ on the REST writes is unchanged, so this opens no path to setting up a command o
   slots as a file, under a banner naming who drafted it and their note, and sends `draftId` with the import, which
   deletes the draft once the automation is saved. **Dismiss draft** is `DELETE /api/autopilot/drafts/:id`. Every change
   publishes `autopilot.changed`.
+- **Review, or Edit first.** The import page is the builder's review step for someone else's automation: the
+  `formSentence` sentence, the read-first sections, **Saves in** Preview or On (On sets the board's mode after the
+  import), and **Edit first**, which opens the builder (`CustomAutomationEditorForm`) at Details on `formFromBundle`
+  with what was filled in. Saving there creates it over the ordinary route (Origin-guarded) and dismisses the draft;
+  a skill the file carries isn't installed that way.
+- **Changes (`replaces`).** A draft can name the custom automation it is a new version of: `replaces` takes its id,
+  `custom:<id>` key or exact name, resolved on drafting (a built-in's key or title is refused as VALIDATION, anything
+  else unknown as NOT_FOUND) and stored as the id (`autopilot_drafts.replaces`, migration 044; no foreign key, so a
+  draft whose automation was deleted says so when applied). Needs you shows it as **Change to <name>**
+  (`AutopilotNeed.replaces`), and the page opens `AutomationChangeReview`: per field, a line diff of the current and
+  proposed definition (`changeReview.logic.ts`), the agent's note as **Why**, and a warning for tools it adds.
+  **Apply change** is `POST /api/autopilot/drafts/:id/apply` → `customAutomations.applyDraft`: the draft's definition
+  with input values and slot tools kept by name (new ones from the request), the automation's own projects and epic,
+  saved with `update`, so the id, switches and run history stay (a changed trigger, filters or variables re-arm it, as
+  any edit does). A changed script needs `confirmScript`, checked in the service; the route holds a draft with code or
+  a skill install to the board's Origin, as the import route does. **Keep current** dismisses the draft; **Edit first**
+  opens the builder on the automation with the change filled in, and its **Save changes** dismisses the draft.
 
 ### Runners
 

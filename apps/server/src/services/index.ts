@@ -134,6 +134,7 @@ export function createServices(deps: ServiceDeps): Services {
     repoUrl,
     boardVariables,
     notifications,
+    builtIn: () => builtIn.map((a) => ({ key: a.key, title: a.title })),
   });
   // Outlives the catalogue entries, which are rebuilt on every call.
   const checkRuns = createCheckRuns();

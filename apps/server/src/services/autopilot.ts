@@ -559,6 +559,9 @@ export function createAutopilotService(
         kind: "draft",
         draftId: d.id,
         name: d.bundle.name,
+        replaces: d.replaces
+          ? { id: d.replaces, name: repos.autopilotCustom.get(d.replaces)?.name ?? d.bundle.name }
+          : null,
         createdBy: d.createdBy,
         createdAt: d.createdAt,
       }));

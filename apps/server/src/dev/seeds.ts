@@ -1162,7 +1162,8 @@ const dense: Scenario = (s, opts) => {
 /**
  * The showcase board with Autopilot set up, for Settings → Autopilot: the agent automations in Preview (so the
  * sandbox never starts an agent) with a few "would" runs this week, Auto-archive on, a failed run to retry, an agent's
- * draft to review, a custom automation whose tool slot is empty and one with a check script.
+ * draft to review, a custom automation whose tool slot is empty and one with a check script, and an agent's proposed
+ * change to that one.
  */
 const autopilot: Scenario = (s, opts) => {
   showcase(s, opts);
@@ -1179,7 +1180,7 @@ const autopilot: Scenario = (s, opts) => {
       dryRun: true,
     });
   }
-  s.customAutomations.create({
+  const flaky = s.customAutomations.create({
     name: "Flaky test report",
     trigger: { kind: "schedule", schedule: { kind: "weekly", days: [1], time: "08:00" } },
     action: {
@@ -1228,6 +1229,27 @@ const autopilot: Scenario = (s, opts) => {
         action: { kind: "agent", prompt: "Fix the failing checks on the pull request of #{{task.number}}." },
       },
       note: "Drafted from your request to fix failing checks.",
+    },
+    AGENT,
+  );
+  // A change an agent proposed to the flaky test report (draft_automation's `replaces`), for the before/after review.
+  s.customAutomations.draft(
+    {
+      automation: {
+        name: "Flaky test report",
+        trigger: { kind: "schedule", schedule: { kind: "weekly", days: [1, 4], time: "08:00" } },
+        action: {
+          kind: "agent",
+          prompt:
+            "Open a task with the evidence for {{item.key}}.\nLink the three most recent failing runs and say which commit first failed.",
+          check: {
+            language: "node",
+            body: "// Reads the last week of CI runs; prints nothing in the sandbox.\n// Now also skips tests quarantined in .flaky.json.\n",
+          },
+        },
+      },
+      note: "You asked for it twice a week, and for the runs to be linked. It also skips tests you already quarantined.",
+      replaces: flaky.id,
     },
     AGENT,
   );
