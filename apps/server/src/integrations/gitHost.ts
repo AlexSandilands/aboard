@@ -139,6 +139,81 @@ export interface GitHostReads {
   getIssue(ref: IssueRef): Promise<HostIssue>;
 }
 
+// ── Other people's PRs ───────────────────────────────────────────────────
+
+/** An open PR as listed, before its detail is read: enough to choose which to read. */
+export interface OpenPrListing {
+  number: number;
+  author: string | null;
+  draft: boolean;
+}
+
+/** A comment's or review's author and text, as Review PRs reads another person's PR (logins lower-cased). */
+interface RepoPrPost {
+  author: string | null;
+  body: string;
+}
+
+/**
+ * Another person's open PR, read in full for Review PRs (docs/features/autopilot.md#other-peoples-prs): its history,
+ * threads and checks, which the review's mode and approval gate are worked out from. Logins are lower-cased. Reads
+ * the host's newest 100 of each list; `files.total` says when there were more files than read.
+ */
+export interface RepoPr {
+  number: number;
+  url: string;
+  title: string;
+  author: string | null;
+  draft: boolean;
+  state: "open" | "closed" | "merged";
+  headOid: string;
+  headRef: string;
+  baseRef: string;
+  isCrossRepository: boolean;
+  /** The signed-in account, which Autopilot posts as. */
+  viewer: string;
+  /** Issues the PR closes (`Closes #n`). */
+  closingIssues: number[];
+  /** Open issues in the same repository that mention the PR: often a bug report against it. */
+  referencingIssues: number[];
+  files: { total: number; paths: string[] };
+  /** The newest 100 commits, oldest first. */
+  commits: Array<{ oid: string; committedDate: string; parents: number }>;
+  /**
+   * The head commit's checks, each judged by its newest run, counting only the required ones when the base branch
+   * requires any. `missing` are required checks that haven't reported at all; `latestAt` is when the last one finished.
+   */
+  checks: { pending: string[]; failing: string[]; missing: string[]; latestAt: string | null };
+  /** Each reviewer's latest review that counts (GitHub's `latestReviews`). */
+  latestReviews: Array<RepoPrPost & { state: string }>;
+  /** Submitted reviews, oldest first. */
+  reviews: Array<
+    RepoPrPost & { id: number | null; state: string; submittedAt: string | null; commitOid: string | null }
+  >;
+  /** Conversation comments, oldest first. `nodeId` is what an edit names. */
+  comments: Array<RepoPrPost & { id: number; nodeId: string; url: string; createdAt: string; editedAt: string | null }>;
+  threads: Array<{
+    id: string;
+    resolved: boolean;
+    canResolve: boolean;
+    comments: Array<RepoPrPost & { id: number; createdAt: string; path: string | null; line: number | null }>;
+  }>;
+  /** Approvals or requests for changes someone dismissed, oldest first. */
+  dismissals: Array<{
+    createdAt: string;
+    actor: string | null;
+    previousState: string;
+    review: (RepoPrPost & { submittedAt: string | null; commitOid: string | null }) | null;
+  }>;
+}
+
+/** A conversation comment Autopilot posted or edited. */
+export interface PostedComment {
+  id: number;
+  nodeId: string;
+  url: string;
+}
+
 // ── Writes and merges ────────────────────────────────────────────────────
 
 /** An inline comment on a line of the PR's diff. */
@@ -153,6 +228,11 @@ export interface PostReviewInput {
   reviewedSha: string;
   body: string;
   comments: readonly ReviewComment[];
+  /**
+   * A comment (the default), or an approval or request for changes. Only Review PRs' other-people's-PRs source asks
+   * for the last two, after the board's own approval gate passed; task PRs are only ever commented on.
+   */
+  event?: "comment" | "approve" | "request_changes";
 }
 
 export interface PostedReview {
@@ -330,12 +410,28 @@ export interface GitHost extends GitHostReads {
   /** The PR's head commit now, in full. Throws AppError. */
   prHead(ref: PrRef): Promise<string>;
   /**
-   * Posts one review as the signed-in account, always as a comment (never an approval or a request for changes).
+   * Posts one review as the signed-in account: a comment unless `input.event` says otherwise (only Review PRs' other
+   * people's PRs, after the board's approval gate passed, approve or request changes).
    * Throws StaleReviewError when the head isn't the commit read, GitHostError (with its reason) for the host's refusal.
    */
   postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
   /** The PR's unresolved review threads and newest commits, read now. Throws AppError. */
   reviewThreads(ref: PrRef): Promise<PrThreadState>;
+  /** The repository's open PRs (the newest 100 by update), for Review PRs' other-people's-PRs source. */
+  listOpenPrs(host: string, repo: string): Promise<OpenPrListing[]>;
+  /** One PR in full: history, threads, checks. */
+  readRepoPr(ref: PrRef): Promise<RepoPr>;
+  /**
+   * Whether nothing the author wrote changed from `base` to `head`: only merges came in, or a rebase left the same
+   * change against `baseRef`.
+   */
+  unchangedSince(ref: PrRef, base: string, head: string, baseRef: string): Promise<boolean>;
+  /** Posts a conversation comment on the PR as the signed-in account. */
+  postComment(ref: PrRef, body: string): Promise<PostedComment>;
+  /** Replaces the text of a conversation comment the signed-in account posted. */
+  editComment(host: string, nodeId: string, body: string): Promise<PostedComment>;
+  /** Replies on a review thread as the signed-in account. */
+  replyOnThread(host: string, threadId: string, body: string): Promise<void>;
   /** Resolves one review thread as the signed-in account. Throws AppError. */
   resolveReviewThread(host: string, threadId: string): Promise<void>;
   /** The open PR from `head` into the default branch, opened as a draft when there is none. Never merged. */

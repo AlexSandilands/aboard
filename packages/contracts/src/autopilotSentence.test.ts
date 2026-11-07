@@ -27,6 +27,17 @@ describe("automationSentence", () => {
     expect(say("start_planned", { skill: { source: "builtin" } })).toContain("following the default workflow");
   });
 
+  it("adds other people's PRs to Review PRs when that source is on", () => {
+    expect(say("review_prs")).not.toContain("Also review");
+    expect(say("review_prs", { otherPrs: true, otherAuthors: "Alice, @bob", otherApprove: true })).toContain(
+      "Also review open PRs by alice, bob that no task links to: approve it when it is clean and the gate passes",
+    );
+    expect(say("review_prs", { otherPrs: true, otherAuthors: "" })).toContain("nobody yet (add authors)");
+    expect(say("review_prs", { otherPrs: true, otherAuthors: "alice" })).toContain(
+      "a clean one waits for your approval",
+    );
+  });
+
   it("lists only the triggers Fix PRs reacts to, and says when none is on", () => {
     expect(
       say("fix_prs", {

@@ -1,3 +1,4 @@
+import type { RepoPrReviewsService } from "./repoPrReviews.ts";
 import type {
   AgentSessionSnapshot,
   AppSettings,
@@ -91,6 +92,7 @@ export interface Services {
   suggestions: SuggestionsService;
   skillSync: SkillSyncService;
   attention: AttentionService;
+  repoPrReviews: RepoPrReviewsService;
 }
 
 export interface ProjectRef {
