@@ -393,6 +393,15 @@ export function inQuietHours(quiet: AutopilotEngineSettings["quietHours"], minut
   return start < end ? minutes >= start && minutes < end : minutes >= start || minutes < end;
 }
 
+/**
+ * Why a skipped run stopped short of its work for now, to be done again later: `head_moved`, the PR's head moved on
+ * before or while it ran, so the new head is acted on next. Shown as "Deferred", not as a plain skip.
+ */
+export const AutopilotRunDeferral = z.enum(["head_moved"]);
+export type AutopilotRunDeferral = z.infer<typeof AutopilotRunDeferral>;
+
+export const DEFERRAL_TEXT: Record<AutopilotRunDeferral, string> = { head_moved: "head moved" };
+
 export const AutopilotRun = z.object({
   id: z.string(),
   automation: z.string(),
@@ -414,6 +423,8 @@ export const AutopilotRun = z.object({
   /** A shell action's exit code; null when it didn't exit (a timeout) or isn't a shell action. */
   exitCode: z.number().int().nullable(),
   error: z.string().nullable(),
+  /** Set on a skipped run that stopped for a reason that defers its work (AutopilotRunDeferral); null otherwise. */
+  deferred: AutopilotRunDeferral.nullable(),
   needsAttention: z.boolean(),
   /** When the user dismissed the flag; the run stays flagged but no longer counts as attention. Null when not. */
   dismissedAt: z.string().nullable(),
@@ -447,6 +458,47 @@ export const AutopilotStatus = z.object({
   active: z.array(AutopilotActiveRun),
 });
 export type AutopilotStatus = z.infer<typeof AutopilotStatus>;
+
+/** An automation paused in one project after failing there `AUTOPILOT_AUTO_PAUSE_FAILURES` times in a row. */
+export const AutopilotAutoPause = z.object({
+  automation: z.string(),
+  projectId: z.string(),
+  projectTitle: z.string(),
+  /** "Failed 3 times in a row. The last: …". */
+  reason: z.string(),
+  pausedAt: z.string(),
+});
+export type AutopilotAutoPause = z.infer<typeof AutopilotAutoPause>;
+
+/** What a hint's one click does. */
+export const AutopilotHintAction = z.discriminatedUnion("kind", [
+  /** Sets one config key of the automation at the board scope, keeping the rest of the board's own config. */
+  z.object({ kind: z.literal("board_config"), label: z.string(), key: z.string(), value: z.unknown() }),
+  /** Flags these tasks for Autopilot. */
+  z.object({ kind: z.literal("flag_tasks"), label: z.string(), taskIds: z.array(z.string()).min(1) }),
+  /** Hands an agent the failures to look into: copies this prompt. */
+  z.object({ kind: z.literal("ask_agent"), label: z.string(), prompt: z.string() }),
+  /** Opens Limits & safety. */
+  z.object({ kind: z.literal("open_limits"), label: z.string() }),
+]);
+export type AutopilotHintAction = z.infer<typeof AutopilotHintAction>;
+
+/**
+ * A rule-based suggestion for tuning an automation (no model reads anything), with one click to apply it. `id` names
+ * the situation, so a dismissed hint comes back only when the situation changes (a new give-up, other tasks, a new
+ * failure, another week or day). Applying one dismisses it too.
+ */
+export const AutopilotHint = z.object({
+  id: z.string(),
+  /** The automation it is about; null for Autopilot as a whole (a daily cap). */
+  automation: z.string().nullable(),
+  tone: z.enum(["info", "warning", "danger"]),
+  text: z.string(),
+  action: AutopilotHintAction,
+  /** What the toast says once applied. */
+  done: z.string().optional(),
+});
+export type AutopilotHint = z.infer<typeof AutopilotHint>;
 
 /**
  * Something in Autopilot only the user can sort out, for the Needs you list: a failed run still flagged on its task
@@ -491,6 +543,10 @@ export const AutopilotOverview = z.object({
   today: z.object({ agentRuns: z.number().int(), spendUsd: z.number() }),
   /** Newest first within each kind: failed runs, then drafts, then setup gaps. */
   needsYou: z.array(AutopilotNeed),
+  /** Automations that paused themselves in a project after failing there in a row, newest first. */
+  autoPaused: z.array(AutopilotAutoPause),
+  /** Tuning hints not dismissed, for Needs you and each automation's detail. */
+  hints: z.array(AutopilotHint),
   /** Each automation's latest real run that has finished, for its row in the list; none for one that never ran. */
   lastRuns: z.array(z.object({ automation: z.string(), status: AutopilotRunStatus, at: z.string() })),
   /** Each automation's dry runs ("would …") over the last 7 days, for its Preview hint; none for one with none. */

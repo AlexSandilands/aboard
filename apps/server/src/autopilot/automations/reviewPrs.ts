@@ -457,7 +457,11 @@ export const reviewPrs = defineAutomation({
     }
     // The next poll's head commit has its own key, and its own round.
     if (headOid !== data.headOid) {
-      return { status: "skipped", summary: `PR #${data.number} moved on to ${shortSha(headOid ?? "")}` };
+      return {
+        status: "skipped",
+        deferred: "head_moved",
+        summary: `PR #${data.number} moved on to ${shortSha(headOid ?? "")}`,
+      };
     }
 
     const threshold = effectiveFixThreshold(fixThresholdFor(services, task), data.round, data.maxRounds);
@@ -507,14 +511,22 @@ export const reviewPrs = defineAutomation({
       // The branch moved on before or while the agent read it: nothing was posted, and the new head is reviewed next.
       // That isn't a failure, nor a round used. A worktree at some other commit is one: it never matched.
       if (error instanceof StaleReviewError || (error instanceof WorktreeHeadError && error.moved)) {
-        return { status: "skipped", summary: `PR #${data.number} moved on while it was being reviewed` };
+        return {
+          status: "skipped",
+          deferred: "head_moved",
+          summary: `PR #${data.number} moved on while it was being reviewed`,
+        };
       }
       // A branch that was rewritten (a force-push) no longer descends from the commit either. Only when GitHub still
       // calls that commit the head is the checkout what's wrong; otherwise the PR just moved on.
       if (error instanceof WorktreeHeadError) {
         const live = await gitHosts.prHead({ host: data.host, repo: data.repo, number: data.number }).catch(() => null);
         if (live && live !== data.headOid) {
-          return { status: "skipped", summary: `PR #${data.number} moved on while it was being reviewed` };
+          return {
+            status: "skipped",
+            deferred: "head_moved",
+            summary: `PR #${data.number} moved on while it was being reviewed`,
+          };
         }
       }
       // GitHub failing in passing (an internal error, the network) after the agent had read: post again on the next pass.

@@ -196,6 +196,12 @@ of a custom automation keeps in `detail` what it would have run (`Candidate.prev
 **Preview**. Runs are history, so backups
 leave them out.
 
+- **Deferred runs.** A skipped run whose work comes again later says why in `deferred` (migration 045,
+  `AutopilotRunDeferral`, `ActionResult.deferred`). Today that is only `head_moved`: Review PRs, Fix PRs and Merge into
+  epic branch stopped because the PR's head moved before or while they ran, so the new head is acted on next. The UI
+  shows these as **Deferred: head moved** (`runStatusLabel`, a warning badge), not as a plain skip, and the history's
+  outcome filter has them apart. The status stays `skipped`, so dedupe keys, rounds and attempts read them as before.
+
 - A task's runs log `autopilot_run` activity under the actor `autopilot`: when it starts, when it ends, and
   once for a dry-run preview.
 - Every change to a run publishes `autopilot.changed` with the pause state and the runs in flight; the board
@@ -225,6 +231,17 @@ The Run history page (`/settings/autopilot/runs/$automation`, `RunHistory`) list
 first, or of all of them with `all`: the Runs tab of Settings → Autopilot. An automation's detail and a custom
 automation's editor link to its own. It is for reading what scheduled agents did, since their runs have no task panel, and for clearing out old runs.
 
+- **Plain names.** Every run shows its automation's name, never its key: `automationTitleOf` (contracts,
+  `autopilotRunHistory.ts`) takes the catalogue's title, then `RETIRED_AUTOMATION_TITLES` for automations the board
+  no longer has (`unstick`, `unblock_dependents`, `fix_pr_findings`), "Removed custom automation" for a deleted custom
+  one, and otherwise the key made readable. The server's titles (activity, digests, Needs you, notifications) and the
+  Stats page's table use it too.
+- **A row** shows its status, automation, project and task, the error or summary, cost and age, with **Retry** when
+  `canRetryRun` allows it (judged against the loaded runs, so a superseded run offers none). Clicking it opens what the
+  run kept: its summary under an error, the output (**Error output** on a failure), a scheduled agent's handover,
+  cost, model, runner, session, worktree, times and run id, **Open thread**, and on a failure **Ask an agent to fix**
+  (`AskToFix`, the hand-off menu described under [Ask an agent](#ask-an-agent) below).
+
 - **The list.** `GET /api/autopilot/runs/history` (`ListAutopilotRunsQuery`, `AutopilotRunPage` in
   `packages/contracts/src/autopilotRunHistory.ts`) takes `automation` (a key or `all`) and optionally `projectId`,
   `since` (included) and `until` (excluded) as ISO times on `created_at`, `q`, `cursor` and `limit` (default 50,
@@ -237,11 +254,16 @@ automation's editor link to its own. It is for reading what scheduled agents did
   (`automation`, `created_at`, `id`). The page uses an infinite query (`useAutopilotRunHistory`) loading the next page
   as the end of the list comes into view. `autopilot.changed` refetches it, and a refetch takes each cursor from the page
   before it, so a new run moves the pages along instead of dropping a run between two.
-- **Filters in the URL.** Search params `project`, `range` (`24h`, `7d`, `30d` or `custom`), `since` and `until`
-  (local calendar days, both included, only with `custom`) and `q` (`RunHistorySearch`, `runHistoryFilter` in
-  `runHistory.logic.ts`), so a filtered page can be linked to. A preset counts from when it was chosen.
-- **Deleting, by hand only.** Nothing deletes runs by itself: there is no retention setting and no sweep. The page
-  can delete the ticked runs, or every run the filters match (**Delete all matching…**, which with no filter is the
+- **Filters in the URL.** The automation is the path's `$automation` (the page's Automation select navigates, keeping
+  the rest; retired automations are listed too). Search params `project`, `range` (`24h`, `7d`, `30d` or `custom`),
+  `since` and `until` (local calendar days, both included, only with `custom`), `outcome` and `q` (`RunHistorySearch`,
+  `runHistoryFilter` in `runHistory.logic.ts`), so a filtered page can be linked to. A preset counts from when it was
+  chosen. `outcome` (`AutopilotRunOutcome`, the chips under the filters) is `failed`, `succeeded`, `deferred` (skipped
+  with a deferral), `skipped` (the other real skips), `preview` (dry run) or `active` (queued or running); the list's
+  `outcome` query param filters the same way (`OUTCOME_CLAUSE` in the runs repo).
+- **Deleting, by hand only.** Nothing deletes runs by itself: there is no retention setting and no sweep. Deleting
+  sits under **Clean up…** below the list, out of the way: **Select runs to delete** shows a checkbox per run and a bar
+  with **Delete selected**, and **Delete all matching…** deletes every run the filters match (**Delete all matching…**, which with no filter is the
   automation's whole history, so with a time range it clears, say, everything before a date).
   `POST /api/autopilot/runs/delete` takes `{ ids }` (at most 500, `RUN_DELETE_IDS_MAX`; the page stops ticking there) or `{ filter }` (the same filter as the list, without paging) and
   `preview`. A preview counts and deletes nothing, which is what the confirm dialog shows before it asks; a real delete
@@ -256,6 +278,51 @@ automation's editor link to its own. It is for reading what scheduled agents did
   handed); or **less than a day old** (`RUN_DELETE_MIN_AGE_MS`), so deleting a just-finished run can't free a slot's
   dedupe key (Orchestrate would run the slot again) or make a notice repeat. The other automations are safe without their old runs: Recurring tasks has its cursor, the Digest and Start planned follow state that has moved on, and Review PRs, Fix PRs and Merge into epic branch key on a PR head or sit on tasks that are open while it matters. Everything else, including every older run
   of a Done task, can go. `keptReasons` has each reason with its count (`KEPT_REASON_TEXT`).
+
+### Health and hints
+
+How each automation is doing, on its detail in Settings → Autopilot and in Needs you.
+
+- **This week.** `GET /api/autopilot/automations/:automation/week` (`AutomationWeek` in
+  `packages/contracts/src/autopilotHealth.ts`, `AutopilotService.week`) covers today and the six local days before it:
+  real runs that acted (`runs`, skipped ones did nothing), `failed`, `deferred`, `spendUsd`, `wouldRun` (dry-run
+  records), `gaveUp` (distinct PRs Fix PRs gave up on, by attempt budget: `review` or `comments`, read from its
+  `fix:gave_up:` dedupe keys), a bar per day, and its last five real finished runs. 404 for an automation the board
+  doesn't have. The detail's **This week** section (`WeekSection` in `HealthSections.tsx`) shows it while the
+  automation is on anywhere, with an All runs link. Its query sits under the runs keys, so `autopilot.changed`
+  refetches it.
+- **Tuning hints** are rules, no model: pure functions in `autopilotHealth.ts` the overview runs for every automation
+  that is on somewhere (`hints` in `AutopilotOverview`). Each has a stable `id` naming the situation, a tone, its text
+  and one action (`AutopilotHintAction`):
+  - Fix PRs gave up on 2 or more PRs this week at an attempt cap below 10 → **Raise to N+1** (Fix PRs' `attempts` or
+    `commentAttempts`, set in its board config).
+  - 3 or more of the last 5 runs failed (board restarts aside) → **Ask an agent to fix**, which copies
+    `fixAutomationPrompt` and dismisses the hint until the next failure.
+  - Start planned tasks is on but no ready Planned task (a plan, not blocked, not manual) in its projects is flagged,
+    while some are Default → **Flag #9, #10 and #11** (`update_task`-style PATCH with `autopilot: true`; tasks switched
+    Off by hand are left out).
+  - Orchestrate ran 40 or more times this week since its board setting last changed → **Every 2N minutes** (its board
+    config; the count starts again once it changes, so the hint asks again only after the new interval has run often too). Whether a run changed
+    anything isn't recorded, so the text says "if most runs found nothing to do".
+  - A daily run or spend cap is reached today (`engineHints`, `automation: null`) → **See limits**.
+
+  Hints show under the detail's header (`HintNotice`) and in Needs you, each with **Dismiss**
+  (`POST /api/autopilot/hints/dismiss`, stored as the last 200 ids in the `autopilotDismissedHints` setting, which
+  stays with the machine like pause). Applying a hint dismisses it too. A dismissed hint comes back only when its id
+  changes: a newer give-up or failure, other tasks, another interval, another day.
+- **Auto-pause.** After a real run in a project fails, `autoPauseAfter` (service `finish`) reads the automation's
+  finished runs there since it was last resumed and counts failures in a row (`failureStreak`: a success ends the
+  streak; skipped runs, dry runs and runs the board's restart failed neither count nor break it). At
+  `AUTOPILOT_AUTO_PAUSE_FAILURES` (3) it pauses the automation in that project (`autopilot_auto_pauses`, migration 045)
+  with a reason ("Failed 3 times in a row. The last: …"), publishes `autopilot.changed` and sends an
+  `autopilot_failed` notification. The engine then leaves the project out of the automation's check (a custom
+  automation's check script doesn't run there either) and drops its candidates; other projects go on. The overview
+  lists the pauses (`autoPaused`): the list row shows a warning dot and "Paused in storefront", the detail's Where it
+  runs a row per project with the reason and **Resume**, and Needs you the same. Resume
+  (`POST /api/autopilot/auto-pauses/resume`, `{ automation, projectId }`; 409 when it isn't paused) lifts it, counts
+  failures again only from then (`counted_from`), marks the notification read, and calls `onEnabled` as lifting Pause
+  all does, so automations with a schedule of their own don't catch up. Board-wide runs (no project) never pause.
+  Auto-pauses aren't in backups.
 
 ### Needs attention
 
@@ -311,7 +378,7 @@ switches nothing on either, since only the user's import saves the automation it
 
 | Route                                           | Does                                                   |
 | ----------------------------------------------- | ------------------------------------------------------ |
-| `GET /api/autopilot`                            | Pause, engine settings and the catalogue (with each automation's group, field descriptors and defaults), plus today's agent runs and spend, Needs you and each automation's last finished run, for the settings page |
+| `GET /api/autopilot`                            | Pause, engine settings and the catalogue (with each automation's group, field descriptors and defaults), plus today's agent runs and spend, Needs you, auto-pauses, tuning hints and each automation's last finished run, for the settings page |
 | `PATCH /api/autopilot/engine`                   | Updates engine settings; `quietHours` may be partial   |
 | `POST /api/autopilot/pause`, `/resume`          | Pause all, and back                                    |
 | `GET /api/autopilot/board`, `/projects/:id`, `/projects/:id/epics/:epicId` | Each automation at that scope: its own mode and config, and what it resolves to (an epic's through its project and the board) |
@@ -321,6 +388,9 @@ switches nothing on either, since only the user's import saves the automation it
 | `POST /api/autopilot/runs/delete`               | Deletes runs by hand, or with `preview` counts what would go (see [Run history](#run-history)) |
 | `POST /api/autopilot/runs/:id/retry`            | Retries a failed or skipped run (see [A pass](#a-pass)) |
 | `POST /api/autopilot/runs/:id/dismiss`          | Dismisses a flagged run's attention flag (see [Needs attention](#needs-attention)) |
+| `GET /api/autopilot/automations/:automation/week` | An automation's last seven days (see [Health and hints](#health-and-hints)) |
+| `POST /api/autopilot/hints/dismiss`             | Dismisses a tuning hint by id                          |
+| `POST /api/autopilot/auto-pauses/resume`        | Resumes an automation that paused itself in a project  |
 | `GET /api/autopilot/orchestrate/:projectId`     | Orchestrate in one project: next slot, what holds it, Run now, the latest run |
 | `POST /api/autopilot/orchestrate/:projectId/run` | Orchestrate's Run now (202), or 409 with why it can't start |
 
@@ -1097,7 +1167,7 @@ schedule takes one for now (`checkCustomDefinition`); task triggers would need a
   takes it from the same output (a finished agent run asks for a pass). Printing nothing is a quiet pass: no run.
 - **A failed check** (non-zero exit, timeout, a missing interpreter, output past `STDOUT_MAX`, a bad line) becomes one
   candidate `check-failed:<projectId>:<slot stamp>:<updatedAt>` (`CHECK_FAILED_KEY_PREFIX`) with `startsNoAgent`, which `act`
-  records as a failed run with the error, the output tail and the exit code. No task, so nothing is flagged; the
+  records as a failed run with the error, the tail of what it printed to stderr (or, with nothing there, of all its output) and the exit code. No task, so nothing is flagged; the
   automation's run history shows it. `act` then forgets the failure, and that run's key keeps the slot's check from
   running again until it is retried (which retires the key), the automation is edited (a new `updatedAt`) or the next
   slot comes. Like Fix PRs' give-ups, these runs
