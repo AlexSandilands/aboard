@@ -10,15 +10,18 @@ import {
   type WhereCandidate,
   type WhereException,
 } from "@repo/contracts";
-import { PlusIcon, XIcon } from "lucide-react";
+import { ChevronDownIcon, PlusIcon, XIcon } from "lucide-react";
+import { useState } from "react";
 import { DetailSection } from "~/components/settings/agents/SplitCard";
 import { StatusDot } from "~/components/settings/settingsLayout";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { cn } from "~/lib/utils";
-import { turnsOn } from "./where.logic";
+import { filterProjects, pickerLabel, turnsOn, usesProjectPicker } from "./where.logic";
 import { useWhere } from "./useWhere";
 
 const modeLabel = (mode: "on" | "preview" | "off"): string =>
@@ -124,6 +127,30 @@ export function WhereItRuns({
             </ToggleGroup>
             {everywhere ? (
               <p className="text-xs text-muted-foreground">Every project, new ones too.</p>
+            ) : usesProjectPicker(scopes.projects.length) ? (
+              <ProjectPicker
+                projects={scopes.projects}
+                on={description.projects}
+                preview={description.previewProjects}
+                blocked={blocked}
+                disabled={apply.isPending}
+                onToggle={(id, on) => save(whereProject(input, id, on))}
+                onAll={() =>
+                  save(
+                    whereOnlyIn(
+                      input,
+                      scopes.projects.map((p) => p.id),
+                    ),
+                  )
+                }
+                allTurnsOn={turnsOn(
+                  whereOnlyIn(
+                    input,
+                    scopes.projects.map((p) => p.id),
+                  ),
+                )}
+                onNone={() => save(whereOnlyIn(input, []))}
+              />
             ) : (
               <div role="group" aria-label="Projects it runs in" className="flex flex-wrap gap-1.5">
                 {scopes.projects.map((project) => {
@@ -263,5 +290,101 @@ function ExceptionMenu({
         ))}
       </MenuPopup>
     </Menu>
+  );
+}
+
+/**
+ * Only in… on a board with more projects than fit as chips: one "5 of 20 projects" button opening a searchable
+ * checklist with All and None. The sentence above still names the first few, so it rarely needs opening.
+ */
+function ProjectPicker({
+  projects,
+  on,
+  preview,
+  blocked,
+  disabled,
+  onToggle,
+  onAll,
+  allTurnsOn,
+  onNone,
+}: {
+  projects: ReadonlyArray<{ id: string; title: string }>;
+  /** Ids of the projects it runs in (in Preview too). */
+  on: readonly string[];
+  preview: readonly string[];
+  blocked: string | null;
+  disabled: boolean;
+  onToggle: (id: string, on: boolean) => void;
+  onAll: () => void;
+  allTurnsOn: boolean;
+  onNone: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const shown = filterProjects(projects, query);
+  return (
+    <Popover onOpenChange={(open) => (open ? null : setQuery(""))}>
+      <PopoverTrigger
+        render={<Button size="xs" variant="outline" className="self-start" />}
+        aria-label={`Projects it runs in: ${pickerLabel(on.length, projects.length)}`}
+      >
+        {pickerLabel(on.length, projects.length)}
+        <ChevronDownIcon />
+      </PopoverTrigger>
+      <PopoverPopup align="start" padding="compact" width="sm">
+        <div className="flex flex-col gap-2">
+          <Input
+            type="search"
+            size="sm"
+            placeholder="Find a project"
+            aria-label="Find a project"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <div role="group" aria-label="Projects it runs in" className="-mx-1 max-h-60 overflow-y-auto">
+            {shown.length === 0 ? (
+              <p className="px-2 py-1.5 text-xs text-muted-foreground">No project matches.</p>
+            ) : (
+              shown.map((project) => {
+                const isOn = on.includes(project.id);
+                const turnOnBlocked = !isOn && Boolean(blocked);
+                return (
+                  <label
+                    key={project.id}
+                    title={turnOnBlocked && blocked ? blocked : undefined}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-accent/50",
+                      (disabled || turnOnBlocked) && "cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className="size-3.5 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                      checked={isOn}
+                      disabled={disabled || turnOnBlocked}
+                      onChange={() => onToggle(project.id, !isOn)}
+                    />
+                    <span className="min-w-0 flex-1 truncate">{project.title}</span>
+                    {preview.includes(project.id) ? (
+                      <span className="shrink-0 text-xs text-warning-foreground">Preview</span>
+                    ) : null}
+                  </label>
+                );
+              })
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-2 border-t border-border/50 pt-2 text-xs text-muted-foreground">
+            <span>{on.length} selected</span>
+            <span className="flex gap-1">
+              <Button size="xs" variant="ghost" disabled={disabled || (Boolean(blocked) && allTurnsOn)} onClick={onAll}>
+                All
+              </Button>
+              <Button size="xs" variant="ghost" disabled={disabled || on.length === 0} onClick={onNone}>
+                None
+              </Button>
+            </span>
+          </div>
+        </div>
+      </PopoverPopup>
+    </Popover>
   );
 }

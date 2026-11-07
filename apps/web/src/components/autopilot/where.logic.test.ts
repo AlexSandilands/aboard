@@ -1,6 +1,16 @@
 import type { BoardSnapshot, WhereInput } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { ownSettingsLabel, scopeIsOn, scopeToggle, turnsOn, whereScopes } from "./where.logic";
+import {
+  filterProjects,
+  ownSettingsLabel,
+  pickerLabel,
+  PROJECT_CHIPS_MAX,
+  scopeIsOn,
+  scopeToggle,
+  turnsOn,
+  usesProjectPicker,
+  whereScopes,
+} from "./where.logic";
 
 const project = (id: string, title: string, position: string, archivedAt: string | null = null) => ({
   id,
@@ -139,5 +149,25 @@ describe("ownSettingsLabel", () => {
   it("lists a key the automation no longer has by its name, and says nothing when there is none", () => {
     expect(ownSettingsLabel(automation, { nudge: true })).toBe("nudge");
     expect(ownSettingsLabel(automation, {})).toBeNull();
+  });
+});
+
+describe("the project picker", () => {
+  it("keeps chips up to 8 projects and uses the picker past that", () => {
+    expect(usesProjectPicker(0)).toBe(false);
+    expect(usesProjectPicker(PROJECT_CHIPS_MAX)).toBe(false);
+    expect(usesProjectPicker(PROJECT_CHIPS_MAX + 1)).toBe(true);
+    expect(PROJECT_CHIPS_MAX).toBe(8);
+  });
+
+  it("finds projects by any part of their title, ignoring case", () => {
+    const projects = [{ title: "storefront" }, { title: "payments-api" }, { title: "Store admin" }];
+    expect(filterProjects(projects, " STORE ").map((p) => p.title)).toEqual(["storefront", "Store admin"]);
+    expect(filterProjects(projects, "")).toHaveLength(3);
+    expect(filterProjects(projects, "nothing")).toEqual([]);
+  });
+
+  it("labels the button with how many it runs in", () => {
+    expect(pickerLabel(5, 20)).toBe("5 of 20 projects");
   });
 });
