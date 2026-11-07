@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   AUTOPILOT_ALL_RUNS,
+  type AutomationWeek,
+  type AutopilotOverview,
   type AutopilotRun,
   type AutopilotRunPage,
   type DeleteAutopilotRunsResult,
@@ -40,6 +42,7 @@ function setup() {
       detail: null,
       exitCode: null,
       error: null,
+      deferred: null,
       needsAttention: false,
       dismissedAt: null,
       output: null,
@@ -104,6 +107,29 @@ describe("GET /api/autopilot/runs/history", () => {
     expect(await ids("automation=custom:abc")).toEqual(["run-002"]);
     expect(await ids(`automation=${AUTOPILOT_ALL_RUNS}`)).toEqual(["run-003", "run-002", "run-001"]);
     expect(await ids("automation=nothing")).toEqual([]);
+  });
+
+  it("filters by outcome, telling deferred runs and dry runs from plain skips", async () => {
+    const { insert, ids } = setup();
+    insert({ status: "failed", error: "boom" });
+    insert({ status: "skipped", deferred: "head_moved", summary: "PR #3 moved on" });
+    insert({ status: "skipped" });
+    insert({ status: "skipped", dryRun: true });
+    insert({ status: "running", finishedAt: null });
+    insert();
+    const all = `automation=${AUTOPILOT_ALL_RUNS}`;
+    expect(await ids(`${all}&outcome=failed`)).toEqual(["run-001"]);
+    expect(await ids(`${all}&outcome=deferred`)).toEqual(["run-002"]);
+    expect(await ids(`${all}&outcome=skipped`)).toEqual(["run-003"]);
+    expect(await ids(`${all}&outcome=preview`)).toEqual(["run-004"]);
+    expect(await ids(`${all}&outcome=active`)).toEqual(["run-005"]);
+    expect(await ids(`${all}&outcome=succeeded`)).toEqual(["run-006"]);
+  });
+
+  it("keeps a run's deferral", async () => {
+    const { insert, page } = setup();
+    insert({ status: "skipped", deferred: "head_moved" });
+    expect((await page("automation=orchestrate")).runs[0]?.deferred).toBe("head_moved");
   });
 
   it("filters by project", async () => {
@@ -324,5 +350,127 @@ describe("POST /api/autopilot/runs/delete", () => {
     expect((await post({ ids: ["a"], filter: { automation: "all" } })).status).toBe(400);
     expect((await post({ filter: { automation: "all", since: "yesterday" } })).status).toBe(400);
     expect((await post({ filter: {} })).status).toBe(400);
+  });
+});
+
+describe("GET /api/autopilot/automations/:automation/week", () => {
+  it("counts the week's runs, failures, spend, dry runs and give-ups, a bar a day", async () => {
+    const { h, insert } = setup();
+    const now = new Date().toISOString();
+    insert({ automation: "fix_prs", createdAt: now, costUsd: 0.5 });
+    insert({ automation: "fix_prs", createdAt: now, status: "failed", error: "boom", costUsd: 0.25 });
+    insert({ automation: "fix_prs", createdAt: now, status: "skipped", deferred: "head_moved" });
+    insert({ automation: "fix_prs", createdAt: now, status: "skipped", dryRun: true });
+    insert({ automation: "fix_prs", createdAt: now, dedupeKey: "fix:gave_up:link1:review" });
+    insert({ automation: "fix_prs", createdAt: now, dedupeKey: "fix:gave_up:link2:review" });
+    insert({ automation: "fix_prs", createdAt: now, dedupeKey: "fix:gave_up:link3:comments" });
+    // Older than the week, and another automation's: neither counts.
+    insert({ automation: "fix_prs", createdAt: ago(10 * DAY), status: "failed" });
+    insert({ automation: "orchestrate", createdAt: now });
+    const res = await h.request("/api/autopilot/automations/fix_prs/week");
+    expect(res.status).toBe(200);
+    const week = (await res.json()) as AutomationWeek;
+    expect(week).toMatchObject({
+      runs: 5,
+      failed: 1,
+      deferred: 1,
+      spendUsd: 0.75,
+      wouldRun: 1,
+      gaveUp: { review: 2, comments: 1 },
+      lastGaveUp: { review: "run-006", comments: "run-007" },
+    });
+    expect(week.days).toHaveLength(7);
+    expect(week.days.at(-1)).toMatchObject({ runs: 5, failed: 1 });
+    expect(week.lastRuns).toHaveLength(5);
+  });
+
+  it("is not found for an automation the board doesn't have", async () => {
+    const { h } = setup();
+    expect((await h.request("/api/autopilot/automations/nothing/week")).status).toBe(404);
+  });
+});
+
+describe("auto-pause", () => {
+  const fail = (h: ReturnType<typeof setup>["h"], projectId: string, n: number, error = "exited with code 1") => {
+    const run = h.services.autopilot.record({
+      automation: "orchestrate",
+      candidate: { dedupeKey: `slot:${n}`, summary: "look over the project", projectId },
+      dryRun: false,
+    })!;
+    h.services.autopilot.start(run.id);
+    return h.services.autopilot.finish(run.id, { status: "failed", error });
+  };
+
+  it("pauses an automation in a project after three failures in a row there, with the reason", async () => {
+    const { h, alpha, beta } = setup();
+    fail(h, alpha.id, 1);
+    fail(h, alpha.id, 2);
+    fail(h, beta.id, 3);
+    expect(h.services.autopilot.isAutoPaused("orchestrate", alpha.id)).toBe(false);
+    fail(h, alpha.id, 4, "the last error");
+    expect(h.services.autopilot.isAutoPaused("orchestrate", alpha.id)).toBe(true);
+    expect(h.services.autopilot.isAutoPaused("orchestrate", beta.id)).toBe(false);
+    const overview = (await (await h.request("/api/autopilot")).json()) as AutopilotOverview;
+    expect(overview.autoPaused).toEqual([
+      expect.objectContaining({
+        automation: "orchestrate",
+        projectId: alpha.id,
+        projectTitle: "Alpha",
+        reason: "Failed 3 times in a row. The last: the last error",
+      }),
+    ]);
+    const inbox = h.services.notifications.list().items;
+    expect(inbox.some((n) => n.title === "Orchestrate paused in Alpha")).toBe(true);
+  });
+
+  it("doesn't count a success in between, or a board restart", () => {
+    const { h, alpha } = setup();
+    fail(h, alpha.id, 1);
+    fail(h, alpha.id, 2);
+    const ok = h.services.autopilot.record({
+      automation: "orchestrate",
+      candidate: { dedupeKey: "ok", summary: "s", projectId: alpha.id },
+      dryRun: false,
+    })!;
+    h.services.autopilot.start(ok.id);
+    h.services.autopilot.finish(ok.id, {});
+    fail(h, alpha.id, 3);
+    fail(h, alpha.id, 4, "The board restarted while this run was going");
+    fail(h, alpha.id, 5);
+    expect(h.services.autopilot.isAutoPaused("orchestrate", alpha.id)).toBe(false);
+  });
+
+  it("resumes, counting failures again from then", async () => {
+    const { h, alpha } = setup();
+    for (const n of [1, 2, 3]) fail(h, alpha.id, n);
+    const resume = (json: unknown) => h.request("/api/autopilot/auto-pauses/resume", { method: "POST", json });
+    expect((await resume({ automation: "orchestrate", projectId: alpha.id })).status).toBe(204);
+    expect(h.services.autopilot.isAutoPaused("orchestrate", alpha.id)).toBe(false);
+    // Resuming again: nothing is paused.
+    expect((await resume({ automation: "orchestrate", projectId: alpha.id })).status).toBe(409);
+    // Failures count from the millisecond after Resume.
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    fail(h, alpha.id, 4);
+    fail(h, alpha.id, 5);
+    expect(h.services.autopilot.isAutoPaused("orchestrate", alpha.id)).toBe(false);
+    fail(h, alpha.id, 6);
+    expect(h.services.autopilot.isAutoPaused("orchestrate", alpha.id)).toBe(true);
+  });
+});
+
+describe("tuning hints", () => {
+  it("lists a hint until it is dismissed", async () => {
+    const { h, alpha, insert } = setup();
+    h.services.autopilot.setScope("board", null, "orchestrate", { mode: "on" });
+    const now = new Date().toISOString();
+    for (const n of [1, 2, 3]) {
+      insert({ status: "failed", error: "boom", createdAt: now, finishedAt: now, projectId: alpha.id, id: `f${n}` });
+    }
+    const hints = async () => ((await (await h.request("/api/autopilot")).json()) as AutopilotOverview).hints;
+    const [hint] = await hints();
+    expect(hint).toMatchObject({ automation: "orchestrate", action: { kind: "ask_agent" } });
+    const res = await h.request("/api/autopilot/hints/dismiss", { method: "POST", json: { id: hint!.id } });
+    expect(res.status).toBe(204);
+    expect(await hints()).toEqual([]);
   });
 });

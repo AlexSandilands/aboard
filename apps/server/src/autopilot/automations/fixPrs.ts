@@ -731,7 +731,11 @@ export const fixPrs = defineAutomation({
       return { status: "skipped", summary: `PR #${data.number} is ${state}` };
     }
     if (headOid !== data.headOid) {
-      return { status: "skipped", summary: `PR #${data.number} moved on to ${shortSha(headOid ?? "")}` };
+      return {
+        status: "skipped",
+        deferred: "head_moved",
+        summary: `PR #${data.number} moved on to ${shortSha(headOid ?? "")}`,
+      };
     }
 
     const prompt = fixPrompt({
@@ -786,7 +790,11 @@ export const fixPrs = defineAutomation({
           ? null
           : await gitHosts.prHead({ host: data.host, repo: data.repo, number: data.number }).catch(() => null);
         if (error.moved || (live && live !== data.headOid)) {
-          return { status: "skipped", summary: `PR #${data.number} moved on before the fix started` };
+          return {
+            status: "skipped",
+            deferred: "head_moved",
+            summary: `PR #${data.number} moved on before the fix started`,
+          };
         }
       }
       throw error;

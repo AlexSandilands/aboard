@@ -1,10 +1,11 @@
 import type {
+  AutomationWeek,
   AutopilotRunFilter,
   AutopilotRunPage,
   DeleteAutopilotRunsInput,
   DeleteAutopilotRunsResult,
 } from "@repo/contracts";
-import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { runHistoryParams } from "~/components/autopilot/runHistory.logic";
 import { toastManager } from "~/components/ui/toast";
 import { api } from "~/lib/api";
@@ -51,5 +52,38 @@ export function useDeleteAutopilotRuns() {
         title: "Couldn't delete the runs",
         description: error instanceof Error ? error.message : String(error),
       }),
+  });
+}
+
+/** An automation's last seven days, for its This week section; refetched with the other runs queries. */
+export function useAutomationWeek(automation: string) {
+  return useQuery({
+    queryKey: [...queryKeys.autopilotRunsAll, "week", automation] as const,
+    queryFn: ({ signal }) =>
+      api<AutomationWeek>(`/api/autopilot/automations/${encodeURIComponent(automation)}/week`, { signal }),
+  });
+}
+
+const errorToast = (title: string) => (error: unknown) =>
+  toastManager.add({ type: "error", title, description: error instanceof Error ? error.message : String(error) });
+
+/** Hides a tuning hint until its situation changes. The overview refetches on the autopilot.changed it publishes. */
+export function useDismissHint() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<void>("/api/autopilot/hints/dismiss", { body: { id } }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot }),
+    onError: errorToast("Couldn't dismiss the hint"),
+  });
+}
+
+/** Runs an automation that paused itself in a project again, counting failures from now. */
+export function useResumeAutoPause() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { automation: string; projectId: string }) =>
+      api<void>("/api/autopilot/auto-pauses/resume", { body: input }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot }),
+    onError: errorToast("Couldn't resume the automation"),
   });
 }

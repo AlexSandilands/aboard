@@ -1440,6 +1440,17 @@ describe("custom automations: an agent with a check script", () => {
     expect(runsOf()).toHaveLength(0);
   });
 
+  it("keeps the tail of what a failed check printed to stderr, not the items before it", async () => {
+    const { slot, runsOf } = checkSetup(() => ({
+      ...printed({ key: "a" }, { key: "b" }),
+      exitCode: 1,
+      output: '{"key":"a"}\n{"key":"b"}\nTraceback: boom\n',
+      stderr: "Traceback: boom\n",
+    }));
+    await slot(SLOT);
+    expect(runsOf()[0]).toMatchObject({ status: "failed", detail: "Traceback: boom\n" });
+  });
+
   it("records one failed run when the check fails, and runs it again only once that is retried", async () => {
     const { s, slot, scriptRuns, agentRuns, runsOf, project } = checkSetup(() => ({
       ...printed(),

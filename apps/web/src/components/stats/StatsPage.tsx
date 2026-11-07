@@ -1,4 +1,5 @@
 import {
+  automationTitleOf,
   AGENT_HARNESSES,
   formatProjectScope,
   parseProjectScope,
@@ -16,7 +17,7 @@ import { Menu, MenuCheckboxItem, MenuItem, MenuPopup, MenuSeparator, MenuTrigger
 import { Spinner } from "~/components/ui/spinner";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { ApiError } from "~/lib/api";
-import { useBoard, useStats } from "~/state/queries";
+import { useAutopilotOverview, useBoard, useStats } from "~/state/queries";
 import { cn } from "~/lib/utils";
 import { BucketKindContext, SERIES_COLORS, type ChartSeries } from "./chartParts";
 import { KpiTile } from "./KpiTile";
@@ -640,6 +641,7 @@ function ChartCard({ title, children }: { title: string; children: ReactNode }) 
 }
 
 function AutomationTable({ rows }: { rows: ReturnType<typeof runsByAutomation> }) {
+  const catalogue = useAutopilotOverview().data?.automations ?? [];
   return (
     <div className="overflow-x-auto rounded-xl border border-border/60 bg-card/40 p-4">
       <h3 className="mb-2 text-sm font-medium">Runs by automation</h3>
@@ -663,7 +665,7 @@ function AutomationTable({ rows }: { rows: ReturnType<typeof runsByAutomation> }
           {rows.map((row) => (
             <tr key={row.automation} className="border-t border-border/40">
               <th scope="row" className="py-1.5 pe-3 text-start font-normal">
-                {row.automation}
+                {automationTitleOf(catalogue, row.automation)}
               </th>
               {RUN_STATUSES.map(([key, , , statuses]) => (
                 <td key={key} className="px-3 py-1.5 text-end tabular-nums">

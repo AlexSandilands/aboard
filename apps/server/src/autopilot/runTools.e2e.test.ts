@@ -169,6 +169,7 @@ describe("a run on the board's run tools", { timeout: PROCESS_TEST_TIMEOUT }, ()
       detail: null,
       exitCode: null,
       error: null,
+      deferred: null,
       needsAttention: false,
       dismissedAt: null,
       output: null,
