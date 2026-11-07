@@ -9,6 +9,22 @@ auto-merge on for that task.
 
 ## Switching automations on
 
+**Quick setup** is the fastest start. With nothing on, **Settings → Autopilot** opens on it (it's also behind **+ Add
+automation → Quick setup**). Pick a level and read the list, which says exactly what it would switch on for the whole
+board:
+
+- **Notify**: the digest, stuck-task reminders, a note when a blocker finishes, and archiving old Done tasks. No agent
+  starts and nothing is merged.
+- **Assist**: agents review and fix the PRs your tasks open, plus the digest, reminders and archiving. They never start
+  work or merge.
+- **Hands-off**: agents also start the tasks you flag, keep epics moving and merge ready PRs into epic branches.
+  Merging into the default branch is its own setting, which Quick setup leaves as it is.
+
+Automations that start an agent or act on GitHub start in [Preview](#trying-one-out-with-preview) unless you turn
+"Start agent automations in Preview" off. One already on is left as it is, and one a project switches off for itself
+stays off there. **Apply** switches them on once and remembers nothing: they are ordinary switches afterwards, so
+change any of them as usual.
+
 Each project's lane has an **Autopilot** pill. It's dim when nothing is on for the project, a calm ring when
 something is on, and animated while a run is going. Click it to see every automation with an on/off switch. A
 faded switch is following the board: hover it to see what that means ("On, following the board"). Flip it and the
@@ -382,7 +398,7 @@ The **Runs** tab of Settings → Autopilot lists every run, newest first, with m
 status, automation, project and task, when it ran, what it said it did or why it failed, and what it cost. Click a run
 to open the rest: its full output (the error output for a failure), the handover a scheduled agent left, the model,
 the session and a link to its thread. A failed run you can try again has **Retry** on its row, and an opened failure has
-**Ask an agent to fix**, which copies a prompt with the error and output for you to paste into an agent session.
+**Ask an agent to fix**, which hands the error and output to an agent session.
 
 A run that stopped because the pull request moved on while it worked shows as **Deferred: head moved**: nothing went
 wrong, and Autopilot acts on the new commit next.

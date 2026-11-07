@@ -40,6 +40,7 @@ import {
   type RunHistorySearch,
   type RunRange,
 } from "./runHistory.logic";
+import { AskToFix } from "./AskAgentButtons";
 import { RunHistoryRow } from "./RunHistoryRow";
 
 const ALL_PROJECTS = "all";
@@ -480,6 +481,16 @@ function RunList({
               checked={selected.has(run.id)}
               disabled={selectionFull && !selected.has(run.id)}
               onCheckedChange={(on) => onTick(run.id, on)}
+              action={
+                run.status === "failed" && !run.dryRun ? (
+                  <AskToFix
+                    run={run}
+                    automationTitle={automationTitle(automationTitles, run.automation)}
+                    task={taskNumber(run.taskId) === null ? null : `#${taskNumber(run.taskId)}`}
+                    variant="outline"
+                  />
+                ) : undefined
+              }
             />
           ))}
         </ul>

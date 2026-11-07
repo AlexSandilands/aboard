@@ -1,4 +1,4 @@
-import { canRetryRun, fixAutomationPrompt, type AutopilotRun } from "@repo/contracts";
+import { canRetryRun, type AutopilotRun } from "@repo/contracts";
 import { ChevronRightIcon, ExternalLinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { isWebUrl } from "~/components/task/links.logic";
@@ -7,7 +7,6 @@ import { Button } from "~/components/ui/button";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import { useRetryAutopilotRun } from "~/state/mutations";
-import { copyFixPrompt } from "./askAgent";
 import { formatCost, runStatusLabel, runStatusVariant, scheduledAnswerOf } from "./autopilot.logic";
 
 /** Web URLs and T3 Code deep links; a runner's thread URL is shown as a link only if it is one of those. */
@@ -32,6 +31,7 @@ export function RunHistoryRow({
   checked,
   disabled = false,
   onCheckedChange,
+  action,
 }: {
   run: AutopilotRun;
   /** The loaded runs around it, newest first, so Retry isn't offered on a run a later one superseded. */
@@ -50,6 +50,8 @@ export function RunHistoryRow({
   checked: boolean;
   disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
+  /** In an opened failed run: "Ask an agent to fix". */
+  action?: ReactNode;
 }) {
   const answer = scheduledAnswerOf(run);
   const at = run.finishedAt ?? run.startedAt ?? run.createdAt;
@@ -105,21 +107,22 @@ export function RunHistoryRow({
         </button>
         {retryable ? <RetryButton runId={run.id} /> : null}
       </div>
-      {open ? <RunDetail run={run} automation={automation} summary={summary} cost={cost} /> : null}
+      {open ? <RunDetail run={run} summary={summary} cost={cost} action={action} /> : null}
     </li>
   );
 }
 
 function RunDetail({
   run,
-  automation,
   summary,
   cost,
+  action,
 }: {
   run: AutopilotRun;
-  automation: string;
   summary: string;
   cost: string | null;
+  /** "Ask an agent to fix" on a failed run. */
+  action: ReactNode;
 }) {
   const answer = scheduledAnswerOf(run);
   const model = run.model ? [run.model.provider, run.model.model, run.model.effort].filter(Boolean).join(" · ") : null;
@@ -181,16 +184,7 @@ function RunDetail({
             <ExternalLinkIcon />
           </Button>
         ) : null}
-        {run.status === "failed" ? (
-          <Button
-            size="xs"
-            variant="outline"
-            onClick={() => void copyFixPrompt(fixAutomationPrompt(automation, [run]))}
-            title="Copies a prompt with this run's error and output, for an agent session"
-          >
-            Ask an agent to fix
-          </Button>
-        ) : null}
+        {action}
       </div>
     </div>
   );

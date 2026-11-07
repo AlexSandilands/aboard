@@ -32,6 +32,8 @@ import { useAutopilotOverview, useAutopilotProjectScopes, useBoard } from "~/sta
 import { useScopeAutomations } from "./AutomationRows";
 import { automationReach, isOffEverywhere } from "./automationList.logic";
 import { AutopilotLimits } from "./AutopilotSettingsSection";
+import { AskToFix } from "./AskAgentButtons";
+import { QuickSetup, type QuickSetupState } from "./QuickSetup";
 import { AutomationsSplit, customOf, type ListedAutomation } from "./AutomationsSplit";
 import { HINT_ICONS, useApplyHint, type HintTarget } from "./HealthSections";
 import { pausedForRun } from "./health.logic";
@@ -119,6 +121,13 @@ export function AutopilotAutomationsTab() {
     previewRuns: overview.data?.previewRuns.find((r) => r.automation === item.automation.key)?.count ?? 0,
     custom: customOf(customs, item.automation.key),
   }));
+  const quickSetup: QuickSetupState = {
+    automations: overview.data?.automations ?? [],
+    board: items.map((item) => item.entry),
+    projects: projects.map((p, i) => ({ title: p.title, entries: scopes[i]?.data ?? [] })),
+  };
+  // Not known until every project's scope has loaded: before that a project's own switch would be missed.
+  const nothingOn = scopes.every((s) => s.data) && !listed.some((i) => !isOffEverywhere(i.reach));
   return (
     <div className="space-y-6">
       <AutopilotTabs current="automations" />
@@ -126,6 +135,12 @@ export function AutopilotAutomationsTab() {
         {overview.data && !message ? (
           <>
             <StatusStrip overview={overview.data} anyOn={listed.some((i) => !isOffEverywhere(i.reach))} />
+            {nothingOn ? (
+              // The empty state: nothing is on, so the first thing to offer is switching a sensible set on.
+              <SettingsGroup className="px-3 py-3 sm:px-4">
+                <QuickSetup state={quickSetup} title="Start with Quick setup" />
+              </SettingsGroup>
+            ) : null}
             <NeedsYou
               overview={overview.data}
               onSelect={(key) => selectAutomation(key)}
@@ -135,7 +150,7 @@ export function AutopilotAutomationsTab() {
               }}
             />
             <section className="space-y-2.5">
-              <AutomationsSplit items={listed} pending={pending} rejected={rejected} />
+              <AutomationsSplit items={listed} pending={pending} rejected={rejected} quickSetup={quickSetup} />
             </section>
           </>
         ) : (
@@ -286,6 +301,7 @@ function NeedsYou({
                         Retry
                       </Button>
                     ) : null}
+                    <AskToFix run={need.run} automationTitle={need.title} task={need.task} />
                     <Button
                       size="xs"
                       variant="ghost-muted"

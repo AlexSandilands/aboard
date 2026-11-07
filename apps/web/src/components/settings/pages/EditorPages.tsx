@@ -1,4 +1,4 @@
-import { AUTOMATION_EXAMPLES } from "@repo/contracts";
+import { AUTOMATION_EXAMPLES, AUTOMATION_RECIPES } from "@repo/contracts";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { CustomAutomationEditorForm } from "~/components/autopilot/CustomAutomationEditorForm";
@@ -155,10 +155,16 @@ export function CustomAutomationImportPage() {
   const leaveEditor = useLeaveEditor();
   const navigate = useNavigate();
   const draftId = useSearch({ from: "/_app/settings/autopilot/custom/import", select: (search) => search.draft });
+  const recipeId = useSearch({ from: "/_app/settings/autopilot/custom/import", select: (search) => search.recipe });
+  const recipe = AUTOMATION_RECIPES.find((r) => r.id === recipeId);
   return (
-    <EditorShell group="autopilot" label={draftId ? "Review a draft" : "Import automation"}>
+    <EditorShell
+      group="autopilot"
+      label={draftId ? "Review a draft" : recipe ? `Recipe: ${recipe.title}` : "Import automation"}
+    >
       <CustomAutomationImportForm
         examples={AUTOMATION_EXAMPLES}
+        initial={recipe?.bundle}
         draftId={draftId}
         onCancel={() => leaveEditor("autopilot")}
         // Straight to the new automation: it comes in off, with its tools still to check.
