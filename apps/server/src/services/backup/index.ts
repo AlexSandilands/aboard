@@ -138,12 +138,16 @@ export function createBackupService(
             actor: r.actor,
           }));
           repos.tasks.delete(taskId);
+        } else if (repos.tasks.getAny(taskId)) {
+          // In the trash here: the backup's copy replaces it, and keeps its number.
+          repos.tasks.delete(taskId);
         }
         const projectId = String(bundle.task.project_id);
         if (!repos.projects.get(projectId)) {
           throw new AppError("NOT_FOUND", `Task #${number}'s project (${projectId}) is not on the board`);
         }
-        const task = { ...bundle.task };
+        // Restoring a task brings it back to the board, even one that was in the backup's trash.
+        const task: BackupRow = { ...bundle.task, deleted_at: null };
         if (repos.tasks.byNumberAny(number)) task.number = repos.tasks.nextNumber();
         else db.prepare("UPDATE counters SET value = max(value, ?) WHERE name = 'task_number'").run(number);
         if (task.resolved_by_task_id && !repos.tasks.get(String(task.resolved_by_task_id))) {

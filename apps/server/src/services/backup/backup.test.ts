@@ -665,6 +665,34 @@ describe("backup routes", () => {
 });
 
 describe("restoreTask", () => {
+  it("round-trips the trash with a whole-board restore", () => {
+    const { s, b } = seed();
+    s.tasks.delete([b.id], {}, "user");
+    const dump = s.backup.dump();
+    expect(dump.tasks.find((t) => t.task.id === b.id)?.task.deleted_at).toEqual(expect.any(String));
+    const dbPath = join(tempDir(), "data.sqlite");
+    restoreBoard(dbPath, dump);
+    const restored = openDatabase(dbPath);
+    try {
+      expect(
+        createRepos(restored)
+          .tasks.trashed()
+          .map((t) => t.id),
+      ).toEqual([b.id]);
+    } finally {
+      restored.close();
+    }
+  });
+
+  it("brings a task in the trash back from a backup without force, keeping its number", () => {
+    const { s, b } = seed();
+    const dump = s.backup.dump();
+    s.tasks.delete([b.id], {}, "user");
+    expect(s.backup.restoreTask(dump, b.number, { actor: "user" })).toEqual({ taskId: b.id, number: b.number });
+    expect(s.tasks.summary(b.id).title).toBe("Duplicate");
+    expect(s.tasks.trash()).toEqual([]);
+  });
+
   it("puts a deleted task back with its plan, links, labels, reviews and history", () => {
     const { s, a, events } = seed();
     const dump = s.backup.dump();

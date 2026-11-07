@@ -24,7 +24,7 @@ greys it and says "archived", and the board has no card for it.
 | Archived task      | Neither end may be archived when a relation is added; removing one is always allowed                           |
 | Done tasks         | Can be either end. A Done task never shows as blocked on its card                                              |
 | Adding twice       | A no-op: no event, no error                                                                                    |
-| Deleting a task    | Its relations go with it (`ON DELETE CASCADE`); the other tasks log `blocker_deleted` or `blocked_deleted`     |
+| Deleting a task    | In the trash its relations are hidden, and come back if it is restored; purging it drops them (`ON DELETE CASCADE`) and the other tasks log `blocker_deleted` or `blocked_deleted` |
 | Deleting a project | Tasks elsewhere related to its tasks lose the relation and are refreshed                                       |
 
 `TaskSummary` carries `blockedBy` and `blocks` (each `{id, number, title, status, archived}`, by number) and

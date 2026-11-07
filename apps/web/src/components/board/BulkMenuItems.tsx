@@ -10,6 +10,7 @@ import {
   SquareCheckIcon,
   StarIcon,
   TagIcon,
+  Trash2Icon,
   XIcon,
 } from "lucide-react";
 import { useState } from "react";
@@ -31,7 +32,7 @@ import {
   MenuSubTrigger,
 } from "~/components/ui/menu";
 import { useBoard } from "~/state/queries";
-import { useDialogs } from "~/state/ui";
+import { useBoardPick, useDialogs } from "~/state/ui";
 import { AutomationMenuItems } from "./AutomationMenuItems";
 import { useBoardContext } from "./BoardContext";
 import { useBulkActions } from "./bulkActions";
@@ -184,6 +185,20 @@ export function BulkMenuItems({ tasks }: { tasks: readonly TaskSummary[] }) {
           </MenuSub>
         ))
       )}
+      <MenuSeparator />
+      {/* One confirmation and one Undo for all of them; the pick goes once they are gone. */}
+      <MenuItem
+        variant="destructive"
+        onClick={() =>
+          useDialogs.getState().openDeleteTask(
+            tasks.map(({ id, number, title, kind }) => ({ id, number, title, kind })),
+            () => useBoardPick.getState().clearPicked(),
+          )
+        }
+      >
+        <Trash2Icon />
+        Delete {taskCount(tasks.length)}…
+      </MenuItem>
     </>
   );
 }

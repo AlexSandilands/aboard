@@ -100,6 +100,13 @@ describe("applyBoardEvent", () => {
     expect(applyBoardEvent(deleted, { type: "task.deleted", taskId: "a" }).tasks.map((t) => t.id)).toEqual(["b"]);
   });
 
+  it("shows a task restored from the trash again", () => {
+    const b = board([task("a", "backlog", "a0"), task("b", "backlog", "a1")]);
+    const deleted = applyBoardEvent(b, { type: "task.deleted", taskId: "a" });
+    const restored = applyBoardEvent(deleted, { type: "task.upserted", task: task("a", "backlog", "a2") });
+    expect(restored.tasks.map((t) => t.id).sort()).toEqual(["a", "b"]);
+  });
+
   it("replaces the label colours", () => {
     const b = { ...board([]), labelColors: { ui: 10, docs: 20 } };
     expect(applyBoardEvent(b, { type: "labels.colors_changed", labelColors: { ui: 30 } }).labelColors).toEqual({

@@ -137,15 +137,42 @@ loose); see [autopilot.md](autopilot.md#automations).
 
 ### Deleting
 
-Permanent, and only for archived tasks: archive first, then delete (task menu, `DELETE /api/tasks/:id` or
-`delete_task`). The plan, links, events, review rounds and blocks / blocked-by relations go with it. Tasks resolved by it lose the link,
-not their resolution.
+Only the user deletes: the task menu's **Delete…**, the bulk menu's **Delete N tasks…**, the `task.delete` shortcut
+(Delete, on the focused card or the open panel) or REST. There is no MCP tool; agents close or archive. Any task can
+be deleted, archived or not, and every delete confirms first and then offers **Undo** in a toast.
+
+A delete is a move to the trash, not a removal: `tasks.deleted_at` (migration 042) is stamped and the row stays.
+Every read in `db/repos/*` skips a stamped row unless its name says otherwise (`getAny`, `byNumberAny`, the trash
+functions), so the task is gone from the board, lists, search, `#N` lookups, relations, the PR poller, Autopilot,
+stats and notifications without each caller checking. Rows that hang off a task (plan, links, events, reviews) stay
+and come back with it; queries over them that don't join `tasks` use `liveTask(column)` from `db/repos/sql.ts`. A
+reference to a trashed task (`#N` or its id) fails with `NOT_FOUND: Task #N was deleted…`, never another task.
+
+- **Delete** (`tasks.delete(refs, {withTasks})`, `DELETE /api/tasks/:id?withTasks=1`, `POST /api/tasks/bulk-delete`):
+  one write and one stamp per call, later than any stamp already in the trash, so two deletes never share one. Logs
+  `deleted`, publishes `task.deleted`, republishes the cards that block it, are blocked by it or were closed against it,
+  and logs `child_removed` (`deleted`) on its epic, which re-derives. Returns the ids that went, for Undo.
+- **An epic** is deleted alone or **with its tasks** (the dialog's switch). With them, its tasks (archived ones
+  included) get the epic's stamp, `deleted` with `withEpic`. Without, they are left loose at once
+  (`epic_changed` with `epicDeleted`), and restoring the epic doesn't take them back.
+- **Restore** (`tasks.restore(refs)`, `POST /api/tasks/restore`, the toast's Undo, Settings → **Recently deleted**):
+  clears the stamp and puts the task at the end of its lane in the same status (an archived one keeps its place),
+  logs `restored`, and republishes it. It rejoins its epic while that one is live, unarchived and in the same
+  project; otherwise it comes back loose. An epic brings back the tasks that share its stamp
+  (`trashedWith`), not ones deleted on their own. Restoring a task that isn't in the trash is `VALIDATION`.
+- **Purge** (`tasks.purge(refs)`, Settings → **Delete now**, `POST /api/tasks/trash/purge`; `purgeExpired()` at
+  startup and every hour in `server.ts`) removes the row for good: the plan, links, events, review rounds and
+  relations cascade, an epic takes the tasks deleted with it, tasks closed against it keep their resolution and log
+  `resolver_deleted`, tasks it blocked or was blocked by log `blocker_deleted` / `blocked_deleted`, and its pasted
+  images go after the commit. The scheduled purge acts as `trash`.
+- **Retention** is the board setting `trashRetentionDays` (default 30, 1–365, exported in backups). `GET
+  /api/tasks/trash` lists the trash, newest first, with each task's `purgeAt` and the epic it went with.
 
 ### Numbering
 
 Tasks get a global, increasing `number`, shown as `#42`. It comes from the `counters` row
 `task_number`, incremented inside the creating transaction (so a rolled-back create releases it). The
-counter is a high-water mark: numbers of deleted tasks are never reused. Anywhere a task is referenced
+counter is a high-water mark: numbers of deleted tasks are never reused, and a task in the trash keeps its number. Anywhere a task is referenced
 (REST `:id`, MCP `task`, `byTask`), a uuid, `#42` or `42` is accepted.
 
 ### Ordering and moving between projects
@@ -183,7 +210,13 @@ reliably than on instructions they read once.
 ## Decisions
 
 - **Closing is a status, not archiving.** Resolved tasks stay visible in Done with who resolved them;
-  archiving is only for tidying. That's why delete requires archive but close doesn't.
+  archiving is only for tidying.
+- **Deleting goes through a trash.** It used to be permanent and only for archived tasks, so deleting took two
+  steps and a slip lost the work. Now any task can be deleted in one, because it can be undone: the trash keeps it
+  for the retention period. A stamp on the row rather than a separate table keeps the plan, links and history in
+  place for a restore, and filtering in the repos means no caller can forget to hide it.
+- **Only the user deletes.** Agents close (which keeps the why) or archive, so the trash only holds the user's own
+  deletes, and nothing an agent does can empty a task of its history.
 - **Numbers are never reused.** A `#N` in a commit, a PR or a note should never point at a different task
   later, so the counter only goes up even after deletes.
 - **Backlog, not Ideas.** Not everything in the first column is an idea: some are known to-dos, Jira
@@ -199,13 +232,16 @@ reliably than on instructions they read once.
 
 | File                                        | What it does                                                                   |
 | ------------------------------------------- | ------------------------------------------------------------------------------ |
-| `apps/server/src/services/tasks.ts`         | `create`, `update`, `move`, `close`, `delete`, `addNote`, `resolveId`, search  |
+| `apps/server/src/services/tasks.ts`         | `create`, `update`, `move`, `close`, `delete` / `restore` / `purge` (the trash), `addNote`, `resolveId`, search  |
 | `apps/server/src/services/core.ts`          | `write` (transaction, events, publish) and `positionAmong`                     |
 | `apps/server/src/services/projects.ts`      | Project resolution from a workspace path                                       |
-| `apps/server/src/db/repos/tasks.ts`         | Task SQL, `nextNumber`, `lane`, `resolvedBy`                                   |
+| `apps/server/src/db/repos/tasks.ts`         | Task SQL (skipping trashed rows), `nextNumber`, `lane`, `resolvedBy`, the trash queries |
+| `apps/server/src/db/migrations/042_task_trash.sql` | `deleted_at`, the trash's stamp |
 | `apps/server/src/db/migrations/002_task_resolution.sql`, `003_task_number_counter.sql` | Resolution columns and the number counter |
 | `apps/server/src/db/migrations/006_status_backlog.sql` | Renames the `idea` status to `backlog` (rebuilds `tasks`) |
-| `apps/server/src/mcp/tools/tasks.ts`        | `add_to_backlog`, `create_task`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note` |
+| `apps/server/src/mcp/tools/tasks.ts`        | `add_to_backlog`, `create_task`, `move_task`, `close_task`, `update_task`, `add_note` |
 | `packages/contracts/src/schemas.ts`         | `TaskStatus`, `TaskStatusInput`, `TaskResolution`, `CloseTaskInput`, `MoveTaskInput`              |
 | `packages/contracts/src/derive.ts`          | `deriveAttention`, progress, current step                                      |
 | `apps/web/src/components/task/CloseTaskDialog.tsx`, `ResolutionCallout.tsx` | Closing and "Also resolved" in the panel           |
+| `apps/web/src/components/task/TaskMenuDialogs.tsx`, `deleteTasks.logic.ts` | The delete confirmation and its Undo toast |
+| `apps/web/src/components/settings/RecentlyDeletedSection.tsx` | Settings → Recently deleted and the retention setting |

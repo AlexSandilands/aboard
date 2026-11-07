@@ -49,8 +49,10 @@ a CLI session gets each image's file path) and are kept with the task.
   "Also resolved". Moving it out of Done reopens it.
 - **Archiving** clears a card off the board. It's for tidying up, not for resolving work. Archiving an epic
   (once none of its tasks is open) archives its Done tasks with it, and unarchiving the epic brings them back.
-- **Deleting** removes an archived task for good, with its plan, links and activity (task menu, or
-  `delete_task` over MCP). Archive first; active tasks can't be deleted.
+- **Deleting** moves any task to the trash: **Delete…** in its menu, the Delete key on a focused card or open
+  task, or **Delete N tasks…** for picked cards. It asks first, then offers **Undo**. An epic can take its tasks
+  with it. Deleted tasks wait in Settings → Board → **Recently deleted** for 30 days (you can change that), where
+  **Restore** brings one back to its column and **Delete now** removes it for good. Agents can't delete tasks.
 
 ## Links
 
@@ -268,6 +270,7 @@ sections of the task panel. Your layout is saved per browser.
 | `Esc`        | Close the task panel, or leave Settings or Stats |
 | `Ctrl/Cmd B` | Show or hide the sidebar |
 | `Ctrl/Cmd Alt B` | Close the task panel, or reopen the last task |
+| `Delete`     | Delete the focused card or the open task (asks first) |
 
 These are the defaults. Change any of them, or say when one applies, under **Settings → Keybindings**
 (it has a search box):

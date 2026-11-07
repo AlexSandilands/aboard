@@ -1,4 +1,5 @@
-import { type KeybindingCommand, storageKey } from "@repo/contracts";
+import { type BoardSnapshot, type KeybindingCommand, storageKey, type TaskDetail } from "@repo/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useEffectEvent, useRef } from "react";
 import { CommandPalette } from "~/components/command/CommandPalette";
 import { useCloseTask, useJumpToTask, useOpenTask, useSelectedTaskId } from "~/components/board/boardNavigation";
@@ -7,8 +8,8 @@ import { AppDialogs } from "~/components/settings/AppDialogs";
 import { ThemeEditorHost } from "~/components/settings/ThemeEditorHost";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail, useSidebar } from "~/components/ui/sidebar";
-import { useBoardEvents } from "~/state/queries";
-import { anyDialogOpen, useDialogs, usePalette } from "~/state/ui";
+import { queryKeys, useBoardEvents } from "~/state/queries";
+import { anyDialogOpen, type DeletableTask, useDialogs, usePalette } from "~/state/ui";
 import { IS_MAC, isEditableTarget, isInsidePopup, isRecordingShortcut } from "./keyboard";
 import { resolveCommand, runsImmediately } from "./keyboard.logic";
 import { useResolvedKeybindings } from "./useKeybindings";
@@ -67,6 +68,13 @@ export function AppShell({
   );
 }
 
+/** The card a key event came from: a board card with focus, not a control inside one. */
+function focusedCardId(target: EventTarget | null): string | null {
+  return target instanceof HTMLElement ? (target.dataset.taskCard ?? null) : null;
+}
+
+const pickDeletable = ({ id, number, title, kind }: DeletableTask): DeletableTask => ({ id, number, title, kind });
+
 /**
  * App-wide shortcuts, from the registry in `packages/contracts/src/keybindings.ts` with the user's overrides applied
  * (Settings → Keybindings). By default Ctrl/Cmd+K opens the palette, Ctrl/Cmd+, opens Settings, N starts a new
@@ -101,7 +109,12 @@ function GlobalKeybindings({
     if (selectedTaskId) lastTaskId.current = selectedTaskId;
   }, [selectedTaskId]);
   const bindings = useResolvedKeybindings();
-  const run = (command: KeybindingCommand) => {
+  const queryClient = useQueryClient();
+  /** What the confirmation needs of a task: from the board, or the panel's detail for an archived one. */
+  const deletable = (id: string): DeletableTask | undefined =>
+    queryClient.getQueryData<BoardSnapshot>(queryKeys.board)?.tasks.find((t) => t.id === id) ??
+    queryClient.getQueryData<TaskDetail>(queryKeys.task(id));
+  const run = (command: KeybindingCommand, target: EventTarget | null) => {
     const palette = usePalette.getState();
     switch (command) {
       case "palette.open":
@@ -126,6 +139,15 @@ function GlobalKeybindings({
         if (selectedTaskId) void closeTask();
         else if (lastTaskId.current) void openTask(lastTaskId.current, { reveal: false });
         return;
+      case "task.delete": {
+        const cardId = focusedCardId(target);
+        const task = deletable(cardId ?? selectedTaskId ?? "");
+        if (!task) return;
+        // The panel closes once it is confirmed, as the menu's Delete… does; a card's panel stays put.
+        const onDeleted = task.id === selectedTaskId ? () => void closeTask() : undefined;
+        useDialogs.getState().openDeleteTask([pickDeletable(task)], onDeleted);
+        return;
+      }
       default:
         command satisfies never;
     }
@@ -146,6 +168,7 @@ function GlobalKeybindings({
         settingsOpen,
         // The task panel, not the stats page, which also has an `onBack`.
         panelOpen: selectedTaskId !== null && !settingsOpen,
+        cardFocus: focusedCardId(event.target) !== null,
         canGoBack: onBack !== null,
       },
       IS_MAC,
@@ -154,13 +177,13 @@ function GlobalKeybindings({
     if (command === null) return;
     if (runsImmediately(command, bindings)) {
       event.preventDefault();
-      run(command);
+      run(command, event.target);
       return;
     }
     // A timeout rather than a microtask: microtasks run between listeners, before the bubble phase.
     setTimeout(() => {
       if (event.defaultPrevented) return;
-      run(command);
+      run(command, event.target);
     }, 0);
   });
 
