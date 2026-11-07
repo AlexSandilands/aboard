@@ -488,6 +488,8 @@ function RunList({
                     automationTitle={automationTitle(automationTitles, run.automation)}
                     task={taskNumber(run.taskId) === null ? null : `#${taskNumber(run.taskId)}`}
                     variant="outline"
+                    triggerLabel="Ask an agent"
+                    caret
                   />
                 ) : undefined
               }

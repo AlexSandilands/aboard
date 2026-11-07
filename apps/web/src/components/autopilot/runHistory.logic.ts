@@ -1,8 +1,10 @@
 import {
   AutopilotRunOutcome,
   KEPT_REASON_TEXT,
+  type AutopilotRun,
   type AutopilotRunFilter,
   type DeleteAutopilotRunsResult,
+  type TaskLink,
 } from "@repo/contracts";
 import { z } from "zod";
 
@@ -138,3 +140,26 @@ export function keptText(result: Pick<DeleteAutopilotRunsResult, "keptReasons">)
 export function deleteTitle(count: number): string {
   return count === 1 ? "Delete 1 run?" : `Delete ${count} runs?`;
 }
+
+/**
+ * The agent session link a run's session was linked as on its task, so the run can open it as the task panel does;
+ * null when the run has no task or session, or the link has since been removed.
+ */
+export function runSessionLink(
+  tasks: ReadonlyArray<{ id: string; links: readonly TaskLink[] }> | undefined,
+  run: Pick<AutopilotRun, "taskId" | "sessionId">,
+): Extract<TaskLink, { kind: "agent_session" }> | null {
+  if (!run.taskId || !run.sessionId) return null;
+  const links = tasks?.find((t) => t.id === run.taskId)?.links ?? [];
+  for (const link of links) {
+    if (link.kind === "agent_session" && link.ref.sessionId === run.sessionId) return link;
+  }
+  return null;
+}
+
+/** The first 8 characters of a session id, for a compact row; the whole id goes in its tooltip. */
+export const shortSessionId = (sessionId: string): string => sessionId.slice(0, 8);
+
+/** The Thread row's link text: a T3 Code deep link opens there; any other URL is just the thread. */
+export const threadLinkLabel = (url: string): string =>
+  url.startsWith("t3code://") ? "Open in T3 Code" : "Open thread";
