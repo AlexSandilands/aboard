@@ -32,8 +32,9 @@ have something in show), or use **Mark all read**.
 
 Notifications clear themselves when what they told you about is over. They are marked read when the thread stops
 waiting, the checks pass or the pull request is merged or closed, the reviewer's decision changes, the agent's
-request is dismissed, or the task is Done or archived. A notice that a task is quiet or its last blocker finished is
-read when the task is Done or archived. Read ones stay, dimmed, for 7 days after you read them, and unread ones for 30.
+request is dismissed, or the task is Done or archived. A notice that a thread has waited is read when the thread stops
+waiting; one that a task is quiet, when anyone but Autopilot touches the task; and one that a last blocker finished, when
+the task is Done or archived. Read ones stay, dimmed, for 7 days after you read them, and unread ones for 30.
 
 ## Pop-ups
 

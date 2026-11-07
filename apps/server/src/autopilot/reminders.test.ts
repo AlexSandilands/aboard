@@ -97,6 +97,19 @@ describe("reminders", () => {
       expect(notes(task.id)).toEqual([]);
     });
 
+    it("is read once someone but Autopilot is active on the task again", async () => {
+      const { s, working, pass } = setup();
+      const task = working();
+      await pass(26 * HOUR_MS);
+      const unread = () => s.notifications.list({ kind: "task_quiet" }).items.filter((n) => n.readAt === null).length;
+      expect(unread()).toBe(1);
+      // Autopilot's own note doesn't end the quiet period.
+      s.tasks.addNote(task.id, "bot note", "autopilot");
+      expect(unread()).toBe(1);
+      s.tasks.addNote(task.id, "back at it", "agent");
+      expect(unread()).toBe(0);
+    });
+
     it("leaves manual tasks, epics and tasks that aren't In Progress alone", async () => {
       const { s, project, working, pass, sent } = setup();
       s.tasks.update(working("Mine").id, { manual: true }, "user");
@@ -145,6 +158,20 @@ describe("reminders", () => {
       expect(notes(task.id)).toEqual([`${UNSTICK_WAITING_PREFIX} 45m`]);
       await pass(50 * MINUTE_MS);
       expect(sent("thread_waited")).toHaveLength(1);
+    });
+
+    it("is read when the thread stops waiting", async () => {
+      const { s, working, pass } = setup();
+      const task = working();
+      s.links.add(task.id, { value: "t3code://threads/env/thread-1" }, "agent");
+      const link = s.tasks.detail(task.id).links.at(-1)!;
+      s.links.setSnapshot(link.id, { title: "T", status: "input", lastActivityAt: new Date().toISOString() });
+      await pass(45 * MINUTE_MS);
+      const unread = () =>
+        s.notifications.list({ kind: "thread_waited" }).items.filter((n) => n.readAt === null).length;
+      expect(unread()).toBe(1);
+      s.links.setSnapshot(link.id, { title: "T", status: "working", lastActivityAt: new Date().toISOString() });
+      expect(unread()).toBe(0);
     });
 
     it("doesn't tell you about a follow-up thread the user left waiting", async () => {

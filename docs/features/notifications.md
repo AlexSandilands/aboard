@@ -42,7 +42,9 @@ dedupe key exists, or when the retired automation has a run under that key (its 
 default, so they may never have been stored), so an upgrade doesn't repeat what was already reported. The key lives in
 the notification, which is pruned after 30 days: a task left quiet, or a thread left waiting, longer than that is
 reminded of once more, with another note, each month. They were the Remind me about stuck tasks
-(`unstick`) and Unblock dependents (`unblock_dependents`) automations, with the same detection and dedupe keys; the
+(`unstick`) and Unblock dependents (`unblock_dependents`) automations, with the same detection and dedupe keys. One thing
+is gone: a quiet task no longer gets a "Stale" reason on its card and in the sidebar's Needs attention list, because
+that came from the automation's run, and a reminder records none; the inbox notice is the signal now; the
 two keys stay in `RETIRED_AUTOMATION_TITLES` so their old runs show a plain name. `board_activity` and the stats read
 the stalls from these notifications as well as from those old runs. Migration `043_reminder_notifications` set the
 three switches: each of the two automations' effective state somewhere (the project's mode, else the board's, or an
@@ -62,6 +64,8 @@ producer's own write:
 | Kind                   | Read when                                                                              |
 | ---------------------- | -------------------------------------------------------------------------------------- |
 | `thread_waiting`       | The thread's next snapshot is not `input` or `approval`, or it is archived             |
+| `thread_waited`        | The thread stops waiting (`links.setSnapshot`, by the key prefix `waiting:<threadLinkId>:`), as for `thread_waiting` |
+| `task_quiet`           | Someone but `autopilot` logs activity on the task (a note or any `task_events` row: `endQuietNotice`, called from `fx.log` and `addNote`) |
 | `pr_checks_failing`    | The next snapshot's checks are not failing (a later head passes), or the PR is merged or closed |
 | `pr_changes_requested` | The decision is no longer `changes_requested`, or the PR is merged or closed           |
 | `agent_request`        | The request is cleared or dismissed                                                    |

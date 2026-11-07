@@ -196,7 +196,7 @@ function ListRow({
       badge={
         off ? null : lastRun?.status === "failed" ? (
           <StatusDot tone="danger" label="Last run failed" />
-        ) : (
+        ) : automation.alwaysOn ? null : (
           <StatusDot tone="success" label="On" />
         )
       }
@@ -266,7 +266,7 @@ function AutomationDetail({
         title={automation.title}
         subtitle={
           <span className="flex items-center gap-1.5">
-            <StatusDot tone={off ? "muted" : "success"} label={off ? "Off" : "On"} />
+            {switchless ? null : <StatusDot tone={off ? "muted" : "success"} label={off ? "Off" : "On"} />}
             <span className="truncate">{switchless ? "Each rule has its own switch" : statusLine(reach)}</span>
             {custom ? (
               <Badge variant="outline" size="sm">
