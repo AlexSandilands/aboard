@@ -192,14 +192,21 @@ interface ProjectPoll {
   running: boolean;
   items: RepoPrData[];
   error: string | null;
+  /** Settles when the read ends. */
+  done: Promise<void>;
 }
 
 /** Each project's latest read, kept between passes (a restart reads again; run keys keep it from acting twice). */
 const polls = new Map<string, ProjectPoll>();
 
-/** Forgets every read (tests). */
+/** Forgets every read, so the next pass reads again (tests). */
 export function resetOtherPrsPolls(): void {
   polls.clear();
+}
+
+/** Settles once every read under way has ended (tests). */
+export async function otherPrsPolled(): Promise<void> {
+  await Promise.all([...polls.values()].map((p) => p.done));
 }
 
 const prKeyPrefix = (host: string, repo: string, number: number) => `review:repo:${host}/${repo}#${number}:`;
@@ -304,10 +311,11 @@ export function otherPrCandidates(ctx: CheckContext<Record<string, unknown>>): C
         running: true,
         items: poll?.fingerprint === fingerprint ? poll.items : [],
         error: null,
+        done: Promise.resolve(),
       };
       polls.set(project.id, next);
       poll = next;
-      void pollProject(ctx, project, settings)
+      next.done = pollProject(ctx, project, settings)
         .catch((error: unknown) => ({ items: [] as RepoPrData[], error: messageOf(error) }))
         .then((result) => {
           next.items = result.items;
@@ -858,7 +866,7 @@ export async function actRepoPr(
   if (settled.outcome !== "ready") services.repoPrReviews.clearReady(item.host, item.repo, item.number);
   else {
     services.notifications.notify({
-      kind: "autopilot_notice",
+      kind: "pr_ready",
       taskId: null,
       title: `Ready for your approval: ${item.repo}#${item.number}`,
       body: `${item.title} (by ${item.author})\n${settled.why}`,
