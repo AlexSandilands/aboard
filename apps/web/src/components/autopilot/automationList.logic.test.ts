@@ -13,6 +13,8 @@ import {
   selectedAutomation,
   splitAgentFields,
   statusLine,
+  switchState,
+  onInProjectsText,
   projectsStatus,
   whereText,
 } from "./automationList.logic";
@@ -78,20 +80,58 @@ describe("where an automation is on", () => {
     expect(isOffEverywhere(automationReach("a", undefined, [{ title: "p", entries: undefined }]))).toBe(true);
   });
 
-  it("says Off under a dimmed row, and where and the last run under one that is on", () => {
+  it("says Off under a dimmed row, and where and the last run under one that is plainly on", () => {
     const now = Date.parse("2026-11-07T12:00:00Z");
     const off = automationReach("a", entry("a", false), projects([false]));
-    expect(rowSubline(off, undefined, now)).toBe("Off");
+    expect(rowSubline(off, undefined, { nowMs: now })).toEqual({ word: null, sep: "", text: "Off" });
     expect(statusLine(off)).toBe("Off");
     const on = automationReach("a", entry("a", true), projects([true, true]));
-    expect(rowSubline(on, { automation: "a", status: "failed", at: "2026-11-07T11:58:00Z" }, now)).toBe(
-      "every project · ✗ 2m",
-    );
-    expect(rowSubline(on, undefined, now)).toBe("every project · no runs yet");
+    expect(rowSubline(on, undefined, { nowMs: now })).toEqual({
+      word: null,
+      sep: "",
+      text: "every project · no runs yet",
+    });
     expect(statusLine(on)).toBe("On · every project");
     expect(lastRunText({ automation: "a", status: "succeeded", at: "2026-11-07T09:00:00Z" }, now)).toBe("✓ 3h");
   });
+
+  it("leads the subline with the state the switch can't show, in words", () => {
+    const now = Date.parse("2026-11-07T12:00:00Z");
+    const on = automationReach("a", entry("a", true), projects([true, true]));
+    const failed = { automation: "a", status: "failed" as const, at: "2026-11-07T11:57:00Z" };
+    expect(rowSubline(on, failed, { nowMs: now })).toEqual({
+      word: { text: "Last run failed", tone: "danger" },
+      sep: " · ",
+      text: "3m ago",
+    });
+    expect(rowSubline(on, undefined, { nowMs: now, preview: true })).toEqual({
+      word: { text: "Preview", tone: "warning" },
+      sep: " · ",
+      text: "every project · no runs yet",
+    });
+    // Paused beats Preview and a failed run: it is what stops it running.
+    expect(rowSubline(on, failed, { nowMs: now, preview: true, paused: "Paused in storefront" })).toEqual({
+      word: { text: "Paused", tone: "warning" },
+      sep: " ",
+      text: "in storefront",
+    });
+    // Recurring tasks has no switch, so only its last run.
+    expect(rowSubline(off3(), undefined, { nowMs: now, switchless: true }).text).toBe("no runs yet");
+  });
+
+  it("reads a board that is off while projects set their own On as mixed, in the subline and status too", () => {
+    const now = Date.parse("2026-11-07T12:00:00Z");
+    const mixed = automationReach("a", entry("a", false), projects([true, true, true, true, true]));
+    expect(switchState(mixed)).toBe("mixed");
+    expect(switchState(automationReach("a", entry("a", true), projects([true])))).toBe("on");
+    expect(switchState(off3())).toBe("off");
+    expect(rowSubline(mixed, undefined, { nowMs: now }).text).toBe("On in 5 projects · no runs yet");
+    expect(statusLine(mixed)).toBe("On in 5 projects · Off for the board");
+    expect(onInProjectsText(["storefront"])).toBe("On in storefront");
+  });
 });
+
+const off3 = () => automationReach("a", entry("a", false), [{ title: "p", entries: [entry("a", false)] }]);
 
 describe("advancedChanged", () => {
   const automation = {

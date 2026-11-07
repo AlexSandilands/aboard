@@ -279,6 +279,28 @@ export function whereOnlyIn(input: WhereInput, projectIds: ReadonlyArray<string>
   return writes;
 }
 
+/** The projects and epics that set their own On or Preview: they keep running when only the board is switched off. */
+export function whereOwnOn(input: WhereInput): { projects: WhereProject[]; epics: WhereEpic[] } {
+  const ownOn = (mode: AutopilotMode) => mode === "on" || mode === "preview";
+  return { projects: input.projects.filter((p) => ownOn(p.mode)), epics: input.epics.filter((e) => ownOn(e.mode)) };
+}
+
+/**
+ * Off everywhere: the board off (Inherit, as its own switch saves it) and every project or epic that sets its own On
+ * or Preview back to Inherit, so nothing is left running. Projects and epics set Off keep their row; it is redundant
+ * while everything is off and comes back as an exception when the board is switched on again.
+ */
+export function whereOffEverywhere(input: WhereInput): WhereWrite[] {
+  const writes: WhereWrite[] = [];
+  const own = whereOwnOn(input);
+  for (const epic of own.epics) {
+    writes.push({ target: { kind: "epic", id: epic.id, projectId: epic.projectId }, mode: "inherit" });
+  }
+  for (const project of own.projects) writes.push({ target: { kind: "project", id: project.id }, mode: "inherit" });
+  if (input.board !== "inherit" && input.board !== "off") writes.push({ target: { kind: "board" }, mode: "inherit" });
+  return writes;
+}
+
 /** The projects that are on now (in Preview too), for "Only in…" to start from when it is picked over Everywhere. */
 export function currentOnProjects(input: WhereInput): string[] {
   return input.projects.filter((p) => projectIsOn(input.board, p)).map((p) => p.id);

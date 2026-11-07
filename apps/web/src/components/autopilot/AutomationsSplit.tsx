@@ -18,6 +18,8 @@ import {
   OPERATIONS,
   splitFieldsByTier,
   whereEverywhere,
+  whereOffEverywhere,
+  whereOwnOn,
   type AutopilotAutomation,
   type AutopilotMode,
   type AutopilotField,
@@ -62,6 +64,15 @@ import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
+import {
+  Dialog,
+  DialogClose,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+} from "~/components/ui/dialog";
 import { Switch } from "~/components/ui/switch";
 import { toastManager } from "~/components/ui/toast";
 import { downloadText } from "~/lib/download";
@@ -79,12 +90,14 @@ import {
   agentSummary,
   groupAutomations,
   isOffEverywhere,
-  lastRunText,
+  onInProjectsText,
   rowSubline,
   selectedAutomation,
   splitAgentFields,
   statusLine,
+  switchState,
   type AutomationReach,
+  type RowSubline,
   type LastRun,
 } from "./automationList.logic";
 import {
@@ -139,19 +152,115 @@ export interface ListedAutomation extends AutomationItem {
  * The board's mode from a list row's switch, the detail header's Switch on/off and its Mode row. Turning it on from
  * off is Everywhere, so the project rows Only in… left are dropped with it and a later off really is off; any other
  * choice is the board's own row (Off saves Inherit, as before).
+ *
+ * Switching off (`switchOff`) asks first when projects or epics set their own On, since switching off only the board
+ * leaves them running: Off everywhere clears them, Board only keeps them. `dialog` is that question, to render.
  */
-function useBoardMode(item: ListedAutomation): { set: (mode: AutopilotMode) => void; ready: boolean } {
+function useBoardMode(item: ListedAutomation): {
+  set: (mode: AutopilotMode) => void;
+  ready: boolean;
+  /** How many projects and epics set their own On or Preview; 0 while loading. */
+  ownOn: number;
+  offEverywhere: () => void;
+  switchOff: () => void;
+  dialog: React.ReactNode;
+} {
   const { input, apply } = useWhere(item.automation);
+  const [asking, setAsking] = useState(false);
+  const own = input ? whereOwnOn(input) : null;
+  const ownOn = own ? own.projects.length + own.epics.length : 0;
+  const set = (mode: AutopilotMode) => {
+    if ((mode === "on" || mode === "preview") && input && boardState(input.board) === "off") {
+      const writes = whereEverywhere(input, mode);
+      if (writes.length > 0) apply.mutate(writes);
+    } else item.onMode(boardModeToSave(mode));
+  };
+  const offEverywhere = () => {
+    if (!input) return;
+    const writes = whereOffEverywhere(input);
+    if (writes.length > 0) apply.mutate(writes);
+  };
+  const boardOn = input ? boardState(input.board) !== "off" : false;
   return {
     // Turning on from off needs the project and epic rows to drop, so it waits for them rather than saving only the board.
     ready: input !== null,
-    set: (mode) => {
-      if ((mode === "on" || mode === "preview") && input && boardState(input.board) === "off") {
-        const writes = whereEverywhere(input, mode);
-        if (writes.length > 0) apply.mutate(writes);
-      } else item.onMode(boardModeToSave(mode));
-    },
+    set,
+    ownOn,
+    offEverywhere,
+    switchOff: () => (ownOn > 0 ? setAsking(true) : set("off")),
+    dialog: (
+      <SwitchOffDialog
+        open={asking}
+        onOpenChange={setAsking}
+        title={item.automation.title}
+        projects={own?.projects.map((p) => p.title) ?? []}
+        epics={own?.epics.length ?? 0}
+        boardOn={boardOn}
+        onEverywhere={offEverywhere}
+        onBoardOnly={() => set("off")}
+      />
+    ),
   };
+}
+
+/**
+ * Asked when switching off an automation that projects or epics set On themselves: Off everywhere clears their own
+ * On; Board only switches off the board's and leaves them running. A board that is already off has nothing to switch
+ * off on its own, so only Off everywhere is offered.
+ */
+function SwitchOffDialog({
+  open,
+  onOpenChange,
+  title,
+  projects,
+  epics,
+  boardOn,
+  onEverywhere,
+  onBoardOnly,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  projects: string[];
+  epics: number;
+  boardOn: boolean;
+  onEverywhere: () => void;
+  onBoardOnly: () => void;
+}) {
+  const where = [
+    ...(projects.length > 0 ? [projects.length <= 3 ? projects.join(", ") : `${projects.length} projects`] : []),
+    ...(epics > 0 ? [epics === 1 ? "1 epic" : `${epics} epics`] : []),
+  ].join(" and ");
+  const done = (fn: () => void) => () => {
+    fn();
+    onOpenChange(false);
+  };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogPopup showCloseButton={false} className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Switch off {title}?</DialogTitle>
+          <DialogDescription>
+            {where} {projects.length + epics === 1 ? "sets its" : "set their"} own On, which beats the board.{" "}
+            {boardOn
+              ? "Off everywhere clears that too; Board only switches off the board's and leaves them running."
+              : "Off everywhere clears that, so it runs nowhere."}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
+          {boardOn ? (
+            <Button variant="outline" onClick={done(onBoardOnly)}>
+              Board only
+            </Button>
+          ) : null}
+          <Button variant="destructive" onClick={done(onEverywhere)}>
+            Off everywhere
+          </Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
+  );
 }
 
 /** A custom automation whose agent action starts from a check script, which still runs for real in Preview. */
@@ -262,41 +371,70 @@ function ListRow({
   const board = useBoardMode(item);
   const on = isOnMode(entry.mode);
   const off = !automation.alwaysOn && isOffEverywhere(reach);
+  const state = switchState(reach);
   return (
-    <SplitListItem
-      id={`autopilot.automations.${automation.key}`}
-      icon={<AutomationIcon automation={automation} />}
-      title={automation.title}
-      badge={
-        off ? null : paused ? (
-          <StatusDot tone="warning" label={paused} />
-        ) : entry.mode === "preview" ? (
-          <PreviewBadge />
-        ) : lastRun?.status === "failed" ? (
-          <StatusDot tone="danger" label="Last run failed" />
-        ) : automation.alwaysOn ? null : (
-          <StatusDot tone="success" label="On" />
-        )
-      }
-      subtitle={paused && !off ? paused : automation.alwaysOn ? lastRunText(lastRun) : rowSubline(reach, lastRun)}
-      dimmed={off}
-      selected={selected}
-      onSelect={onSelect}
-      // Recurring tasks has no switch: each of its rules has its own, in the detail.
-      trailing={
-        automation.alwaysOn ? null : (
-          <Switch
-            size="sm"
-            aria-label={`${automation.title} on for the board`}
-            checked={on}
-            disabled={pending || (!on && (Boolean(automation.blocked) || !board.ready))}
-            title={!on && automation.blocked ? automation.blocked : undefined}
-            // Back on in the mode it was last on in, or Preview for one that has never run.
-            onCheckedChange={(next) => board.set(next ? restoreMode(entry, lastRun !== undefined) : "off")}
+    <>
+      <SplitListItem
+        id={`autopilot.automations.${automation.key}`}
+        icon={<AutomationIcon automation={automation} />}
+        title={automation.title}
+        subtitle={
+          <Subline
+            line={rowSubline(reach, lastRun, {
+              paused: off ? null : paused,
+              preview: entry.mode === "preview",
+              switchless: automation.alwaysOn,
+            })}
           />
-        )
-      }
-    />
+        }
+        dimmed={off}
+        selected={selected}
+        onSelect={onSelect}
+        // Recurring tasks has no switch: each of its rules has its own, in the detail.
+        trailing={
+          automation.alwaysOn ? null : (
+            <Switch
+              size="sm"
+              aria-label={
+                state === "mixed"
+                  ? `${automation.title}: off for the board, ${onInProjectsText(reach.projects)}`
+                  : `${automation.title} on for the board`
+              }
+              checked={on}
+              mixed={state === "mixed"}
+              disabled={pending || (!on && (!board.ready || (state !== "mixed" && Boolean(automation.blocked))))}
+              title={!on && state !== "mixed" && automation.blocked ? automation.blocked : undefined}
+              // Back on in the mode it was last on in, or Preview for one that has never run. A mixed switch is on
+              // somewhere, so a click switches it off.
+              onCheckedChange={(next) =>
+                next && state !== "mixed" ? board.set(restoreMode(entry, lastRun !== undefined)) : board.switchOff()
+              }
+            />
+          )
+        }
+      />
+      {board.dialog}
+    </>
+  );
+}
+
+/** A row's subline: the state its switch can't show as a coloured word, then where it runs and its last run. */
+function Subline({ line }: { line: RowSubline }) {
+  return (
+    <>
+      {line.word ? (
+        <span
+          className={cn(
+            "font-medium",
+            line.word.tone === "danger" ? "text-destructive-foreground" : "text-warning-foreground",
+          )}
+        >
+          {line.word.text}
+        </span>
+      ) : null}
+      {line.word && line.text ? line.sep : null}
+      {line.text}
+    </>
   );
 }
 
@@ -327,6 +465,7 @@ function AutomationDetail({
   const preview = entry.mode === "preview";
   const switchless = automation.alwaysOn;
   const off = !switchless && isOffEverywhere(reach);
+  const mixed = !switchless && switchState(reach) === "mixed";
   const checkScript = hasCheckScript(custom);
   const editCustom = (id: string) =>
     void navigate({ to: "/settings/autopilot/custom/$customId", params: { customId: id }, state: FROM_SETTINGS_LIST });
@@ -352,8 +491,8 @@ function AutomationDetail({
           <span className="flex items-center gap-1.5">
             {switchless ? null : (
               <StatusDot
-                tone={off ? "muted" : preview ? "warning" : "success"}
-                label={off ? "Off" : preview ? "Preview" : "On"}
+                tone={off ? "muted" : preview && !mixed ? "warning" : "success"}
+                label={off ? "Off" : mixed ? "On in some projects" : preview ? "Preview" : "On"}
               />
             )}
             <span className="truncate">{switchless ? "Each rule has its own switch" : statusLine(reach, preview)}</span>
@@ -370,10 +509,11 @@ function AutomationDetail({
               <Button
                 size="xs"
                 variant="ghost-muted"
-                disabled={pending || (!on && (Boolean(automation.blocked) || !board.ready))}
-                onClick={() => board.set(on ? "off" : restoreMode(entry, lastRun !== undefined))}
+                disabled={pending || (!on && (!board.ready || (!mixed && Boolean(automation.blocked))))}
+                // A mixed automation runs somewhere, so this switches it off, as its list switch does.
+                onClick={() => (on || mixed ? board.switchOff() : board.set(restoreMode(entry, lastRun !== undefined)))}
               >
-                {on ? "Switch off" : "Switch on"}
+                {on || mixed ? "Switch off" : "Switch on"}
               </Button>
             )}
             <AskToChange
@@ -423,13 +563,31 @@ function AutomationDetail({
         {switchless ? null : (
           <SettingsRow
             id={`autopilot.automations.${automation.key}.board`}
-            title="Mode"
-            description={modeDescription(
-              boardSwitchValue(entry.mode) as "off" | "preview" | "on",
-              automation,
-              checkScript,
-            )}
-            info="Off: nothing runs. Preview: each time it would act, a run marked Preview is recorded instead; no agent starts and nothing on the board or on GitHub changes. A custom automation's check script is the exception: it runs for real. New, imported and drafted automations save in Preview."
+            title={
+              <>
+                Mode <span className="text-muted-foreground">· for the board</span>
+              </>
+            }
+            description={
+              !on && mixed ? (
+                <>
+                  <span className="font-medium text-foreground">Off for the board.</span>{" "}
+                  {onInProjectsText(reach.projects)} that set their own.{" "}
+                  <button
+                    type="button"
+                    className="cursor-pointer text-foreground underline underline-offset-2 hover:text-primary disabled:cursor-not-allowed disabled:opacity-64"
+                    disabled={pending || !board.ready}
+                    onClick={board.offEverywhere}
+                  >
+                    Turn off everywhere
+                  </button>
+                </>
+              ) : (
+                modeDescription(boardSwitchValue(entry.mode) as "off" | "preview" | "on", automation, checkScript)
+              )
+            }
+            infoLabel="More about Mode"
+            info="The board's own setting: a project or epic that sets its own beats it. Off: nothing runs. Preview: each time it would act, a run marked Preview is recorded instead; no agent starts and nothing on the board or on GitHub changes. A custom automation's check script is the exception: it runs for real. New, imported and drafted automations save in Preview."
             control={
               <ModeSwitch
                 label={`${automation.title} for the board`}
@@ -507,6 +665,7 @@ function AutomationDetail({
           {automation.title} is off everywhere. Its settings are kept for when you switch it on.
         </p>
       ) : null}
+      {board.dialog}
     </DetailBody>
   );
 }
@@ -620,15 +779,6 @@ function AgentDefaultsLine({
           ))
         : null}
     </>
-  );
-}
-
-/** Beside a list row's name: the automation only records what it would do. */
-function PreviewBadge() {
-  return (
-    <Badge variant="warning" size="sm" title="In Preview: it records what it would do and does none of it">
-      Preview
-    </Badge>
   );
 }
 
