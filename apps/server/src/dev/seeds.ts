@@ -1246,6 +1246,51 @@ const autopilot: Scenario = (s, opts) => {
   if (second)
     s.recurring.create(second.id, { name: "Weekly dependency bump", templateId: bump.id, schedule: weekly(3) });
   if (third) s.recurring.create(third.id, { name: "Security audit", templateId: audit.id, schedule: weekly(2) });
+  // Run health: a run deferred because its PR moved on, Fix PRs failing three times in a row in one project (so it
+  // pauses itself there), giving up on two PRs (a tuning hint), and a run of an automation the board no longer has.
+  const tasks = s.tasks.summaries({}).filter((t) => t.kind !== "epic" && t.archivedAt === null);
+  const shopTasks = tasks.filter((t) => t.projectId === tasks[0]!.projectId);
+  const finished = (
+    automation: string,
+    key: string,
+    taskId: string,
+    result: Parameters<typeof s.autopilot.finish>[1],
+  ) => {
+    const run = s.autopilot.record({
+      automation,
+      candidate: { dedupeKey: key, summary: "act", taskId, projectId: s.tasks.summary(taskId).projectId },
+      dryRun: false,
+    });
+    if (!run) return;
+    s.autopilot.start(run.id);
+    s.autopilot.finish(run.id, result);
+  };
+  finished("review_prs", "seed-deferred", shopTasks[1]!.id, {
+    status: "skipped",
+    deferred: "head_moved",
+    summary: "PR #214 moved on while it was being reviewed",
+  });
+  finished("fix_prs", "fix:gave_up:seed-a:review", shopTasks[2]!.id, {
+    status: "skipped",
+    summary: "Gave up on PR #208: 3 fix attempts used, still to fix: failing checks",
+  });
+  finished("fix_prs", "fix:gave_up:seed-b:review", shopTasks[3]!.id, {
+    status: "skipped",
+    summary: "Gave up on PR #211: 3 fix attempts used, still to fix: failing checks",
+  });
+  finished("fix_pr_findings", "seed-retired", shopTasks[1]!.id, {
+    summary: "Fixed the findings on PR #87",
+    costUsd: 0.31,
+  });
+  for (const n of [1, 2, 3]) {
+    finished("fix_prs", `seed-failing-${n}`, shopTasks[n % shopTasks.length]!.id, {
+      status: "failed",
+      error: "The fix agent exited with code 1: pnpm install failed (ERR_PNPM_FETCH_404)",
+      detail: "ERR_PNPM_FETCH_404  GET https://registry.npmjs.org/@acme%2Fui: Not Found - 404\n",
+      runner: "headless",
+      costUsd: 0.12,
+    });
+  }
   s.customAutomations.create({
     name: "Triage new bugs",
     trigger: { kind: "schedule", schedule: { kind: "weekly", days: [1, 2, 3, 4, 5], time: "09:00" } },

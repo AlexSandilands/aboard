@@ -193,7 +193,12 @@ export async function mainMergeAction(
     return { status: "skipped", summary: `Didn't merge PR #${data.number}: ${verdict.reason}`, output: RECHECK };
   }
   if (verdict.link.id !== data.linkId || verdict.headOid !== data.headOid) {
-    return { status: "skipped", summary: `PR #${data.number} moved on before the merge`, output: RECHECK };
+    return {
+      status: "skipped",
+      deferred: "head_moved",
+      summary: `PR #${data.number} moved on before the merge`,
+      output: RECHECK,
+    };
   }
   let method: string;
   try {

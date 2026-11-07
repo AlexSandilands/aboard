@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
   AUTOPILOT_RECURRING,
+  automationTitleOf,
   customAutomationId,
   effectiveVariables,
   epicArmKey,
-  RETIRED_AUTOMATION_TITLES,
   type T3IntegrationStatus,
 } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
@@ -205,6 +205,8 @@ export function createServices(deps: ServiceDeps): Services {
         const customId = customAutomationId(automation);
         if (customId) customAutomations.rearm(customId, epicIds.map(epicArmKey));
       },
+      plannedTasks: (projectIds) =>
+        projectIds.flatMap((projectId) => tasks.service.summaries({ projectId, status: "planned" })),
     }),
     recurring,
     customAutomations,
@@ -217,14 +219,12 @@ export function createServices(deps: ServiceDeps): Services {
     }),
     skillSync: createSkillSyncService(core, { userHome: deps.userHome, harnessHomes: deps.harnessHomes }),
     activity: createActivityService(core, {
-      automationTitle: (key) =>
-        automations().find((a) => a.key === key)?.title ?? RETIRED_AUTOMATION_TITLES[key] ?? key,
+      automationTitle: (key) => automationTitleOf(automations(), key),
     }),
     stats: createStatsService(core, { runGit: deps.runGit ?? defaultRunGit }),
     digests: createDigestsService(core, {
       notifications,
-      automationTitle: (key) =>
-        automations().find((a) => a.key === key)?.title ?? RETIRED_AUTOMATION_TITLES[key] ?? key,
+      automationTitle: (key) => automationTitleOf(automations(), key),
     }),
   };
 }

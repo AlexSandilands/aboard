@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { AutopilotRun } from "./autopilot.ts";
+import { AutopilotRun, type AutopilotAutomation } from "./autopilot.ts";
+import { CUSTOM_AUTOMATION_PREFIX } from "./customAutomations.ts";
 
 // The run history page: a paged, filterable list of an automation's runs, and deleting them by hand
 // (docs/features/autopilot.md#run-history).
@@ -18,6 +19,14 @@ export const RUN_DELETE_IDS_MAX = 500;
 
 const RunTime = z.iso.datetime({ offset: true });
 
+/**
+ * How a run ended, as the history page filters it. `deferred` is a skipped run that stopped for a reason of its own
+ * (the PR's head moved), `skipped` the other real skipped runs, `preview` what dry run recorded instead of acting, and
+ * `active` a run still queued or running.
+ */
+export const AutopilotRunOutcome = z.enum(["failed", "succeeded", "deferred", "skipped", "preview", "active"]);
+export type AutopilotRunOutcome = z.infer<typeof AutopilotRunOutcome>;
+
 /** What the history page filters by, and what "delete all matching" deletes. `since` is inclusive, `until` exclusive. */
 export const AutopilotRunFilter = z.object({
   /** An automation's key, or `AUTOPILOT_ALL_RUNS`. */
@@ -25,6 +34,7 @@ export const AutopilotRunFilter = z.object({
   projectId: z.string().min(1).optional(),
   since: RunTime.optional(),
   until: RunTime.optional(),
+  outcome: AutopilotRunOutcome.optional(),
   /** Matches the run id, the project's title, a `#N` task number, and the summary and handover text. */
   q: z.string().trim().min(1).max(200).optional(),
 });
@@ -80,3 +90,30 @@ export const DeleteAutopilotRunsResult = z.object({
   keptReasons: z.array(z.object({ reason: AutopilotKeptReason, count: z.number().int() })),
 });
 export type DeleteAutopilotRunsResult = z.infer<typeof DeleteAutopilotRunsResult>;
+
+/**
+ * Titles of automations the board no longer ships (or has since renamed or folded into another), so their old runs
+ * still read plainly in the history and in reports.
+ */
+export const RETIRED_AUTOMATION_TITLES: Readonly<Record<string, string>> = {
+  unstick: "Remind me about stuck tasks",
+  unblock_dependents: "Unblock dependents",
+  fix_pr_findings: "Fix PR findings",
+};
+
+/**
+ * What an automation is called, never its raw key: its title in the catalogue, a retired one's old title, "Removed
+ * custom automation" for a custom one since deleted, or else the key made readable ("nightly_sync" → "Nightly sync").
+ */
+export function automationTitleOf(
+  automations: ReadonlyArray<Pick<AutopilotAutomation, "key" | "title">>,
+  key: string,
+): string {
+  const listed = automations.find((a) => a.key === key)?.title;
+  if (listed) return listed;
+  const retired = RETIRED_AUTOMATION_TITLES[key];
+  if (retired) return retired;
+  if (key.startsWith(CUSTOM_AUTOMATION_PREFIX)) return "Removed custom automation";
+  const words = key.replace(/[_-]+/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : key;
+}

@@ -66,6 +66,7 @@ import { cn } from "~/lib/utils";
 import { inheritDetail } from "~/components/models/choicePicker.logic";
 import { operationTarget } from "~/components/models/operations.logic";
 import { useDeleteCustomAutomation, useExportCustomAutomation } from "~/state/customAutomations";
+import { useAutopilotOverview } from "~/state/queries";
 import { useSettings } from "~/state/queries";
 import { AutomationField, type AutomationItem, type ConfigUpdate } from "./AutomationRows";
 import {
@@ -98,6 +99,8 @@ import { AskToChange } from "./AskAgentButtons";
 import type { QuickSetupState } from "./QuickSetup";
 import { bundleFilename } from "./customAutomationImport.logic";
 import { BlockedWarning, NeedsVariablesWarning } from "./InputsAndSlots";
+import { HintNotice, PausedRows, WeekSection } from "./HealthSections";
+import { hintsFor, pausedText, pausesFor } from "./health.logic";
 import { MergeTargets } from "./MergeTargets";
 import { ModeSwitch } from "./ModeSwitch";
 import { RecurringRulesByProject } from "~/components/recurring/RecurringSection";
@@ -149,6 +152,7 @@ export function AutomationsSplit({
   const navigate = useNavigate();
   const requested = useSearch({ strict: false, select: (search) => search.automation });
   const [adding, setAdding] = useState(false);
+  const autoPaused = useAutopilotOverview().data?.autoPaused ?? [];
   const groups = groupAutomations(items);
   const ordered = groups.flatMap((g) => g.items);
   const selectedKey = selectedAutomation(
@@ -176,6 +180,7 @@ export function AutomationsSplit({
                   <ListRow
                     key={item.automation.key}
                     item={item}
+                    paused={pausedText(pausesFor(autoPaused, item.automation.key))}
                     pending={pending}
                     selected={item.automation.key === selectedKey}
                     onSelect={() => select(item.automation.key)}
@@ -219,11 +224,14 @@ export function AutomationsSplit({
 
 function ListRow({
   item,
+  paused,
   pending,
   selected,
   onSelect,
 }: {
   item: ListedAutomation;
+  /** "Paused in storefront" when it paused itself somewhere after failing. */
+  paused: string | null;
   pending: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -237,7 +245,9 @@ function ListRow({
       icon={<AutomationIcon automation={automation} />}
       title={automation.title}
       badge={
-        off ? null : entry.mode === "preview" ? (
+        off ? null : paused ? (
+          <StatusDot tone="warning" label={paused} />
+        ) : entry.mode === "preview" ? (
           <PreviewBadge />
         ) : lastRun?.status === "failed" ? (
           <StatusDot tone="danger" label="Last run failed" />
@@ -245,7 +255,7 @@ function ListRow({
           <StatusDot tone="success" label="On" />
         )
       }
-      subtitle={automation.alwaysOn ? lastRunText(lastRun) : rowSubline(reach, lastRun)}
+      subtitle={paused && !off ? paused : automation.alwaysOn ? lastRunText(lastRun) : rowSubline(reach, lastRun)}
       dimmed={off}
       selected={selected}
       onSelect={onSelect}
@@ -285,6 +295,9 @@ function AutomationDetail({
   const { automation, entry, reach, custom, lastRun, previewRuns, onMode, onConfig } = item;
   const navigate = useNavigate();
   const { essential, advanced } = splitFieldsByTier(automation.fields);
+  const overview = useAutopilotOverview().data;
+  const hints = hintsFor(overview?.hints ?? [], automation.key);
+  const pauses = pausesFor(overview?.autoPaused ?? [], automation.key);
   const agent = splitAgentFields(advanced);
   const on = isOnMode(entry.mode);
   const preview = entry.mode === "preview";
@@ -354,6 +367,13 @@ function AutomationDetail({
           {automation.needs ? <NeedsVariablesWarning needs={automation.needs} /> : null}
         </div>
       ) : null}
+      {hints.length > 0 ? (
+        <div className="space-y-2 px-3 sm:px-4">
+          {hints.map((hint) => (
+            <HintNotice key={hint.id} hint={hint} target={{ onConfig }} />
+          ))}
+        </div>
+      ) : null}
       {preview ? (
         <PreviewNotice
           count={previewRuns}
@@ -367,9 +387,12 @@ function AutomationDetail({
           <p className="min-w-0 flex-1 text-sm leading-relaxed text-foreground">
             {automationSentence(automation, entry.effectiveConfig, { custom })}
           </p>
-          <div className="shrink-0 self-start">
-            <RunHistoryLink automation={automation.key} label="All runs" size="xs" />
-          </div>
+          {/* While it's on, This week links to its runs. */}
+          {off ? (
+            <div className="shrink-0 self-start">
+              <RunHistoryLink automation={automation.key} label="All runs" size="xs" />
+            </div>
+          ) : null}
         </div>
         {switchless ? null : (
           <SettingsRow
@@ -416,8 +439,10 @@ function AutomationDetail({
             }
             status={projectsStatus(reach)}
           />
+          <PausedRows pauses={pauses} />
         </DetailSection>
       )}
+      {off ? null : <WeekSection automation={automation.key} />}
       {automation.key === AUTOPILOT_MERGE_EPIC_PRS ? (
         <MergeTargets automation={automation} entry={entry} rejected={rejected} onConfig={onConfig} />
       ) : essential.length > 0 ? (
