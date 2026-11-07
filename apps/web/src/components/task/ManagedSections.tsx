@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { TaskDetail } from "@repo/contracts";
+import type { AttentionReason, TaskDetail } from "@repo/contracts";
 import { GripVerticalIcon } from "lucide-react";
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -24,7 +24,13 @@ import { createPortal } from "react-dom";
 import { cn } from "~/lib/utils";
 import { useSettings } from "~/state/queries";
 import { useSectionLayout, useTaskPanelPrefs } from "~/state/ui";
-import { collapsedByDefault, SECTION_TITLES, summarizeSection, type SectionId } from "./sections.logic";
+import {
+  collapsedByDefault,
+  SECTION_TITLES,
+  sectionAttention,
+  summarizeSection,
+  type SectionId,
+} from "./sections.logic";
 
 const modifiers = [restrictToVerticalAxis];
 
@@ -34,6 +40,8 @@ export interface SectionFrame {
   expanded: boolean;
   onToggle: () => void;
   summary: string;
+  /** The task's warning for this section, set only while it is collapsed (open, the content shows it). */
+  attention: AttentionReason | null;
   dragHandle: ReactNode;
 }
 
@@ -133,12 +141,14 @@ function ManagedSection({ id, task, children }: { id: SectionId; task: TaskDetai
   });
   const globalReview = useSettings().data?.autoReview ?? false;
   const summary = expanded ? "" : summarizeSection(id, task, undefined, globalReview);
+  const attention = expanded ? null : sectionAttention(id, task);
   const frame = useMemo<SectionFrame>(
     () => ({
       id,
       expanded,
       onToggle: () => setCollapsed(id, expanded, byDefault),
       summary,
+      attention,
       dragHandle: (
         <button
           type="button"
@@ -152,7 +162,7 @@ function ManagedSection({ id, task, children }: { id: SectionId; task: TaskDetai
         </button>
       ),
     }),
-    [id, expanded, byDefault, summary, setCollapsed, setActivatorNodeRef, attributes, listeners],
+    [id, expanded, byDefault, summary, attention, setCollapsed, setActivatorNodeRef, attributes, listeners],
   );
   return (
     <div

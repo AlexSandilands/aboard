@@ -1,4 +1,4 @@
-import type { TaskLink, TaskRelation, TaskReview, TaskReviewSummary } from "@repo/contracts";
+import type { AttentionReason, TaskLink, TaskRelation, TaskReview, TaskReviewSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import type { PlainLink } from "./links.logic";
 import {
@@ -9,7 +9,9 @@ import {
   moveSection,
   normalizeSectionLayout,
   relationChipGroups,
+  SECTION_ATTENTION,
   SECTION_IDS,
+  sectionAttention,
   summarizeSection,
   type SectionTask,
   withCollapseChoice,
@@ -240,6 +242,54 @@ describe("firstLine", () => {
     expect(firstLine("> quoted `code`")).toBe("quoted code");
     expect(firstLine("  \n ")).toBeNull();
     expect(firstLine(null)).toBeNull();
+  });
+});
+
+describe("sectionAttention", () => {
+  const reason = (kind: AttentionReason["kind"], severity: AttentionReason["severity"] = "warning") => ({
+    kind,
+    severity,
+    message: `${kind} message`,
+  });
+  const EXPECTED = {
+    autopilot: ["autopilot"],
+    sessions: ["thread_needs_input", "thread_failed"],
+    links: ["pr_checks_failing", "pr_changes_requested", "pr_conflict"],
+    plan: ["blocked_step"],
+    review: ["review_stalled", "review_stuck", "review_failed", "review_unattended"],
+  } as const;
+
+  it("maps each kind to its section", () => {
+    expect(SECTION_ATTENTION).toEqual(EXPECTED);
+    for (const [id, kinds] of Object.entries(EXPECTED)) {
+      for (const kind of kinds) {
+        const shown = sectionAttention(id as keyof typeof EXPECTED, task({ attention: [reason(kind)] }));
+        expect(shown?.kind).toBe(kind);
+      }
+    }
+  });
+
+  it("leaves import_failed and agent_request to their own callouts", () => {
+    const attention = [reason("import_failed", "error"), reason("agent_request")];
+    for (const id of SECTION_IDS) expect(sectionAttention(id, task({ attention }))).toBeNull();
+  });
+
+  it("ignores reasons that belong to another section", () => {
+    const attention = [reason("pr_conflict", "error")];
+    expect(sectionAttention("sessions", task({ attention }))).toBeNull();
+    expect(sectionAttention("links", task({ attention }))?.kind).toBe("pr_conflict");
+  });
+
+  it("picks an error before a warning, else the first", () => {
+    const warning = reason("pr_changes_requested");
+    const error = reason("pr_checks_failing", "error");
+    expect(sectionAttention("links", task({ attention: [warning, error] }))).toEqual(error);
+    expect(sectionAttention("links", task({ attention: [warning, reason("pr_conflict")] }))).toEqual(warning);
+  });
+
+  it("is null when the task has no reasons, or the section takes none", () => {
+    expect(sectionAttention("links", task())).toBeNull();
+    expect(sectionAttention("labels", task({ attention: [reason("pr_conflict", "error")] }))).toBeNull();
   });
 });
 

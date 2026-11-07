@@ -1,4 +1,5 @@
-import { reviewBadgeLabel, type TaskDetail, type TaskRelation } from "@repo/contracts";
+import { reviewBadgeLabel, type AttentionReason, type TaskDetail, type TaskRelation } from "@repo/contracts";
+import { topAttention } from "~/components/board/board.logic";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { mayState } from "./automation.logic";
 import { isSessionLink, type PlainLink } from "./links.logic";
@@ -246,8 +247,23 @@ function autopilotSummary(
   return parts.filter((part) => part !== null).join(" · ");
 }
 
-const LINK_ATTENTION = new Set(["pr_checks_failing", "pr_changes_requested", "pr_conflict"]);
-const SESSION_ATTENTION = new Set(["thread_needs_input", "thread_failed"]);
+/**
+ * Which attention reasons live in which section. import_failed and agent_request are in none: they have their own
+ * callouts at the top of the panel.
+ */
+export const SECTION_ATTENTION: Partial<Record<SectionId, ReadonlyArray<AttentionReason["kind"]>>> = {
+  autopilot: ["autopilot"],
+  sessions: ["thread_needs_input", "thread_failed"],
+  links: ["pr_checks_failing", "pr_changes_requested", "pr_conflict"],
+  plan: ["blocked_step"],
+  review: ["review_stalled", "review_stuck", "review_failed", "review_unattended"],
+};
+
+/** The reason a section's header shows, errors before warnings; null when the task has none for it. */
+export function sectionAttention(id: SectionId, task: Pick<SectionTask, "attention">): AttentionReason | null {
+  const kinds = SECTION_ATTENTION[id];
+  return kinds ? topAttention(task.attention.filter((a) => kinds.includes(a.kind))) : null;
+}
 
 /** The one-line summary a collapsed section header shows in place of its content. */
 export function summarizeSection(
@@ -263,13 +279,13 @@ export function summarizeSection(
     case "sessions": {
       const count = task.links.filter(isSessionLink).length;
       if (count === 0) return "None";
-      const problem = task.attention.find((a) => SESSION_ATTENTION.has(a.kind));
+      const problem = sectionAttention("sessions", task);
       return problem ? `${count} · ${problem.message}` : String(count);
     }
     case "links": {
       const count = task.links.filter((link) => !isSessionLink(link)).length;
       if (count === 0) return "None";
-      const problem = task.attention.find((a) => LINK_ATTENTION.has(a.kind));
+      const problem = sectionAttention("links", task);
       return problem ? `${count} · ${problem.message}` : String(count);
     }
     case "relations": {
@@ -287,7 +303,7 @@ export function summarizeSection(
       return open ? plural(open, "open finding") : reviewBadgeLabel(task.review);
     }
     case "autopilot":
-      return task.attention.find((a) => a.kind === "autopilot")?.message ?? autopilotSummary(task, globalReview);
+      return sectionAttention("autopilot", task)?.message ?? autopilotSummary(task, globalReview);
     case "plan": {
       const { done, total } = task.progress;
       if (total === 0) return "No plan yet";
