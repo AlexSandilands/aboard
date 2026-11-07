@@ -29,7 +29,7 @@ const OPTIONS: ReadonlyArray<{ value: EpicDelivery; label: string }> = [
 /** What the delivery means for the epic, in a line. */
 export function deliveryDescription(epic: EpicLike): string {
   return epic.integrationBranch
-    ? `Tasks start from ${epic.integrationBranch} and open their pull requests against it. Autopilot's Merge into epic branch merges them there; you merge the epic's pull request into main.`
+    ? `Tasks start from ${epic.integrationBranch} and open their pull requests against it. Autopilot's Merge ready PRs merges them there; you merge the epic's pull request into main.`
     : "Each task opens a pull request to the default branch, and you merge it.";
 }
 

@@ -100,9 +100,10 @@ export interface ActionResult extends RunPatch {
 
 /**
  * One automation: a deterministic check over board state and an action per candidate. The engine resolves scopes,
- * dedupes, applies the limits and records runs; the automation only finds work and does it. It must never merge into
- * the default branch, close or delete tasks, force-push or push to the default branch; the one merge it may make is a
- * task's PR into its epic's integration branch (docs/decisions/0008-autopilot-engine.md).
+ * dedupes, applies the limits and records runs; the automation only finds work and does it. It must never close or
+ * delete tasks, force-push or push to the default branch. It may merge only a task's PR into its epic's integration
+ * branch, or, through merge_task_pr's own path (GitHostActions.mergeAutoMergeTask), the PR of a task the user flagged
+ * for auto-merge into the default branch (docs/decisions/0008-autopilot-engine.md).
  */
 export interface Automation<C extends AutomationConfig = AutomationConfig> {
   key: string;

@@ -12,6 +12,7 @@ import {
   type PrAgentHints,
   type PrThreadState,
 } from "./gitHost.ts";
+import type { MergeTaskPrResult } from "./mergeTaskPr.ts";
 import type { PrMerges } from "./prMerge.ts";
 import { messageOf } from "./util.ts";
 
@@ -66,9 +67,10 @@ export function createGitHosts(hosts: readonly GitHost[]): GitHosts {
 
 /**
  * What an Autopilot action may do on a git host, as the user's signed-in account: post a review, resolve review
- * threads Autopilot answered, merge a task's PR into its epic's integration branch (never into the default branch:
- * checkAutopilotMergeTarget), and open and describe the epic's draft PR (never merge it). Each call goes to the host
- * the PR or repository is on.
+ * threads Autopilot answered, merge a task's PR into its epic's integration branch (checkAutopilotMergeTarget), merge
+ * a task flagged for auto-merge into the default branch through merge_task_pr's own path (mergeAutoMergeTask: the
+ * flag and the gate are checked there, so no automation can merge any other PR into the default branch), and open and
+ * describe the epic's draft PR (never merge it). Each call goes to the host the PR or repository is on.
  */
 export interface GitHostActions {
   postReview(ref: PrRef, input: PostReviewInput): Promise<PostedReview>;
@@ -76,6 +78,17 @@ export interface GitHostActions {
   prHead(ref: PrRef): Promise<string>;
   /** Merges the PR, with the method the repository allows (a merge commit if it can), and says which. */
   mergeIntoEpicBranch(link: TaskLink, input: EpicMergeInput): Promise<{ method: MergeMethod }>;
+  /**
+   * Merges the one open PR of a task flagged for auto-merge into the default branch, as merge_task_pr does (mergeTaskPr:
+   * it refuses, with the reason, a task that isn't flagged or isn't ready), at `expectedHeadOid`. Moves it to Done.
+   */
+  mergeAutoMergeTask(
+    taskId: string,
+    input: { expectedHeadOid: string; via: string },
+    actor: string,
+  ): Promise<MergeTaskPrResult>;
+  /** Reads a PR link again now and stores it (after a merge moved its base); never throws. */
+  rereadPr(link: TaskLink): Promise<void>;
   ensureEpicPr(input: EpicPrInput): Promise<{ number: number; url: string; created: boolean }>;
   setPrBody(ref: PrRef, body: string): Promise<void>;
   /** The PR's unresolved review threads and newest commits, read now. */
@@ -88,7 +101,11 @@ export interface GitHostActions {
 }
 
 /** The actions, each sent to the host serving its PR, after checking the CLI is signed in there. */
-export function gitHostActions(hosts: GitHosts, merges: Pick<PrMerges, "mergeIntoEpicBranch">): GitHostActions {
+export function gitHostActions(
+  hosts: GitHosts,
+  merges: Pick<PrMerges, "mergeIntoEpicBranch">,
+  extra: Partial<Pick<GitHostActions, "mergeAutoMergeTask" | "rereadPr">> = {},
+): GitHostActions {
   const on = async (host: string): Promise<GitHost> => {
     const found = await hosts.resolve(host);
     if (!found) {
@@ -105,6 +122,8 @@ export function gitHostActions(hosts: GitHosts, merges: Pick<PrMerges, "mergeInt
     postReview: async (ref, input) => (await on(ref.host)).postReview(ref, input),
     prHead: async (ref) => (await on(ref.host)).prHead(ref),
     mergeIntoEpicBranch: (link, input) => merges.mergeIntoEpicBranch(link, input),
+    mergeAutoMergeTask: extra.mergeAutoMergeTask ?? unavailable,
+    rereadPr: extra.rereadPr ?? (() => Promise.resolve()),
     ensureEpicPr: async (input) => (await on(input.host)).ensurePr(input),
     setPrBody: async (ref, body) => (await on(ref.host)).setPrBody(ref, body),
     reviewThreads: async (ref) => (await on(ref.host)).reviewThreads(ref),
@@ -160,6 +179,8 @@ export const NO_GIT_HOSTS: GitHostActions = {
   postReview: unavailable,
   prHead: unavailable,
   mergeIntoEpicBranch: unavailable,
+  mergeAutoMergeTask: unavailable,
+  rereadPr: () => Promise.resolve(),
   ensureEpicPr: unavailable,
   setPrBody: unavailable,
   reviewThreads: unavailable,
