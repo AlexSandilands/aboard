@@ -106,6 +106,21 @@ describe("merge_task_pr", () => {
     expect(merges()[0]!.input).toMatchObject({ mergeMethod: "MERGE" });
   });
 
+  it("refuses when the signed-in account can't merge, naming the host", async () => {
+    gh.repos.set("o/r", {
+      squashMergeAllowed: true,
+      mergeCommitAllowed: true,
+      rebaseMergeAllowed: false,
+      autoMergeAllowed: true,
+      viewerPermission: "READ",
+    });
+    const task = await reviewTask({ autoMerge: true });
+    const result = await call("merge_task_pr", { task: `#${task.number}` });
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain("the signed-in GitHub account can't merge it");
+    expect(merges()).toEqual([]);
+  });
+
   it("refuses unless the user turned auto-merge on for the task", async () => {
     for (const autoMerge of [undefined, null, false]) {
       const task = await reviewTask(autoMerge === undefined ? {} : { autoMerge });
