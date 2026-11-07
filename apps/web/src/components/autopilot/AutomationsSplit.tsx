@@ -71,11 +71,10 @@ import {
   type AutomationReach,
   type LastRun,
 } from "./automationList.logic";
-import { BOARD_MODES, boardModeToSave, boardSwitchValue } from "./autopilot.logic";
 import { bundleFilename } from "./customAutomationImport.logic";
 import { BlockedWarning, NeedsVariablesWarning } from "./InputsAndSlots";
-import { ModeSwitch } from "./ModeSwitch";
 import { RunHistoryLink } from "./RunHistoryLink";
+import { WhereItRuns } from "./WhereItRuns";
 
 const BUILTIN_ICONS: Record<string, LucideIcon> = {
   [AUTOPILOT_START_PLANNED]: PlayIcon,
@@ -304,37 +303,12 @@ function AutomationDetail({
           </div>
         </div>
       </DetailSection>
-      <DetailSection title="Where it runs">
-        <SettingsRow
-          id={`autopilot.automations.${automation.key}.board`}
-          title="Whole board"
-          description="On for the board: every project, unless a project or epic switches it off for itself."
-          control={
-            <ModeSwitch
-              label={`${automation.title} for the board`}
-              modes={BOARD_MODES}
-              value={boardSwitchValue(entry.mode)}
-              disabled={pending}
-              blocked={automation.blocked}
-              onChange={(mode) => onMode(boardModeToSave(mode))}
-            />
-          }
-        />
-        <SettingsRow
-          title="Projects"
-          description={
-            <>
-              A project switches it for itself in its lane&apos;s Autopilot pill, or in{" "}
-              <SettingsLink to="project.autopilot">its settings</SettingsLink>
-              {automation.epicScope ? "; an epic, in its own Autopilot popover." : "."}
-              {automation.key === AUTOPILOT_ORCHESTRATE
-                ? " Each lane's pill also shows the next check and has Run now."
-                : ""}
-            </>
-          }
-          status={reach.projects.length > 0 ? `On in ${reach.projects.join(", ")}` : "On in no project"}
-        />
-      </DetailSection>
+      <WhereItRuns automation={automation} />
+      {automation.key === AUTOPILOT_ORCHESTRATE ? (
+        <p className="px-3 text-xs text-muted-foreground sm:px-4">
+          Each lane&apos;s pill also shows Orchestrate&apos;s next check and has Run now.
+        </p>
+      ) : null}
       {essential.length > 0 ? <DetailSection title="Settings">{essential.map(field)}</DetailSection> : null}
       {automation.key === AUTOPILOT_RECURRING ? (
         <DetailSection title="Rules">

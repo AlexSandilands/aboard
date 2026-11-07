@@ -7,43 +7,20 @@ import {
   type AutopilotField,
   type AutopilotScopeEntry,
 } from "@repo/contracts";
-import { ChevronRightIcon } from "lucide-react";
 import { useState } from "react";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
-import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
 import { skillOptions } from "~/components/review/review.logic";
 import { inheritDetail } from "~/components/models/choicePicker.logic";
 import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
 import { ReviewSkillSelect } from "~/components/settings/ReviewSettingsSection";
-import {
-  SETTINGS_TEXT_WIDTH,
-  SettingResetButton,
-  SettingsNote,
-  SettingsRow,
-  UnitInput,
-} from "~/components/settings/settingsLayout";
-import { cn } from "~/lib/utils";
-import { BlockedWarning, NeedsVariablesWarning } from "./InputsAndSlots";
+import { SETTINGS_TEXT_WIDTH, SettingResetButton, SettingsRow, UnitInput } from "~/components/settings/settingsLayout";
 import { useSetAutopilotScope } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotScope, useSettings, useSkills } from "~/state/queries";
 import { toastManager } from "~/components/ui/toast";
-import {
-  BOARD_MODES,
-  boardModeToSave,
-  boardSummary,
-  boardSwitchValue,
-  entryFor,
-  fieldText,
-  inheritLabel,
-  isClockTime,
-  parentEntry,
-  parseNumberField,
-  withConfigValue,
-} from "./autopilot.logic";
-import { ModeSwitch } from "./ModeSwitch";
+import { entryFor, fieldText, isClockTime, parseNumberField, withConfigValue } from "./autopilot.logic";
 import { TimeInput } from "./TimeInput";
 
 /** Sets or clears one key of a scope's config, built from the latest saved config (see useSetAutopilotScope). */
@@ -52,147 +29,33 @@ export type ConfigUpdate = (update: (current: AutopilotConfig) => AutopilotConfi
 export interface AutomationItem {
   automation: AutopilotAutomation;
   entry: AutopilotScopeEntry;
-  inherited: AutopilotScopeEntry | null;
   onMode: (mode: AutopilotScopeEntry["mode"]) => void;
   onConfig: ConfigUpdate;
 }
 
 /**
- * Every automation at a scope, with its entry there and the scope's setters, or the message to show instead while
- * loading, on an error or with no automations. `projectId` null is the board.
+ * Every automation at the board, with its entry there and the board's setters, or the message to show instead while
+ * loading, on an error or with no automations. Where an automation runs below the board is the Where it runs widget's.
  */
-export function useScopeAutomations(projectId: string | null) {
+export function useBoardAutomations() {
   const overview = useAutopilotOverview();
-  const scope = useAutopilotScope(projectId);
-  const board = useAutopilotScope(null, projectId !== null);
+  const scope = useAutopilotScope(null);
   // Bumped when the server rejects a save, so the form controls drop the text it refused.
   const [rejected, setRejected] = useState(0);
-  const set = useSetAutopilotScope(projectId, () => setRejected((n) => n + 1));
+  const set = useSetAutopilotScope(null, () => setRejected((n) => n + 1));
   const automations = overview.data?.automations;
-  const failed = overview.error ?? scope.error ?? board.error;
+  const failed = overview.error ?? scope.error;
   // The forms send a scope's whole config, so they wait for the real entries rather than editing stand-ins.
-  const loaded = automations && scope.data && (projectId === null || board.data);
+  const loaded = automations && scope.data;
   if (!loaded) return { message: failed ? failed.message : "Loading automations...", items: [] };
   if (automations.length === 0) return { message: "No automations are installed yet.", items: [] };
   const items = automations.map((automation): AutomationItem => ({
     automation,
     entry: entryFor(scope.data, automation),
-    inherited: projectId ? parentEntry(board.data, automation.key) : null,
     onMode: (mode) => set.mutate({ automation: automation.key, mode }),
     onConfig: (config) => set.mutate({ automation: automation.key, config }),
   }));
   return { message: null, items, pending: set.isPending, rejected };
-}
-
-/**
- * One row per automation at a scope: its Inherit / On / Off switch (On / Off at the board), and a form for its config
- * generated from the automation's field descriptors. `projectId` null is the board. Config set here applies at this
- * scope only; a key left alone inherits (from the board, for a project; from the automation's default, for the board).
- */
-export function AutomationRows({ projectId }: { projectId: string | null }) {
-  const { message, items, pending = false, rejected = 0 } = useScopeAutomations(projectId);
-  if (message) return <SettingsNote>{message}</SettingsNote>;
-  return (
-    <>
-      {items.map((item) => (
-        <AutomationRow
-          key={item.automation.key}
-          {...item}
-          projectId={projectId}
-          pending={pending}
-          rejected={rejected}
-        />
-      ))}
-    </>
-  );
-}
-
-function AutomationRow({
-  automation,
-  entry,
-  inherited,
-  projectId,
-  pending,
-  rejected,
-  onMode,
-  onConfig,
-}: {
-  automation: AutopilotAutomation;
-  entry: AutopilotScopeEntry;
-  inherited: AutopilotScopeEntry | null;
-  projectId: string | null;
-  pending: boolean;
-  rejected: number;
-  onMode: (mode: AutopilotScopeEntry["mode"]) => void;
-  onConfig: ConfigUpdate;
-}) {
-  const [open, setOpen] = useState(false);
-  const where = projectId ? "this project" : "the board";
-  const board = projectId === null;
-  return (
-    <SettingsRow
-      title={automation.title}
-      description={automation.description}
-      status={
-        board
-          ? boardSummary(entry.mode)
-          : entry.mode === "inherit"
-            ? inheritLabel(inherited)
-            : `Set to ${entry.mode} for ${where}`
-      }
-      control={
-        <ModeSwitch
-          label={`${automation.title} for ${where}`}
-          modes={board ? BOARD_MODES : undefined}
-          value={board ? boardSwitchValue(entry.mode) : entry.mode}
-          disabled={pending}
-          blocked={automation.blocked}
-          onChange={board ? (mode) => onMode(boardModeToSave(mode)) : onMode}
-        />
-      }
-    >
-      {automation.blocked ? (
-        <div className="mt-2">
-          <BlockedWarning reason={automation.blocked} />
-        </div>
-      ) : null}
-      {automation.needs ? (
-        <div className="mt-2">
-          <NeedsVariablesWarning needs={automation.needs} />
-        </div>
-      ) : null}
-      {automation.fields.length ? (
-        <Collapsible open={open} onOpenChange={setOpen} className="mt-1">
-          <CollapsibleTrigger className="-ms-1 inline-flex h-6 items-center gap-1 rounded-md px-1 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
-            <ChevronRightIcon
-              aria-hidden
-              className={cn("size-3 transition-transform motion-reduce:transition-none", open && "rotate-90")}
-            />
-            Settings
-          </CollapsibleTrigger>
-          {/* Edge to edge in the row, so the field rows inside line up with every other row of the card. The panel clips
-              its content, so the bleed is on the panel itself. The negative margins undo SettingsRow's own padding
-              (px-3 sm:px-4, pb-3 under children), so they must follow it, and this disclosure must stay the row's last
-              child. */}
-          <CollapsiblePanel className="-mx-3 -mb-3 mt-3 border-t border-border/50 sm:-mx-4">
-            <div className="[&>*+*]:border-t [&>*+*]:border-border/50">
-              {automation.fields.map((field) => (
-                <AutomationField
-                  key={field.key}
-                  automation={automation}
-                  field={field}
-                  entry={entry}
-                  projectId={projectId}
-                  rejected={rejected}
-                  onConfig={onConfig}
-                />
-              ))}
-            </div>
-          </CollapsiblePanel>
-        </Collapsible>
-      ) : null}
-    </SettingsRow>
-  );
 }
 
 /**

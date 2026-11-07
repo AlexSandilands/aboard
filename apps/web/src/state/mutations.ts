@@ -1,3 +1,4 @@
+import { applyWhereWrites, type WhereWrite } from "@repo/contracts";
 import type {
   DeleteTasksResult,
   AddLinkResult,
@@ -7,6 +8,7 @@ import type {
   AskSettingsResult,
   AutopilotConfig,
   AutopilotEngineSettings,
+  AutopilotModeRow,
   AutopilotOverview,
   AutopilotRun,
   AutopilotScopeEntry,
@@ -597,6 +599,40 @@ export function useSetAutopilotScope(projectId: string | null, onRejected?: () =
         description: error instanceof Error ? error.message : String(error),
       });
     },
+  });
+}
+
+/**
+ * Saves the scope writes an edit in the Where it runs widget came to (see `autopilotWhere.ts` in contracts), one PUT
+ * each, in order. The widget's rows update at once and are put back if one is refused.
+ */
+export function useApplyWhere(automation: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (writes: ReadonlyArray<WhereWrite>) => {
+      for (const { target, mode } of writes) {
+        const path =
+          target.kind === "board"
+            ? "board"
+            : target.kind === "project"
+              ? `projects/${enc(target.id)}`
+              : `projects/${enc(target.projectId)}/epics/${enc(target.id)}`;
+        await api(`/api/autopilot/${path}/${enc(automation)}`, { method: "PUT", body: { mode } });
+      }
+    },
+    scope: { id: `autopilot-where:${automation}` },
+    onMutate: (writes) => {
+      queryClient.setQueryData<AutopilotModeRow[]>(queryKeys.autopilotModes, (rows) =>
+        rows ? applyWhereWrites(rows, automation, writes) : rows,
+      );
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll }),
+    onError: (error) =>
+      toastManager.add({
+        type: "error",
+        title: "Couldn't save where it runs",
+        description: error instanceof Error ? error.message : String(error),
+      }),
   });
 }
 

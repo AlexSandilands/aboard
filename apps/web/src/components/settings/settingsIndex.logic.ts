@@ -640,9 +640,9 @@ const WRITTEN: ReadonlyArray<Draft> = [
   ),
   draft(
     "project.autopilot.automations",
-    "Autopilot overrides",
-    "Switch automations on or off for this project, over the board's setting.",
-    ["automations", "inherit", "override", "per project"],
+    "Automations",
+    "What each automation does in this project, and where it runs, with a link to change it.",
+    ["automations", "inherit", "override", "per project", "where it runs"],
   ),
   draft(
     "project.autopilot.variables",

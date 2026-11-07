@@ -162,7 +162,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
       section("project.plan-skill", "Planning skill"),
       section("project.review-skill", "Review skill"),
       section("project.models", "Reviewer model", ["models", "review model", "board reviewer"]),
-      section("project.autopilot", "Autopilot overrides", ["automations"]),
+      section("project.autopilot", "Automations", ["automations"]),
       section("project.recurring", "Recurring tasks", ["schedule", "rules"]),
       section("project.danger-zone", "Danger zone", ["archive", "delete"]),
     ],

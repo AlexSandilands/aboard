@@ -3,6 +3,7 @@ import type {
   AgentCliStatus,
   AgentModels,
   AppSettings,
+  AutopilotModeRow,
   AutopilotOverview,
   AutopilotActiveRun,
   AutopilotRun,
@@ -70,6 +71,8 @@ export const queryKeys = {
   autopilotScopeAll: ["autopilotScope"] as const,
   /** The board scope when `projectId` is null. */
   autopilotScope: (projectId: string | null) => ["autopilotScope", projectId] as const,
+  /** Every switch that is set at any scope; under the scope prefix so each autopilot change refreshes it. */
+  autopilotModes: ["autopilotScope", "modes"] as const,
   /** An epic's scope, under its project's. */
   autopilotEpicScope: (projectId: string, epicId: string) => ["autopilotScope", projectId, epicId] as const,
   /** Every runs query, for invalidation. */
@@ -133,6 +136,16 @@ export function useAutopilotProjectScopes(projectIds: readonly string[]) {
         api<AutopilotScopeEntry[]>(`/api/autopilot/projects/${encodeURIComponent(projectId)}`, { signal }),
       staleTime: 30_000,
     })),
+  });
+}
+
+/** Every switch that is set at any scope (board, projects, epics), for the Where it runs widget. One read, not one per scope. */
+export function useAutopilotModes(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.autopilotModes,
+    queryFn: ({ signal }) => api<AutopilotModeRow[]>("/api/autopilot/modes", { signal }),
+    enabled,
+    staleTime: 30_000,
   });
 }
 

@@ -11,7 +11,7 @@ import { bulkAutoMerge, bulkAutopilot, bulkAutoReview } from "./bulkMenu.logic";
  * "Turn Autopilot / auto-merge / auto-review on / off" for one card or several picked ones. Each item applies to the
  * cards it would change and is left out when that is none, so a card shows only the item that does something and a
  * mixed pick shows both. Epics, manual and archived cards never match (see `automationEligible`), so the items
- * disappear for them. Labels follow the panel's Automation section.
+ * disappear for them. Labels follow the chips in the panel's Autopilot section.
  */
 export function AutomationMenuItems({ tasks }: { tasks: readonly TaskSummary[] }) {
   const actions = useBulkActions();

@@ -96,11 +96,8 @@ export function RecurringSection({ project }: { project: Project }) {
             title="Recurring tasks is off for this project"
             description={
               <>
-                Rules only run while it is on. Switch it on under{" "}
-                <SettingsLink to="project.autopilot" project={project.id}>
-                  Autopilot overrides
-                </SettingsLink>
-                , or from the Autopilot pill on the lane.
+                Rules only run while it is on. Switch it on from the Autopilot pill on the lane, or{" "}
+                <SettingsLink to="autopilot.automations.recurring">where it runs</SettingsLink> in Settings → Autopilot.
               </>
             }
           />

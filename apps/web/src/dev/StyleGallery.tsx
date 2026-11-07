@@ -78,9 +78,7 @@ import {
 } from "~/components/ui/sidebar";
 import { Skeleton } from "~/components/ui/skeleton";
 import { PILL_CLASS_NAME, pillClassName, PillIcon, PillLabel } from "~/components/autopilot/AutopilotPill";
-import { ModeSwitch } from "~/components/autopilot/ModeSwitch";
 import { PausedNotice, ScopeCard, ScopeRow, ScopeSectionLabel, ScopeSkeleton } from "~/components/autopilot/ScopeRow";
-import { scopeRowModel } from "~/components/autopilot/autopilot.logic";
 import { FoldedSettingsSection, SettingsRow, SettingsSection, StatusDot } from "~/components/settings/settingsLayout";
 import { Spinner } from "~/components/ui/spinner";
 import { Switch } from "~/components/ui/switch";
@@ -467,38 +465,30 @@ export function StyleGallery() {
             <Spinner size="xs" aria-hidden role="presentation" />
             Autopilot
           </Badge>
-          {/* The popover's switch: On is blue when chosen, and Inherit's note is blue while it resolves to On. */}
-          <ModeSwitch label="Chosen: On" value="on" onChange={() => {}} />
-          <ModeSwitch label="Chosen: Inherit" value="inherit" onChange={() => {}} />
-          <span className="text-2xs text-info-foreground">Inherit (On from board)</span>
-          <span className="text-2xs text-muted-foreground">Inherit (Off by default)</span>
         </Section>
 
-        <Section title="Autopilot popover: rows (following the board, set here, blocked), paused, loading, epic delivery card">
+        <Section title="Autopilot popover: rows (with where it runs, blocked), paused, loading, epic delivery card">
           <div className="flex w-96 flex-col gap-2">
             <PausedNotice onResume={() => {}} />
             <ScopeSectionLabel>Automations</ScopeSectionLabel>
             <ScopeCard>
               {(
                 [
-                  ["Review PRs", { mode: "inherit", enabled: true, source: "board" }, null],
-                  ["Fix PRs", { mode: "inherit", enabled: false, source: "default" }, null],
-                  ["Digest", { mode: "on", enabled: true, source: "project" }, null],
-                  ["Start planned tasks", { mode: "off", enabled: false, source: "project" }, null],
-                  [
-                    "Scheduled agent",
-                    { mode: "inherit", enabled: false, source: "default" },
-                    "Pick a tool for the agent.",
-                  ],
+                  ["Review PRs", true, "On everywhere", null],
+                  ["Fix PRs", false, "Off everywhere", null],
+                  ["Digest", true, "On everywhere except docs", null],
+                  ["Start planned tasks", false, "On only in storefront", null],
+                  ["Scheduled agent", false, "Off everywhere", "Pick a tool for the agent."],
                 ] as const
-              ).map(([name, entry, blocked]) => (
+              ).map(([name, checked, where, blocked]) => (
                 <ScopeRow
                   key={name}
                   name={name}
                   description={`${name}: what it does, as a tooltip.`}
                   label={name}
-                  model={scopeRowModel(entry, blocked, "project")}
-                  scope="project"
+                  checked={checked}
+                  where={where}
+                  blocked={blocked}
                   onChange={() => {}}
                 />
               ))}
@@ -533,7 +523,7 @@ export function StyleGallery() {
               id="gallery.folded"
               title="Folded section"
               summary="Inherit (Off by default)"
-              control={<ModeSwitch label="Folded section" value="inherit" onChange={() => {}} />}
+              control={<Switch size="sm" aria-label="Folded section" checked={false} onCheckedChange={() => {}} />}
             >
               <p className="px-4 py-3 text-xs text-muted-foreground">What it does, then its settings.</p>
             </FoldedSettingsSection>

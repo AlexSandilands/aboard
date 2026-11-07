@@ -1,4 +1,9 @@
-import { type AutopilotEngineSettings, type FindingSeverity, type UpdateAutopilotEngineInput } from "@repo/contracts";
+import {
+  type AutopilotAutomation,
+  type AutopilotEngineSettings,
+  type FindingSeverity,
+  type UpdateAutopilotEngineInput,
+} from "@repo/contracts";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { toastManager } from "~/components/ui/toast";
@@ -7,13 +12,17 @@ import {
   SettingsNote,
   SettingsRow,
   SettingsSection,
+  StatusDot,
   UnitInput,
 } from "~/components/settings/settingsLayout";
+import { useOpenSettings } from "~/components/settings/settingsNavigation";
+import { Button } from "~/components/ui/button";
 import { useUpdateAutopilotEngine } from "~/state/mutations";
 import { useAutopilotOverview } from "~/state/queries";
-import { AutomationRows } from "./AutomationRows";
 import { parseLimit } from "./autopilot.logic";
 import { TimeInput } from "./TimeInput";
+import { scopeIsOn } from "./where.logic";
+import { useWhere } from "./useWhere";
 import { BoardVariablesSection } from "./VariablesSection";
 
 const FIX_THRESHOLDS: ReadonlyArray<{ value: FindingSeverity; label: string }> = [
@@ -36,12 +45,55 @@ export function AutopilotLimits() {
   return <EngineSections engine={overview.data.engine} />;
 }
 
-/** A project's own Autopilot switches and config, in its settings. */
+/**
+ * A project's Autopilot in its settings, read only: what each automation does here and why, with a Change link to the
+ * automation's Where it runs in Settings → Autopilot. The one place that edits where an automation runs, besides the
+ * lane's pill, is that widget.
+ */
 export function ProjectAutopilotSection({ projectId }: { projectId: string }) {
+  const overview = useAutopilotOverview();
   return (
-    <SettingsSection id="project.autopilot.automations" title="Autopilot overrides">
-      <AutomationRows projectId={projectId} />
+    <SettingsSection id="project.autopilot.automations" title="Automations">
+      {!overview.data ? (
+        <SettingsNote>{overview.error ? overview.error.message : "Loading automations..."}</SettingsNote>
+      ) : overview.data.automations.length === 0 ? (
+        <SettingsNote>No automations are installed yet.</SettingsNote>
+      ) : (
+        overview.data.automations.map((automation) => (
+          <ProjectAutomationRow key={automation.key} automation={automation} projectId={projectId} />
+        ))
+      )}
     </SettingsSection>
+  );
+}
+
+function ProjectAutomationRow({ automation, projectId }: { automation: AutopilotAutomation; projectId: string }) {
+  const { input, description } = useWhere(automation);
+  const openSettings = useOpenSettings();
+  const on = input ? scopeIsOn(input, { kind: "project", id: projectId }) : null;
+  return (
+    <SettingsRow
+      title={automation.title}
+      description={description ? description.sentence : "Loading..."}
+      status={
+        on === null ? null : (
+          <span className="flex items-center gap-1.5">
+            <StatusDot tone={on ? "success" : "muted"} label={on ? "On here" : "Off here"} />
+            {on ? "On here" : "Off here"}
+          </span>
+        )
+      }
+      control={
+        <Button
+          size="xs"
+          variant="outline"
+          aria-label={`Change where ${automation.title} runs`}
+          onClick={() => openSettings(`autopilot.automations.${automation.key}`)}
+        >
+          Change
+        </Button>
+      }
+    />
   );
 }
 

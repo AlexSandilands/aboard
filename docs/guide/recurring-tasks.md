@@ -8,8 +8,9 @@ board creates the task, and you or an agent do the work.
 
 Open the project's settings (the gear beside it in the sidebar, or right-click it) and go to **Recurring tasks**.
 
-1. Switch **Recurring tasks** on under **Autopilot overrides** on the same page (or from the Autopilot pill on the project's
-   lane, which also links here with **Recurring tasks…**). Until then no rule in the project runs.
+1. Switch **Recurring tasks** on for the project: from the Autopilot pill on the project's lane (which also links here
+   with **Recurring tasks…**), or under **Where it runs** for Recurring tasks in Settings → Autopilot (the project's
+   own **Automations** section on this page has a **Change** button that opens it). Until then no rule in the project runs.
 2. **New rule**, or **Add** one of the examples (dependency bumps, security audit, docs drift check, stale
    branch and worktree cleanup, flaky test sweep, release prep, renewing the T3 token). An example adds a
    template for the project, which you can edit under Settings → Tasks → New tasks.

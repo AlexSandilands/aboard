@@ -40,6 +40,11 @@ export function registerAutopilotRoutes(app: Hono, { services, integrations }: A
     handle((c) => c.json(autopilot.setPaused(false))),
   );
 
+  // Registered before the scope routes: every set switch at every scope, for the Where it runs widget.
+  app.get(
+    "/api/autopilot/modes",
+    handle((c) => c.json(autopilot.modes())),
+  );
   app.get(
     "/api/autopilot/board",
     handle((c) => c.json(autopilot.scope("board", null))),

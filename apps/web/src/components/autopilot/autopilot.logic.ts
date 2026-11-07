@@ -1,12 +1,10 @@
 import {
-  describeInherited,
   isRetried,
   ScheduledAgentRunOutput,
   type AutopilotActiveRun,
   type AutopilotAutomation,
   type AutopilotConfig,
   type AutopilotField,
-  type AutopilotMode,
   type AutopilotRun,
   type AutopilotScopeEntry,
   type AutopilotStatus,
@@ -68,91 +66,6 @@ export function pillTooltip(state: PillState, activeRuns: number, subject: "proj
     case "off":
       return `Autopilot is off for this ${subject}`;
   }
-}
-
-// ── Switches ─────────────────────────────────────────────────────────────
-
-export const AUTOPILOT_MODES: ReadonlyArray<{ value: AutopilotMode; label: string }> = [
-  { value: "inherit", label: "Inherit" },
-  { value: "on", label: "On" },
-  { value: "off", label: "Off" },
-];
-
-/**
- * The board is the top scope, so Inherit there only falls back to the built-in default, which is Off: its switch
- * offers On and Off alone.
- */
-export const BOARD_MODES = AUTOPILOT_MODES.filter((mode) => mode.value !== "inherit");
-
-/** The board switch's choice for a stored mode: no row (inherit) reads as Off. */
-export const boardSwitchValue = (mode: AutopilotMode): AutopilotMode => (mode === "inherit" ? "off" : mode);
-
-/**
- * The mode to save for a board switch choice. Off is saved as inherit, which drops the board's row unless it still
- * holds config, since both resolve to Off.
- */
-export const boardModeToSave = (mode: AutopilotMode): AutopilotMode => (mode === "off" ? "inherit" : mode);
-
-/** What the board switch's row says about the choice. */
-export const boardSummary = (mode: AutopilotMode): string => (mode === "on" ? "On for the board" : "Off for the board");
-
-/**
- * What the Inherit choice resolves to at a project or epic, e.g. "Inherit (On from board)". `parent` is the entry at
- * the scope above (the board's, for a project; the project's, for an epic, which already resolves through the board);
- * without one (still loading) it reads as off by default.
- */
-export function inheritLabel(parent: Pick<AutopilotScopeEntry, "enabled" | "source"> | null | undefined): string {
-  return describeInherited(parent ?? { enabled: false, source: "default" });
-}
-
-/** The entry for `automation` at the scope above (the board's for a project, the project's for an epic), which Inherit follows. */
-export function parentEntry(
-  parentEntries: ReadonlyArray<AutopilotScopeEntry> | undefined,
-  automation: string,
-): AutopilotScopeEntry | null {
-  return parentEntries?.find((entry) => entry.automation === automation) ?? null;
-}
-
-/** What one row of a project's or epic's Autopilot popover shows: a switch that is faded while it follows the scope above. */
-export interface ScopeRowModel {
-  /** What the automation resolves to here, whether set at this scope or inherited. */
-  checked: boolean;
-  /** True while the scope sets nothing (Inherit): the switch is faded and there is nothing to reset. */
-  inherited: boolean;
-  /** The mode a click on the switch saves. It is always an explicit On or Off; the reset button saves Inherit. */
-  nextMode: "on" | "off";
-  /** False when a click would turn on an automation that can't be (`blocked`). Turning off always works. */
-  canToggle: boolean;
-  blocked: string | null;
-  /** The switch's tooltip: where its state comes from. */
-  note: string;
-}
-
-/**
- * The row for one automation at a project or epic. `entry` already resolves through the scopes above (`enabled` and
- * `source` are what Inherit would give), so the row needs no entry from the parent scope.
- */
-export function scopeRowModel(
-  entry: Pick<AutopilotScopeEntry, "mode" | "enabled" | "source">,
-  blocked: string | null,
-  scope: "project" | "epic",
-): ScopeRowModel {
-  const inherited = entry.mode === "inherit";
-  const nextMode = entry.enabled ? "off" : "on";
-  const state = entry.enabled ? "On" : "Off";
-  const note = !inherited
-    ? `${state} for this ${scope}`
-    : entry.source === "default"
-      ? `${state} by default`
-      : `${state}, following the ${entry.source}`;
-  return {
-    checked: entry.enabled,
-    inherited,
-    nextMode,
-    canToggle: !(nextMode === "on" && blocked),
-    blocked,
-    note,
-  };
 }
 
 // ── Config forms ─────────────────────────────────────────────────────────
