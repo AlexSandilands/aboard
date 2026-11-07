@@ -416,8 +416,8 @@ export type AutopilotHintAction = z.infer<typeof AutopilotHintAction>;
 
 /**
  * A rule-based suggestion for tuning an automation (no model reads anything), with one click to apply it. `id` names
- * the situation, so a dismissed hint comes back only when the situation changes (another cap, other tasks, a new
- * failure).
+ * the situation, so a dismissed hint comes back only when the situation changes (a new give-up, other tasks, a new
+ * failure, another week or day). Applying one dismisses it too.
  */
 export const AutopilotHint = z.object({
   id: z.string(),

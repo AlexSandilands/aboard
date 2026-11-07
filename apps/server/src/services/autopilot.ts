@@ -562,12 +562,13 @@ export function createAutopilotService(
     const runs = repos.autopilotRuns.automationSince(automation, since);
     const real = runs.filter((r) => !r.dryRun);
     const acted = real.filter((r) => r.status !== "skipped");
-    const gaveUp = (budget: string) =>
-      new Set(
-        real
-          .map((r) => unretiredKey(r.dedupeKey))
-          .filter((k) => k.startsWith(FIX_GAVE_UP_KEY_PREFIX) && k.endsWith(`:${budget}`)),
-      ).size;
+    // Newest first, as the repo lists them.
+    const gaveUpRuns = (budget: string) =>
+      real.filter((r) => {
+        const k = unretiredKey(r.dedupeKey);
+        return k.startsWith(FIX_GAVE_UP_KEY_PREFIX) && k.endsWith(`:${budget}`);
+      });
+    const gaveUp = (budget: string) => new Set(gaveUpRuns(budget).map((r) => unretiredKey(r.dedupeKey))).size;
     return {
       automation,
       since,
@@ -577,6 +578,7 @@ export function createAutopilotService(
       spendUsd: real.reduce((sum, r) => sum + (r.costUsd ?? 0), 0),
       wouldRun: runs.length - real.length,
       gaveUp: { review: gaveUp("review"), comments: gaveUp("comments") },
+      lastGaveUp: { review: gaveUpRuns("review")[0]?.id ?? null, comments: gaveUpRuns("comments")[0]?.id ?? null },
       days: days.map((day, i) => {
         const end = days[i + 1]?.toISOString() ?? "\uffff";
         const start = day.toISOString();

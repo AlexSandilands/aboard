@@ -377,6 +377,7 @@ describe("GET /api/autopilot/automations/:automation/week", () => {
       spendUsd: 0.75,
       wouldRun: 1,
       gaveUp: { review: 2, comments: 1 },
+      lastGaveUp: { review: "run-006", comments: "run-007" },
     });
     expect(week.days).toHaveLength(7);
     expect(week.days.at(-1)).toMatchObject({ runs: 5, failed: 1 });

@@ -27,6 +27,7 @@ export function RunHistoryRow({
   taskNumber,
   open,
   onOpenChange,
+  paused = false,
   selecting,
   checked,
   disabled = false,
@@ -42,6 +43,8 @@ export function RunHistoryRow({
   taskNumber: number | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Its automation paused itself in the run's project: a retry would only wait for Resume, so none is offered. */
+  paused?: boolean;
   /** Clean up's select mode: a checkbox per run. */
   selecting: boolean;
   checked: boolean;
@@ -53,7 +56,7 @@ export function RunHistoryRow({
   const cost = formatCost(run.costUsd);
   const summary = answer?.summary || run.summary;
   // A deferred run's work comes round again by itself, on the new head: retrying it would redo nothing.
-  const retryable = run.deferred === null && canRetryRun(run, others);
+  const retryable = run.deferred === null && !paused && canRetryRun(run, others);
   const where = [projectTitle, taskNumber !== null ? `#${taskNumber}` : null].filter(Boolean).join(" ");
   return (
     <li className="text-xs">

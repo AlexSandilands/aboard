@@ -50,6 +50,7 @@ const week = (over: Partial<AutomationWeek> = {}): AutomationWeek => ({
   spendUsd: 0,
   wouldRun: 0,
   gaveUp: { review: 0, comments: 0 },
+  lastGaveUp: { review: null, comments: null },
   days: [],
   lastRuns: [],
   ...over,
@@ -94,21 +95,28 @@ describe("failureStreak", () => {
 
 describe("automationHints", () => {
   it("offers to raise the attempt cap Fix PRs gave up at", () => {
-    const hints = automationHints(input({ week: week({ gaveUp: { review: 4, comments: 1 } }) }));
+    const hints = automationHints(
+      input({ week: week({ gaveUp: { review: 4, comments: 1 }, lastGaveUp: { review: "g4", comments: "c1" } }) }),
+    );
     expect(hints).toEqual([
       expect.objectContaining({
-        id: "gave_up:fix_prs:review:3",
-        text: "Gave up on 4 PRs this week after 3 attempts on its review and failing checks.",
+        id: "gave_up:fix_prs:review:g4",
+        text: "Gave up on 4 PRs this week after running out of attempts on its review and failing checks (the limit is 3).",
         action: { kind: "engine", label: "Raise to 4", patch: { prReviewRounds: 4 } },
       }),
     ]);
   });
 
   it("raises the comment cap for review comments, and never past 10", () => {
-    const comments = automationHints(input({ week: week({ gaveUp: { review: 0, comments: 2 } }) }));
+    const comments = automationHints(
+      input({ week: week({ gaveUp: { review: 0, comments: 2 }, lastGaveUp: { review: null, comments: "c2" } }) }),
+    );
     expect(comments[0]?.action).toMatchObject({ patch: { prCommentRounds: 6 } });
     const capped = automationHints(
-      input({ week: week({ gaveUp: { review: 3, comments: 0 } }), engine: { prReviewRounds: 10, prCommentRounds: 5 } }),
+      input({
+        week: week({ gaveUp: { review: 3, comments: 0 }, lastGaveUp: { review: "g3", comments: null } }),
+        engine: { prReviewRounds: 10, prCommentRounds: 5 },
+      }),
     );
     expect(capped).toEqual([]);
   });

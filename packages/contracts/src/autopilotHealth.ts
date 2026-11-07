@@ -66,6 +66,8 @@ export const AutomationWeek = z.object({
   wouldRun: z.number().int(),
   /** PRs Fix PRs gave up on, by attempt budget: its review and failing checks, or review comments. */
   gaveUp: z.object({ review: z.number().int(), comments: z.number().int() }),
+  /** The newest give-up run of each budget this week, so a hint about them is new only once another one comes. */
+  lastGaveUp: z.object({ review: z.string().nullable(), comments: z.string().nullable() }),
   /** Oldest first, one per local day ("2026-11-07"). */
   days: z.array(z.object({ date: z.string(), runs: z.number().int(), failed: z.number().int() })),
   /** Its newest real finished runs, newest first. */
@@ -140,12 +142,15 @@ export function automationHints(input: AutomationHintInput): AutopilotHint[] {
   ] as const;
   for (const { budget, count, field, what } of budgets) {
     const cap = engine[field];
-    if (count < 2 || cap >= MAX_PR_ROUNDS) continue;
+    const newest = week.lastGaveUp[budget];
+    if (count < 2 || cap >= MAX_PR_ROUNDS || !newest) continue;
     hints.push({
-      id: `gave_up:${key}:${budget}:${cap}`,
+      // Keyed by the newest give-up, not the cap: raising the cap dismisses it, and only a give-up after that (at the
+      // new cap) brings it back, though the week still counts the older ones.
+      id: `gave_up:${key}:${budget}:${newest}`,
       automation: key,
       tone: "warning",
-      text: `Gave up on ${plural(count, "PR")} this week after ${plural(cap, "attempt")} ${what}.`,
+      text: `Gave up on ${plural(count, "PR")} this week after running out of attempts ${what} (the limit is ${cap}).`,
       action: {
         kind: "engine",
         label: `Raise to ${cap + 1}`,
@@ -191,7 +196,8 @@ export function automationHints(input: AutomationHintInput): AutopilotHint[] {
     const next = Math.min(every * 2, MAX_ORCHESTRATE_MINUTES);
     if (next > every) {
       hints.push({
-        id: `busy:${key}:${every}`,
+        // Once a week at most: the week's count doesn't drop the moment the interval goes up.
+        id: `busy:${key}:${week.since}`,
         automation: key,
         tone: "info",
         text: `Ran ${week.runs} times this week. If most runs found nothing to do, checking every ${next} minutes costs less.`,

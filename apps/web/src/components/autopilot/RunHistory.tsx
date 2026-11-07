@@ -191,6 +191,7 @@ export function RunHistory({
         error={history.error?.message ?? null}
         narrowed={isNarrowed(search)}
         automationTitles={catalogue}
+        paused={new Set(overview.data?.autoPaused.map((p) => `${p.automation}:${p.projectId}`) ?? [])}
         selecting={selecting}
         selected={selected}
         selectionFull={full}
@@ -393,6 +394,7 @@ function RunList({
   error,
   narrowed,
   automationTitles,
+  paused,
   selecting,
   selected,
   selectionFull,
@@ -411,6 +413,8 @@ function RunList({
   error: string | null;
   narrowed: boolean;
   automationTitles: ReadonlyArray<{ key: string; title: string }>;
+  /** `automation:projectId` of each auto-pause. */
+  paused: ReadonlySet<string>;
   selecting: boolean;
   selected: ReadonlySet<string>;
   /** Nothing more can be ticked. */
@@ -470,6 +474,7 @@ function RunList({
               projectTitle={projectTitle(run.projectId)}
               taskNumber={taskNumber(run.taskId)}
               open={opened.has(run.id)}
+              paused={paused.has(`${run.automation}:${run.projectId}`)}
               onOpenChange={(open) => onOpen(run.id, open)}
               selecting={selecting}
               checked={selected.has(run.id)}

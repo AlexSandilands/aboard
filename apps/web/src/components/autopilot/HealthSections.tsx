@@ -119,27 +119,29 @@ export function useApplyHint() {
   const updateTask = useUpdateTask();
   const navigate = useNavigate();
   const dismiss = useDismissHint();
-  const done = (hint: AutopilotHint) => {
+  /** Applied: the hint has done its job, and comes back only if its situation does. */
+  const applied = (hint: AutopilotHint) => {
     if (hint.done) toastManager.add({ type: "success", title: hint.done });
+    dismiss.mutate(hint.id);
   };
   const apply = async (hint: AutopilotHint, target: HintTarget | undefined) => {
     const { action } = hint;
     switch (action.kind) {
       case "engine":
-        engine.mutate(action.patch, { onSuccess: () => done(hint) });
+        engine.mutate(action.patch, { onSuccess: () => applied(hint) });
         return;
       case "board_config":
         if (!target) return;
         target.onConfig((current) => withConfigValue(current, action.key, action.value));
-        done(hint);
+        applied(hint);
         return;
       case "flag_tasks":
         await Promise.all(action.taskIds.map((id) => updateTask.mutateAsync({ id, autopilot: true })));
-        done(hint);
+        if (hint.done) toastManager.add({ type: "success", title: hint.done });
         return;
       case "ask_agent":
         await copyFixPrompt(action.prompt, hint.done);
-        // Handed over: the hint has done its job until the next failure.
+        // Handed over: until the next failure.
         dismiss.mutate(hint.id);
         return;
       case "open_limits":
