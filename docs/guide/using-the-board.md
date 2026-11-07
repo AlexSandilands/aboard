@@ -214,7 +214,7 @@ Every open task has a hand-off menu. **Copy prompt** copies a ready-to-paste pro
 **New T3 Code thread…** starts a thread for the task directly.
 
 A task of an epic delivered through an integration branch (the branch button in the epic's panel; see
-[Merge into epic branch](autopilot.md#merge-into-epic-branch)) is handed off to start from that branch: the prompt
+[Merge ready PRs](autopilot.md#merge-ready-prs)) is handed off to start from that branch: the prompt
 says to open its pull request against it, and the T3 dialog opens on a new worktree from it.
 
 When Claude Code, Codex or Copilot CLI is installed and added in **Settings → Agents → Providers** (on your PATH, or at the path

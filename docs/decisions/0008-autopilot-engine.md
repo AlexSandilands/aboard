@@ -33,10 +33,10 @@ scheduled agent run, or rules inside the server that start an agent only when an
 - **Limits.** Pause all stops new runs (running ones finish). Quiet hours, the concurrency cap and the daily
   run and spend caps hold back only runs that start an agent, which are the ones that cost money and touch code.
   Held candidates aren't recorded; a later pass picks them up.
-- **Safety.** Autopilot never merges into the default branch, closes or deletes tasks, never force-pushes and
-  never pushes to the default branch. Runners and automations must keep to that; it isn't a setting. The one merge
-  it may make is a task's PR into its epic's integration branch, when the user set the epic to integration
-  delivery (Merge into epic branch, #123); `checkAutopilotMergeTarget` in `integrations/github.ts` refuses any
+- **Safety.** Autopilot never closes or deletes tasks, never force-pushes and never pushes to the default branch.
+  Runners and automations must keep to that; it isn't a setting. It merges into the default branch only as the next
+  point says (amended by #127). Its other merge is a task's PR into its epic's integration branch, when the user set
+  the epic to integration delivery (Merge into epic branch, now Merge ready PRs, #123); `checkAutopilotMergeTarget` in `integrations/github.ts` refuses any
   other target, the default branch above all, on GitHub's own reading just before the merge. The epic's PR into the
   default branch is only ever opened as a draft and described; the user merges it.
 - **Into the default branch: only `merge_task_pr`, only for flagged tasks.** (Amended for the orchestrator agent,
@@ -48,8 +48,18 @@ scheduled agent run, or rules inside the server that start an agent only when an
   default (`into: "epic"`) still refuses the default branch. Headless runs keep their `gh pr merge` deny rule, so
   the tool is the only way, and the gate can't be skipped. The agent chooses which flagged PR to merge and when,
   since it can see the board and order merges so they don't conflict; the server decides whether it may.
-  Autopilot's **Orchestrate** automation (#138) is such an agent: its run reaches the default branch only through
-  that same tool, so only for flagged tasks, and its **May merge** setting off denies it the tool outright.
+  Autopilot's **Orchestrate** automation (#138) was such an agent, with a **May merge** setting.
+- **Autopilot merges flagged tasks into the default branch itself, through the same path.** (Amended by #127.)
+  Merging moved out of Orchestrate into **Merge ready PRs** (the old Merge into epic branch, key `merge_epic_prs`),
+  whose **Into main** (off by default) merges the PRs of tasks flagged for auto-merge. It needs no agent, which reads
+  no untrusted text and so can't be talked into an order. It doesn't get a raw default-branch merge either: its
+  `GitHostActions.mergeAutoMergeTask` is `merge_task_pr`'s own `mergeTaskPr`, so the flag, the gate
+  (`autoMergeVerdict`) and `checkAutopilotMergeTarget` with `into: "default"` all hold, at the head it checked. It
+  merges one PR at a time per repository and waits until the others have been read again after each merge, which is
+  the ordering the agent used to provide. Orchestrate is now denied `merge_task_pr` always and only reports what
+  looks ready, so exactly two things merge into the default branch without the user's click: this automation and an
+  agent the user runs, both only for flagged tasks. A migration switched Into main on wherever Orchestrate had May
+  merge on, so nothing that merged before stops.
 - **Retrying a run is not a limit.** (#138.) `retry_autopilot_run` (and the panel's Retry) hands a failed or
   skipped run back to the engine by retiring its dedupe key. The engine still decides, under the switches, pause and
   caps, so agents may call it; it is the one Autopilot tool they get.

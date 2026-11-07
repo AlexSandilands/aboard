@@ -1171,6 +1171,36 @@ const autopilot: Scenario = (s, opts) => {
     s.autopilot.setScope("board", null, key, { mode: "on" });
   }
   s.autopilot.setScope("board", null, "fix_prs", { config: { resolveThreads: false } });
+  // Merge ready PRs (Into main off): an epic delivering through a branch of its own, and Review tasks flagged
+  // Auto-merge, the last held for an approval only the user gives.
+  s.autopilot.setScope("board", null, "merge_epic_prs", { mode: "on" });
+  const epic = s.tasks.summaries({}).find((t) => t.kind === "epic");
+  if (epic) s.tasks.setDelivery(epic.id, "integration", epicBranchName(epic), "user");
+  const flagged = s.tasks
+    .summaries({})
+    .filter((t) => t.kind !== "epic" && t.status === "review" && !t.integrationBranch)
+    .slice(0, 2);
+  for (const t of flagged) s.tasks.update(t.id, { autoMerge: true }, "user");
+  const held = flagged.at(-1);
+  if (held) {
+    const run = s.autopilot.record({
+      automation: "merge_epic_prs",
+      candidate: {
+        dedupeKey: `main-hold:${held.id}:seed`,
+        summary: `say why #${held.number} can't merge`,
+        taskId: held.id,
+      },
+      dryRun: false,
+    });
+    if (run) {
+      s.autopilot.start(run.id);
+      s.autopilot.finish(run.id, {
+        status: "skipped",
+        summary: `Ready to merge into main, but Autopilot won't merge #${held.number} by itself: it still needs an approving review. Merge it yourself, or fix that.`,
+        needsAttention: true,
+      });
+    }
+  }
   s.customAutomations.draft(
     {
       automation: {

@@ -45,7 +45,10 @@ export function deliveryHintApplies(
   return (open.length >= 2 && related) || open.filter((c) => c.status === "planned").length >= 3;
 }
 
-/** Autopilot's "Merge into epic branch": merges task PRs into an integration epic's branch and keeps its PR. */
+/**
+ * Autopilot's "Merge ready PRs" (the key is from when it was "Merge into epic branch"): merges task PRs into an
+ * integration epic's branch and keeps its PR, and with Into main on, merges tasks flagged Auto-merge into main.
+ */
 export const AUTOPILOT_MERGE_EPIC_PRS = "merge_epic_prs";
 
 /**

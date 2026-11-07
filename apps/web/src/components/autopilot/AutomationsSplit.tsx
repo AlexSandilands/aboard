@@ -74,6 +74,7 @@ import {
 } from "./automationList.logic";
 import { bundleFilename } from "./customAutomationImport.logic";
 import { BlockedWarning, NeedsVariablesWarning } from "./InputsAndSlots";
+import { MergeTargets } from "./MergeTargets";
 import { RunHistoryLink } from "./RunHistoryLink";
 import { useWhere } from "./useWhere";
 import { WhereItRuns } from "./WhereItRuns";
@@ -332,7 +333,11 @@ function AutomationDetail({
           Each lane&apos;s pill also shows Orchestrate&apos;s next check and has Run now.
         </p>
       ) : null}
-      {essential.length > 0 ? <DetailSection title="Settings">{essential.map(field)}</DetailSection> : null}
+      {automation.key === AUTOPILOT_MERGE_EPIC_PRS ? (
+        <MergeTargets automation={automation} entry={entry} rejected={rejected} onConfig={onConfig} />
+      ) : essential.length > 0 ? (
+        <DetailSection title="Settings">{essential.map(field)}</DetailSection>
+      ) : null}
       {automation.key === AUTOPILOT_RECURRING ? (
         <DetailSection title="Rules">
           <SettingsRow

@@ -215,8 +215,8 @@ so a saved layout that names it loses that id (its hidden and collapsed choice w
 The Autopilot section (`AutopilotSection`) is where a task's Autopilot settings and runs are. Its first part is
 `AutopilotFlags`, the task's automation settings (the old Automation section, #168, merged in by #125): **Autopilot
 may** with three chips, **start it** (`autopilot`: whether Start planned tasks may start it), **review it** (`autoReview`:
-whether moving to Review opens a local review round) and **merge it** (`autoMerge`: whether `merge_task_pr` may merge
-its PR); **Reviewer** (the task's [reviewer model](local-review.md#the-reviewer-model) in the shared model picker:
+whether moving to Review opens a local review round) and **merge it** (`autoMerge`: whether its PR may merge into the
+default branch without the user: by `merge_task_pr`, or by Autopilot's Merge ready PRs with Into main on); **Reviewer** (the task's [reviewer model](local-review.md#the-reviewer-model) in the shared model picker:
 Inherit, which names what the project's or board's comes down to, a tier, a custom model or a provider's model; shown
 only while review is effectively on); a **Priority** switch; and **For a person** (the old Manual task switch). A chip is
 on or off: the data keeps Default / On / Off, but off saves Default (null), which acts as Off for start and merge and

@@ -9,7 +9,11 @@ export type MayFlag = "start" | "review" | "merge";
 export const MAY_FLAGS: ReadonlyArray<{ flag: MayFlag; label: string; hint: string }> = [
   { flag: "start", label: "start it", hint: "Start planned tasks may start this task once it is planned" },
   { flag: "review", label: "review it", hint: "Open a local review round when the task moves to Review" },
-  { flag: "merge", label: "merge it", hint: "An agent may merge this task's pull request with merge_task_pr" },
+  {
+    flag: "merge",
+    label: "merge it",
+    hint: "This task's pull request may merge into main without you: by Autopilot's Merge ready PRs (with Into main on) or an agent's merge_task_pr",
+  },
 ];
 
 /**

@@ -167,15 +167,18 @@ This repo's own `main` requires green checks but no approval ([GitHub setup](git
 
 The MCP tool `merge_task_pr(task, method?)` lets an agent (the orchestrator of an epic, say) merge a task's PR into
 the default branch, for tasks the user allowed to be merged that way ([ADR 0008](../decisions/0008-autopilot-engine.md)).
+Autopilot's Merge ready PRs, with **Into main** on, merges through the same `mergeTaskPr` (with `expectedHeadOid`, so
+only at the head it checked), one PR at a time per repository ([Autopilot](autopilot.md#merge-ready-prs)). The rules
+below are `autoMergeVerdict`, which both share.
 
 - **The flag.** `tasks.auto_merge`: null (Default) and 0 (Off) refuse, 1 (On) allows. Set in the REST task update
   (`autoMerge`) or by an agent with `create_task` / `add_to_backlog` / `update_task` (`autoMerge: "default" | "on" | "off"`),
   only once the user has said so. The server can't tell an agent from the user, so an agent could set On unasked; it is
   trusted like the Autopilot flag, and the gate below limits the harm ([ADR 0008](../decisions/0008-autopilot-engine.md)). Epics can't have it. The task detail shows `Auto-merge:` when set, and the task panel's Autopilot section sets it (the **merge it** chip).
-- **Refused** (a `VALIDATION` error with the reason, `mergeTaskPr` in `integrations/mergeTaskPr.ts`) for an epic, a
+- **Refused** (a `VALIDATION` error with the reason, `autoMergeVerdict` and `mergeTaskPr` in `integrations/mergeTaskPr.ts`) for an epic, a
   task without the flag On, a task in an epic delivered through an integration branch (Autopilot merges those), a
   task with no PR, or more than one, not merged or closed, a PR from a fork, and whenever `notMergeable`
-  ([Autopilot's gate](autopilot.md#merge-into-epic-branch)) gives a reason: not in Review, PR not open or a draft,
+  ([Autopilot's gate](autopilot.md#merge-ready-prs)) gives a reason: not in Review, PR not open or a draft,
   local review going or blocking/major findings open, a Review PRs or Fix PRs run going, Review PRs (when on) not
   clean at the head, changes requested, checks not passing (or none for 10 minutes), not cleanly mergeable, GitHub saying it is blocked (a required check not reported yet) unless only a review is missing. Also when
   an approving review is still required, the account can't merge, or the repo doesn't allow the method asked for.
@@ -272,7 +275,7 @@ still unknown, one merge mustn't finish a task whose other PR is open.
 | `apps/server/src/integrations/gh.ts`                     | Running `gh`                                                    |
 | `apps/server/src/integrations/index.ts`                  | Starts the integrations, `refreshLink`, `mergePr`, `mergeTaskPr` |
 | `apps/server/src/integrations/mergeTaskPr.ts`            | `merge_task_pr`'s checks and merge into the default branch      |
-| `apps/server/src/autopilot/mergeGate.ts`                 | `notMergeable`, the gate shared with Merge into epic branch     |
+| `apps/server/src/autopilot/mergeGate.ts`                 | `notMergeable`, the gate shared with Merge ready PRs            |
 | `apps/server/src/mcp/tools/merge.ts`                     | The `merge_task_pr` tool                                        |
 | `apps/server/src/services/links.ts`                      | Adding links, `setSnapshot`, `completeOnMerge`                  |
 | `apps/server/src/db/codeMigrations.ts`                   | Re-classifying stored PR links                                  |

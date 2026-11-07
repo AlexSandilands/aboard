@@ -2,10 +2,10 @@
 
 Autopilot lets the board act on its own. It is a list of **automations**, each of which watches the board and
 does something when it's needed. Everything is off until you switch it on, and Autopilot never closes or deletes a
-task, force-pushes, or pushes to the default branch. It merges in two cases only: a task's pull request into its
-epic's integration branch, for an epic you set to deliver that way ([Merge into epic branch](#merge-into-epic-branch)),
-and, through [Orchestrate](#orchestrate), a task's pull request into the default branch when you turned auto-merge on
-for that task.
+task, force-pushes, or pushes to the default branch. It merges in two cases only, both through
+[Merge ready PRs](#merge-ready-prs): a task's pull request into its epic's integration branch, for an epic you set to
+deliver that way, and, if you switch on **Into main**, a task's pull request into the default branch when you turned
+auto-merge on for that task.
 
 ## Switching automations on
 
@@ -211,7 +211,37 @@ grace period ends, the card goes under **Needs attention** with "Autopilot could
 a notification; nothing retries. Move the task out of Planned and back in to try again. Try it first with
 **Dry run** to see which tasks it would start.
 
-## Merge into epic branch
+## Merge ready PRs
+
+**Merge ready PRs** merges a task's pull request once it is ready: into its epic's branch if the epic has one, or into
+main if you flagged the task **Auto-merge** and switched **Into main** on. It needs no agent, so it costs nothing.
+Ready means all of these hold:
+
+- the task is in Review;
+- its local review has finished with no blocking or major finding open, and Review PRs (when it's on) found nothing at
+  or above the fix threshold at the current commit;
+- no reviewer asked for changes;
+- its checks pass (a repository with no checks waits ten minutes after each push, in case they just haven't started);
+- it merges cleanly.
+
+Anything else waits. Where only you can settle it (GitHub wants an approving review, say), the task shows why under
+**Needs attention** and you get a notification.
+
+It has two targets:
+
+- **Into epic branches** is on whenever the automation is on. A task in an epic with its own branch merges into that
+  branch, never into main. Example: #12 Card vault is in epic #5, which delivers through `epic/5-one-page-checkout`;
+  when #12's pull request is ready it merges there, and the epic's own pull request into main stays yours.
+- **Into main** is off unless you switch it on. Only tasks you flagged **merge it** (under **Autopilot may** in the task panel's
+  Autopilot section) merge into main, through the same check the `merge_task_pr` tool uses. It merges one pull
+  request at a time per repository and reads the others again after each merge, so a pull request that conflicts
+  with the one that just landed waits for a fix instead of merging. Example: #4 Fix currency rounding is flagged
+  Auto-merge; once its pull request is ready it merges into main and #4 goes to Done.
+
+Switch it on for the board, a project or an epic in **Settings → Autopilot → Merge ready PRs**, and **Into main** there
+too.
+
+### Integration branches
 
 For an epic whose tasks build on each other, waiting for you to merge each pull request before the next task can
 start means the epic stops every time a task is done. An epic can instead deliver through an **integration branch**:
@@ -226,11 +256,8 @@ start means the epic stops every time a task is done. An epic can instead delive
   badge and press **Mark merged into main**.
 - The epic's tasks start from that branch and open their pull requests against it: Start planned tasks, the
   hand-off prompts and **New T3 Code thread…** all default to it.
-- **Merge into epic branch** merges a task's pull request into the epic's branch once all of
-  these hold: the task is in Review, its local review has finished with no blocking or major finding open, Review
-  PRs (when it's on) found nothing at or above the fix threshold at the current commit, no reviewer asked for
-  changes, its checks pass (a repository with no checks waits ten minutes after each push, in case they just
-  haven't started) and it merges cleanly. The task then goes to Done, so the tasks it blocks can start from the updated branch.
+- **Merge ready PRs** merges a task's pull request into the epic's branch once it is ready (above). The task then
+  goes to Done, so the tasks it blocks can start from the updated branch.
 - It merges with a merge commit if the repository allows one, otherwise a squash, otherwise a rebase, going by the
   repository's settings when it merges (and moving to the next method if GitHub refuses one, for example because of a
   branch rule). A squash-only repository therefore gets squashed task commits on the epic's branch. That can
@@ -244,17 +271,21 @@ start means the epic stops every time a task is done. An epic can instead delive
   the default branch, Fix PRs merges the default branch in. **Only you merge that pull request.**
 - You can go back to pull requests to main until one of the epic's tasks has started.
 
-Switch **Merge into epic branch** on for the epic (or its project). It needs no agent and has no settings.
+Switch **Merge ready PRs** on for the epic (or its project).
 
-## Letting an agent merge into the default branch
+## Auto-merge into the default branch
 
-Autopilot never merges into the default branch. An agent you run (one orchestrating an epic, say) can, with the
-`merge_task_pr` tool, but only for a task you've allowed it on: turn on **merge it** under **Autopilot may**
-in the task panel's Autopilot section, or tell the agent to turn it on (`update_task` with `autoMerge: "on"`). The board can't tell an
-agent from you, so any agent with the board's tools could set it; agents are told to only when you ask. The board then merges the task's pull request only once it is in
-Review, its local review and Autopilot's review are finished and clean, nobody requested changes, its checks pass and
-it merges cleanly, and only at the commit it checked. The agent picks the order, so the tasks' pull requests don't
-conflict. Without the flag, the tool refuses and the merge stays yours.
+A task's pull request reaches the default branch without you only when you've allowed it on that task: set
+**merge it** under **Autopilot may** in the task panel's Autopilot section, or tell an agent to turn it on (`update_task` with
+`autoMerge: "on"`). The board can't tell an agent from you, so any agent with the board's tools could set it; agents
+are told to only when you ask. Then two things may merge it, both through the same check (ready, above), and only at
+the commit it checked:
+
+- **Merge ready PRs** with **Into main** on, by itself, one at a time per repository;
+- an agent you run (one orchestrating an epic, say), with the `merge_task_pr` tool. The agent picks the order, so the
+  tasks' pull requests don't conflict.
+
+Without the flag both refuse and the merge stays yours.
 
 ## Orchestrate
 
@@ -264,8 +295,7 @@ its work moving, like a T3 Code thread you'd leave watching the board:
 - it nudges a task's thread that has gone quiet, or starts one when the task has none working;
 - it retries an Autopilot run that failed or was cut short (a review lost to a board restart, say);
 - it tells a thread to fix failing checks or conflicts, and re-runs a flaky CI job once;
-- with **May merge** on (the default), it merges ready pull requests of tasks you turned **auto-merge** on for, one
-  at a time, and checks the others are still green afterwards. Turn it off to have it only list them;
+- it lists the pull requests that look ready to merge. It never merges: [Merge ready PRs](#merge-ready-prs) does that;
 - it flags a task under **Needs attention** when only you can decide something.
 
 It works through the board's tools and `gh`, never edits code, and runs only while the project has work going on, so
