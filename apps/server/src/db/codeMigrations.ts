@@ -1,6 +1,7 @@
 import {
   AgentHarness,
   AUTOPILOT_DIGEST,
+  AUTOPILOT_MERGE_EPIC_PRS,
   AUTOPILOT_ORCHESTRATE,
   AUTOPILOT_REVIEW_PRS,
   classifyLink,
@@ -26,6 +27,7 @@ export const CODE_MIGRATIONS: Readonly<Record<string, (db: Db) => void>> = {
   "036_ticket_systems_settings": jiraSettingsToTicketSystem,
   "040_providers_settings": seedProviders,
   "041_operation_models": operationModels,
+  "043_merge_ready_prs": mergeReadyPrs,
 };
 
 /**
@@ -285,4 +287,62 @@ function operationModels(db: Db): void {
     upsert.run("modelTiers", JSON.stringify(next));
   }
   if (Array.isArray(profiles)) upsert.run("modelProfiles", JSON.stringify(profiles.map(renamed)));
+}
+
+/**
+ * Orchestrate loses May merge, and Merge ready PRs (merge_epic_prs) gains Into main (#127). Wherever Orchestrate was
+ * on with May merge (on unless switched off), Merge ready PRs is switched on with Into main at that scope, so tasks
+ * flagged for auto-merge keep landing there. A project where Orchestrate was on but May merge off, under a board that
+ * gets Into main, gets Into main off. An explicit Off for Merge ready PRs at a scope is the user's and stays. The
+ * stored May merge values are dropped.
+ */
+function mergeReadyPrs(db: Db): void {
+  type Row = { scope_kind: string; scope_id: string; mode: string; config_json: string };
+  const rows = (automation: string) =>
+    db
+      .prepare("SELECT scope_kind, scope_id, mode, config_json FROM autopilot_settings WHERE automation = ?")
+      .all(automation) as Row[];
+  const configOf = (row: Row | undefined): Record<string, unknown> => {
+    try {
+      const parsed: unknown = row ? JSON.parse(row.config_json) : {};
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  };
+  const now = new Date().toISOString();
+  const merges = rows(AUTOPILOT_MERGE_EPIC_PRS);
+  const setMerge = (kind: string, id: string, intoMain: boolean, switchOn: boolean) => {
+    const existing = merges.find((r) => r.scope_kind === kind && r.scope_id === id);
+    const mode = existing?.mode === "off" ? "off" : switchOn ? "on" : (existing?.mode ?? "inherit");
+    const config = JSON.stringify({ ...configOf(existing), intoMain });
+    db.prepare(
+      `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (scope_kind, scope_id, automation) DO UPDATE SET mode = excluded.mode,
+         config_json = excluded.config_json, updated_at = excluded.updated_at`,
+    ).run(kind, id, AUTOPILOT_MERGE_EPIC_PRS, mode, config, now);
+  };
+
+  const orchestrate = rows(AUTOPILOT_ORCHESTRATE);
+  const board = orchestrate.find((r) => r.scope_kind === "board");
+  const boardOn = board?.mode === "on";
+  const boardMay = configOf(board).mayMerge !== false;
+  const boardIntoMain = boardOn && boardMay;
+  if (boardIntoMain) setMerge("board", "", true, true);
+  for (const row of orchestrate.filter((r) => r.scope_kind === "project")) {
+    const on = row.mode === "on" || (row.mode === "inherit" && boardOn);
+    const config = configOf(row);
+    const may = typeof config.mayMerge === "boolean" ? config.mayMerge : boardMay;
+    if (on && may) setMerge("project", row.scope_id, true, true);
+    else if (on && boardIntoMain) setMerge("project", row.scope_id, false, false);
+  }
+
+  const strip = db.prepare(
+    "UPDATE autopilot_settings SET config_json = ? WHERE automation = ? AND scope_kind = ? AND scope_id = ?",
+  );
+  for (const row of orchestrate) {
+    const { mayMerge: _dropped, ...rest } = configOf(row);
+    strip.run(JSON.stringify(rest), AUTOPILOT_ORCHESTRATE, row.scope_kind, row.scope_id);
+  }
 }

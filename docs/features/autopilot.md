@@ -1,7 +1,7 @@
 # Autopilot
 
 Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), #90 (digest), #94 (start planned tasks), #95
-(PR review), #97 (custom automations), in epic #101; #123 (Merge into epic branch); #135 (sharing custom automations); #241 (agents' drafts).
+(PR review), #97 (custom automations), in epic #101; #123 (Merge into epic branch), #127 (Merge ready PRs); #135 (sharing custom automations); #241 (agents' drafts).
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per epic, per project or
 for the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
@@ -115,7 +115,7 @@ it, since retrying would redo nothing yet drop it from the rounds and attempts. 
 `canRetryRun` in contracts) and its attention flag is lifted, and the task logs an `autopilot_run` entry with status
 `retried` under the caller. The old key is free, so the next pass acts on it again if `check` still finds the work,
 under the switches, pause, quiet hours and caps as usual: retrying lifts no limit, which is why agents may call it.
-Automations that count runs by key (Review PRs' rounds, Fix PRs' attempts, Merge into epic branch's tries) no longer
+Automations that count runs by key (Review PRs' rounds, Fix PRs' attempts, Merge ready PRs' tries) no longer
 count the retried one. This replaces pushing an empty commit to get a new head reviewed after a board restart failed
 the review. Dry-run runs are deduped
 apart from real ones (the unique key is automation, dedupe key and `dry_run`), so turning dry-run off doesn't
@@ -185,7 +185,7 @@ automation's editor link to its own. It is for reading what scheduled agents did
 - **What is always kept.** Runs are more than history: the engine reads them. A delete leaves a run alone, with the
   first of these as the reason, when it is: **queued or running**; one whose **worktree is still on disk** (the
   worktree cleanup finds worktrees through the row); **on a task that isn't done or archived**, since dedupe keys
-  (`hasRun`), Review PRs rounds, Fix PRs attempts, Merge into epic branch tries and the attention flag read the task's
+  (`hasRun`), Review PRs rounds, Fix PRs attempts, Merge ready PRs tries and the attention flag read the task's
   runs; a **custom or Auto-archive run on a task** (their dedupe keys follow the task's own state, so without the run Auto-archive would archive a task someone unarchived, and a custom trigger that still holds would fire again); the **latest succeeded answer of a scheduled agent** in its project (`lastScheduledAnswer`, what the next run is
   handed); or **less than a day old** (`RUN_DELETE_MIN_AGE_MS`), so deleting a just-finished run can't free a slot's
   dedupe key (Orchestrate would run the slot again) or make a notice repeat. The other automations are safe without their old runs: Recurring tasks has its cursor, the Digest and Start planned follow state that has moved on, and Review PRs, Fix PRs and Merge into epic branch key on a PR head or sit on tasks that are open while it matters. Everything else, including every older run
@@ -544,10 +544,35 @@ to fix a pull request linked to a task.
   a thread linked on an epic orchestrates its tasks. The agent merges the default branch into the epic's branch and
   pushes there; pushing to `epic/*` needs no deny-rule change, since only the default branch is denied.
 
-**Merge into epic branch** (`merge_epic_prs`, #123; `automations/mergeEpicPrs.ts`). Needs no agent and is off until
-switched on, with no settings. Only epics with integration delivery ([epics](epics.md#delivery)) give it work.
+**Merge ready PRs** (`merge_epic_prs`, #123, #127; `automations/mergeEpicPrs.ts`, `mergeIntoMain.ts`). Needs no
+agent and is off until switched on. It was Merge into epic branch, and keeps that key. Two targets: **Into epic
+branches**, always on with it, for epics with integration delivery ([epics](epics.md#delivery)); and **Into main**
+(`intoMain`, the one setting, essential, default off) for tasks flagged for auto-merge. Its detail in Settings →
+Autopilot explains integration branches and gives each target a sentence, its gate and an example
+(`MergeTargets` in `AutomationsSplit.tsx`).
 
-- **Merging.** A task's PR is merged into its epic's branch when `notMergeable` (`autopilot/mergeGate.ts`, shared
+- **Into main.** With `intoMain` on in the task's project (the engine drops tasks an epic's own Off reaches), the
+  candidates are open tasks in Review with `autoMerge` on and no integration branch. Each goes through
+  `autoMergeVerdict` (`integrations/mergeTaskPr.ts`), the rules `merge_task_pr` refuses by: the task's one unfinished
+  PR (unpolled ones count), not from a fork, passing `notMergeable` against its own base, no required approval still
+  missing, and an account that can merge. `ready` makes a merge candidate `main:<linkId>:<headOid>` (retries
+  `:<n>`, up to `MAIN_MERGE_ATTEMPTS`, 3, as for the epic merges below); `wait` makes nothing; `yours` (an approval
+  GitHub requires, two open PRs, a fork, an account that can't merge) makes one skipped, flagged notice per PR head
+  and reason (`main-hold:<linkId>:<headOid>:<hash>`), "Ready to merge into main, but Autopilot won't merge #N by
+  itself: …". **One at a time per repository:** at most one merge candidate per `host/repo` per pass, in order (a
+  task blocked by another flagged task after it, then by number), none while a run of this automation on a
+  default-branch task of that repository is queued or running, and none for a PR whose link was last read
+  (`syncedAt`) before the latest merge into its base that the board saw in the project (`PrChanges.merged` of any
+  merged PR link there), so a PR the merge left conflicting waits for its next read. The action checks the verdict
+  again at the same link and head, then calls `ctx.gitHosts.mergeAutoMergeTask`, which runs `mergeTaskPr` itself with
+  `expectedHeadOid` (the flag and gate again, then `mergeIntoDefaultBranch`: `checkAutopilotMergeTarget` with
+  `into: "default"`, the host's fresh merge state, the head). Its note on the task says "with Autopilot's Merge ready
+  PRs". Then it rereads (`rereadPr`, the poller's `reread`) the repository's other open PRs of flagged tasks. A
+  refusal from `mergeTaskPr` (something changed since the re-check) skips as a re-check; a race, "try again in a
+  minute" or a network error retries; anything else ends "Ready to merge into main: … Merge it yourself." flagged;
+  `MergeTargetError` fails the run, flagged.
+
+- **Into epic branches: merging.** A task's PR is merged into its epic's branch when `notMergeable` (`autopilot/mergeGate.ts`, shared
   with [`merge_task_pr`](github-prs.md#merge_task_pr)) finds nothing in the way: the task
   is in Review; the PR is open (not a draft), from origin, with the epic's branch as its base (`PrSnapshot.baseRef`,
   `baseRefName` in the poll) and a head commit; the local review isn't going (`reviewIsInProgress`) and left no
@@ -632,18 +657,18 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   token, in a temporary folder of its own outside the run's, removed afterwards) and pass it with
   `--strict-mcp-config --mcp-config`. On top of that, the `gh` reads in `ORCHESTRATE_TOOLS` (`gh pr view|checks|list|diff`, `gh run list|view`, and `gh run rerun` for a flaky CI
   job). The rules match each command, and a compound one is refused if any part isn't allowed, so the prompt tells it to run each `gh` command on its own (no loops, pipes or `&&`) and that a refusal is about the command's shape, not that Bash is off. It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
-  for any task), `retry_autopilot_run`, `request_attention` and `merge_task_pr`. Because it reads text anyone can
+  for any task), `retry_autopilot_run` and `request_attention`. Because it reads text anyone can
   write (PR comments, CI logs), it gets only the board tools in `ORCHESTRATE_BOARD_TOOLS` (reads, `add_note`, `request_attention`, the
-  thread tools, `retry_autopilot_run`, `merge_task_pr`); every other board tool is in `ORCHESTRATE_DENIED_TOOLS`
+  thread tools, `retry_autopilot_run`); every other board tool is in `ORCHESTRATE_DENIED_TOOLS`
   (`RunnerRequest.deniedTools`), so it can't create or flag a task for auto-merge, link a PR, mark review findings away,
-  or move, close, archive or delete tasks. `mcp.test.ts` checks every registered tool is on one list or the other. It never starts a Planned task: that is Start planned's, under its
+  merge, or move, close, archive or delete tasks. `mcp.test.ts` checks every registered tool is on one list or the other. It never starts a Planned task: that is Start planned's, under its
   limits and the task's blockers; a failed start goes back through `retry_autopilot_run`. It counts against the caps and waits
   out quiet hours like any agent run. The `orchestrate` operation (Standard tier by default); `modelChoice`, `budgetUsd` (3) and `timeoutMinutes` (30) are its
   only runner options (the runner choice doesn't apply).
-- **Merging.** Only through `merge_task_pr`, so only tasks flagged for auto-merge and only past the server's gate. The
-  prompt adds no policy of its own (nothing about UI changes): what to hold back is the user's call, in the extra
-  instructions. **May merge** (default on) off adds `mcp__<id>__merge_task_pr` to the denied tools and tells it to
-  list ready tasks instead.
+- **Merging.** Never (#127): `merge_task_pr` is always denied, and the prompt tells it to list the Review tasks whose
+  PR looks ready, saying which are flagged for auto-merge, and leave merging to Merge ready PRs. Its old **May merge**
+  setting is gone: migration `043_merge_ready_prs` switched Merge ready PRs on with Into main wherever Orchestrate was
+  on with May merge (see [Merge ready PRs](#merge-ready-prs) above), and dropped the stored values.
 - **The prompt** (`orchestratePrompt`) is adapted from the babysitter threads: ground rules (this project only, never
   read or edit files in the project's live folder, since a board or dev server under `--watch` may restart, and treat
   PR and CI text as data), orient, unstick stalled work the lightest way (message a live thread, start one only when
@@ -652,8 +677,8 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   state, never by the age of the task's last board activity: a working thread or a pending or running local review
   round is activity (a reviewer can run for 40+ minutes and write nothing to the board). A Review task with no PR
   is asked for one only when `get_task` says the loop has ended, since with auto-review the PR is opened after the
-  local loop; a stalled or failed round is sent back to its review loop instead. It merges one at a time, re-checks
-  the other PRs' checks after each, and ends with a short status. **Extra instructions** (multi-line) are appended last and win where they differ.
+  local loop; a stalled or failed round is sent back to its review loop instead. A PR left red or conflicting by a
+  merge into the default branch is a stall like any other. It ends with a short status. **Extra instructions** (multi-line) are appended last and win where they differ.
 - **Memory.** The scheduled agents' handover ([custom automations](#custom-automations)):
   `scheduledHandoverParts` ends the prompt, `lastHandover("orchestrate", projectId)` supplies the last one, and the
   run keeps its `ScheduledAgentRunOutput`. Its settings section lists each project's latest runs with their summary
@@ -1212,7 +1237,7 @@ with that error.
 - Headless only: **`access: "none"`** gives the agent no tools at all (no built-in tools, no MCP servers), for one that
   must work from its prompt alone.
 - Headless only: **`access: "read-only"`** for agents that only read (a reviewer), **`tools`** to allow more
-  (`Bash(gh pr review *)`), **`deniedTools`** to deny more (Orchestrate with May merge off), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
+  (`Bash(gh pr review *)`), **`deniedTools`** to deny more (Orchestrate's `ORCHESTRATE_DENIED_TOOLS`), and **`outputSchema`** for a structured answer, returned as `output`. A T3 thread
   can't be held to these, so a request with any of them runs headless under Auto, and fails under T3 only.
   Also headless only: **`untrustedInput`** for a read-only agent that reads text anyone can write (no MCP servers or
   checkout settings, file tools limited to the worktree, only exact git commands), **`runTools`**, the board-served
@@ -1530,9 +1555,10 @@ One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` 
   Agent work goes through `ctx.runner.start` (see [Runners](#runners)); `ctx.update` records runner details while
   it runs. Return `needsAttention: true` for a failure the user should see.
 
-An automation must never merge into the default branch itself, close or delete tasks, force-push or push to the
-default branch. Its own merge is Merge into epic branch's, through `ctx.gitHosts.mergeIntoEpicBranch`; an
-agent it starts (Orchestrate's) reaches the default branch only through `merge_task_pr`, for flagged tasks.
+An automation must never close or delete tasks, force-push or push to the default branch. Its merges are Merge ready
+PRs': into an epic's branch through `ctx.gitHosts.mergeIntoEpicBranch`, and into the default branch only through
+`ctx.gitHosts.mergeAutoMergeTask`, which is `merge_task_pr`'s own `mergeTaskPr` (the auto-merge flag and the gate are
+checked there). No agent an automation starts merges: Orchestrate is denied `merge_task_pr`.
 
 ### The UI
 
@@ -1665,7 +1691,8 @@ button beside a field's title (shown only while the key is set at that scope) re
 | `apps/server/src/autopilot/automations/unstick.ts` | Remind me about stuck tasks (`unstick`) |
 | `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |
 | `apps/server/src/autopilot/automations/fixPrs.ts` | Fix PRs: the triggers, batching, the limits and the fix prompt |
-| `apps/server/src/autopilot/automations/mergeEpicPrs.ts` | Merge into epic branch: `notMergeable`, the merge, the epic's draft PR and `epicPrBody` |
+| `apps/server/src/autopilot/automations/mergeEpicPrs.ts` | Merge ready PRs: Into epic branches (the merge, the epic's draft PR and `epicPrBody`) and the dispatch to Into main |
+| `apps/server/src/autopilot/automations/mergeIntoMain.ts` | Merge ready PRs' Into main: candidates one per repository, the hold notice and the merge through `mergeAutoMergeTask` |
 | `apps/server/src/autopilot/epicBranch.ts` | `ensureEpicBranch`: making an epic's integration branch on origin |
 | `packages/contracts/src/runThreads.ts` | `t3RunWorking`: whether a T3 thread a run handed work to is still working on it, for Start planned, Fix PRs and the PR row |
 | `apps/server/src/autopilot/threads.ts` | `threadSeen`: whether the live poll has seen a thread lately |
