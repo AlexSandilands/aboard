@@ -34,7 +34,8 @@ write that made the change, so the change and its notification commit together.
 
 **Reminders** are the three kinds above that nothing changes to produce: `sendReminders` (`autopilot/reminders.ts`) looks
 for them on the Autopilot engine's pass (every minute and after board events), before the Pause all check, so they
-are never held back by it, and quiet hours only mute their pop-ups like any notification. Each runs only while its switch
+are never held back by it, and quiet hours only mute their pop-ups like any notification. Dry run does stop them, as it stops everything that
+would change the board: they send and note nothing, and report what is still true once it is off. Each runs only while its switch
 is on, in every project (it has no Autopilot scope), and adds a note under the actor `autopilot` ("Stale: no activity
 for 26h", "Thread waiting for input for 45m", "Unblocked: #12 finished") when the notification was new. Those notes
 aren't activity, or the note would end the quiet period it reports. A reminder is skipped when a notification with its

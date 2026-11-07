@@ -237,8 +237,9 @@ export function createAutopilotEngine(deps: {
     const s = deps.services();
     const at = now();
     // Reminders only tell the user something, so Pause all doesn't hold them back (notifications.ts has quiet hours).
+    // Dry run does: it promises to change nothing, and a reminder sends a notification and writes a note.
     try {
-      self(() => sendReminders(s, at));
+      if (!s.autopilot.engine().dryRun) self(() => sendReminders(s, at));
     } catch (error) {
       log.warn(`[autopilot] reminders failed: ${messageOf(error)}`);
     }

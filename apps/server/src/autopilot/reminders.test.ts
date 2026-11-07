@@ -148,6 +148,18 @@ describe("reminders", () => {
       expect(sent("task_quiet")).toEqual([`#${task.number} has gone quiet`]);
     });
 
+    it("sends nothing in dry run, and catches up once it is off", async () => {
+      const { s, working, pass, sent, notes } = setup();
+      const task = working();
+      s.autopilot.updateEngine({ dryRun: true });
+      await pass(26 * HOUR_MS);
+      expect(sent("task_quiet")).toEqual([]);
+      expect(notes(task.id)).toEqual([]);
+      s.autopilot.updateEngine({ dryRun: false });
+      await pass(27 * HOUR_MS);
+      expect(sent("task_quiet")).toHaveLength(1);
+    });
+
     it("isn't held back by Pause all, which only stops runs", async () => {
       const { s, working, pass, sent } = setup();
       working();
