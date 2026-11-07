@@ -121,7 +121,9 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
    ..."), `draft_automation(automation, note)` writes it as a draft in the shape of a shared automation file and
    returns a link to its import page. It saves nothing that runs: the user reviews it there, confirms any script,
    fills in its inputs and tool slots, and imports it in Preview (it records what it would do; a check script runs for
-   real) until they turn it on. Give them the link and never say it is set up.
+   real) until they turn it on. Give them the link and never say it is set up. To change one of their custom
+   automations, pass `replaces` (its id or name) with the whole new version: they apply it from a before/after diff
+   and it keeps its id, switches and run history.
    A refused draft lists every problem with where it is; fix them all and call again. Before you write one, use the
    `aboard-automations` skill if it is installed: it covers the triggers, actions, variables, inputs, tool slots and script
    contract, and how to test a script and hand the draft over.

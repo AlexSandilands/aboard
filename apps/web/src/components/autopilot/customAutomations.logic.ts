@@ -23,7 +23,7 @@ import {
   type AutomationInputType,
   type AutomationVariable,
   type CreateCustomAutomationInput as CreateInput,
-  type CustomAutomation,
+  type CustomDefinition,
   type CustomPrEvent,
   type CustomScriptLanguage,
   type CustomTrigger,
@@ -100,14 +100,6 @@ export interface CustomForm {
   timeoutSeconds: string;
 }
 
-export const TRIGGER_KINDS: ReadonlyArray<{ value: CustomTrigger["kind"]; label: string }> = [
-  { value: "status_change", label: "A task changes column" },
-  { value: "pr_event", label: "Something happens on a pull request" },
-  { value: "stale", label: "A task sits in a column too long" },
-  { value: "blocker_finished", label: "A task's last blocker finishes" },
-  { value: "schedule", label: "On a schedule" },
-];
-
 export const PR_EVENTS: ReadonlyArray<{ value: CustomPrEvent; label: string }> = [
   { value: "linked", label: "Linked to the task" },
   { value: "new_head", label: "Gets new commits" },
@@ -161,7 +153,8 @@ export function emptyCustomForm(): CustomForm {
   };
 }
 
-export function formFromCustom(custom: CustomAutomation): CustomForm {
+/** The form for a saved automation, or for any definition (a shared file's, an agent's draft). */
+export function formFromCustom(custom: CustomDefinition): CustomForm {
   const form: CustomForm = {
     ...emptyCustomForm(),
     name: custom.name,
@@ -232,7 +225,8 @@ export const parseAllowedTools = (text: string): string[] =>
 
 const wholeNumber = (value: string): number | null => (/^\d+$/.test(value.trim()) ? Number(value) : null);
 
-function triggerOf(form: CustomForm): CustomTrigger | string {
+/** The form's trigger, or what to fix in it. */
+export function triggerOf(form: CustomForm): CustomTrigger | string {
   switch (form.triggerKind) {
     case "status_change":
       return { kind: "status_change", to: form.to, from: form.from || null };

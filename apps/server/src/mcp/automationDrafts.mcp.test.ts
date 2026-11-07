@@ -198,3 +198,173 @@ describe("draft_automation", () => {
     expect(h.services.customAutomations.list()).toEqual([]);
   });
 });
+
+describe("draft_automation with replaces", () => {
+  let h: Harness;
+  let agent: Client;
+
+  const call = async (args: Record<string, unknown>) => {
+    const result = (await agent.callTool({ name: "draft_automation", arguments: args })) as CallToolResult;
+    const text = result.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
+    return { text, isError: result.isError === true };
+  };
+  const drafts = async () => (await (await h.request("/api/autopilot/drafts")).json()) as AutomationDraft[];
+  const apply = (id: string, json: Record<string, unknown>, headers: Record<string, string> = ORIGIN) =>
+    h.request(`/api/autopilot/drafts/${id}/apply`, { method: "POST", json, headers });
+
+  beforeEach(async () => {
+    // The real built-ins, so a draft that names one is told it can't replace it.
+    h = createTestHarness();
+    agent = await connect(h);
+  });
+  afterEach(async () => {
+    await agent.close();
+    h.db.close();
+  });
+
+  const flakyReport = () => {
+    const alpha = h.services.projects.create({ title: "Alpha" });
+    h.services.projects.create({ title: "Beta" });
+    const custom = h.services.customAutomations.create({
+      name: "Flaky test report",
+      trigger: { kind: "schedule", schedule: { kind: "weekly", days: [1], time: "08:00" } },
+      filters: { projectIds: [alpha.id] },
+      action: {
+        kind: "agent",
+        prompt: "Open a task for {{item.key}} covering the last {{inputs.days}} days.",
+        inputs: [{ name: "days", label: "Days", type: "number", value: "3", default: "7" }],
+        slots: [{ name: "ci", label: "CI logs", tools: ["mcp__ci__logs"] }],
+        check: { language: "node", body: "// v1\n" },
+        untrustedItems: false,
+      },
+    });
+    const key = `custom:${custom.id}`;
+    h.services.autopilot.setScope("board", null, key, { mode: "on" });
+    h.services.autopilot.record({
+      automation: key,
+      candidate: { dedupeKey: "seed:1", summary: "a run" },
+      dryRun: false,
+    });
+    return { custom, key, alpha };
+  };
+
+  const changed = {
+    name: "Flaky test report",
+    trigger: { kind: "schedule", schedule: { kind: "weekly", days: [1, 4], time: "08:00" } },
+    action: {
+      kind: "agent",
+      prompt: "Open a task for {{item.key}} covering the last {{inputs.days}} days, from the {{inputs.branch}} branch.",
+      check: { language: "node", body: "// v2: skips quarantined tests\n" },
+      untrustedItems: false,
+    },
+    inputs: [
+      { name: "days", label: "Days", type: "number", default: "7" },
+      { name: "branch", label: "Branch", type: "text", default: "main" },
+    ],
+    slots: [{ name: "ci", label: "CI logs" }],
+  };
+
+  it("applies a change in place: same id, switches, projects and run history, inputs and slots kept by name", async () => {
+    const { custom, key, alpha } = flakyReport();
+
+    const { text, isError } = await call({ automation: changed, replaces: key, note: "Twice a week." });
+
+    expect(isError).toBe(false);
+    expect(text).toContain('Proposed a change to "Flaky test report"');
+    const [draft] = await drafts();
+    expect(draft!.replaces).toBe(custom.id);
+    expect(h.services.autopilot.overview().needsYou).toContainEqual(
+      expect.objectContaining({ kind: "draft", replaces: { id: custom.id, name: "Flaky test report" } }),
+    );
+
+    // The check script changed, so it must be read and confirmed, from the board's page.
+    expect((await apply(draft!.id, {})).status).toBe(400);
+    expect((await apply(draft!.id, { confirmScript: true }, {})).status).toBe(400);
+    const applied = await apply(draft!.id, { confirmScript: true });
+
+    expect(applied.status).toBe(200);
+    const [after, ...others] = h.services.customAutomations.list();
+    expect(others).toEqual([]);
+    expect(after!.id).toBe(custom.id);
+    expect(after!.trigger).toMatchObject({ schedule: { days: [1, 4] } });
+    expect(after!.filters.projectIds).toEqual([alpha.id]);
+    expect(after!.action).toMatchObject({
+      kind: "agent",
+      check: { body: "// v2: skips quarantined tests\n" },
+      inputs: [
+        { name: "days", value: "3" },
+        { name: "branch", value: "main" },
+      ],
+      slots: [{ name: "ci", tools: ["mcp__ci__logs"] }],
+    });
+    expect(h.db.prepare("SELECT mode FROM autopilot_settings WHERE automation = ?").get(key)).toEqual({ mode: "on" });
+    expect(h.db.prepare("SELECT count(*) AS n FROM autopilot_runs WHERE automation = ?").get(key)).toEqual({ n: 1 });
+    expect(await drafts()).toEqual([]);
+  });
+
+  it("finds the automation by its name, and needs no confirmation when the scripts are unchanged", async () => {
+    const { custom } = flakyReport();
+
+    await call({
+      automation: { ...changed, action: { ...changed.action, check: { language: "node", body: "// v1\n" } } },
+      replaces: "Flaky test report",
+    });
+    const [draft] = await drafts();
+
+    expect(draft!.replaces).toBe(custom.id);
+    expect((await apply(draft!.id, {})).status).toBe(200);
+  });
+
+  it("keeps the automation's own skill unless the reader saves the draft's, which is kept apart", async () => {
+    const { custom, key } = flakyReport();
+    h.services.customAutomations.update(custom.id, {
+      action: { ...custom.action, kind: "agent", skill: "flaky" } as typeof custom.action,
+    });
+    const withSkill = {
+      ...changed,
+      action: { ...changed.action, skill: "flaky", check: { language: "node", body: "// v1\n" } },
+      skill: { name: "flaky", body: "# New text" },
+    };
+    const installed: string[] = [];
+    const install = (skill: { name: string }) => {
+      installed.push(skill.name);
+      return { name: `${skill.name}-2`, path: `/skills/${skill.name}-2`, renamed: true };
+    };
+
+    await call({ automation: withSkill, replaces: key });
+    const [kept] = await drafts();
+    const left = h.services.customAutomations.applyDraft(kept!.id, {}, install);
+    expect(left.automation.action).toMatchObject({ skill: "flaky" });
+    expect(installed).toEqual([]);
+
+    await call({ automation: withSkill, replaces: key });
+    const [saved] = await drafts();
+    const apart = h.services.customAutomations.applyDraft(saved!.id, { installSkill: true }, install);
+    expect(installed).toEqual(["flaky"]);
+    expect(apart.automation.action).toMatchObject({ skill: "flaky-2" });
+  });
+
+  it("refuses to replace a built-in or an automation that doesn't exist", async () => {
+    flakyReport();
+
+    const builtIn = await call({ automation: changed, replaces: "review_prs" });
+    expect(builtIn.isError).toBe(true);
+    expect(builtIn.text).toContain("built-in");
+
+    const missing = await call({ automation: changed, replaces: "custom:nope" });
+    expect(missing.isError).toBe(true);
+    expect(missing.text).toContain('no custom automation "custom:nope"');
+    expect(await drafts()).toEqual([]);
+  });
+
+  it("won't apply a draft for a new automation, or one whose automation was deleted", async () => {
+    const { custom, key } = flakyReport();
+    await call({ automation: { ...changed, name: "Another report" } });
+    await call({ automation: changed, replaces: key });
+    const [change, fresh] = await drafts();
+
+    expect((await apply(fresh!.id, { confirmScript: true })).status).toBe(400);
+    h.services.customAutomations.delete(custom.id);
+    expect((await apply(change!.id, { confirmScript: true })).status).toBe(404);
+  });
+});

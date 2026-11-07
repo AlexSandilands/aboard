@@ -3,6 +3,7 @@ import {
   actionScripts,
   AUTOMATION_DRAFT_TTL_DAYS,
   AUTOMATION_DRAFTS_MAX,
+  ApplyAutomationDraftInput,
   bundleToDefinition,
   checkAutomationDraft,
   DraftAutomationInput,
@@ -10,6 +11,7 @@ import {
   CUSTOM_NAME_MAX,
   ImportAutomationInput,
   parseAutomationBundle,
+  customAutomationId,
   customAutomationKey,
   epicArmKey,
   CreateCustomAutomationInput,
@@ -65,6 +67,17 @@ export interface CustomAutomationsService {
   /** Throws NOT_FOUND once it has expired or was imported or dismissed. */
   getDraft(id: string): AutomationDraft;
   dismissDraft(id: string): void;
+  /**
+   * Applies a draft that replaces a custom automation: the automation takes the draft's definition in place, keeping
+   * its id, switches, projects, epic and run history. Inputs and slots keep their current values unless given. Deletes
+   * the draft. Throws VALIDATION for a draft that makes a new automation or changes a script not confirmed, NOT_FOUND
+   * when the draft or its automation is gone.
+   */
+  applyDraft(
+    id: string,
+    input: ApplyAutomationDraftInput,
+    installSkill?: (skill: BundleSkill) => InstalledSkill,
+  ): ImportedAutomation;
   /** A changed trigger or filters arm it again, so events before the change don't fire. */
   update(id: string, input: UpdateCustomAutomationInput): CustomAutomation;
   /** Its switches go with it; its runs stay as history. */
@@ -113,6 +126,8 @@ export function createCustomAutomationsService(
     repoUrl: RepoUrls;
     boardVariables: () => readonly AutomationVariable[];
     notifications?: NotificationsService;
+    /** The built-in automations, so a draft that tries to replace one is told it can't. */
+    builtIn?: () => readonly { key: string; title: string }[];
   },
 ): CustomAutomationsService {
   const { repos } = core;
@@ -204,6 +219,24 @@ export function createCustomAutomationsService(
     return draft;
   };
 
+  /** The custom automation a draft's `replaces` names: by id, `custom:<id>` key or name. Refuses a built-in one. */
+  const replaced = (ref: string): CustomAutomation => {
+    const id = customAutomationId(ref) ?? ref;
+    const found = repos.autopilotCustom.get(id) ?? repos.autopilotCustom.byName(ref);
+    if (found) return found;
+    const builtIn = deps.builtIn?.().find((a) => a.key === ref || a.title.toLowerCase() === ref.toLowerCase());
+    if (builtIn) {
+      throw new AppError(
+        "VALIDATION",
+        `replaces names ${builtIn.title}, a built-in automation: a draft can only replace a custom one. Tell the user which of its settings to change instead.`,
+      );
+    }
+    throw new AppError(
+      "NOT_FOUND",
+      `replaces: no custom automation "${ref}". Pass the id of a custom automation (custom:<id>) or its exact name, or leave replaces out to draft a new one.`,
+    );
+  };
+
   const service: CustomAutomationsService = {
     list: () => repos.autopilotCustom.all(),
 
@@ -252,7 +285,8 @@ export function createCustomAutomationsService(
     },
 
     draft(input, createdBy) {
-      const { automation, note } = DraftAutomationInput.parse(input);
+      const { automation, note, replaces } = DraftAutomationInput.parse(input);
+      const target = replaces ? replaced(replaces) : null;
       const checkedDraft = checkAutomationDraft(automation);
       if (!checkedDraft.ok) {
         const { errors } = checkedDraft;
@@ -269,6 +303,7 @@ export function createCustomAutomationsService(
           id: randomUUID(),
           bundle: checkedDraft.bundle,
           note,
+          replaces: target?.id ?? null,
           createdBy,
           createdAt: now.toISOString(),
           expiresAt: new Date(now.getTime() + AUTOMATION_DRAFT_TTL_DAYS * 86_400_000).toISOString(),
@@ -278,8 +313,10 @@ export function createCustomAutomationsService(
         repos.autopilotDrafts.prune(draft.createdAt, AUTOMATION_DRAFTS_MAX);
         deps.notifications?.notify({
           kind: "automation_draft",
-          title: `Automation drafted: ${draft.bundle.name}`,
-          body: `${createdBy} drafted it for you to review. Nothing runs until you import it.`,
+          title: target ? `Change proposed to ${target.name}` : `Automation drafted: ${draft.bundle.name}`,
+          body: target
+            ? `${createdBy} proposed a change for you to review. Nothing changes until you apply it.`
+            : `${createdBy} drafted it for you to review. Nothing runs until you import it.`,
           dedupeKey: `automation_draft:${draft.id}`,
         });
         fx.autopilot();
@@ -297,6 +334,65 @@ export function createCustomAutomationsService(
         repos.autopilotDrafts.delete(id);
         fx.autopilot();
       });
+    },
+
+    applyDraft(id, input, installSkill) {
+      const { inputs, slots, installSkill: wantSkill, confirmScript } = ApplyAutomationDraftInput.parse(input);
+      const draft = getDraft(id);
+      if (!draft.replaces) {
+        throw new AppError("VALIDATION", "This draft is a new automation, not a change: import it instead");
+      }
+      const current = repos.autopilotCustom.get(draft.replaces);
+      if (!current) {
+        throw new AppError(
+          "NOT_FOUND",
+          "The automation this draft changes was deleted. Dismiss the draft, or ask for a new one",
+        );
+      }
+      const { bundle } = draft;
+      // Here, not in the route, so nothing can skip it: a changed script is someone else's code, run as the user.
+      const scripts = actionScripts(bundle.action);
+      const scriptsChanged = JSON.stringify(scripts) !== JSON.stringify(actionScripts(current.action));
+      if (scripts.length > 0 && scriptsChanged && !confirmScript) {
+        throw new AppError(
+          "VALIDATION",
+          "This change runs a new script on your machine as you. Read it and confirm (confirmScript) to apply it",
+        );
+      }
+      const currentInputs = new Map(current.action.inputs.map((i) => [i.name, i.value]));
+      const currentSlots = new Map(
+        current.action.kind === "agent" ? current.action.slots.map((s) => [s.name, s.tools]) : [],
+      );
+      const fill = {
+        inputs: Object.fromEntries(
+          bundle.inputs.flatMap((i) => {
+            const value = inputs[i.name] ?? currentInputs.get(i.name);
+            return value === undefined ? [] : [[i.name, value]];
+          }),
+        ),
+        slots: Object.fromEntries(bundle.slots.map((s) => [s.name, slots[s.name] ?? currentSlots.get(s.name) ?? []])),
+        // Where it runs is the user's, not the draft's: a file carries no projects or epic.
+        projectIds: current.filters.projectIds,
+      };
+      const define = (skill?: string | null) => {
+        const def = CreateCustomAutomationInput.parse(
+          bundleToDefinition(bundle, { ...fill, ...(skill === undefined ? {} : { skill }) }),
+        );
+        return { ...def, filters: { ...def.filters, epicId: current.filters.epicId } };
+      };
+      // A skill the draft carries is written only with consent, and never over one of the user's (installSkill keeps a
+      // taken name apart). Without it the automation keeps naming its own skill when the draft names the same one, and
+      // names none for a skill it would have needed the draft's copy of, as an import does.
+      const keepSkill = current.action.kind === "agent" && bundle.skill?.name === current.action.skill;
+      // Check everything before writing a skill, so a change that can't be saved leaves nothing behind.
+      checked(define(bundle.skill?.name), current.id);
+      const installed = bundle.skill && wantSkill && installSkill ? installSkill(bundle.skill) : null;
+      const def = define(installed ? installed.name : keepSkill ? bundle.skill!.name : undefined);
+      const automation = service.update(current.id, def);
+      core.write((fx) => {
+        if (repos.autopilotDrafts.delete(draft.id)) fx.autopilot();
+      });
+      return { automation, skill: installed };
     },
 
     update(id, input) {

@@ -125,7 +125,9 @@ Tasks are referenced as \`#42\`, steps as \`"2.3"\` (phase 2, step 3).
    ..."), \`draft_automation(automation, note)\` writes it as a draft in the shape of a shared automation file and
    returns a link to its import page. It saves nothing that runs: the user reviews it there, confirms any script,
    fills in its inputs and tool slots, and imports it in Preview (it records what it would do; a check script runs for
-   real) until they turn it on. Give them the link and never say it is set up.
+   real) until they turn it on. Give them the link and never say it is set up. To change one of their custom
+   automations, pass \`replaces\` (its id or name) with the whole new version: they apply it from a before/after diff
+   and it keeps its id, switches and run history.
    A refused draft lists every problem with where it is; fix them all and call again. Before you write one, use the
    \`${BRAND.id}-automations\` skill if it is installed: it covers the triggers, actions, variables, inputs, tool slots and script
    contract, and how to test a script and hand the draft over.
@@ -356,7 +358,7 @@ ${BOARD_SKILL_BODY}`;
 }
 
 /** The automations skill's frontmatter description; `skills/aboard-automations/SKILL.md` ships the same text. */
-export const AUTOMATIONS_SKILL_DESCRIPTION = `Write a custom Autopilot automation for the user of the ${BRAND.name} task board and hand it over as a draft they import. Use when the user asks for an automation of their own ("every morning, triage new defects", "when a PR merges, run the release notes script", "when a task sits in review for two days, ..."), or to improve one you drafted. Covers which trigger and action to pick, placeholders, variables, inputs and tool slots, how a script reads its values and reports back, check scripts, per-language limits, testing and draft_automation.`;
+export const AUTOMATIONS_SKILL_DESCRIPTION = `Write a custom Autopilot automation for the user of the ${BRAND.name} task board and hand it over as a draft they import, or propose a change to one of theirs. Use when the user asks for an automation of their own ("every morning, triage new defects", "when a PR merges, run the release notes script", "when a task sits in review for two days, ..."), or to change or fix one they have. Covers which trigger and action to pick, placeholders, variables, inputs and tool slots, how a script reads its values and reports back, check scripts, per-language limits, testing and draft_automation.`;
 
 export const AUTOMATIONS_SKILL_BODY = `# Writing custom automations for ${BRAND.name}
 
@@ -366,6 +368,12 @@ A custom automation is an Autopilot automation the user defines: a **trigger** (
 it there (every script, command and prompt), confirms any script, fills in inputs and tool slots, and imports it. It
 comes in **in Preview**: it records what it would do and does none of it, except that a **check script still runs for
 real** (to find what it would act on). The user turns it on themselves. Nothing else you write runs on its own.
+
+To **change** one of the user's custom automations (a better prompt, a fixed check script, another trigger), pass
+\`replaces\` with its id (or \`custom:<id>\`, or its exact name) and the whole new version. The user sees a before/after
+diff and applies it: the automation changes in place and keeps its id, its switches (Off, Preview or On), where it runs
+and its run history. Never draft a copy under a new name to change one: that makes a second automation with a history of
+its own. Built-in automations can't be replaced; say which of their settings to change instead.
 
 ## Before you draft
 
@@ -695,23 +703,27 @@ and (for a check) look at the lines it prints: every one must be a JSON object w
 Don't run a script that approves, merges, deletes or posts for real just to test it: stub that call, or run it against
 a throwaway target.
 
-In your \`note\`, tell the user to read the script on the import page, then use **Test run** in the automation's editor (Settings →
-Autopilot → Automations, under Yours; the import page shows scripts read-only), and to watch its **Preview** runs
-before turning it on: it imports in Preview, which records what each run would have done, under **What it would run**,
-and does nothing (Preview still runs a check script for real).
+In your \`note\`, tell the user to read the script on the review page, then use **Test run** on the builder's last step,
+**Review & try** (Edit first opens it from the review page; the review page itself shows scripts read-only), and to
+watch its **Preview** runs before turning it on: it imports in Preview, which records what each run would have done,
+under **What it would run**, and does nothing (Preview still runs a check script for real).
 
 ## Hand it over
 
-1. Call \`draft_automation(automation, note)\`. \`automation\` is a shared automation file without \`format\` and \`version\`:
-   \`name\`, \`description\` (for the user), \`trigger\`, \`filters\`, \`action\`, \`inputs\`, \`slots\`. The tool's own description
-   lists every field.
+1. Call \`draft_automation(automation, note)\`, or \`draft_automation(automation, note, replaces)\` to change an existing
+   one. \`automation\` is a shared automation file without \`format\` and \`version\`: \`name\`, \`description\` (for the user),
+   \`trigger\`, \`filters\`, \`action\`, \`inputs\`, \`slots\`. The tool's own description lists every field. For a change, start
+   from the automation's current definition (the user's "Ask an agent" prompt includes it) and change only what was
+   asked: anything you leave out shows as removed in the diff. Inputs and tool slots keep the user's values when their
+   \`name\` stays the same, and the automation keeps its projects.
 2. If it is refused, the result lists **every** problem with where it is: fix them all and call again. Each call makes
    a **new** draft, so don't call it to "tweak" one the user may already have opened; say what you changed.
 3. **Write the \`note\` for the user**, up to 2,000 characters: what it does and when, what it will touch (a command or
    script runs on their machine with their access), the variables to set and tool slots to fill, anything to check
    before importing (a Jira key, who is trusted), and what you tested.
-4. **Give the user the link from the result and say they must open it, read it, import it and turn it on.** Never say
-   the automation is set up or running: it isn't until they do (until then it only previews).
+4. **Give the user the link from the result and say they must open it, read it, import it and turn it on** (for a
+   change: read the diff and apply it). Never say the automation is set up, running or changed: it isn't until they do
+   (until then a new one only previews).
 
 ## Worked examples
 
@@ -845,7 +857,7 @@ Track work on the user's local task board via the \`${BRAND.id}\` MCP server (Ba
 - **Planning several tasks:** a session the board starts from a lane's **Plan tasks** plans each task it lists with the user; \`get_handoff_prompt(tasks: ["#3", "#4"])\` gives the same prompt. Approve simple tasks as a set, complex ones one at a time; \`set_plan\` each, then \`move_task\` → \`planned\`.
 - **Labels:** tag tasks with the kind of work (\`labels: ["ui"]\`, \`["backend", "bug"]\`) on \`create_task\` / \`add_to_backlog\` or \`update_task\` (replaces the list). Reuse the labels \`board_overview\` lists. If a task you plan has none (**Missing labels** in the result), suggest 1–3 to the user and apply them once they agree.
 - **Autopilot:** when a planning result says **Autopilot flag not set**, ask the user whether to flag the task, then \`update_task(autopilot: "on" | "off")\`; never set it unasked. You can flag tasks but never change Autopilot's own settings.
-- **Custom automations:** when the user asks for an automation of their own ("every morning, ...", "when a PR merges, ..."), \`draft_automation(automation, note)\` keeps it as a draft and returns a link to its import page. Only the user can import it and switch it on: give them the link and never say it is set up. A refused draft lists every problem; fix them all and call again. Where the \`${BRAND.id}-automations\` skill is installed, read it first: it covers triggers, variables, inputs, tool slots, the script contract and testing.
+- **Custom automations:** when the user asks for an automation of their own ("every morning, ...", "when a PR merges, ..."), \`draft_automation(automation, note)\` keeps it as a draft and returns a link to its import page. Only the user can import it and switch it on: give them the link and never say it is set up. To change one of their custom automations, pass \`replaces\` (its id or name) with the whole new version; they apply it from a diff. A refused draft lists every problem; fix them all and call again. Where the \`${BRAND.id}-automations\` skill is installed, read it first: it covers triggers, variables, inputs, tool slots, the script contract and testing.
 - **Manual tasks:** \`manual: true\` on \`create_task\` / \`add_to_backlog\` / \`update_task\` makes a to-do for a person (an access request, a sign-off). It needs no plan, and agents and Autopilot leave it alone: never work on a task marked manual. Block your own task on one with \`blockedBy\` when your work waits on a person.
 - **Due date:** \`update_task(dueDate: "YYYY-MM-DD" | null)\`. Set it only when the user gives a date.
 - **Priority:** \`priority: true | false\` on \`create_task\` / \`add_to_backlog\` / \`update_task\` puts a task in the lane above every project, and Autopilot starts it first. Set it only when the user asks.

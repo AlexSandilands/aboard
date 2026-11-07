@@ -1,6 +1,6 @@
 ---
 name: aboard-automations
-description: Write a custom Autopilot automation for the user of the Aboard task board and hand it over as a draft they import. Use when the user asks for an automation of their own ("every morning, triage new defects", "when a PR merges, run the release notes script", "when a task sits in review for two days, ..."), or to improve one you drafted. Covers which trigger and action to pick, placeholders, variables, inputs and tool slots, how a script reads its values and reports back, check scripts, per-language limits, testing and draft_automation.
+description: Write a custom Autopilot automation for the user of the Aboard task board and hand it over as a draft they import, or propose a change to one of theirs. Use when the user asks for an automation of their own ("every morning, triage new defects", "when a PR merges, run the release notes script", "when a task sits in review for two days, ..."), or to change or fix one they have. Covers which trigger and action to pick, placeholders, variables, inputs and tool slots, how a script reads its values and reports back, check scripts, per-language limits, testing and draft_automation.
 ---
 
 # Writing custom automations for Aboard
@@ -11,6 +11,12 @@ A custom automation is an Autopilot automation the user defines: a **trigger** (
 it there (every script, command and prompt), confirms any script, fills in inputs and tool slots, and imports it. It
 comes in **in Preview**: it records what it would do and does none of it, except that a **check script still runs for
 real** (to find what it would act on). The user turns it on themselves. Nothing else you write runs on its own.
+
+To **change** one of the user's custom automations (a better prompt, a fixed check script, another trigger), pass
+`replaces` with its id (or `custom:<id>`, or its exact name) and the whole new version. The user sees a before/after
+diff and applies it: the automation changes in place and keeps its id, its switches (Off, Preview or On), where it runs
+and its run history. Never draft a copy under a new name to change one: that makes a second automation with a history of
+its own. Built-in automations can't be replaced; say which of their settings to change instead.
 
 ## Before you draft
 
@@ -340,23 +346,27 @@ and (for a check) look at the lines it prints: every one must be a JSON object w
 Don't run a script that approves, merges, deletes or posts for real just to test it: stub that call, or run it against
 a throwaway target.
 
-In your `note`, tell the user to read the script on the import page, then use **Test run** in the automation's editor (Settings →
-Autopilot → Automations, under Yours; the import page shows scripts read-only), and to watch its **Preview** runs
-before turning it on: it imports in Preview, which records what each run would have done, under **What it would run**,
-and does nothing (Preview still runs a check script for real).
+In your `note`, tell the user to read the script on the review page, then use **Test run** on the builder's last step,
+**Review & try** (Edit first opens it from the review page; the review page itself shows scripts read-only), and to
+watch its **Preview** runs before turning it on: it imports in Preview, which records what each run would have done,
+under **What it would run**, and does nothing (Preview still runs a check script for real).
 
 ## Hand it over
 
-1. Call `draft_automation(automation, note)`. `automation` is a shared automation file without `format` and `version`:
-   `name`, `description` (for the user), `trigger`, `filters`, `action`, `inputs`, `slots`. The tool's own description
-   lists every field.
+1. Call `draft_automation(automation, note)`, or `draft_automation(automation, note, replaces)` to change an existing
+   one. `automation` is a shared automation file without `format` and `version`: `name`, `description` (for the user),
+   `trigger`, `filters`, `action`, `inputs`, `slots`. The tool's own description lists every field. For a change, start
+   from the automation's current definition (the user's "Ask an agent" prompt includes it) and change only what was
+   asked: anything you leave out shows as removed in the diff. Inputs and tool slots keep the user's values when their
+   `name` stays the same, and the automation keeps its projects.
 2. If it is refused, the result lists **every** problem with where it is: fix them all and call again. Each call makes
    a **new** draft, so don't call it to "tweak" one the user may already have opened; say what you changed.
 3. **Write the `note` for the user**, up to 2,000 characters: what it does and when, what it will touch (a command or
    script runs on their machine with their access), the variables to set and tool slots to fill, anything to check
    before importing (a Jira key, who is trusted), and what you tested.
-4. **Give the user the link from the result and say they must open it, read it, import it and turn it on.** Never say
-   the automation is set up or running: it isn't until they do (until then it only previews).
+4. **Give the user the link from the result and say they must open it, read it, import it and turn it on** (for a
+   change: read the diff and apply it). Never say the automation is set up, running or changed: it isn't until they do
+   (until then a new one only previews).
 
 ## Worked examples
 
