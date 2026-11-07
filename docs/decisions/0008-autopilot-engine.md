@@ -62,7 +62,9 @@ scheduled agent run, or rules inside the server that start an agent only when an
   merge on, so nothing that merged before stops.
 - **Retrying a run is not a limit.** (#138.) `retry_autopilot_run` (and the panel's Retry) hands a failed or
   skipped run back to the engine by retiring its dedupe key. The engine still decides, under the switches, pause and
-  caps, so agents may call it; it is the one Autopilot tool they get.
+  caps, so agents may call it; it is the one Autopilot tool they get. The one limit it lifts is Review PRs' rounds
+  (#134): retrying the notice that a PR changed after its last round allows that PR one more review, and the tool's
+  description tells agents to do that only when the user asks, as with the auto-merge flag below.
 - **Who can turn auto-merge On: any MCP caller, as with the Autopilot flag.** (#172, raised in #167's review.)
   `create_task`, `add_to_backlog` and `update_task` accept `autoMerge: "on"`, and only their descriptions say to do
   it when the user says so. Making On user-only isn't enforceable: MCP callers are anonymous (headless runs use

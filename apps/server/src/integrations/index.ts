@@ -14,6 +14,7 @@ import { tasksToPlan } from "../services/planning.ts";
 import type { Services } from "../services/types.ts";
 import { createAgentModels, type AgentModelProbes } from "./agentModels.ts";
 import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
+import { createRepoGate, gateFetches } from "../autopilot/repoGate.ts";
 import { createBackupIntegration, defaultRunGit, type RunGit } from "./backup.ts";
 import type { RunGh } from "./gh.ts";
 import { createBackupSetup } from "./backupSetup.ts";
@@ -206,12 +207,15 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       (overrides.log ?? console).warn(`[sessions] couldn't refresh ${sessionId}: ${messageOf(error)}`);
     });
   };
+  // One `git fetch` per repository at a time, across the runner's worktrees and the engine's own reads.
+  const repoGate = createRepoGate();
   const runner =
     overrides.autopilotRunner ??
     createAutopilotRunner({
       services: deps.services,
       t3,
       worktreesDir: deps.config.worktreesDir,
+      gate: repoGate,
       ...(overrides.autopilotGit ? { runGit: overrides.autopilotGit } : {}),
       ...(overrides.runAgent ? { runAgent: overrides.runAgent } : {}),
       sessionLinked: refreshSession,
@@ -230,6 +234,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     services: deps.services,
     bus: deps.bus,
     runner,
+    runGit: gateFetches(overrides.autopilotGit ?? defaultRunGit, repoGate),
     gitHosts: gitHostActions(hosts, merges, {
       mergeAutoMergeTask: (taskId, input, actor) =>
         mergeTaskPr({ services: deps.services(), merges, hosts }, taskId, input, actor),

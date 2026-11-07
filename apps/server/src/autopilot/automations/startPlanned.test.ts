@@ -777,6 +777,7 @@ describe("start planned tasks: skipped when no longer eligible", () => {
       services: s,
       runner: { start: () => Promise.reject(new Error("must not run")) },
       gitHosts: NO_GIT_HOSTS,
+      runGit: () => Promise.reject(new Error("must not run git")),
       engine: s.autopilot.engine(),
       boardUrl: "http://127.0.0.1:5317",
       config: startPlanned.defaults,

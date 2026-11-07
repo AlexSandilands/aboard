@@ -28,8 +28,9 @@ function missingVariables(services: Services, draft: AutomationDraft): string[] 
 }
 
 /**
- * retry_autopilot_run, which lifts no limit (the engine decides whether there is still work, under the user's switches,
- * pause and caps), and draft_automation, which saves nothing that runs: only the user's import on the board's page
+ * retry_autopilot_run, which lifts no limit but one (the engine decides whether there is still work, under the user's
+ * switches, pause and caps; retrying Review PRs' "rounds used up" notice allows the PR one more review round, which its
+ * description says to do only when the user asks), and draft_automation, which saves nothing that runs: only the user's import on the board's page
  * does. Neither switches Autopilot on or changes what it may do.
  */
 export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, actor }) => {
@@ -42,7 +43,9 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
         "interrupted (get_task shows it under attention or in recent activity). Clears its attention flag; on its next " +
         "pass, within a minute, the automation acts again if there is still work, under the user's switches, pause and " +
         "limits. Rounds and attempts no longer count the retried run. Use it instead of pushing an empty commit to " +
-        "re-trigger a review. Retry a run once its cause is gone: one that fails the same way again wastes a run.",
+        "re-trigger a review. Retry a run once its cause is gone: one that fails the same way again wastes a run. " +
+        "Retrying Review PRs' notice that a PR changed after its last review round (or after its last conflict " +
+        "resolution review) allows that PR one more review: do that only when the user asks for it.",
       inputSchema: {
         task: taskField,
         automation: z

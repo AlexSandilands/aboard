@@ -347,6 +347,12 @@ export function fixPrompt({
         lines.push(
           `- **${BRAND.name} Autopilot's review** (round ${review.round} of ${review.maxRounds}, ${review.reviewUrl}): ${review.actionable} point${review.actionable === 1 ? "" : "s"} at or above **${review.threshold}** to fix (${describeCounts(review.counts)}${review.fyi > 0 ? `, ${review.fyi} FYI` : ""}). Read it with ${read}. Fix only the points rated ${review.threshold} or above. Leave the ones below it and everything under "FYI (no action needed)" alone.`,
         );
+        if (review.openFrom) {
+          const from = review.openFrom;
+          lines.push(
+            `  That review only checked how merge conflicts were resolved. Most of the points to fix were raised in the earlier review ${from.reviewUrl} and are still open: read it with ${from.reviewId !== null ? `\`${hints.review(from.reviewId)}\` and \`${hints.reviewComments(from.reviewId)}\`` : "that link"}.`,
+          );
+        }
         break;
       }
     }
