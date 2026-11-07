@@ -31,8 +31,10 @@ export function groupAutomations<T extends { automation: Pick<AutopilotAutomatio
 /** Where an automation is on: the board, or the projects whose own setting (or the board's) switches it on. */
 export interface AutomationReach {
   board: boolean;
-  /** Titles of the projects it is on in, in board order. */
+  /** Titles of the projects it is on in (in Preview too), in board order. */
   projects: string[];
+  /** Those of them where it is only in Preview. */
+  previewProjects: string[];
   /** How many projects the board has. */
   total: number;
 }
@@ -43,11 +45,24 @@ export function automationReach(
   board: Pick<AutopilotScopeEntry, "enabled"> | undefined,
   projects: ReadonlyArray<{ title: string; entries: ReadonlyArray<AutopilotScopeEntry> | undefined }>,
 ): AutomationReach {
+  const entryIn = (p: (typeof projects)[number]) => p.entries?.find((e) => e.automation === key);
   return {
     board: board?.enabled ?? false,
-    projects: projects.filter((p) => p.entries?.find((e) => e.automation === key)?.enabled).map((p) => p.title),
+    projects: projects.filter((p) => entryIn(p)?.enabled).map((p) => p.title),
+    previewProjects: projects.filter((p) => entryIn(p)?.enabled && entryIn(p)?.preview).map((p) => p.title),
     total: projects.length,
   };
+}
+
+/** The Projects row's status: "On in storefront · Preview in docs", or "On in no project". */
+export function projectsStatus(reach: Pick<AutomationReach, "projects" | "previewProjects">): string {
+  const preview = new Set(reach.previewProjects);
+  const live = reach.projects.filter((title) => !preview.has(title));
+  const parts = [
+    ...(live.length > 0 ? [`On in ${live.join(", ")}`] : []),
+    ...(preview.size > 0 ? [`Preview in ${reach.previewProjects.join(", ")}`] : []),
+  ];
+  return parts.length > 0 ? parts.join(" · ") : "On in no project";
 }
 
 /** Off everywhere: the row is dimmed, as a switched-off provider is. */
@@ -79,9 +94,9 @@ export function rowSubline(reach: AutomationReach, run: LastRun | undefined, now
   return `${whereText(reach)} · ${lastRunText(run, nowMs)}`;
 }
 
-/** The status line under the detail's title. */
-export function statusLine(reach: AutomationReach): string {
-  return isOffEverywhere(reach) ? "Off" : `On · ${whereText(reach)}`;
+/** The status line under the detail's title; `preview` when the board's mode is Preview. */
+export function statusLine(reach: AutomationReach, preview = false): string {
+  return isOffEverywhere(reach) ? "Off" : `${preview ? "Preview" : "On"} · ${whereText(reach)}`;
 }
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);

@@ -2,6 +2,7 @@ import type { AutopilotMode } from "@repo/contracts";
 import { PauseIcon, TriangleAlertIcon, Undo2Icon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Alert, AlertAction, AlertDescription } from "~/components/ui/alert";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Switch } from "~/components/ui/switch";
@@ -60,7 +61,8 @@ export function PausedNotice({ onResume, disabled }: { onResume: () => void; dis
 /**
  * One automation at a project or epic: its name (the description is its tooltip) and an on/off switch. The switch is
  * faded while it follows the scope above and solid once this scope sets it, which also shows ↺ to follow again. The
- * stored Inherit / On / Off model is unchanged: a click saves an explicit On or Off, ↺ saves Inherit.
+ * stored Inherit / Off / Preview / On model is unchanged: a click saves an explicit Off or the last on-mode (On when
+ * none), ↺ saves Inherit. Preview shows as a badge beside the name.
  */
 export function ScopeRow({
   name,
@@ -91,6 +93,11 @@ export function ScopeRow({
           <TooltipTrigger render={<span className="min-w-0 truncate text-xs font-medium" />}>{name}</TooltipTrigger>
           <TooltipPopup side="top">{description}</TooltipPopup>
         </Tooltip>
+        {model.preview ? (
+          <Badge variant="warning" size="sm" title="Records what it would do and does none of it">
+            Preview
+          </Badge>
+        ) : null}
         {model.blocked ? (
           <Tooltip>
             <TooltipTrigger render={<span role="img" aria-label={`${name} can't be turned on`} className="shrink-0" />}>
