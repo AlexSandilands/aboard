@@ -218,6 +218,7 @@ describe("Merge ready PRs: Into main", () => {
       services: s,
       runner: NO_RUNNER,
       gitHosts: { ...NO_GIT_HOSTS, mergeAutoMergeTask: () => Promise.reject(new Error("must not merge")) },
+      runGit: () => Promise.reject(new Error("must not run git")),
       engine: s.autopilot.engine(),
       boardUrl: "",
       config: { intoMain: true },

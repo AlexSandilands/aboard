@@ -9,6 +9,7 @@ import type {
   Project,
 } from "@repo/contracts";
 import type { z } from "zod";
+import type { RunGit } from "../integrations/backup.ts";
 import type { GitHostActions } from "../integrations/gitHosts.ts";
 import type { AgentAccess } from "../integrations/headlessAgent.ts";
 import type { RunToolScope } from "../mcp/runTokens.ts";
@@ -88,6 +89,8 @@ export interface ActionContext<C> {
   runner: { start(request: RunnerRequest): Promise<RunnerResult> };
   /** What it may do on the git host a PR is on (gitHostActions). */
   gitHosts: GitHostActions;
+  /** The machine's git, for reading a project's repository (its fetches wait their turn per repository). */
+  runGit: RunGit;
   engine: AutopilotEngineSettings;
   /** Where the user opens the board, e.g. `http://127.0.0.1:5317`, for prompts that point an agent at a task. */
   boardUrl: string;

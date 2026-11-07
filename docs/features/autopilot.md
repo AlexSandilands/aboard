@@ -512,10 +512,47 @@ approves, asks for changes or hands them to the user.
 - **One at a time, and rounds.** While a review of the PR is queued or running, a new head commit waits; the next
   pass reviews the latest head with the earlier review in view. A PR gets at most **Rounds per PR** reviews (`rounds`,
   default 3): the rounds used are its real review runs, a failed one included and a skipped one (which
-  posted nothing) not. Once they are used up, a new head commit isn't reviewed. Fix PRs counts its
+  posted nothing) not, and neither a carried verdict nor a resolution review (below: their output has a `basis`,
+  `isCountedReview`). Every new head still gets a run, rounds left or not, so nothing is skipped silently (see Head
+  moves, below). Fix PRs counts its
   attempts on Autopilot's review and failing checks against a limit of its own (`attempts`, also 3 by default); each
   fix is followed by at most one new head and so one review. Other people's comments have a budget of their own
   (`commentAttempts`, below).
+- **Head moves: base merges and the last round.** When the PR already has a verdict, `act` first asks git how the head
+  got from that verdict's head to the new one (`autopilot/headMove.ts`): `fetchForHeadMove` fetches the PR's base and
+  head branches into the project's checkout (its fetch waits its turn at the same per-repository gate as the runner's
+  worktrees), then `classifyHeadMove` reads the history. Only merges of the base branch in leave the PR's own change as
+  it was reviewed, so only those are let off a round: every first-parent commit since the reviewed head must be a
+  two-parent merge whose other parent is already on `origin/<baseRef>`. Each is then checked against git's own
+  merge (`git merge-tree --write-tree`, git 2.38+): the same tree is a clean merge, a different one (conflicts
+  resolved by hand, or an edit slipped into the merge) a resolved one. Anything else (a commit of the PR's own, a
+  rewrite or force-push, a merge of another branch, the base merged the other way round) is a change.
+  - **Clean base merge: the verdict is carried.** No agent runs and nothing is posted: the run succeeds with the last
+    verdict at the new head (`basis: "carried"`, `carriedFrom: <old head>`, the same `round`, `handoff` and review
+    id), and the task gets a note "Autopilot carried its review of PR #N … No review round used". This holds for any
+    verdict, so a clean one lets Merge ready PRs merge and a `fix` one is still Fix PRs' to act on (once: its
+    trigger key is the review id, which the carry keeps).
+  - **Hand-resolved base merge: a resolution review**, not counted. The prompt says round N already covered the
+    PR's own change and asks the reviewer to check only how the conflicts were resolved (a side's change lost or
+    doubled, code that no longer fits the other side, markers left in, unrelated edits), with `git show
+    --remerge-diff` of the resolved merges inlined as untrusted text (cut at `MAX_REMERGE_DIFF`, 40,000 characters).
+    It is posted like any review, headed "Conflict resolution review (not counted), after round N of M"; its output
+    has `basis: "conflict_review"` and the last counted round. A git too old to check a merge (no `merge-tree
+    --write-tree`) treats it as resolved, and one with no `--remerge-diff` gets a full review instead, still
+    uncounted. At most `CONFLICT_REVIEWS_PER_PR` (5) per PR, as many as Fix PRs' conflict attempts; past that the run
+    is skipped, flagged: "PR #N merged <base> in with conflicts resolved by hand again, after 5 conflict resolution
+    reviews …". A resolution review that fails is flagged like any failure but keeps its `basis`, so it costs no
+    round.
+  - **A change of the PR's own** is a counted round while rounds are left. With none left the run is skipped and
+    flagged, so the card says why the PR waits: "PR #N changed after Review PRs' last round (3 of 3, at `<sha>`):
+    `<reason>`. Review and merge it yourself, or retry this run to allow one more round." Retrying it (the run's
+    Retry, or `retry_autopilot_run`) grants exactly one more round for that PR: the retried run keeps
+    `output.roundsUsedUp`, and each such run of the link (read through its retired key) adds one to the PR's rounds.
+    Retrying the conflict-review notice (`output.conflictReviewsUsedUp`) allows one more resolution review the same
+    way.
+  - **When git can't tell** (a project with no folder, a base branch the poller hasn't read, a fetch that fails, a
+    commit git doesn't have), the move counts as a change: it may cost a round, but never lets code through
+    unreviewed. A PR with no verdict yet is always a counted round.
 - **Resolving its own threads.** From round 2 the prompt asks the reviewer to list, in the verdict's optional `fixed`,
   the comment ids of earlier Autopilot inline comments whose point is fixed at this commit. After posting,
   `resolveConfirmedThreads` reads the threads fresh (`reviewThreads`) and resolves those (`resolveReviewThread`), only where the thread's first comment is in
@@ -585,8 +622,9 @@ approves, asks for changes or hands them to the user.
 - **Hand-off.** `handoff` says what comes next: `clean` (nothing at or above the bar: the loop ends), `fix`
   (something is, with rounds left) or `gave_up` (something is, on the last round: the run ends flagged "Autopilot
   gave up…", which shows under Needs attention and sends an `autopilot_failed` notification). The fix automation
-  reads `currentPrReview(runs, linkId, snapshot.headOid)`: the newest finished review of the link, and only while
-  its `headOid` is the PR's current head, so a superseded or stale verdict is never acted on. The review ids on the
+  reads `currentPrReview(runs, linkId, snapshot.headOid)`: the newest finished review of the link (highest round; on a
+  tie, which a carried verdict or a resolution review makes, the newer run), and only while its `headOid` is the PR's
+  current head, so a superseded or stale verdict is never acted on. The review ids on the
   runs are how it tells Autopilot's own reviews from other people's.
 - **Limits.** Switching the automation on reviews every open PR already linked in the project, once per head
   commit; dry run shows which first.
@@ -832,7 +870,10 @@ Autopilot explains integration branches and gives each target a sentence, its ga
   is in Review; the PR is open (not a draft), from origin, with the epic's branch as its base (`PrSnapshot.baseRef`,
   `baseRefName` in the poll) and a head commit; the local review isn't going (`reviewIsInProgress`) and left no
   blocking or major finding open; no Review PRs or Fix PRs run of the task is queued or running; when Review PRs is
-  on for the task, its review of the current head (`currentPrReview`) has nothing actionable; no reviewer requested
+  on for the task, its review of the current head (`currentPrReview`) has nothing actionable (a verdict Review PRs
+  carried across a base merge counts, so a PR that only merged the epic's branch in after its last round still
+  merges; one whose own code changed after it waits, and Review PRs' run says why under Needs attention); no reviewer
+  requested
   changes on GitHub; checks pass, or none has reported for `NO_CHECKS_WAIT_MS` (10 minutes) since the board first saw
   the head (`PrChanges.newHead`, else the link's creation: GitHub reports no checks for a moment after a push); and
   GitHub says it merges cleanly and isn't blocked on a check or rule (only a missing review is left to GitHub). The dedupe key is `merge:<linkId>:<headOid>`. The action re-checks all
@@ -2018,7 +2059,8 @@ button beside a field's title (shown only while the key is set at that scope) re
 | `apps/server/src/autopilot/automations/orchestrate.ts` | Orchestrate: the schedule, Run now, its state, the tools it gets and `orchestratePrompt` |
 | `apps/server/src/mcp/tools/autopilot.ts` | `retry_autopilot_run`, `draft_automation` |
 | `apps/server/src/autopilot/automations/unstick.ts` | Remind me about stuck tasks (`unstick`) |
-| `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |
+| `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off, carried verdicts and resolution reviews |
+| `apps/server/src/autopilot/headMove.ts` | `classifyHeadMove`: whether a PR's head moved only by merging its base in, and whether git made those merges on its own |
 | `apps/server/src/autopilot/automations/repoPrs.ts`, `repoPrAssess.ts` | Review PRs' other people's PRs: settings, the poll, which PRs and their mode and gate, the prompt, posting and hand-offs |
 | `apps/server/src/integrations/githubRepoPrs.ts` | GitHub's reads and writes for other people's PRs: the open PRs, one PR in full, `unchangedSince`, comments |
 | `packages/contracts/src/repoPrReview.ts` | The other-people's-PR verdict, run output, markers, `/autopilot` commands and sensitive paths |

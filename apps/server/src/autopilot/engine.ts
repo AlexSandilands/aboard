@@ -1,5 +1,6 @@
 import { AUTOPILOT_ACTOR, type AutopilotEngineSettings, type AutopilotRun, type Project } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
+import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
 import { NO_GIT_HOSTS, type GitHostActions } from "../integrations/gitHosts.ts";
 import { messageOf } from "../integrations/util.ts";
 import type { Logger } from "../integrations/util.ts";
@@ -48,6 +49,8 @@ export function createAutopilotEngine(deps: {
   bus: EventBus;
   runner?: Runner;
   gitHosts?: GitHostActions;
+  /** Git for actions that read a project's repository (Review PRs classifying a head move). */
+  runGit?: RunGit;
   /** The repository a project's folder pushes to (its `origin`), for checks that read the git host. */
   repoOf?: (project: Project) => Promise<{ host: string; repo: string } | null>;
   /** Where the user opens the board; actions put it in agent prompts. */
@@ -61,6 +64,7 @@ export function createAutopilotEngine(deps: {
 }): AutopilotEngine {
   const runner = deps.runner ?? NO_RUNNER;
   const gitHosts = deps.gitHosts ?? NO_GIT_HOSTS;
+  const runGit = deps.runGit ?? defaultRunGit;
   const now = deps.now ?? (() => new Date());
   const log = deps.log ?? console;
   const inFlight = new Set<Promise<void>>();
@@ -116,6 +120,7 @@ export function createAutopilotEngine(deps: {
           services: s,
           runner: { start: (request) => runner.start(request, update) },
           gitHosts,
+          runGit,
           engine: s.autopilot.engine(),
           boardUrl: deps.boardUrl?.() ?? DEFAULT_BOARD_URL,
           config,
