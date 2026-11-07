@@ -37,7 +37,7 @@ import { useResumeAutoPause } from "~/state/autopilotRunHistory";
 import { useCustomAutomations, useDismissAutomationDraft } from "~/state/customAutomations";
 import { useDismissAutopilotRun, useRetryAutopilotRun, useSetAutopilotPaused } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotProjectScopes, useBoard } from "~/state/queries";
-import { useScopeAutomations } from "./AutomationRows";
+import { useBoardAutomations } from "./AutomationRows";
 import { automationReach, isOffEverywhere } from "./automationList.logic";
 import { AutopilotLimits } from "./AutopilotSettingsSection";
 import { AskToFix } from "./AskAgentButtons";
@@ -114,7 +114,7 @@ export function AutopilotLimitsPage() {
 export function AutopilotAutomationsTab() {
   const navigate = useNavigate();
   const overview = useAutopilotOverview();
-  const { message, items, pending = false, rejected = 0 } = useScopeAutomations(null);
+  const { message, items, pending = false, rejected = 0 } = useBoardAutomations();
   const customs = useCustomAutomations().data;
   const projects = useBoard().data?.projects.filter((p) => p.archivedAt === null) ?? [];
   const scopes = useAutopilotProjectScopes(projects.map((p) => p.id));

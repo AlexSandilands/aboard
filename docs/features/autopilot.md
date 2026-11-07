@@ -35,6 +35,21 @@ at every scope. Projects and epics offer Inherit / Off / Preview / On.
 | On    | Preview | Inherit | Preview (project) |
 | Preview | Inherit | On    | On (epic)      |
 
+**Where it runs** is the same rows read as one sentence. `describeWhere` (`packages/contracts/src/autopilotWhere.ts`)
+turns an automation's modes at every scope into a reach and its exceptions: **Everywhere** is the board On;
+**Only in…** is the board off with some projects On; **nowhere** is neither. An exception is a project or epic whose own
+setting differs from what it would follow: a project Off under Everywhere, an epic set against its project (an epic
+set the same as its project is not one). "On everywhere except payments-api; epic #5 Off" is the sentence for the
+board On, payments-api Off and epic #5 Off. Everywhere also drops the rows Only in… left (a project set On, an epic set the same as its project), so a later Switch off of the board really is off. Nothing is stored for it: the edits (`whereEverywhere`, `whereOnlyIn`,
+`whereProject`, `whereEpic`, `whereAddException`, `whereRemoveException`) return the plain `PUT` writes (a scope and a
+mode), and a toggle that gives what the scope above already gives saves Inherit rather than an override
+(`modeToBe`), so a project that is switched on and off again leaves no row. Each write is its own request and the
+server acts on each, so the order is part of the contract: Only in… turns the picked projects On before the board goes
+off (nothing that stays on is ever off on the way, which would drop a Run now request or restart a schedule), and
+Everywhere turns the board on first. `useApplyWhere` sends them in order and the event stream holds back the switches'
+refetch until the last is in (`WHERE_MUTATION_KEY`). The tests run every board × project × epic
+combination against `resolveAutopilot`.
+
 An epic's setting covers only the tasks in it (`parent_id`). A task with no epic skips that level, and so does a
 task whose epic is archived: an archived epic no longer counts (unarchive it and its rows apply again). The epic
 card itself isn't "in" an epic, so it follows its project, except as a candidate that is the epic card itself
@@ -352,7 +367,7 @@ past an earlier flag in that very millisecond.
 Default never auto-starts a task; only On does, so an automation that starts work (Start planned tasks) checks
 for `task.autopilot === true` on top of its scope being on. The flag does nothing by itself.
 
-- The user sets it in the task panel's Automation section. Agents set it with `autopilot: "default" | "on" | "off"`
+- The user sets it in the task panel's Autopilot section, as the **start it** chip (On saves On; off saves Default). Agents set it with `autopilot: "default" | "on" | "off"`
   on `update_task`, `create_task` and `add_to_backlog`, and only after the user has said so. A change is logged
   as an `updated` activity entry naming `autopilot`.
 - After `set_plan` or `create_task`, when Start planned tasks resolves On for the task (its epic, project or the board)
@@ -381,6 +396,7 @@ switches nothing on either, since only the user's import saves the automation it
 | `GET /api/autopilot`                            | Pause, engine settings and the catalogue (with each automation's group, field descriptors and defaults), plus today's agent runs and spend, Needs you, auto-pauses, tuning hints and each automation's last finished run, for the settings page |
 | `PATCH /api/autopilot/engine`                   | Updates engine settings; `quietHours` may be partial   |
 | `POST /api/autopilot/pause`, `/resume`          | Pause all, and back                                    |
+| `GET /api/autopilot/modes`                      | Every switch that is set (not Inherit) at any scope, as `{ scopeKind, scopeId, automation, mode }`: the one read the Where it runs widget needs for its exceptions, instead of a scope per project and epic |
 | `GET /api/autopilot/board`, `/projects/:id`, `/projects/:id/epics/:epicId` | Each automation at that scope: its own mode and config, and what it resolves to (an epic's through its project and the board) |
 | `PUT /api/autopilot/board/:automation`, `/projects/:id/:automation`, `/projects/:id/epics/:epicId/:automation` | Sets mode and/or config; Inherit with no config removes the row |
 | `GET /api/autopilot/runs?taskId=` or `?projectId=` | Runs, newest first (`limit`, default 50)            |
@@ -1200,7 +1216,7 @@ most 50 per list; `automationVariables.ts` in contracts).
 
 - **Where they live.** The board's are the `automationVariables` setting (`PATCH /api/settings`, edited under **Settings →
   Autopilot → Limits & safety → Variables**); a project's overrides are `projects.variables_json` (migration 036,
-  `PATCH /api/projects/:id` with `variables`, edited under the project's Autopilot overrides). `effectiveVariables` lays
+  `PATCH /api/projects/:id` with `variables`, edited under the project's Automations section). `effectiveVariables` lays
   the project's over the board's. Both writes publish `autopilot.changed`, since a row's "Needs" line depends on them.
 - **How they are read.** A prompt reads `{{vars.<name>}}`; a command, script or check reads `<PREFIX>_VAR_<NAME>`
   (`variableEnvName`) or stdin's `vars`. Like inputs they are filled in once and never read again for placeholders, and
@@ -1841,7 +1857,9 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
     under its `group` heading (`AUTOMATION_GROUPS`: Ship work, Pull requests, Upkeep, then Yours for custom
     automations, which have no group of their own). A row has an icon, the name with a dot (green on, red when the
     last run failed), a line saying where it is on and how its last run went (`rowSubline`, from each project's scope
-    and `overview.lastRuns`), and its board switch (on saves the mode `restoreMode` gives, off saves `inherit`). A
+    and `overview.lastRuns`), and its board switch (on saves the mode `restoreMode` gives, off saves `inherit`); that
+    switch, and the detail header's **Switch on** (`useBoardMode`), turn it on as Everywhere, so the rows Only in… left
+    go too and a later off is off everywhere (while it is already on or in Preview, only the board's own row changes). A
     row in Preview has an amber **Preview** badge instead of the dot. An
     automation off on the board and in every project is dimmed, as a switched-off provider is; its switch stays.
     **+ Add automation** opens [the Add gallery](#the-add-gallery), and **Ask an agent** beside it is
@@ -1851,8 +1869,15 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
     week (`previewHint`), **See them** (its run history) and **Turn on**; **What it does**, one sentence read from its
     effective config (`automationSentence`; a custom automation's from its trigger and action) with **All runs**, and
     the **Mode** row, the board's Off · Preview · On, saying what the mode does (`modeDescription`; with a check
-    script, that it still runs for real); **Where it runs**, the board's mode as text and a line naming the projects it
-    is on in and, apart, those only in Preview (`projectsStatus`), which a project sets in its lane pill or settings; **Settings**, the fields whose `tier` is `essential`; and **Advanced**, closed, with every other field.
+    script, that it still runs for real); **Where it runs** (`WhereItRuns`): the sentence (`describeWhere`, "Preview
+    everywhere", "On only in storefront; Preview in docs"), an **Everywhere / Only in…** control with the projects as
+    chips under Only in… (amber when only in Preview), and **Exceptions** as removable chips (a project's or epic's own
+    setting, with the mode it has: On, Preview or Off) with **+ Exception**, which offers the projects not yet Off under
+    Everywhere and the epics that aren't exceptions yet, each with the mode it would be given (On or Off). Everywhere
+    turns an off automation on in the mode `restoreMode` gives. It reads `useAutopilotModes` and the board's projects and
+    unarchived epics (epics only for an automation with `epicScope`), writes through `useApplyWhere` (one PUT per write,
+    shown at once and refetched on error), and a blocked automation can't be switched on or into Preview from it;
+    **Settings**, the fields whose `tier` is `essential`; and **Advanced**, closed, with every other field.
     Its heading gets a dot when an advanced value isn't the default (`advancedChanged`). A field without a tier is
     advanced. A custom automation's trigger and action are edited in its editor (**Edit**,
     `/settings/autopilot/custom/<id>`).
@@ -1925,12 +1950,15 @@ tab's path. Orchestrate's **Countdown on lanes** (`showAutopilotTimer`, a per-br
 The fields are a form generated from the automation's `fields`: a switch, number, text, 24-hour time or select per
 field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is stored as a
 `ReviewSkillRef`, and an unset one is the built-in skill, labelled with the field's `builtinLabel` when it has one,
-such as the digest's own skill). A project's settings page shows every automation as rows (`AutomationRows`, the
-config behind a **Settings** disclosure), where Inherit follows the board; an epic's switches (its button's popover)
-follow its project. The lane and epic popovers show them as a faded switch while it follows the scope above and a
-solid one with a ↺ reset once set (see [board-layout.md](board-layout.md#autopilot-on-the-board)). Config set at a
-scope is sent whole (the server replaces it), so editing one key sends the scope's other keys with it; the reset
-button beside a field's title (shown only while the key is set at that scope) removes the key so it inherits.
+such as the digest's own skill). The board's fields are edited in the detail, as above. A project's settings page (Settings → Project → Automations,
+`ProjectAutopilotSection`) is read only: each automation with the sentence saying where it runs, **On here** or
+**Off here**, and a **Change** button that opens that automation's detail (`autopilot.automations.<key>`). A project
+no longer has a form for its own config: a value already stored for a project still applies over the board's, so its
+row says "This project sets its own: …" and has **Clear own settings** (it saves the scope's config as empty, which the
+server turns into removing the row when the mode is Inherit); nothing in the UI sets one. The lane and epic popovers are the widget's compact form (`WhereRow`, see
+[board-layout.md](board-layout.md#autopilot-on-the-board)). Config set at a scope is sent whole (the server replaces
+it), so editing one key sends the scope's other keys with it; the reset button beside a field's title (shown only
+while the key is set at that scope) removes the key so it inherits.
 
 - Saves reach the server one at a time per scope, each built from the latest saved config when it runs, so two quick
   edits can't undo each other. The server's reply goes straight into the query cache, and `autopilot.changed`
@@ -2047,7 +2075,7 @@ button beside a field's title (shown only while the key is set at that scope) re
 | `apps/web/src/components/autopilot/RunHistory.tsx`, `RunHistoryRow.tsx`, `runHistory.logic.ts` | The run history page, a run's row, and the URL-to-filter logic |
 | `apps/web/src/components/autopilot/AutopilotPage.tsx` | Settings → Autopilot's tabs, the status strip and Needs you |
 | `apps/web/src/components/autopilot/AutomationsSplit.tsx`, `automationList.logic.ts` | The list and detail: groups, rows, dimming, the Advanced section and its dot |
-| `apps/web/src/components/autopilot/AutopilotSettingsSection.tsx` | The Limits & safety tab, and a project's Autopilot overrides |
+| `apps/web/src/components/autopilot/AutopilotSettingsSection.tsx` | The Limits & safety tab, and a project's read-only Autopilot list |
 | `packages/contracts/src/autopilotSentence.ts` | `automationSentence`, `limitsSummary`, `todaySummary` |
 | `apps/web/src/state/autopilotRunHistory.ts` | The history's infinite query, the delete preview and the delete |
 | `apps/web/src/components/autopilot/` | The pill, epic button, their shared popover (`ScopePopover`), badge, panel section and settings (`autopilot.logic.ts` holds the tested logic) |

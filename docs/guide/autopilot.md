@@ -26,13 +26,13 @@ stays off there. **Apply** switches them on once and remembers nothing: they are
 change any of them as usual.
 
 Each project's lane has an **Autopilot** pill. It's dim when nothing is on for the project, a calm ring when
-something is on, and animated while a run is going. Click it to see every automation with an on/off switch. A
-faded switch is following the board: hover it to see what that means ("On, following the board"). Flip it and the
-switch turns solid, meaning this project sets it itself; the **↺** button beside it goes back to following the board.
-To pin the value the board has now, flip the switch twice. The cog at the top opens **Settings → Autopilot**.
+something is on, and animated while a run is going. Click it to see every automation with an on/off switch for the
+project and a line saying where it runs overall ("On everywhere except storefront"). Flipping a switch makes this
+project an exception to the rest, or takes the exception away again when it matches the rest. The cog at the top opens
+**Settings → Autopilot**, where the same thing is edited for every project at once (see below).
 
 An **epic** has the same switch, in a small round **Autopilot** button on its band and in its panel's top bar. It
-covers only the tasks in that epic, and a faded switch follows the project ("On, following the project"). So you can
+covers only the tasks in that epic, and its switches follow the project until you set one. So you can
 switch an automation on for one epic in a project that has it off, or off for one epic in a project that has it
 on. The button looks like the pill: dim, a ring, or animated while one of the epic's tasks is being worked on.
 An epic only lists the automations that work on tasks in an epic (not the Digest, for instance). An archived epic has no button and no say.
@@ -61,16 +61,19 @@ switch it on. Click a row to see it on the right:
 - one sentence saying what it does with your settings ("Every weekday at 09:00, write a plain list of what changed
   on the board"), and **All runs**;
 - **Mode**: **Off**, **Preview** or **On** for the board (see [Trying one out with Preview](#trying-one-out-with-preview));
-- **Where it runs**: the board's mode and the projects it's on in;
+- **Where it runs**: one sentence saying where it is on ("On everywhere except payments-api; epic #5 Off"), **Everywhere**
+  or **Only in…** (then pick the projects), and its **Exceptions**: a project or epic that runs differently, each a chip
+  you can remove, with **+ Exception** to add one. The lane pill and the epic button edit the same thing, so they always
+  agree;
 - **Settings**: the few options most people change;
 - **Advanced**, closed: everything else. For an automation that starts an agent it opens with two lines: the
   **Model**, which comes from Settings → Agents → Operations and says what it runs on now, and **Runner, budget and
   timeout**, which come from the [defaults for agent runs](#limits). Each has **Override**, to set it for this
   automation alone, and each overridden value a reset. A dot on Advanced means something in there isn't the default.
 
-The board's switch is just **Off / Preview / On** (there's nothing above the board to inherit from, so an automation
-you haven't switched on is off); only projects and epics can follow the scope above (the ↺ button), and a project can
-override the options in its own settings. On a phone the list and an automation take turns: tap a row, and **All
+The switch on each row is the shortcut for **Everywhere** (there's nothing above the board to inherit from, so an
+automation you haven't switched on is off). A project's own **Settings → Project → Automations** is a read-only list of
+what each automation does there, with a **Change** button that opens it here. On a phone the list and an automation take turns: tap a row, and **All
 automations** takes you back.
 
 **Recurring tasks** has no switch, in the list or in a lane's pill: each of its rules has its own, and its detail lists every
@@ -243,7 +246,7 @@ kept.
 ## Start planned tasks
 
 The one that does the work: it starts an agent on a task you've planned. Switch it on per project or for the
-board, then flag the tasks you want it to take: **Autopilot: On** in the task panel's Automation section. A task flagged
+board, then flag the tasks you want it to take: turn on **start it** under **Autopilot may** in the task panel's Autopilot section. A task flagged
 Default or Off is never started.
 
 A task is picked up when it's in **Planned**, flagged On, has a plan and nothing unfinished blocks it, and the
@@ -292,8 +295,8 @@ It has two targets:
 - **Into epic branches** is on whenever the automation is on. A task in an epic with its own branch merges into that
   branch, never into main. Example: #12 Card vault is in epic #5, which delivers through `epic/5-one-page-checkout`;
   when #12's pull request is ready it merges there, and the epic's own pull request into main stays yours.
-- **Into main** is off unless you switch it on. Only tasks you flagged **Auto-merge** (in the task panel's
-  Automation section) merge into main, through the same check the `merge_task_pr` tool uses. It merges one pull
+- **Into main** is off unless you switch it on. Only tasks you flagged **merge it** (under **Autopilot may** in the task panel's
+  Autopilot section) merge into main, through the same check the `merge_task_pr` tool uses. It merges one pull
   request at a time per repository and reads the others again after each merge, so a pull request that conflicts
   with the one that just landed waits for a fix instead of merging. Example: #4 Fix currency rounding is flagged
   Auto-merge; once its pull request is ready it merges into main and #4 goes to Done.
@@ -336,7 +339,7 @@ Switch **Merge ready PRs** on for the epic (or its project).
 ## Auto-merge into the default branch
 
 A task's pull request reaches the default branch without you only when you've allowed it on that task: set
-**Auto-merge** to On in the task panel's Automation section, or tell an agent to turn it on (`update_task` with
+**merge it** under **Autopilot may** in the task panel's Autopilot section, or tell an agent to turn it on (`update_task` with
 `autoMerge: "on"`). The board can't tell an agent from you, so any agent with the board's tools could set it; agents
 are told to only when you ask. Then two things may merge it, both through the same check (ready, above), and only at
 the commit it checked:
