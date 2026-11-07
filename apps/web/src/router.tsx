@@ -94,7 +94,8 @@ function movedSettingsRedirect(moved: string, provider?: string) {
   });
 }
 /** `draft` opens an automation an agent drafted (docs/features/autopilot.md#drafts). */
-const ImportSearch = z.object({ draft: z.string().optional() });
+// `draft`: an agent's draft to review. `recipe`: one of AUTOMATION_RECIPES, opened like a file someone shared.
+const ImportSearch = z.object({ draft: z.string().optional(), recipe: z.string().optional() });
 
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,

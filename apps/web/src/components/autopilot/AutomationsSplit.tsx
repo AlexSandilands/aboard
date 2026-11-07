@@ -11,6 +11,7 @@ import {
   AUTOPILOT_START_PLANNED,
   AUTOPILOT_UNSTICK,
   automationSentence,
+  createAutomationPrompt,
   customAutomationId,
   isOnMode,
   splitFieldsByTier,
@@ -26,7 +27,6 @@ import {
   ChevronRightIcon,
   ClockAlertIcon,
   EyeIcon,
-  FileUpIcon,
   GitMergeIcon,
   type LucideIcon,
   NewspaperIcon,
@@ -52,12 +52,12 @@ import {
   SplitListItem,
 } from "~/components/settings/agents/SplitCard";
 import { FROM_SETTINGS_LIST } from "~/components/settings/settingsNavigation";
+import { AskAgentMenu } from "~/components/handoff/HandoffActions";
 import { ConfirmDialog } from "~/components/task/ConfirmDialog";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
-import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Switch } from "~/components/ui/switch";
 import { toastManager } from "~/components/ui/toast";
 import { downloadText } from "~/lib/download";
@@ -84,6 +84,9 @@ import {
   previewHint,
   restoreMode,
 } from "./autopilot.logic";
+import { AddAutomationDialog } from "./AddAutomationDialog";
+import { AskToChange } from "./AskAgentButtons";
+import type { QuickSetupState } from "./QuickSetup";
 import { bundleFilename } from "./customAutomationImport.logic";
 import { BlockedWarning, NeedsVariablesWarning } from "./InputsAndSlots";
 import { MergeTargets } from "./MergeTargets";
@@ -127,8 +130,11 @@ export function AutomationsSplit({
   overview,
   pending,
   rejected,
+  quickSetup,
 }: {
   items: ListedAutomation[];
+  /** What Quick setup in the Add dialog reads. */
+  quickSetup: QuickSetupState;
   overview: AutopilotOverview;
   pending: boolean;
   rejected: number;
@@ -170,11 +176,20 @@ export function AutomationsSplit({
                 ))}
               </SplitListGroup>
             ))}
-            <SplitListAction
-              icon={<PlusIcon className="size-4 shrink-0" />}
-              label="Add automation"
-              onClick={() => setAdding(true)}
-            />
+            <div className="flex items-center gap-1 pe-2 sm:pe-3">
+              <div className="min-w-0 flex-1">
+                <SplitListAction
+                  icon={<PlusIcon className="size-4 shrink-0" />}
+                  label="Add automation"
+                  onClick={() => setAdding(true)}
+                />
+              </div>
+              <AskAgentMenu
+                label="Ask an agent to write an automation"
+                threadLabel="Write an automation"
+                prompt={() => createAutomationPrompt({ boardUrl: window.location.origin })}
+              />
+            </div>
           </SplitList>
         }
       >
@@ -191,7 +206,7 @@ export function AutomationsSplit({
           <SettingsNote>No automations are installed yet.</SettingsNote>
         )}
       </SplitCard>
-      <AddAutomationDialog open={adding} onOpenChange={setAdding} />
+      <AddAutomationDialog open={adding} onOpenChange={setAdding} quickSetup={quickSetup} />
     </>
   );
 }
@@ -311,6 +326,11 @@ function AutomationDetail({
             >
               {on ? "Switch off" : "Switch on"}
             </Button>
+            <AskToChange
+              automation={automation}
+              custom={custom}
+              sentence={automationSentence(automation, entry.effectiveConfig, { custom, engine: overview.engine })}
+            />
             {custom ? <CustomActions custom={custom} /> : null}
           </>
         }
@@ -548,66 +568,6 @@ function CustomActions({ custom }: { custom: CustomAutomation }) {
         onConfirm={() => remove.mutate(custom.id)}
       />
     </>
-  );
-}
-
-/**
- * + Add automation, until the gallery: start a custom automation from scratch in the editor, or import one from a
- * file or the examples.
- */
-function AddAutomationDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const navigate = useNavigate();
-  const choices = [
-    {
-      icon: PlusIcon,
-      title: "New automation",
-      blurb: "Pick what it watches for, then start an agent with your prompt, or run a command or a script.",
-      go: () =>
-        void navigate({
-          to: "/settings/autopilot/custom/$customId",
-          params: { customId: "new" },
-          state: FROM_SETTINGS_LIST,
-        }),
-    },
-    {
-      icon: FileUpIcon,
-      title: "Import",
-      blurb: "From a file someone shared, or one of the examples. It comes in in Preview.",
-      go: () => void navigate({ to: "/settings/autopilot/custom/import", state: FROM_SETTINGS_LIST }),
-    },
-  ];
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Add automation</DialogTitle>
-          <DialogDescription>
-            The built-in automations are already in the list: switch one on there. These are your own.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogPanel>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {choices.map(({ icon: Icon, title, blurb, go }) => (
-              <button
-                key={title}
-                type="button"
-                className="flex cursor-pointer flex-col items-start gap-2 rounded-lg border border-border/60 p-3 text-left transition-colors outline-none hover:border-border hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
-                onClick={() => {
-                  onOpenChange(false);
-                  go();
-                }}
-              >
-                <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Icon aria-hidden className="size-4" />
-                  {title}
-                </span>
-                <span className="text-xs text-muted-foreground">{blurb}</span>
-              </button>
-            ))}
-          </div>
-        </DialogPanel>
-      </DialogPopup>
-    </Dialog>
   );
 }
 
