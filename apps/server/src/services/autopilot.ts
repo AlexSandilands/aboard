@@ -593,6 +593,10 @@ export function createAutopilotService(
     };
   };
 
+  const settingChangedAt = (automation: string): string | null =>
+    repos.autopilotSettings.all().find((s) => s.scopeKind === "board" && s.automation === automation)?.updatedAt ??
+    null;
+
   const dismissedHints = (): string[] => {
     const stored = repos.settings.all().get(AUTOPILOT_DISMISSED_HINTS_KEY);
     return Array.isArray(stored) ? stored.filter((v): v is string => typeof v === "string") : [];
@@ -626,10 +630,16 @@ export function createAutopilotService(
           unflagged: ready.filter((t) => t.autopilot === null).map((t) => ({ id: t.id, number: t.number })),
         };
       }
+      const thisWeek = week(automation.key);
+      const changedAt = settingChangedAt(automation.key);
+      const runsSinceConfigChange = repos.autopilotRuns
+        .automationSince(automation.key, changedAt && changedAt > thisWeek.since ? changedAt : thisWeek.since)
+        .filter((r) => !r.dryRun && r.status !== "skipped").length;
       all.push(
         ...automationHints({
           automation,
-          week: week(automation.key),
+          week: thisWeek,
+          runsSinceConfigChange,
           engine,
           boardConfig: parsed.success ? parsed.data : automation.defaults,
           planned,
@@ -883,9 +893,7 @@ export function createAutopilotService(
       return parsed.success && parsed.data.handover ? capHandover(parsed.data.handover) : null;
     },
     runForSession: (sessionId) => repos.autopilotRuns.forSession(sessionId),
-    settingChangedAt: (automation) =>
-      repos.autopilotSettings.all().find((s) => s.scopeKind === "board" && s.automation === automation)?.updatedAt ??
-      null,
+    settingChangedAt,
     finishedWithWorktree: () => repos.autopilotRuns.finishedWithWorktree(),
     usage,
     record({ automation, candidate, dryRun }) {

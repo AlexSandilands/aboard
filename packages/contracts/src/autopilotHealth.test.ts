@@ -181,6 +181,8 @@ describe("automationHints", () => {
       value: 60,
     });
     expect(automationHints({ ...busy, week: week({ runs: ORCHESTRATE_BUSY_RUNS - 1 }) })).toEqual([]);
+    // Once the interval changes, only the runs since count: the hint doesn't ask again straight away.
+    expect(automationHints({ ...busy, boardConfig: { everyMinutes: 60 }, runsSinceConfigChange: 3 })).toEqual([]);
   });
 });
 

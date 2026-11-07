@@ -34,6 +34,7 @@ import { automationReach, isOffEverywhere } from "./automationList.logic";
 import { AutopilotLimits } from "./AutopilotSettingsSection";
 import { AutomationsSplit, customOf, type ListedAutomation } from "./AutomationsSplit";
 import { HINT_ICONS, useApplyHint, type HintTarget } from "./HealthSections";
+import { pausedForRun } from "./health.logic";
 
 type Tab = "automations" | "runs" | "limits";
 
@@ -274,7 +275,7 @@ function NeedsYou({
                 description={`${need.run.error ?? need.run.summary} · ${formatRelativeTimeLabel(need.run.updatedAt)}`}
                 control={
                   <>
-                    {canRetryRun(need.run) ? (
+                    {canRetryRun(need.run) && !pausedForRun(autoPaused, need.run) ? (
                       <Button
                         size="xs"
                         variant="outline"

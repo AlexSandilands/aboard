@@ -9,6 +9,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { useDismissAutopilotRun, useRetryAutopilotRun } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotRuns } from "~/state/queries";
+import { pausedForRun } from "./health.logic";
 import { automationTitle, dismissableRun, formatCost, runStatusLabel, runStatusVariant } from "./autopilot.logic";
 
 /**
@@ -17,7 +18,8 @@ import { automationTitle, dismissableRun, formatCost, runStatusLabel, runStatusV
  */
 export function AutopilotSection({ task }: { task: TaskDetail }) {
   const runs = useAutopilotRuns({ taskId: task.id }).data;
-  const automations = useAutopilotOverview().data?.automations ?? [];
+  const overview = useAutopilotOverview().data;
+  const automations = overview?.automations ?? [];
   if (!runs?.length) return null;
   // Newest first. A run that needs attention is what the card and the collapsed text point at, so it comes first.
   const shown = runs.find((run) => run.needsAttention && run.dismissedAt === null) ?? runs[0]!;
@@ -43,7 +45,7 @@ export function AutopilotSection({ task }: { task: TaskDetail }) {
             key={run.id}
             run={run}
             title={automationTitle(automations, run.automation)}
-            retryable={canRetryRun(run, runs)}
+            retryable={canRetryRun(run, runs) && !pausedForRun(overview?.autoPaused, run)}
           />
         ))}
       </ul>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hintsFor, pausedText, spendText, weekBars } from "./health.logic";
+import { hintsFor, pausedForRun, pausedText, spendText, weekBars } from "./health.logic";
 
 describe("weekBars", () => {
   it("scales each day to the busiest, with its failed part", () => {
@@ -45,5 +45,15 @@ describe("text", () => {
     const hints = [hint("a"), hint(null), hint("b")];
     expect(hintsFor(hints, "a").map((h) => h.id)).toEqual(["a"]);
     expect(hintsFor(hints, null).map((h) => h.id)).toEqual(["null"]);
+  });
+});
+
+describe("pausedForRun", () => {
+  it("matches the run's automation and project", () => {
+    const pauses = [{ automation: "fix_prs", projectId: "p1", projectTitle: "", reason: "", pausedAt: "" }];
+    expect(pausedForRun(pauses, { automation: "fix_prs", projectId: "p1" })).toBe(true);
+    expect(pausedForRun(pauses, { automation: "fix_prs", projectId: "p2" })).toBe(false);
+    expect(pausedForRun(pauses, { automation: "review_prs", projectId: "p1" })).toBe(false);
+    expect(pausedForRun(undefined, { automation: "fix_prs", projectId: "p1" })).toBe(false);
   });
 });

@@ -92,6 +92,11 @@ export interface AutomationHintInput {
   engine: Pick<AutopilotEngineSettings, "prReviewRounds" | "prCommentRounds">;
   /** Its effective config at the board scope. */
   boardConfig: AutopilotConfig;
+  /**
+   * Orchestrate only: its runs this week that acted since its board setting last changed. A changed interval starts
+   * the count again, so the hint asks again only once the new interval has run often too.
+   */
+  runsSinceConfigChange?: number;
   /** Start planned only: Planned tasks with a plan that nothing blocks, in projects where it is on, by flag. */
   planned?: {
     flagged: number;
@@ -192,15 +197,15 @@ export function automationHints(input: AutomationHintInput): AutopilotHint[] {
   }
 
   const every = typeof boardConfig.everyMinutes === "number" ? boardConfig.everyMinutes : null;
-  if (key === AUTOPILOT_ORCHESTRATE && every !== null && week.runs >= ORCHESTRATE_BUSY_RUNS) {
+  const busy = input.runsSinceConfigChange ?? week.runs;
+  if (key === AUTOPILOT_ORCHESTRATE && every !== null && busy >= ORCHESTRATE_BUSY_RUNS) {
     const next = Math.min(every * 2, MAX_ORCHESTRATE_MINUTES);
     if (next > every) {
       hints.push({
-        // Once a week at most: the week's count doesn't drop the moment the interval goes up.
-        id: `busy:${key}:${week.since}`,
+        id: `busy:${key}:${every}`,
         automation: key,
         tone: "info",
-        text: `Ran ${week.runs} times this week. If most runs found nothing to do, checking every ${next} minutes costs less.`,
+        text: `Ran ${busy} times this week at every ${every} minutes. If most runs found nothing to do, checking every ${next} minutes costs less.`,
         action: { kind: "board_config", label: `Every ${next} minutes`, key: "everyMinutes", value: next },
         done: `Orchestrate: every ${every} → ${next} minutes`,
       });

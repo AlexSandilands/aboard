@@ -1,4 +1,4 @@
-import type { AutomationWeek, AutopilotAutoPause, AutopilotHint } from "@repo/contracts";
+import type { AutomationWeek, AutopilotAutoPause, AutopilotHint, AutopilotRun } from "@repo/contracts";
 
 /** One day's bar in This week: its height out of 1 (the busiest day is 1), and the failed part of it. */
 export interface WeekBar {
@@ -40,3 +40,12 @@ export function pausedText(pauses: readonly AutopilotAutoPause[]): string | null
   if (pauses.length === 0) return null;
   return pauses.length === 1 ? `Paused in ${pauses[0]!.projectTitle}` : `Paused in ${pauses.length} projects`;
 }
+
+/**
+ * Whether the run's automation has paused itself in the run's project. A retry there would only wait for Resume, so
+ * Retry isn't offered.
+ */
+export const pausedForRun = (
+  pauses: readonly AutopilotAutoPause[] | undefined,
+  run: Pick<AutopilotRun, "automation" | "projectId">,
+): boolean => !!pauses?.some((p) => p.automation === run.automation && p.projectId === run.projectId);
