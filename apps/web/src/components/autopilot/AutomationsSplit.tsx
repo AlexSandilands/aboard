@@ -13,6 +13,7 @@ import {
   automationSentence,
   customAutomationId,
   splitFieldsByTier,
+  whereEverywhere,
   type AutopilotAutomation,
   type AutopilotOverview,
   type CustomAutomation,
@@ -74,6 +75,7 @@ import {
 import { bundleFilename } from "./customAutomationImport.logic";
 import { BlockedWarning, NeedsVariablesWarning } from "./InputsAndSlots";
 import { RunHistoryLink } from "./RunHistoryLink";
+import { useWhere } from "./useWhere";
 import { WhereItRuns } from "./WhereItRuns";
 
 const BUILTIN_ICONS: Record<string, LucideIcon> = {
@@ -99,6 +101,20 @@ export interface ListedAutomation extends AutomationItem {
   reach: AutomationReach;
   lastRun: LastRun | undefined;
   custom: CustomAutomation | null;
+}
+
+/**
+ * The board switch of a list row and of the detail's header: the shortcut for Everywhere. On is Everywhere, so the
+ * project rows Only in… left are dropped with it and a later Off really is off; off is the board's Inherit.
+ */
+function useBoardSwitch(item: ListedAutomation): (on: boolean) => void {
+  const { input, apply } = useWhere(item.automation);
+  return (on) => {
+    if (on && input) {
+      const writes = whereEverywhere(input);
+      if (writes.length > 0) apply.mutate(writes);
+    } else item.onMode(on ? "on" : "inherit");
+  };
 }
 
 /** The list and the picked automation's detail. The automation in `?automation=` is picked; with none, the first. */
@@ -187,7 +203,8 @@ function ListRow({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const { automation, entry, reach, lastRun, onMode } = item;
+  const { automation, entry, reach, lastRun } = item;
+  const setBoard = useBoardSwitch(item);
   const on = entry.mode === "on";
   const off = isOffEverywhere(reach);
   return (
@@ -213,7 +230,7 @@ function ListRow({
           checked={on}
           disabled={pending || (!on && Boolean(automation.blocked))}
           title={!on && automation.blocked ? automation.blocked : undefined}
-          onCheckedChange={(next) => onMode(next ? "on" : "inherit")}
+          onCheckedChange={setBoard}
         />
       }
     />
@@ -237,7 +254,8 @@ function AutomationDetail({
   rejected: number;
   onBack: () => void;
 }) {
-  const { automation, entry, reach, custom, onMode, onConfig } = item;
+  const { automation, entry, reach, custom, onConfig } = item;
+  const setBoard = useBoardSwitch(item);
   const navigate = useNavigate();
   const { essential, advanced } = splitFieldsByTier(automation.fields);
   const on = entry.mode === "on";
@@ -279,7 +297,7 @@ function AutomationDetail({
               size="xs"
               variant="ghost-muted"
               disabled={pending || (!on && Boolean(automation.blocked))}
-              onClick={() => onMode(on ? "inherit" : "on")}
+              onClick={() => setBoard(!on)}
             >
               {on ? "Switch off" : "Switch on"}
             </Button>

@@ -1572,7 +1572,8 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
     automations, which have no group of their own). A row has an icon, the name with a dot (green on, red when the
     last run failed), a line saying where it is on and how its last run went (`rowSubline`, from each project's scope
     and `overview.lastRuns`), and its board switch (On saves `on`, off saves `inherit`, as the old switch did); that
-    switch is the shortcut for Everywhere below. An
+    switch, and the detail header's **Switch on** (`useBoardSwitch`), are the shortcut for Everywhere below: on saves
+    Everywhere (so the rows Only in… left go too and a later off is off everywhere); off saves the board's Inherit. An
     automation off on the board and in every project is dimmed, as a switched-off provider is; its switch stays.
     **+ Add automation** opens a chooser: New (the editor) or Import. `?automation=<key>` picks a row; with none,
     the first is shown.
