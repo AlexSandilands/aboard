@@ -215,7 +215,11 @@ export function createLinksService(
       // from each), so the key names the thread, not the link.
       const threadKey = `thread:${ref.environmentId}:${ref.threadId}:`;
       const waiting = (s: T3ThreadSnapshot) => s.status === "input" || s.status === "approval";
-      if (!waiting(next) || next.archived) deps.notifications.resolve({ keyPrefix: threadKey });
+      if (!waiting(next) || next.archived) {
+        deps.notifications.resolve({ keyPrefix: threadKey });
+        // The reminder that it has waited a while (reminders.ts) is over too.
+        deps.notifications.resolve({ keyPrefix: `waiting:${row.id}:` });
+      }
       // Waiting again on the same thing counts when the thread was active in between, which a poll can miss.
       const askedAgain = prev.status === next.status && (next.lastActivityAt ?? "") > (prev.lastActivityAt ?? "");
       if (waiting(next) && !next.archived && (!waiting(prev) || prev.status !== next.status || askedAgain)) {

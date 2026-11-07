@@ -84,8 +84,9 @@ describe("scopeAutomations", () => {
     { key: "unblock", epicScope: true },
     { key: "archive", epicScope: false },
     { key: "recurring", epicScope: false },
+    { key: "switchless", epicScope: true, alwaysOn: true },
   ];
-  it("lists every automation for the board and a project, and only those that apply to epics for an epic", () => {
+  it("leaves out an automation with no switch, and for an epic those that don't apply to epics", () => {
     expect(scopeAutomations(all, false).map((a) => a.key)).toEqual(["unblock", "archive", "recurring"]);
     expect(scopeAutomations(all, true).map((a) => a.key)).toEqual(["unblock"]);
   });
@@ -297,6 +298,7 @@ describe("config forms", () => {
     description: "",
     needsAgent: false,
     epicScope: true,
+    alwaysOn: false,
     group: "yours",
     blocked: null,
     needs: null,

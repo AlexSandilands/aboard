@@ -95,15 +95,18 @@ export function AutomationRows({ projectId }: { projectId: string | null }) {
   if (message) return <SettingsNote>{message}</SettingsNote>;
   return (
     <>
-      {items.map((item) => (
-        <AutomationRow
-          key={item.automation.key}
-          {...item}
-          projectId={projectId}
-          pending={pending}
-          rejected={rejected}
-        />
-      ))}
+      {/* An automation with no switch (Recurring tasks) has nothing to set here. */}
+      {items
+        .filter((item) => !item.automation.alwaysOn)
+        .map((item) => (
+          <AutomationRow
+            key={item.automation.key}
+            {...item}
+            projectId={projectId}
+            pending={pending}
+            rejected={rejected}
+          />
+        ))}
     </>
   );
 }

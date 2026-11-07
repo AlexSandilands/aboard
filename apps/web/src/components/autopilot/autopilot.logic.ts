@@ -200,17 +200,20 @@ export function scopeRowModel(
 
 // ── Config forms ─────────────────────────────────────────────────────────
 
-/** The automations a scope's popover lists: an epic's leaves out those that don't apply to epics. */
-export function scopeAutomations<T extends Pick<AutopilotAutomation, "epicScope">>(
+/**
+ * The automations a scope's popover lists: one with no switch (Recurring tasks) isn't there, and an epic's also leaves
+ * out those that don't apply to epics.
+ */
+export function scopeAutomations<T extends { epicScope: boolean; alwaysOn?: boolean }>(
   automations: ReadonlyArray<T>,
   forEpic: boolean,
 ): T[] {
-  return forEpic ? automations.filter((a) => a.epicScope) : [...automations];
+  return automations.filter((a) => !a.alwaysOn && (!forEpic || a.epicScope));
 }
 
 /** Whether an epic has anything to switch: its button and popover are pointless when no automation applies to epics. */
-export const hasEpicAutomations = (automations: ReadonlyArray<Pick<AutopilotAutomation, "epicScope">>): boolean =>
-  automations.some((a) => a.epicScope);
+export const hasEpicAutomations = (automations: ReadonlyArray<{ epicScope: boolean; alwaysOn?: boolean }>): boolean =>
+  automations.some((a) => a.epicScope && !a.alwaysOn);
 
 /** The entry for an automation, or an inherit-everything stand-in while the scope loads. */
 export function entryFor(

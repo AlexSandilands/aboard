@@ -1162,8 +1162,8 @@ const dense: Scenario = (s, opts) => {
 /**
  * The showcase board with Autopilot set up, for Settings → Autopilot: the agent automations in Preview (so the
  * sandbox never starts an agent) with a few "would" runs this week, Auto-archive on, a failed run to retry, an agent's
- * draft to review, a custom automation whose tool slot is empty and one with a check script, and an agent's proposed
- * change to that one.
+ * draft to review, a custom automation whose tool slot is empty and one with a check script, an agent's proposed
+ * change to that one, and recurring rules in three projects.
  */
 const autopilot: Scenario = (s, opts) => {
   showcase(s, opts);
@@ -1260,6 +1260,22 @@ const autopilot: Scenario = (s, opts) => {
     },
     AGENT,
   );
+  // Recurring rules in several projects, one of them paused, for the Recurring tasks detail.
+  const bump = s.templates.create({
+    name: "Dependency bump",
+    titlePattern: "Bump dependencies {{date}}",
+    labels: ["deps"],
+  });
+  const audit = s.templates.create({ name: "Security audit", titlePattern: "Audit {{project}}" });
+  const [rulesA, rulesB, rulesC] = s.projects.list();
+  const weekly = (day: number) => ({ kind: "weekly" as const, days: [day], time: "09:00" });
+  if (rulesA)
+    s.recurring.create(rulesA.id, { name: "Weekly dependency bump", templateId: bump.id, schedule: weekly(1) });
+  if (rulesA)
+    s.recurring.create(rulesA.id, { name: "Monthly audit", templateId: audit.id, schedule: weekly(5), enabled: false });
+  if (rulesB)
+    s.recurring.create(rulesB.id, { name: "Weekly dependency bump", templateId: bump.id, schedule: weekly(3) });
+  if (rulesC) s.recurring.create(rulesC.id, { name: "Security audit", templateId: audit.id, schedule: weekly(2) });
   // A change an agent proposed to the flaky test report (draft_automation's `replaces`), for the before/after review.
   s.customAutomations.draft(
     {

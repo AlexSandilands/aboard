@@ -384,8 +384,9 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
         else if (e.payload.to === "blocked") count("friction.steps_blocked", e.at);
         else if (e.payload.to === "skipped") count("friction.steps_skipped", e.at);
       }
-      // Stalls are Unstick's findings and the inbox's "thread waiting" notices, read as the activity report reads
-      // them: a task stalls one way once per week, however often it was noticed.
+      // Stalls are the inbox's "thread waiting", "waited" and "quiet" notices, and the runs of the Unstick automation
+      // they replaced, read as the activity report reads them: a task stalls one way once per week, however often it
+      // was noticed.
       const stalled = new Set<string>();
       const stall = (taskId: string, kind: string, at: string) => {
         const key = `${taskId}:${kind}:${bucketOf(Date.parse(at))}`;
@@ -402,8 +403,14 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
         const kind = stallKind(run);
         if (kind) stall(run.taskId!, kind, at);
       }
-      for (const n of repos.notifications.between(["thread_waiting"], start, end)) {
-        if (n.taskId && inScope(projectOfTask(n.taskId))) stall(n.taskId, "waiting", n.createdAt);
+      const stallKinds = { thread_waiting: "waiting", thread_waited: "waiting", task_quiet: "stale" } as const;
+      for (const n of repos.notifications.between(
+        Object.keys(stallKinds) as Array<keyof typeof stallKinds>,
+        start,
+        end,
+      )) {
+        if (n.taskId && inScope(projectOfTask(n.taskId)))
+          stall(n.taskId, stallKinds[n.kind as keyof typeof stallKinds], n.createdAt);
       }
 
       // Breakdowns split the period by category rather than by week: what finished, and what ran sessions.
