@@ -246,6 +246,14 @@ export function automationOfTarget(target: string | null | undefined): string | 
 
 /** Where a setting went when Settings → Autopilot became tabs, by its old id; one ending in "." moves every row under it. */
 const MOVED_AUTOPILOT: ReadonlyArray<[string, string]> = [
+  // The PR rounds and fix threshold moved into the PR automations themselves.
+  ["autopilot.engine.pr-review-rounds", "autopilot.automations.review_prs"],
+  ["autopilot.limits.pr-review-rounds", "autopilot.automations.review_prs"],
+  ["autopilot.engine.pr-comment-rounds", "autopilot.automations.fix_prs"],
+  ["autopilot.limits.pr-comment-rounds", "autopilot.automations.fix_prs"],
+  ["autopilot.engine.pr-fix-threshold", "autopilot.automations.fix_prs"],
+  ["autopilot.limits.pr-fix-threshold", "autopilot.automations.fix_prs"],
+  ["autopilot.limits.pull-requests", "autopilot.automations.fix_prs"],
   // Dry run became Preview everything, under Limits → Advanced (the Safety section before).
   ["autopilot.engine.dry-run", "autopilot.limits.preview-everything"],
   ["autopilot.limits.dry-run", "autopilot.limits.preview-everything"],

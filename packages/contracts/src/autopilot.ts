@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { FindingSeverity } from "./reviews.ts";
 import { OperationId, OperationNeed, RunModelRecord } from "./operations.ts";
+import { T3RuntimeMode } from "./t3Launch.ts";
 import type { TaskSummary } from "./schemas.ts";
 
 // Autopilot: a rule engine in the server that runs a catalogue of automations (docs/decisions/0008-autopilot-engine.md).
@@ -315,6 +315,48 @@ export type AutopilotScopeEntry = z.infer<typeof AutopilotScopeEntry>;
 
 const ClockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM (24-hour)");
 
+/** Where an agent run goes. Auto: a T3 Code thread when T3 is connected, else headless. */
+export const RunnerChoice = z.enum(["auto", "t3", "headless"]);
+export type RunnerChoice = z.infer<typeof RunnerChoice>;
+
+/** The runner choices as the settings list them; `short` is for one-line summaries. */
+export const RUNNER_CHOICES: ReadonlyArray<{ value: RunnerChoice; label: string; short: string }> = [
+  { value: "auto", label: "Auto (T3 Code when connected, else headless)", short: "Auto" },
+  { value: "t3", label: "T3 Code only", short: "T3 Code" },
+  { value: "headless", label: "Headless only (a CLI in a worktree)", short: "Headless" },
+];
+
+/**
+ * What every agent automation runs with unless it overrides it (docs/features/autopilot.md#agent-defaults). The model
+ * isn't here: it comes from Settings → Agents → Operations, per kind of run.
+ */
+export const AutopilotAgentDefaults = z.object({
+  runner: RunnerChoice,
+  /** Headless: `--max-budget-usd`, for Claude Code only (Codex and Copilot CLI have no cap). */
+  budgetUsd: z.number().positive().max(100),
+  /** Headless: the run is stopped after this long. */
+  timeoutMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 60),
+  /** T3: the most access a thread gets; "default" is T3's own default, which is also the ceiling. */
+  t3Access: z.union([z.literal("default"), T3RuntimeMode]),
+});
+export type AutopilotAgentDefaults = z.infer<typeof AutopilotAgentDefaults>;
+
+/** The agent defaults' keys: an automation's config field of the same key overrides the board's value. */
+export const AGENT_DEFAULT_KEYS = Object.keys(AutopilotAgentDefaults.shape) as ReadonlyArray<
+  keyof AutopilotAgentDefaults
+>;
+
+export const DEFAULT_AGENT_DEFAULTS: AutopilotAgentDefaults = {
+  runner: "auto",
+  budgetUsd: 5,
+  timeoutMinutes: 60,
+  t3Access: "default",
+};
+
 /** Engine-wide limits. Caps and quiet hours apply only to automations that start an agent. */
 export const AutopilotEngineSettings = z.object({
   /** Agent runs at once. */
@@ -327,14 +369,13 @@ export const AutopilotEngineSettings = z.object({
   quietHours: z.object({ enabled: z.boolean(), start: ClockTime, end: ClockTime }),
   /** Preview everything: every automation records what would run, as skipped runs, and does nothing. */
   dryRun: z.boolean(),
-  /** Review rounds the PR review automation runs per PR, and Fix PRs' attempts on its review and failing checks. */
-  prReviewRounds: z.number().int().min(1).max(10),
-  /** Fix PRs' attempts per PR on other people's review comments and requests for changes. */
-  prCommentRounds: z.number().int().min(1).max(10),
-  /** The lowest finding severity the PR automations ask an agent to fix. */
-  prFixThreshold: FindingSeverity,
   /** Days a finished headless run's worktree is kept when its PR hasn't merged; clean ones are then removed. */
   worktreeRetentionDays: z.number().int().min(1).max(365),
+  /**
+   * What agent automations run with when no scope of theirs sets it. Review rounds, comment rounds and the fix
+   * threshold were engine settings before 044_autopilot_agent_defaults moved them into Review PRs and Fix PRs.
+   */
+  agentDefaults: AutopilotAgentDefaults,
 });
 export type AutopilotEngineSettings = z.infer<typeof AutopilotEngineSettings>;
 
@@ -344,14 +385,13 @@ export const DEFAULT_AUTOPILOT_ENGINE: AutopilotEngineSettings = {
   dailySpendCapUsd: null,
   quietHours: { enabled: false, start: "22:00", end: "07:00" },
   dryRun: false,
-  prReviewRounds: 3,
-  prCommentRounds: 5,
-  prFixThreshold: "major",
   worktreeRetentionDays: 7,
+  agentDefaults: DEFAULT_AGENT_DEFAULTS,
 };
 
 export const UpdateAutopilotEngineInput = AutopilotEngineSettings.extend({
   quietHours: AutopilotEngineSettings.shape.quietHours.partial(),
+  agentDefaults: AutopilotAgentDefaults.partial(),
 }).partial();
 export type UpdateAutopilotEngineInput = z.infer<typeof UpdateAutopilotEngineInput>;
 

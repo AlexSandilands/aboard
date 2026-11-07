@@ -41,6 +41,7 @@ import {
 } from "@repo/contracts";
 import { AUTOPILOT_AUTO_ARCHIVE } from "../autopilot/automations/autoArchive.ts";
 import { startOfDay } from "../autopilot/limits.ts";
+import { agentDefaultsFor } from "../autopilot/runnerOptions.ts";
 import type { ActionResult, Automation, AutomationConfig, Candidate, RunPatch } from "../autopilot/types.ts";
 import { nowIso } from "../db/database.ts";
 import type { Repos } from "../db/repos/index.ts";
@@ -55,10 +56,14 @@ export const AUTOPILOT_PAUSED_KEY = "autopilotPaused";
 
 /** The engine settings stored, over the defaults; a value that no longer parses falls back to them. */
 export function loadAutopilotEngine(repos: Repos): AutopilotEngineSettings {
-  const stored = repos.settings.all().get(AUTOPILOT_ENGINE_KEY);
+  // One row, not the whole table: the service reads it on every resolve, for the agent defaults.
+  const raw = repos.settings.get(AUTOPILOT_ENGINE_KEY);
+  const stored = raw && typeof raw === "object" ? (raw as Partial<Record<keyof AutopilotEngineSettings, unknown>>) : {};
+  const agentDefaults = stored.agentDefaults && typeof stored.agentDefaults === "object" ? stored.agentDefaults : {};
   const parsed = AutopilotEngineSettings.safeParse({
     ...DEFAULT_AUTOPILOT_ENGINE,
-    ...(typeof stored === "object" ? stored : {}),
+    ...stored,
+    agentDefaults: { ...DEFAULT_AUTOPILOT_ENGINE.agentDefaults, ...agentDefaults },
   });
   return parsed.success ? parsed.data : DEFAULT_AUTOPILOT_ENGINE;
 }
@@ -84,7 +89,12 @@ export function loadAutopilotStatus(repos: Repos): AutopilotStatus {
   };
 }
 
-export const describeAutomation = (a: Automation, needs: string | null = null): AutopilotAutomation => ({
+/** `defaults`: what applies where no scope sets a key, the board's agent defaults included. */
+export const describeAutomation = (
+  a: Automation,
+  needs: string | null = null,
+  defaults: AutopilotAutomation["defaults"] = a.defaults,
+): AutopilotAutomation => ({
   key: a.key,
   title: a.title,
   description: a.description,
@@ -95,7 +105,7 @@ export const describeAutomation = (a: Automation, needs: string | null = null): 
   blocked: a.blocked ?? null,
   needs,
   fields: a.fields,
-  defaults: a.defaults,
+  defaults,
 });
 
 /** An automation's effective state for one project (or the board, with null). */
@@ -339,11 +349,18 @@ export function createAutopilotService(
     ];
   };
 
-  const parseConfig = (automation: Automation, config: AutomationConfig) =>
-    automation.schema.safeParse({ ...automation.defaults, ...config });
+  /** The automation's defaults with the board's agent defaults laid over them: what applies where no scope sets a key. */
+  const defaultsOf = (automation: Automation, board = loadAutopilotEngine(repos).agentDefaults): AutomationConfig => ({
+    ...automation.defaults,
+    ...agentDefaultsFor(automation, board),
+  });
+
+  const parseConfig = (automation: Automation, config: AutomationConfig, defaults = defaultsOf(automation)) =>
+    automation.schema.safeParse({ ...defaults, ...config });
 
   const entries = (kind: AutopilotScopeKind, id: string | null, projectId?: string): AutopilotScopeEntry[] => {
     const all = repos.autopilotSettings.all();
+    const board = loadAutopilotEngine(repos).agentDefaults;
     return deps
       .automations()
       .filter((automation) => kind !== "epic" || epicScoped(automation))
@@ -352,7 +369,8 @@ export function createAutopilotService(
         const resolved = resolveAutopilot(
           chainFor(all, automation.key, kind === "board" ? null : (projectId ?? id), kind === "epic" ? id : null),
         );
-        const parsed = parseConfig(automation, resolved.config);
+        const defaults = defaultsOf(automation, board);
+        const parsed = parseConfig(automation, resolved.config, defaults);
         return {
           automation: automation.key,
           mode: own?.mode ?? "inherit",
@@ -361,7 +379,7 @@ export function createAutopilotService(
           enabled: resolved.enabled,
           preview: resolved.preview,
           source: resolved.source,
-          effectiveConfig: parsed.success ? parsed.data : { ...automation.defaults, ...resolved.config },
+          effectiveConfig: parsed.success ? parsed.data : { ...defaults, ...resolved.config },
         };
       });
   };
@@ -554,7 +572,12 @@ export function createAutopilotService(
 
   return {
     overview: () => {
-      const automations = deps.automations().map((automation) => describeAutomation(automation, needsOf(automation)));
+      const engine = loadAutopilotEngine(repos);
+      const automations = deps
+        .automations()
+        .map((automation) =>
+          describeAutomation(automation, needsOf(automation), defaultsOf(automation, engine.agentDefaults)),
+        );
       const agents = deps
         .automations()
         .filter((a) => a.needsAgent)
@@ -562,7 +585,7 @@ export function createAutopilotService(
       const { started, spendUsd } = usage(agents, startOfDay(core.now()));
       return {
         paused: loadAutopilotStatus(repos).paused,
-        engine: loadAutopilotEngine(repos),
+        engine,
         automations,
         today: { agentRuns: started, spendUsd },
         needsYou: needsYou(automations),
@@ -581,6 +604,7 @@ export function createAutopilotService(
         ...current,
         ...input,
         quietHours: { ...current.quietHours, ...input.quietHours },
+        agentDefaults: { ...current.agentDefaults, ...input.agentDefaults },
       });
       if (!next.success) throw new AppError("VALIDATION", "Invalid Autopilot settings", next.error.issues);
       core.write((fx) => {
