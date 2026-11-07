@@ -152,7 +152,7 @@ Agents can suggest changes to the prompts and skills the board runs them with: t
 chose (on the board or a project), your custom automations' prompts, and the skills those automations name. Each
 suggestion waits under **Settings → Tasks → Suggestions**, with a count beside the section in the list and a
 notification when a new one arrives. Nothing changes until you decide. The
-[Improve prompts and skills](custom-automations.md#improve-prompts-and-skills) automation makes them every week.
+[Improve automations](autopilot.md#improve-automations) automation can make them every week.
 
 Each one shows why the agent suggests it, the evidence (tasks open on the board, links open in a new tab), and the
 change as a diff; **Show the whole proposed text** shows all of it. Read it before you accept: it is an agent's

@@ -9,6 +9,7 @@ import type {
   AutopilotConfig,
   AutopilotEngineSettings,
   AutopilotModeRow,
+  AutopilotOnMode,
   AutopilotOverview,
   AutopilotRun,
   AutopilotScopeEntry,
@@ -642,6 +643,38 @@ export function useApplyWhere(automation: string) {
         description: error instanceof Error ? error.message : String(error),
       });
     },
+  });
+}
+
+/**
+ * Quick setup's Apply: each switch-on (quickSetupWrites) as a board-scope write, one after another. The server has no
+ * batch, and the writes are independent: when one is refused the rest still apply, and the error says which.
+ */
+export function useApplyQuickSetup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (writes: ReadonlyArray<{ automation: string; mode: AutopilotOnMode }>) => {
+      const failed: string[] = [];
+      for (const { automation, mode } of writes) {
+        try {
+          await api<AutopilotScopeEntry[]>(`/api/autopilot/board/${enc(automation)}`, {
+            method: "PUT",
+            body: { mode } satisfies UpdateAutopilotSettingInput,
+          });
+        } catch (error) {
+          failed.push(`${automation}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      if (failed.length > 0) throw new Error(failed.join("; "));
+    },
+    scope: { id: "autopilot-scope:board" },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll }),
+    onError: (error) =>
+      toastManager.add({
+        type: "error",
+        title: "Quick setup couldn't switch everything on",
+        description: error instanceof Error ? error.message : String(error),
+      }),
   });
 }
 
