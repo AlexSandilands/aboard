@@ -17,6 +17,9 @@ export const AUTOPILOT_UNSTICK = "unstick";
 /** The scheduled agent that sees a project's work through: unsticks it, merges what's ready. The UI shows its handovers. */
 export const AUTOPILOT_ORCHESTRATE = "orchestrate";
 
+/** The weekly agent that audits how agents did and suggests rewrites of the prompts and skills they run with. */
+export const AUTOPILOT_IMPROVE = "improve_automations";
+
 /** How an Unstick note and run summary open for a task gone quiet; board_activity tells the two kinds apart by it. */
 export const UNSTICK_STALE_PREFIX = "Stale: no activity for";
 /** How they open for a task whose thread waits on the user. */

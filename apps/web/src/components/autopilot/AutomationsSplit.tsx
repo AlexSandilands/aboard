@@ -5,6 +5,7 @@ import {
   AUTOPILOT_DIGEST,
   AUTOPILOT_FIX_PRS,
   AUTOPILOT_MERGE_EPIC_PRS,
+  AUTOPILOT_IMPROVE,
   AUTOPILOT_ORCHESTRATE,
   AUTOPILOT_RECURRING,
   AUTOPILOT_REVIEW_PRS,
@@ -32,6 +33,7 @@ import {
   PlusIcon,
   RepeatIcon,
   ScanSearchIcon,
+  SparklesIcon,
   SquareTerminalIcon,
   WorkflowIcon,
   WrenchIcon,
@@ -80,6 +82,7 @@ import { RunHistoryLink } from "./RunHistoryLink";
 const BUILTIN_ICONS: Record<string, LucideIcon> = {
   [AUTOPILOT_START_PLANNED]: PlayIcon,
   [AUTOPILOT_ORCHESTRATE]: WorkflowIcon,
+  [AUTOPILOT_IMPROVE]: SparklesIcon,
   [AUTOPILOT_REVIEW_PRS]: ScanSearchIcon,
   [AUTOPILOT_FIX_PRS]: WrenchIcon,
   [AUTOPILOT_MERGE_EPIC_PRS]: GitMergeIcon,

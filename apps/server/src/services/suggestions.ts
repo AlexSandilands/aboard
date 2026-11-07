@@ -76,6 +76,12 @@ export interface SuggestionsService {
    */
   accept(id: string, actor: string): Suggestion;
   reject(id: string, actor: string): Suggestion;
+  /**
+   * Keeps the first `max` open suggestions made at or after `since` and rejects the rest, with an outcome saying the
+   * run was over its limit (so it isn't the user's verdict). Returns both lists. For a run that was asked for
+   * at most `max` and can't be held to it by its tools (Improve automations).
+   */
+  limitSince(since: string, max: number, actor: string): { kept: Suggestion[]; dropped: Suggestion[] };
 }
 
 export function createSuggestionsService(
@@ -396,6 +402,19 @@ export function createSuggestionsService(
 
     reject(id, actor) {
       return close(open(id), "rejected", actor, null);
+    },
+
+    limitSince(since, max, actor) {
+      const made = repos.suggestions.list(0).filter((s) => s.status === "open" && s.createdAt >= since);
+      const limit = Math.max(0, max);
+      return {
+        kept: made.slice(0, limit),
+        dropped: made
+          .slice(limit)
+          .map((s) =>
+            close(s, "rejected", actor, `Over the limit of ${max} suggestions for one run, so it was dropped.`),
+          ),
+      };
     },
   };
 }
