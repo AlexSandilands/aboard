@@ -31,8 +31,8 @@ const openTaskOf = (services: Services, rule: RecurringRule): TaskSummary | null
 
 /**
  * Makes a task from a template on a schedule, per project, with no agent: weekly dependency bumps, an audit, a
- * docs check. The rules are in `autopilot_recurring` (edited in the project's settings); this automation's own
- * switch decides whether any of a project's rules run.
+ * docs check. The rules are in `autopilot_recurring` (edited in Settings → Autopilot → Recurring tasks, or the
+ * project's settings); a rule that is enabled runs, as the automation has no switch of its own.
  *
  * Each slot has its own dedupe key. A rule that was due while the board was off gets one task for the latest slot,
  * not one per missed slot. A slot that finds the rule's last task still open is skipped (and logged), so a chore
@@ -46,6 +46,8 @@ export const recurring = defineAutomation({
   group: "upkeep",
   // Its candidates are per project, with no task, so no epic can hold one.
   epicScope: false,
+  // Each rule has its own switch; a rule that is on runs.
+  alwaysOn: true,
   schema: z.object({}),
   fields: [],
   defaults: {},

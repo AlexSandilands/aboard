@@ -1,5 +1,6 @@
 import { reviewBadgeLabel, type TaskDetail, type TaskRelation } from "@repo/contracts";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
+import { mayState } from "./automation.logic";
 import { isSessionLink, type PlainLink } from "./links.logic";
 
 type PrLink = Extract<PlainLink, { kind: "pr" }>;
@@ -10,9 +11,8 @@ export const SECTION_IDS = [
   "sessions",
   "links",
   "relations",
-  "automation",
-  "review",
   "autopilot",
+  "review",
   "plan",
   "details",
   "activity",
@@ -25,7 +25,6 @@ export const SECTION_TITLES: Record<SectionId, string> = {
   sessions: "Sessions",
   links: "Links",
   relations: "Relations",
-  automation: "Automation",
   review: "Local review",
   autopilot: "Autopilot",
   plan: "Plan",
@@ -41,7 +40,7 @@ export interface SectionLayout {
 }
 
 /** Sections added after others existed sit before the one they were split from in a saved order, not at the end. */
-const SECTION_ANCHORS: Partial<Record<SectionId, SectionId>> = { sessions: "links", automation: "review" };
+const SECTION_ANCHORS: Partial<Record<SectionId, SectionId>> = { sessions: "links" };
 
 const isSectionId = (value: unknown): value is SectionId => SECTION_IDS.includes(value as SectionId);
 
@@ -95,6 +94,7 @@ export function moveSection(order: ReadonlyArray<SectionId>, id: SectionId, over
 
 export type SectionTask = Pick<
   TaskDetail,
+  | "kind"
   | "labels"
   | "links"
   | "blockedBy"
@@ -134,13 +134,11 @@ export function collapsedByDefault(id: SectionId, task: SectionTask): boolean {
     case "relations":
       return task.blockedBy.length === 0 && task.blocks.length === 0;
     // The settings are the section's content, so it stays open: they're what you came to change.
-    case "automation":
-      return false;
+    // An epic has no settings of its own here, only the runs on it: open it when one needs a look.
+    case "autopilot":
+      return task.kind === "epic" ? !task.attention.some((a) => a.kind === "autopilot") : false;
     case "review":
       return task.reviews.length === 0;
-    // The runs aren't in the task detail; open it when one needs attention, since that is why you'd look.
-    case "autopilot":
-      return !task.attention.some((a) => a.kind === "autopilot");
     case "details":
       return !hasText(task.description) && !hasText(task.planContext);
     case "activity":
@@ -223,30 +221,42 @@ export function relationChipGroups(task: Pick<SectionTask, "blockedBy" | "blocks
   ].filter((group) => group.chips.length > 0);
 }
 
-/** The settings that were changed from their default, or "Defaults" when none were. */
-function automationSummary(
-  task: Pick<SectionTask, "autopilot" | "autoReview" | "reviewModel" | "autoMerge" | "priority" | "manual">,
+/**
+ * What Autopilot may do with the task, as the collapsed Autopilot section says it: "May start, review", or "Not
+ * automated". It reads the same chips the open section shows (`mayState`), so a task that follows the board's
+ * Auto-review counts review when the board has it on; the reviewer's model comes after it.
+ */
+function autopilotSummary(
+  task: Pick<SectionTask, "kind" | "autopilot" | "autoReview" | "reviewModel" | "autoMerge" | "priority" | "manual">,
+  globalReview: boolean,
 ): string {
-  const on = (value: boolean | null) => (value ? "on" : "off");
+  // An epic has no flags: its section is only the runs.
+  if (task.kind === "epic") return "Runs on this epic";
   // A manual task has no Autopilot, review or merge settings that apply to it.
-  if (task.manual) return task.priority ? "Manual task · Priority" : "Manual task";
-  const parts = [
-    task.autopilot === null ? null : `Autopilot ${on(task.autopilot)}`,
-    task.autoReview === null ? null : `Auto-review ${on(task.autoReview)}`,
+  if (task.manual) return task.priority ? "For a person · Priority" : "For a person";
+  const on = mayState(task, globalReview);
+  const may = [on.start ? "start" : null, on.review ? "review" : null, on.merge ? "merge" : null].filter(
+    (part) => part !== null,
+  );
+  const reviewer =
     task.reviewModel === null || task.reviewModel === "inherit"
       ? null
-      : `Reviewer ${"tier" in task.reviewModel ? task.reviewModel.tier : "profile" in task.reviewModel ? task.reviewModel.profile : task.reviewModel.model}`,
-    task.autoMerge === null ? null : `Auto-merge ${on(task.autoMerge)}`,
-    task.priority ? "Priority" : null,
-  ].filter((part) => part !== null);
-  return parts.length ? parts.join(" · ") : "Defaults";
+      : `Reviewer ${"tier" in task.reviewModel ? task.reviewModel.tier : "profile" in task.reviewModel ? task.reviewModel.profile : task.reviewModel.model}`;
+  const parts = [may.length ? `May ${may.join(", ")}` : "Not automated", reviewer, task.priority ? "Priority" : null];
+  return parts.filter((part) => part !== null).join(" · ");
 }
 
 const LINK_ATTENTION = new Set(["pr_checks_failing", "pr_changes_requested", "pr_conflict"]);
 const SESSION_ATTENTION = new Set(["thread_needs_input", "thread_failed"]);
 
 /** The one-line summary a collapsed section header shows in place of its content. */
-export function summarizeSection(id: SectionId, task: SectionTask, nowMs: number = Date.now()): string {
+export function summarizeSection(
+  id: SectionId,
+  task: SectionTask,
+  nowMs: number = Date.now(),
+  /** The board's Auto-review setting, which a task that sets nothing follows. */
+  globalReview: boolean = false,
+): string {
   switch (id) {
     case "labels":
       return task.labels.length ? task.labels.join(", ") : "None";
@@ -270,8 +280,6 @@ export function summarizeSection(id: SectionId, task: SectionTask, nowMs: number
       ].filter((part) => part !== null);
       return parts.length ? parts.join(" · ") : task.blockedBy.length ? "Unblocked" : "None";
     }
-    case "automation":
-      return automationSummary(task);
     case "review": {
       if (!task.review) return "Not reviewed yet";
       if (task.review.state === "pending" || task.review.state === "running") return reviewBadgeLabel(task.review);
@@ -279,7 +287,7 @@ export function summarizeSection(id: SectionId, task: SectionTask, nowMs: number
       return open ? plural(open, "open finding") : reviewBadgeLabel(task.review);
     }
     case "autopilot":
-      return task.attention.find((a) => a.kind === "autopilot")?.message ?? "Runs on this task";
+      return task.attention.find((a) => a.kind === "autopilot")?.message ?? autopilotSummary(task, globalReview);
     case "plan": {
       const { done, total } = task.progress;
       if (total === 0) return "No plan yet";

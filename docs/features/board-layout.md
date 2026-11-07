@@ -40,7 +40,7 @@ stand-in `PRIORITY_PROJECT` and whose row id is `PRIORITY_ROW_ID`, "priority"). 
 - **Cards** name their project in a small chip. Order is by project (the board's order), then position.
   The cells count in the column headers like any lane's.
 - **Setting it.** The star on a card (shown on hover, filled while set), **Mark as priority** in the panel's More menu,
-  the Priority switch in the panel's Automation section, and `priority` on `create_task`, `add_to_backlog` and `update_task` (and REST). Agents set it only when asked.
+  the Priority switch in the panel's Autopilot section, and `priority` on `create_task`, `add_to_backlog` and `update_task` (and REST). Agents set it only when asked.
 - **Dragging** (`computeDrop`, `canDropIn` in `dnd.logic.ts`). A card in the lane moves between its columns, which
   changes its status. It takes no place in the column: positions only mean something inside one project's lane, and
   the server refuses a neighbour from another project. Dropped on its own project's lane (or its epic's band) it is
@@ -198,9 +198,8 @@ Until the user chooses, sections collapse by content (`collapsedByDefault`):
 | Sessions             | The task has no T3 threads or agent sessions      |
 | Links                | The task has no PRs, issues, tickets or URLs      |
 | Relations            | The task blocks nothing and is blocked by nothing ([relations](relations.md)) |
-| Automation           | Never: the settings are its content               |
 | Local review         | No review rounds                                  |
-| Autopilot            | No run on the task needs attention (the runs aren't in the task detail, so they can't decide) |
+| Autopilot            | A task: never, the settings are its content. An epic (runs only): no run needs attention |
 | Details              | No description and no plan context                |
 | Activity             | Always: it's a log, not a summary                 |
 
@@ -210,11 +209,30 @@ them until **Reset**. The **Customize sections** popover in the panel's top bar 
 hides sections, collapses or expands them all, and resets to the defaults. Stored layouts are
 re-validated on read (`normalizeSectionLayout`): unknown ids are dropped and sections added later are
 appended, except Sessions, which goes before Links in a layout saved without it (and takes its hidden and collapsed state from Links when that layout
-had them, since it used to be part of Links) and Automation, which goes before Local review.
+had them, since it used to be part of Links). There was once a separate Automation section; it is part of Autopilot now,
+so a saved layout that names it loses that id (its hidden and collapsed choice with it), and Autopilot keeps its own.
 
-The Autopilot section lists the task's Autopilot runs (`AutopilotSection`: status, automation, what it did,
-runner, a thread link or session id, cost and the error). It renders nothing while the task has no runs, so
-tasks Autopilot never touched don't show it.
+The Autopilot section (`AutopilotSection`) is where a task's Autopilot settings and runs are. Its first part is
+`AutopilotFlags`, the task's automation settings (the old Automation section, #168, merged in by #125): **Autopilot
+may** with three chips, **start it** (`autopilot`: whether Start planned tasks may start it), **review it** (`autoReview`:
+whether moving to Review opens a local review round) and **merge it** (`autoMerge`: whether its PR may merge into the
+default branch without the user: by `merge_task_pr`, or by Autopilot's Merge ready PRs with Into main on); **Reviewer** (the task's [reviewer model](local-review.md#the-reviewer-model) in the shared model picker:
+Inherit, which names what the project's or board's comes down to, a tier, a custom model or a provider's model; shown
+only while review is effectively on); a **Priority** switch; and **For a person** (the old Manual task switch). A chip is
+on or off: the data keeps Default / On / Off, but off saves Default (null), which acts as Off for start and merge and
+follows the board's Auto-review for review, so review is saved as an explicit On or Off only when it differs from the
+board's setting (`automationUpdate`, `mayState`); an explicit Off already stored reads as off. Each change saves through
+`useUpdateTask` at once. The actions menu's "Mark as priority" and the card's star stay as shortcuts to the same field.
+Each control's hint is a tooltip and also its group's description, so screen readers read it. Local review's header only
+shows whether auto-review is on, as plain text. A task for a person shows only Priority and For a person. An epic has no
+flags (no plan to start, no PR, no priority), so its panel shows the section only once Autopilot has run on it, with the
+runs alone.
+
+Under the settings come the run notice and the task's Autopilot runs (status, automation, what it did, runner, a thread
+link or session id, cost and the error), or "Autopilot hasn't run on this task". The collapsed header reads what it may do
+("May start, review · Priority", "Not automated", "For a person"; "Runs on this epic" for an epic), from the same chips
+(`mayState`, so a task that follows the board's Auto-review counts review when the board has it on), or the attention
+message when a run needs a look.
 
 #### The due date
 
@@ -226,16 +244,6 @@ there are no reminders, notifications, sort, filters or columns. The panel's Det
 clears). The card shows a small chip in its meta row only when a date is set and the task isn't Done: muted, amber due
 today, red overdue. A change logs `updated` with `fields: ["dueDate"]`. Agents set it with `update_task` (`dueDate`,
 `null` clears) only when the user gives a date, and see it in `get_task` and `list_tasks` only when set.
-
-#### The Automation section
-
-The task's own automation settings live in one place (`AutomationSection`, #168): **Autopilot** (Default / On / Off,
-whether Start planned tasks may start it), **Auto-review** (Default / On / Off, whether moving to Review opens a local
-review round), **Reviewer** (the task's [reviewer model](local-review.md#the-reviewer-model) in the shared model picker: Inherit, which names what the project's or board's comes down to, a tier, a custom model or a provider's model; shown only while auto-review is effectively on), **Auto-merge** (Default / On / Off, whether its PR may merge into the default branch without the user: by `merge_task_pr`, or by Autopilot's Merge ready PRs with Into main on; Default reads as off) and a
-**Priority** switch. Each saves through `useUpdateTask` as soon as it changes. The actions menu's "Mark as priority" and the
-card's star stay as shortcuts to the same field. Local review's header only shows whether auto-review is on, as plain text; with Automation hidden, show it again from **Customize sections** to change it. Each row's hint is a tooltip and also its group's description, so screen readers read it.
-An epic has none of these (no plan to start, no PR, no priority), so the panel leaves the section out for it, like Plan and
-Local review.
 
 #### The Sessions section
 
@@ -273,18 +281,20 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   a run is going in the project a bright arc circles the border and a glow breathes behind it (`.autopilot-pill`
   in `index.css`; both animations are off under `prefers-reduced-motion`). A run still going counts as active
   even under Pause all. Clicking it opens a popover (`ScopePopover`) with a header ("Autopilot" and a cog button,
-  tooltip "Autopilot settings", that closes it and opens Settings → Autopilot) and one on/off switch per automation at
-  the project. Every row is a `ScopeRow` in a `ScopeCard`: the name (its description is the name's tooltip) and a
-  switch. The stored Inherit / Off / Preview / On model is unchanged; only the control is. A switch that follows the
-  board (or the built-in default) is faded, and its tooltip says where the state comes from (`scopeRowModel`, from the
-  entry's already resolved `enabled`, `preview` and `source`: "On, following the board"). An automation resolved to
-  [Preview](autopilot.md#preview) is on, with an amber **Preview** badge by its name. A click saves Off, or turns it on
-  in the mode the project last had it on in (`lastOnMode`, On when none); once the
-  project sets it the switch is solid and a ↺ button saves Inherit again. An automation that can't be turned on
-  (`blocked`, an empty required tool slot) shows a ⚠ with the reason as its tooltip and its switch can only be
-  turned off. Under Recurring tasks a calendar icon button opens the project's settings at that section. Paused is a
-  one-line `Alert` with a **Resume** button (`PausedNotice`). The rows wait behind a skeleton until the scope loads (a failed load shows its error instead), so
-  no switch shows a made-up Off, and a long list scrolls in a `ScrollArea`.
+  tooltip "Autopilot settings", that closes it and opens Settings → Autopilot) and one row per automation, the compact
+  form of the **Where it runs** widget in Settings ([autopilot.md](autopilot.md#the-ui)). Every row is a `WhereRow`
+  (a `ScopeRow` in a `ScopeCard`): the name (its description is the name's tooltip), a muted line saying where the
+  automation runs overall ("On everywhere except storefront", the widget's sentence from `describeWhere`) and an on/off
+  switch for this project. The switch always shows what the automation does here, and a click saves the project's
+  switch the way the widget's exceptions do (`scopeToggle`: an override only when the board gives something else, so
+  turning it back leaves no row; there is no faded state or ↺). An automation in [Preview](autopilot.md#preview) here
+  is on, with an amber **Preview** badge by its name. The rows read the same cached switches
+  (`useAutopilotModes`, one request for every scope) and save with `useApplyWhere`, so the popover, the project page
+  and the widget never disagree. An automation that can't be turned on (`blocked`, an empty required tool slot)
+  shows a ⚠ with the reason as its tooltip and its switch can only be turned off. An automation with no switch
+  (`alwaysOn`: Recurring tasks, whose rules have their own) isn't listed. Paused is a one-line `Alert` with a **Resume** button
+  (`PausedNotice`). A row waits behind a skeleton until the switches and the board have loaded (a failed load shows
+  its error instead), so no switch shows a made-up Off, and a long list scrolls in a `ScrollArea`.
   - **Orchestrate** is pinned above, in a card of its own (`OrchestrateSection`): its row, then one line with
     "Next check in 12:34" (hover it for the latest run, `lastRunText`) ticking every second (`useNow`; the slot is counted in the browser with
     `nextMinutesSlot`), or instead why no check is coming (`orchestrateLine`: running, run requested, off, paused, quiet
@@ -303,8 +313,8 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
 - **The epic's Autopilot button** (`AutopilotEpicButton`), a small circle at the end of the epic band's header and
   in the epic panel's top bar. It has the pill's four states and the same sweep (it wears `.autopilot-pill`, so
   reduced motion is respected), animates while a run on one of the epic's tasks is going (`epicId` on the active
-  run), and opens the same popover (`ScopePopover`) for the epic. Its faded switches follow the project, whose state already
-  resolves through the board ("Off, following the project"). The epic's delivery control is a card of its own below the automations. Automations with `epicScope: false` (Recurring, Digest) aren't listed and don't count. Off means nothing is on for the epic's
+  run), and opens the same popover (`ScopePopover`) for the epic, whose rows switch the epic against its project (a row's
+  line is the widget's sentence, so "epic #5 Off" shows when it is). The epic's delivery control is a card of its own below the automations. Automations with `epicScope: false` (Digest) aren't listed and don't count. Off means nothing is on for the epic's
   tasks, whether the epic or its project says so. It isn't shown for an archived epic.
 - **The header's pause button** (`PauseAllButton`): Pause all, which turns into a labelled "Autopilot paused ·
   Resume" while set.
@@ -365,7 +375,7 @@ offers both **Mark as priority** and **Remove priority** while a uniform one off
   server does (shown as "N without a plan" beside the status, and counted as skipped in the toast).
 - **Mark as priority / Remove priority**, **Archive / Unarchive**.
 - **Turn Autopilot / auto-merge / auto-review on / off** (`AutomationMenuItems`, the same component the single-card
-  menu uses with one card): skips epics, manual and archived cards, like the panel's Automation section. Autopilot and
+  menu uses with one card): skips epics, manual and archived cards, like the panel's Autopilot section. Autopilot and
   auto-merge compare `=== true` and Off clears the flag to Default (it behaves like Off, and the panel keeps reading
   "Default"). Auto-review compares the effective value (`task.autoReview ?? settings.autoReview`) and Off writes
   `false`, because clearing to Default would leave it on while the board's setting is on.
@@ -495,7 +505,7 @@ rule editor take `?project=`; without it the page shows the project the board wa
   bottom). The list highlights that section.
 - **Ways in.** The sidebar gear, Ctrl/Cmd+, (`settings.open`), the palette's "Settings: <group or section>"
   entries (sections only once a query is typed), a project's gear or right-click (project page), and the Autopilot
-  popover (its settings cog, and the icon beside Recurring tasks for the project's rules).
+  popover (its settings cog).
 - **Editors.** `EditorFrame`'s parts render the template, custom automation and rule editors as a dialog by
   default and as page blocks inside `EditorPage`, so Save as template keeps its dialog. Cancel, Save and Esc all
   leave an editor for the section listing what it edits (`editorListSection`, `useLeaveEditor`): opened from that

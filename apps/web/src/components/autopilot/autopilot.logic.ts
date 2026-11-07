@@ -1,7 +1,6 @@
 import {
   automationTitleOf,
   DEFERRAL_TEXT,
-  describeInherited,
   isRetried,
   ScheduledAgentRunOutput,
   type AutopilotActiveRun,
@@ -131,86 +130,22 @@ export const boardModeToSave = (mode: AutopilotMode): AutopilotMode => (mode ===
 export const boardSummary = (mode: AutopilotMode): string =>
   mode === "on" ? "On for the board" : mode === "preview" ? "In Preview for the board" : "Off for the board";
 
-/**
- * What the Inherit choice resolves to at a project or epic, e.g. "Inherit (On from board)". `parent` is the entry at
- * the scope above (the board's, for a project; the project's, for an epic, which already resolves through the board);
- * without one (still loading) it reads as off by default.
- */
-export function inheritLabel(parent: Pick<AutopilotScopeEntry, "enabled" | "source"> | null | undefined): string {
-  return describeInherited(parent ?? { enabled: false, source: "default" });
-}
-
-/** The entry for `automation` at the scope above (the board's for a project, the project's for an epic), which Inherit follows. */
-export function parentEntry(
-  parentEntries: ReadonlyArray<AutopilotScopeEntry> | undefined,
-  automation: string,
-): AutopilotScopeEntry | null {
-  return parentEntries?.find((entry) => entry.automation === automation) ?? null;
-}
-
-/** What one row of a project's or epic's Autopilot popover shows: a switch that is faded while it follows the scope above. */
-export interface ScopeRowModel {
-  /** What the automation resolves to here, whether set at this scope or inherited. */
-  checked: boolean;
-  /** On in Preview here: the row shows a Preview badge. */
-  preview: boolean;
-  /** True while the scope sets nothing (Inherit): the switch is faded and there is nothing to reset. */
-  inherited: boolean;
-  /**
-   * The mode a click on the switch saves: Off, or the last on-mode set here (On when there is none). Always explicit;
-   * the reset button saves Inherit.
-   */
-  nextMode: "on" | "preview" | "off";
-  /** False when a click would turn on an automation that can't be (`blocked`). Turning off always works. */
-  canToggle: boolean;
-  blocked: string | null;
-  /** The switch's tooltip: where its state comes from. */
-  note: string;
-}
-
-/**
- * The row for one automation at a project or epic. `entry` already resolves through the scopes above (`enabled` and
- * `source` are what Inherit would give), so the row needs no entry from the parent scope.
- */
-export function scopeRowModel(
-  entry: Pick<AutopilotScopeEntry, "mode" | "enabled" | "source"> &
-    Partial<Pick<AutopilotScopeEntry, "preview" | "lastOnMode">>,
-  blocked: string | null,
-  scope: "project" | "epic",
-): ScopeRowModel {
-  const inherited = entry.mode === "inherit";
-  const preview = entry.enabled && (entry.preview ?? false);
-  const nextMode = entry.enabled ? "off" : (entry.lastOnMode ?? "on");
-  const state = !entry.enabled ? "Off" : preview ? "In Preview" : "On";
-  const note = !inherited
-    ? `${state} for this ${scope}`
-    : entry.source === "default"
-      ? `${state} by default`
-      : `${state}, following the ${entry.source}`;
-  return {
-    checked: entry.enabled,
-    preview,
-    inherited,
-    nextMode,
-    canToggle: !(nextMode !== "off" && blocked),
-    blocked,
-    note,
-  };
-}
-
 // ── Config forms ─────────────────────────────────────────────────────────
 
-/** The automations a scope's popover lists: an epic's leaves out those that don't apply to epics. */
-export function scopeAutomations<T extends Pick<AutopilotAutomation, "epicScope">>(
+/**
+ * The automations a scope's popover lists: one with no switch (Recurring tasks) isn't there, and an epic's also leaves
+ * out those that don't apply to epics.
+ */
+export function scopeAutomations<T extends { epicScope: boolean; alwaysOn?: boolean }>(
   automations: ReadonlyArray<T>,
   forEpic: boolean,
 ): T[] {
-  return forEpic ? automations.filter((a) => a.epicScope) : [...automations];
+  return automations.filter((a) => !a.alwaysOn && (!forEpic || a.epicScope));
 }
 
 /** Whether an epic has anything to switch: its button and popover are pointless when no automation applies to epics. */
-export const hasEpicAutomations = (automations: ReadonlyArray<Pick<AutopilotAutomation, "epicScope">>): boolean =>
-  automations.some((a) => a.epicScope);
+export const hasEpicAutomations = (automations: ReadonlyArray<{ epicScope: boolean; alwaysOn?: boolean }>): boolean =>
+  automations.some((a) => a.epicScope && !a.alwaysOn);
 
 /** The entry for an automation, or an inherit-everything stand-in while the scope loads. */
 export function entryFor(

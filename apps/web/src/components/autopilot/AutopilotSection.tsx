@@ -2,6 +2,7 @@ import { canRetryRun, type AttentionReason, type AutopilotRun, type TaskDetail }
 import { ExternalLinkIcon, XIcon } from "lucide-react";
 import { AttentionIcon } from "~/components/board/attention";
 import { isWebUrl } from "~/components/task/links.logic";
+import { AutopilotFlags } from "~/components/task/AutopilotFlags";
 import { TaskSection } from "~/components/task/TaskSection";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -13,42 +14,51 @@ import { pausedForRun } from "./health.logic";
 import { automationTitle, dismissableRun, formatCost, runStatusLabel, runStatusVariant } from "./autopilot.logic";
 
 /**
- * The runs Autopilot has made on this task, newest first: what it did, how it ran, where to follow it and what it
- * cost. Left out while there are none, so the panel stays clean for tasks Autopilot never touched.
+ * The task's one Autopilot section: what Autopilot may do with it (AutopilotFlags), the flag it put on the task, and
+ * the runs it has made, newest first: what it did, how it ran, where to follow it and what it cost. An epic has no
+ * flags of its own, so its panel shows the section only once Autopilot has run on it.
  */
 export function AutopilotSection({ task }: { task: TaskDetail }) {
-  const runs = useAutopilotRuns({ taskId: task.id }).data;
+  const runs = useAutopilotRuns({ taskId: task.id }).data ?? [];
   const overview = useAutopilotOverview().data;
   const automations = overview?.automations ?? [];
-  if (!runs?.length) return null;
+  const epic = task.kind === "epic";
+  if (epic && runs.length === 0) return null;
   // Newest first. A run that needs attention is what the card and the collapsed text point at, so it comes first.
-  const shown = runs.find((run) => run.needsAttention && run.dismissedAt === null) ?? runs[0]!;
+  const shown = runs.find((run) => run.needsAttention && run.dismissedAt === null) ?? runs[0];
   const flag = dismissableRun(runs, task.attention);
   const flagged = task.attention.find((a) => a.kind === "autopilot");
   return (
     <TaskSection
       title="Autopilot"
       summary={
-        <Badge
-          variant={runStatusVariant(shown.status, shown.deferred)}
-          size="sm"
-          title={automationTitle(automations, shown.automation)}
-        >
-          {runStatusLabel(shown)}
-        </Badge>
+        shown ? (
+          <Badge
+            variant={runStatusVariant(shown.status, shown.deferred)}
+            size="sm"
+            title={automationTitle(automations, shown.automation)}
+          >
+            {runStatusLabel(shown)}
+          </Badge>
+        ) : undefined
       }
     >
+      {epic ? null : <AutopilotFlags task={task} />}
       {flag && flagged ? <FlagNotice runId={flag.id} reason={flagged} /> : null}
-      <ul className="flex flex-col gap-1 px-1.5">
-        {runs.map((run) => (
-          <RunRow
-            key={run.id}
-            run={run}
-            title={automationTitle(automations, run.automation)}
-            retryable={canRetryRun(run, runs) && !pausedForRun(overview?.autoPaused, run)}
-          />
-        ))}
-      </ul>
+      {runs.length === 0 ? (
+        <p className="px-1.5 text-xs text-muted-foreground">Autopilot hasn&apos;t run on this task.</p>
+      ) : (
+        <ul className="flex flex-col gap-1 px-1.5">
+          {runs.map((run) => (
+            <RunRow
+              key={run.id}
+              run={run}
+              title={automationTitle(automations, run.automation)}
+              retryable={canRetryRun(run, runs) && !pausedForRun(overview?.autoPaused, run)}
+            />
+          ))}
+        </ul>
+      )}
     </TaskSection>
   );
 }

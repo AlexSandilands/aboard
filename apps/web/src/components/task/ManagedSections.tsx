@@ -22,6 +22,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from "re
 import { createPortal } from "react-dom";
 
 import { cn } from "~/lib/utils";
+import { useSettings } from "~/state/queries";
 import { useSectionLayout, useTaskPanelPrefs } from "~/state/ui";
 import { collapsedByDefault, SECTION_TITLES, summarizeSection, type SectionId } from "./sections.logic";
 
@@ -130,7 +131,8 @@ function ManagedSection({ id, task, children }: { id: SectionId; task: TaskDetai
   const { setNodeRef, setActivatorNodeRef, transform, transition, isDragging, attributes, listeners } = useSortable({
     id,
   });
-  const summary = expanded ? "" : summarizeSection(id, task);
+  const globalReview = useSettings().data?.autoReview ?? false;
+  const summary = expanded ? "" : summarizeSection(id, task, undefined, globalReview);
   const frame = useMemo<SectionFrame>(
     () => ({
       id,

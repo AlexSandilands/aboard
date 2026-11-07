@@ -367,6 +367,29 @@ describe("activity.between", () => {
     expect(notes.map((n) => n.text)).toEqual(["Handover: next step is 2.1"]);
   });
 
+  it("reads stalls from the reminder notifications too, once per task and kind", () => {
+    const { s, alpha, task, clock, week } = setup();
+    const t = task(alpha.id, "Quiet");
+    clock(at(13));
+    s.notifications.notify({ kind: "task_quiet", taskId: t.id, title: "Quiet", body: "Gone quiet", dedupeKey: "q1" });
+    s.notifications.notify({ kind: "task_quiet", taskId: t.id, title: "Quiet", body: "Gone quiet", dedupeKey: "q2" });
+    s.notifications.notify({
+      kind: "thread_waited",
+      taskId: t.id,
+      title: "Waited",
+      body: "Waited 45m",
+      dedupeKey: "w1",
+    });
+    expect(
+      week()
+        .stalls.map((x) => [x.kind, x.text])
+        .sort(([a], [b]) => String(a).localeCompare(String(b))),
+    ).toEqual([
+      ["stale", "Gone quiet"],
+      ["waiting", "Waited 45m"],
+    ]);
+  });
+
   it("cuts each section to its cap and says how many more", () => {
     const { s, alpha, task, clock, run } = setup();
     clock(at(13));

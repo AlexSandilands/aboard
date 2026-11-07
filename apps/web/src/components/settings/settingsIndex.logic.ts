@@ -8,7 +8,6 @@ import {
   AUTOPILOT_FIX_PRS,
   AUTOPILOT_REVIEW_PRS,
   AUTOPILOT_START_PLANNED,
-  AUTOPILOT_UNSTICK,
   BRAND,
   DEFAULT_KEYBINDINGS,
   KeybindingCommand,
@@ -72,13 +71,6 @@ export const AUTOMATION_ENTRIES: ReadonlyArray<{
     title: "Start planned tasks",
     description:
       "Starts an agent on each Planned task whose Autopilot flag is On, once it has a plan and nothing blocks it.",
-  },
-  {
-    key: AUTOPILOT_UNSTICK,
-    title: "Remind me about stuck tasks",
-    description:
-      "Tells you when an In Progress task has had no activity, or its T3 thread has been waiting on you, for too long. " +
-      "Needs no agent and changes nothing; Orchestrate is what gets stalled work moving.",
   },
   {
     key: AUTOPILOT_REVIEW_PRS,
@@ -646,9 +638,9 @@ const WRITTEN: ReadonlyArray<Draft> = [
   ),
   draft(
     "project.autopilot.automations",
-    "Autopilot overrides",
-    "Switch automations on or off for this project, over the board's setting.",
-    ["automations", "inherit", "override", "per project"],
+    "Automations",
+    "What each automation does in this project, and where it runs, with a link to change it.",
+    ["automations", "inherit", "override", "per project", "where it runs"],
   ),
   draft(
     "project.autopilot.variables",

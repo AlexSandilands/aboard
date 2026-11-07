@@ -1,5 +1,6 @@
 import type {
   AutopilotEngineSettings,
+  AutopilotModeRow,
   Digest,
   DigestList,
   AutopilotOverview,
@@ -138,6 +139,27 @@ describe("Autopilot REST routes", () => {
     // Back to inherit with no config of its own: the row goes.
     await put(`/api/autopilot/projects/${h.project.id}/archive`, { mode: "inherit", config: {} });
     expect(h.db.prepare("SELECT count(*) AS n FROM autopilot_settings").get()).toEqual({ n: 1 });
+  });
+
+  it("lists every switch that is set at any scope, and none that only holds config", async () => {
+    const h = setup();
+    const epic = h.services.tasks.createEpic({ projectId: h.project.id, title: "E" }, [], "agent");
+    const put = (path: string, json: unknown) => h.request(path, { method: "PUT", json });
+    const modes = async () => (await (await h.request("/api/autopilot/modes")).json()) as AutopilotModeRow[];
+    expect(await modes()).toEqual([]);
+
+    await put("/api/autopilot/board/archive", { mode: "on" });
+    await put(`/api/autopilot/projects/${h.project.id}/archive`, { mode: "off" });
+    await put(`/api/autopilot/projects/${h.project.id}/epics/${epic.id}/archive`, { mode: "on" });
+    expect(await modes()).toEqual([
+      { scopeKind: "board", scopeId: null, automation: "archive", mode: "on" },
+      { scopeKind: "epic", scopeId: epic.id, automation: "archive", mode: "on" },
+      { scopeKind: "project", scopeId: h.project.id, automation: "archive", mode: "off" },
+    ]);
+
+    // A row that only holds config is Inherit, so it isn't a switch.
+    await put(`/api/autopilot/projects/${h.project.id}/archive`, { mode: "inherit", config: { days: 3 } });
+    expect((await modes()).map((m) => m.scopeKind)).toEqual(["board", "epic"]);
   });
 
   it("takes Preview at every scope and remembers the last on-mode through Off", async () => {

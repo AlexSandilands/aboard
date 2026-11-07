@@ -28,6 +28,7 @@ import type { AttachmentsService } from "./attachments.ts";
 import type { ImportsModule } from "./imports.ts";
 import type { LabelsModule } from "./labels.ts";
 import { classifyLinkInput, type LinksModule } from "./links.ts";
+import { endQuietNotice } from "./notifications.ts";
 import type { RelationsModule } from "./relations.ts";
 import type {
   CloseInput,
@@ -393,6 +394,8 @@ export function createTasksService(
     },
 
     summary: (id) => assembleOne(id).summary,
+
+    lastActivityAt: (id, exceptActor) => repos.events.lastAtExcept(id, exceptActor),
 
     detail(id): TaskDetail {
       const { record: task, summary, phases, reviews } = assembleOne(id);
@@ -993,6 +996,7 @@ export function createTasksService(
         const now = nowIso();
         repos.tasks.update({ ...task, updatedAt: now });
         fx.task(id);
+        if (endQuietNotice(repos, id, actor, now)) fx.notificationsChanged();
         return repos.events.append(id, now, actor, "note", { text: body });
       });
     },

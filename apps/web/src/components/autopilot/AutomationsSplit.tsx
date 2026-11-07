@@ -10,14 +10,16 @@ import {
   AUTOPILOT_RECURRING,
   AUTOPILOT_REVIEW_PRS,
   AUTOPILOT_START_PLANNED,
-  AUTOPILOT_UNSTICK,
   automationSentence,
   createAutomationPrompt,
   customAutomationId,
   isOnMode,
+  boardState,
   OPERATIONS,
   splitFieldsByTier,
+  whereEverywhere,
   type AutopilotAutomation,
+  type AutopilotMode,
   type AutopilotField,
   type AutopilotScopeEntry,
   type CustomAutomation,
@@ -25,10 +27,8 @@ import {
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ArchiveIcon,
-  BellRingIcon,
   BotIcon,
   ChevronRightIcon,
-  ClockAlertIcon,
   EyeIcon,
   GitMergeIcon,
   type LucideIcon,
@@ -79,7 +79,7 @@ import {
   agentSummary,
   groupAutomations,
   isOffEverywhere,
-  projectsStatus,
+  lastRunText,
   rowSubline,
   selectedAutomation,
   splitAgentFields,
@@ -90,7 +90,6 @@ import {
 import {
   BOARD_MODES,
   boardModeToSave,
-  boardSummary,
   boardSwitchValue,
   modeDescription,
   previewHint,
@@ -105,7 +104,10 @@ import { HintNotice, PausedRows, WeekSection } from "./HealthSections";
 import { hintsFor, pausedText, pausesFor } from "./health.logic";
 import { MergeTargets } from "./MergeTargets";
 import { ModeSwitch } from "./ModeSwitch";
+import { RecurringRulesByProject } from "~/components/recurring/RecurringSection";
 import { RunHistoryLink } from "./RunHistoryLink";
+import { useWhere } from "./useWhere";
+import { WhereItRuns } from "./WhereItRuns";
 
 const BUILTIN_ICONS: Record<string, LucideIcon> = {
   [AUTOPILOT_START_PLANNED]: PlayIcon,
@@ -117,8 +119,6 @@ const BUILTIN_ICONS: Record<string, LucideIcon> = {
   [AUTOPILOT_RECURRING]: RepeatIcon,
   auto_archive: ArchiveIcon,
   [AUTOPILOT_DIGEST]: NewspaperIcon,
-  [AUTOPILOT_UNSTICK]: ClockAlertIcon,
-  unblock_dependents: BellRingIcon,
 };
 
 function AutomationIcon({ automation, className }: { automation: AutopilotAutomation; className?: string }) {
@@ -133,6 +133,25 @@ export interface ListedAutomation extends AutomationItem {
   /** Its "would …" runs over the last 7 days. */
   previewRuns: number;
   custom: CustomAutomation | null;
+}
+
+/**
+ * The board's mode from a list row's switch, the detail header's Switch on/off and its Mode row. Turning it on from
+ * off is Everywhere, so the project rows Only in… left are dropped with it and a later off really is off; any other
+ * choice is the board's own row (Off saves Inherit, as before).
+ */
+function useBoardMode(item: ListedAutomation): { set: (mode: AutopilotMode) => void; ready: boolean } {
+  const { input, apply } = useWhere(item.automation);
+  return {
+    // Turning on from off needs the project and epic rows to drop, so it waits for them rather than saving only the board.
+    ready: input !== null,
+    set: (mode) => {
+      if ((mode === "on" || mode === "preview") && input && boardState(input.board) === "off") {
+        const writes = whereEverywhere(input, mode);
+        if (writes.length > 0) apply.mutate(writes);
+      } else item.onMode(boardModeToSave(mode));
+    },
+  };
 }
 
 /** A custom automation whose agent action starts from a check script, which still runs for real in Preview. */
@@ -239,9 +258,10 @@ function ListRow({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const { automation, entry, reach, lastRun, onMode } = item;
+  const { automation, entry, reach, lastRun } = item;
+  const board = useBoardMode(item);
   const on = isOnMode(entry.mode);
-  const off = isOffEverywhere(reach);
+  const off = !automation.alwaysOn && isOffEverywhere(reach);
   return (
     <SplitListItem
       id={`autopilot.automations.${automation.key}`}
@@ -254,24 +274,27 @@ function ListRow({
           <PreviewBadge />
         ) : lastRun?.status === "failed" ? (
           <StatusDot tone="danger" label="Last run failed" />
-        ) : (
+        ) : automation.alwaysOn ? null : (
           <StatusDot tone="success" label="On" />
         )
       }
-      subtitle={paused && !off ? paused : rowSubline(reach, lastRun)}
+      subtitle={paused && !off ? paused : automation.alwaysOn ? lastRunText(lastRun) : rowSubline(reach, lastRun)}
       dimmed={off}
       selected={selected}
       onSelect={onSelect}
+      // Recurring tasks has no switch: each of its rules has its own, in the detail.
       trailing={
-        <Switch
-          size="sm"
-          aria-label={`${automation.title} on for the board`}
-          checked={on}
-          disabled={pending || (!on && Boolean(automation.blocked))}
-          title={!on && automation.blocked ? automation.blocked : undefined}
-          // Back on in the mode it was last on in, or Preview for one that has never run.
-          onCheckedChange={(next) => onMode(next ? restoreMode(entry, lastRun !== undefined) : "inherit")}
-        />
+        automation.alwaysOn ? null : (
+          <Switch
+            size="sm"
+            aria-label={`${automation.title} on for the board`}
+            checked={on}
+            disabled={pending || (!on && (Boolean(automation.blocked) || !board.ready))}
+            title={!on && automation.blocked ? automation.blocked : undefined}
+            // Back on in the mode it was last on in, or Preview for one that has never run.
+            onCheckedChange={(next) => board.set(next ? restoreMode(entry, lastRun !== undefined) : "off")}
+          />
+        )
       }
     />
   );
@@ -292,7 +315,8 @@ function AutomationDetail({
   rejected: number;
   onBack: () => void;
 }) {
-  const { automation, entry, reach, custom, lastRun, previewRuns, onMode, onConfig } = item;
+  const { automation, entry, reach, custom, lastRun, previewRuns, onConfig } = item;
+  const board = useBoardMode(item);
   const navigate = useNavigate();
   const { essential, advanced } = splitFieldsByTier(automation.fields);
   const overview = useAutopilotOverview().data;
@@ -301,7 +325,8 @@ function AutomationDetail({
   const agent = splitAgentFields(advanced);
   const on = isOnMode(entry.mode);
   const preview = entry.mode === "preview";
-  const off = isOffEverywhere(reach);
+  const switchless = automation.alwaysOn;
+  const off = !switchless && isOffEverywhere(reach);
   const checkScript = hasCheckScript(custom);
   const editCustom = (id: string) =>
     void navigate({ to: "/settings/autopilot/custom/$customId", params: { customId: id }, state: FROM_SETTINGS_LIST });
@@ -325,11 +350,13 @@ function AutomationDetail({
         title={automation.title}
         subtitle={
           <span className="flex items-center gap-1.5">
-            <StatusDot
-              tone={off ? "muted" : preview ? "warning" : "success"}
-              label={off ? "Off" : preview ? "Preview" : "On"}
-            />
-            <span className="truncate">{statusLine(reach, preview)}</span>
+            {switchless ? null : (
+              <StatusDot
+                tone={off ? "muted" : preview ? "warning" : "success"}
+                label={off ? "Off" : preview ? "Preview" : "On"}
+              />
+            )}
+            <span className="truncate">{switchless ? "Each rule has its own switch" : statusLine(reach, preview)}</span>
             {custom ? (
               <Badge variant="outline" size="sm">
                 Custom
@@ -339,14 +366,16 @@ function AutomationDetail({
         }
         actions={
           <>
-            <Button
-              size="xs"
-              variant="ghost-muted"
-              disabled={pending || (!on && Boolean(automation.blocked))}
-              onClick={() => onMode(on ? "inherit" : restoreMode(entry, lastRun !== undefined))}
-            >
-              {on ? "Switch off" : "Switch on"}
-            </Button>
+            {switchless ? null : (
+              <Button
+                size="xs"
+                variant="ghost-muted"
+                disabled={pending || (!on && (Boolean(automation.blocked) || !board.ready))}
+                onClick={() => board.set(on ? "off" : restoreMode(entry, lastRun !== undefined))}
+              >
+                {on ? "Switch off" : "Switch on"}
+              </Button>
+            )}
             <AskToChange
               automation={automation}
               custom={custom}
@@ -376,7 +405,7 @@ function AutomationDetail({
           count={previewRuns}
           automation={automation.key}
           disabled={pending || Boolean(automation.blocked)}
-          onTurnOn={() => onMode("on")}
+          onTurnOn={() => board.set("on")}
         />
       ) : null}
       <DetailSection title="What it does">
@@ -391,67 +420,48 @@ function AutomationDetail({
             </div>
           ) : null}
         </div>
-        <SettingsRow
-          id={`autopilot.automations.${automation.key}.board`}
-          title="Mode"
-          description={modeDescription(
-            boardSwitchValue(entry.mode) as "off" | "preview" | "on",
-            automation,
-            checkScript,
-          )}
-          info="Off: nothing runs. Preview: each time it would act, a run marked Preview is recorded instead; no agent starts and nothing on the board or on GitHub changes. A custom automation's check script is the exception: it runs for real. New, imported and drafted automations save in Preview."
-          control={
-            <ModeSwitch
-              label={`${automation.title} for the board`}
-              modes={BOARD_MODES}
-              value={boardSwitchValue(entry.mode)}
-              disabled={pending}
-              blocked={automation.blocked}
-              onChange={(mode) => onMode(boardModeToSave(mode))}
-            />
-          }
-        />
+        {switchless ? null : (
+          <SettingsRow
+            id={`autopilot.automations.${automation.key}.board`}
+            title="Mode"
+            description={modeDescription(
+              boardSwitchValue(entry.mode) as "off" | "preview" | "on",
+              automation,
+              checkScript,
+            )}
+            info="Off: nothing runs. Preview: each time it would act, a run marked Preview is recorded instead; no agent starts and nothing on the board or on GitHub changes. A custom automation's check script is the exception: it runs for real. New, imported and drafted automations save in Preview."
+            control={
+              <ModeSwitch
+                label={`${automation.title} for the board`}
+                modes={BOARD_MODES}
+                value={boardSwitchValue(entry.mode)}
+                disabled={pending || (!on && !board.ready)}
+                blocked={automation.blocked}
+                onChange={board.set}
+              />
+            }
+          />
+        )}
       </DetailSection>
-      <DetailSection title="Where it runs">
-        <SettingsRow
-          title="Whole board"
-          description="Every project follows the mode above, unless a project or epic sets its own."
-          status={boardSummary(entry.mode)}
-        />
-        <SettingsRow
-          title="Projects"
-          description={
-            <>
-              A project switches it for itself in its lane&apos;s Autopilot pill, or in{" "}
-              <SettingsLink to="project.autopilot">its settings</SettingsLink>
-              {automation.epicScope ? "; an epic, in its own Autopilot popover." : "."}
-              {automation.key === AUTOPILOT_ORCHESTRATE
-                ? " Each lane's pill also shows the next check and has Run now."
-                : ""}
-            </>
-          }
-          status={projectsStatus(reach)}
-        />
-        <PausedRows pauses={pauses} />
-      </DetailSection>
+      {switchless ? <RecurringRulesByProject /> : null}
+      {switchless ? null : (
+        <WhereItRuns automation={automation} everywhereMode={restoreMode(entry, lastRun !== undefined)} />
+      )}
+      {automation.key === AUTOPILOT_ORCHESTRATE ? (
+        <p className="px-3 text-xs text-muted-foreground sm:px-4">
+          Each lane&apos;s pill also shows Orchestrate&apos;s next check and has Run now.
+        </p>
+      ) : null}
+      {pauses.length > 0 ? (
+        <DetailSection title="Paused">
+          <PausedRows pauses={pauses} />
+        </DetailSection>
+      ) : null}
       {off ? null : <WeekSection automation={automation.key} />}
       {automation.key === AUTOPILOT_MERGE_EPIC_PRS ? (
         <MergeTargets automation={automation} entry={entry} rejected={rejected} onConfig={onConfig} />
       ) : essential.length > 0 ? (
         <DetailSection title="Settings">{essential.map(field)}</DetailSection>
-      ) : null}
-      {automation.key === AUTOPILOT_RECURRING ? (
-        <DetailSection title="Rules">
-          <SettingsRow
-            title="Recurring rules"
-            description={
-              <>
-                Each project keeps its own rules, in <SettingsLink to="project.recurring">its settings</SettingsLink>. A
-                rule that is on makes its task when it comes due, while this is on in the project.
-              </>
-            }
-          />
-        </DetailSection>
       ) : null}
       {custom ? (
         <DetailSection title="Trigger and action">

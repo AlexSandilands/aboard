@@ -40,6 +40,7 @@ import {
   type AutopilotOverview,
   type AutopilotRun,
   type AutopilotRunPage,
+  type AutopilotModeRow,
   type AutopilotScopeEntry,
   type AutopilotScopeKind,
   type AutopilotSetting,
@@ -117,6 +118,7 @@ export const describeAutomation = (
   description: a.description,
   needsAgent: a.needsAgent,
   epicScope: a.epicScope ?? true,
+  alwaysOn: a.alwaysOn ?? false,
   group: a.group ?? "yours",
   blocked: a.blocked ?? null,
   needs,
@@ -154,6 +156,11 @@ export interface AutopilotService {
    * project it must be in (`projectId`); any other epic is not found.
    */
   scope(kind: AutopilotScopeKind, id: string | null, projectId?: string): AutopilotScopeEntry[];
+  /**
+   * Every switch that is set (not Inherit) at any scope, for the Where it runs widget: one read instead of a scope per
+   * project and epic. Rows of an archived epic or project are listed too; the UI shows only scopes it has.
+   */
+  modes(): AutopilotModeRow[];
   /** Sets one automation's mode and/or config at a scope. Inherit with no config removes the row. */
   setScope(
     kind: AutopilotScopeKind,
@@ -450,9 +457,11 @@ export function createAutopilotService(
    */
   const enabledProjects = (key: string, live = false): string[] => {
     const all = repos.autopilotSettings.all();
+    const always = find(key)?.alwaysOn === true;
     return repos.projects
       .list()
       .filter((p) => {
+        if (always) return true;
         const resolved = resolveAutopilot(chainFor(all, key, p.id));
         return resolved.enabled && (!live || !resolved.preview);
       })
@@ -840,12 +849,19 @@ export function createAutopilotService(
     scope(kind, id, projectId) {
       return entries(kind, checkScope(kind, id, projectId), projectId);
     },
+    modes() {
+      return repos.autopilotSettings
+        .all()
+        .filter((s) => s.mode !== "inherit")
+        .map((s) => ({ scopeKind: s.scopeKind, scopeId: s.scopeId, automation: s.automation, mode: s.mode }));
+    },
     setScope(kind, id, key, input, projectId) {
       const scopeId = checkScope(kind, id, projectId);
       const automation = automationOf(key);
       if (kind === "epic" && !epicScoped(automation)) {
         throw new AppError("VALIDATION", `${automation.title} doesn't apply to epics`);
       }
+      if (automation.alwaysOn) throw new AppError("VALIDATION", `${automation.title} has no switch: its rules do`);
       if (input.mode && isOnMode(input.mode) && automation.blocked) {
         throw new AppError("VALIDATION", automation.blocked);
       }
@@ -911,8 +927,8 @@ export function createAutopilotService(
       const resolved = resolveAutopilot(chainFor(repos.autopilotSettings.all(), automation.key, projectId, epic));
       const parsed = parseConfig(automation, resolved.config);
       return {
-        enabled: resolved.enabled,
-        preview: resolved.preview,
+        enabled: automation.alwaysOn ? true : resolved.enabled,
+        preview: automation.alwaysOn ? false : resolved.preview,
         config: parsed.success ? parsed.data : null,
       };
     },
