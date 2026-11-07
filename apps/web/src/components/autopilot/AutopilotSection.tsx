@@ -11,7 +11,14 @@ import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { useDismissAutopilotRun, useRetryAutopilotRun } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotRuns } from "~/state/queries";
 import { pausedForRun } from "./health.logic";
-import { automationTitle, dismissableRun, formatCost, runStatusLabel, runStatusVariant } from "./autopilot.logic";
+import {
+  automationTitle,
+  dismissableRun,
+  formatCost,
+  runStatusLabel,
+  runStatusVariant,
+  summaryRun,
+} from "./autopilot.logic";
 
 /**
  * The task's one Autopilot section: what Autopilot may do with it (AutopilotFlags), the flag it put on the task, and
@@ -24,8 +31,8 @@ export function AutopilotSection({ task }: { task: TaskDetail }) {
   const automations = overview?.automations ?? [];
   const epic = task.kind === "epic";
   if (epic && runs.length === 0) return null;
-  // Newest first. A run that needs attention is what the card and the collapsed text point at, so it comes first.
-  const shown = runs.find((run) => run.needsAttention && run.dismissedAt === null) ?? runs[0];
+  // Newest first. The run Dismiss belongs to is what the card and the collapsed header point at, so it is shown first.
+  const { run: shown, flagged: shownFlagged } = summaryRun(runs, task.attention);
   const flag = dismissableRun(runs, task.attention);
   const flagged = task.attention.find((a) => a.kind === "autopilot");
   return (
@@ -34,11 +41,11 @@ export function AutopilotSection({ task }: { task: TaskDetail }) {
       summary={
         shown ? (
           <Badge
-            variant={runStatusVariant(shown.status, shown.deferred)}
+            variant={shownFlagged ? (flagged?.severity ?? "warning") : runStatusVariant(shown.status, shown.deferred)}
             size="sm"
             title={automationTitle(automations, shown.automation)}
           >
-            {runStatusLabel(shown)}
+            {shownFlagged ? "Needs attention" : runStatusLabel(shown)}
           </Badge>
         ) : undefined
       }
