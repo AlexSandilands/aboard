@@ -83,7 +83,11 @@ export function ProjectRuleRows({ project, withAdd = false }: { project: Project
         <SettingsRow
           title={rules.error ? "Couldn't load the rules" : "No recurring tasks"}
           description={
-            rules.error ? rules.error.message : "Add a rule, or start from an example. Each needs a template."
+            rules.error
+              ? rules.error.message
+              : withAdd
+                ? "Add a rule below. Each needs a template."
+                : "Add a rule, or start from an example. Each needs a template."
           }
         />
       ) : (

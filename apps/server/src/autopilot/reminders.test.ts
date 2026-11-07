@@ -110,6 +110,17 @@ describe("reminders", () => {
       expect(unread()).toBe(0);
     });
 
+    it("is read by any other activity on the task, not only a note", async () => {
+      const { s, working, pass } = setup();
+      const task = working();
+      await pass(26 * HOUR_MS);
+      const unread = () => s.notifications.list({ kind: "task_quiet" }).items.filter((n) => n.readAt === null).length;
+      expect(unread()).toBe(1);
+      // An edit goes through the log, not addNote.
+      s.tasks.update(task.id, { title: "Renamed" }, "user");
+      expect(unread()).toBe(0);
+    });
+
     it("leaves manual tasks, epics and tasks that aren't In Progress alone", async () => {
       const { s, project, working, pass, sent } = setup();
       s.tasks.update(working("Mine").id, { manual: true }, "user");
