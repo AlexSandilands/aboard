@@ -7,16 +7,16 @@ import { VariablesEditor, variablesKey } from "./VariablesEditor";
 const NO_SECRETS =
   "Plain text, not for secrets: values show in dry runs, previews, run details and backups. Keep tokens in your shell's own environment or a credential store.";
 
-/** Settings → Autopilot → Custom automations: the variables every project's automations read, unless it overrides them. */
+/** Settings → Autopilot → Limits & safety: the variables every project's automations read, unless it overrides them. */
 export function BoardVariablesSection() {
   const settings = useSettings();
   const update = useUpdateSettings();
   const variables = settings.data?.automationVariables ?? [];
   return (
-    <SettingsSection id="autopilot.custom.variables" title="Variables">
+    <SettingsSection id="autopilot.limits.variables" title="Variables">
       {settings.data ? (
         <SettingsRow
-          id="autopilot.custom.variables.list"
+          id="autopilot.limits.variables.list"
           title="Automation variables"
           description="Values custom automations read, the same in every project unless a project overrides them."
           info={`A prompt reads one as {{vars.name}}; a command or script as an environment variable, or from vars in the JSON on stdin. An automation that needs one doesn't run in a project where it has no value. ${NO_SECRETS}`}

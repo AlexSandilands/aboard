@@ -240,6 +240,7 @@ export const mergeEpicPrs = defineAutomation({
   description:
     "For epics delivered through an integration branch: merges each task's PR into the epic's branch once it's reviewed and green, and keeps the epic's draft PR to main. Never merges into main.",
   needsAgent: false,
+  group: "prs",
   schema: z.object({}),
   fields: [],
   defaults: {},

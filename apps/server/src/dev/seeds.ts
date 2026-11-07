@@ -1159,7 +1159,45 @@ const dense: Scenario = (s, opts) => {
   addTask(s, one.id, { title: "The only card", status: "backlog" });
 };
 
-export const SCENARIOS = { basic, review, threads, showcase, social, stats, dense } satisfies Record<string, Scenario>;
+/**
+ * The showcase board with Autopilot set up, for Settings → Autopilot: several automations on for the board (in dry
+ * run, so the sandbox never starts an agent), a failed run to retry, an agent's draft to review and a custom
+ * automation whose tool slot is empty.
+ */
+const autopilot: Scenario = (s, opts) => {
+  showcase(s, opts);
+  s.autopilot.updateEngine({ dryRun: true, dailySpendCapUsd: 5, quietHours: { enabled: true } });
+  for (const key of ["start_planned", "review_prs", "fix_prs", "auto_archive", "digest"]) {
+    s.autopilot.setScope("board", null, key, { mode: "on" });
+  }
+  s.autopilot.setScope("board", null, "fix_prs", { config: { resolveThreads: false } });
+  s.customAutomations.draft(
+    {
+      automation: {
+        name: "Changes requested → fix",
+        description: "When a reviewer requests changes on a task's PR, an agent addresses them on the PR's branch.",
+        trigger: { kind: "pr_event", event: "checks_failing" },
+        action: { kind: "agent", prompt: "Fix the failing checks on the pull request of #{{task.number}}." },
+      },
+      note: "Drafted from your request to fix failing checks.",
+    },
+    AGENT,
+  );
+  s.customAutomations.create({
+    name: "Triage new bugs",
+    trigger: { kind: "schedule", schedule: { kind: "weekly", days: [1, 2, 3, 4, 5], time: "09:00" } },
+    action: {
+      kind: "agent",
+      prompt: "Label and size each new task labelled bug, using the issue tracker to find duplicates.",
+      slots: [{ name: "tracker", label: "Issue tracker search", description: "Finds issues by text." }],
+    },
+  });
+};
+
+export const SCENARIOS = { basic, review, threads, showcase, social, stats, dense, autopilot } satisfies Record<
+  string,
+  Scenario
+>;
 export type ScenarioName = keyof typeof SCENARIOS;
 
 /** The made-up tracker the seeded tasks' keys (SHOP-77, PAY-88) belong to. */

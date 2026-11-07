@@ -43,6 +43,7 @@ export const DIGEST_FIELDS: AutopilotField[] = [
   {
     key: "mode",
     label: "Digest",
+    tier: "essential",
     kind: "select",
     help: "Plain is a grouped list the board builds. Summarised has an agent write it up, and falls back to plain if that fails.",
     options: [
@@ -50,8 +51,14 @@ export const DIGEST_FIELDS: AutopilotField[] = [
       { value: "summarised", label: "Written by an agent" },
     ],
   },
-  { key: "time", label: "Time", kind: "time", help: "When the daily digest is made, in the server's local time." },
-  { key: "weekdaysOnly", label: "Weekdays only", kind: "boolean" },
+  {
+    key: "time",
+    label: "Time",
+    kind: "time",
+    tier: "essential",
+    help: "When the daily digest is made, in the server's local time.",
+  },
+  { key: "weekdaysOnly", label: "Weekdays only", kind: "boolean", tier: "essential" },
   { key: "skill", label: "Digest skill", kind: "skill", builtinLabel: BUILTIN_DIGEST_SKILL_NAME },
   { key: "budgetUsd", label: "Agent budget", kind: "number", min: 0.1, max: 100, step: 0.1, unit: "USD" },
   { key: "timeoutMinutes", label: "Agent timeout", kind: "number", min: 1, max: 1440, unit: "minutes" },

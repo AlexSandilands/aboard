@@ -30,6 +30,7 @@ export * from "./providers.ts";
 export * from "./templates.ts";
 export * from "./autopilot.ts";
 export * from "./autopilotRunHistory.ts";
+export * from "./autopilotSentence.ts";
 export * from "./prReview.ts";
 export * from "./recurring.ts";
 export * from "./automationVariables.ts";

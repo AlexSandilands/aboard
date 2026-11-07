@@ -250,6 +250,7 @@ describe("config forms", () => {
     description: "",
     needsAgent: false,
     epicScope: true,
+    group: "yours",
     blocked: null,
     needs: null,
     fields: [],

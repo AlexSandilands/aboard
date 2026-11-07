@@ -19,7 +19,7 @@ describe("searchSettings", () => {
   });
 
   it("ignores case and extra spaces", () => {
-    expect(ids("  QUIET   Hours ")[0]).toBe("autopilot.engine.quiet-hours");
+    expect(ids("  QUIET   Hours ")[0]).toBe("autopilot.limits.quiet-hours");
   });
 
   it("puts a title match before a keyword match, and that before a description match", () => {
@@ -39,7 +39,7 @@ describe("searchSettings", () => {
     expect(found.indexOf("tasks.review.budget")).toBeGreaterThanOrEqual(0);
     expect(found.indexOf("tasks.new-tasks.import-budget")).toBeGreaterThanOrEqual(0);
     // "Daily spend cap" mentions no budget in its title: it is found by keyword, after the titled ones.
-    expect(found.indexOf("autopilot.engine.daily-spend-cap")).toBeGreaterThan(found.indexOf("tasks.review.budget"));
+    expect(found.indexOf("autopilot.limits.daily-spend-cap")).toBeGreaterThan(found.indexOf("tasks.review.budget"));
   });
 
   it("finds a setting by an alternative name", () => {
@@ -49,16 +49,15 @@ describe("searchSettings", () => {
   });
 
   it("needs every word to match something", () => {
-    expect(ids("quiet hours")).toContain("autopilot.engine.quiet-hours");
+    expect(ids("quiet hours")).toContain("autopilot.limits.quiet-hours");
     expect(ids("quiet hours zzz")).toEqual([]);
     // Words may match different fields: the setting's title and where it lives.
-    expect(ids("autopilot worktree")[0]).toBe("autopilot.engine.worktree-retention");
+    expect(ids("autopilot worktree")[0]).toBe("autopilot.limits.worktree-retention");
   });
 
-  it("finds a setting folded inside a section by name, with the fold to open", () => {
+  it("finds a built-in automation by name", () => {
     const [match] = searchSettings(entries, "stuck tasks");
-    expect(match?.id).toBe("autopilot.engine.automation-unstick");
-    expect(match?.foldedIn).toBe(match?.id);
+    expect(match?.id).toBe("autopilot.automations.unstick");
   });
 
   it("finds generated rows: notification kinds and model tiers", () => {
@@ -155,8 +154,8 @@ describe("askEntries", () => {
   it("sends every entry with its location, so the model can name any id", () => {
     const sent = askEntries(entries);
     expect(sent).toHaveLength(entries.length);
-    const quiet = sent.find((entry) => entry.id === "autopilot.engine.quiet-hours");
-    expect(quiet).toMatchObject({ title: "Quiet hours", location: "Autopilot" });
+    const quiet = sent.find((entry) => entry.id === "autopilot.limits.quiet-hours");
+    expect(quiet).toMatchObject({ title: "Quiet hours", location: "Autopilot › Limits & safety" });
     expect(quiet?.keywords).toContain("night");
   });
 });

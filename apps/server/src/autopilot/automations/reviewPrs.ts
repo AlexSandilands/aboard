@@ -314,11 +314,13 @@ export const reviewPrs = defineAutomation({
   description:
     "Reviews pull requests linked to tasks and posts the review on GitHub as comments, again when the PR's head commit changes.",
   needsAgent: true,
+  group: "prs",
   schema: ConfigSchema,
   fields: [
     {
       key: "skill",
       label: "Review skill",
+      tier: "essential",
       kind: "skill",
       help: "What the reviewer follows. The built-in skill is aboard-review.",
     },

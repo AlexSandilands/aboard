@@ -29,10 +29,31 @@ the epic's own switch and days decide.
 [Manual tasks](using-the-board.md#manual-tasks) are yours: no automation starts, reviews, fixes or reminds you
 about one. Unblock dependents still tells you when finishing one unblocks a task.
 
-**Settings → Autopilot** has a switch for the whole board, and under each automation a **Settings**
-section with its options: which skill it follows, which runner, the model, and budgets and timeouts. A
-project can override those in its own settings. The board's switch is just **On / Off** (there's nothing above the
-board to inherit from, so an automation you haven't switched on is off); only projects and epics can follow the scope above (the ↺ button).
+**Settings → Autopilot** has three tabs: **Automations**, **Runs** and **Limits & safety**.
+
+**Automations** opens on a strip saying whether Autopilot is running or paused, how many agent runs it started today
+and what they cost, and your limits in one line, with **Pause all** beside it. Under it, **Needs you** lists what only
+you can sort out, and is hidden when there's nothing: a run that failed on a task (**Retry** or **Dismiss**; a
+run with no task, such as the digest's, shows as a red dot on its automation instead), an automation an
+agent drafted for you (**Review** or **Dismiss**), and an automation that can't run until you fill in a tool or a
+variable (**Fix**).
+
+Then every automation, in a list down the left grouped as **Ship work**, **Pull requests**, **Upkeep** and
+**Yours** (the ones you made or imported). Each row has the automation's switch for the whole board and says where
+it's on and how its last run went. One that is off everywhere is greyed out but stays in the list, so you can
+switch it on. Click a row to see it on the right:
+
+- one sentence saying what it does with your settings ("Every weekday at 09:00, write a plain list of what changed
+  on the board"), and **All runs**;
+- **Where it runs**: the board's **On / Off** and the projects it's on in;
+- **Settings**: the few options most people change;
+- **Advanced**, closed: everything else, such as the runner, the model, budgets and timeouts. A dot on it means
+  something in there isn't the default.
+
+The board's switch is just **On / Off** (there's nothing above the board to inherit from, so an automation you
+haven't switched on is off); only projects and epics can follow the scope above (the ↺ button), and a project can
+override the options in its own settings. On a phone the list and an automation take turns: tap a row, and **All
+automations** takes you back.
 
 ## Remind me about stuck tasks
 
@@ -57,14 +78,15 @@ comment carries a short mark. It only ever comments: it never approves or reques
 agent itself only reads the pull request and reports its findings; Autopilot posts them.
 
 - It reviews the PR again each time its head commit changes, up to **PR review rounds** (3 by default, in
-  Settings → Autopilot) per PR. Drafts are skipped unless you turn on **Review drafts**; merged and closed PRs
+  Settings → Autopilot → Limits & safety) per PR. Drafts are skipped unless you turn on **Review drafts**; merged and closed PRs
   are never reviewed.
 - With local review on for the task, the PR waits: it is reviewed once the task is in Review and its local review has
   finished. A PR on a task still in Backlog, Planned or In Progress isn't reviewed until then.
 - From the second round it looks for regressions and for points still not fixed, and keeps new small points in an
   "FYI (no action needed)" section. On the last round only major and blocking points count.
 - The findings stay on GitHub, not on the board, so they don't mix with local review findings. The task gets a
-  note "Autopilot reviewed PR #N at …" linking the review.
+  note "Autopilot reviewed PR #N at …" linking the review. **All runs** on an automation (and in a scheduled custom automation's editor) opens the same list for that
+automation alone.
 - Points at or above the **fix threshold** (major by default) are the ones a fix would address. When the last
   round still has some, the card says "Autopilot gave up" under Needs attention and you get a notification.
 - Its settings: the **review skill** it follows (the built-in one by default), **Review drafts**, the runner, the
@@ -249,16 +271,16 @@ the board's layout for me to check"): they're added to its prompt and win where 
 handover for the next, so it remembers what it's waiting on. Switch it on per project or for the board; it counts
 against the agent limits below.
 
-Orchestrate has its own area in **Settings → Autopilot**, above the other automations: its switch and settings, and **View all runs**, which opens
-its [run history](#run-history). What is per project is set in the project's own settings; its next check and
-**Run now** are in the lane's popover (below).
+Orchestrate is in **Settings → Autopilot** like the others, under Ship work: its switch, **Every** and **Extra
+instructions**, and **All runs**, which opens its [run history](#run-history). What is per project is set in the
+project's own settings; its next check and **Run now** are in the lane's popover (below).
 
 Orchestrate sits at the top of the lane's Autopilot popover, in a card of its own. It shows when the next check
 is ("Next check in 12:34"). A check is a look, not a promise of a run: when the next one won't
 run, the section says why instead (idle with nothing to check, paused, quiet hours, today's cap reached). **▶ Run
 now** runs it for the project straight away, even when it's idle, unless it is already running, Autopilot is paused,
 it's quiet hours or a daily cap is reached; then a message says so. While it's on, the lane's pill shows the time to
-the next check too (`Autopilot · 12m`). Switch that off under **Settings → Autopilot → Orchestrate → Countdown on
+the next check too (`Autopilot · 12m`). Switch that off under **Settings → Appearance → Autopilot countdown on
 lanes**. **History** in the popover's card opens the run history filtered to that project.
 
 A failed run on a task can also be retried by hand: **Retry** on the run in the task panel's Autopilot section.
@@ -273,8 +295,7 @@ Other automations have their own guides: [Recurring tasks](recurring-tasks.md) a
 
 ## Run history
 
-**View all runs** (in Orchestrate's area, and in a scheduled custom automation's editor) and **All runs** (beside the
-Automations heading) open a page listing every run, newest first, with more loading as you scroll. Each run shows its
+The **Runs** tab of Settings → Autopilot lists every run, newest first, with more loading as you scroll. Each run shows its
 status, project, when it ran, what it said it did and, for a scheduled agent, the handover it left, folded away. Narrow
 the list by project and time (the last 24 hours, 7 or 30 days, or a range of days), and search by run id, project name,
 a task as `#12`, or any word of the summary or handover. The filters are in the page's address, so you can bookmark a
@@ -295,16 +316,18 @@ Some runs stay even when you ask, because Autopilot still reads them. The box sa
 
 ## Limits
 
-In **Settings → Autopilot**:
+In **Settings → Autopilot → Limits & safety**:
 
 - **Agent runs at once**, a **daily run cap** and a **daily spend cap**.
 - **Quiet hours**: a window (local time, it may cross midnight) in which no agent runs start. Automations that
   only change the board still run.
+- **PR review rounds**, **PR comment rounds** and the **PR fix threshold** for Review PRs and Fix PRs.
 - **Dry run**: record what each automation would do, and do nothing. Good for trying an automation out.
+- **Worktree retention**, and the **Variables** your custom automations read.
 
 ## Pausing
 
-**Pause all** stops every new run at once, whatever the switches say. It's in Settings and in the board header,
+**Pause all** stops every new run at once, whatever the switches say. It's on the Automations tab and in the board header,
 where it turns into a **Resume** button while it's set. Runs already going finish.
 
 ## Seeing what it did

@@ -27,11 +27,12 @@ Projects with nothing to report are left out.
 
 ## Switching it on
 
-Under **Settings → Autopilot**, switch **Digest of what changed** on for the board, and open its **Settings**:
+Under **Settings → Autopilot**, switch **Digest of what changed** on for the board (it's under Upkeep), and click it to
+see its settings:
 
 - **Digest**: **Plain list** (built by the board, no agent, free) or **Written by an agent**.
 - **Time** (local) and **Weekdays only**. After the board has been off, you get one digest for the lot.
-- For an agent-written digest: the **Digest skill** to follow (the built-in one, or any skill you have), the
+- Under **Advanced**, for an agent-written digest: the **Digest skill** to follow (the built-in one, or any skill you have), the
   **Agent budget**, **Agent timeout** and **Agent model** (blank uses the model for your light tier).
 
 Switching it on, or changing its time, doesn't make a digest for a time that has already passed that day; the

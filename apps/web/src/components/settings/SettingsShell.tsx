@@ -35,6 +35,7 @@ import { SettingsSearch } from "./SettingsSearch";
 import type { SettingsIndexEntry } from "./settingsIndex.logic";
 import {
   activeSectionId,
+  isEditorPath,
   isSettingsGroup,
   sectionOf,
   SETTINGS_GROUPS,
@@ -59,7 +60,7 @@ function useSettingsLocation(): { group: SettingsGroupId | null; inEditor: boole
   const pathname = useLocation({ select: (location) => location.pathname });
   const parts = pathname.split("/").filter(Boolean);
   const group = parts[1];
-  return { group: isSettingsGroup(group) ? group : null, inEditor: parts.length > 2 };
+  return { group: isSettingsGroup(group) ? group : null, inEditor: isEditorPath(pathname) };
 }
 
 /** The `?project=` of the project page and its rule editor. */
