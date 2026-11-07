@@ -10,6 +10,12 @@ does in one sentence, switch it on or off, **Edit** it, **Export** it or **Delet
 **Settings → Autopilot → + Add automation → Start from scratch**. The same dialog has **Recipes** (small ready-made
 automations that open for you to read and import, in Preview), **Import a file** and **Ask an agent**.
 
+The builder takes it in five steps: **When → Do → Details → Where → Review & try**. Each step shows only what the
+trigger and action you picked need, and a sentence above it says what the automation does so far ("When a task moves
+into Review, ask an agent: “…” It runs in every project it's switched on in."). **Back**, or a step you've already
+reached in the row at the top, takes you back without losing anything you typed. **Next** checks the step first and
+says what to fix.
+
 1. **When**: pick a trigger.
    - **A task changes column**: into a column, and optionally only from one (Done → In Progress catches reopened
      tasks).
@@ -21,9 +27,10 @@ automations that open for you to read and import, in Preview), **Import a file**
      (local time), so every 15 minutes runs at 00:00, 00:15, 00:30 and so on. It runs once in each project it's on
      in, with no task, so it can only filter by project. If the board was off, it runs once when it's back, not
      once for each slot it missed.
-2. **Only in these projects**, **with any of these labels**, **in the epic**: narrow it down. Leave them empty
-   for every task.
-3. **Do**: one of these.
+2. **Do**: one of these, then its **Details** on the next step: the prompt, the command or the script, up front.
+   The rest sits under **More options**, closed unless something in it is set: for an agent the model, skill,
+   allowed tools, inputs, required tools, and the pull request branch (or, on a schedule, the check script); for a
+   command or script its inputs.
    - **Start an agent** on the task, with your prompt. The prompt can name `{{task.number}}`, `{{task.title}}`,
      `{{task.id}}`, `{{task.status}}`, `{{pr.url}}`, `{{project.name}}`, `{{project.path}}`,
      `{{project.repo_url}}`, `{{automation.name}}`, your [variables](#variables) as `{{vars.name}}` and
@@ -69,11 +76,21 @@ automations that open for you to read and import, in Preview), **Import a file**
      `pnpm run notify "$env:ABOARD_TASK_TITLE"` is unsafe. Have the program read the variable itself instead:
      `pnpm run notify`, with `process.env.ABOARD_TASK_TITLE` in the script. Using a value inside PowerShell
      (`Write-Output`, `-match`, a `.ps1` script) is fine.
-4. The **Preview** shows exactly what would run for the newest task the filters let through: the filled prompt,
-   or the command with its variables.
-5. Save it. It starts in [Preview](autopilot.md#trying-one-out-with-preview): it records what it would do, and does
-   none of it. Once its Preview runs look right, turn it **On** on its page (**Turn on**, or its Mode), in a project's
-   Autopilot settings, or from the Autopilot pill on a lane.
+3. **Where**: **only in these projects**, **with any of these labels**, **in the epic**. Leave them empty for every
+   task in every project it's switched on in.
+4. **Review & try**: the sentence, each step in one line with an **Edit** that goes back to it, and:
+   - **Right now this would run for**: for "sits too long", the tasks already past the limit (it would act on each
+     once switched on); for an event, nothing yet, since it only acts on what happens after it's on; for a schedule,
+     the projects it would run in.
+   - **Try it**: **Show the prompt** shows exactly what an agent would be sent for the newest task the filters let
+     through; a command shows what it would run; a script or check script has its **Test run** here.
+   - **Name**, filled in from what you picked ("PR checks fail → agent"); change it if you like.
+5. **Save in Preview**, or **Save and turn on**. In [Preview](autopilot.md#trying-one-out-with-preview) it records
+   what it would do, and does none of it. Once its Preview runs look right, turn it **On** on its page (**Turn on**, or
+   its Mode), in a project's Autopilot settings, or from the Autopilot pill on a lane.
+
+**Edit** on an automation opens the same steps at **Review & try**, every step reachable, with **Save changes** at the
+bottom of each.
 
 ## What it does
 
@@ -118,7 +135,7 @@ run.
 
   ```json
   {
-    "automation": "Review repo PRs",
+    "automation": "Triage bug reports",
     "project": {
       "id": "…",
       "name": "aboard",
@@ -267,13 +284,16 @@ prompt, skill name and allowed tools, any script or check script (in full), the 
 slots **without** their tools. It leaves out your projects, your epic and the tools you filled the slots with. If the
 automation names a skill you have installed, the skill's text goes in the file.
 
-To use someone's file: **+ Add automation → Import a file**, then choose the file (or the example the app ships:
-**Review repo PRs**). Before anything is saved you see everything it
-would run: the prompt, any command, script or check script (with its language), the tools it may use without asking and
+To use someone's file: **+ Add automation → Import a file**, then choose the file. It opens as the builder's review:
+what it does in one sentence, and before anything is saved, everything it would run: the prompt, any command, script or
+check script (with its language), the tools it may use without asking and
 the skill's text. Treat it as code from a stranger, because once you turn it on it runs on
-your machine with your access. Then fill in its inputs and slots, optionally restrict it to projects, and import.
-It comes in **in Preview**, which records what it would do (a check script still runs for real); turn it on in the
-Autopilot list when its Preview runs look right and the orange warning is gone.
+your machine with your access. Then fill in its inputs and slots, optionally restrict it to projects, choose
+**Saves in: Preview** (the default) or **On**, and **Import**. In Preview it records what it would do (a check script
+still runs for real); turn it on in the Autopilot list when its Preview runs look right and the orange warning is gone.
+**Edit first** opens it in the builder instead, at Details, with what you filled in; saving there makes it as you leave
+it (a skill in the file isn't saved that way: import it as it is for that). A script in it still needs the "I've read
+it" switch, on Review & try, before it saves.
 
 - A file with a script needs one more step: a switch that says you've read the script and understand it runs on your
   machine as you. **Import** waits for it.
@@ -286,58 +306,41 @@ Autopilot list when its Preview runs look right and the orange warning is gone.
 - The "Improve prompts and skills" example that older versions shipped is now the built-in
   [Improve automations](autopilot.md#improve-automations). One you imported earlier keeps working as it is.
 
-### Review repo PRs
+### Reviewing pull requests
 
-The example is a pull request reviewer built on a [check script](#check-scripts), for the repository of each
-project it's on in. It also covers pull requests that aren't linked to a task, which the built-in **Review PRs** can't
-see. It needs the GitHub CLI (`gh`), signed in as the account that should post the reviews.
+An earlier version shipped an example, **Review repo PRs**, that commented on any pull request of the
+repository. It is gone: the built-in **Review PRs** now does that with its **Other people's PRs** setting, and it can
+approve (past a gate the board checks itself), ask for changes or hand a pull request to you
+([Review PRs](autopilot.md#review-prs)). An automation you imported from it keeps working until you delete it.
 
-Every five minutes a Node script asks GitHub for the project's open pull requests and prints each one that has no
-review of this kind **at its head commit** (every review carries the commit it was made at, so GitHub is the memory,
-not a file). The board starts one agent for each. It reads the pull request with `gh` and posts one review as a
-**comment**, under the same header Review PRs uses. It never approves or requests changes: there is no such code in the
-script, and the agent is told not to.
-
-It reviews only pull requests from people who can be trusted with your access: the repository's owners, members and
-collaborators, your own account and the **Trusted GitHub logins**. A stranger's pull request is left alone, since its
-text would go to an agent that runs `gh` as you; turn on **Also review PRs from people with no write access** to
-include them. To keep the first run from reviewing every old open pull request, it only looks at those updated in the
-last **Only PRs updated in the last (days)** (7 by default). The board starts at most 50 new agents in a pass and
-keeps to the agent caps, so the rest follow.
-
-The script leaves a pull request alone when it is a draft or has a `no-autopilot` label. In the comments it reads two
-commands, only at the start of a line, and only from the people who may give each one, never from anyone else:
-
-- `/stop-review` stops the reviews. It counts from the **pull request's author**, the account running `gh` or a login
-  in Trusted GitHub logins. The latest command wins, so a later `/re-review` starts them again.
-- `/re-review` asks for another review of the same commit. It counts only from the **account running `gh` or a trusted
-  login**, not from the pull request's author, because each request starts an agent. The number of `/re-review`
-  comments is in the key (`owner/repo#41:3f2a9c1:1`) beside the head commit, so a push and a request each make a new
-  item.
-
-Only reviews posted by your own account count, so pasting the header into a review can't keep a pull request out. It
-reviews each pull request at most **Most automatic reviews per PR** times (3 by default); a `/re-review` goes past
-that, since someone you trust asked.
-
-It looks at the 50 most recently updated open pull requests, and at the last 100 comments and reviews of each; a
-repository with more has the rest left out, and the script says so on stderr, which a test run shows.
-
-To use it: **Import → Example: Review repo PRs**, read the script, enter your trusted logins if any, pick the
-projects, and switch it on. It comes in with **Treat the items as untrusted** off, because the agent has to run `gh` to
-read the pull request and post its review, which an agent of untrusted items can't. A pull request's title, description,
-comments and code are text its author wrote, and the agent reads them with your access: that is why outside
-contributors are off by default, and why you should only turn them on for repositories where a stranger's text is
-acceptable to it. If **Review PRs** is on for the same project, this example skips a pull request that Review PRs
-already reviewed at its head commit (it sees the review on GitHub), but Review PRs doesn't see this one's reviews, so
-a pull request linked to a task can get a second review from it. Switch one of them off for a project to avoid that.
+If you run a custom automation that reviews pull requests (the example, or one of your own), switch it off in a
+project before you turn on **Other people's PRs** there, or both review the same pull requests. Review PRs reads
+what an earlier `Autopilot PR review` automation posted (its hidden `autopilot-review` markers), so rounds, approvals,
+hand-offs and `/autopilot stop` carry over.
 
 ## Asking an agent for one
 
 You can ask an agent connected to the board to write an automation for you: "every weekday at 8, triage the new
 defects in Jira", "when a PR merges, run the release notes script". The agent can't set one up itself. It drafts it,
-and you get a notification and a link to the import page, where the draft opens like a shared file, with a banner
+and you get a notification and a link to the review page, where the draft opens like a shared file, with a banner
 saying an agent wrote it and the agent's note to you. Read it with the same care, fill in its inputs and tools, and
-import it; it comes in off, like any import.
+import it (in Preview unless you choose On), or **Edit first**.
+
+### Changes to one you have
+
+An agent can also propose a change to one of your custom automations: a better prompt, a fixed check script,
+another time. It sends the whole new version naming the automation it replaces, and **Needs you** shows **Change to
+<name>**. **Review** shows the difference field by field (trigger, prompt, check script, inputs, allowed tools...)
+with the agent's reason, and three buttons:
+
+- **Apply change** changes the automation in place: it keeps its switches (Off, Preview or On), where it runs, its run
+  history, the values you gave its inputs and the tools in its slots. New inputs and slots are asked for on the
+  page. A changed script needs the same "I've read it" switch as an import, and a skill the change carries is saved only
+  if you switch it on (under a new name when you already have one by its name); otherwise the automation keeps its own
+  skill of that name, or names none.
+- **Edit first** opens the builder on the automation with the change filled in; **Save changes** applies it as you leave
+  it (a changed script still needs the "I've read it" switch on Review & try).
+- **Keep current** drops the proposal.
 
 With **Settings → Agents → Providers → Board skills** on, the agent also has the `aboard-automations` skill, which tells it
 how to pick a trigger and action, use your variables, inputs and tool slots, write a script that fails loudly and
@@ -347,12 +350,12 @@ less guidance.
 You don't need to know what to ask. **Ask an agent** (beside **+ Add automation**, and in the Add dialog) gives you a
 prompt to paste into your own agent, or starts a new T3 Code thread with it, which you can edit first. The same menu is
 on each automation as **Ask an agent to change this** (it hands over the automation's current definition and asks for a
-changed draft; for a built-in it tells you which settings to change) and on a failed run as **Ask an agent to fix**
+[change](#changes-to-one-you-have); for a built-in it tells you which settings to change) and on a failed run as **Ask an agent to fix**
 (with the error and the end of its output). There's no chat box: the agent works in your own session, and what it
 makes arrives as a draft.
 
 Drafts waiting for you are listed under **Needs you** at the top of Settings → Autopilot, with **Review** and
-**Dismiss**. Importing a
+**Dismiss**. Importing or applying a
 draft removes it; one you leave is dropped after 14 days. Drafts aren't backed up.
 
 ## Commands and scripts run on your machine

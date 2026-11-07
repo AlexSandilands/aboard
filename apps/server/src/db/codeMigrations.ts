@@ -33,8 +33,8 @@ export const CODE_MIGRATIONS: Readonly<Record<string, (db: Db) => void>> = {
   "041_operation_models": operationModels,
   "043_merge_ready_prs": mergeReadyPrs,
   "044_autopilot_agent_defaults": autopilotAgentDefaults,
-  "045_reminder_notifications": reminderNotifications,
-  "046_recurring_without_switch": recurringWithoutSwitch,
+  "047_reminder_notifications": reminderNotifications,
+  "048_recurring_without_switch": recurringWithoutSwitch,
 };
 
 /**

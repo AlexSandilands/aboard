@@ -573,7 +573,7 @@ describe("migrations", () => {
     });
   });
 
-  describe("reminders and Recurring tasks without switches (045, 046)", () => {
+  describe("reminders and Recurring tasks without switches (047, 048)", () => {
     const before = (setup: string): DatabaseSync => {
       dir = mkdtempSync(join(tmpdir(), "board-db-"));
       const path = join(dir, "board.db");

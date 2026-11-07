@@ -38,7 +38,24 @@ import { messageOf } from "../../integrations/util.ts";
 import type { Services } from "../../services/types.ts";
 import { RUN_SERVER_NAME } from "../../mcp/runTokens.ts";
 import { RUNNER_DEFAULTS, RUNNER_OPTION_SHAPE } from "../runnerOptions.ts";
-import { WorktreeHeadError, defineAutomation, type ActionResult, type Candidate } from "../types.ts";
+import {
+  WorktreeHeadError,
+  defineAutomation,
+  type ActionContext,
+  type ActionResult,
+  type Candidate,
+  type CheckContext,
+} from "../types.ts";
+import {
+  OTHER_PRS_ADVANCED_FIELDS,
+  OTHER_PRS_DEFAULTS,
+  OTHER_PRS_ESSENTIAL_FIELDS,
+  OTHER_PRS_SHAPE,
+  actRepoPr,
+  isRepoPrData,
+  otherPrCandidates,
+  otherPrsNeeds,
+} from "./repoPrs.ts";
 
 export { AUTOPILOT_REVIEW_PRS };
 
@@ -299,7 +316,9 @@ const ConfigSchema = z.object({
   reviewDrafts: z.boolean(),
   /** Reviews per PR. An engine setting (prReviewRounds) before 044_autopilot_agent_defaults. */
   rounds: z.number().int().min(1).max(10),
+  ...OTHER_PRS_SHAPE,
 });
+type ReviewPrsConfig = z.infer<typeof ConfigSchema>;
 
 /** Fix PRs' default fix threshold, for a board that has no Fix PRs. */
 const DEFAULT_FIX_THRESHOLD: FindingSeverity = "major";
@@ -355,12 +374,14 @@ export const reviewPrs = defineAutomation({
       unit: "rounds",
       help: "Reviews of one PR, each after new commits. The last round asks for no fixes below the fix threshold. Fix PRs' attempts on checks and reviews should be at least this.",
     },
+    ...OTHER_PRS_ESSENTIAL_FIELDS,
     {
       key: "reviewDrafts",
       label: "Review drafts",
       kind: "boolean",
-      help: "Also review pull requests that are still drafts.",
+      help: "Also review task pull requests that are still drafts. Other people's drafts are never reviewed.",
     },
+    ...OTHER_PRS_ADVANCED_FIELDS,
     {
       key: "runner",
       label: "Runner",
@@ -387,216 +408,229 @@ export const reviewPrs = defineAutomation({
     skill: { source: "builtin" },
     reviewDrafts: false,
     rounds: 3,
+    ...OTHER_PRS_DEFAULTS,
   },
-  check: ({ services, projects }) =>
-    projects.flatMap(({ project, config }): Candidate[] =>
-      services.tasks.summaries({ projectId: project.id }).flatMap((task): Candidate[] => {
-        if (task.kind === "epic" || task.manual || task.archivedAt !== null || task.status === "done") return [];
-        // The local review comes first: a PR opened before it ended would be reviewed twice, and on a head the loop
-        // is about to change. A task not yet in Review hasn't started its loop (the move to Review opens round 1), so
-        // it waits too; in Review it waits while the loop runs. Without auto-review there is no loop to wait for.
-        if (prWaitsForLocalReview(task.status, task.review, services.reviews.effectiveAutoReview(task.id))) return [];
-        const links = task.links.flatMap((link) => {
-          if (link.kind !== "pr" || !link.ref || !link.snapshot) return [];
-          const { state, headOid, headRef, isCrossRepository } = link.snapshot;
-          // Merged and closed PRs are never reviewed; a draft only when asked for. A fork's branch isn't on origin.
-          if (state === "merged" || state === "closed" || (state === "draft" && !config.reviewDrafts)) return [];
-          if (isCrossRepository) return [];
-          return headOid && headRef ? [{ link, ref: link.ref, snapshot: link.snapshot, headOid, headRef }] : [];
-        });
-        if (links.length === 0) return [];
-        const runs = services.autopilot
-          .runsForTask(task.id, 500)
-          .filter((r) => r.automation === AUTOPILOT_REVIEW_PRS && !r.dryRun);
-        return links.flatMap(({ link, ref, snapshot, headOid, headRef }): Candidate[] => {
-          const headKey = prReviewDedupeKey(link.id, headOid);
-          const atHead = runs.filter((r) => r.dedupeKey === headKey || r.dedupeKey.startsWith(`${headKey}:`));
-          // Only a try that was skipped for a failure in passing leaves the head open for another.
-          if (atHead.some((r) => !(r.status === "skipped" && r.output?.retry === true))) return [];
-          const dedupeKey = atHead.length === 0 ? headKey : `${headKey}:${atHead.length + 1}`;
-          const ofLink = runs.filter((r) => isReviewOfLink(r.dedupeKey, link.id));
-          // One review at a time: a push meanwhile waits for it, then the latest head is reviewed with it in view.
-          if (ofLink.some((r) => r.status === "queued" || r.status === "running")) return [];
-          // A review that posted nothing (skipped) didn't use a round.
-          const used = ofLink.filter((r) => r.status !== "skipped");
-          if (used.length >= config.rounds) return [];
-          const round = used.length + 1;
-          const data: ReviewData = {
-            linkId: link.id,
-            url: link.url,
-            host: ref.host,
-            repo: ref.repo,
-            number: ref.number,
-            title: snapshot.title,
-            headRef,
-            headOid,
-            round,
-            maxRounds: config.rounds,
-            earlier: earlierReviews(used, link.id),
-            attempt: atHead.length + 1,
-          };
-          return [
-            {
-              dedupeKey,
-              summary: `review PR #${ref.number} at ${shortSha(headOid)} (round ${round} of ${config.rounds})`,
-              taskId: task.id,
-              data,
-            },
-          ];
-        });
+  needs: otherPrsNeeds,
+  check: (ctx) => [...taskPrCandidates(ctx), ...otherPrCandidates(ctx)],
+  act: async (candidate, ctx): Promise<ActionResult> =>
+    isRepoPrData(candidate.data) ? actRepoPr(candidate, ctx) : actTaskPr(candidate, ctx),
+});
+
+/** Task PRs to review: the first source. */
+function taskPrCandidates({ services, projects }: CheckContext<ReviewPrsConfig>): Candidate[] {
+  return projects.flatMap(({ project, config }): Candidate[] =>
+    services.tasks.summaries({ projectId: project.id }).flatMap((task): Candidate[] => {
+      if (task.kind === "epic" || task.manual || task.archivedAt !== null || task.status === "done") return [];
+      // The local review comes first: a PR opened before it ended would be reviewed twice, and on a head the loop
+      // is about to change. A task not yet in Review hasn't started its loop (the move to Review opens round 1), so
+      // it waits too; in Review it waits while the loop runs. Without auto-review there is no loop to wait for.
+      if (prWaitsForLocalReview(task.status, task.review, services.reviews.effectiveAutoReview(task.id))) return [];
+      const links = task.links.flatMap((link) => {
+        if (link.kind !== "pr" || !link.ref || !link.snapshot) return [];
+        const { state, headOid, headRef, isCrossRepository } = link.snapshot;
+        // Merged and closed PRs are never reviewed; a draft only when asked for. A fork's branch isn't on origin.
+        if (state === "merged" || state === "closed" || (state === "draft" && !config.reviewDrafts)) return [];
+        if (isCrossRepository) return [];
+        return headOid && headRef ? [{ link, ref: link.ref, snapshot: link.snapshot, headOid, headRef }] : [];
+      });
+      if (links.length === 0) return [];
+      const runs = services.autopilot
+        .runsForTask(task.id, 500)
+        .filter((r) => r.automation === AUTOPILOT_REVIEW_PRS && !r.dryRun);
+      return links.flatMap(({ link, ref, snapshot, headOid, headRef }): Candidate[] => {
+        const headKey = prReviewDedupeKey(link.id, headOid);
+        const atHead = runs.filter((r) => r.dedupeKey === headKey || r.dedupeKey.startsWith(`${headKey}:`));
+        // Only a try that was skipped for a failure in passing leaves the head open for another.
+        if (atHead.some((r) => !(r.status === "skipped" && r.output?.retry === true))) return [];
+        const dedupeKey = atHead.length === 0 ? headKey : `${headKey}:${atHead.length + 1}`;
+        const ofLink = runs.filter((r) => isReviewOfLink(r.dedupeKey, link.id));
+        // One review at a time: a push meanwhile waits for it, then the latest head is reviewed with it in view.
+        if (ofLink.some((r) => r.status === "queued" || r.status === "running")) return [];
+        // A review that posted nothing (skipped) didn't use a round.
+        const used = ofLink.filter((r) => r.status !== "skipped");
+        if (used.length >= config.rounds) return [];
+        const round = used.length + 1;
+        const data: ReviewData = {
+          linkId: link.id,
+          url: link.url,
+          host: ref.host,
+          repo: ref.repo,
+          number: ref.number,
+          title: snapshot.title,
+          headRef,
+          headOid,
+          round,
+          maxRounds: config.rounds,
+          earlier: earlierReviews(used, link.id),
+          attempt: atHead.length + 1,
+        };
+        return [
+          {
+            dedupeKey,
+            summary: `review PR #${ref.number} at ${shortSha(headOid)} (round ${round} of ${config.rounds})`,
+            taskId: task.id,
+            data,
+          },
+        ];
+      });
+    }),
+  );
+}
+
+/** Reviews one task PR and posts the findings as a comment review. */
+async function actTaskPr(
+  candidate: Candidate,
+  { services, runner, gitHosts, config, run, actor }: ActionContext<ReviewPrsConfig>,
+): Promise<ActionResult> {
+  const data = candidate.data as ReviewData;
+  const task = services.tasks.summary(candidate.taskId!);
+  const link = task.links.find((l) => l.id === data.linkId);
+  if (link?.kind !== "pr" || !link.snapshot) return { status: "skipped", summary: "The PR link was removed" };
+  const { state, headOid } = link.snapshot;
+  if (state === "merged" || state === "closed") {
+    return { status: "skipped", summary: `PR #${data.number} is ${state}` };
+  }
+  // The next poll's head commit has its own key, and its own round.
+  if (headOid !== data.headOid) {
+    return {
+      status: "skipped",
+      deferred: "head_moved",
+      summary: `PR #${data.number} moved on to ${shortSha(headOid ?? "")}`,
+    };
+  }
+
+  const threshold = effectiveFixThreshold(fixThresholdFor(services, task), data.round, data.maxRounds);
+  let verdict: PrReviewVerdict;
+  let posted: PostedReview;
+  let posting = false;
+  try {
+    const result = await runner.start({
+      run,
+      label: `Review PRs · PR #${data.number} round ${data.round}`,
+      prompt: reviewPrompt({
+        task,
+        pr: data,
+        round: data.round,
+        maxRounds: data.maxRounds,
+        threshold,
+        earlier: data.earlier,
+        skill: config.skill,
+        host: gitHosts.definitionFor(data.host),
       }),
-    ),
-  act: async (candidate, { services, runner, gitHosts, config, run, actor }): Promise<ActionResult> => {
-    const data = candidate.data as ReviewData;
-    const task = services.tasks.summary(candidate.taskId!);
-    const link = task.links.find((l) => l.id === data.linkId);
-    if (link?.kind !== "pr" || !link.snapshot) return { status: "skipped", summary: "The PR link was removed" };
-    const { state, headOid } = link.snapshot;
-    if (state === "merged" || state === "closed") {
-      return { status: "skipped", summary: `PR #${data.number} is ${state}` };
+      operation: "prReview",
+      options: config,
+      access: "read-only",
+      // The PR is read through the board's run tools, bound to this one PR; the agent gets no gh and no network.
+      runTools: {
+        toolSet: "prReview",
+        target: { kind: "pr", host: data.host, repo: data.repo, number: data.number },
+      },
+      untrustedInput: true,
+      // Checked before the agent starts: it reads the commit this run is about, or nothing.
+      expectHead: data.headOid,
+      outputSchema: PR_REVIEW_OUTPUT_SCHEMA,
+      workspace: { branch: data.headRef },
+    });
+    const parsed = PrReviewVerdict.safeParse(result.output);
+    if (!parsed.success) {
+      throw new Error(`The reviewer's answer wasn't a review: ${parsed.error.issues[0]?.message ?? "invalid"}`);
     }
-    // The next poll's head commit has its own key, and its own round.
-    if (headOid !== data.headOid) {
+    verdict = parsed.data;
+    const rendered = renderReview(verdict, data);
+    posting = true;
+    posted = await gitHosts.postReview(
+      { host: data.host, repo: data.repo, number: data.number },
+      { reviewedSha: data.headOid, body: rendered.body, comments: rendered.comments },
+    );
+  } catch (error) {
+    // The branch moved on before or while the agent read it: nothing was posted, and the new head is reviewed next.
+    // That isn't a failure, nor a round used. A worktree at some other commit is one: it never matched.
+    if (error instanceof StaleReviewError || (error instanceof WorktreeHeadError && error.moved)) {
       return {
         status: "skipped",
         deferred: "head_moved",
-        summary: `PR #${data.number} moved on to ${shortSha(headOid ?? "")}`,
+        summary: `PR #${data.number} moved on while it was being reviewed`,
       };
     }
-
-    const threshold = effectiveFixThreshold(fixThresholdFor(services, task), data.round, data.maxRounds);
-    let verdict: PrReviewVerdict;
-    let posted: PostedReview;
-    let posting = false;
-    try {
-      const result = await runner.start({
-        run,
-        label: `Review PRs · PR #${data.number} round ${data.round}`,
-        prompt: reviewPrompt({
-          task,
-          pr: data,
-          round: data.round,
-          maxRounds: data.maxRounds,
-          threshold,
-          earlier: data.earlier,
-          skill: config.skill,
-          host: gitHosts.definitionFor(data.host),
-        }),
-        operation: "prReview",
-        options: config,
-        access: "read-only",
-        // The PR is read through the board's run tools, bound to this one PR; the agent gets no gh and no network.
-        runTools: {
-          toolSet: "prReview",
-          target: { kind: "pr", host: data.host, repo: data.repo, number: data.number },
-        },
-        untrustedInput: true,
-        // Checked before the agent starts: it reads the commit this run is about, or nothing.
-        expectHead: data.headOid,
-        outputSchema: PR_REVIEW_OUTPUT_SCHEMA,
-        workspace: { branch: data.headRef },
-      });
-      const parsed = PrReviewVerdict.safeParse(result.output);
-      if (!parsed.success) {
-        throw new Error(`The reviewer's answer wasn't a review: ${parsed.error.issues[0]?.message ?? "invalid"}`);
-      }
-      verdict = parsed.data;
-      const rendered = renderReview(verdict, data);
-      posting = true;
-      posted = await gitHosts.postReview(
-        { host: data.host, repo: data.repo, number: data.number },
-        { reviewedSha: data.headOid, body: rendered.body, comments: rendered.comments },
-      );
-    } catch (error) {
-      // The branch moved on before or while the agent read it: nothing was posted, and the new head is reviewed next.
-      // That isn't a failure, nor a round used. A worktree at some other commit is one: it never matched.
-      if (error instanceof StaleReviewError || (error instanceof WorktreeHeadError && error.moved)) {
+    // A branch that was rewritten (a force-push) no longer descends from the commit either. Only when GitHub still
+    // calls that commit the head is the checkout what's wrong; otherwise the PR just moved on.
+    if (error instanceof WorktreeHeadError) {
+      const live = await gitHosts.prHead({ host: data.host, repo: data.repo, number: data.number }).catch(() => null);
+      if (live && live !== data.headOid) {
         return {
           status: "skipped",
           deferred: "head_moved",
           summary: `PR #${data.number} moved on while it was being reviewed`,
         };
       }
-      // A branch that was rewritten (a force-push) no longer descends from the commit either. Only when GitHub still
-      // calls that commit the head is the checkout what's wrong; otherwise the PR just moved on.
-      if (error instanceof WorktreeHeadError) {
-        const live = await gitHosts.prHead({ host: data.host, repo: data.repo, number: data.number }).catch(() => null);
-        if (live && live !== data.headOid) {
-          return {
-            status: "skipped",
-            deferred: "head_moved",
-            summary: `PR #${data.number} moved on while it was being reviewed`,
-          };
-        }
-      }
-      // GitHub failing in passing (an internal error, the network) after the agent had read: post again on the next pass.
-      // Nothing was posted, so no round was used. The agent's own failures aren't retried here.
-      if (posting && isTransientHostError(error)) {
-        if (data.attempt < REVIEW_ATTEMPTS) {
-          return {
-            status: "skipped",
-            summary: `${messageOf(error)} (PR #${data.number}, try ${data.attempt} of ${REVIEW_ATTEMPTS}, will retry)`,
-            output: RETRY,
-          };
-        }
-        throw new Error(`${messageOf(error)} (after ${REVIEW_ATTEMPTS} tries)`, { cause: error });
-      }
-      throw error;
     }
-
-    const { counts, fyi } = countReviewIssues(verdict.issues);
-    const actionable = actionableCount(counts, threshold);
-    const handoff = reviewHandoff(actionable, data.round, data.maxRounds);
-    const resolvedThreads =
-      data.earlier.length > 0 && (verdict.fixed?.length ?? 0) > 0
-        ? await resolveConfirmedThreads(
-            gitHosts,
-            { host: data.host, repo: data.repo, number: data.number },
-            verdict.fixed ?? [],
-            new Set(data.earlier.flatMap((e) => (e.reviewId === null ? [] : [e.reviewId]))),
-          )
-        : 0;
-    const output: PrReviewRunOutput = {
-      kind: "pr_review",
-      linkId: data.linkId,
-      prUrl: data.url,
-      headOid: posted.headOid,
-      round: data.round,
-      maxRounds: data.maxRounds,
-      reviewUrl: posted.url,
-      reviewId: posted.id,
-      counts,
-      fyi,
-      threshold,
-      actionable,
-      handoff,
-      ...(resolvedThreads > 0 ? { resolvedThreads } : {}),
-    };
-
-    services.tasks.addNote(
-      task.id,
-      `Autopilot reviewed PR #${data.number} at \`${shortSha(posted.headOid)}\` (round ${data.round} of ${data.maxRounds}): [review on ${gitHosts.definitionFor(data.host).label}](${posted.url})`,
-      actor,
-    );
-
-    const found = `${describeCounts(counts)}${fyi > 0 ? `, ${fyi} FYI` : ""}`;
-    const folded = posted.folded > 0 ? ` (${posted.folded} inline, put in the summary: not on the diff)` : "";
-    const closed =
-      resolvedThreads > 0
-        ? `, resolved ${resolvedThreads} earlier thread${resolvedThreads === 1 ? "" : "s"} it confirmed fixed`
-        : "";
-    const head = `Reviewed PR #${data.number} at ${shortSha(posted.headOid)} (round ${data.round} of ${data.maxRounds}): ${found}${folded}${closed}`;
-    switch (handoff) {
-      case "clean":
-        return { summary: `${head}; nothing at or above ${threshold}`, output };
-      case "fix":
-        return { summary: `${head}; ${actionable} at or above ${threshold} to fix`, output };
-      case "gave_up":
+    // GitHub failing in passing (an internal error, the network) after the agent had read: post again on the next pass.
+    // Nothing was posted, so no round was used. The agent's own failures aren't retried here.
+    if (posting && isTransientHostError(error)) {
+      if (data.attempt < REVIEW_ATTEMPTS) {
         return {
-          summary: `Autopilot gave up on PR #${data.number} after ${data.maxRounds} review rounds: ${actionable} at or above ${threshold} still open (${found})`,
-          output,
-          needsAttention: true,
+          status: "skipped",
+          summary: `${messageOf(error)} (PR #${data.number}, try ${data.attempt} of ${REVIEW_ATTEMPTS}, will retry)`,
+          output: RETRY,
         };
+      }
+      throw new Error(`${messageOf(error)} (after ${REVIEW_ATTEMPTS} tries)`, { cause: error });
     }
-  },
-});
+    throw error;
+  }
+
+  const { counts, fyi } = countReviewIssues(verdict.issues);
+  const actionable = actionableCount(counts, threshold);
+  const handoff = reviewHandoff(actionable, data.round, data.maxRounds);
+  const resolvedThreads =
+    data.earlier.length > 0 && (verdict.fixed?.length ?? 0) > 0
+      ? await resolveConfirmedThreads(
+          gitHosts,
+          { host: data.host, repo: data.repo, number: data.number },
+          verdict.fixed ?? [],
+          new Set(data.earlier.flatMap((e) => (e.reviewId === null ? [] : [e.reviewId]))),
+        )
+      : 0;
+  const output: PrReviewRunOutput = {
+    kind: "pr_review",
+    linkId: data.linkId,
+    prUrl: data.url,
+    headOid: posted.headOid,
+    round: data.round,
+    maxRounds: data.maxRounds,
+    reviewUrl: posted.url,
+    reviewId: posted.id,
+    counts,
+    fyi,
+    threshold,
+    actionable,
+    handoff,
+    ...(resolvedThreads > 0 ? { resolvedThreads } : {}),
+  };
+
+  services.tasks.addNote(
+    task.id,
+    `Autopilot reviewed PR #${data.number} at \`${shortSha(posted.headOid)}\` (round ${data.round} of ${data.maxRounds}): [review on ${gitHosts.definitionFor(data.host).label}](${posted.url})`,
+    actor,
+  );
+
+  const found = `${describeCounts(counts)}${fyi > 0 ? `, ${fyi} FYI` : ""}`;
+  const folded = posted.folded > 0 ? ` (${posted.folded} inline, put in the summary: not on the diff)` : "";
+  const closed =
+    resolvedThreads > 0
+      ? `, resolved ${resolvedThreads} earlier thread${resolvedThreads === 1 ? "" : "s"} it confirmed fixed`
+      : "";
+  const head = `Reviewed PR #${data.number} at ${shortSha(posted.headOid)} (round ${data.round} of ${data.maxRounds}): ${found}${folded}${closed}`;
+  switch (handoff) {
+    case "clean":
+      return { summary: `${head}; nothing at or above ${threshold}`, output };
+    case "fix":
+      return { summary: `${head}; ${actionable} at or above ${threshold} to fix`, output };
+    case "gave_up":
+      return {
+        summary: `Autopilot gave up on PR #${data.number} after ${data.maxRounds} review rounds: ${actionable} at or above ${threshold} still open (${found})`,
+        output,
+        needsAttention: true,
+      };
+  }
+}

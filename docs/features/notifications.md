@@ -30,6 +30,7 @@ write that made the change, so the change and its notification commit together.
 | `autopilot_notice`     | Anything else an automation sends through `notify()`: a new digest (task-less, with the counts) | the caller's (`digest:<id>`) |
 | `suggestion`           | An agent suggests a change to a prompt or skill ([suggestions](suggestions.md)); task-less, opens Settings › Suggestions from the inbox | `suggestion:<id>` |
 | `automation_draft`     | An agent drafts a custom automation (`draft_automation`, [autopilot](autopilot.md#drafts)); task-less, opens Needs you in Settings › Autopilot, which lists the drafts | `automation_draft:<id>` |
+| `pr_ready`             | Review PRs found another person's PR clean, but the approval gate (or its Approve switch being off) leaves the approval to the user ([autopilot](autopilot.md#other-peoples-prs)); task-less, opens Settings › Autopilot › Needs you | `pr-ready:<host>/<repo>#<n>:<head>`, marked read once the PR leaves Needs you |
 | `backup_notice`        | The git backup moved a flat backup repo into this machine's folder, or set unpushed backups that clashed with another machine's folder aside on a branch ([backup](backup.md#machine-folders)); task-less, opens Settings › Data. Also: a task moved to another machine that had changed here since the backup it was taken from, or had work going on it ([backup](backup.md#moving-tasks-between-machines)); on that task | `backup_notice:migrated:<instanceId>`, `backup_notice:set-aside:<sha>`, `backup_notice:moved:<transferId>` |
 
 **Reminders** are the three kinds above that nothing changes to produce: `sendReminders` (`autopilot/reminders.ts`) looks
@@ -47,7 +48,7 @@ reminded of once more, with another note, each month. They were the Remind me ab
 is gone: a quiet task no longer gets a "Stale" reason on its card and in the sidebar's Needs attention list, because
 that came from the automation's run, and a reminder records none; the inbox notice is the signal now; the
 two keys stay in `RETIRED_AUTOMATION_TITLES` so their old runs show a plain name. `board_activity` and the stats read
-the stalls from these notifications as well as from those old runs. Migration `045_reminder_notifications` set the
+the stalls from these notifications as well as from those old runs. Migration `047_reminder_notifications` set the
 three switches: each of the two automations' effective state somewhere (the project's mode, else the board's, or an
 unarchived epic with it On) became the setting, and an install with no projects or Autopilot settings keeps the defaults
 (on, on, and off for `task_unblocked`).

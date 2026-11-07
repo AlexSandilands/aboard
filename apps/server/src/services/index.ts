@@ -34,6 +34,7 @@ import { createPlans, type PlansModule } from "./plans.ts";
 import { createProjectsService } from "./projects.ts";
 import { createRelations, type RelationsModule } from "./relations.ts";
 import { createRecurringService } from "./recurring.ts";
+import { createRepoPrReviewsService } from "./repoPrReviews.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
 import { createSkillSyncService, type HarnessHomes } from "./skillSync.ts";
@@ -135,6 +136,7 @@ export function createServices(deps: ServiceDeps): Services {
     repoUrl,
     boardVariables,
     notifications,
+    builtIn: () => builtIn.map((a) => ({ key: a.key, title: a.title })),
   });
   // Outlives the catalogue entries, which are rebuilt on every call.
   const checkRuns = createCheckRuns();
@@ -187,6 +189,7 @@ export function createServices(deps: ServiceDeps): Services {
     notifications,
     social: createSocialService(core, { resolveTask: (ref) => tasks.service.resolveId(ref) }),
     attention,
+    repoPrReviews: createRepoPrReviewsService(core, { notifications }),
     autopilot: createAutopilotService(core, {
       automations,
       notifications,

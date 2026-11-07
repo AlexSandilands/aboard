@@ -1,4 +1,5 @@
 import {
+  customAutomationId,
   INHERIT,
   parseModelChoice,
   ReviewSkillRef,
@@ -161,7 +162,7 @@ function AutomationRow({
       ) : null}
       {automation.needs ? (
         <div className="mt-2">
-          <NeedsVariablesWarning needs={automation.needs} />
+          <NeedsVariablesWarning needs={automation.needs} custom={customAutomationId(automation.key) !== null} />
         </div>
       ) : null}
       {automation.fields.length ? (

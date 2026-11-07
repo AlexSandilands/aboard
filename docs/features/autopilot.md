@@ -1,7 +1,7 @@
 # Autopilot
 
 Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks, now reminders), #90 (digest), #94 (start planned tasks), #95
-(PR review), #97 (custom automations), in epic #101; #123 (Merge into epic branch), #127 (Merge ready PRs); #135 (sharing custom automations); #241 (agents' drafts).
+(PR review), #21 (other people's PRs), #97 (custom automations), in epic #101; #123 (Merge into epic branch), #127 (Merge ready PRs); #135 (sharing custom automations); #241 (agents' drafts).
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per epic, per project or
 for the whole board, that watch the board and act when something needs doing. The engine is deterministic code in
@@ -423,7 +423,7 @@ archive #N with its K tasks after D days in Done". Unarchiving such a task, or r
 (`autopilot/reminders.ts`, [notifications.md](notifications.md#what-produces-a-notification)). They have no scopes, no
 config (24 hours quiet and 30 minutes waiting are fixed, as their labels say), and no runs: the run history keeps the old ones, named by
 `RETIRED_AUTOMATION_TITLES`, and a Needs-attention reason from an old Unstick run still clears on new activity
-(`attentionFor`). Getting stalled work moving again is Orchestrate's job (below). Migration `045_reminder_notifications`
+(`attentionFor`). Getting stalled work moving again is Orchestrate's job (below). Migration `047_reminder_notifications`
 turned each switch on where its automation was effectively on, and dropped the automations' `autopilot_settings` rows.
 
 **Recurring tasks** (`recurring`, #89; `automations/recurring.ts`). Needs no agent and has no switch: it is `alwaysOn`, so
@@ -431,7 +431,7 @@ every project is on for it (`resolve` and `enabledProjects` say so, which is wha
 scope entries stay Inherit and not enabled, so a lane's pill doesn't read On because of it, and `setScope` refuses it
 with a `VALIDATION`, and a rule that is enabled runs. Pause all still holds it back; quiet hours and the caps never
 did (it needs no agent). Makes a task from a template on a schedule; the rules are rows in `autopilot_recurring` (below).
-It has no config of its own. Migration `046_recurring_without_switch` disabled the rules of every project where it was
+It has no config of its own. Migration `048_recurring_without_switch` disabled the rules of every project where it was
 effectively off, and dropped its settings rows.
 
 - A rule has a name, a template (board-wide or the project's, with a title pattern), a schedule, whether its tasks
@@ -480,7 +480,8 @@ Every change publishes `autopilot.changed`, which the web app uses to refetch th
 
 **Review PRs** (`review_prs`, #95; `automations/reviewPrs.ts`, contract in `packages/contracts/src/prReview.ts`).
 Needs an agent and is off until switched on. Reviews a pull request linked to a task and posts the review on GitHub,
-as comments only.
+as comments only. With [Other people's PRs](#other-peoples-prs) on, it also reviews other people's open PRs and
+approves, asks for changes or hands them to the user.
 
 - **Trigger.** A `pr` link whose snapshot (from the `gh` poller) is open, or draft when **Review drafts** is on
   (off by default), and has a `headOid` and `headRef`. Merged and closed PRs, PRs from forks (`isCrossRepository`:
@@ -575,6 +576,117 @@ as comments only.
   runs are how it tells Autopilot's own reviews from other people's.
 - **Limits.** Switching the automation on reviews every open PR already linked in the project, once per head
   commit; dry run shows which first.
+
+#### Other people's PRs
+
+Board task #21 (epic #123). Review PRs' second source, off until **Other people's PRs** (`otherPrs`) is on in a
+project's config: open pull requests of the project's repository, by the logins in **Authors** (`otherAuthors`), that
+no task works on. It replaces the custom "Autopilot PR review" automation the owner ran, and the shipped **Review repo
+PRs** example. The difference that matters: the agent only reads and answers; the **server** finds the PRs, works
+out the mode and the approval gate from the PR's history, and posts. The gate is code, not a line in a prompt.
+`automations/repoPrs.ts` (poll, prompt, posting, board writes), `repoPrAssess.ts` (which PRs and how), contract in
+`packages/contracts/src/repoPrReview.ts`.
+
+- **Settings.** Essentials: **Other people's PRs**, **Authors** (comma separated, `parseLogins`: lower-cased, a
+  leading `@` dropped) and **Approve** (`otherApprove`, off by default). Advanced: **Require a linked issue** (on),
+  **Sensitive paths** (`DEFAULT_SENSITIVE_PATHS`: `.github/`, `tools/`, `CODEOWNERS`, `*.lock`, `package-lock.json`,
+  `pnpm-lock.yaml`, `go.sum`; `dir/` is a root folder, a name with no `/` matches in any folder, `*` stops at `/`,
+  `**` doesn't: `matchesPathPattern`), **Quiet period** (10 minutes), **Other reviewers' wait** (60 minutes) and
+  **Rounds** (3). On with no authors, the automation's `needs` (which now gets each project's config) says "Needs
+  setup: Other people's PRs is on with no authors in: …" on its row and under Needs you, instead of silently doing
+  nothing.
+- **Finding PRs.** The check can't read GitHub in a pass, so `otherPrCandidates` starts a read per project in the
+  background every `OTHER_PRS_POLL_MS` (5 minutes, or at once when the settings change) and wakes the engine when it
+  ends; each pass offers what the latest read found. The repository is the project folder's `origin`
+  (`CheckContext.repoOf`, `createRepoUrls`), and the reads go through `CheckContext.gitHosts`: `listOpenPrs` (the
+  newest 100 open PRs), then `readRepoPr` for each one by a listed author (`REPO_PR_QUERY`, one GraphQL query: closing
+  issues, files, the newest 100 commits with parent counts, the head's checks with `isRequired`, latest reviews,
+  reviews, comments with edit times, threads with comments, dismissed reviews and the open issues of the same
+  repository that mention it). The base branch's required checks also come from its rulesets (REST
+  `rules/branches/<base>`) and its classic branch protection (`baseRef.branchProtectionRule
+  .requiredStatusCheckContexts`), so a required check that never reported is seen. Drafts, PRs linked to a task that isn't
+  manual (those are the task source's and Fix PRs'), and PRs of anyone else are skipped. A read that fails becomes a
+  failed task-less run, once a day per error, so it isn't silent.
+- **History from the markers.** Nothing about a PR's history has to be remembered: everything Autopilot posts ends
+  with a hidden marker, the same one the custom automation wrote, so switching over keeps rounds, approvals,
+  hand-offs and stops. A review ends `<!-- autopilot-review head=<sha> verdict=approve|changes counted=1|0 round=<n> -->`,
+  a hand-off comment `<!-- autopilot-review event=escalated head=<sha> reason=<reason> round=<n> counted=1 -->`, an
+  inline point `<!-- autopilot-review finding -->`. Old posts without `round` count one round each when counted;
+  v1 hand-offs have no reason and v2's `no_issue` reads as `gate`. `/autopilot stop` and `/autopilot resume`
+  (`parseControlCommand`, at the start of a comment, any case) count only from the signed-in account and without a
+  marker; the newest wins, and a resume starts the history afresh.
+- **Which PR, which mode** (`assessRepoPr`, a port of the custom automation's check):
+  - skipped while stopped, while a person's approval or request for changes stands (the user's hand review too:
+    it has no marker), while any counted check is pending, until the quiet period has passed since the head commit and
+    its last check, and while another reviewer's unresolved thread is younger than the wait and the author hasn't
+    answered in it;
+  - the newest of Autopilot's reviews, its hand-offs and the user's own approval that someone else's push dismissed
+    (`REVIEW_DISMISSED_EVENT`) sets the mode: none is `full`; the same head after an approval or a hand-off is skipped;
+    the same head after changes is a `dispute` only once the author replied on one of Autopilot's open threads (the
+    reply's id goes in the key), else skipped; a newer head after an approval is `delta` (skipped when its approval
+    still stands and nothing the author wrote changed); after a hand-off, `followup` (skipped likewise); else
+    `full`. `full`, `dispute` and `followup` past the rounds become `cap_reached`;
+  - "nothing the author wrote changed" is `GitHost.unchangedSince`: the PR's change against its base branch
+    (`compare <base>...<old head>` and `...<new head>`) is the same patch, hunk line numbers ignored. That holds after
+    merging the base branch in or rebasing onto it, and fails for a merge of any other branch, an edited merge, and any
+    file GitHub serves no patch for (binary, too large), which can't be compared. A hand-off edited later counts from
+    its edit.
+  - The key is `review:repo:<host>/<repo>#<n>:<head12>:r<resume id>[:c<reply id>]`; one review of a PR runs at a time.
+- **The gate** (`approvalGate`): a closing issue (when required), every required check finished, green and reported,
+  at most 100 files (all of them read), no sensitive path. The rulesets' required checks must be readable (anyone who
+  can read the repository can): a failure to read them fails the read of the PR, so it is judged on a later pass, never
+  as if nothing were required. Classic branch protection's list may be hidden from an account without admin rights;
+  then only the checks GitHub marks `isRequired` on the head count. The agent is told the reasons but not asked to obey them.
+- **The review.** A task-less, read-only headless run with `untrustedInput`, in a worktree of the project's checkout
+  at the PR's head (`RunnerRequest.checkout`: removed when the run ends; a fork's PR gets an empty folder), on the
+  `repoPrReview` [run tools](#run-tools): the PR review set plus `pr_threads` and `repo_issue`. `repoPrPrompt` gives
+  it the mode, the base commit, the round, the closing and the mentioning issues (the bug report a past approval
+  missed), the gate, what to read (the project's docs and decision records), the severity scale (only blocking and
+  major hold up approval), a concurrency and contract checklist, when a recorded decision is a departure and when it
+  isn't, and the review skill chosen for Review PRs (inlined). It answers `RepoPrReviewVerdict`
+  (`REPO_PR_REVIEW_OUTPUT_SCHEMA`): the PR review's answer plus `decision` (approve, request_changes, escalate), an
+  `escalation` (reason: departure, dependency, security, dispute or vague; one line; a checklist), `disputes` per
+  thread of its own (accepted, rejected, unsure, with a reply) and `counted`.
+- **Read again before posting.** The poll can be minutes old by the time the agent answers, so `actRepoPr` reads the PR
+  again (`readRepoPr`) before it posts anything: a moved head skips the run, `/autopilot stop`, a person's standing
+  review or a closed PR skips it with nothing posted (`standingBlock`), and the gate is worked out afresh, so an
+  approval never rests on a check that has since turned red or a `Closes #n` that was removed.
+- **What the server does with it** (`settleDecision`). Minor points and nits are always FYI. An approval with a
+  blocking or major point open is a request for changes, and a request for changes with none open is a clean
+  review (minor points never block a merge). A request for changes in `cap_reached` is a hand-off for
+  `cap`. An approval with the gate failing, or with **Approve** off, is `ready`. Only a clean approval past the gate
+  is posted as one: `postReview` with `event: "approve"` (or `request_changes`, blocking and major points inline,
+  folded into the body when GitHub refuses them), refused with `StaleReviewError` if the head moved, which skips the
+  run. `counted: false` is honoured for an approval or a ready-for-approval in `delta` or `followup`, so small re-checks
+  don't walk a PR into the round limit. GitHub failing in passing while posting (`isTransientHostError`) skips the run
+  with `output.retry`, and the next pass tries again under `<key>:a<n>`, up to `REPO_REVIEW_ATTEMPTS` (3); so does
+  GitHub failing in passing on the read before the post. A try finds the post an earlier one made if GitHub took it
+  and still answered with an error (`postedSince`: a post of its own at this head after the plan's `lastPostAt`), and
+  then posts nothing.
+- **Hand-offs.** The head is read again first; a moved PR skips the run with nothing posted or written. One comment
+  (`renderHandoff`): the header, the round, "Handed to @you for manual review (<reason>): <why>" or "Ready for
+  @you's approval: <gate>", the summary, every point, the checklist, and that Autopilot looks again by itself on a push.
+  When the latest hand-off on the PR has the same reason, that comment is edited (`GitHost.editComment`) instead of
+  another posted. A real escalation finds the open manual task for the PR (the one remembered, one linking the PR,
+  or one titled `Review PR #n:`) or creates one (manual, label `review`, the PR linked, the checklist), and asks for
+  attention only when the task is new or the reason changed; a repeat adds a note. A `ready` PR makes no task and
+  pings nobody: it goes under **Needs you** (`AutopilotNeed` kind `pr_approval`, from `repo_pr_reviews.ready_since`)
+  with a `pr_ready` notification, and leaves it once a person reviews it, it is stopped, closed or merged, a new
+  head comes, or its author leaves the list; the list also hides rows of projects where the source or Review PRs is
+  off. While it waits, each poll works the gate out again at that head: a reason that changed is updated, and once the
+  gate passes (a required check re-run green, an issue linked) and Approve is on, the PR gets a fresh look
+  (`approveReady`, key `…:approve:<hash of when its wait was last written>`) that uses no round: the agent is told
+  it found the PR clean before and checks what can change without a push (new threads, issues that mention it), and
+  the server approves past the gate or, if it is held again, edits its Ready comment with the new reason. Skips carry a typed `code`
+  (`ENDS_WAIT` lists the ones that end the wait).
+- **Afterwards.** Its own threads the review says are fixed, and disputes it accepted, are resolved
+  (`resolveReviewThread`); accepted and rejected disputes get the agent's reply on the thread. An approval, or the
+  first review after a resume, closes the PR's hand-off task (a note, attention cleared, Done). Fix PRs never acts
+  on these PRs: they have no task.
+- **What the board keeps.** `repo_pr_reviews` (migration 046, `services/repoPrReviews.ts`), keyed by host, repository
+  and number: the last head, round, outcome and reason, the hand-off comment to edit, the manual task and
+  `ready_since`. The run's output is `RepoPrReviewRunOutput`. Neither is in backups; the markers on GitHub are the
+  history.
 
 **Fix PRs** (`fix_prs`, #96; `automations/fixPrs.ts`). Needs an agent and is off until switched on. Sends an agent
 to fix a pull request linked to a task.
@@ -919,6 +1031,12 @@ Every change publishes `autopilot.changed`, which the web app uses to refetch th
 
 Automations the user defines (#97, sharing #135, scripts and checks #225; guide: [custom automations](../guide/custom-automations.md)).
 An action is an agent (on a schedule, optionally gated by a [check script](#check-scripts)), a shell command or a script.
+The editor is a five-step builder (When → Do → Details → Where → Review & try, `CustomAutomationEditorForm` with the
+steps in `BuilderSteps.tsx`): one form, so moving between steps keeps everything; `stepProblem` (`builder.logic.ts`)
+checks each step only for what it shows, and Save jumps to the first step with a problem. Review shows the
+sentence, what it would run for right now (`rightNow`: a stale trigger's tasks already past the limit), the prompt
+preview or a script's test run, and the name, pre-filled from the trigger and action. A new one saves in Preview, or
+**Save and turn on** sets the board's mode to On after it is created; an existing one opens at Review.
 Each row of
 `autopilot_custom` (name, `trigger_json`, `filters_json`, `action_json`, `armed_at`) is a catalogue entry
 `custom:<id>`, built by `customAutomation` (`autopilot/custom.ts`). The service's catalogue is a function
@@ -1274,24 +1392,8 @@ comes from anyone who can comment, so it should check who wrote it) and a switch
 file in `AUTOMATION_EXAMPLES` (`automationExamples.ts`). The "Improve prompts and skills" example that was here is now the built-in
 [Improve automations](suggestions.md#the-improve-automation); a copy someone imported is an ordinary custom automation and is unaffected.
 
-**Review repo PRs** (#230) is the example of a [check script](#check-scripts): a version 2 file, since it carries one. A
-schedule every 5 minutes, an agent action with `check` (`REVIEW_PRS_CHECK_SCRIPT`, Node, 120 seconds) and the inputs
-`trusted_logins`, `max_rounds`, `look_back_days` (7) and `review_outside_contributors` (a boolean, off). The script runs `gh repo view`, then one `gh api graphql` query for the open PRs
-(the first 50 by update, with a stderr note when there are more: labels, the last 100 reviews with `commit.oid`, the last 100 comments) and prints one item per
-PR that needs a review (only PRs whose `updatedAt` is within `look_back_days`, so a first run isn't a flood of old PRs; the script prints no cap of its own, since the board drops remembered keys only after it, and a failed review would hold a slot; the board's 50 new items per pass and the agent caps do that job); it holds no state, since GitHub is the memory. A PR is skipped when its author isn't the viewer, in `trusted_logins` or an OWNER, MEMBER or COLLABORATOR (`authorAssociation`) unless `review_outside_contributors` is on, since the agent reads the PR's text with the user's `gh`; when it is a draft, has the
-`no-autopilot` label, or its latest valid `/stop-review` or `/re-review` is a stop
-(a line start, any case, the last command wins; `/stop-review` counts from the PR's author, the viewer or
-`trusted_logins`, `/re-review` only from the viewer or `trusted_logins`, since each starts an agent past the round limit; a
-null author never counts). A review counts when the viewer
-posted it and its body holds `prReviewMarker()`, the one Review PRs' reviews carry, so this skips what Review PRs posted (not the reverse: Review PRs decides from the board's runs, so a linked PR can be reviewed twice); a review at
-`headRefOid` ends the PR's turn. Otherwise the PR is listed unless the reviews already number `max_rounds`; a
-`/re-review` newer than the last review (by `submittedAt`; a pending review has none) lists it regardless. A dismissed review isn't an opt-out: GitHub only lets a review that approved or requested changes be dismissed, and the example posts comment reviews. The key is `<repo>#<number>:<head, 7 characters>:<count of
-/re-review commands>`, so a push and a request each make a new one, and the board's key memory means a review that
-failed isn't retried every slot. Each item's agent (`untrustedItems: false`, since it runs `gh` to read the PR and
-post one `--comment` review headed `prReviewHeader()`, which an untrusted-item agent can't) is told in its prompt to
-read only and never approve or request changes; nothing in the bundle approves. The risk of that choice, text from
-anyone who can open a PR read by an agent with the user's access, is stated in the guide and on the import page's
-warning. `reviewRepoPrs.test.ts` runs the script under Node with `child_process.execFileSync` replaced by a fake `gh`.
+**Review repo PRs** (#230), an example check script that commented on any repository PR, was retired by #21: Review
+PRs' [other people's PRs](#other-peoples-prs) does it as a built-in, and an imported copy keeps working until deleted.
 
 ### Drafts
 
@@ -1319,6 +1421,24 @@ on the REST writes is unchanged, so this opens no path to setting up a command o
   slots as a file, under a banner naming who drafted it and their note, and sends `draftId` with the import, which
   deletes the draft once the automation is saved. **Dismiss draft** is `DELETE /api/autopilot/drafts/:id`. Every change
   publishes `autopilot.changed`.
+- **Review, or Edit first.** The import page is the builder's review step for someone else's automation: the
+  `formSentence` sentence, the read-first sections, **Saves in** Preview or On (On sets the board's mode after the
+  import), and **Edit first**, which opens the builder (`CustomAutomationEditorForm`) at Details on `formFromBundle`
+  with what was filled in. Saving there creates it over the ordinary route (Origin-guarded) and dismisses the draft;
+  a skill the file carries isn't installed that way. Opened on a script (or, for a change, a changed one), the builder's
+  `confirmScript` holds Save until the same "I've read it" switch is on, so editing first doesn't skip it.
+- **Changes (`replaces`).** A draft can name the custom automation it is a new version of: `replaces` takes its id,
+  `custom:<id>` key or exact name, resolved on drafting (a built-in's key or title is refused as VALIDATION, anything
+  else unknown as NOT_FOUND) and stored as the id (`autopilot_drafts.replaces`, migration 044; no foreign key, so a
+  draft whose automation was deleted says so when applied). Needs you shows it as **Change to <name>**
+  (`AutopilotNeed.replaces`), and the page opens `AutomationChangeReview`: per field, a line diff of the current and
+  proposed definition (`changeReview.logic.ts`), the agent's note as **Why**, and a warning for tools it adds.
+  **Apply change** is `POST /api/autopilot/drafts/:id/apply` → `customAutomations.applyDraft`: the draft's definition
+  with input values and slot tools kept by name (new ones from the request), the automation's own projects and epic,
+  saved with `update`, so the id, switches and run history stay (a changed trigger, filters or variables re-arm it, as
+  any edit does). A changed script needs `confirmScript`, checked in the service; the route holds a draft with code or
+  a skill install to the board's Origin, as the import route does. **Keep current** dismisses the draft; **Edit first**
+  opens the builder on the automation with the change filled in, and its **Save changes** dismisses the draft.
 
 ### Runners
 
@@ -1550,7 +1670,8 @@ A headless run that reads a git host gets that host's reads as tools the board s
 and tool rules only Claude Code can follow ([ADR 0013](../decisions/0013-board-served-run-tools.md)):
 
 - **The scope.** `RunnerRequest.runTools` is `{toolSet, target}` (`mcp/runTokens.ts`): one tool set per kind of
-  operation and the one thing it reads. Today the set is `prReview` and the target a PR.
+  operation and the one thing it reads. The sets are `prReview` (a task's PR) and `repoPrReview` (another person's
+  PR); the target is a PR.
 - **The token.** `runOnDriver` mints one before the agent starts (`RunTokens.mint`, through the runner's `runTools`
   dep): 32 random bytes, kept in memory by its SHA-256 only, alive for the run's timeout plus five minutes and never
   more than a day (`RUN_TOKEN_MAX_TTL_MS`). It writes the MCP config (`runToolsMcpConfig`) to a temp folder of its own
@@ -1568,6 +1689,10 @@ and tool rules only Claude Code can follow ([ADR 0013](../decisions/0013-board-s
   `(continued)`, each result names its page, the count and the next call, and only a line longer than half a page is
   cut, with a marker. The file list is read once per run (`RunGrant.cache`) however many pages follow. Results mark
   the PR's own text as untrusted.
+- **The other-people's-PR set** (`repoPrReview`): the same four, plus `pr_threads(page?)` (every review thread,
+  resolved or not, each comment with its id and author, Autopilot's own threads marked, read through
+  `GitHost.readRepoPr`) and `repo_issue(number)` (one issue of the PR's own repository: the issues it closes and the
+  open ones that mention it). Neither reads another repository.
 - **What they read through.** A `GitHost` (`integrations/gitHost.ts`): `getPr`, `listFiles` (with each file's patch),
   `getDiff(path, page)`, `getComments` (conversation comments, review bodies and inline comments with their ids,
   oldest first) and `getIssue` (`GitHostReads`, found by the run's target host through the `GitHosts` registry). GitHub's
@@ -1708,8 +1833,9 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
     **Pause all** (`autopilot.automations.pause-all`) and a link to Limits & safety.
   - **Needs you** (`autopilot.automations.needs-you`, hidden when empty), from `overview.needsYou` (`AutopilotNeed`,
     built by the service's `overview()`): failed runs whose flag still stands on their task (one per task, the latest;
-    **Retry** when `canRetryRun`, **Dismiss**), drafts agents wrote (**Review** opens the import page, **Dismiss**),
-    and automations that can't run as set up, their `blocked` or `needs` (**Fix** picks the built-in, or opens a
+    **Retry** when `canRetryRun`, **Dismiss**), other people's PRs Review PRs found clean that only the user can
+    approve (kind `pr_approval`, oldest first, **Open PR**), drafts agents wrote (**Review** opens the import page,
+    **Dismiss**), and automations that can't run as set up, their `blocked` or `needs` (**Fix** picks the built-in, or opens a
     custom one's editor).
   - **The list and detail** (`AutomationsSplit`), the Providers page's `SplitCard`. Every automation is listed once,
     under its `group` heading (`AUTOMATION_GROUPS`: Ship work, Pull requests, Upkeep, then Yours for custom
@@ -1879,6 +2005,9 @@ button beside a field's title (shown only while the key is set at that scope) re
 | `apps/server/src/mcp/tools/autopilot.ts` | `retry_autopilot_run`, `draft_automation` |
 | `apps/server/src/autopilot/reminders.ts` | The quiet-task, waiting-thread and unblocked reminders (`sendReminders`) |
 | `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |
+| `apps/server/src/autopilot/automations/repoPrs.ts`, `repoPrAssess.ts` | Review PRs' other people's PRs: settings, the poll, which PRs and their mode and gate, the prompt, posting and hand-offs |
+| `apps/server/src/integrations/githubRepoPrs.ts` | GitHub's reads and writes for other people's PRs: the open PRs, one PR in full, `unchangedSince`, comments |
+| `packages/contracts/src/repoPrReview.ts` | The other-people's-PR verdict, run output, markers, `/autopilot` commands and sensitive paths |
 | `apps/server/src/autopilot/automations/fixPrs.ts` | Fix PRs: the triggers, batching, the limits and the fix prompt |
 | `apps/server/src/autopilot/automations/mergeEpicPrs.ts` | Merge ready PRs: Into epic branches (the merge, the epic's draft PR and `epicPrBody`) and the dispatch to Into main |
 | `apps/server/src/autopilot/automations/mergeIntoMain.ts` | Merge ready PRs' Into main: candidates one per repository, the hold notice and the merge through `mergeAutoMergeTask` |
@@ -1904,7 +2033,7 @@ button beside a field's title (shown only while the key is set at that scope) re
 | `apps/web/src/components/autopilot/CustomAutomation*.tsx` | The custom automation editor and import page |
 | `apps/web/src/components/autopilot/ScriptField.tsx`, `ScriptEditor*.tsx`, `scripts.logic.ts` | The script editor (CodeMirror, lazy), language notes, starters, the test run panel |
 | `apps/server/src/services/testScript.ts` | Running a draft script once for the editor's test run |
-| `packages/contracts/src/automationBundle.ts`, `automationExamples.ts` | The shareable file (version 2 with a script), and the shipped examples, with the "Review repo PRs" check script |
+| `packages/contracts/src/automationBundle.ts`, `automationExamples.ts` | The shareable file (version 2 with a script), and the shipped example |
 | `apps/server/src/autopilot/reviewRepoPrs.test.ts` | The example's bundle, and its script run against a fake `gh` |
 | `packages/contracts/src/automationDrafts.ts`, `apps/server/src/db/repos/autopilotDrafts.ts` | Agents' drafts: the input, the check, the caps, and their table (migration 037) |
 | `apps/server/src/autopilot/automations/digest.ts`, `autopilot/digest.ts` | Digest of what changed: the automation, making a digest (plain, summarised, the fallback) and "digest now" |
