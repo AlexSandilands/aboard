@@ -61,8 +61,8 @@ function actorFromUserAgent(userAgent: string | null): string | undefined {
 function createMcpServer(ctx: AppContext, request: Request): McpServer {
   const server = new McpServer({ name: BRAND.id, version: "0.1.0" }, { instructions: INSTRUCTIONS });
   const fallbackActor = actorFromUserAgent(request.headers.get("user-agent"));
-  // A caller that sends the actor header is pinned to it, whatever `actor` argument its agent passes: Autopilot's runs
-  // use it so what a run writes can be told from what anyone else writes.
+  // A caller that sends the actor header is pinned to it, whatever `actor` argument its agent passes (apart from
+  // `submit_review`, which keeps its own): Autopilot's runs use it so what a run writes can be told from the rest.
   const pinnedActor = request.headers.get(ACTOR_HEADER)?.trim().slice(0, 64) || undefined;
   const tc: ToolContext = {
     ctx,

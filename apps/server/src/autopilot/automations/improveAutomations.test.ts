@@ -250,4 +250,22 @@ describe("Improve automations", () => {
     expect(s.suggestions.get(made[1]!.id).status).toBe("rejected");
     expect(s.suggestions.get(earlier.id)).toMatchObject({ status: "open", resolvedBy: null, outcome: null });
   });
+
+  it("doesn't bring back the run's own earlier suggestion when it drops a later one for the same target", async () => {
+    const made: Suggestion[] = [];
+    const { s, withTask, turnOn, pass } = setup((services, request) => {
+      // One for the plan skill, then two for the review skill (the second replaces the first): the cap of one keeps the
+      // first and drops the second review one.
+      for (const target of ["builtin:plan", "builtin:review", "builtin:review"]) {
+        made.push(suggestFor(services, target, actorIn(request)));
+      }
+    });
+    withTask();
+    turnOn({ maxSuggestions: 1 });
+    await pass();
+    expect(s.suggestions.get(made[0]!.id).status).toBe("open");
+    // Its own earlier one that the dropped one replaced stays replaced: it isn't a suggestion to bring back.
+    expect(s.suggestions.get(made[1]!.id).status).toBe("superseded");
+    expect(s.suggestions.get(made[2]!.id).status).toBe("rejected");
+  });
 });

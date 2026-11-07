@@ -430,7 +430,13 @@ export function createSuggestionsService(
           // nothing else is open for the target now.
           const replaced = repos.suggestions
             .forTarget(s.targetKey, 10)
-            .find((o) => o.status === "superseded" && o.resolvedBy === runActor && o.outcome === SUPERSEDED_OUTCOME);
+            .find(
+              (o) =>
+                o.status === "superseded" &&
+                o.resolvedBy === runActor &&
+                o.actor !== runActor &&
+                o.outcome === SUPERSEDED_OUTCOME,
+            );
           if (replaced && !repos.suggestions.openFor(s.targetKey)) {
             repos.suggestions.update({
               ...replaced,
