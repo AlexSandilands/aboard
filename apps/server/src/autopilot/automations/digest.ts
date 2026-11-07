@@ -25,6 +25,7 @@ export const digest = defineAutomation({
   description:
     "Writes a daily digest of what changed on the board: status moves, merged pull requests, new attention and Autopilot runs, as a plain list or written by an agent.",
   needsAgent: false,
+  group: "upkeep",
   // The summarised mode waits on an agent; the engine must not hold up its other automations for that.
   background: true,
   // Never about a task, so an epic has nothing to switch.

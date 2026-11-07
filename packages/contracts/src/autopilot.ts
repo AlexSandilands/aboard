@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { FindingSeverity } from "./reviews.ts";
 import { OperationId, OperationNeed, RunModelRecord } from "./operations.ts";
+import { T3RuntimeMode } from "./t3Launch.ts";
 import type { TaskSummary } from "./schemas.ts";
 
 // Autopilot: a rule engine in the server that runs a catalogue of automations (docs/decisions/0008-autopilot-engine.md).
@@ -11,11 +11,20 @@ export const AUTOPILOT_ACTOR = "autopilot";
 /** The automation that starts flagged Planned tasks. Shared so hints can name it before it is registered. */
 export const AUTOPILOT_START_PLANNED = "start_planned";
 
-/** The automation that flags In Progress tasks gone quiet. Its attention clears on new activity, so the repo knows its key. */
+/**
+ * The retired automation that flagged In Progress tasks gone quiet; its runs stay in the history and their attention
+ * clears on new activity, so the repo knows its key. It is now the `task_quiet` and `thread_waited` notifications.
+ */
 export const AUTOPILOT_UNSTICK = "unstick";
+
+/** The retired automation that told the user a task's last blocker finished; now the `task_unblocked` notification. */
+export const AUTOPILOT_UNBLOCK_DEPENDENTS = "unblock_dependents";
 
 /** The scheduled agent that sees a project's work through: unsticks it, merges what's ready. The UI shows its handovers. */
 export const AUTOPILOT_ORCHESTRATE = "orchestrate";
+
+/** The weekly agent that audits how agents did and suggests rewrites of the prompts and skills they run with. */
+export const AUTOPILOT_IMPROVE = "improve_automations";
 
 /** How an Unstick note and run summary open for a task gone quiet; board_activity tells the two kinds apart by it. */
 export const UNSTICK_STALE_PREFIX = "Stale: no activity for";
@@ -25,9 +34,22 @@ export const UNSTICK_WAITING_PREFIX = "Thread waiting for input for";
 /** What a run failed by the board restarting says first, so reports can tell it from a failure of the run's own. */
 export const BOARD_RESTARTED_ERROR = "The board restarted";
 
-/** An automation's switch at one scope. `inherit` defers to the next scope up; nothing set anywhere is off. */
-export const AutopilotMode = z.enum(["inherit", "on", "off"]);
+/**
+ * An automation's switch at one scope. `inherit` defers to the next scope up; nothing set anywhere is off. `preview`
+ * is on, but every run is a dry run: it records what it would do and does none of it (a custom automation's check
+ * script still runs for real, to find what it would act on).
+ */
+export const AutopilotMode = z.enum(["inherit", "on", "preview", "off"]);
 export type AutopilotMode = z.infer<typeof AutopilotMode>;
+
+/** The modes that switch an automation on: what a scope remembers so its switch can restore it after Off. */
+export const AutopilotOnMode = z.enum(["on", "preview"]);
+export type AutopilotOnMode = z.infer<typeof AutopilotOnMode>;
+
+export const isOnMode = (mode: AutopilotMode): mode is AutopilotOnMode => mode === "on" || mode === "preview";
+
+/** How far back an automation's Preview hint counts its "would …" runs. */
+export const PREVIEW_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Most specific last. An epic's setting applies to the tasks in it. */
 export const AutopilotScopeKind = z.enum(["board", "project", "epic"]);
@@ -50,6 +72,8 @@ export const AutopilotSetting = z.object({
   mode: AutopilotMode,
   /** Only the keys set at this scope; the others inherit. */
   config: AutopilotConfig,
+  /** The last on-mode this scope was set to, kept through Off; null when it never was on. */
+  lastOnMode: AutopilotOnMode.nullable().default(null),
   updatedAt: z.string(),
 });
 export type AutopilotSetting = z.infer<typeof AutopilotSetting>;
@@ -66,7 +90,10 @@ export const AutopilotModeSource = z.enum(["board", "project", "epic", "default"
 export type AutopilotModeSource = z.infer<typeof AutopilotModeSource>;
 
 export interface ResolvedAutopilot {
+  /** On or in Preview: the automation's check runs. */
   enabled: boolean;
+  /** Enabled in Preview: its runs are dry runs. */
+  preview: boolean;
   source: AutopilotModeSource;
   /** Config keys merged board first, most specific scope last. Not yet merged over the automation's defaults. */
   config: AutopilotConfig;
@@ -74,7 +101,8 @@ export interface ResolvedAutopilot {
 
 /**
  * The effective mode and config of one automation, given its settings from least to most specific scope (board,
- * project, then the task's epic). The most specific scope that isn't `inherit` wins; with none, it's off. Config keys
+ * project, then the task's epic). The most specific scope that isn't `inherit` wins; with none, it's off. Preview
+ * counts as enabled, with `preview` set, so the engine records its runs as dry runs. Config keys
  * merge in the same order whatever the modes, so a project can tune an automation that is switched on for the whole
  * board.
  */
@@ -82,17 +110,19 @@ export function resolveAutopilot(
   chain: ReadonlyArray<Pick<AutopilotSetting, "scopeKind" | "mode" | "config"> | null | undefined>,
 ): ResolvedAutopilot {
   let enabled = false;
+  let preview = false;
   let source: AutopilotModeSource = "default";
   const config: AutopilotConfig = {};
   for (const setting of chain) {
     if (!setting) continue;
     Object.assign(config, setting.config);
     if (setting.mode !== "inherit") {
-      enabled = setting.mode === "on";
+      enabled = isOnMode(setting.mode);
+      preview = setting.mode === "preview";
       source = setting.scopeKind;
     }
   }
-  return { enabled, source, config };
+  return { enabled, preview, source, config };
 }
 
 const AUTOPILOT_LABELLED_PREFIX = "Autopilot · ";
@@ -133,18 +163,32 @@ export const isAutopilotSessionName = (name: string | null | undefined): boolean
   !!name &&
   (name === AUTOPILOT_UNLABELLED_NAME || name.startsWith(AUTOPILOT_LABELLED_PREFIX) || AUTOPILOT_TASK_NAME.test(name));
 
+/** What a resolved switch reads as: Off, Preview or On. */
+export const resolvedModeLabel = (resolved: Pick<ResolvedAutopilot, "enabled" | "preview">): string =>
+  !resolved.enabled ? "Off" : resolved.preview ? "Preview" : "On";
+
 /** "Inherit (On from board)": how the UI labels an inherit switch. */
-export function describeInherited(resolved: Pick<ResolvedAutopilot, "enabled" | "source">): string {
-  const state = resolved.enabled ? "On" : "Off";
+export function describeInherited(
+  resolved: Pick<ResolvedAutopilot, "enabled" | "source"> & { preview?: boolean },
+): string {
+  const state = resolvedModeLabel({ enabled: resolved.enabled, preview: resolved.preview ?? false });
   return resolved.source === "default" ? `Inherit (${state} by default)` : `Inherit (${state} from ${resolved.source})`;
 }
 
 // ── Automation catalogue ─────────────────────────────────────────────────
 
+/**
+ * How far into an automation's detail a field sits: essential ones show with it, advanced ones under its closed
+ * Advanced section. Unset is advanced, so a new field stays out of the way until someone decides it is essential.
+ */
+export const AutopilotFieldTier = z.enum(["essential", "advanced"]);
+export type AutopilotFieldTier = z.infer<typeof AutopilotFieldTier>;
+
 const FieldBase = {
   key: z.string(),
   label: z.string(),
   help: z.string().optional(),
+  tier: AutopilotFieldTier.optional(),
 };
 
 /** One config field of an automation, described so the UI can render its form without knowing the automation. */
@@ -195,6 +239,34 @@ export const AutopilotField = z.discriminatedUnion("kind", [
 ]);
 export type AutopilotField = z.infer<typeof AutopilotField>;
 
+/** A field's tier; unset is advanced. */
+export const fieldTier = (field: Pick<AutopilotField, "tier">): AutopilotFieldTier => field.tier ?? "advanced";
+
+/** An automation's fields split by tier, each in the order the automation lists them. */
+export function splitFieldsByTier<F extends Pick<AutopilotField, "tier">>(
+  fields: readonly F[],
+): { essential: F[]; advanced: F[] } {
+  return {
+    essential: fields.filter((f) => fieldTier(f) === "essential"),
+    advanced: fields.filter((f) => fieldTier(f) === "advanced"),
+  };
+}
+
+/**
+ * Where an automation is listed in Settings → Autopilot: shipping work, pull requests, upkeep of the board, or the
+ * user's own (custom automations, and anything that doesn't say).
+ */
+export const AutomationGroup = z.enum(["ship", "prs", "upkeep", "yours"]);
+export type AutomationGroup = z.infer<typeof AutomationGroup>;
+
+/** The list's headings, in the order the groups are listed. */
+export const AUTOMATION_GROUPS: ReadonlyArray<{ value: AutomationGroup; label: string }> = [
+  { value: "ship", label: "Ship work" },
+  { value: "prs", label: "Pull requests" },
+  { value: "upkeep", label: "Upkeep" },
+  { value: "yours", label: "Yours" },
+];
+
 export const AutopilotAutomation = z.object({
   key: z.string(),
   title: z.string(),
@@ -203,6 +275,10 @@ export const AutopilotAutomation = z.object({
   needsAgent: z.boolean(),
   /** An epic can switch it on or off for its tasks. False for automations that don't act on tasks in an epic. */
   epicScope: z.boolean(),
+  /** It has no switch: it runs wherever it has work (Recurring tasks, whose rules each have their own). */
+  alwaysOn: z.boolean().default(false),
+  /** Where the settings page lists it. Defaults to the user's own, as for a custom automation. */
+  group: AutomationGroup.default("yours"),
   /** Why it can't be switched on yet ("Won't work until you fill in: Jira tools"), or null. */
   blocked: z.string().nullable().default(null),
   /** Which projects it is on in won't run it for lack of a variable ("Needs `jira_key` in: billing"), or null. */
@@ -220,7 +296,12 @@ export const AutopilotScopeEntry = z.object({
   mode: AutopilotMode,
   /** The config set at this scope only. */
   config: AutopilotConfig,
+  /** The last on-mode set at this scope, kept through Off, so a switch can restore it; null when never on here. */
+  lastOnMode: AutopilotOnMode.nullable(),
+  /** On or in Preview, from this scope or one above. */
   enabled: z.boolean(),
+  /** Enabled in Preview: its runs here are dry runs. */
+  preview: z.boolean(),
   source: AutopilotModeSource,
   /** The config the engine would use: defaults, then every scope's keys. */
   effectiveConfig: AutopilotConfig,
@@ -230,6 +311,48 @@ export type AutopilotScopeEntry = z.infer<typeof AutopilotScopeEntry>;
 // ── Engine ───────────────────────────────────────────────────────────────
 
 const ClockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM (24-hour)");
+
+/** Where an agent run goes. Auto: a T3 Code thread when T3 is connected, else headless. */
+export const RunnerChoice = z.enum(["auto", "t3", "headless"]);
+export type RunnerChoice = z.infer<typeof RunnerChoice>;
+
+/** The runner choices as the settings list them; `short` is for one-line summaries. */
+export const RUNNER_CHOICES: ReadonlyArray<{ value: RunnerChoice; label: string; short: string }> = [
+  { value: "auto", label: "Auto (T3 Code when connected, else headless)", short: "Auto" },
+  { value: "t3", label: "T3 Code only", short: "T3 Code" },
+  { value: "headless", label: "Headless only (a CLI in a worktree)", short: "Headless" },
+];
+
+/**
+ * What every agent automation runs with unless it overrides it (docs/features/autopilot.md#agent-defaults). The model
+ * isn't here: it comes from Settings → Agents → Operations, per kind of run.
+ */
+export const AutopilotAgentDefaults = z.object({
+  runner: RunnerChoice,
+  /** Headless: `--max-budget-usd`, for Claude Code only (Codex and Copilot CLI have no cap). */
+  budgetUsd: z.number().positive().max(100),
+  /** Headless: the run is stopped after this long. */
+  timeoutMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 60),
+  /** T3: the most access a thread gets; "default" is T3's own default, which is also the ceiling. */
+  t3Access: z.union([z.literal("default"), T3RuntimeMode]),
+});
+export type AutopilotAgentDefaults = z.infer<typeof AutopilotAgentDefaults>;
+
+/** The agent defaults' keys: an automation's config field of the same key overrides the board's value. */
+export const AGENT_DEFAULT_KEYS = Object.keys(AutopilotAgentDefaults.shape) as ReadonlyArray<
+  keyof AutopilotAgentDefaults
+>;
+
+export const DEFAULT_AGENT_DEFAULTS: AutopilotAgentDefaults = {
+  runner: "auto",
+  budgetUsd: 5,
+  timeoutMinutes: 60,
+  t3Access: "default",
+};
 
 /** Engine-wide limits. Caps and quiet hours apply only to automations that start an agent. */
 export const AutopilotEngineSettings = z.object({
@@ -241,16 +364,15 @@ export const AutopilotEngineSettings = z.object({
   dailySpendCapUsd: z.number().positive().max(10_000).nullable(),
   /** No agent runs start between `start` and `end` (local time, may wrap midnight) while on. Equal times are no window. */
   quietHours: z.object({ enabled: z.boolean(), start: ClockTime, end: ClockTime }),
-  /** Record what would run, as skipped runs, and do nothing. */
+  /** Preview everything: every automation records what would run, as skipped runs, and does nothing. */
   dryRun: z.boolean(),
-  /** Review rounds the PR review automation runs per PR, and Fix PRs' attempts on its review and failing checks. */
-  prReviewRounds: z.number().int().min(1).max(10),
-  /** Fix PRs' attempts per PR on other people's review comments and requests for changes. */
-  prCommentRounds: z.number().int().min(1).max(10),
-  /** The lowest finding severity the PR automations ask an agent to fix. */
-  prFixThreshold: FindingSeverity,
   /** Days a finished headless run's worktree is kept when its PR hasn't merged; clean ones are then removed. */
   worktreeRetentionDays: z.number().int().min(1).max(365),
+  /**
+   * What agent automations run with when no scope of theirs sets it. Review rounds, comment rounds and the fix
+   * threshold were engine settings before 044_autopilot_agent_defaults moved them into Review PRs and Fix PRs.
+   */
+  agentDefaults: AutopilotAgentDefaults,
 });
 export type AutopilotEngineSettings = z.infer<typeof AutopilotEngineSettings>;
 
@@ -260,14 +382,13 @@ export const DEFAULT_AUTOPILOT_ENGINE: AutopilotEngineSettings = {
   dailySpendCapUsd: null,
   quietHours: { enabled: false, start: "22:00", end: "07:00" },
   dryRun: false,
-  prReviewRounds: 3,
-  prCommentRounds: 5,
-  prFixThreshold: "major",
   worktreeRetentionDays: 7,
+  agentDefaults: DEFAULT_AGENT_DEFAULTS,
 };
 
 export const UpdateAutopilotEngineInput = AutopilotEngineSettings.extend({
   quietHours: AutopilotEngineSettings.shape.quietHours.partial(),
+  agentDefaults: AutopilotAgentDefaults.partial(),
 }).partial();
 export type UpdateAutopilotEngineInput = z.infer<typeof UpdateAutopilotEngineInput>;
 
@@ -279,6 +400,15 @@ export function inQuietHours(quiet: AutopilotEngineSettings["quietHours"], minut
   const end = toMinutes(quiet.end);
   return start < end ? minutes >= start && minutes < end : minutes >= start || minutes < end;
 }
+
+/**
+ * Why a skipped run stopped short of its work for now, to be done again later: `head_moved`, the PR's head moved on
+ * before or while it ran, so the new head is acted on next. Shown as "Deferred", not as a plain skip.
+ */
+export const AutopilotRunDeferral = z.enum(["head_moved"]);
+export type AutopilotRunDeferral = z.infer<typeof AutopilotRunDeferral>;
+
+export const DEFERRAL_TEXT: Record<AutopilotRunDeferral, string> = { head_moved: "head moved" };
 
 export const AutopilotRun = z.object({
   id: z.string(),
@@ -301,6 +431,8 @@ export const AutopilotRun = z.object({
   /** A shell action's exit code; null when it didn't exit (a timeout) or isn't a shell action. */
   exitCode: z.number().int().nullable(),
   error: z.string().nullable(),
+  /** Set on a skipped run that stopped for a reason that defers its work (AutopilotRunDeferral); null otherwise. */
+  deferred: AutopilotRunDeferral.nullable(),
   needsAttention: z.boolean(),
   /** When the user dismissed the flag; the run stays flagged but no longer counts as attention. Null when not. */
   dismissedAt: z.string().nullable(),
@@ -335,11 +467,113 @@ export const AutopilotStatus = z.object({
 });
 export type AutopilotStatus = z.infer<typeof AutopilotStatus>;
 
-/** `GET /api/autopilot`: engine settings, pause and the catalogue. */
+/** An automation paused in one project after failing there `AUTOPILOT_AUTO_PAUSE_FAILURES` times in a row. */
+export const AutopilotAutoPause = z.object({
+  automation: z.string(),
+  projectId: z.string(),
+  projectTitle: z.string(),
+  /** "Failed 3 times in a row. The last: …". */
+  reason: z.string(),
+  pausedAt: z.string(),
+});
+export type AutopilotAutoPause = z.infer<typeof AutopilotAutoPause>;
+
+/** What a hint's one click does. */
+export const AutopilotHintAction = z.discriminatedUnion("kind", [
+  /** Sets one config key of the automation at the board scope, keeping the rest of the board's own config. */
+  z.object({ kind: z.literal("board_config"), label: z.string(), key: z.string(), value: z.unknown() }),
+  /** Flags these tasks for Autopilot. */
+  z.object({ kind: z.literal("flag_tasks"), label: z.string(), taskIds: z.array(z.string()).min(1) }),
+  /** Hands an agent the failures to look into: copies this prompt. */
+  z.object({ kind: z.literal("ask_agent"), label: z.string(), prompt: z.string() }),
+  /** Opens Limits & safety. */
+  z.object({ kind: z.literal("open_limits"), label: z.string() }),
+]);
+export type AutopilotHintAction = z.infer<typeof AutopilotHintAction>;
+
+/**
+ * A rule-based suggestion for tuning an automation (no model reads anything), with one click to apply it. `id` names
+ * the situation, so a dismissed hint comes back only when the situation changes (a new give-up, other tasks, a new
+ * failure, another week or day). Applying one dismisses it too.
+ */
+export const AutopilotHint = z.object({
+  id: z.string(),
+  /** The automation it is about; null for Autopilot as a whole (a daily cap). */
+  automation: z.string().nullable(),
+  tone: z.enum(["info", "warning", "danger"]),
+  text: z.string(),
+  action: AutopilotHintAction,
+  /** What the toast says once applied. */
+  done: z.string().optional(),
+});
+export type AutopilotHint = z.infer<typeof AutopilotHint>;
+
+/**
+ * Something in Autopilot only the user can sort out, for the Needs you list: a failed run still flagged on its task
+ * (a task-less failure isn't flagged; its automation's row shows it),
+ * a draft an agent wrote for them to review, or an automation that can't run as set up (a tool slot or variable
+ * missing).
+ */
+export const AutopilotNeed = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("failed_run"),
+    run: AutopilotRun,
+    /** The automation's title, or its key when it is gone. */
+    title: z.string(),
+    /** "#12 Rewrite the cart drawer". Only a run on a task is flagged, so there always is one. */
+    task: z.string(),
+  }),
+  z.object({
+    kind: z.literal("draft"),
+    draftId: z.string(),
+    name: z.string(),
+    /** The custom automation it proposes a new version of (its current name), or null for a new one. */
+    replaces: z.object({ id: z.string(), name: z.string() }).nullable(),
+    createdBy: z.string(),
+    createdAt: z.string(),
+  }),
+  z.object({
+    kind: z.literal("setup"),
+    automation: z.string(),
+    title: z.string(),
+    /** What is missing, as the automation's `blocked` or `needs` says it. */
+    reason: z.string(),
+  }),
+  /**
+   * Another person's PR Review PRs found clean, but that only the user can approve: the approval gate stopped it (a
+   * sensitive path, a required check, no linked issue) or Approve is off. Gone once the PR is approved, closed or moves.
+   */
+  z.object({
+    kind: z.literal("pr_approval"),
+    url: z.string(),
+    /** "acme/app#42". */
+    pr: z.string(),
+    title: z.string(),
+    author: z.string().nullable(),
+    /** What stopped the approval, e.g. "touches sensitive paths: .github/workflows/ci.yml". */
+    reason: z.string(),
+    since: z.string(),
+  }),
+]);
+export type AutopilotNeed = z.infer<typeof AutopilotNeed>;
+
+/** `GET /api/autopilot`: engine settings, pause and the catalogue, and what the page's status strip reads. */
 export const AutopilotOverview = z.object({
   paused: z.boolean(),
   engine: AutopilotEngineSettings,
   automations: z.array(AutopilotAutomation),
+  /** Since local midnight: real agent runs started (as the daily run cap counts them) and what runs cost. */
+  today: z.object({ agentRuns: z.number().int(), spendUsd: z.number() }),
+  /** Failed runs (newest first), PRs waiting for the user's approval (oldest first), drafts, then setup gaps. */
+  needsYou: z.array(AutopilotNeed),
+  /** Automations that paused themselves in a project after failing there in a row, newest first. */
+  autoPaused: z.array(AutopilotAutoPause),
+  /** Tuning hints not dismissed, for Needs you and each automation's detail. */
+  hints: z.array(AutopilotHint),
+  /** Each automation's latest real run that has finished, for its row in the list; none for one that never ran. */
+  lastRuns: z.array(z.object({ automation: z.string(), status: AutopilotRunStatus, at: z.string() })),
+  /** Each automation's dry runs ("would …") over the last 7 days, for its Preview hint; none for one with none. */
+  previewRuns: z.array(z.object({ automation: z.string(), count: z.number().int() })),
 });
 export type AutopilotOverview = z.infer<typeof AutopilotOverview>;
 

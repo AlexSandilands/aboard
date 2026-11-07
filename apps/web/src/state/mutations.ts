@@ -1,3 +1,4 @@
+import { applyWhereWrites, type WhereWrite } from "@repo/contracts";
 import type {
   DeleteTasksResult,
   AddLinkResult,
@@ -7,6 +8,8 @@ import type {
   AskSettingsResult,
   AutopilotConfig,
   AutopilotEngineSettings,
+  AutopilotModeRow,
+  AutopilotOnMode,
   AutopilotOverview,
   AutopilotRun,
   AutopilotScopeEntry,
@@ -58,7 +61,7 @@ import { api, ApiError } from "~/lib/api";
 import { snapshotCardRects } from "~/components/board/cardMotion";
 import { toastManager } from "~/components/ui/toast";
 import { applyMove, moveWasReverted, rollbackMove } from "./boardReducer";
-import { queryKeys } from "./queries";
+import { queryKeys, WHERE_MUTATION_KEY } from "./queries";
 
 /*
  * Mutation hooks. The server pushes every change back over /events, so these don't
@@ -597,6 +600,81 @@ export function useSetAutopilotScope(projectId: string | null, onRejected?: () =
         description: error instanceof Error ? error.message : String(error),
       });
     },
+  });
+}
+
+/**
+ * Saves the scope writes an edit in the Where it runs widget came to (see `autopilotWhere.ts` in contracts), one PUT
+ * each, in order. The widget's rows update at once; the rows as they were are put back if one is refused, and the
+ * event stream's refetches of them wait until the last write is in (see `useBoardEvents`).
+ */
+export function useApplyWhere(automation: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: WHERE_MUTATION_KEY,
+    mutationFn: async (writes: ReadonlyArray<WhereWrite>) => {
+      for (const { target, mode } of writes) {
+        const path =
+          target.kind === "board"
+            ? "board"
+            : target.kind === "project"
+              ? `projects/${enc(target.id)}`
+              : `projects/${enc(target.projectId)}/epics/${enc(target.id)}`;
+        await api(`/api/autopilot/${path}/${enc(automation)}`, { method: "PUT", body: { mode } });
+      }
+    },
+    scope: { id: `autopilot-where:${automation}` },
+    onMutate: async (writes) => {
+      // A refetch already on its way would land over the optimistic rows.
+      await queryClient.cancelQueries({ queryKey: queryKeys.autopilotModes });
+      const previous = queryClient.getQueryData<AutopilotModeRow[]>(queryKeys.autopilotModes);
+      queryClient.setQueryData<AutopilotModeRow[]>(queryKeys.autopilotModes, (rows) =>
+        rows ? applyWhereWrites(rows, automation, writes) : rows,
+      );
+      return { previous };
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll }),
+    onError: (error, _writes, context) => {
+      // The server may have kept the writes before the refused one; the refetch after this shows what it did keep.
+      if (context?.previous) queryClient.setQueryData(queryKeys.autopilotModes, context.previous);
+      toastManager.add({
+        type: "error",
+        title: "Couldn't save where it runs",
+        description: error instanceof Error ? error.message : String(error),
+      });
+    },
+  });
+}
+
+/**
+ * Quick setup's Apply: each switch-on (quickSetupWrites) as a board-scope write, one after another. The server has no
+ * batch, and the writes are independent: when one is refused the rest still apply, and the error says which.
+ */
+export function useApplyQuickSetup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (writes: ReadonlyArray<{ automation: string; mode: AutopilotOnMode }>) => {
+      const failed: string[] = [];
+      for (const { automation, mode } of writes) {
+        try {
+          await api<AutopilotScopeEntry[]>(`/api/autopilot/board/${enc(automation)}`, {
+            method: "PUT",
+            body: { mode } satisfies UpdateAutopilotSettingInput,
+          });
+        } catch (error) {
+          failed.push(`${automation}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      if (failed.length > 0) throw new Error(failed.join("; "));
+    },
+    scope: { id: "autopilot-scope:board" },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll }),
+    onError: (error) =>
+      toastManager.add({
+        type: "error",
+        title: "Quick setup couldn't switch everything on",
+        description: error instanceof Error ? error.message : String(error),
+      }),
   });
 }
 

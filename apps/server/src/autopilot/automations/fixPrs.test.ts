@@ -231,6 +231,9 @@ function setup() {
     setThreadState: (patch: Partial<PrThreadState>) => (threadState = { ...threadState, ...patch }),
     failResolve: (message: string | Record<string, string> | null) => (failResolve = message),
     engineSettings: (patch: Partial<AutopilotEngineSettings>) => s.autopilot.updateEngine(patch),
+    /** Fix PRs' board-scope config: its attempts and threshold, once engine settings. */
+    fixSettings: (config: Record<string, unknown>) =>
+      s.autopilot.setScope("board", null, AUTOPILOT_FIX_PRS, { config }),
   };
 }
 
@@ -342,6 +345,45 @@ describe("fix PRs: triggers", () => {
     expect(prompt).toContain('"FYI (no action needed)" alone');
     expect(prompt).toContain("gh api repos/acme/app/pulls/7/reviews/900/comments");
     expect(runs()[0]!.dedupeKey).toMatch(/:review@900$/);
+  });
+
+  it("acts on a verdict Review PRs carried across a base merge, and not again on one it already handled", async () => {
+    const { requests, setPr, pass, turnOn, reviewed, runs } = setup();
+    turnOn();
+    // Reviewed at SHA_A, then the base was merged in before Fix PRs got to it: the verdict was carried to SHA_B.
+    setPr({ headOid: SHA_B });
+    reviewed();
+    await pass();
+    expect(requests).toHaveLength(0);
+    reviewed({ headOid: SHA_B, basis: "carried", carriedFrom: SHA_A });
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.prompt).toContain("2 points at or above **major** to fix");
+    expect(runs()[0]!.dedupeKey).toMatch(/:review@900$/);
+    // Another base merge carries the same review on: it was handed over already, so nothing starts again.
+    setPr({ headOid: SHA_C });
+    reviewed({ headOid: SHA_C, basis: "carried", carriedFrom: SHA_B });
+    await pass();
+    expect(requests).toHaveLength(1);
+  });
+
+  it("points the fixer at the earlier review whose points a conflict resolution review carried", async () => {
+    const { requests, setPr, pass, turnOn, reviewed } = setup();
+    turnOn();
+    setPr({ headOid: SHA_B });
+    reviewed({
+      headOid: SHA_B,
+      reviewId: 950,
+      reviewUrl: "https://github.com/acme/app/pull/7#pullrequestreview-950",
+      basis: "conflict_review",
+      carriedFrom: SHA_A,
+      openFrom: { reviewId: 900, reviewUrl: "https://github.com/acme/app/pull/7#pullrequestreview-900" },
+    });
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.prompt).toContain("gh api repos/acme/app/pulls/7/reviews/950/comments");
+    expect(requests[0]!.prompt).toContain("only checked how merge conflicts were resolved");
+    expect(requests[0]!.prompt).toContain("gh api repos/acme/app/pulls/7/reviews/900/comments");
   });
 
   it("ignores a review that was clean, gave up, or is of an older head", async () => {
@@ -606,8 +648,8 @@ describe("fix PRs: limits", () => {
   });
 
   it("gives up once the PR's rounds are used, failed attempts included and skipped ones not", async () => {
-    const { requests, setPr, pass, turnOn, runs, engineSettings, failRunner } = setup();
-    engineSettings({ prReviewRounds: 2 });
+    const { requests, setPr, pass, turnOn, runs, failRunner, fixSettings } = setup();
+    fixSettings({ attempts: 2 });
     turnOn();
     failRunner(new WorktreeHeadError("moved", SHA_B, true));
     setPr({ checks: "failing" });
@@ -634,8 +676,8 @@ describe("fix PRs: limits", () => {
     const head = (n: number) => n.toString(16).padStart(40, "0");
 
     it("don't use up the rounds or the attempts per head that review points and checks have", async () => {
-      const { requests, setPr, pass, turnOn, runs, engineSettings } = setup();
-      engineSettings({ prReviewRounds: 2 });
+      const { requests, setPr, pass, turnOn, runs, fixSettings } = setup();
+      fixSettings({ attempts: 2 });
       turnOn();
       for (const n of [1, 2, 3]) {
         setPr({ mergeable: "conflicting", headOid: head(n) });
@@ -705,8 +747,8 @@ describe("fix PRs: limits", () => {
     });
 
     it("still run once the rounds and the attempts at that head are used, and once the checks are given up on", async () => {
-      const { requests, setPr, pass, turnOn, runs, engineSettings, linkId } = setup();
-      engineSettings({ prReviewRounds: 1 });
+      const { requests, setPr, pass, turnOn, runs, linkId, fixSettings } = setup();
+      fixSettings({ attempts: 1 });
       turnOn();
       setPr({ checks: "failing", headOid: head(1) });
       await pass();
@@ -729,8 +771,8 @@ describe("fix PRs: limits", () => {
     });
 
     it("count a mixed attempt as a round", async () => {
-      const { requests, setPr, pass, turnOn, runs, engineSettings } = setup();
-      engineSettings({ prReviewRounds: 1 });
+      const { requests, setPr, pass, turnOn, runs, fixSettings } = setup();
+      fixSettings({ attempts: 1 });
       turnOn();
       setPr({ checks: "failing", mergeable: "conflicting", headOid: head(1) });
       await pass();
@@ -769,8 +811,8 @@ describe("fix PRs: budgets", () => {
   });
 
   it("counts an attempt on Autopilot's review and a colleague's comments against both budgets", async () => {
-    const { requests, setPr, pass, turnOn, runs, reviewed, engineSettings, linkId } = setup();
-    engineSettings({ prCommentRounds: 1 });
+    const { requests, setPr, pass, turnOn, runs, reviewed, linkId, fixSettings } = setup();
+    fixSettings({ commentAttempts: 1 });
     turnOn();
     reviewed();
     setPr({ reviewComments: [comment(1)] });
@@ -785,8 +827,8 @@ describe("fix PRs: budgets", () => {
   });
 
   it("gives other people's comments attempts of their own, apart from Autopilot's review and checks", async () => {
-    const { requests, setPr, pass, turnOn, runs, engineSettings, linkId } = setup();
-    engineSettings({ prReviewRounds: 1, prCommentRounds: 2 });
+    const { requests, setPr, pass, turnOn, runs, linkId, fixSettings } = setup();
+    fixSettings({ attempts: 1, commentAttempts: 2 });
     turnOn();
     setPr({ checks: "failing", headOid: SHA_A });
     await pass();
@@ -809,8 +851,8 @@ describe("fix PRs: budgets", () => {
   });
 
   it("goes on with comments once the review's rounds are used", async () => {
-    const { requests, setPr, pass, turnOn, runs, engineSettings, linkId } = setup();
-    engineSettings({ prReviewRounds: 1 });
+    const { requests, setPr, pass, turnOn, runs, linkId, fixSettings } = setup();
+    fixSettings({ attempts: 1 });
     turnOn();
     setPr({ checks: "failing", headOid: SHA_A });
     await pass();
@@ -1162,7 +1204,7 @@ describe("manualFix: Fix in → on a PR", () => {
 
 describe("fix PRs: an integration epic's own PR", () => {
   it("fixes only its conflicts with the default branch, in a session of its own on the epic's branch", async () => {
-    const { s, project, requests, pass, turnOn, engineSettings } = setup();
+    const { s, project, requests, pass, turnOn, fixSettings } = setup();
     turnOn();
     const epic = s.tasks.createEpic({ projectId: project.id, title: "Checkout" }, [], "user");
     const pr = () => s.tasks.summary(epic.id).links.find((l) => l.kind === "pr")!;
@@ -1197,7 +1239,7 @@ describe("fix PRs: an integration epic's own PR", () => {
     expect(requests[0]!.prompt).toContain("never merge the pull request");
 
     // Conflicts have a budget of their own, so the epic's PR keeps being fixed past the PR rounds.
-    engineSettings({ prReviewRounds: 1 });
+    fixSettings({ attempts: 1 });
     for (const sha of [SHA_A, SHA_B]) {
       epicPr({ mergeable: "conflicting", headOid: sha });
       await pass();

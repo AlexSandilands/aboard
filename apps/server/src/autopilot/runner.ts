@@ -43,7 +43,7 @@ import type { Logger } from "../integrations/util.ts";
 import { RUN_TOKEN_ENV, type RunToolScope } from "../mcp/runTokens.ts";
 import type { Services } from "../services/types.ts";
 import { pushGuardEnv } from "./pushGuard.ts";
-import { createRepoGate, gateFetches } from "./repoGate.ts";
+import { createRepoGate, gateFetches, type RepoGate } from "./repoGate.ts";
 import { readRunnerOptions, type RunnerOptions } from "./runnerOptions.ts";
 import {
   RunAbandonedError,
@@ -166,6 +166,8 @@ export function createAutopilotRunner(deps: {
   t3PrepareMs?: number;
   t3PreparePollMs?: number;
   runGit?: RunGit;
+  /** The per-repository fetch gate, shared with whatever else fetches in the same checkouts (the engine's actions). */
+  gate?: RepoGate;
   runAgent?: RunAgent;
   newSessionId?: () => string;
   /** A headless session was just linked to its task, so the board can read its state at once. */
@@ -183,7 +185,7 @@ export function createAutopilotRunner(deps: {
 }): Runner {
   // One `git fetch` per repository at a time across T3 launches and headless worktrees. What the user asks for (an epic's
   // branch, a launch from the dialog) doesn't queue behind them: a hold can last minutes.
-  const gate = createRepoGate();
+  const gate = deps.gate ?? createRepoGate();
   const runGit = gateFetches(deps.runGit ?? defaultRunGit, gate);
   const runAgent = deps.runAgent ?? runHeadlessAgent;
   const newSessionId = deps.newSessionId ?? randomUUID;
@@ -598,13 +600,19 @@ export function createAutopilotRunner(deps: {
     };
   };
 
+  /** Removes a task-less run's read-only worktree and its branch. */
+  const dropCheckout = async (worktree: Worktree, repo: string) => {
+    await runGit(["worktree", "remove", "--force", worktree.path], repo).catch(() => null);
+    await runGit(["branch", "-D", worktree.branch], repo).catch(() => null);
+  };
+
   /**
    * A run with no task (a digest, a scheduled agent): headless, in an empty folder of its own that is removed
    * afterwards. With a `repo` it can use git there, so it gets Claude Code's push deny rules: there is no worktree for
    * the pre-push guard, so an editing run never goes to a harness that lacks them (DriverNeeds.unguarded).
    */
   const startDetached = async (request: RunnerRequest, update: (patch: RunPatch) => void): Promise<RunnerResult> => {
-    const options = readRunnerOptions(request.options);
+    const options = readRunnerOptions(request.options, deps.services().autopilot.engine().agentDefaults);
     if (request.kind === "nudge") throw new Error("A run with no task has no thread to nudge");
     if (options.runner === "t3") throw new Error("A run with no task can't run in T3 Code");
     const settings = deps.services().settings.get();
@@ -616,7 +624,30 @@ export function createAutopilotRunner(deps: {
 
 You are running unattended as ${BRAND.name} Autopilot, with no task and no worktree, in an empty temporary folder. ${SAFETY(defaultBranch)}`
         : request.prompt;
-    const cwd = await mkdtemp(join(tmpdir(), `${BRAND.id}-run-`));
+    let worktree: Worktree | null = null;
+    if (request.checkout) {
+      if (!request.repo || request.access !== "read-only") {
+        throw new Error("A task-less checkout is only for a read-only run with a project folder");
+      }
+      worktree = await createWorktree(runGit, {
+        repo: request.repo,
+        root: deps.worktreesDir,
+        taskNumber: request.checkout.tag,
+        runId: request.run.id,
+        branch: request.checkout.branch,
+        readOnly: true,
+        pushGuard: true,
+      });
+      if (request.expectHead) {
+        try {
+          await checkHead(worktree.path, request.expectHead);
+        } catch (error) {
+          await dropCheckout(worktree, request.repo);
+          throw error;
+        }
+      }
+    }
+    const cwd = worktree?.path ?? (await mkdtemp(join(tmpdir(), `${BRAND.id}-run-`)));
     // The board's MCP config carries its token, so it sits outside the folder the agent may read.
     const mcpDir = request.boardTools ? await mkdtemp(join(tmpdir(), `${BRAND.id}-mcp-`)) : null;
     try {
@@ -628,7 +659,7 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
         const board = deps.boardMcp?.();
         if (!board) throw new Error("The board's MCP endpoint isn't known to the runner");
         mcpConfig = join(mcpDir, "mcp.json");
-        await writeFile(mcpConfig, boardMcpConfig(board.url, board.token), { mode: 0o600 });
+        await writeFile(mcpConfig, boardMcpConfig(board.url, board.token, request.boardActor), { mode: 0o600 });
       }
       // No task to link the session to.
       const { outcome, sessionId } = await runOnDriver(
@@ -636,7 +667,13 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
         null,
         options,
         settings,
-        { cwd, prompt, defaultBranch, ...(mcpConfig ? { boardMcpConfig: mcpConfig } : {}) },
+        {
+          cwd,
+          prompt: worktree ? `${request.prompt}\n\n${headlessWorkspaceNote(worktree, true, null)}` : prompt,
+          defaultBranch: worktree?.defaultBranch ?? defaultBranch,
+          ...(worktree ? { hooksPath: worktree.hooksPath } : {}),
+          ...(mcpConfig ? { boardMcpConfig: mcpConfig } : {}),
+        },
         { runner: "headless" },
         update,
         () => {},
@@ -649,7 +686,9 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
         ...(request.outputSchema ? { output: outcome.output } : {}),
       };
     } finally {
-      for (const dir of [cwd, mcpDir]) {
+      // A read-only checkout holds nothing of the agent's: it goes with the run.
+      if (worktree) await dropCheckout(worktree, request.repo!);
+      for (const dir of [worktree ? null : cwd, mcpDir]) {
         if (!dir) continue;
         await rm(dir, { recursive: true, force: true }).catch((error: unknown) => {
           log.warn(`[autopilot] couldn't remove ${dir}: ${messageOf(error)}`);
@@ -663,7 +702,7 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
       if (!request.run.taskId) return startDetached(request, update);
       const task = taskOf(request.run.taskId);
       if (request.kind === "nudge") return nudge(request, task, update);
-      const options = readRunnerOptions(request.options);
+      const options = readRunnerOptions(request.options, deps.services().autopilot.engine().agentDefaults);
       // A T3 thread can't be held to read-only, given tools (its own or the board's run tools) or asked for structured
       // output.
       const headlessOnly =

@@ -5,6 +5,7 @@ interface DraftRow {
   id: string;
   bundle_json: string;
   note: string;
+  replaces: string | null;
   created_by: string;
   created_at: string;
   expires_at: string;
@@ -15,6 +16,7 @@ const toDraft = (r: DraftRow): AutomationDraft => ({
   // Written through the schema, so it parses; a hand-edited row that doesn't is a corrupt database.
   bundle: AutomationBundle.parse(JSON.parse(r.bundle_json)),
   note: r.note,
+  replaces: r.replaces,
   createdBy: r.created_by,
   createdAt: r.created_at,
   expiresAt: r.expires_at,
@@ -36,6 +38,7 @@ export function createAutopilotDraftsRepo(sql: Sql) {
         id: draft.id,
         bundle_json: JSON.stringify(draft.bundle),
         note: draft.note,
+        replaces: draft.replaces,
         created_by: draft.createdBy,
         created_at: draft.createdAt,
         expires_at: draft.expiresAt,

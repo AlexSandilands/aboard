@@ -27,11 +27,12 @@ Projects with nothing to report are left out.
 
 ## Switching it on
 
-Under **Settings → Autopilot**, switch **Digest of what changed** on for the board, and open its **Settings**:
+Under **Settings → Autopilot**, switch **Digest of what changed** on for the board (it's under Upkeep), and click it to
+see its settings:
 
 - **Digest**: **Plain list** (built by the board, no agent, free) or **Written by an agent**.
 - **Time** (local) and **Weekdays only**. After the board has been off, you get one digest for the lot.
-- For an agent-written digest: the **Digest skill** to follow (the built-in one, or any skill you have), the
+- Under **Advanced**, for an agent-written digest: the **Digest skill** to follow (the built-in one, or any skill you have), the
   **Agent budget**, **Agent timeout** and **Agent model** (blank uses the model for your light tier).
 
 Switching it on, or changing its time, doesn't make a digest for a time that has already passed that day; the
@@ -46,7 +47,7 @@ The agent gets the plain digest and rewrites it as a short update. It runs headl
 to the board, your files or any tools, so a task title can't make it read or do anything. The digest shows no images, since the agent's text could
 carry a link that sends it out when the page loads. If it fails, runs
 out of budget or answers nothing, you get the plain digest instead, with a line saying why. A quiet period never
-starts an agent. It waits out Autopilot's quiet hours, and goes plain while Pause all is set, in dry-run, or once
+starts an agent. It waits out Autopilot's quiet hours, and goes plain while Pause all is set, under Preview everything, or once
 today's spend cap is used up.
 
 How it works: [docs/features/autopilot.md](../features/autopilot.md#automations).

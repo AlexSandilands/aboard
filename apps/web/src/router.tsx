@@ -6,13 +6,14 @@ import {
   Outlet,
   redirect,
 } from "@tanstack/react-router";
-import { BoardFilterParams } from "@repo/contracts";
+import { AUTOPILOT_ALL_RUNS, BoardFilterParams } from "@repo/contracts";
 import { z } from "zod";
 import { RunHistorySearch } from "./components/autopilot/runHistory.logic.ts";
 import { AppFrame } from "./components/layout/AppFrame.tsx";
 import { boardSnapshotMotion, prepareBoardTransition, snapshotMotionSupported } from "./lib/boardMotion.ts";
 import { panelTransitionType } from "./lib/boardMotion.logic.ts";
 import { AppLayout } from "./components/layout/AppLayout.tsx";
+import { AutopilotLimitsPage } from "./components/autopilot/AutopilotPage.tsx";
 import {
   AutopilotRunsPage,
   CustomAutomationEditorPage,
@@ -22,7 +23,13 @@ import {
 } from "./components/settings/pages/EditorPages.tsx";
 import { SettingsGroupPage } from "./components/settings/pages/SettingsGroupPage.tsx";
 import { SettingsShell } from "./components/settings/SettingsShell.tsx";
-import { isSettingsGroup, providerOfTarget, redirectSettingsTarget } from "./components/settings/settingsNav.logic.ts";
+import {
+  automationOfTarget,
+  autopilotTabOf,
+  isSettingsGroup,
+  providerOfTarget,
+  redirectSettingsTarget,
+} from "./components/settings/settingsNav.logic.ts";
 import { SocialFeedPage } from "./components/social/SocialFeedPage.tsx";
 import { StatsPage } from "./components/stats/StatsPage.tsx";
 import { parseStatsPeriod } from "./components/stats/stats.logic.ts";
@@ -50,10 +57,45 @@ export const boardRoute = createRoute({
 
 /** `?project=` on the project settings page and its rule editor: the project shown. */
 const SettingsProjectSearch = z.object({ project: z.string().optional() });
-/** The settings pages' search: the project page's project, or the provider the Providers page edits. */
-const SettingsGroupSearch = SettingsProjectSearch.extend({ provider: z.string().optional() });
+/**
+ * The settings pages' search: the project page's project, the provider the Providers page edits, or the automation
+ * the Autopilot page shows.
+ */
+const SettingsGroupSearch = SettingsProjectSearch.extend({
+  provider: z.string().optional(),
+  automation: z.string().optional(),
+});
+
+/**
+ * Where an old settings link goes once its target has moved: the Autopilot page's Runs and Limits tabs have paths of
+ * their own; anything else is a group page with the target as its hash, and the provider or automation it selects.
+ */
+function movedSettingsRedirect(moved: string, provider?: string) {
+  const group = moved.split(".")[0]!;
+  if (group === "autopilot" && autopilotTabOf(moved) === "limits") {
+    return redirect({ to: "/settings/autopilot/limits", hash: moved, replace: true });
+  }
+  if (group === "autopilot" && autopilotTabOf(moved) === "runs") {
+    return redirect({
+      to: "/settings/autopilot/runs/$automation",
+      params: { automation: AUTOPILOT_ALL_RUNS },
+      hash: moved,
+      replace: true,
+    });
+  }
+  const selected = provider ?? providerOfTarget(moved);
+  const automation = automationOfTarget(moved);
+  return redirect({
+    to: "/settings/$group",
+    params: { group },
+    search: selected ? { provider: selected } : automation ? { automation } : {},
+    hash: moved,
+    replace: true,
+  });
+}
 /** `draft` opens an automation an agent drafted (docs/features/autopilot.md#drafts). */
-const ImportSearch = z.object({ draft: z.string().optional() });
+// `draft`: an agent's draft to review. `recipe`: one of AUTOMATION_RECIPES, opened like a file someone shared.
+const ImportSearch = z.object({ draft: z.string().optional(), recipe: z.string().optional() });
 
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -81,31 +123,12 @@ export const settingsGroupRoute = createRoute({
       const group = moved.split(".")[0]!;
       if (!isSettingsGroup(group))
         throw redirect({ to: "/settings/$group", params: { group: "board" }, replace: true });
-      const search = location.search as { provider?: string };
-      throw redirect({
-        to: "/settings/$group",
-        params: { group },
-        search: search.provider
-          ? { provider: search.provider }
-          : providerOfTarget(moved)
-            ? { provider: providerOfTarget(moved)! }
-            : {},
-        hash: moved,
-        replace: true,
-      });
+      throw movedSettingsRedirect(moved, (location.search as { provider?: string }).provider);
     }
-    // An old link into Integrations (`#integrations.claude-code.cli-path`) goes to where that setting is now.
+    // An old link into Integrations (`#integrations.claude-code.cli-path`) or the old Autopilot page goes to where
+    // that setting is now.
     const moved = hash ? redirectSettingsTarget(hash) : hash;
-    if (moved !== hash) {
-      const provider = providerOfTarget(moved);
-      throw redirect({
-        to: "/settings/$group",
-        params: { group: moved.split(".")[0]! },
-        search: provider ? { provider } : {},
-        hash: moved,
-        replace: true,
-      });
-    }
+    if (moved !== hash) throw movedSettingsRedirect(moved);
   },
   component: SettingsGroupPage,
 });
@@ -147,12 +170,20 @@ export const customAutomationEditorRoute = createRoute({
   component: CustomAutomationEditorPage,
 });
 
-// An automation's run history, or every automation's with `all`; the filters are search params.
+// The Autopilot page's Runs tab: an automation's run history, or every automation's with `all`; the filters are
+// search params.
 export const autopilotRunsRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "autopilot/runs/$automation",
   validateSearch: (search) => RunHistorySearch.parse(search),
   component: AutopilotRunsPage,
+});
+
+// The Autopilot page's Limits & safety tab. A static path, so it wins over `$group`-style reads of "limits".
+export const autopilotLimitsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "autopilot/limits",
+  component: AutopilotLimitsPage,
 });
 
 export const ruleEditorRoute = createRoute({
@@ -186,6 +217,7 @@ export const router = createRouter({
         customAutomationImportRoute,
         customAutomationEditorRoute,
         autopilotRunsRoute,
+        autopilotLimitsRoute,
         ruleEditorRoute,
       ]),
     ]),

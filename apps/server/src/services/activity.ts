@@ -304,16 +304,22 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
       }
       const runs = [...byAutomation.values()].sort((a, b) => b.failed - a.failed || b.total - a.total);
 
-      // Threads that waited on input are also announced to the inbox, whether or not Unstick ran on them.
-      for (const n of repos.notifications.between(["thread_waiting"], start, end)) {
+      // Threads that waited on input are announced to the inbox, as are tasks that went quiet since the reminders
+      // moved there; the runs above are the history of the Unstick automation they replace.
+      const stallKinds = { thread_waiting: "waiting", thread_waited: "waiting", task_quiet: "stale" } as const;
+      for (const n of repos.notifications.between(
+        Object.keys(stallKinds) as Array<keyof typeof stallKinds>,
+        start,
+        end,
+      )) {
         const ref = n.taskId && inScope(n.taskId) ? taskRef(n.taskId) : null;
         if (ref)
           addStall({
             ...ref,
             taskId: n.taskId!,
-            kind: "waiting",
+            kind: stallKinds[n.kind as keyof typeof stallKinds],
             at: n.createdAt,
-            text: n.title,
+            text: n.kind === "thread_waiting" ? n.title : n.body,
           });
       }
 

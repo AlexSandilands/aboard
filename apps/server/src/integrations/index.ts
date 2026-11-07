@@ -14,12 +14,14 @@ import { tasksToPlan } from "../services/planning.ts";
 import type { Services } from "../services/types.ts";
 import { createAgentModels, type AgentModelProbes } from "./agentModels.ts";
 import { createAgentSessionsIntegration, type ProcessProbe } from "./agentSessions.ts";
+import { createRepoGate, gateFetches } from "../autopilot/repoGate.ts";
 import { createBackupIntegration, defaultRunGit, type RunGit } from "./backup.ts";
 import type { RunGh } from "./gh.ts";
 import { createBackupSetup } from "./backupSetup.ts";
 import type { GitHostReads } from "./gitHost.ts";
 import { createGitHosts, gitHostActions, gitHostIssues } from "./gitHosts.ts";
 import { createGithubHost } from "./githubHost.ts";
+import { createRepoUrls, remoteRepo } from "./gitRemote.ts";
 import { createRunTokens } from "../mcp/runTokens.ts";
 import { RUN_TOOLS_PATH, type RunToolsContext } from "../mcp/runTools.ts";
 import { createPrMerges } from "./prMerge.ts";
@@ -205,12 +207,15 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       (overrides.log ?? console).warn(`[sessions] couldn't refresh ${sessionId}: ${messageOf(error)}`);
     });
   };
+  // One `git fetch` per repository at a time, across the runner's worktrees and the engine's own reads.
+  const repoGate = createRepoGate();
   const runner =
     overrides.autopilotRunner ??
     createAutopilotRunner({
       services: deps.services,
       t3,
       worktreesDir: deps.config.worktreesDir,
+      gate: repoGate,
       ...(overrides.autopilotGit ? { runGit: overrides.autopilotGit } : {}),
       ...(overrides.runAgent ? { runAgent: overrides.runAgent } : {}),
       sessionLinked: refreshSession,
@@ -223,11 +228,24 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       },
       ...(overrides.log ? { log: overrides.log } : {}),
     });
+  // Each project folder's `origin`, cached: Review PRs reads it on every pass for other people's PRs.
+  const repoUrls = createRepoUrls(overrides.autopilotGit ?? defaultRunGit);
   const autopilot = createAutopilotEngine({
     services: deps.services,
     bus: deps.bus,
     runner,
-    gitHosts: gitHostActions(hosts, merges),
+    runGit: gateFetches(overrides.autopilotGit ?? defaultRunGit, repoGate),
+    gitHosts: gitHostActions(hosts, merges, {
+      mergeAutoMergeTask: (taskId, input, actor) =>
+        mergeTaskPr({ services: deps.services(), merges, hosts }, taskId, input, actor),
+      rereadPr: async (link) => {
+        if (link.kind === "pr" && link.ref) await poller.reread({ ...link, ref: link.ref }, { quiet: true });
+      },
+    }),
+    repoOf: async (project) => {
+      const url = await repoUrls(project.workspaceRoot);
+      return url ? remoteRepo(url) : null;
+    },
     runEnded: (run) => {
       if (run.sessionId) refreshSession(run.sessionId);
     },

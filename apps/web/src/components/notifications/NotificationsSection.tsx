@@ -45,7 +45,7 @@ export function NotificationsSection({ settings }: { settings: AppSettings }) {
           <>
             No pop-up while quiet hours are on; they still land in the inbox.{" "}
             {autopilot.data ? `${describeQuietHours(autopilot.data.engine.quietHours)} ` : null}
-            <SettingsLink to="autopilot.engine.quiet-hours">Set quiet hours</SettingsLink>
+            <SettingsLink to="autopilot.limits.quiet-hours">Set quiet hours</SettingsLink>
           </>
         }
         control={

@@ -1,41 +1,36 @@
-import { AUTOPILOT_ORCHESTRATE, AUTOPILOT_RECURRING, type AutopilotScopeEntry } from "@repo/contracts";
-import { CalendarClockIcon, SettingsIcon } from "lucide-react";
+import { AUTOPILOT_ORCHESTRATE } from "@repo/contracts";
+import { SettingsIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { PopoverClose } from "~/components/ui/popover";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
-import { useSetAutopilotPaused, type useSetAutopilotScope } from "~/state/mutations";
+import { useSetAutopilotPaused } from "~/state/mutations";
 import { useAutopilotOverview } from "~/state/queries";
-import { entryFor, scopeAutomations, scopeRowModel } from "./autopilot.logic";
+import { scopeAutomations } from "./autopilot.logic";
 import { OrchestrateSection } from "./OrchestrateSection";
-import { PausedNotice, ScopeCard, ScopeRow, ScopeSectionLabel, ScopeSkeleton } from "./ScopeRow";
+import type { PopoverScope } from "./where.logic";
+import { PausedNotice, ScopeCard, ScopeSectionLabel, ScopeSkeleton } from "./ScopeRow";
+import { WhereRow } from "./WhereRow";
 
 /**
- * The popover behind the lane pill and the epic button: an on/off switch per automation for one scope, faded while it
- * follows the scope above (the board for a project, the project for an epic) and solid once this scope sets it.
- * A project's popover pins Orchestrate in a card of its own at the top (OrchestrateSection). `children` are further
- * cards under the automations (an epic's delivery).
+ * The popover behind the lane pill and the epic button: the compact form of the Where it runs widget. One row per
+ * automation with a switch for this project or epic and a line saying where it runs overall, so an exception made here
+ * shows in Settings and the other way round. A project's popover pins Orchestrate in a card of its own at the top
+ * (OrchestrateSection). `children` are further cards under the automations (an epic's delivery).
  */
 export function ScopePopover({
   title,
-  entries,
-  set,
-  projectId,
-  epic = false,
+  scope,
   error,
   children,
 }: {
   /** The project's or epic's name, for the switches' labels. */
   title: string;
-  entries: ReadonlyArray<AutopilotScopeEntry> | undefined;
-  set: ReturnType<typeof useSetAutopilotScope>;
-  /** Set for a project's popover: Recurring tasks gets a link to the project's settings page at that section. */
-  projectId?: string;
-  /** An epic's popover: leaves out the automations that don't apply to epics. */
-  epic?: boolean;
-  /** The scope query's error, so a failed load shows a message instead of a skeleton for good. */
+  /** A project's popover pins Orchestrate; an epic's leaves out the automations that don't apply to epics. */
+  scope: PopoverScope;
+  /** The load error, so a failed load shows a message instead of a skeleton for good. */
   error?: Error | null;
   children?: ReactNode;
 }) {
@@ -43,11 +38,10 @@ export function ScopePopover({
   const openSettings = useOpenSettings();
   const resume = useSetAutopilotPaused();
   const paused = overview.data?.paused ?? false;
-  const automations = scopeAutomations(overview.data?.automations ?? [], epic);
-  const pinned = projectId && !epic ? automations.find((a) => a.key === AUTOPILOT_ORCHESTRATE) : undefined;
-  const scope = epic ? "epic" : "project";
-  // The switches would show a made-up Off until the scope arrives, so rows wait for it.
-  const loading = !overview.data || !entries;
+  const automations = scopeAutomations(overview.data?.automations ?? [], scope.kind === "epic");
+  const projectId = scope.kind === "project" ? scope.id : undefined;
+  const pinned = projectId ? automations.find((a) => a.key === AUTOPILOT_ORCHESTRATE) : undefined;
+  const loading = !overview.data;
   const loadError = error ?? overview.error;
   return (
     <div className="flex w-full flex-col gap-2">
@@ -82,54 +76,14 @@ export function ScopePopover({
         <ScopeSkeleton />
       ) : (
         <>
-          {pinned && projectId ? (
-            <OrchestrateSection
-              automation={pinned}
-              entry={entryFor(entries, pinned)}
-              title={title}
-              projectId={projectId}
-              set={set}
-            />
-          ) : null}
+          {pinned && projectId ? <OrchestrateSection automation={pinned} title={title} projectId={projectId} /> : null}
           <ScopeSectionLabel>Automations</ScopeSectionLabel>
           <ScrollArea scrollFade className="max-h-72">
             <ScopeCard>
               {automations
                 .filter((automation) => automation !== pinned)
                 .map((automation) => (
-                  <ScopeRow
-                    key={automation.key}
-                    name={automation.title}
-                    description={automation.description}
-                    label={`${automation.title} in ${title}`}
-                    model={scopeRowModel(entryFor(entries, automation), automation.blocked, scope)}
-                    scope={scope}
-                    disabled={set.isPending}
-                    onChange={(mode) => set.mutate({ automation: automation.key, mode })}
-                    trailing={
-                      projectId && automation.key === AUTOPILOT_RECURRING ? (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <PopoverClose
-                                render={
-                                  <Button
-                                    size="icon-micro"
-                                    variant="ghost-muted"
-                                    aria-label="Recurring tasks settings"
-                                    onClick={() => openSettings("project.recurring", { project: projectId })}
-                                  />
-                                }
-                              />
-                            }
-                          >
-                            <CalendarClockIcon />
-                          </TooltipTrigger>
-                          <TooltipPopup side="top">Recurring tasks</TooltipPopup>
-                        </Tooltip>
-                      ) : null
-                    }
-                  />
+                  <WhereRow key={automation.key} automation={automation} scope={scope} title={title} />
                 ))}
             </ScopeCard>
           </ScrollArea>

@@ -13,8 +13,11 @@ import { AppError } from "../../errors.ts";
 import { MergeTargetError } from "../../integrations/prMerge.ts";
 import { messageOf } from "../../integrations/util.ts";
 import { isTransientHostError } from "../../integrations/gitHost.ts";
+import type { GitHostActions } from "../../integrations/gitHosts.ts";
+import type { Services } from "../../services/types.ts";
 import { headSeenSince, isPrLink, notMergeable, type PrLink } from "../mergeGate.ts";
 import { defineAutomation, type ActionResult, type Candidate } from "../types.ts";
+import { holdAction, mainCandidates, mainMergeAction, type MainHoldData, type MainMergeData } from "./mergeIntoMain.ts";
 
 export { AUTOPILOT_MERGE_EPIC_PRS };
 
@@ -224,178 +227,209 @@ const epicPrLink = (epic: TaskSummary, branch: string): PrLink | "unpolled" | nu
   return prs.some((l) => !l.snapshot) ? "unpolled" : null;
 };
 
+const schema = z.object({ intoMain: z.boolean() });
+type MergeReadyConfig = z.infer<typeof schema>;
+
 /**
- * Merge into epic branch (docs/features/autopilot.md#merge-into-epic-branch). For each epic delivered through an
- * integration branch:
- * - merges a task's PR into the branch once `notMergeable` finds nothing in the way: with a merge commit if the
- *   repository allows one, else a squash, else a rebase (mergeIntoEpicBranch). Once per PR
- *   and head commit. GitHub refusing (branch rules wanting an approval) puts "Ready to merge into the epic branch" on
- *   the task and notifies. The merge moves the task to Done, which unblocks what waits on it.
- * - opens a draft PR from the branch into the default branch once a task has merged, links it on the epic, and keeps
- *   its description listing the tasks. It never merges that PR, nor anything into the default branch.
+ * Merge ready PRs (docs/features/autopilot.md#merge-ready-prs; the key is still merge_epic_prs from when it only merged
+ * into epic branches). Two targets:
+ * - Into epic branches, always on with it: for each epic delivered through an integration branch, merges a task's PR
+ *   into the branch once `notMergeable` finds nothing in the way, with a merge commit if the repository allows one,
+ *   else a squash, else a rebase (mergeIntoEpicBranch). Once per PR and head commit. GitHub refusing (branch rules
+ *   wanting an approval) puts "Ready to merge into the epic branch" on the task and notifies. The merge moves the task
+ *   to Done, which unblocks what waits on it. It also opens a draft PR from the branch into the default branch once a
+ *   task has merged, links it on the epic, and keeps its description listing the tasks. It never merges that PR.
+ * - Into main, with `intoMain` on (off by default): tasks the user flagged for auto-merge, through merge_task_pr's own
+ *   rules and merge (mergeIntoMain.ts), one PR at a time per repository.
  */
 export const mergeEpicPrs = defineAutomation({
   key: AUTOPILOT_MERGE_EPIC_PRS,
-  title: "Merge into epic branch",
+  title: "Merge ready PRs",
   description:
-    "For epics delivered through an integration branch: merges each task's PR into the epic's branch once it's reviewed and green, and keeps the epic's draft PR to main. Never merges into main.",
+    "Merges a task's PR once it's reviewed, green and mergeable: into its epic's branch when the epic has one, and into main for tasks you flagged Auto-merge, if you switch that on.",
   needsAgent: false,
-  schema: z.object({}),
-  fields: [],
-  defaults: {},
+  group: "prs",
+  schema,
+  fields: [
+    {
+      key: "intoMain",
+      label: "Into main",
+      kind: "boolean",
+      tier: "essential",
+      help: "Also merge the PRs of tasks you've flagged Auto-merge into main once they're ready, one at a time per repository. Off: only epic branches.",
+    },
+  ],
+  defaults: { intoMain: false } satisfies MergeReadyConfig,
+  // Into main is read per task (intoMainOn), so an epic's own setting counts as well as the project's.
   check: ({ services, projects, now }) =>
     projects.flatMap(({ project }): Candidate[] => {
       const tasks = services.tasks.summaries({ projectId: project.id });
-      return tasks.flatMap((epic): Candidate[] => {
-        const branch = epic.kind === "epic" ? epic.integrationBranch : null;
-        if (!branch || epic.archivedAt !== null) return [];
-        const children = tasks.filter((t) => t.parent?.id === epic.id);
-        const runs = new Map(children.map((c) => [c.id, services.autopilot.runsForTask(c.id, 200)]));
-        const runsOf = (id: string) => runs.get(id) ?? [];
-        const changes = services.links.prChanges(children.flatMap((c) => prsInto(c, branch).map((l) => l.id)));
-
-        const merges = children.flatMap((task) =>
-          prsInto(task, branch).flatMap((link): Candidate[] => {
-            const timing = { now: now.getTime(), headSince: headSeenSince(link, changes.get(link.id)) };
-            if (notMergeable(services, task, link, branch, runsOf(task.id), timing) !== null) return [];
-            const earlier = mergeRuns(runsOf(task.id), link.id, link.snapshot!.headOid!);
-            if (earlier.settled || earlier.count >= MERGE_ATTEMPTS) return [];
-            const data: MergeData = {
-              kind: "merge",
-              linkId: link.id,
-              headOid: link.snapshot!.headOid!,
-              branch,
-              number: link.ref.number,
-              attempt: earlier.count + 1,
-            };
-            return [
-              {
-                dedupeKey: earlier.runs === 0 ? earlier.key : `${earlier.key}:${earlier.runs + 1}`,
-                summary: `merge PR #${link.ref.number} of #${task.number} into ${branch}`,
-                taskId: task.id,
-                data,
-              },
-            ];
-          }),
-        );
-
-        // The epic's PR waits for something to collect: the first task merged into the branch.
-        const merged = children.flatMap((c) => prsInto(c, branch).filter((l) => l.snapshot?.state === "merged"));
-        const first = merged[0];
-        if (!first) return merges;
-        const own = epicPrLink(epic, branch);
-        if (own === "unpolled") return merges;
-        if (own && own.snapshot?.state !== "open" && own.snapshot?.state !== "draft") return merges;
-        const body = epicPrBody(epic, children, runsOf);
-        const data: EpicPrData = {
-          kind: own ? "update_pr" : "open_pr",
-          branch,
-          host: first.ref.host,
-          repo: first.ref.repo,
-          linkId: own ? own.id : null,
-          body,
-          ...(own
-            ? {}
-            : {
-                title: epicPrTitle(
-                  epic,
-                  merged.map((l) => l.snapshot?.title ?? ""),
-                ),
-              }),
-        };
-        const upkeep: Candidate = own
-          ? {
-              dedupeKey: `epic-pr-body:${own.id}:${hashOf(body)}`,
-              summary: `update the description of epic #${epic.number}'s PR #${own.ref.number}`,
-              taskId: epic.id,
-              data,
-            }
-          : {
-              // With the merged count, so a failed attempt is tried again after the next merge.
-              dedupeKey: `epic-pr:${epic.id}:${branch}:${merged.length}`,
-              summary: `open a draft PR from ${branch} for epic #${epic.number}`,
-              taskId: epic.id,
-              data,
-            };
-        return [...merges, upkeep];
-      });
+      return [...mainCandidates(services, tasks, now), ...intoEpicBranches(services, tasks, now)];
     }),
   act: async (candidate, { services, gitHosts, actor }): Promise<ActionResult> => {
-    const data = candidate.data as MergeData | EpicPrData;
-    if (data.kind === "merge") {
-      const task = services.tasks.summary(candidate.taskId!);
-      const link = task.links.find((l): l is PrLink => l.id === data.linkId && isPrLink(l));
-      if (!link) return { status: "skipped", summary: "The PR link was removed" };
-      // Re-checked on the latest state: a push, a new finding or the epic switching back since the check.
-      if (task.integrationBranch !== data.branch) {
-        return { status: "skipped", summary: `#${task.number}'s epic no longer delivers through ${data.branch}` };
-      }
-      if (link.snapshot?.headOid !== data.headOid) {
-        return { status: "skipped", summary: `PR #${data.number} moved on before the merge` };
-      }
-      const timing = {
-        now: Date.now(),
-        headSince: headSeenSince(link, services.links.prChanges([link.id]).get(link.id)),
-      };
-      const runs = services.autopilot.runsForTask(task.id, 200);
-      const reason = notMergeable(services, task, link, data.branch, runs, timing);
-      // Something changed since the check; the next pass looks again.
-      if (reason) return { status: "skipped", summary: `Didn't merge PR #${data.number}: ${reason}`, output: RECHECK };
-      let method: string;
-      try {
-        ({ method } = await gitHosts.mergeIntoEpicBranch(link, { base: data.branch, headOid: data.headOid }));
-      } catch (error) {
-        if (error instanceof MergeTargetError) {
-          return {
-            status: "failed",
-            error: `Autopilot refused to merge PR #${data.number}: ${error.message}`,
-            needsAttention: true,
-          };
+    const data = candidate.data as MergeData | EpicPrData | MainMergeData | MainHoldData;
+    if (data.kind === "main_merge") return mainMergeAction(services, gitHosts, candidate.taskId!, data, actor);
+    if (data.kind === "main_hold") return holdAction(services.tasks.summary(candidate.taskId!), data);
+    return actEpic(candidate, data, { services, gitHosts, actor });
+  },
+});
+
+/** Into epic branches' candidates in one project: task merges, then the epic's PR to open or describe. */
+function intoEpicBranches(services: Services, tasks: readonly TaskSummary[], now: Date): Candidate[] {
+  return tasks.flatMap((epic): Candidate[] => {
+    const branch = epic.kind === "epic" ? epic.integrationBranch : null;
+    if (!branch || epic.archivedAt !== null) return [];
+    const children = tasks.filter((t) => t.parent?.id === epic.id);
+    const runs = new Map(children.map((c) => [c.id, services.autopilot.runsForTask(c.id, 200)]));
+    const runsOf = (id: string) => runs.get(id) ?? [];
+    const changes = services.links.prChanges(children.flatMap((c) => prsInto(c, branch).map((l) => l.id)));
+
+    const merges = children.flatMap((task) =>
+      prsInto(task, branch).flatMap((link): Candidate[] => {
+        const timing = { now: now.getTime(), headSince: headSeenSince(link, changes.get(link.id)) };
+        if (notMergeable(services, task, link, branch, runsOf(task.id), timing) !== null) return [];
+        const earlier = mergeRuns(runsOf(task.id), link.id, link.snapshot!.headOid!);
+        if (earlier.settled || earlier.count >= MERGE_ATTEMPTS) return [];
+        const data: MergeData = {
+          kind: "merge",
+          linkId: link.id,
+          headOid: link.snapshot!.headOid!,
+          branch,
+          number: link.ref.number,
+          attempt: earlier.count + 1,
+        };
+        return [
+          {
+            dedupeKey: earlier.runs === 0 ? earlier.key : `${earlier.key}:${earlier.runs + 1}`,
+            summary: `merge PR #${link.ref.number} of #${task.number} into ${branch}`,
+            taskId: task.id,
+            data,
+          },
+        ];
+      }),
+    );
+
+    // The epic's PR waits for something to collect: the first task merged into the branch.
+    const merged = children.flatMap((c) => prsInto(c, branch).filter((l) => l.snapshot?.state === "merged"));
+    const first = merged[0];
+    if (!first) return merges;
+    const own = epicPrLink(epic, branch);
+    if (own === "unpolled") return merges;
+    if (own && own.snapshot?.state !== "open" && own.snapshot?.state !== "draft") return merges;
+    const body = epicPrBody(epic, children, runsOf);
+    const data: EpicPrData = {
+      kind: own ? "update_pr" : "open_pr",
+      branch,
+      host: first.ref.host,
+      repo: first.ref.repo,
+      linkId: own ? own.id : null,
+      body,
+      ...(own
+        ? {}
+        : {
+            title: epicPrTitle(
+              epic,
+              merged.map((l) => l.snapshot?.title ?? ""),
+            ),
+          }),
+    };
+    const upkeep: Candidate = own
+      ? {
+          dedupeKey: `epic-pr-body:${own.id}:${hashOf(body)}`,
+          summary: `update the description of epic #${epic.number}'s PR #${own.ref.number}`,
+          taskId: epic.id,
+          data,
         }
-        const message = messageOf(error);
-        // A race (another PR just merged into the branch, a push) or a network error may pass: try again next pass.
-        const passing =
-          (error instanceof AppError && error.code === "CONFLICT") ||
-          MERGE_RACE.test(message) ||
-          isTransientHostError(error);
-        if (passing && data.attempt < MERGE_ATTEMPTS) {
-          return {
-            status: "skipped",
-            summary: `Couldn't merge PR #${data.number} yet (try ${data.attempt} of ${MERGE_ATTEMPTS}): ${message}`,
-            output: RETRY,
-          };
-        }
-        // Branch rules wanting an approval, or tries used up: the user can still merge it by hand.
+      : {
+          // With the merged count, so a failed attempt is tried again after the next merge.
+          dedupeKey: `epic-pr:${epic.id}:${branch}:${merged.length}`,
+          summary: `open a draft PR from ${branch} for epic #${epic.number}`,
+          taskId: epic.id,
+          data,
+        };
+    return [...merges, upkeep];
+  });
+}
+
+/** Into epic branches' action: a task's merge into the branch, or the epic's PR opened or described. */
+async function actEpic(
+  candidate: Candidate,
+  data: MergeData | EpicPrData,
+  { services, gitHosts, actor }: { services: Services; gitHosts: GitHostActions; actor: string },
+): Promise<ActionResult> {
+  if (data.kind === "merge") {
+    const task = services.tasks.summary(candidate.taskId!);
+    const link = task.links.find((l): l is PrLink => l.id === data.linkId && isPrLink(l));
+    if (!link) return { status: "skipped", summary: "The PR link was removed" };
+    // Re-checked on the latest state: a push, a new finding or the epic switching back since the check.
+    if (task.integrationBranch !== data.branch) {
+      return { status: "skipped", summary: `#${task.number}'s epic no longer delivers through ${data.branch}` };
+    }
+    if (link.snapshot?.headOid !== data.headOid) {
+      return { status: "skipped", deferred: "head_moved", summary: `PR #${data.number} moved on before the merge` };
+    }
+    const timing = {
+      now: Date.now(),
+      headSince: headSeenSince(link, services.links.prChanges([link.id]).get(link.id)),
+    };
+    const runs = services.autopilot.runsForTask(task.id, 200);
+    const reason = notMergeable(services, task, link, data.branch, runs, timing);
+    // Something changed since the check; the next pass looks again.
+    if (reason) return { status: "skipped", summary: `Didn't merge PR #${data.number}: ${reason}`, output: RECHECK };
+    let method: string;
+    try {
+      ({ method } = await gitHosts.mergeIntoEpicBranch(link, { base: data.branch, headOid: data.headOid }));
+    } catch (error) {
+      if (error instanceof MergeTargetError) {
         return {
-          status: "skipped",
-          summary: `Ready to merge into the epic branch: GitHub didn't let Autopilot merge PR #${data.number} into ${data.branch} (${message}). Merge it yourself.`,
+          status: "failed",
+          error: `Autopilot refused to merge PR #${data.number}: ${error.message}`,
           needsAttention: true,
         };
       }
-      return { summary: `Merged PR #${data.number} into ${data.branch} (${method})` };
-    }
-
-    const epic = services.tasks.summary(candidate.taskId!);
-    if (epic.integrationBranch !== data.branch) {
-      return { status: "skipped", summary: `Epic #${epic.number} no longer delivers through ${data.branch}` };
-    }
-    if (data.kind === "open_pr") {
-      const pr = await gitHosts.ensureEpicPr({
-        host: data.host,
-        repo: data.repo,
-        head: data.branch,
-        title: data.title ?? `Epic #${epic.number}: ${epic.title}`,
-        body: data.body,
-      });
-      services.links.add(epic.id, { value: pr.url }, actor);
-      if (!pr.created) await gitHosts.setPrBody({ host: data.host, repo: data.repo, number: pr.number }, data.body);
+      const message = messageOf(error);
+      // A race (another PR just merged into the branch, a push) or a network error may pass: try again next pass.
+      const passing =
+        (error instanceof AppError && error.code === "CONFLICT") ||
+        MERGE_RACE.test(message) ||
+        isTransientHostError(error);
+      if (passing && data.attempt < MERGE_ATTEMPTS) {
+        return {
+          status: "skipped",
+          summary: `Couldn't merge PR #${data.number} yet (try ${data.attempt} of ${MERGE_ATTEMPTS}): ${message}`,
+          output: RETRY,
+        };
+      }
+      // Branch rules wanting an approval, or tries used up: the user can still merge it by hand.
       return {
-        summary: `${pr.created ? "Opened draft" : "Linked"} PR #${pr.number} from ${data.branch} for epic #${epic.number}`,
+        status: "skipped",
+        summary: `Ready to merge into the epic branch: GitHub didn't let Autopilot merge PR #${data.number} into ${data.branch} (${message}). Merge it yourself.`,
+        needsAttention: true,
       };
     }
-    const link = epic.links.find((l): l is PrLink => l.id === data.linkId && isPrLink(l));
-    if (!link) return { status: "skipped", summary: "The epic's PR link was removed" };
-    await gitHosts.setPrBody(link.ref, data.body);
-    return { summary: `Updated the description of PR #${link.ref.number}` };
-  },
-});
+    return { summary: `Merged PR #${data.number} into ${data.branch} (${method})` };
+  }
+
+  const epic = services.tasks.summary(candidate.taskId!);
+  if (epic.integrationBranch !== data.branch) {
+    return { status: "skipped", summary: `Epic #${epic.number} no longer delivers through ${data.branch}` };
+  }
+  if (data.kind === "open_pr") {
+    const pr = await gitHosts.ensureEpicPr({
+      host: data.host,
+      repo: data.repo,
+      head: data.branch,
+      title: data.title ?? `Epic #${epic.number}: ${epic.title}`,
+      body: data.body,
+    });
+    services.links.add(epic.id, { value: pr.url }, actor);
+    if (!pr.created) await gitHosts.setPrBody({ host: data.host, repo: data.repo, number: pr.number }, data.body);
+    return {
+      summary: `${pr.created ? "Opened draft" : "Linked"} PR #${pr.number} from ${data.branch} for epic #${epic.number}`,
+    };
+  }
+  const link = epic.links.find((l): l is PrLink => l.id === data.linkId && isPrLink(l));
+  if (!link) return { status: "skipped", summary: "The epic's PR link was removed" };
+  await gitHosts.setPrBody(link.ref, data.body);
+  return { summary: `Updated the description of PR #${link.ref.number}` };
+}

@@ -5,7 +5,7 @@ Board task: #177.
 Agents run with prompts and skills the user chose: the review and planning skills in Settings, custom automations'
 prompts and the skills those name. An agent that sees one of them mislead agents or waste their time can suggest a
 rewrite, with its reasons and evidence. The user sees a diff in Settings and accepts or rejects it. Nothing is
-written without the user. It is built for the improvement automation (#134), but any agent can use it.
+written without the user. It is built for the [Improve automations](#the-improve-automation) built-in, but any agent can use it.
 
 User-facing: [guide/settings.md](../guide/settings.md#suggested-changes).
 
@@ -85,6 +85,40 @@ listed below as history.
 
 Suggestions are backed up (`suggestions.json`), so a restore keeps the ones the user hasn't decided.
 
+### The Improve automation
+
+`improve_automations` (`apps/server/src/autopilot/automations/improveAutomations.ts`, #133) is the built-in agent
+that writes suggestions on a schedule. User-facing: [guide/autopilot.md](../guide/autopilot.md#improve-automations);
+how it runs as an automation: [autopilot.md](autopilot.md#automations).
+
+- **Weekly, per project.** `check` makes one candidate per project it is on in at the latest `weekday` + `time` slot
+  (`latestDue`), keyed `improve:<projectId>:<slot stamp>`. A slot before the setting last changed
+  (`settingChangedAt(automation, projectId)`) doesn't count, so switching it on never backfills, and a project where no
+  task changed and no other automation ran within `lookBackDays` is skipped, so an idle project costs nothing.
+- **The skill is in the prompt.** The built-in skill text (`BUILTIN_IMPROVE_SKILL_BODY`, `contracts/improveSkill.ts`)
+  goes into `improvePrompt`, so there is no file to install and no way to run without it. This replaced the shipped
+  "Improve prompts and skills" example (#134), which an agent could only follow if the user had imported it with its
+  skill, and which otherwise proposed nothing without saying so. A skill chosen in the `skill` field is read
+  (`readSkillBody`) and sent instead; when it can't be, the run fails (`status: failed`) with an error naming the
+  skill rather than running without rules.
+- **Tools.** Task-less, headless, read-only, `untrustedInput` + `boardTools`, like Orchestrate, with only the board
+  tools in `IMPROVE_BOARD_TOOLS`: reads, `get_session_transcript`, the three suggestion tools and `request_attention`.
+  Everything else is denied: `IMPROVE_DENIED_TOOLS` is Orchestrate's two lists (which `mcp.test.ts` keeps covering
+  every registered tool) minus the allowed ones, so a new tool is denied until placed. It has no `add_to_backlog`:
+  it reads transcripts and notes that agents and people wrote, and a task it created could be flagged for Autopilot.
+- **The limits.** The agent is told `maxSuggestions` and `targets`, but a tool can't count or filter, so after the run
+  (and also when it fails, times out or runs out of budget) `SuggestionsService.limitRun` holds it to them. The run's
+  board MCP config pins its actor (`RunnerRequest.boardActor`, sent as the actor header `boardMcpConfig` writes; the
+  MCP server records every write of a caller that sends it under that actor, whatever `actor` the agent passes) as
+  `improve-automations:<first 8 of the run id>`, and only the open suggestions under that actor are looked at, so
+  another project's run, a custom automation or the user's own session is never touched. It rejects, oldest first,
+  those for a kind of target the `targets` setting doesn't allow (`targetAllowed`) and those past the first `max`,
+  each with an `outcome` saying why (not a verdict of the user's). A rejected suggestion that had replaced the
+  target's open one (`suggest` supersedes it) gives that one back, if nothing else is open for the target. Its
+  `suggestion` notification has already been sent. The run's summary says how many it kept and dropped.
+- **The `improve` operation** (Deep tier by default) is the model's setting; `modelChoice`, `budgetUsd` and
+  `timeoutMinutes` are its runner options.
+
 ## Decisions
 
 - **The agent's text is untrusted.** Nothing is applied without the user's click, the whole change is shown first,
@@ -117,6 +151,8 @@ Suggestions are backed up (`suggestions.json`), so a restore keeps the ones the 
 | `apps/server/src/db/migrations/030_suggestions.sql`      | The `suggestions` table; a partial unique index keeps one open per target |
 | `apps/server/src/db/repos/suggestions.ts`                | Typed SQL                                                                 |
 | `apps/server/src/services/suggestions.ts`                | Targets, hashing, suggest, accept (with the built-in fork), reject       |
+| `apps/server/src/autopilot/automations/improveAutomations.ts` | The built-in weekly agent that writes suggestions |
+| `packages/contracts/src/improveSkill.ts`                 | Its skill text                                                            |
 | `apps/server/src/mcp/tools/suggestions.ts`               | `list_editable_prompts`, `get_editable_prompt`, `suggest_change`          |
 | `apps/server/src/http/routes/suggestions.ts`             | List, accept, reject                                                      |
 | `apps/web/src/components/settings/SuggestionsSection.tsx` | The Settings section                                                     |

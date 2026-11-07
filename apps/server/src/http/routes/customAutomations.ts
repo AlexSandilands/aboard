@@ -1,4 +1,5 @@
 import {
+  ApplyAutomationDraftInput,
   actionRunsCode,
   automationBundle,
   BUNDLE_SKILL_BODY_MAX,
@@ -96,6 +97,20 @@ export function registerCustomAutomationRoutes(app: Hono, { services, config }: 
   app.get(
     "/api/autopilot/drafts/:id",
     handle((c) => c.json(custom.getDraft(idParam(c)))),
+  );
+  // A draft that replaces an automation, applied in place. The same rails as an import: its scripts and skill run as the
+  // user, so only the board's page may apply one that has them.
+  app.post(
+    "/api/autopilot/drafts/:id/apply",
+    handle(async (c) => {
+      const input = await parseBody(c, ApplyAutomationDraftInput);
+      const { bundle } = custom.getDraft(idParam(c));
+      assertShellFromBrowser(c, bundle.action);
+      if (bundle.skill && input.installSkill && !c.req.header("origin")) {
+        throw new AppError("VALIDATION", "Skills can only be installed from the board's settings page");
+      }
+      return c.json(custom.applyDraft(idParam(c), input, (skill) => installSkill(config.userHome, skill)));
+    }),
   );
   app.delete(
     "/api/autopilot/drafts/:id",

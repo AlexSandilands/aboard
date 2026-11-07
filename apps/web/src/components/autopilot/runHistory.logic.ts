@@ -1,4 +1,9 @@
-import { KEPT_REASON_TEXT, type AutopilotRunFilter, type DeleteAutopilotRunsResult } from "@repo/contracts";
+import {
+  AutopilotRunOutcome,
+  KEPT_REASON_TEXT,
+  type AutopilotRunFilter,
+  type DeleteAutopilotRunsResult,
+} from "@repo/contracts";
 import { z } from "zod";
 
 /** The time presets of the history page's filter, in the order they're offered. `custom` takes `since` and `until`. */
@@ -17,6 +22,16 @@ const PRESET_MS: Record<"24h" | "7d" | "30d", number> = {
   "30d": 30 * 24 * 60 * 60_000,
 };
 
+/** The outcome chips of the history page, in the order they're offered; none is any outcome. */
+export const RUN_OUTCOMES: ReadonlyArray<{ value: AutopilotRunOutcome; label: string }> = [
+  { value: "failed", label: "Failed" },
+  { value: "succeeded", label: "Succeeded" },
+  { value: "deferred", label: "Deferred" },
+  { value: "skipped", label: "Skipped" },
+  { value: "preview", label: "Dry run" },
+  { value: "active", label: "Running" },
+];
+
 /** A calendar date as a date input holds it (YYYY-MM-DD) that is a real day. */
 const DateOnly = z.string().refine((value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)));
 
@@ -30,6 +45,8 @@ export const RunHistorySearch = z.object({
   since: DateOnly.optional().catch(undefined),
   /** With `range=custom`: the last day, included. */
   until: DateOnly.optional().catch(undefined),
+  /** None is any outcome. */
+  outcome: AutopilotRunOutcome.optional().catch(undefined),
   q: z.string().optional().catch(undefined),
 });
 export type RunHistorySearch = z.infer<typeof RunHistorySearch>;
@@ -53,6 +70,7 @@ export function runHistoryFilter(automation: string, search: RunHistorySearch, n
   } else if (search.range) {
     filter.since = new Date(now.getTime() - PRESET_MS[search.range]).toISOString();
   }
+  if (search.outcome) filter.outcome = search.outcome;
   const q = search.q?.trim();
   if (q) filter.q = q;
   return filter;
@@ -61,7 +79,7 @@ export function runHistoryFilter(automation: string, search: RunHistorySearch, n
 /** The query string of a history request: the filter, and the cursor of the page after what is loaded. */
 export function runHistoryParams(filter: AutopilotRunFilter, cursor?: string): URLSearchParams {
   const params = new URLSearchParams({ automation: filter.automation });
-  for (const key of ["projectId", "since", "until", "q"] as const) {
+  for (const key of ["projectId", "since", "until", "outcome", "q"] as const) {
     const value = filter[key];
     if (value) params.set(key, value);
   }
@@ -83,7 +101,7 @@ export function runsOfPages<T extends { id: string }>(pages: ReadonlyArray<{ run
 
 /** Whether a filter narrows anything beyond the automation. */
 export const isNarrowed = (search: RunHistorySearch): boolean =>
-  !!search.project || !!search.range || !!search.q?.trim();
+  !!search.project || !!search.range || !!search.outcome || !!search.q?.trim();
 
 /** "Orchestrate runs in Alpha from 3 Mar to 5 Mar matching "x"": what a delete-all would act on, for its dialog. */
 export function describeRunFilter(
@@ -91,7 +109,14 @@ export function describeRunFilter(
   projectTitle: string | null,
   search: RunHistorySearch,
 ): string {
-  const parts = [automationTitle ? `${automationTitle} runs` : "Runs of every automation"];
+  const outcome = RUN_OUTCOMES.find((o) => o.value === search.outcome)?.label.toLowerCase();
+  const parts = [
+    automationTitle
+      ? `${outcome ? `${outcome} ` : ""}${automationTitle} runs`
+      : outcome
+        ? `${outcome.charAt(0).toUpperCase()}${outcome.slice(1)} runs of every automation`
+        : "Runs of every automation",
+  ];
   if (projectTitle) parts.push(`in ${projectTitle}`);
   if (search.range === "custom") {
     if (search.since) parts.push(`from ${search.since}`);

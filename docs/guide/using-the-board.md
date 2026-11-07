@@ -138,14 +138,14 @@ or clear the tier from the dropdown there; picking one drops the planner's reaso
 
 ## Autopilot flag
 
-Each task has an **Autopilot** setting in the panel's Automation section: Default, On or Off. Autopilot only
-starts tasks you flag On, so Default never starts one. When Start planned tasks is switched on for a
+Each task has **Autopilot may** chips in the panel's Autopilot section: **start it**, **review it** and **merge it**.
+Autopilot only starts tasks you turn **start it** on for, so a task without it is never started. When Start planned tasks is switched on for a
 project, agents that plan a task ask you whether to flag it, and only set it after you answer. They can
 flag tasks but never change Autopilot's own settings.
 
 ## Priority
 
-Star a task on its card (the star shows when you hover it), choose **Mark as priority** in the panel's More menu, or turn on **Priority** in the panel's Automation section, and
+Star a task on its card (the star shows when you hover it), choose **Mark as priority** in the panel's More menu, or turn on **Priority** in the panel's Autopilot section, and
 it moves to a **Priority** lane at the top of the board, above every project, whatever you are filtering. The lane
 shows priority tasks from all projects in their usual columns, each with its project's name; drag a card between
 columns there to change its status (finished tasks go back to their own project), or onto its own project's lane to take it off the lane. Autopilot starts priority
@@ -161,8 +161,8 @@ To see only what is in progress, tick **In progress, all projects** in the filte
 
 ## Manual tasks
 
-Some work isn't code: asking for access, getting a sign-off, a call to make. Turn on **Manual task** in the task
-panel's Automation section, or with the switch under the description when you create a task from the command
+Some work isn't code: asking for access, getting a sign-off, a call to make. Turn on **For a person** in the task
+panel's Autopilot section, or with the switch under the description when you create a task from the command
 palette, and the card gets a **Manual** badge. A manual task needs no plan, so you can drag it to any column, and
 agents and Autopilot leave it alone: no hand-off menu, no review round, no Autopilot or auto-merge flag. It can
 still sit in an epic and block a code task, and Autopilot still tells you when finishing it unblocks one. Agents
@@ -214,7 +214,7 @@ Every open task has a hand-off menu. **Copy prompt** copies a ready-to-paste pro
 **New T3 Code thread…** starts a thread for the task directly.
 
 A task of an epic delivered through an integration branch (the branch button in the epic's panel; see
-[Merge into epic branch](autopilot.md#merge-into-epic-branch)) is handed off to start from that branch: the prompt
+[Merge ready PRs](autopilot.md#merge-ready-prs)) is handed off to start from that branch: the prompt
 says to open its pull request against it, and the T3 dialog opens on a new worktree from it.
 
 When Claude Code, Codex or Copilot CLI is installed and added in **Settings → Agents → Providers** (on your PATH, or at the path

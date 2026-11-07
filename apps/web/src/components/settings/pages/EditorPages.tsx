@@ -1,9 +1,9 @@
-import { AUTOMATION_EXAMPLES, AUTOPILOT_ALL_RUNS } from "@repo/contracts";
+import { AUTOMATION_EXAMPLES, AUTOMATION_RECIPES } from "@repo/contracts";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { CustomAutomationEditorForm } from "~/components/autopilot/CustomAutomationEditorForm";
 import { CustomAutomationImportForm } from "~/components/autopilot/CustomAutomationImportForm";
-import { automationTitle } from "~/components/autopilot/autopilot.logic";
+import { AutopilotTabPage } from "~/components/autopilot/AutopilotPage";
 import { emptyCustomForm, formFromCustom } from "~/components/autopilot/customAutomations.logic";
 import { RunHistory } from "~/components/autopilot/RunHistory";
 import { emptyRuleForm, formFromRule } from "~/components/recurring/recurring.logic";
@@ -11,12 +11,12 @@ import { RuleEditorForm } from "~/components/recurring/RuleEditorForm";
 import { TemplateEditorForm } from "~/components/templates/TemplateEditorForm";
 import { emptyForm, formFromTemplate } from "~/components/templates/templates.logic";
 import { useCustomAutomations } from "~/state/customAutomations";
-import { useAutopilotOverview, useBoard, useTemplates } from "~/state/queries";
+import { useBoard, useTemplates } from "~/state/queries";
 import { useRecurringRules } from "~/state/recurring";
 import { EditorPage } from "../EditorFrame";
 import { SettingsLink } from "../settingsLayout";
 import type { SettingsGroupId } from "../settingsNav.logic";
-import { FROM_SETTINGS_LIST, useLeaveEditor, useLeaveRunHistory } from "../settingsNavigation";
+import { FROM_SETTINGS_LIST, useLeaveEditor } from "../settingsNavigation";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
 
 /** "new" in an editor's URL stands for one not saved yet. */
@@ -105,7 +105,7 @@ export function CustomAutomationEditorPage() {
           onDone={back}
         />
       ) : customs.data || customs.error ? (
-        <EditorMessage back={{ to: "autopilot.custom", label: "Back to custom automations" }}>
+        <EditorMessage back={{ to: "autopilot.automations", label: "Back to automations" }}>
           {customs.error ? customs.error.message : "This automation no longer exists."}
         </EditorMessage>
       ) : (
@@ -115,16 +115,13 @@ export function CustomAutomationEditorPage() {
   );
 }
 
-/** Route component for `/settings/autopilot/runs/$automation`: the run history, filtered by the search params. */
+/** Route component for `/settings/autopilot/runs/$automation`: the Runs tab, filtered by the search params. */
 export function AutopilotRunsPage() {
   const { automation } = useParams({ from: "/_app/settings/autopilot/runs/$automation" });
   const search = useSearch({ from: "/_app/settings/autopilot/runs/$automation" });
   const navigate = useNavigate();
-  const leave = useLeaveRunHistory(automation);
-  const automations = useAutopilotOverview().data?.automations;
-  const title = automation === AUTOPILOT_ALL_RUNS ? "all automations" : automationTitle(automations ?? [], automation);
   return (
-    <EditorShell group="autopilot" label={`Run history: ${title}`}>
+    <AutopilotTabPage tab="runs">
       <RunHistory
         key={automation}
         automation={automation}
@@ -139,9 +136,17 @@ export function AutopilotRunsPage() {
             state: (prev) => prev,
           })
         }
-        onBack={leave}
+        onAutomation={(next) =>
+          void navigate({
+            to: "/settings/autopilot/runs/$automation",
+            params: { automation: next },
+            search: { ...search },
+            replace: true,
+            state: (prev) => prev,
+          })
+        }
       />
-    </EditorShell>
+    </AutopilotTabPage>
   );
 }
 
@@ -150,10 +155,16 @@ export function CustomAutomationImportPage() {
   const leaveEditor = useLeaveEditor();
   const navigate = useNavigate();
   const draftId = useSearch({ from: "/_app/settings/autopilot/custom/import", select: (search) => search.draft });
+  const recipeId = useSearch({ from: "/_app/settings/autopilot/custom/import", select: (search) => search.recipe });
+  const recipe = AUTOMATION_RECIPES.find((r) => r.id === recipeId);
   return (
-    <EditorShell group="autopilot" label={draftId ? "Review a draft" : "Import automation"}>
+    <EditorShell
+      group="autopilot"
+      label={draftId ? "Review a draft" : recipe ? `Recipe: ${recipe.title}` : "Import automation"}
+    >
       <CustomAutomationImportForm
         examples={AUTOMATION_EXAMPLES}
+        initial={recipe?.bundle}
         draftId={draftId}
         onCancel={() => leaveEditor("autopilot")}
         // Straight to the new automation: it comes in off, with its tools still to check.

@@ -1,4 +1,5 @@
 import type {
+  ApplyAutomationDraftInput,
   AutomationBundle,
   AutomationDraft,
   CreateCustomAutomationInput,
@@ -63,15 +64,6 @@ export const useExportCustomAutomation = () =>
 export const useDeleteCustomAutomation = () =>
   useCustomMutation((id: string) => api<void>(`/api/autopilot/custom/${enc(id)}`, { method: "DELETE" }));
 
-/** Automations agents drafted for the user to review and import, newest first. */
-export function useAutomationDrafts() {
-  return useQuery({
-    queryKey: queryKeys.automationDrafts,
-    queryFn: ({ signal }) => api<AutomationDraft[]>("/api/autopilot/drafts", { signal }),
-    staleTime: 0,
-  });
-}
-
 /** One draft; an error once it was imported, dismissed or expired. */
 export function useAutomationDraft(id: string | undefined) {
   return useQuery({
@@ -82,6 +74,12 @@ export function useAutomationDraft(id: string | undefined) {
     retry: false,
   });
 }
+
+/** Applies a draft that replaces a custom automation: it changes in place, keeping its id and history. */
+export const useApplyAutomationDraft = () =>
+  useCustomMutation(({ id, ...input }: ApplyAutomationDraftInput & { id: string }) =>
+    api<ImportedAutomation>(`/api/autopilot/drafts/${enc(id)}/apply`, { body: input }),
+  );
 
 export const useDismissAutomationDraft = () =>
   useCustomMutation((id: string) => api<void>(`/api/autopilot/drafts/${enc(id)}`, { method: "DELETE" }));

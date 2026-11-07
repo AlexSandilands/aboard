@@ -1,12 +1,15 @@
-import type { AutopilotAutomation, AutopilotRun, AutopilotScopeEntry, AutopilotStatus } from "@repo/contracts";
+import type { AutopilotAutomation, AutopilotRun, AutopilotStatus } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   AUTOPILOT_MODES,
   BOARD_MODES,
-  automationTitle,
   boardModeToSave,
   boardSummary,
   boardSwitchValue,
+  modeDescription,
+  previewHint,
+  restoreMode,
+  automationTitle,
   dismissableRun,
   entryFor,
   hasEpicAutomations,
@@ -15,9 +18,7 @@ import {
   epicPillState,
   fieldText,
   formatCost,
-  inheritLabel,
   isClockTime,
-  parentEntry,
   parseLimit,
   parseNumberField,
   pillState,
@@ -25,9 +26,9 @@ import {
   projectActiveRuns,
   runsSummary,
   runStatusLabel,
-  scopeRowModel,
   scheduledAgentRuns,
   scheduledAnswerOf,
+  summaryRun,
   taskActiveRun,
   withConfigValue,
 } from "./autopilot.logic";
@@ -81,8 +82,9 @@ describe("scopeAutomations", () => {
     { key: "unblock", epicScope: true },
     { key: "archive", epicScope: false },
     { key: "recurring", epicScope: false },
+    { key: "switchless", epicScope: true, alwaysOn: true },
   ];
-  it("lists every automation for the board and a project, and only those that apply to epics for an epic", () => {
+  it("leaves out an automation with no switch, and for an epic those that don't apply to epics", () => {
     expect(scopeAutomations(all, false).map((a) => a.key)).toEqual(["unblock", "archive", "recurring"]);
     expect(scopeAutomations(all, true).map((a) => a.key)).toEqual(["unblock"]);
   });
@@ -147,9 +149,9 @@ describe("active runs", () => {
 });
 
 describe("board switch", () => {
-  it("offers On and Off, without Inherit", () => {
-    expect(BOARD_MODES.map((mode) => mode.value)).toEqual(["on", "off"]);
-    expect(AUTOPILOT_MODES.map((mode) => mode.value)).toEqual(["inherit", "on", "off"]);
+  it("offers Off, Preview and On, without Inherit", () => {
+    expect(BOARD_MODES.map((mode) => mode.value)).toEqual(["off", "preview", "on"]);
+    expect(AUTOPILOT_MODES.map((mode) => mode.value)).toEqual(["inherit", "off", "preview", "on"]);
   });
 
   it("shows no row (inherit) as Off", () => {
@@ -167,79 +169,30 @@ describe("board switch", () => {
     expect(boardSummary("on")).toBe("On for the board");
     expect(boardSummary("off")).toBe("Off for the board");
     expect(boardSummary("inherit")).toBe("Off for the board");
+    expect(boardSummary("preview")).toBe("In Preview for the board");
   });
 });
 
-describe("inheritLabel", () => {
-  it("says what Inherit resolves to from the board's entry", () => {
-    expect(inheritLabel({ enabled: true, source: "board" })).toBe("Inherit (On from board)");
-    expect(inheritLabel({ enabled: false, source: "board" })).toBe("Inherit (Off from board)");
-  });
-
-  it("is off by default with no parent, while the board's entries load", () => {
-    expect(inheritLabel(null)).toBe("Inherit (Off by default)");
-    expect(inheritLabel({ enabled: false, source: "default" })).toBe("Inherit (Off by default)");
-  });
-
-  it("says what an epic inherits from its project's entry, which already resolves through the board", () => {
-    // The project turned it off; the board had it on.
-    const project = [{ automation: "a", enabled: false, source: "project" }] as AutopilotScopeEntry[];
-    expect(inheritLabel(parentEntry(project, "a"))).toBe("Inherit (Off from project)");
-    const fromBoard = [{ automation: "a", enabled: true, source: "board" }] as AutopilotScopeEntry[];
-    expect(inheritLabel(parentEntry(fromBoard, "a"))).toBe("Inherit (On from board)");
-  });
-
-  it("finds the board's entry for an automation", () => {
-    const entries = [{ automation: "a", enabled: true, source: "board" }] as AutopilotScopeEntry[];
-    expect(parentEntry(entries, "a")?.enabled).toBe(true);
-    expect(parentEntry(entries, "b")).toBeNull();
-    expect(parentEntry(undefined, "a")).toBeNull();
+describe("restoreMode", () => {
+  it("brings back the last on-mode, else Preview for one that never ran, else On", () => {
+    expect(restoreMode({ lastOnMode: "on" }, false)).toBe("on");
+    expect(restoreMode({ lastOnMode: "preview" }, true)).toBe("preview");
+    expect(restoreMode({ lastOnMode: null }, false)).toBe("preview");
+    expect(restoreMode({ lastOnMode: null }, true)).toBe("on");
   });
 });
 
-describe("scopeRowModel", () => {
-  it("fades an inherited switch and says where it comes from", () => {
-    expect(scopeRowModel({ mode: "inherit", enabled: true, source: "board" }, null, "project")).toEqual({
-      checked: true,
-      inherited: true,
-      nextMode: "off",
-      canToggle: true,
-      blocked: null,
-      note: "On, following the board",
-    });
-    expect(scopeRowModel({ mode: "inherit", enabled: false, source: "default" }, null, "project")).toMatchObject({
-      checked: false,
-      inherited: true,
-      nextMode: "on",
-      note: "Off by default",
-    });
+describe("Preview wording", () => {
+  it("says a check script still runs for real, and only where there is one", () => {
+    expect(modeDescription("preview", { needsAgent: true }, true)).toMatch(/check script still runs for real/);
+    expect(modeDescription("preview", { needsAgent: true }, false)).not.toMatch(/script/);
+    expect(modeDescription("on", { needsAgent: false }, false)).toMatch(/starts no agent/);
   });
 
-  it("follows the project for an epic, whatever the board says", () => {
-    const row = scopeRowModel({ mode: "inherit", enabled: false, source: "project" }, null, "epic");
-    expect(row.note).toBe("Off, following the project");
-  });
-
-  it("shows a switch set here as solid, with its own state", () => {
-    expect(scopeRowModel({ mode: "on", enabled: true, source: "project" }, null, "project")).toMatchObject({
-      checked: true,
-      inherited: false,
-      nextMode: "off",
-      note: "On for this project",
-    });
-    expect(scopeRowModel({ mode: "off", enabled: false, source: "epic" }, null, "epic")).toMatchObject({
-      checked: false,
-      inherited: false,
-      nextMode: "on",
-      note: "Off for this epic",
-    });
-  });
-
-  it("won't turn a blocked automation on, but turns it off", () => {
-    const off = scopeRowModel({ mode: "inherit", enabled: false, source: "default" }, "Pick a tool", "project");
-    expect(off).toMatchObject({ canToggle: false, blocked: "Pick a tool" });
-    const on = scopeRowModel({ mode: "on", enabled: true, source: "project" }, "Pick a tool", "project");
-    expect(on.canToggle).toBe(true);
+  it("counts the week's would-be runs", () => {
+    expect(previewHint(1)).toBe("Would have run once this week. Did those look right?");
+    expect(previewHint(3)).toBe("Would have run 3 times this week. Did those look right?");
+    expect(previewHint(0)).toMatch(/^Nothing for it to do yet/);
   });
 });
 
@@ -250,6 +203,8 @@ describe("config forms", () => {
     description: "",
     needsAgent: false,
     epicScope: true,
+    alwaysOn: false,
+    group: "yours",
     blocked: null,
     needs: null,
     fields: [],
@@ -311,8 +266,9 @@ describe("parseLimit", () => {
 
 describe("runs", () => {
   it("labels statuses, telling a dry run from a skip", () => {
-    expect(runStatusLabel({ status: "skipped", dryRun: true })).toBe("Dry run");
+    expect(runStatusLabel({ status: "skipped", dryRun: true })).toBe("Preview");
     expect(runStatusLabel({ status: "skipped", dryRun: false })).toBe("Skipped");
+    expect(runStatusLabel({ status: "skipped", dryRun: false, deferred: "head_moved" })).toBe("Deferred: head moved");
     expect(runStatusLabel({ status: "succeeded", dryRun: false })).toBe("Done");
     expect(runStatusLabel({ status: "failed", dryRun: false, dedupeKey: "retried:r1:review:pr:l1:abc" })).toBe(
       "Failed, retried",
@@ -327,9 +283,10 @@ describe("runs", () => {
     expect(formatCost(0)).toBe("$0.00");
   });
 
-  it("falls back to the key for an automation that is no longer in the catalogue", () => {
+  it("names an automation that is no longer in the catalogue plainly", () => {
     expect(automationTitle([{ key: "a", title: "Archive done" }], "a")).toBe("Archive done");
-    expect(automationTitle([], "gone")).toBe("gone");
+    expect(automationTitle([], "fix_pr_findings")).toBe("Fix PR findings");
+    expect(automationTitle([], "gone_away")).toBe("Gone away");
   });
 
   it("summarizes a task's runs", () => {
@@ -371,6 +328,39 @@ describe("dismissableRun", () => {
     ];
     expect(dismissableRun(runs, flagged)).toBeNull();
     expect(dismissableRun([...runs, flaggedRun("live")], flagged)?.id).toBe("live");
+  });
+});
+
+describe("summaryRun", () => {
+  const flaggedRun = (id: string, patch: Partial<AutopilotRun> = {}) => ({
+    id,
+    needsAttention: true,
+    dismissedAt: null,
+    dryRun: false,
+    ...patch,
+  });
+  const plain = (id: string) => flaggedRun(id, { needsAttention: false });
+  const flagged = [{ kind: "autopilot" }];
+
+  it("shows the run the Dismiss belongs to as flagged, ahead of a newer one", () => {
+    const shown = summaryRun([plain("newest"), flaggedRun("old")], flagged);
+    expect(shown.run?.id).toBe("old");
+    expect(shown.flagged).toBe(true);
+  });
+
+  it("falls back to the newest run when the task no longer carries the flag", () => {
+    const shown = summaryRun([plain("newest"), flaggedRun("stale")], []);
+    expect(shown.run?.id).toBe("newest");
+    expect(shown.flagged).toBe(false);
+  });
+
+  it("does not flag a dry or dismissed run, which has no Dismiss", () => {
+    const runs = [flaggedRun("dry", { dryRun: true }), flaggedRun("done", { dismissedAt: "2026-10-18T00:00:00.000Z" })];
+    expect(summaryRun(runs, flagged)).toEqual({ run: runs[0], flagged: false });
+  });
+
+  it("has no run when there are none", () => {
+    expect(summaryRun([], flagged)).toEqual({ run: undefined, flagged: false });
   });
 });
 

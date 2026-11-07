@@ -1,10 +1,12 @@
-import { AUTOPILOT_ACTOR, type AutopilotEngineSettings, type AutopilotRun } from "@repo/contracts";
+import { AUTOPILOT_ACTOR, type AutopilotEngineSettings, type AutopilotRun, type Project } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
+import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
 import { NO_GIT_HOSTS, type GitHostActions } from "../integrations/gitHosts.ts";
 import { messageOf } from "../integrations/util.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
 import { agentHold } from "./limits.ts";
+import { sendReminders } from "./reminders.ts";
 import {
   NO_RUNNER,
   type Automation,
@@ -48,6 +50,10 @@ export function createAutopilotEngine(deps: {
   bus: EventBus;
   runner?: Runner;
   gitHosts?: GitHostActions;
+  /** Git for actions that read a project's repository (Review PRs classifying a head move). */
+  runGit?: RunGit;
+  /** The repository a project's folder pushes to (its `origin`), for checks that read the git host. */
+  repoOf?: (project: Project) => Promise<{ host: string; repo: string } | null>;
   /** Where the user opens the board; actions put it in agent prompts. */
   boardUrl?: () => string;
   /** A run ended, so the board can show its headless session as finished or failed at once. */
@@ -59,6 +65,7 @@ export function createAutopilotEngine(deps: {
 }): AutopilotEngine {
   const runner = deps.runner ?? NO_RUNNER;
   const gitHosts = deps.gitHosts ?? NO_GIT_HOSTS;
+  const runGit = deps.runGit ?? defaultRunGit;
   const now = deps.now ?? (() => new Date());
   const log = deps.log ?? console;
   const inFlight = new Set<Promise<void>>();
@@ -114,6 +121,7 @@ export function createAutopilotEngine(deps: {
           services: s,
           runner: { start: (request) => runner.start(request, update) },
           gitHosts,
+          runGit,
           engine: s.autopilot.engine(),
           boardUrl: deps.boardUrl?.() ?? DEFAULT_BOARD_URL,
           config,
@@ -160,16 +168,28 @@ export function createAutopilotEngine(deps: {
     // A project is looked at where it is on, and where one of its epics is: the check returns every task of the
     // project there, and the per-task resolve below keeps the ones the epic's setting reaches.
     const withEpicOn = s.autopilot.projectsWithEpicOn(automation);
+    const withEpicLive = s.autopilot.projectsWithEpicOn(automation, true);
     const projects = s.projects
       .list()
       .map((project) => ({ project, resolved: s.autopilot.resolve(automation, project.id) }))
       .flatMap(({ project, resolved }) =>
-        (resolved.enabled || withEpicOn.has(project.id)) && resolved.config
-          ? [{ project, config: resolved.config }]
+        (resolved.enabled || withEpicOn.has(project.id)) &&
+        resolved.config &&
+        // Paused there after failing in a row: not even its check runs (a custom one's script) until resumed.
+        !s.autopilot.isAutoPaused(automation.key, project.id)
+          ? [
+              {
+                project,
+                config: resolved.config,
+                dryRun: engine.dryRun || !((resolved.enabled && !resolved.preview) || withEpicLive.has(project.id)),
+              },
+            ]
           : [],
       );
     const boardConfig = board.enabled ? board.config : null;
     if (projects.length === 0 && !boardConfig) return;
+    // A check that is only previewing anywhere it looks hears so, as it would under Preview everything.
+    const allDry = projects.every((p) => p.dryRun) && (!boardConfig || engine.dryRun || board.preview);
 
     // Settings are read once per project and epic, not per candidate: a Done column can hold many.
     const resolutions = new Map<string, ReturnType<typeof s.autopilot.resolve>>();
@@ -185,12 +205,14 @@ export function createAutopilotEngine(deps: {
 
     const candidates = await automation.check({
       services: s,
-      engine,
+      engine: allDry && !engine.dryRun ? { ...engine, dryRun: true } : engine,
       now: at,
       projects,
       board: boardConfig,
       clock: now,
       wake: schedule,
+      gitHosts,
+      repoOf: deps.repoOf ?? (() => Promise.resolve(null)),
     });
     for (const found of candidates) {
       let candidate = found;
@@ -208,12 +230,14 @@ export function createAutopilotEngine(deps: {
         epicId = task.kind === "epic" ? found.taskId! : (task.parent?.id ?? null);
       }
       const projectId = candidate.projectId ?? null;
+      if (projectId && s.autopilot.isAutoPaused(automation.key, projectId)) continue;
       // Only where the automation is on: a check may return more than it was asked for.
       const resolved = projectId ? resolveFor(projectId, epicId) : board;
       const config = resolved.enabled ? resolved.config : null;
       if (!config) continue;
       if (s.autopilot.status().paused) return;
-      if (engine.dryRun) {
+      // Preview everything, or Preview where this candidate's task (or project, or the board) resolves.
+      if (engine.dryRun || resolved.preview) {
         if (!s.autopilot.hasRun(automation.key, candidate.dedupeKey, true)) {
           self(() => s.autopilot.record({ automation: automation.key, candidate, dryRun: true }));
         }
@@ -234,9 +258,16 @@ export function createAutopilotEngine(deps: {
 
   const runPass = async (): Promise<void> => {
     const s = deps.services();
+    const at = now();
+    // Reminders only tell the user something, so Pause all doesn't hold them back (notifications.ts has quiet hours).
+    // Dry run does: it promises to change nothing, and a reminder sends a notification and writes a note.
+    try {
+      if (!s.autopilot.engine().dryRun) self(() => sendReminders(s, at));
+    } catch (error) {
+      log.warn(`[autopilot] reminders failed: ${messageOf(error)}`);
+    }
     if (s.autopilot.status().paused) return;
     const engine = s.autopilot.engine();
-    const at = now();
     for (const automation of s.autopilot.automations()) {
       await runAutomation(s, automation, engine, at).catch((error: unknown) => {
         log.warn(`[autopilot] ${automation.key} failed: ${messageOf(error)}`);

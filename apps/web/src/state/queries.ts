@@ -3,6 +3,7 @@ import type {
   AgentCliStatus,
   AgentModels,
   AppSettings,
+  AutopilotModeRow,
   AutopilotOverview,
   AutopilotActiveRun,
   AutopilotRun,
@@ -33,7 +34,7 @@ import type {
   TaskTemplate,
   ProvidersStatus,
 } from "@repo/contracts";
-import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect } from "react";
 import { taskActiveRun } from "~/components/autopilot/autopilot.logic";
 import { projectHasOrchestrateWork } from "~/components/autopilot/orchestrate.logic";
@@ -70,6 +71,8 @@ export const queryKeys = {
   autopilotScopeAll: ["autopilotScope"] as const,
   /** The board scope when `projectId` is null. */
   autopilotScope: (projectId: string | null) => ["autopilotScope", projectId] as const,
+  /** Every switch that is set at any scope; under the scope prefix so each autopilot change refreshes it. */
+  autopilotModes: ["autopilotScope", "modes"] as const,
   /** An epic's scope, under its project's. */
   autopilotEpicScope: (projectId: string, epicId: string) => ["autopilotScope", projectId, epicId] as const,
   /** Every runs query, for invalidation. */
@@ -95,6 +98,9 @@ export const queryKeys = {
   suggestions: ["suggestions"] as const,
 };
 
+/** Marks a Where it runs save in flight, so the event stream doesn't refetch the switches between its writes. */
+export const WHERE_MUTATION_KEY = ["autopilotWhere"] as const;
+
 export type AutopilotRunsScope = { taskId: string } | { projectId: string };
 
 /** Pause, engine limits and the automation catalogue. Re-read when a settings page or popover opens. */
@@ -116,6 +122,31 @@ export function useAutopilotScope(projectId: string | null, enabled = true) {
         projectId ? `/api/autopilot/projects/${encodeURIComponent(projectId)}` : "/api/autopilot/board",
         { signal },
       ),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Every listed project's automations at once, for where each automation is on in Settings → Autopilot. Shares its
+ * cache with `useAutopilotScope`.
+ */
+export function useAutopilotProjectScopes(projectIds: readonly string[]) {
+  return useQueries({
+    queries: projectIds.map((projectId) => ({
+      queryKey: queryKeys.autopilotScope(projectId),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        api<AutopilotScopeEntry[]>(`/api/autopilot/projects/${encodeURIComponent(projectId)}`, { signal }),
+      staleTime: 30_000,
+    })),
+  });
+}
+
+/** Every switch that is set at any scope (board, projects, epics), for the Where it runs widget. One read, not one per scope. */
+export function useAutopilotModes(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.autopilotModes,
+    queryFn: ({ signal }) => api<AutopilotModeRow[]>("/api/autopilot/modes", { signal }),
     enabled,
     staleTime: 30_000,
   });
@@ -590,7 +621,13 @@ export function useBoardEvents() {
       }
       // Also sent when a switch or config changes, so another window's edit refreshes the lanes' scopes.
       if (event.type === "autopilot.changed") {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
+        // Each write of a Where it runs edit publishes this; refetching the switches between them would show the
+        // edit half done. The edit refetches them once it has saved every write.
+        const whereBusy = queryClient.isMutating({ mutationKey: WHERE_MUTATION_KEY }) > 0;
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.autopilotScopeAll,
+          predicate: (query) => !(whereBusy && query.queryKey[1] === "modes"),
+        });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotOrchestrateAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });

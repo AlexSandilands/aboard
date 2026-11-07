@@ -1,0 +1,159 @@
+import type { AutopilotAutomation, AutopilotScopeEntry } from "@repo/contracts";
+import { describe, expect, it } from "vitest";
+import {
+  advancedChanged,
+  advancedFieldNames,
+  agentFieldsTitle,
+  agentSummary,
+  automationReach,
+  groupAutomations,
+  isOffEverywhere,
+  lastRunText,
+  rowSubline,
+  selectedAutomation,
+  splitAgentFields,
+  statusLine,
+  projectsStatus,
+  whereText,
+} from "./automationList.logic";
+
+const entry = (automation: string, enabled: boolean): AutopilotScopeEntry => ({
+  automation,
+  mode: "inherit",
+  config: {},
+  lastOnMode: null,
+  enabled,
+  preview: false,
+  source: enabled ? "board" : "default",
+  effectiveConfig: {},
+});
+
+describe("groupAutomations", () => {
+  it("lists the groups in order, keeps the catalogue's order inside each and leaves out empty ones", () => {
+    const item = (key: string, group: AutopilotAutomation["group"]) => ({ automation: { key, group } });
+    const groups = groupAutomations([
+      item("archive", "upkeep"),
+      item("custom:1", "yours"),
+      item("start", "ship"),
+      item("digest", "upkeep"),
+    ]);
+    expect(groups.map((g) => [g.label, g.items.map((i) => i.automation.key)])).toEqual([
+      ["Ship work", ["start"]],
+      ["Upkeep", ["archive", "digest"]],
+      ["Yours", ["custom:1"]],
+    ]);
+  });
+});
+
+describe("where an automation is on", () => {
+  const projects = (on: boolean[]) => on.map((enabled, i) => ({ title: `p${i + 1}`, entries: [entry("a", enabled)] }));
+
+  it("names the projects it is on in, or every project", () => {
+    expect(whereText(automationReach("a", entry("a", true), projects([true, true, true])))).toBe("every project");
+    expect(whereText(automationReach("a", entry("a", false), projects([true, false, false])))).toBe("p1");
+    expect(whereText(automationReach("a", entry("a", false), projects([true, true, true, true, false])))).toBe(
+      "p1, p2 +2",
+    );
+  });
+
+  it("names the projects it only previews apart from those it runs in", () => {
+    const preview = (title: string): { title: string; entries: AutopilotScopeEntry[] } => ({
+      title,
+      entries: [{ ...entry("a", true), preview: true }],
+    });
+    const reach = automationReach("a", entry("a", true), [...projects([true]), preview("docs")]);
+    expect(reach.previewProjects).toEqual(["docs"]);
+    expect(projectsStatus(reach)).toBe("On in p1 · Preview in docs");
+    expect(projectsStatus({ projects: ["docs"], previewProjects: ["docs"] })).toBe("Preview in docs");
+    expect(projectsStatus({ projects: [], previewProjects: [] })).toBe("On in no project");
+  });
+
+  it("dims a row only when the automation is off on the board and in every project", () => {
+    expect(isOffEverywhere(automationReach("a", entry("a", false), projects([false, false])))).toBe(true);
+    // Switched on for one project only: not off, though the board's switch is.
+    expect(isOffEverywhere(automationReach("a", entry("a", false), projects([false, true])))).toBe(false);
+    // On for the board with no project yet.
+    expect(isOffEverywhere(automationReach("a", entry("a", true), []))).toBe(false);
+    // A project whose scope is still loading counts as off.
+    expect(isOffEverywhere(automationReach("a", undefined, [{ title: "p", entries: undefined }]))).toBe(true);
+  });
+
+  it("says Off under a dimmed row, and where and the last run under one that is on", () => {
+    const now = Date.parse("2026-11-07T12:00:00Z");
+    const off = automationReach("a", entry("a", false), projects([false]));
+    expect(rowSubline(off, undefined, now)).toBe("Off");
+    expect(statusLine(off)).toBe("Off");
+    const on = automationReach("a", entry("a", true), projects([true, true]));
+    expect(rowSubline(on, { automation: "a", status: "failed", at: "2026-11-07T11:58:00Z" }, now)).toBe(
+      "every project · ✗ 2m",
+    );
+    expect(rowSubline(on, undefined, now)).toBe("every project · no runs yet");
+    expect(statusLine(on)).toBe("On · every project");
+    expect(lastRunText({ automation: "a", status: "succeeded", at: "2026-11-07T09:00:00Z" }, now)).toBe("✓ 3h");
+  });
+});
+
+describe("advancedChanged", () => {
+  const automation = {
+    fields: [
+      { key: "days", label: "Days", kind: "number" as const, tier: "essential" as const },
+      { key: "budget", label: "Budget", kind: "number" as const },
+      { key: "skill", label: "Skill", kind: "skill" as const, tier: "advanced" as const },
+    ],
+    defaults: { days: 14, budget: 5, skill: { source: "builtin" } },
+  };
+
+  it("is set when an advanced value isn't its default", () => {
+    expect(advancedChanged(automation, { days: 14, budget: 5, skill: { source: "builtin" } })).toBe(false);
+    expect(advancedChanged(automation, { budget: 7 })).toBe(true);
+    expect(advancedChanged(automation, { skill: { source: "global", name: "mine" } })).toBe(true);
+  });
+
+  it("ignores essential fields, which show anyway", () => {
+    expect(advancedChanged(automation, { days: 30 })).toBe(false);
+  });
+});
+
+describe("selectedAutomation", () => {
+  it("picks the one asked for when it exists, else the first", () => {
+    expect(selectedAutomation(["a", "b"], "b")).toBe("b");
+    expect(selectedAutomation(["a", "b"], "gone")).toBe("a");
+    expect(selectedAutomation(["a", "b"], undefined)).toBe("a");
+    expect(selectedAutomation([], "a")).toBeNull();
+  });
+});
+
+describe("agent fields", () => {
+  const fields = [
+    { key: "skill", label: "Review skill", kind: "skill" as const },
+    { key: "runner", label: "Runner", kind: "select" as const },
+    { key: "modelChoice", label: "Model", kind: "model" as const },
+    { key: "budgetUsd", label: "Budget", kind: "number" as const },
+    { key: "timeoutMinutes", label: "Timeout", kind: "number" as const },
+  ];
+
+  it("splits out the model and the fields the board's agent defaults cover", () => {
+    const { model, runner, rest } = splitAgentFields(fields);
+    expect(model?.key).toBe("modelChoice");
+    expect(runner.map((f) => f.key)).toEqual(["runner", "budgetUsd", "timeoutMinutes"]);
+    expect(rest.map((f) => f.key)).toEqual(["skill"]);
+    expect(advancedFieldNames(fields)).toEqual(["Agent", "Review skill"]);
+    expect(advancedFieldNames([fields[0]!])).toEqual(["Review skill"]);
+  });
+
+  it("titles the line by the fields it has", () => {
+    expect(agentFieldsTitle(splitAgentFields(fields).runner)).toBe("Runner, budget and timeout");
+    expect(agentFieldsTitle([{ key: "budgetUsd" }, { key: "timeoutMinutes" }])).toBe("Budget and timeout");
+    expect(agentFieldsTitle([{ key: "budgetUsd" }])).toBe("Budget");
+  });
+
+  it("summarises the effective values, and T3 access only when it isn't T3's default", () => {
+    const keys = [{ key: "runner" }, { key: "budgetUsd" }, { key: "timeoutMinutes" }, { key: "t3Access" }];
+    expect(agentSummary(keys, { runner: "auto", budgetUsd: 5, timeoutMinutes: 60, t3Access: "default" })).toBe(
+      "Auto · $5 · 60 min",
+    );
+    expect(agentSummary(keys, { runner: "headless", budgetUsd: 2.5, timeoutMinutes: 20, t3Access: "auto" })).toMatch(
+      /^Headless · \$2\.50 · 20 min · T3: /,
+    );
+  });
+});
