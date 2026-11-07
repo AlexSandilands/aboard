@@ -89,6 +89,9 @@ export interface SuggestionsService {
   ): { kept: Suggestion[]; dropped: Suggestion[] };
 }
 
+/** What a suggestion replaced by a newer one for its target records. */
+const SUPERSEDED_OUTCOME = "Replaced by a newer suggestion for the same target.";
+
 export function createSuggestionsService(
   core: Core,
   deps: {
@@ -338,9 +341,7 @@ export function createSuggestionsService(
       return core.write((fx) => {
         const now = nowIso();
         const previous = repos.suggestions.openFor(prompt.key);
-        const replaced = previous
-          ? close(previous, "superseded", actor, "Replaced by a newer suggestion for the same target.")
-          : null;
+        const replaced = previous ? close(previous, "superseded", actor, SUPERSEDED_OUTCOME) : null;
         const suggestion: Suggestion = {
           id: randomUUID(),
           targetKey: prompt.key,
@@ -419,8 +420,28 @@ export function createSuggestionsService(
           : kept.length >= max
             ? `Over the limit of ${max} suggestions for one run, so it was dropped.`
             : null;
-        if (why) dropped.push(close(s, "rejected", by, why));
-        else kept.push(s);
+        if (!why) {
+          kept.push(s);
+          continue;
+        }
+        core.write((fx) => {
+          dropped.push(close(s, "rejected", by, why));
+          // It had replaced the target's open suggestion, which was fine as it stood: bring that one back, if
+          // nothing else is open for the target now.
+          const replaced = repos.suggestions
+            .forTarget(s.targetKey, 10)
+            .find((o) => o.status === "superseded" && o.resolvedBy === runActor && o.outcome === SUPERSEDED_OUTCOME);
+          if (replaced && !repos.suggestions.openFor(s.targetKey)) {
+            repos.suggestions.update({
+              ...replaced,
+              status: "open",
+              resolvedAt: null,
+              resolvedBy: null,
+              outcome: null,
+            });
+            fx.suggestions();
+          }
+        });
       }
       return { kept, dropped };
     },

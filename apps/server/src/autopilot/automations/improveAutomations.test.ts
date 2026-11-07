@@ -18,8 +18,8 @@ const DAY_MS = 24 * 3_600_000;
 /** `onRun` is what the fake agent does while it runs, such as writing suggestions. */
 type Services = ReturnType<typeof createTestHarness>["services"];
 
-/** The actor the prompt tells the agent to pass to suggest_change. */
-const actorIn = (request: RunnerRequest): string => /actor "([^"]+)"/.exec(request.prompt)![1]!;
+/** What the board records the run's writes under: the runner pins it in the MCP config. */
+const actorIn = (request: RunnerRequest): string => request.boardActor!;
 
 function setup(onRun: (s: Services, request: RunnerRequest) => void = () => {}, fail = false) {
   const home = mkdtempSync(join(tmpdir(), "improve-home-"));
@@ -234,5 +234,20 @@ describe("Improve automations", () => {
     setLater(10 * DAY_MS);
     await pass();
     expect(requests).toHaveLength(0);
+  });
+
+  it("brings back the suggestion a dropped one had replaced", async () => {
+    const made: Suggestion[] = [];
+    const { s, withTask, turnOn, pass } = setup((services, request) => {
+      for (const target of ["builtin:review", "builtin:plan"])
+        made.push(suggestFor(services, target, actorIn(request)));
+    });
+    // Someone else's open suggestion for the second target, which the run's later one replaces.
+    const earlier = suggestFor(s, "builtin:plan", "user-session");
+    withTask();
+    turnOn({ maxSuggestions: 1 });
+    await pass();
+    expect(s.suggestions.get(made[1]!.id).status).toBe("rejected");
+    expect(s.suggestions.get(earlier.id)).toMatchObject({ status: "open", resolvedBy: null, outcome: null });
   });
 });

@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { BRAND } from "@repo/contracts";
+import { ACTOR_HEADER, BRAND } from "@repo/contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { AppContext } from "../app.ts";
@@ -61,10 +61,14 @@ function actorFromUserAgent(userAgent: string | null): string | undefined {
 function createMcpServer(ctx: AppContext, request: Request): McpServer {
   const server = new McpServer({ name: BRAND.id, version: "0.1.0" }, { instructions: INSTRUCTIONS });
   const fallbackActor = actorFromUserAgent(request.headers.get("user-agent"));
+  // A caller that sends the actor header is pinned to it, whatever `actor` argument its agent passes: Autopilot's runs
+  // use it so what a run writes can be told from what anyone else writes.
+  const pinnedActor = request.headers.get(ACTOR_HEADER)?.trim().slice(0, 64) || undefined;
   const tc: ToolContext = {
     ctx,
     services: ctx.services,
-    actor: (explicit) => explicit?.trim() || server.server.getClientVersion()?.name || fallbackActor || "agent",
+    actor: (explicit) =>
+      pinnedActor || explicit?.trim() || server.server.getClientVersion()?.name || fallbackActor || "agent",
     client: () => server.server.getClientVersion()?.name || fallbackActor,
   };
   registerReadTools(server, tc);

@@ -107,13 +107,15 @@ how it runs as an automation: [autopilot.md](autopilot.md#automations).
   every registered tool) minus the allowed ones, so a new tool is denied until placed. It has no `add_to_backlog`:
   it reads transcripts and notes that agents and people wrote, and a task it created could be flagged for Autopilot.
 - **The limits.** The agent is told `maxSuggestions` and `targets`, but a tool can't count or filter, so after the run
-  (and also when it fails, times out or runs out of budget) `SuggestionsService.limitRun` holds it to them. The prompt
-  has the agent pass `actor` `improve-automations:<first 8 of the run id>` to `suggest_change`, and only the open
-  suggestions under that actor are looked at, so another project's run, a custom automation or the user's own
-  session is never touched. It rejects, oldest first, those for a kind of target the `targets` setting doesn't allow
-  (`targetAllowed`) and those past the first `max`, each with an `outcome` saying why (not a verdict of the user's).
-  The run's summary says how many it kept and dropped. An agent that doesn't pass the actor escapes the count, which
-  fails open on the cap but never rejects what isn't the run's.
+  (and also when it fails, times out or runs out of budget) `SuggestionsService.limitRun` holds it to them. The run's
+  board MCP config pins its actor (`RunnerRequest.boardActor`, sent as the actor header `boardMcpConfig` writes; the
+  MCP server records every write of a caller that sends it under that actor, whatever `actor` the agent passes) as
+  `improve-automations:<first 8 of the run id>`, and only the open suggestions under that actor are looked at, so
+  another project's run, a custom automation or the user's own session is never touched. It rejects, oldest first,
+  those for a kind of target the `targets` setting doesn't allow (`targetAllowed`) and those past the first `max`,
+  each with an `outcome` saying why (not a verdict of the user's). A rejected suggestion that had replaced the
+  target's open one (`suggest` supersedes it) gives that one back, if nothing else is open for the target. Its
+  `suggestion` notification has already been sent. The run's summary says how many it kept and dropped.
 - **The `improve` operation** (Deep tier by default) is the model's setting; `modelChoice`, `budgetUsd` and
   `timeoutMinutes` are its runner options.
 

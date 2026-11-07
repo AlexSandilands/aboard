@@ -628,7 +628,7 @@ You are running unattended as ${BRAND.name} Autopilot, with no task and no workt
         const board = deps.boardMcp?.();
         if (!board) throw new Error("The board's MCP endpoint isn't known to the runner");
         mcpConfig = join(mcpDir, "mcp.json");
-        await writeFile(mcpConfig, boardMcpConfig(board.url, board.token), { mode: 0o600 });
+        await writeFile(mcpConfig, boardMcpConfig(board.url, board.token, request.boardActor), { mode: 0o600 });
       }
       // No task to link the session to.
       const { outcome, sessionId } = await runOnDriver(
