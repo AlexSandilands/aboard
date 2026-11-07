@@ -125,6 +125,11 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
    */
   epicScope?: boolean;
   /**
+   * It has no switch at any scope: every project is on for it, and the user's own rules (Recurring tasks) decide what
+   * runs. The service refuses to switch it. Pause all still holds it back.
+   */
+  alwaysOn?: boolean;
+  /**
    * Why it can't work as it is (a custom automation with an empty required tool slot), or null. The service refuses to
    * switch it on, the UI says why, and its check finds nothing meanwhile.
    */

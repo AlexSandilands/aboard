@@ -9,7 +9,6 @@ import {
   AUTOPILOT_RECURRING,
   AUTOPILOT_REVIEW_PRS,
   AUTOPILOT_START_PLANNED,
-  AUTOPILOT_UNSTICK,
   automationSentence,
   customAutomationId,
   splitFieldsByTier,
@@ -20,10 +19,8 @@ import {
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ArchiveIcon,
-  BellRingIcon,
   BotIcon,
   ChevronRightIcon,
-  ClockAlertIcon,
   FileUpIcon,
   GitMergeIcon,
   type LucideIcon,
@@ -65,6 +62,7 @@ import {
   advancedChanged,
   groupAutomations,
   isOffEverywhere,
+  lastRunText,
   rowSubline,
   selectedAutomation,
   statusLine,
@@ -75,6 +73,7 @@ import { BOARD_MODES, boardModeToSave, boardSwitchValue } from "./autopilot.logi
 import { bundleFilename } from "./customAutomationImport.logic";
 import { BlockedWarning, NeedsVariablesWarning } from "./InputsAndSlots";
 import { ModeSwitch } from "./ModeSwitch";
+import { RecurringRulesByProject } from "~/components/recurring/RecurringSection";
 import { RunHistoryLink } from "./RunHistoryLink";
 
 const BUILTIN_ICONS: Record<string, LucideIcon> = {
@@ -86,8 +85,6 @@ const BUILTIN_ICONS: Record<string, LucideIcon> = {
   [AUTOPILOT_RECURRING]: RepeatIcon,
   auto_archive: ArchiveIcon,
   [AUTOPILOT_DIGEST]: NewspaperIcon,
-  [AUTOPILOT_UNSTICK]: ClockAlertIcon,
-  unblock_dependents: BellRingIcon,
 };
 
 function AutomationIcon({ automation, className }: { automation: AutopilotAutomation; className?: string }) {
@@ -190,7 +187,7 @@ function ListRow({
 }) {
   const { automation, entry, reach, lastRun, onMode } = item;
   const on = entry.mode === "on";
-  const off = isOffEverywhere(reach);
+  const off = !automation.alwaysOn && isOffEverywhere(reach);
   return (
     <SplitListItem
       id={`autopilot.automations.${automation.key}`}
@@ -203,19 +200,22 @@ function ListRow({
           <StatusDot tone="success" label="On" />
         )
       }
-      subtitle={rowSubline(reach, lastRun)}
+      subtitle={automation.alwaysOn ? lastRunText(lastRun) : rowSubline(reach, lastRun)}
       dimmed={off}
       selected={selected}
       onSelect={onSelect}
+      // Recurring tasks has no switch: each of its rules has its own, in the detail.
       trailing={
-        <Switch
-          size="sm"
-          aria-label={`${automation.title} on for the board`}
-          checked={on}
-          disabled={pending || (!on && Boolean(automation.blocked))}
-          title={!on && automation.blocked ? automation.blocked : undefined}
-          onCheckedChange={(next) => onMode(next ? "on" : "inherit")}
-        />
+        automation.alwaysOn ? null : (
+          <Switch
+            size="sm"
+            aria-label={`${automation.title} on for the board`}
+            checked={on}
+            disabled={pending || (!on && Boolean(automation.blocked))}
+            title={!on && automation.blocked ? automation.blocked : undefined}
+            onCheckedChange={(next) => onMode(next ? "on" : "inherit")}
+          />
+        )
       }
     />
   );
@@ -242,7 +242,8 @@ function AutomationDetail({
   const navigate = useNavigate();
   const { essential, advanced } = splitFieldsByTier(automation.fields);
   const on = entry.mode === "on";
-  const off = isOffEverywhere(reach);
+  const switchless = automation.alwaysOn;
+  const off = !switchless && isOffEverywhere(reach);
   const editCustom = (id: string) =>
     void navigate({ to: "/settings/autopilot/custom/$customId", params: { customId: id }, state: FROM_SETTINGS_LIST });
   const field = (f: (typeof automation.fields)[number]) => (
@@ -266,7 +267,7 @@ function AutomationDetail({
         subtitle={
           <span className="flex items-center gap-1.5">
             <StatusDot tone={off ? "muted" : "success"} label={off ? "Off" : "On"} />
-            <span className="truncate">{statusLine(reach)}</span>
+            <span className="truncate">{switchless ? "Each rule has its own switch" : statusLine(reach)}</span>
             {custom ? (
               <Badge variant="outline" size="sm">
                 Custom
@@ -276,14 +277,16 @@ function AutomationDetail({
         }
         actions={
           <>
-            <Button
-              size="xs"
-              variant="ghost-muted"
-              disabled={pending || (!on && Boolean(automation.blocked))}
-              onClick={() => onMode(on ? "inherit" : "on")}
-            >
-              {on ? "Switch off" : "Switch on"}
-            </Button>
+            {switchless ? null : (
+              <Button
+                size="xs"
+                variant="ghost-muted"
+                disabled={pending || (!on && Boolean(automation.blocked))}
+                onClick={() => onMode(on ? "inherit" : "on")}
+              >
+                {on ? "Switch off" : "Switch on"}
+              </Button>
+            )}
             {custom ? <CustomActions custom={custom} /> : null}
           </>
         }
@@ -304,51 +307,41 @@ function AutomationDetail({
           </div>
         </div>
       </DetailSection>
-      <DetailSection title="Where it runs">
-        <SettingsRow
-          id={`autopilot.automations.${automation.key}.board`}
-          title="Whole board"
-          description="On for the board: every project, unless a project or epic switches it off for itself."
-          control={
-            <ModeSwitch
-              label={`${automation.title} for the board`}
-              modes={BOARD_MODES}
-              value={boardSwitchValue(entry.mode)}
-              disabled={pending}
-              blocked={automation.blocked}
-              onChange={(mode) => onMode(boardModeToSave(mode))}
-            />
-          }
-        />
-        <SettingsRow
-          title="Projects"
-          description={
-            <>
-              A project switches it for itself in its lane&apos;s Autopilot pill, or in{" "}
-              <SettingsLink to="project.autopilot">its settings</SettingsLink>
-              {automation.epicScope ? "; an epic, in its own Autopilot popover." : "."}
-              {automation.key === AUTOPILOT_ORCHESTRATE
-                ? " Each lane's pill also shows the next check and has Run now."
-                : ""}
-            </>
-          }
-          status={reach.projects.length > 0 ? `On in ${reach.projects.join(", ")}` : "On in no project"}
-        />
-      </DetailSection>
-      {essential.length > 0 ? <DetailSection title="Settings">{essential.map(field)}</DetailSection> : null}
-      {automation.key === AUTOPILOT_RECURRING ? (
-        <DetailSection title="Rules">
+      {switchless ? <RecurringRulesByProject /> : null}
+      {switchless ? null : (
+        <DetailSection title="Where it runs">
           <SettingsRow
-            title="Recurring rules"
-            description={
-              <>
-                Each project keeps its own rules, in <SettingsLink to="project.recurring">its settings</SettingsLink>. A
-                rule that is on makes its task when it comes due, while this is on in the project.
-              </>
+            id={`autopilot.automations.${automation.key}.board`}
+            title="Whole board"
+            description="On for the board: every project, unless a project or epic switches it off for itself."
+            control={
+              <ModeSwitch
+                label={`${automation.title} for the board`}
+                modes={BOARD_MODES}
+                value={boardSwitchValue(entry.mode)}
+                disabled={pending}
+                blocked={automation.blocked}
+                onChange={(mode) => onMode(boardModeToSave(mode))}
+              />
             }
           />
+          <SettingsRow
+            title="Projects"
+            description={
+              <>
+                A project switches it for itself in its lane&apos;s Autopilot pill, or in{" "}
+                <SettingsLink to="project.autopilot">its settings</SettingsLink>
+                {automation.epicScope ? "; an epic, in its own Autopilot popover." : "."}
+                {automation.key === AUTOPILOT_ORCHESTRATE
+                  ? " Each lane's pill also shows the next check and has Run now."
+                  : ""}
+              </>
+            }
+            status={reach.projects.length > 0 ? `On in ${reach.projects.join(", ")}` : "On in no project"}
+          />
         </DetailSection>
-      ) : null}
+      )}
+      {essential.length > 0 ? <DetailSection title="Settings">{essential.map(field)}</DetailSection> : null}
       {custom ? (
         <DetailSection title="Trigger and action">
           <SettingsRow

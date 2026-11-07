@@ -1,6 +1,6 @@
 # Autopilot
 
-Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks), #90 (digest), #94 (start planned tasks), #95
+Board tasks: #79 (engine core), #85 (runners), #88 (Unstick stale tasks, now reminders), #90 (digest), #94 (start planned tasks), #95
 (PR review), #97 (custom automations), in epic #101; #123 (Merge into epic branch); #135 (sharing custom automations); #241 (agents' drafts).
 
 Autopilot lets the board act on its own: a catalogue of automations, each switched on or off per epic, per project or
@@ -233,8 +233,8 @@ for `task.autopilot === true` on top of its scope being on. The flag does nothin
 
 A manual task (`task.manual`, see [task-lifecycle.md](task-lifecycle.md#manual-tasks)) is for a person, so the
 automations that act on tasks pass it over: Start planned tasks (`notStartable`; `workingAgents` still counts a
-thread that is working on a task turned manual mid-run, since nothing stops that agent), Remind me about stuck tasks, Review PRs, Fix PRs, and Orchestrate (`orchestrateNeedsLooking` ignores it, and
-its prompt tells the agent to leave manual tasks alone). Unblock dependents still fires when a manual blocker
+thread that is working on a task turned manual mid-run, since nothing stops that agent), the quiet-task and waiting-thread reminders, Review PRs, Fix PRs, and Orchestrate (`orchestrateNeedsLooking` ignores it, and
+its prompt tells the agent to leave manual tasks alone). The unblocked notification still fires when a manual blocker
 finishes, since the task it unblocks is code; Auto-archive still tidies it away once Done.
 
 ### API
@@ -281,37 +281,21 @@ Done and comes back. The engine resolves a candidate that is an epic on the epic
 archive #N with its K tasks after D days in Done". Unarchiving such a task, or reopening it, unarchives its epic
 ([epics.md](epics.md#joining-and-leaving)).
 
-**Unblock dependents** (`unblock_dependents`, #92; `automations/unblockDependents.ts`). Needs no agent and is off until
-switched on, with no settings. When the last unfinished blocker of a task reaches Done (or is closed as completed or
-duplicate), it logs a note "Unblocked: #N finished" on the dependent and sends an `autopilot_notice` notification.
-A partially unblocked dependent waits. It starts nothing: a flagged Planned dependent just becomes eligible for Start
-planned tasks on the next tick. It only reports blockers that finished in the last 24 hours, so switching it on doesn't announce old work. The scope is the dependent's project. The dedupe key is
-`unblock:<dependentId>:<latest blocker statusChangedAt>`, so reopening a blocker and finishing it again notifies
-again, while two blockers finishing together give one notification.
+**Reminders, no longer automations.** Remind me about stuck tasks (`unstick`, #88) and Unblock dependents
+(`unblock_dependents`, #92) needed no agent and only notified, so they left the catalogue: they are the `task_quiet`,
+`thread_waited` and `task_unblocked` notification settings, found by `sendReminders` on the engine's pass
+(`autopilot/reminders.ts`, [notifications.md](notifications.md#what-produces-a-notification)). They have no scopes, no
+config (24 hours quiet and 30 minutes waiting are fixed, as their labels say), and no runs: the run history keeps the old ones, named by
+`RETIRED_AUTOMATION_TITLES`, and a Needs-attention reason from an old Unstick run still clears on new activity
+(`attentionFor`). Getting stalled work moving again is Orchestrate's job (below). Migration `043_reminder_notifications`
+turned each switch on where its automation was effectively on, and dropped the automations' `autopilot_settings` rows.
 
-**Remind me about stuck tasks** (`unstick`, #88; `automations/unstick.ts`; first called "Unstick stale tasks", and
-the key stayed). Needs no agent and is off until switched on. It is a reminder to the user and acts on nothing:
-getting stalled work moving again is Orchestrate's job (below). It is still worth having beside it, because
-Orchestrate leaves a task that is waiting on the user alone, and a thread stuck waiting holds a concurrency slot
-for Start planned tasks. It is also the free option for someone who doesn't run Orchestrate (no agent, no caps, no
-quiet hours). Watches tasks In Progress for two things, each reported once:
-
-- **Quiet**: no activity for `staleHours` (default 24). Activity is any activity entry not written by `autopilot`
-  (its own notes and run entries don't count), or the move into In Progress. Puts "Stale: no activity for 26h" under
-  Needs attention, which clears on the next activity by anyone else (or when the task changes status). The dedupe
-  key is `stale:<taskId>:<lastActivityAt>`.
-- **Waiting**: the task's latest T3 thread has waited on input or approval for `waitingMinutes` (default 30), by
-  the snapshot's `lastActivityAt`. The thread already shows its own Needs attention reason, so only the run and the
-  notification are added. The dedupe key is `waiting:<threadLinkId>:<lastActivityAt>`.
-
-Either way it logs a note under `autopilot` and sends an `autopilot_notice`. It used to be able to post a nudge into
-the thread (`nudge`, `nudgeMessage`); that went to Orchestrate. A row that still holds those keys is not an error:
-`setScope` ignores stored keys the automation no longer declares and drops them on the next save, so the forms,
-which send a scope's whole config back, keep working. A key that was never stored is still a `VALIDATION` error.
-
-**Recurring tasks** (`recurring`, #89; `automations/recurring.ts`). Needs no agent and is off until switched on
-per project. Makes a task from a template on a schedule; the rules are rows in `autopilot_recurring` (below), and
-this automation's own switch decides whether a project's rules run. It has no config of its own.
+**Recurring tasks** (`recurring`, #89; `automations/recurring.ts`). Needs no agent and has no switch: it is `alwaysOn`, so
+every project is on for it at every scope (`resolve` and the scope entries say enabled, and `setScope` refuses it
+with a `VALIDATION`), and a rule that is enabled runs. Pause all still holds it back; quiet hours and the caps never
+did (it needs no agent). Makes a task from a template on a schedule; the rules are rows in `autopilot_recurring` (below).
+It has no config of its own. Migration `044_recurring_without_switch` disabled the rules of every project where it was
+effectively off, and dropped its settings rows.
 
 - A rule has a name, a template (board-wide or the project's, with a title pattern), a schedule, whether its tasks
   carry the Autopilot flag (On), and an enabled switch. The schedule is `weekly` (weekdays and a time) or `every`
@@ -333,13 +317,14 @@ this automation's own switch decides whether a project's rules run. It has no co
   slot after it, and never moves it back. The cursor is also what stops a duplicate when runs are gone (a restore
   doesn't bring runs back). Dry-run records "Would …" and leaves the cursor, so turning it off makes the task.
 - A rule's cursor starts at its creation time, and is set again when the rule is switched on or its schedule
-  changes, so slots from before that aren't caught up. The same goes for the automation: when its switch turns on
-  for a project (its own, or the board's), or Pause all is lifted, `AutopilotService` calls `onEnabled` and the
-  project's rules restart from now (`recurring.restart`). Only downtime of the board itself catches up.
+  changes, so slots from before that aren't caught up. The same goes for Pause all: when it is lifted,
+  `AutopilotService` calls `onEnabled` for every project and the rules restart from now (`recurring.restart`). Only
+  downtime of the board itself catches up.
 - Rules are managed in the project's settings (**Recurring tasks**, `components/recurring/`), which also offers
-  example rules: adding one creates a template for the project (reusing one of the same name) and the rule.
-  The automation's own switch is the project's Autopilot section like any other; the lane pill's popover links to
-  these settings with an icon button beside Recurring tasks (`useOpenSettings()("project.recurring", { project })`), scrolled to the section.
+  example rules: adding one creates a template for the project (reusing one of the same name) and the rule. The
+  Recurring tasks row in Settings → Autopilot has no switch (`alwaysOn` hides it, and `scopeAutomations` leaves it out
+  of the lane and epic popovers); its detail lists every project's rules (`RecurringRulesByProject`), each with its
+  switch, next run, last task and a **New rule** for that project, sharing `ProjectRuleRows` with the project's page.
 
 #### Recurring rules API
 
@@ -567,7 +552,7 @@ switched on, with no settings. Only epics with integration delivery ([epics](epi
   task's unmerged branch, which is accepted because tasks normally start from the epic's branch once their blockers
   are Done. A run that ended "Merge it yourself" is settled for that head (`mergeRuns`) and isn't reconsidered by a
   fix or a settings change: use `retry_autopilot_run` or push to the PR.
-  The refreshed snapshot says merged, which moves the task to Done (`completeIfPrsDone`), so Unblock dependents
+  The refreshed snapshot says merged, which moves the task to Done (`completeIfPrsDone`), so the unblocked notification
   notifies and Start planned starts what waited on it, from the updated branch.
 - **Refused.** A failure another try may get past (another PR merged into the branch first, a push, GitHub still
   computing mergeability, the network) ends the run skipped with `output.retry`, and the next pass tries the same
@@ -694,7 +679,7 @@ the caps and waits out quiet hours. Off until switched on. The headline automati
   thread with no such snapshot, or whose snapshot the live poll stopped refreshing (T3 gone, thread deleted), counts
   for ten minutes from the run's end or the snapshot. The slot frees when
   the thread idles, finishes, fails, settles or is archived, or the task is Done, archived or back in Backlog; a thread stuck
-  waiting for you holds it until you answer, and Remind me about stuck tasks flags it. A headless run is a running run, which
+  waiting for you holds it until you answer, and the waiting-thread reminder tells you. A headless run is a running run, which
   the engine counts. A dry run ignores this.
 - **Config**: the shared runner options plus `skill` (a `ReviewSkillRef`; built-in means the default workflow, labelled
   by the field's `builtinLabel`), `baseRef` (the worktree's start; blank is the default branch) and `graceMinutes`
@@ -1662,7 +1647,7 @@ button beside a field's title (shown only while the key is set at that scope) re
 | `apps/server/src/autopilot/automations/startPlanned.ts` | Start planned tasks |
 | `apps/server/src/autopilot/automations/orchestrate.ts` | Orchestrate: the schedule, Run now, its state, the tools it gets and `orchestratePrompt` |
 | `apps/server/src/mcp/tools/autopilot.ts` | `retry_autopilot_run`, `draft_automation` |
-| `apps/server/src/autopilot/automations/unstick.ts` | Remind me about stuck tasks (`unstick`) |
+| `apps/server/src/autopilot/reminders.ts` | The quiet-task, waiting-thread and unblocked reminders (`sendReminders`) |
 | `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off |
 | `apps/server/src/autopilot/automations/fixPrs.ts` | Fix PRs: the triggers, batching, the limits and the fix prompt |
 | `apps/server/src/autopilot/automations/mergeEpicPrs.ts` | Merge into epic branch: `notMergeable`, the merge, the epic's draft PR and `epicPrBody` |
@@ -1692,7 +1677,7 @@ button beside a field's title (shown only while the key is set at that scope) re
 | `apps/server/src/autopilot/digestBuilder.ts`, `digestConfig.ts` | The plain digest's Markdown, and the automation's config |
 | `apps/server/src/services/digests.ts`, `db/repos/autopilotDigests.ts` | Collecting the period's activity, storing digests, the inbox notification |
 | `packages/contracts/src/digest.ts` | `Digest`, `dueDigestSlot` |
-| `apps/web/src/components/recurring/` | The rule list, editor and examples on the project settings page |
+| `apps/web/src/components/recurring/` | The rule rows (shared by the project page and Settings → Autopilot), editor and examples |
 | `apps/server/src/http/routes/autopilot.ts` | The REST routes |
 | `packages/contracts/src/autopilotRunHistory.ts` | The run history's filter, query and page, and the delete's input, result and kept reasons |
 | `apps/server/src/db/migrations/034_autopilot_runs_automation_index.sql` | The index the history page's filter and paging read |

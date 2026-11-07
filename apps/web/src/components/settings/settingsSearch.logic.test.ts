@@ -56,8 +56,8 @@ describe("searchSettings", () => {
   });
 
   it("finds a built-in automation by name", () => {
-    const [match] = searchSettings(entries, "stuck tasks");
-    expect(match?.id).toBe("autopilot.automations.unstick");
+    const [match] = searchSettings(entries, "fix prs");
+    expect(match?.id).toBe("autopilot.automations.fix_prs");
   });
 
   it("finds generated rows: notification kinds and model tiers", () => {

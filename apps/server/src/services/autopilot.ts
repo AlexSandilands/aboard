@@ -88,6 +88,7 @@ export const describeAutomation = (a: Automation, needs: string | null = null): 
   description: a.description,
   needsAgent: a.needsAgent,
   epicScope: a.epicScope ?? true,
+  alwaysOn: a.alwaysOn ?? false,
   group: a.group ?? "yours",
   blocked: a.blocked ?? null,
   needs,
@@ -348,7 +349,7 @@ export function createAutopilotService(
           automation: automation.key,
           mode: own?.mode ?? "inherit",
           config: own?.config ?? {},
-          enabled: resolved.enabled,
+          enabled: automation.alwaysOn ? true : resolved.enabled,
           source: resolved.source,
           effectiveConfig: parsed.success ? parsed.data : { ...automation.defaults, ...resolved.config },
         };
@@ -381,9 +382,10 @@ export function createAutopilotService(
   /** The projects an automation is on for, with the board's setting and any project's own taken into account. */
   const enabledProjects = (key: string): string[] => {
     const all = repos.autopilotSettings.all();
+    const always = find(key)?.alwaysOn === true;
     return repos.projects
       .list()
-      .filter((p) => resolveAutopilot(chainFor(all, key, p.id)).enabled)
+      .filter((p) => always || resolveAutopilot(chainFor(all, key, p.id)).enabled)
       .map((p) => p.id);
   };
 
@@ -583,6 +585,7 @@ export function createAutopilotService(
       if (kind === "epic" && !epicScoped(automation)) {
         throw new AppError("VALIDATION", `${automation.title} doesn't apply to epics`);
       }
+      if (automation.alwaysOn) throw new AppError("VALIDATION", `${automation.title} has no switch: its rules do`);
       if (input.mode === "on" && automation.blocked) throw new AppError("VALIDATION", automation.blocked);
       const own = repos.autopilotSettings.forScope(kind, scopeId).find((s) => s.automation === key);
       const mode = input.mode ?? own?.mode ?? "inherit";
@@ -634,7 +637,7 @@ export function createAutopilotService(
       const epic = epicScoped(automation) && countsAsScope(epicId, projectId) ? epicId : null;
       const resolved = resolveAutopilot(chainFor(repos.autopilotSettings.all(), automation.key, projectId, epic));
       const parsed = parseConfig(automation, resolved.config);
-      return { enabled: resolved.enabled, config: parsed.success ? parsed.data : null };
+      return { enabled: automation.alwaysOn ? true : resolved.enabled, config: parsed.success ? parsed.data : null };
     },
     epicsWithOwnSetting: (automation) => new Set(epicsWithOwnSetting(automation)),
     projectsWithEpicOn(automation) {

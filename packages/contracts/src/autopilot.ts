@@ -11,8 +11,20 @@ export const AUTOPILOT_ACTOR = "autopilot";
 /** The automation that starts flagged Planned tasks. Shared so hints can name it before it is registered. */
 export const AUTOPILOT_START_PLANNED = "start_planned";
 
-/** The automation that flags In Progress tasks gone quiet. Its attention clears on new activity, so the repo knows its key. */
+/**
+ * The retired automation that flagged In Progress tasks gone quiet; its runs stay in the history and their attention
+ * clears on new activity, so the repo knows its key. It is now the `task_quiet` and `thread_waited` notifications.
+ */
 export const AUTOPILOT_UNSTICK = "unstick";
+
+/** The retired automation that told the user a task's last blocker finished; now the `task_unblocked` notification. */
+export const AUTOPILOT_UNBLOCK_DEPENDENTS = "unblock_dependents";
+
+/** What the runs of a retired automation are called in the history, once it is out of the catalogue. */
+export const RETIRED_AUTOMATION_TITLES: Readonly<Record<string, string>> = {
+  [AUTOPILOT_UNSTICK]: "Remind me about stuck tasks",
+  [AUTOPILOT_UNBLOCK_DEPENDENTS]: "Unblock dependents",
+};
 
 /** The scheduled agent that sees a project's work through: unsticks it, merges what's ready. The UI shows its handovers. */
 export const AUTOPILOT_ORCHESTRATE = "orchestrate";
@@ -239,6 +251,8 @@ export const AutopilotAutomation = z.object({
   needsAgent: z.boolean(),
   /** An epic can switch it on or off for its tasks. False for automations that don't act on tasks in an epic. */
   epicScope: z.boolean(),
+  /** It has no switch: it runs wherever it has work (Recurring tasks, whose rules each have their own). */
+  alwaysOn: z.boolean().default(false),
   /** Where the settings page lists it. Defaults to the user's own, as for a custom automation. */
   group: AutomationGroup.default("yours"),
   /** Why it can't be switched on yet ("Won't work until you fill in: Jira tools"), or null. */

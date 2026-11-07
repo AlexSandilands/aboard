@@ -24,10 +24,26 @@ write that made the change, so the change and its notification commit together.
 | `review_finished` ("Review needs you") | A local review loop ends without a clean result: a round is submitted with blocking or major findings open at the round limit (Stuck), or a round is set `failed` or `stalled` (`reviews.notifyIfUnresolved`). Not for every submitted round. Opening a round, or a new outcome for one, reads the task's earlier ones | `review:<roundId>:<state>` |
 | `autopilot_failed`     | A real Autopilot run fails, or ends flagged `needsAttention` (it gave up or needs you); also runs a restart stranded, except a Review PRs or Fix PRs run it retries | `autopilot:<runId>`     |
 | `agent_request`        | An agent calls `request_attention` on a task (`services/attention.ts`)         | `request:<taskId>:<requestedAt>`        |
-| `autopilot_notice`     | Anything else an automation sends through `notify()`: Unblock dependents, and a new digest (task-less, with the counts) | the caller's (`digest:<id>`) |
+| `thread_waited` ("A thread has waited on me for 30 min") | A task's T3 thread has been in `input` or `approval` for 30 minutes (by its snapshot's `lastActivityAt`), found by the reminders below; not a follow-up thread | `waiting:<threadLinkId>:<lastActivityAt>` |
+| `task_quiet` ("In Progress work is quiet for 24 h") | An In Progress task, not manual and not an epic, has had no activity by anyone but Autopilot for 24 hours (the move into In Progress counts as activity) | `stale:<taskId>:<lastActivityAt>` |
+| `task_unblocked` ("A task's last blocker finished") | The last unfinished blocker of a task reached Done (or was closed) in the last 24 hours; a partially unblocked task waits | `unblock:<taskId>:<latest blocker statusChangedAt>` |
+| `autopilot_notice`     | Anything else an automation sends through `notify()`: a new digest (task-less, with the counts) | the caller's (`digest:<id>`) |
 | `suggestion`           | An agent suggests a change to a prompt or skill ([suggestions](suggestions.md)); task-less, opens Settings › Suggestions from the inbox | `suggestion:<id>` |
 | `automation_draft`     | An agent drafts a custom automation (`draft_automation`, [autopilot](autopilot.md#drafts)); task-less, opens Needs you in Settings › Autopilot, which lists the drafts | `automation_draft:<id>` |
 | `backup_notice`        | The git backup moved a flat backup repo into this machine's folder, or set unpushed backups that clashed with another machine's folder aside on a branch ([backup](backup.md#machine-folders)); task-less, opens Settings › Data. Also: a task moved to another machine that had changed here since the backup it was taken from, or had work going on it ([backup](backup.md#moving-tasks-between-machines)); on that task | `backup_notice:migrated:<instanceId>`, `backup_notice:set-aside:<sha>`, `backup_notice:moved:<transferId>` |
+
+**Reminders** are the three kinds above that nothing changes to produce: `sendReminders` (`autopilot/reminders.ts`) looks
+for them on the Autopilot engine's pass (every minute and after board events), before the Pause all check, so they
+are never held back by it, and quiet hours only mute their pop-ups like any notification. Each runs only while its switch
+is on, in every project (it has no Autopilot scope), and adds a note under the actor `autopilot` ("Stale: no activity
+for 26h", "Thread waiting for input for 45m", "Unblocked: #12 finished") when the notification was new. Those notes
+aren't activity, or the note would end the quiet period it reports. They were the Remind me about stuck tasks
+(`unstick`) and Unblock dependents (`unblock_dependents`) automations, with the same detection and dedupe keys; the
+two keys stay in `RETIRED_AUTOMATION_TITLES` so their old runs show a plain name. `board_activity` and the stats read
+the stalls from these notifications as well as from those old runs. Migration `043_reminder_notifications` set the
+three switches: each of the two automations' effective state somewhere (the project's mode, else the board's, or an
+unarchived epic with it On) became the setting, and an install with no projects or Autopilot settings keeps the defaults
+(on, on, and off for `task_unblocked`).
 
 The thread and PR producers sit in `links.setSnapshot`, the call both pollers make, and compare the new
 snapshot with the stored one. **A link seen for the first time never notifies**: whatever state it was linked
@@ -111,7 +127,7 @@ where a pop-up belongs:
 ### Settings
 
 `AppSettings.notifications` (stored under the `notifications` settings key, exported in backups): a switch
-per kind and `muteInQuietHours`. Every switch defaults on except `autopilot_notice` (`DEFAULT_NOTIFICATION_KINDS`).
+per kind and `muteInQuietHours`. Every switch defaults on except `autopilot_notice` and `task_unblocked` (`DEFAULT_NOTIFICATION_KINDS`).
 Only switches the user set are stored, so a kind they never touched follows the default, including a changed one.
 Settings saved before this change hold the whole record, so those keep what they had. **Settings → Board → Notifications** shows them, the browser
 permission state, and what the quiet-hours window is.
@@ -119,7 +135,7 @@ permission state, and what the quiet-hours window is.
 ### The bell's filter
 
 The popover filters by **group**, not kind, so the row stays one line however many kinds exist.
-`NOTIFICATION_KIND_GROUP` (contracts) maps every kind to Agents, PRs, Reviews, Autopilot, Suggestions or Backup; it is an
+`NOTIFICATION_KIND_GROUP` (contracts) maps every kind to Agents, Tasks, PRs, Reviews, Autopilot, Suggestions or Backup; it is an
 exhaustive `Record`, so a new kind has to pick one. The chips show only the groups present in the inbox.
 
 ### Agent requests

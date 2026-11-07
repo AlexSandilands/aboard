@@ -1,5 +1,5 @@
-import { AUTOPILOT_ORCHESTRATE, AUTOPILOT_RECURRING, type AutopilotScopeEntry } from "@repo/contracts";
-import { CalendarClockIcon, SettingsIcon } from "lucide-react";
+import { AUTOPILOT_ORCHESTRATE, type AutopilotScopeEntry } from "@repo/contracts";
+import { SettingsIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { PopoverClose } from "~/components/ui/popover";
@@ -31,7 +31,7 @@ export function ScopePopover({
   title: string;
   entries: ReadonlyArray<AutopilotScopeEntry> | undefined;
   set: ReturnType<typeof useSetAutopilotScope>;
-  /** Set for a project's popover: Recurring tasks gets a link to the project's settings page at that section. */
+  /** Set for a project's popover: Orchestrate is pinned in a card of its own. */
   projectId?: string;
   /** An epic's popover: leaves out the automations that don't apply to epics. */
   epic?: boolean;
@@ -106,29 +106,6 @@ export function ScopePopover({
                     scope={scope}
                     disabled={set.isPending}
                     onChange={(mode) => set.mutate({ automation: automation.key, mode })}
-                    trailing={
-                      projectId && automation.key === AUTOPILOT_RECURRING ? (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <PopoverClose
-                                render={
-                                  <Button
-                                    size="icon-micro"
-                                    variant="ghost-muted"
-                                    aria-label="Recurring tasks settings"
-                                    onClick={() => openSettings("project.recurring", { project: projectId })}
-                                  />
-                                }
-                              />
-                            }
-                          >
-                            <CalendarClockIcon />
-                          </TooltipTrigger>
-                          <TooltipPopup side="top">Recurring tasks</TooltipPopup>
-                        </Tooltip>
-                      ) : null
-                    }
                   />
                 ))}
             </ScopeCard>

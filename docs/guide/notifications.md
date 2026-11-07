@@ -6,6 +6,11 @@ The board tells you when something needs you, so you don't have to keep it open.
 
 - A T3 Code thread linked to a task is **waiting for input or approval**. A thread shared by several tasks (one
   session planning a batch) is announced once, listing its tasks, and shows as one row under **Needs attention**.
+- A thread has **waited on you for 30 minutes**, so you hear about a reply that is still due, not only the moment it
+  asked. It is the same thread that was announced above, and a second notice for it.
+- An In Progress task has been **quiet for 24 hours** (no activity by anyone but Autopilot). Manual tasks, which are
+  yours, are left alone.
+- A task's **last blocker finished**, so it is ready to pick up (off until you switch it on).
 - A linked pull request's **checks start failing**, or a reviewer **requests changes**.
 - A **local review needs you**: its loop ended Stuck, Review failed or Needs review. A round that only asks the agent to fix things isn't announced.
 - An **Autopilot run fails** or gives up.
@@ -22,12 +27,13 @@ has; only for what changes after.
 ## The inbox
 
 The bell in the board's header shows how many are unread. Click it to see them, newest first. Click one to
-open its task and mark it read, filter by group (Agents, PRs, Reviews, Autopilot, Suggestions; only the groups you
+open its task and mark it read, filter by group (Agents, Tasks, PRs, Reviews, Autopilot, Suggestions; only the groups you
 have something in show), or use **Mark all read**.
 
 Notifications clear themselves when what they told you about is over. They are marked read when the thread stops
 waiting, the checks pass or the pull request is merged or closed, the reviewer's decision changes, the agent's
-request is dismissed, or the task is Done or archived. Read ones stay, dimmed, for 7 days after you read them, and unread ones for 30.
+request is dismissed, or the task is Done or archived. A notice that a task is quiet or its last blocker finished is
+read when the task is Done or archived. Read ones stay, dimmed, for 7 days after you read them, and unread ones for 30.
 
 ## Pop-ups
 
@@ -40,7 +46,11 @@ one tab, and only while you're not looking at the board. The tab's icon shows th
 
 ## Settings
 
-**Settings → Board → Notifications** has a switch for each type. Everything is on except **Autopilot updates** (digests and
-unblocked tasks), which is news rather than something that needs you. A type that is off isn't recorded at all,
+**Settings → Board → Notifications** has a switch for each type, including the three reminders: **A thread has waited on
+me for 30 min**, **In Progress work is quiet for 24 h** and **A task's last blocker finished**. They used to be the
+Autopilot automations *Remind me about stuck tasks* and *Unblock dependents*; they need no agent and no Autopilot
+switch, work in every project, and aren't held back by Pause all. Everything is on except **Autopilot updates**
+(digests) and **A task's last blocker finished**, which are news rather than something that needs you. When you
+upgraded, each reminder started on only if its automation was on somewhere, so nothing new started talking to you. A type that is off isn't recorded at all,
 in the inbox or as a pop-up. **Mute during quiet hours** keeps pop-ups quiet while Autopilot's quiet hours are on; the
 notifications still wait in the inbox.

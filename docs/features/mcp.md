@@ -215,7 +215,7 @@ read-only text over a window `[since, until)`, for the improvement automation, a
 - **Autopilot runs:** real runs that finished in the window, per automation: outcomes, retries (a run right after a
   failed run of the same automation on the same task; review and fix rounds are not), "gave up", and failures with
   their reason. A run the board's restart failed is marked `(board restarted)`.
-- **Stalls:** Unstick's stale and waiting runs and `thread_waiting` notifications, once per task and kind.
+- **Stalls:** the `task_quiet`, `thread_waited` and `thread_waiting` notifications (and the runs of the retired Unstick automation), once per task and kind.
 - **Latest note per task:** the last note anyone but Autopilot wrote on each task, newest first (usually its
   handover). Notes have no "needs the user" flag; what needs the user shows as a run's `needsAttention` or an
   attention reason on the task.

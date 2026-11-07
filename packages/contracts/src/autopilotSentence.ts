@@ -1,7 +1,6 @@
 import {
   AUTOPILOT_ORCHESTRATE,
   AUTOPILOT_START_PLANNED,
-  AUTOPILOT_UNSTICK,
   type AutopilotConfig,
   type AutopilotEngineSettings,
 } from "./autopilot.ts";
@@ -15,7 +14,6 @@ import { AUTOPILOT_RECURRING } from "./recurring.ts";
 // what it watches for and what it does, in the words the user would use. Pure, so the web and tests share it.
 
 const AUTO_ARCHIVE = "auto_archive";
-const UNBLOCK_DEPENDENTS = "unblock_dependents";
 
 const num = (config: AutopilotConfig, key: string, fallback: number): number =>
   typeof config[key] === "number" ? config[key] : fallback;
@@ -98,7 +96,7 @@ export function automationSentence(
     case AUTOPILOT_MERGE_EPIC_PRS:
       return "When a task's PR into its epic's integration branch is reviewed, green and mergeable, merge it into that branch. Never into main.";
     case AUTOPILOT_RECURRING:
-      return "Make a task from a template whenever one of a project's recurring rules comes due.";
+      return "Make a task from a template whenever a recurring rule, in any project, comes due.";
     case AUTO_ARCHIVE:
       return `Archive tasks that have been in Done for ${plural(num(config, "days", 14), "day")}, and finished epics with their tasks.`;
     case AUTOPILOT_DIGEST: {
@@ -106,10 +104,6 @@ export function automationSentence(
       const what = config.mode === "summarised" ? "an agent's summary" : "a plain list";
       return `${days} at ${str(config, "time", "09:00")}, write ${what} of what changed on the board.`;
     }
-    case AUTOPILOT_UNSTICK:
-      return `Tell you when an In Progress task has had no activity for ${plural(num(config, "staleHours", 24), "hour")}, or its thread has waited on you for ${plural(num(config, "waitingMinutes", 30), "minute")}.`;
-    case UNBLOCK_DEPENDENTS:
-      return "Tell you when the last task blocking another reaches Done.";
     default:
       return automation.description;
   }

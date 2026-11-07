@@ -19,15 +19,14 @@ An **epic** has the same switch, in a small round **Autopilot** button on its ba
 covers only the tasks in that epic, and a faded switch follows the project ("On, following the project"). So you can
 switch an automation on for one epic in a project that has it off, or off for one epic in a project that has it
 on. The button looks like the pill: dim, a ring, or animated while one of the epic's tasks is being worked on.
-An epic only lists the automations that work on tasks in an epic (not Recurring tasks or the Digest, for
-instance). An archived epic has no button and no say.
+An epic only lists the automations that work on tasks in an epic (not the Digest, for instance). An archived epic has no button and no say.
 
 Auto-archive Done on an epic works on the epic as a whole: once the epic is finished (every task Done) and has been in
 Done for the set days, it is archived together with its tasks. A task in an epic is never archived on its own, and
 the epic's own switch and days decide.
 
 [Manual tasks](using-the-board.md#manual-tasks) are yours: no automation starts, reviews, fixes or reminds you
-about one. Unblock dependents still tells you when finishing one unblocks a task.
+about one. Notifications still tell you when finishing one unblocks a task.
 
 **Settings → Autopilot** has three tabs: **Automations**, **Runs** and **Limits & safety**.
 
@@ -55,20 +54,16 @@ haven't switched on is off); only projects and epics can follow the scope above 
 override the options in its own settings. On a phone the list and an automation take turns: tap a row, and **All
 automations** takes you back.
 
-## Remind me about stuck tasks
+**Recurring tasks** has no switch, in the list or in a lane's pill: each of its rules has its own, and its detail lists every
+project's rules ([Recurring tasks](recurring-tasks.md)).
 
-**Remind me about stuck tasks** tells you when an In Progress task needs a look. It needs no agent, so it costs
-nothing and isn't held back by quiet hours or the run limits, and it changes nothing on the task. You get a note on
-the task and a notification when:
+## Reminders
 
-- the task has had no activity for **No activity for** hours (24 by default): it also shows under **Needs attention**
-  until someone touches the task;
-- its T3 Code thread has been waiting on you for **Thread waiting for** minutes (30 by default).
-
-Each is reported once. It doesn't get anything moving again: that's [Orchestrate](#orchestrate). The two go well
-together, because Orchestrate leaves a thread that's waiting for you alone, and a thread stuck waiting holds one of
-your concurrency slots until you answer. This automation used to be called **Unstick stale tasks** and could also
-post a nudge into the thread; that option is gone (Orchestrate does it), and a leftover setting is ignored.
+Two automations used to remind you: **Remind me about stuck tasks** and **Unblock dependents**. They need no agent, so
+they moved to **Settings → Board → Notifications** as three switches, which work in every project with no Autopilot
+switch: **A thread has waited on me for 30 min**, **In Progress work is quiet for 24 h** and **A task's last blocker
+finished**. See [notifications](notifications.md). Getting stalled work moving again is [Orchestrate](#orchestrate)'s
+job. Their old runs stay in the run history under their old names.
 
 ## Review PRs
 

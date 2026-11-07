@@ -2,7 +2,10 @@ import {
   AgentHarness,
   AUTOPILOT_DIGEST,
   AUTOPILOT_ORCHESTRATE,
+  AUTOPILOT_RECURRING,
   AUTOPILOT_REVIEW_PRS,
+  AUTOPILOT_UNBLOCK_DEPENDENTS,
+  AUTOPILOT_UNSTICK,
   classifyLink,
   INHERIT,
   type ModelChoice,
@@ -26,6 +29,8 @@ export const CODE_MIGRATIONS: Readonly<Record<string, (db: Db) => void>> = {
   "036_ticket_systems_settings": jiraSettingsToTicketSystem,
   "040_providers_settings": seedProviders,
   "041_operation_models": operationModels,
+  "043_reminder_notifications": reminderNotifications,
+  "044_recurring_without_switch": recurringWithoutSwitch,
 };
 
 /**
@@ -285,4 +290,79 @@ function operationModels(db: Db): void {
     upsert.run("modelTiers", JSON.stringify(next));
   }
   if (Array.isArray(profiles)) upsert.run("modelProfiles", JSON.stringify(profiles.map(renamed)));
+}
+
+/**
+ * The projects an automation was effectively on in, by the rule in docs/features/autopilot.md: the project's own mode
+ * if it set one, else the board's, and also a project with an unarchived epic that switched it on (when epics can).
+ */
+function projectsWhereOn(db: Db, automation: string, withEpics: boolean): string[] {
+  const rows = db
+    .prepare("SELECT scope_kind, scope_id, mode FROM autopilot_settings WHERE automation = ?")
+    .all(automation) as Array<{ scope_kind: string; scope_id: string; mode: string }>;
+  const board = rows.find((r) => r.scope_kind === "board")?.mode === "on";
+  const own = new Map(rows.filter((r) => r.scope_kind === "project").map((r) => [r.scope_id, r.mode]));
+  const viaEpic = new Set(
+    withEpics
+      ? (
+          db
+            .prepare(
+              `SELECT DISTINCT t.project_id FROM autopilot_settings s JOIN tasks t ON t.id = s.scope_id
+               WHERE s.scope_kind = 'epic' AND s.automation = ? AND s.mode = 'on'
+                 AND t.archived_at IS NULL AND t.deleted_at IS NULL`,
+            )
+            .all(automation) as Array<{ project_id: string }>
+        ).map((r) => r.project_id)
+      : [],
+  );
+  const projects = db.prepare("SELECT id FROM projects").all() as Array<{ id: string }>;
+  return projects
+    .filter(({ id }) => {
+      const mode = own.get(id) ?? "inherit";
+      return mode === "on" || (mode === "inherit" && board) || viaEpic.has(id);
+    })
+    .map((p) => p.id);
+}
+
+/**
+ * "Remind me about stuck tasks" and "Unblock dependents" are notification settings now (docs/features/notifications.md).
+ * Each starts on where its automation was on somewhere, since a notification setting has no scopes; a switch the
+ * automation never had on is saved off, so it stays quiet whatever its default (a new install keeps the defaults). The
+ * automations' settings go: they are not in the catalogue any more, and their runs stay in the history.
+ */
+function reminderNotifications(db: Db): void {
+  // A new install has nothing to carry over, and takes the settings' defaults.
+  const used = db.prepare("SELECT 1 FROM projects UNION ALL SELECT 1 FROM autopilot_settings LIMIT 1").get();
+  if (!used) return;
+  const unstickOn = projectsWhereOn(db, AUTOPILOT_UNSTICK, true).length > 0;
+  const unblockOn = projectsWhereOn(db, AUTOPILOT_UNBLOCK_DEPENDENTS, true).length > 0;
+  const row = db.prepare("SELECT value_json FROM settings WHERE key = 'notifications'").get() as
+    | { value_json: string }
+    | undefined;
+  const stored = (row ? JSON.parse(row.value_json) : {}) as { kinds?: Record<string, boolean> };
+  const next = {
+    ...stored,
+    kinds: { ...stored.kinds, thread_waited: unstickOn, task_quiet: unstickOn, task_unblocked: unblockOn },
+  };
+  db.prepare(
+    "INSERT INTO settings (key, value_json) VALUES ('notifications', ?) ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json",
+  ).run(JSON.stringify(next));
+  db.prepare("DELETE FROM autopilot_settings WHERE automation IN (?, ?)").run(
+    AUTOPILOT_UNSTICK,
+    AUTOPILOT_UNBLOCK_DEPENDENTS,
+  );
+}
+
+/**
+ * Recurring tasks has no switch of its own now: an enabled rule runs. A rule in a project where the automation was
+ * effectively off (it never ran) is disabled, so switching the switch away doesn't start tasks nobody expected. Its
+ * settings go with the switch.
+ */
+function recurringWithoutSwitch(db: Db): void {
+  const on = new Set(projectsWhereOn(db, AUTOPILOT_RECURRING, false));
+  const disable = db.prepare("UPDATE autopilot_recurring SET enabled = 0 WHERE project_id = ? AND enabled = 1");
+  for (const { id } of db.prepare("SELECT id FROM projects").all() as Array<{ id: string }>) {
+    if (!on.has(id)) disable.run(id);
+  }
+  db.prepare("DELETE FROM autopilot_settings WHERE automation = ?").run(AUTOPILOT_RECURRING);
 }
