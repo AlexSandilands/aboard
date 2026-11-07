@@ -12,7 +12,7 @@ automations that open for you to read and import, in Preview), **Import a file**
 
 The builder takes it in five steps: **When → Do → Details → Where → Review & try**. Each step shows only what the
 trigger and action you picked need, and a sentence above it says what the automation does so far ("When a task moves
-into Review, ask an agent: “…” It runs in every project it's switched on in."). **Back**, or a step you've already
+into Review, ask an agent: “…” It runs in every project."). **Back**, or a step you've already
 reached in the row at the top, takes you back without losing anything you typed. **Next** checks the step first and
 says what to fix.
 
@@ -25,7 +25,7 @@ says what to fix.
    - **A task's last blocker finishes**.
    - **On a schedule**: weekdays at a time, or every N minutes (5 to 1440) or hours (1 to 24) from midnight
      (local time), so every 15 minutes runs at 00:00, 00:15, 00:30 and so on. It runs once in each project it's on
-     in, with no task, so it can only filter by project. If the board was off, it runs once when it's back, not
+     in, with no task, so it can't filter by label or skip epics. If the board was off, it runs once when it's back, not
      once for each slot it missed.
 2. **Do**: one of these, then its **Details** on the next step: the prompt, the command or the script, up front.
    The rest sits under **More options**, closed unless something in it is set: for an agent the model, skill,
@@ -76,8 +76,10 @@ says what to fix.
      `pnpm run notify "$env:ABOARD_TASK_TITLE"` is unsafe. Have the program read the variable itself instead:
      `pnpm run notify`, with `process.env.ABOARD_TASK_TITLE` in the script. Using a value inside PowerShell
      (`Write-Output`, `-match`, a `.ps1` script) is fine.
-3. **Where**: **only in these projects**, **with any of these labels**, **in the epic**. Leave them empty for every
-   task in every project it's switched on in.
+3. **Where**: where it runs, picked the same way as on its page: **Everywhere** or **Only in…** some projects (as
+   chips, or past eight projects a searchable list). For a saved automation this changes its switches straight away.
+   Then, for a task trigger, **With any of these labels** (blank is any task) and **Tasks in epics**: switch it off to
+   skip tasks in epics. One epic can still be switched on for itself from its popover on the board.
 4. **Review & try**: the sentence, each step in one line with an **Edit** that goes back to it, and:
    - **Right now this would run for**: for "sits too long", the tasks already past the limit (it would act on each
      once switched on); for an event, nothing yet, since it only acts on what happens after it's on; for a schedule,

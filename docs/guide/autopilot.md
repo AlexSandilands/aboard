@@ -74,7 +74,9 @@ everywhere (clearing those projects' own On) or only for the board. Click a row 
 - **Advanced**, closed: everything else. For an automation that starts an agent it opens with two lines: the
   **Model**, which comes from Settings → Agents → Operations and says what it runs on now, and **Runner, budget and
   timeout**, which come from the [defaults for agent runs](#limits). Each has **Override**, to set it for this
-  automation alone, and each overridden value a reset. A dot on Advanced means something in there isn't the default.
+  automation alone. A value you change gets a ↶ reset beside its name (its tooltip says what it goes back to), and
+  **↶ Reset** on the group puts all of them back. Advanced's heading counts what you've changed ("Agent · 2 changed").
+  The longer explanation of a setting is behind the ⓘ by its name.
 
 The switch on each row is the shortcut for **Everywhere** (there's nothing above the board to inherit from, so an
 automation you haven't switched on is off). A project's own **Settings → Project → Automations** is a read-only list of
@@ -199,7 +201,8 @@ the PR's branch and replies on each thread, starting with Autopilot's mark and "
   isn't on `origin`.
 - To fix a PR yourself, use **Fix in** on its row ([Fixing a PR](using-the-board.md#fixing-a-pr)). While Fix PRs is on for
   the task, the row says **Autopilot is fixing** or **Autopilot gave up** instead, with **Fix in** in its menu.
-- Its settings: the five switches, **Fix findings at or above**, the two attempt limits, then under Advanced
+- Its settings: the five switches (**Autopilot's review** with its **Fix findings at or above** severity beside it), the
+  two attempt limits, then under Advanced
   **Resolve threads it fixed**, a **Fix skill** to follow on top of the fix prompt, the model, the runner, the budget,
   the timeout and **T3 Code access**.
 
