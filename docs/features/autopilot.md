@@ -83,12 +83,15 @@ previews every automation at once.
 - **Turning it on.** Going from Preview to On counts as switching it on (`onEnabled`, `onEpicEnabled`): a custom
   automation re-arms and Recurring tasks restarts, so On acts on what happens from then, not on what Preview saw. Dry
   runs are deduped apart from real ones, so the Preview runs stay as history.
+- **Start planned's room.** Its check leaves the tasks in Preview out of the slots it hands the engine, since the
+  engine only records them: a Preview epic can't take the room a live task needs.
 - **Elsewhere.** The merge gate treats Review PRs in Preview as off, since it reviews nothing for real; a Recurring
   section in Preview says no task is made.
 - **New automations save in Preview.** Creating, importing or importing a draft writes a board row in Preview
   (`customAutomations` insert), with `last_on_mode` Preview.
 - **The last on-mode.** `autopilot_settings.last_on_mode` (migration 043, which also widens the mode CHECK) keeps the
-  last of On or Preview a scope was set to, through Off and Inherit; the row stays while it holds one. Scope entries
+  last of On or Preview a scope was set to, through Off and Inherit; the row stays while it holds one. Such a row, at
+  Inherit with no config, isn't an epic's own setting (`epicsWithOwnSetting`), so the epic still follows its project. Scope entries
   carry it as `lastOnMode`, with `preview`. The list's switch turns an automation back on in it, or, with none, in
   Preview for one that has never made a real run and On for one that has (`restoreMode`). The lane and epic popovers'
   switches turn on in it, or On.
@@ -1605,7 +1608,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
     effective config (`automationSentence`; a custom automation's from its trigger and action) with **All runs**, and
     the **Mode** row, the board's Off · Preview · On, saying what the mode does (`modeDescription`; with a check
     script, that it still runs for real); **Where it runs**, the board's mode as text and a line naming the projects it
-    is on in, which a project sets in its lane pill or settings; **Settings**, the fields whose `tier` is `essential`; and **Advanced**, closed, with every other field.
+    is on in and, apart, those only in Preview (`projectsStatus`), which a project sets in its lane pill or settings; **Settings**, the fields whose `tier` is `essential`; and **Advanced**, closed, with every other field.
     Its heading gets a dot when an advanced value isn't the default (`advancedChanged`). A field without a tier is
     advanced. A custom automation's trigger and action are edited in its editor (**Edit**,
     `/settings/autopilot/custom/<id>`).

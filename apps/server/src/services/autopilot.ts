@@ -365,12 +365,16 @@ export function createAutopilotService(
       });
   };
 
-  /** Epics with a setting of their own for the automation (any mode), that count as a scope. */
+  /**
+   * Epics with a setting of their own for the automation (any mode, or config), that count as a scope. A row kept only
+   * to remember its last on-mode (Inherit, no config) is no setting: the epic follows its project.
+   */
   const epicsWithOwnSetting = (automation: Pick<Automation, "key" | "epicScope">): string[] => {
     if (!epicScoped(automation)) return [];
     return repos.autopilotSettings
       .all()
       .filter((s) => s.scopeKind === "epic" && s.automation === automation.key)
+      .filter((s) => s.mode !== "inherit" || Object.keys(s.config).length > 0)
       .map((s) => repos.tasks.get(s.scopeId!))
       .filter((epic) => epic && countsAsScope(epic.id, epic.projectId))
       .map((epic) => epic!.id);

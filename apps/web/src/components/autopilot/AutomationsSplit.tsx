@@ -68,6 +68,7 @@ import {
   advancedChanged,
   groupAutomations,
   isOffEverywhere,
+  projectsStatus,
   rowSubline,
   selectedAutomation,
   statusLine,
@@ -375,7 +376,7 @@ function AutomationDetail({
                 : ""}
             </>
           }
-          status={reach.projects.length > 0 ? `On in ${reach.projects.join(", ")}` : "On in no project"}
+          status={projectsStatus(reach)}
         />
       </DetailSection>
       {essential.length > 0 ? <DetailSection title="Settings">{essential.map(field)}</DetailSection> : null}

@@ -669,6 +669,24 @@ describe("custom automations: filters and scopes", () => {
       expect(ran()).toEqual([later.id]);
     });
 
+    it("lets an epic set back to Inherit follow its project, though its row stays to remember the last on-mode", async () => {
+      const { s, key, epic, project, inEpic, setEpic, setProject, pass, ran } = epicSetup();
+      setProject("off");
+      setEpic("on");
+      setEpic("inherit");
+      expect(s.autopilot.scope("epic", epic.id, project.id).find((e) => e.automation === key)).toMatchObject({
+        mode: "inherit",
+        lastOnMode: "on",
+      });
+      expect(s.autopilot.epicsWithOwnSetting({ key }).has(epic.id)).toBe(false);
+      const t = inEpic("Moved while the project was off");
+      s.tasks.move(t.id, { status: "review" }, "agent");
+      await tick();
+      setProject("on");
+      await pass();
+      expect(ran()).toEqual([]);
+    });
+
     it("doesn't act on what a task did before it joined an epic that is on", async () => {
       const { s, task, epic, setEpic, pass, ran } = epicSetup();
       setEpic("on");

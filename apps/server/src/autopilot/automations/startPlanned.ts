@@ -182,6 +182,7 @@ export const startPlanned = defineAutomation({
   fields: FIELDS,
   defaults: DEFAULTS,
   check: ({ services, projects, engine, now }) => {
+    const self = services.autopilot.automations().find((a) => a.key === AUTOPILOT_START_PLANNED);
     // Priority tasks first, whatever their project; then project order, then board position.
     const candidates = projects
       .flatMap(({ project }, projectIndex) =>
@@ -199,24 +200,37 @@ export const startPlanned = defineAutomation({
           a.projectIndex - b.projectIndex ||
           (a.task.position < b.task.position ? -1 : a.task.position > b.task.position ? 1 : 0),
       )
-      .map(({ task }): Candidate => ({
-        dedupeKey: `start:${task.id}:${task.statusChangedAt}`,
-        summary: `start #${task.number} "${task.title}"`,
-        taskId: task.id,
+      .map(({ task }) => ({
+        candidate: {
+          dedupeKey: `start:${task.id}:${task.statusChangedAt}`,
+          summary: `start #${task.number} "${task.title}"`,
+          taskId: task.id,
+        } satisfies Candidate,
+        // In Preview where the task is (its epic, project or the board): the engine only records it, so it takes no room.
+        preview:
+          engine.dryRun ||
+          (self !== undefined && services.autopilot.resolve(self, task.projectId, task.parent?.id ?? null).preview),
       }));
+    const previewed = candidates.filter((c) => c.preview).map((c) => c.candidate);
     // A dry run only previews, whatever is working.
-    if (engine.dryRun) return candidates;
+    if (engine.dryRun) return previewed;
     // Tasks that already had their attempt (failed, or still starting) are the engine's to skip: they mustn't use up
     // the room the tasks below them need.
-    const fresh = candidates.filter((c) => !services.autopilot.hasRun(AUTOPILOT_START_PLANNED, c.dedupeKey, false));
-    if (fresh.length === 0) return fresh;
+    const fresh = candidates
+      .filter((c) => !c.preview)
+      .map((c) => c.candidate)
+      .filter((c) => !services.autopilot.hasRun(AUTOPILOT_START_PLANNED, c.dedupeKey, false));
+    if (fresh.length === 0) return previewed;
     // The engine's cap counts runs, which for T3 end once the thread starts: leave room for the threads still working.
     const agents = services.autopilot
       .automations()
       .filter((a) => a.needsAgent)
       .map((a) => a.key);
     const running = services.autopilot.usage(agents, new Date(0).toISOString()).active;
-    return fresh.slice(0, Math.max(0, engine.maxConcurrent - running - workingAgents(services, now)));
+    return [
+      ...fresh.slice(0, Math.max(0, engine.maxConcurrent - running - workingAgents(services, now))),
+      ...previewed,
+    ];
   },
   act: async (candidate, { services, runner, run, config, boardUrl }) => {
     const task = services.tasks.summary(candidate.taskId!);

@@ -201,6 +201,22 @@ describe("start planned tasks: eligibility", () => {
   });
 });
 
+describe("start planned tasks: preview", () => {
+  it("records tasks in a Preview epic without taking the room a live task needs", async () => {
+    const { s, task, pass, requests, runs, turnOn } = setup();
+    const previewed = task("Previewed");
+    const epic = s.tasks.createEpic({ projectId: previewed.projectId, title: "Trial" }, [previewed.id], "user");
+    // Ahead of the live task in board order, so slicing them together would give it the only slot.
+    s.tasks.update(previewed.id, { priority: true }, "user");
+    const live = task("Live");
+    turnOn();
+    s.autopilot.setScope("epic", epic.id, AUTOPILOT_START_PLANNED, { mode: "preview" }, epic.projectId);
+    await pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([live.id]);
+    expect(runs().find((r) => r.taskId === previewed.id)).toMatchObject({ dryRun: true, status: "skipped" });
+  });
+});
+
 describe("start planned tasks: priority", () => {
   it("starts priority tasks first, whatever their project or position", async () => {
     const { s, task, engine, project, requests, turnOn } = setup();
