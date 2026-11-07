@@ -682,4 +682,98 @@ describe("migrations", () => {
       some.close();
     });
   });
+
+  describe("custom automation filters to switches (049)", () => {
+    const before = (filters: object, setup: string): DatabaseSync => {
+      dir = mkdtempSync(join(tmpdir(), "board-db-"));
+      const path = join(dir, "board.db");
+      const old = openDatabase(path, { migrateTo: "048_recurring_without_switch" });
+      old.exec(`
+        INSERT INTO projects (id, title, position, created_at, updated_at) VALUES
+          ('a', 'A', 'a0', '', ''), ('b', 'B', 'a1', '', ''), ('c', 'C', 'a2', '', '');
+        INSERT INTO tasks (id, number, project_id, title, status, position, created_by, created_at, updated_at, status_changed_at, kind)
+          VALUES ('e', 1, 'a', 'Epic', 'in_progress', 'a0', 'user', '', '', '', 'epic'),
+                 ('f', 2, 'b', 'Other epic', 'in_progress', 'a1', 'user', '', '', '', 'epic');
+        INSERT INTO autopilot_custom (id, name, trigger_json, filters_json, action_json, armed_at, created_at, updated_at)
+          VALUES ('x', 'X', '{"kind":"blocker_finished"}', '${JSON.stringify(filters)}', '{}', '', '', '');
+        ${setup}
+      `);
+      old.close();
+      return openDatabase(path);
+    };
+    const row = (scope: string, id: string, mode: string, config = "{}") =>
+      `INSERT INTO autopilot_settings (scope_kind, scope_id, automation, mode, config_json, updated_at) VALUES ('${scope}', '${id}', 'custom:x', '${mode}', '${config}', '');`;
+    const modes = (db: DatabaseSync) =>
+      Object.fromEntries(
+        (
+          db
+            .prepare("SELECT scope_kind, scope_id, mode FROM autopilot_settings WHERE automation = 'custom:x'")
+            .all() as Array<{ scope_kind: string; scope_id: string; mode: string }>
+        ).map((r) => [`${r.scope_kind}:${r.scope_id}`, r.mode]),
+      );
+    const filters = (db: DatabaseSync) =>
+      JSON.parse(
+        (db.prepare("SELECT filters_json FROM autopilot_custom WHERE id = 'x'").get() as { filters_json: string })
+          .filters_json,
+      ) as unknown;
+
+    it("keeps the labels and leaves the switches alone without a project or epic filter", () => {
+      const db = before({ projectIds: [], labels: ["ui"], epicId: null }, row("board", "", "on"));
+      expect(filters(db)).toEqual({ labels: ["ui"], epicTasks: true });
+      expect(modes(db)).toEqual({ "board:": "on" });
+      db.close();
+    });
+
+    it("turns a project filter into Only in those projects, each in the state it had", () => {
+      const db = before(
+        { projectIds: ["a", "b"], labels: [], epicId: null },
+        `${row("board", "", "preview")} ${row("project", "b", "on", '{"budgetUsd":2}')} ${row("project", "c", "on")}
+         ${row("epic", "f", "off")}`,
+      );
+      expect(filters(db)).toEqual({ labels: [], epicTasks: true });
+      // a followed the board's Preview; b keeps its own On (and config); c was filtered out; f's own Off stays.
+      expect(modes(db)).toEqual({
+        "board:": "inherit",
+        "project:a": "preview",
+        "project:b": "on",
+        "project:c": "inherit",
+        "epic:f": "off",
+      });
+      expect(
+        db.prepare("SELECT config_json FROM autopilot_settings WHERE scope_kind = 'project' AND scope_id = 'b'").get(),
+      ).toEqual({ config_json: '{"budgetUsd":2}' });
+      db.close();
+    });
+
+    it("switches off an epic of a project the filter left out", () => {
+      const db = before({ projectIds: ["a"], labels: [], epicId: null }, row("epic", "f", "on"));
+      expect(modes(db)).toEqual({ "epic:f": "inherit" });
+      db.close();
+    });
+
+    it("turns an epic filter into that epic's own setting, everything else off and Tasks in epics off", () => {
+      const db = before(
+        { projectIds: [], labels: ["ui"], epicId: "e" },
+        `${row("board", "", "on")} ${row("project", "b", "preview")} ${row("epic", "f", "on")}`,
+      );
+      expect(filters(db)).toEqual({ labels: ["ui"], epicTasks: false });
+      expect(modes(db)).toEqual({
+        "board:": "inherit",
+        "project:b": "inherit",
+        "epic:f": "inherit",
+        "epic:e": "on",
+      });
+      db.close();
+    });
+
+    it("leaves an epic filter off where it never ran: its project off, or left out by the project filter", () => {
+      const off = before({ projectIds: [], labels: [], epicId: "e" }, row("project", "b", "on"));
+      expect(modes(off)).toEqual({ "project:b": "inherit" });
+      off.close();
+      rmSync(dir!, { recursive: true, force: true });
+      const outside = before({ projectIds: ["b"], labels: [], epicId: "e" }, row("board", "", "on"));
+      expect(modes(outside)).toEqual({ "board:": "inherit" });
+      outside.close();
+    });
+  });
 });

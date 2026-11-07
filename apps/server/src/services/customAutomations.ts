@@ -48,11 +48,14 @@ export interface CustomAutomationsService {
   /** Oldest first. */
   list(): CustomAutomation[];
   get(id: string): CustomAutomation;
-  /** Throws VALIDATION for a definition that can't run, NOT_FOUND for an unknown project or epic, CONFLICT for a name taken. */
+  /**
+   * Saves it in Preview, everywhere or only in `projectIds`. Throws VALIDATION for a definition that can't run,
+   * NOT_FOUND for an unknown project, CONFLICT for a name taken.
+   */
   create(input: CreateCustomAutomationInput): CustomAutomation;
   /**
-   * Saves an automation from a shared file, switched off like any new one: its inputs and slots filled in as given,
-   * restricted to `projectIds`, under a free name ("Name (2)" when taken). The skill in the file is written with
+   * Saves an automation from a shared file, in Preview like any new one: its inputs and slots filled in as given,
+   * only in `projectIds` when there are any, under a free name ("Name (2)" when taken). The skill in the file is written with
    * `installSkill` only when the importer asked for it, and the automation names the name it got. Throws VALIDATION
    * for a file that isn't one, is from a newer version or doesn't make a definition that can run.
    */
@@ -69,7 +72,7 @@ export interface CustomAutomationsService {
   dismissDraft(id: string): void;
   /**
    * Applies a draft that replaces a custom automation: the automation takes the draft's definition in place, keeping
-   * its id, switches, projects, epic and run history. Inputs and slots keep their current values unless given. Deletes
+   * its id, switches and run history. Inputs and slots keep their current values unless given. Deletes
    * the draft. Throws VALIDATION for a draft that makes a new automation or changes a script not confirmed, NOT_FOUND
    * when the draft or its automation is gone.
    */
@@ -156,13 +159,6 @@ export function createCustomAutomationsService(
     const next = { ...def, filters: { ...def.filters, labels } };
     const problem = checkCustomDefinition(next);
     if (problem) throw new AppError("VALIDATION", problem);
-    for (const projectId of next.filters.projectIds) {
-      if (!repos.projects.get(projectId)) throw notFound("Project", projectId);
-    }
-    if (next.filters.epicId) {
-      const epic = repos.tasks.get(next.filters.epicId);
-      if (!epic || epic.kind !== "epic") throw notFound("Epic", next.filters.epicId);
-    }
     const taken = repos.autopilotCustom.byName(next.name);
     if (taken && taken.id !== selfId) {
       throw new AppError("CONFLICT", `There is already a custom automation called "${taken.name}"`);
@@ -170,12 +166,20 @@ export function createCustomAutomationsService(
     return next;
   };
 
+  const checkProjects = (projectIds: readonly string[]): void => {
+    for (const projectId of projectIds) {
+      if (!repos.projects.get(projectId)) throw notFound("Project", projectId);
+    }
+  };
+
   /**
-   * Saves a checked definition as a new automation, armed from now, in Preview for the board: it records what it
-   * would do until the user turns it on (docs/features/autopilot.md#preview).
+   * Saves a checked definition as a new automation, armed from now, in Preview for the board (or for `projectIds`
+   * only): it records what it would do until the user turns it on (docs/features/autopilot.md#preview).
    */
-  const insert = (def: CustomDefinition): CustomAutomation =>
+  const insert = (input: CustomDefinition & { projectIds?: readonly string[] }): CustomAutomation =>
     core.write((fx) => {
+      const { projectIds = [], ...def } = input;
+      checkProjects(projectIds);
       const now = nowIso();
       const custom: CustomAutomation = {
         id: randomUUID(),
@@ -186,15 +190,21 @@ export function createCustomAutomationsService(
         updatedAt: now,
       };
       repos.autopilotCustom.insert(custom);
-      repos.autopilotSettings.upsert({
-        scopeKind: "board",
-        scopeId: null,
-        automation: customAutomationKey(custom.id),
-        mode: "preview",
-        config: {},
-        lastOnMode: "preview",
-        updatedAt: now,
-      });
+      // Everywhere is the board in Preview; Only in… is those projects in Preview with the board off, as the Where it
+      // runs widget writes it.
+      const scopes =
+        projectIds.length > 0 ? projectIds.map((id) => ["project", id] as const) : [["board", null] as const];
+      for (const [scopeKind, scopeId] of new Map(scopes.map((s) => [s[1], s])).values()) {
+        repos.autopilotSettings.upsert({
+          scopeKind,
+          scopeId,
+          automation: customAutomationKey(custom.id),
+          mode: "preview",
+          config: {},
+          lastOnMode: "preview",
+          updatedAt: now,
+        });
+      }
       fx.autopilot();
       return custom;
     });
@@ -274,6 +284,7 @@ export function createCustomAutomationsService(
         });
       // Check everything before writing a skill, so a file that can't run leaves nothing behind.
       checked(named(bundle.skill?.name));
+      checkProjects(projectIds);
       const installed = bundle.skill && wantSkill && installSkill ? installSkill(bundle.skill) : null;
       const automation = insert(named(installed?.name));
       if (draftId) {
@@ -371,14 +382,13 @@ export function createCustomAutomationsService(
           }),
         ),
         slots: Object.fromEntries(bundle.slots.map((s) => [s.name, slots[s.name] ?? currentSlots.get(s.name) ?? []])),
-        // Where it runs is the user's, not the draft's: a file carries no projects or epic.
-        projectIds: current.filters.projectIds,
       };
+      // Where it runs is the user's, not the draft's: its switches stay as they are.
       const define = (skill?: string | null) => {
-        const def = CreateCustomAutomationInput.parse(
+        const { name, trigger, filters, action } = CreateCustomAutomationInput.parse(
           bundleToDefinition(bundle, { ...fill, ...(skill === undefined ? {} : { skill }) }),
         );
-        return { ...def, filters: { ...def.filters, epicId: current.filters.epicId } };
+        return { name, trigger, filters, action };
       };
       // A skill the draft carries is written only with consent, and never over one of the user's (installSkill keeps a
       // taken name apart). Without it the automation keeps naming its own skill when the draft names the same one, and

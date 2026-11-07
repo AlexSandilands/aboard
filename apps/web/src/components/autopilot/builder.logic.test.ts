@@ -10,7 +10,7 @@ import {
   stepProblem,
   suggestedName,
 } from "./builder.logic";
-import { emptyCustomForm, type CustomForm } from "./customAutomations.logic";
+import { customFormToInput, emptyCustomForm, type CustomForm } from "./customAutomations.logic";
 
 const form = (overrides: Partial<CustomForm> = {}): CustomForm => ({ ...emptyCustomForm(), ...overrides });
 
@@ -82,21 +82,53 @@ describe("suggestedName", () => {
   });
 });
 
+describe("the Where step", () => {
+  it("asks for a project under Only in…, and sends the ones picked", () => {
+    expect(stepProblem(form({ everywhere: false }), 3)).toMatch(/Pick a project/);
+    expect(stepProblem(form({ prompt: "Go", everywhere: false, projectIds: ["p1"] }), 3)).toBeNull();
+    const only = customFormToInput(
+      form({ name: "x", prompt: "Go", everywhere: false, projectIds: ["p1"], epicTasks: false }),
+    );
+    expect(only.ok && only.input).toMatchObject({ projectIds: ["p1"], filters: { epicTasks: false } });
+    const everywhere = customFormToInput(form({ name: "x", prompt: "Go", projectIds: ["p1"] }));
+    expect(everywhere.ok && everywhere.input.projectIds).toEqual([]);
+  });
+
+  it("drops what narrows tasks for a schedule, which has none", () => {
+    const result = customFormToInput(
+      form({ name: "x", prompt: "Go", triggerKind: "schedule", labels: "ui", epicTasks: false }),
+    );
+    expect(result.ok && result.input.filters).toEqual({ labels: [], epicTasks: true });
+  });
+});
+
 describe("formSentence", () => {
   it("says when, what and where, as far as it is filled in", () => {
     expect(formSentence(form(), projects)).toBe(
-      "When a task moves into Review, ask an agent. It runs in every project it's switched on in.",
+      "When a task moves into Review, ask an agent. It runs in every project.",
     );
     expect(
-      formSentence(form({ prompt: "Review the PR.\nThen comment.", projectIds: ["p2"], labels: "ui, api" }), projects),
+      formSentence(
+        form({
+          prompt: "Review the PR.\nThen comment.",
+          everywhere: false,
+          projectIds: ["p2"],
+          labels: "ui, api",
+          epicTasks: false,
+        }),
+        projects,
+      ),
     ).toBe(
-      "When a task moves into Review, ask an agent: “Review the PR.” It runs in payments, on tasks labelled ui or api.",
+      "When a task moves into Review, ask an agent: “Review the PR.” It runs in payments, on tasks labelled ui or api, skipping tasks in epics.",
+    );
+    expect(formSentence(form({ everywhere: false }), projects)).toBe(
+      "When a task moves into Review, ask an agent. It runs in no project yet.",
     );
   });
 
   it("names a check script, and drops task filters for a schedule", () => {
     expect(formSentence(form({ triggerKind: "schedule", checkOn: true, labels: "ui" }), projects)).toBe(
-      "Mon, Tue, Wed, Thu, Fri at 09:00, run a Node.js check script and, for each item it prints, ask an agent. It runs in every project it's switched on in.",
+      "Mon, Tue, Wed, Thu, Fri at 09:00, run a Node.js check script and, for each item it prints, ask an agent. It runs in every project.",
     );
   });
 });
@@ -116,7 +148,12 @@ describe("rightNow", () => {
   });
 
   it("keeps to the projects picked", () => {
-    const due = rightNow(form({ triggerKind: "stale", staleHours: "48", projectIds: ["p1"] }), tasks, projects, NOW);
+    const due = rightNow(
+      form({ triggerKind: "stale", staleHours: "48", everywhere: false, projectIds: ["p1"] }),
+      tasks,
+      projects,
+      NOW,
+    );
     expect(due.kind === "tasks" && due.tasks.map((t) => t.id)).toEqual(["t1"]);
   });
 
@@ -157,7 +194,7 @@ describe("formFromBundle", () => {
       name: "Fix checks",
       description: "",
       trigger: { kind: "pr_event", event: "checks_failing" },
-      filters: { labels: ["ci"] },
+      filters: { labels: ["ci"], epicTasks: true },
       action: {
         kind: "agent",
         prompt: "Fix it, {{inputs.who}}.",
@@ -179,6 +216,7 @@ describe("formFromBundle", () => {
       triggerKind: "pr_event",
       prEvent: "checks_failing",
       labels: "ci",
+      everywhere: false,
       projectIds: ["p1"],
       prompt: "Fix it, {{inputs.who}}.",
       onPrBranch: true,

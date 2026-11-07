@@ -13,7 +13,6 @@ const current: CustomAutomation = {
   ...CreateCustomAutomationInput.parse({
     name: "Flaky test report",
     trigger: { kind: "schedule", schedule: { kind: "weekly", days: [1], time: "08:00" } },
-    filters: { projectIds: ["p1"] },
     action: {
       kind: "agent",
       prompt: "Open a task for {{item.key}}.",
@@ -34,7 +33,7 @@ const draft = (change: (bundle: AutomationBundle) => AutomationBundle): Automati
   change(automationBundle(current));
 
 describe("proposedDefinition", () => {
-  it("keeps the automation's input values, slot tools, projects and epic", () => {
+  it("keeps the automation's input values and slot tools, and leaves where it runs out", () => {
     const next = proposedDefinition(
       current,
       draft((b) => ({
@@ -42,7 +41,7 @@ describe("proposedDefinition", () => {
         inputs: [...b.inputs, { name: "branch", label: "Branch", type: "text", default: "main" }],
       })),
     );
-    expect(next.filters.projectIds).toEqual(["p1"]);
+    expect(next).not.toHaveProperty("projectIds");
     expect(next.action.inputs.map((i) => [i.name, i.value])).toEqual([
       ["days", "3"],
       ["branch", "main"],

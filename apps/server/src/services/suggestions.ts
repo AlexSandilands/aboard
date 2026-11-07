@@ -157,9 +157,7 @@ export function createSuggestionsService(
       const skillName = custom.action.skill;
       if (!skillName) continue;
       // The skill is named, not located: look where the agent would find it, in the projects the automation covers.
-      const roots = projects
-        .filter((p) => custom.filters.projectIds.length === 0 || custom.filters.projectIds.includes(p.id))
-        .map((p) => p.workspaceRoot);
+      const roots = projects.map((p) => p.workspaceRoot);
       const skills = [null, ...roots].flatMap((workspaceRoot) =>
         discoverSkills({ homeDir: deps.userHome, workspaceRoot }),
       );

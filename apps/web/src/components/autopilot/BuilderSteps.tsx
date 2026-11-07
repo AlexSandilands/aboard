@@ -10,6 +10,7 @@ import {
   INHERIT,
   inputEnvName,
   type AutomationVariable,
+  type AutopilotAutomation,
   type ModelChoice,
   type OperationNeed,
   type Project,
@@ -43,6 +44,7 @@ import { cn } from "~/lib/utils";
 import { useSettings } from "~/state/queries";
 import {
   BUILDER_STEPS,
+  formProjects,
   hasMoreOptions,
   moreOptionsSummary,
   rightNow,
@@ -73,6 +75,7 @@ import { ScriptField, ScriptTest } from "./ScriptField";
 import { RunsAsYouBadge, ScriptWarning } from "./ScriptWarning";
 import { SdkStatusBar } from "./SdkStatusBar";
 import { VariableNeedsList } from "./VariablesEditor";
+import { DraftProjects, WhereProjects } from "./WhereItRuns";
 import { variableNeeds } from "./variables.logic";
 
 /** The shell a command runs in here, for the examples: PowerShell on Windows, sh elsewhere. */
@@ -89,6 +92,8 @@ export interface StepProps {
   epics: readonly TaskSummary[];
   tasks: readonly TaskSummary[];
   boardVariables: readonly AutomationVariable[];
+  /** The saved automation being edited, whose Where step writes its switches; absent for a new one. */
+  automation?: AutopilotAutomation | null;
 }
 
 /** The step's title and, under it, its body as one settings card. */
@@ -814,61 +819,63 @@ function CommandDetails({ form, patch, projects, boardVariables }: StepProps) {
   );
 }
 
-/** Step 4: which projects, and for a task trigger, which tasks. None picked is everywhere it is switched on. */
-export function WhereStep({ form, patch, projects, epics }: StepProps) {
-  const inProjects = epics.filter((e) => form.projectIds.length === 0 || form.projectIds.includes(e.projectId));
+/**
+ * Step 4: where it runs, as the automation's page's Where it runs (a saved one's switches change as they are picked, a
+ * new one's are written when it is saved), and for a task trigger which tasks.
+ */
+export function WhereStep({ form, patch, projects, automation }: StepProps) {
+  const lanes = [...projects]
+    .sort((a, b) => (a.position < b.position ? -1 : a.position > b.position ? 1 : 0))
+    .map((p) => ({ id: p.id, title: p.title }));
   return (
     <StepCard title="Where?">
       <Block>
-        <Field
-          label="Only in these projects"
-          hint="None picked is every project it's switched on in. You switch it on per project in the Autopilot list, like the built-in ones."
-        >
-          <ToggleGroup
-            multiple
-            aria-label="Projects"
-            className="flex-wrap"
-            value={form.projectIds}
-            onValueChange={(projectIds) => patch({ projectIds })}
-          >
-            {projects.map((p) => (
-              <Toggle key={p.id} value={p.id}>
-                {p.title}
-              </Toggle>
-            ))}
-          </ToggleGroup>
+        <Field label="Projects">
+          <div className="flex flex-col gap-2">
+            {automation ? (
+              <WhereProjects automation={automation} />
+            ) : (
+              <DraftProjects
+                projects={lanes}
+                everywhere={form.everywhere}
+                projectIds={form.projectIds}
+                onChange={(next) => patch(next)}
+              />
+            )}
+          </div>
         </Field>
         {form.triggerKind === "schedule" ? null : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="With any of these labels" hint="Comma-separated; blank is any task.">
-              <Input
-                size="sm"
-                aria-label="Labels"
-                value={form.labels}
-                placeholder="ui, backend"
-                onChange={(event) => patch({ labels: event.currentTarget.value })}
-              />
-            </Field>
-            <Field label="In the epic">
-              <Choice
-                label="Epic"
-                value={form.epicId}
-                items={[
-                  { value: "", label: "Any task" },
-                  ...inProjects.map((e) => ({ value: e.id, label: `#${e.number} ${e.title}` })),
-                ]}
-                onChange={(epicId) => patch({ epicId })}
-              />
-            </Field>
-          </div>
+          <Field label="With any of these labels" hint="Comma-separated; blank is any task.">
+            <Input
+              size="sm"
+              aria-label="Labels"
+              value={form.labels}
+              placeholder="ui, backend"
+              onChange={(event) => patch({ labels: event.currentTarget.value })}
+            />
+          </Field>
         )}
       </Block>
+      {form.triggerKind === "schedule" ? null : (
+        <SettingsRow
+          title="Tasks in epics"
+          info="This sets the default. An epic's popover on the board can still switch it on or off for that epic."
+          description={`${form.epicTasks ? "Runs on tasks in epics too." : "Skips tasks in epics."} One epic is switched from its popover.`}
+          control={
+            <Switch
+              aria-label="Run on tasks in epics"
+              checked={form.epicTasks}
+              onCheckedChange={(epicTasks) => patch({ epicTasks })}
+            />
+          }
+        />
+      )}
     </StepCard>
   );
 }
 
 /** The one line the Review step shows for each earlier step, with an Edit that goes back to it. */
-function sectionSummaries(form: CustomForm, projects: readonly Project[], epics: readonly TaskSummary[]) {
+function sectionSummaries(form: CustomForm, projects: readonly Project[]) {
   const parsed = triggerOf(form);
   const trigger = typeof parsed === "string" ? parsed : describeCustomTrigger(parsed);
   const action = ACTIONS.find((a) => a.value === form.actionKind)!.title;
@@ -889,12 +896,11 @@ function sectionSummaries(form: CustomForm, projects: readonly Project[], epics:
             `${form.body.split("\n").length}-line ${form.language} script`,
             form.inputs.length > 0 ? `${form.inputs.length} inputs` : null,
           ];
-  const named = projects.filter((p) => form.projectIds.includes(p.id)).map((p) => p.title);
-  const epic = epics.find((e) => e.id === form.epicId);
+  const named = formProjects(form, projects).map((p) => p.title);
   const where = [
-    named.length > 0 ? named.join(", ") : "Every project it's switched on in",
+    form.everywhere ? "Every project" : named.length > 0 ? named.join(", ") : "No project yet",
     form.triggerKind !== "schedule" && form.labels.trim() ? `labels ${form.labels.trim()}` : null,
-    form.triggerKind !== "schedule" && epic ? `#${epic.number} ${epic.title}` : null,
+    form.triggerKind !== "schedule" && !form.epicTasks ? "skips tasks in epics" : null,
   ];
   const join = (parts: readonly (string | null)[]) => parts.filter(Boolean).join(" · ");
   return [
@@ -921,18 +927,14 @@ export function ReviewStep({
   isNew: boolean;
   onStep: (step: BuilderStep) => void;
 }) {
-  const { form, patch, projects, epics, tasks, boardVariables } = props;
+  const { form, patch, projects, tasks, boardVariables } = props;
   const isSchedule = form.triggerKind === "schedule";
   const [now] = useState(() => new Date());
   const result = customFormToInput({ ...form, name: form.name || "x" });
   const sample = result.ok && !isSchedule ? sampleTask(result.input, tasks) : null;
   const preview = result.ok ? previewAction(result.input, sample, projects, boardVariables) : null;
   const needs = result.ok
-    ? variableNeeds(
-        CustomAction.parse(result.input.action),
-        boardVariables,
-        projects.filter((p) => form.projectIds.length === 0 || form.projectIds.includes(p.id)),
-      )
+    ? variableNeeds(CustomAction.parse(result.input.action), boardVariables, formProjects(form, projects))
     : [];
   const due = rightNow(form, tasks, projects, now);
   const trigger = triggerOf(form);
@@ -945,7 +947,7 @@ export function ReviewStep({
         <Block>
           <p className="text-sm leading-relaxed text-foreground">{sentence}</p>
         </Block>
-        {sectionSummaries(form, projects, epics).map((section) => (
+        {sectionSummaries(form, projects).map((section) => (
           // Its own row rather than a SettingsRow, so Edit stays beside the line on a phone instead of under it.
           <div key={section.title} className="flex items-center gap-3 px-3 py-3 sm:px-4">
             <div className="min-w-0 flex-1">

@@ -228,7 +228,7 @@ describe("draft_automation with replaces", () => {
     const custom = h.services.customAutomations.create({
       name: "Flaky test report",
       trigger: { kind: "schedule", schedule: { kind: "weekly", days: [1], time: "08:00" } },
-      filters: { projectIds: [alpha.id] },
+      projectIds: [alpha.id],
       action: {
         kind: "agent",
         prompt: "Open a task for {{item.key}} covering the last {{inputs.days}} days.",
@@ -239,7 +239,7 @@ describe("draft_automation with replaces", () => {
       },
     });
     const key = `custom:${custom.id}`;
-    h.services.autopilot.setScope("board", null, key, { mode: "on" });
+    h.services.autopilot.setScope("project", alpha.id, key, { mode: "on" });
     h.services.autopilot.record({
       automation: key,
       candidate: { dedupeKey: "seed:1", summary: "a run" },
@@ -287,7 +287,6 @@ describe("draft_automation with replaces", () => {
     expect(others).toEqual([]);
     expect(after!.id).toBe(custom.id);
     expect(after!.trigger).toMatchObject({ schedule: { days: [1, 4] } });
-    expect(after!.filters.projectIds).toEqual([alpha.id]);
     expect(after!.action).toMatchObject({
       kind: "agent",
       check: { body: "// v2: skips quarantined tests\n" },
@@ -297,7 +296,10 @@ describe("draft_automation with replaces", () => {
       ],
       slots: [{ name: "ci", tools: ["mcp__ci__logs"] }],
     });
-    expect(h.db.prepare("SELECT mode FROM autopilot_settings WHERE automation = ?").get(key)).toEqual({ mode: "on" });
+    // Where it runs is the user's: still On only in Alpha.
+    expect(
+      h.db.prepare("SELECT scope_kind, scope_id, mode FROM autopilot_settings WHERE automation = ?").all(key),
+    ).toEqual([{ scope_kind: "project", scope_id: alpha.id, mode: "on" }]);
     expect(h.db.prepare("SELECT count(*) AS n FROM autopilot_runs WHERE automation = ?").get(key)).toEqual({ n: 1 });
     expect(await drafts()).toEqual([]);
   });

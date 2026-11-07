@@ -39,7 +39,7 @@ const custom = (over: Partial<CustomAutomation>): CustomAutomation => ({
   id: "c1",
   name: "Ping",
   trigger: { kind: "status_change", to: "review", from: null },
-  filters: { projectIds: [], labels: [], epicId: null },
+  filters: { labels: [], epicTasks: true },
   action: { kind: "shell", command: "make", timeoutSeconds: 60, inputs: [] },
   armedAt: "2026-10-01T00:00:00.000Z",
   armedProjects: {},
@@ -66,7 +66,8 @@ describe("custom automation form", () => {
       input: {
         name: "Fix checks",
         trigger: { kind: "pr_event", event: "checks_failing" },
-        filters: { projectIds: [], labels: ["ui", "backend"], epicId: null },
+        filters: { labels: ["ui", "backend"], epicTasks: true },
+        projectIds: [],
         action: {
           kind: "agent",
           prompt: "Fix {{pr.url}}",
@@ -111,9 +112,10 @@ describe("custom automation form", () => {
       ok: false,
       error: "Run every 1 to 24 hours",
     });
+    // Labels left from a task trigger don't stop a schedule: it has no task, so they aren't saved.
     expect(customFormToInput({ ...interval, prompt: "Go", unit: "minutes", every: "15", labels: "ui" })).toMatchObject({
-      ok: false,
-      error: expect.stringMatching(/only filter by project/),
+      ok: true,
+      input: { filters: { labels: [] } },
     });
   });
 
@@ -170,7 +172,7 @@ describe("custom automation form", () => {
     });
     expect(customFormToInput(formFromCustom(saved))).toEqual({
       ok: true,
-      input: { name: saved.name, trigger: saved.trigger, filters: saved.filters, action: saved.action },
+      input: { name: saved.name, trigger: saved.trigger, filters: saved.filters, action: saved.action, projectIds: [] },
     });
   });
 
@@ -291,12 +293,12 @@ describe("custom automation form", () => {
   it("round-trips a saved automation", () => {
     const saved = custom({
       trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 6 } },
-      filters: { projectIds: ["p"], labels: [], epicId: null },
+      filters: { labels: [], epicTasks: true },
     });
     const result = customFormToInput(formFromCustom(saved));
     expect(result).toEqual({
       ok: true,
-      input: { name: saved.name, trigger: saved.trigger, filters: saved.filters, action: saved.action },
+      input: { name: saved.name, trigger: saved.trigger, filters: saved.filters, action: saved.action, projectIds: [] },
     });
   });
 });
@@ -507,7 +509,7 @@ describe("preview", () => {
       task("epic", { kind: "epic", labels: ["ui"], updatedAt: "2026-10-09T00:00:00.000Z" }),
       task("elsewhere", { projectId: "q", labels: ["ui"], updatedAt: "2026-10-09T00:00:00.000Z" }),
     ];
-    expect(sampleTask({ filters: { projectIds: ["p"], labels: ["ui"], epicId: null } }, tasks)?.id).toBe("new");
+    expect(sampleTask({ filters: { labels: ["ui"], epicTasks: true }, projectIds: ["p"] }, tasks)?.id).toBe("new");
   });
 
   it("shows the command with the sample task's variables, and the filled prompt", () => {

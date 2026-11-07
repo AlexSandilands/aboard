@@ -15,7 +15,7 @@ const custom: CustomAutomation = {
   id: "c-1",
   name: "Nudge stale work",
   trigger: { kind: "stale", status: "in_progress", hours: 48 },
-  filters: { projectIds: [], labels: [], epicId: null },
+  filters: { labels: [], epicTasks: true },
   action: {
     kind: "agent",
     prompt: "Read its plan and notes, then add a note saying what is left.",

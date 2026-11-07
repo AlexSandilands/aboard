@@ -44,12 +44,13 @@ export function proposedDefinition(
         }),
       ),
       slots: Object.fromEntries(bundle.slots.map((s) => [s.name, fill.slots?.[s.name] ?? tools.get(s.name) ?? []])),
-      projectIds: current.filters.projectIds,
       // As applying names it: the draft's skill once saved, the automation's own when the names match, else none.
       ...(bundle.skill ? { skill: fill.installSkill || keepsSkill(current, bundle) ? bundle.skill.name : null } : {}),
     }),
   );
-  return { ...def, filters: { ...def.filters, epicId: current.filters.epicId } };
+  // Where it runs is its switches, which applying leaves alone.
+  const { name, trigger, filters, action } = def;
+  return { name, trigger, filters, action };
 }
 
 /** One field the draft changes, as text before and after, for a line diff. */

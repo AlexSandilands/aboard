@@ -1,14 +1,14 @@
 import { customAutomationKey } from "@repo/contracts";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { EditorFooter, EditorHeader, EditorTitle } from "~/components/settings/EditorFrame";
 import { Button } from "~/components/ui/button";
 import {
   useCreateCustomAutomation,
   useDismissAutomationDraft,
+  useTurnOnCustomAutomation,
   useUpdateCustomAutomation,
 } from "~/state/customAutomations";
-import { useSetAutopilotScope } from "~/state/mutations";
-import { useBoard, useSettings } from "~/state/queries";
+import { useAutopilotOverview, useBoard, useSettings } from "~/state/queries";
 import {
   BUILDER_STEPS,
   firstProblem,
@@ -30,6 +30,7 @@ import {
   type StepProps,
 } from "./BuilderSteps";
 import { customFormToInput, type CustomForm } from "./customAutomations.logic";
+import { useWhere } from "./useWhere";
 
 /**
  * The custom automation builder (docs/features/autopilot.md#custom-automations): one form shown in five steps, When →
@@ -79,9 +80,15 @@ export function CustomAutomationEditorForm({
   const boardVariables = useSettings().data?.automationVariables ?? [];
   const create = useCreateCustomAutomation();
   const update = useUpdateCustomAutomation();
-  const setScope = useSetAutopilotScope(null);
+  const turnOn = useTurnOnCustomAutomation();
   const dismiss = useDismissAutomationDraft();
-  const pending = create.isPending || update.isPending || setScope.isPending;
+  const pending = create.isPending || update.isPending || turnOn.isPending;
+  // A saved one's Where step edits its switches in place, so it needs its catalogue entry.
+  const overview = useAutopilotOverview(customId !== null).data;
+  const automation = useMemo(
+    () => (customId ? (overview?.automations.find((a) => a.key === customAutomationKey(customId)) ?? null) : null),
+    [overview, customId],
+  );
 
   const setForm = (next: (current: CustomForm) => CustomForm) => {
     setFormState(next);
@@ -92,8 +99,12 @@ export function CustomAutomationEditorForm({
   const projects = board?.projects.filter((p) => p.archivedAt === null) ?? [];
   const tasks = board?.tasks ?? [];
   const epics = tasks.filter((t) => t.kind === "epic" && t.archivedAt === null);
-  const props: StepProps = { form, patch, setForm, projects, epics, tasks, boardVariables };
-  const sentence = formSentence(form, projects, epics);
+  // A saved one's form reads where it runs from its switches, so the sentence and the previews say where it really runs.
+  const where = useWhere(automation ?? { key: "", epicScope: false }).description;
+  const shown =
+    automation && where ? { ...form, everywhere: where.reach === "everywhere", projectIds: where.projects } : form;
+  const props: StepProps = { form: shown, patch, setForm, projects, epics, tasks, boardVariables, automation };
+  const sentence = formSentence(shown, projects);
 
   const goTo = (next: BuilderStep) => {
     // The name is asked for last, so it starts from one said from what was chosen.
@@ -122,7 +133,7 @@ export function CustomAutomationEditorForm({
   // Only while it still runs a script: one switched to an agent without a check has nothing to read.
   const mustConfirm = confirmScript && !scriptRead && formRunsScript(form);
 
-  const save = (turnOn: boolean) => {
+  const save = (on: boolean) => {
     const problem = firstProblem(form);
     if (problem) {
       setStep(problem.step);
@@ -137,15 +148,17 @@ export function CustomAutomationEditorForm({
     const result = customFormToInput(form);
     if (!result.ok) return;
     if (customId) {
-      update.mutate({ id: customId, ...result.input }, { onSuccess: () => finish(customId) });
+      // Where it runs was saved as it was picked: the definition is the rest.
+      const { name, trigger, filters, action } = result.input;
+      update.mutate({ id: customId, name, trigger, filters, action }, { onSuccess: () => finish(customId) });
       return;
     }
     create.mutate(result.input, {
-      // A new one is saved in Preview by the server; "Save and turn on" then switches it on for the board.
+      // A new one is saved in Preview where it was made to run; "Save and turn on" then switches it on there.
       onSuccess: (custom) => {
-        if (turnOn) {
-          setScope.mutate(
-            { automation: customAutomationKey(custom.id), mode: "on" },
+        if (on) {
+          turnOn.mutate(
+            { id: custom.id, projectIds: result.input.projectIds ?? [] },
             { onSettled: () => finish(custom.id) },
           );
         } else finish(custom.id);

@@ -418,8 +418,9 @@ Statuses are \`backlog\`, \`planned\`, \`in_progress\`, \`review\`, \`done\`. Th
   \`note\`.
 - A **schedule has no task**: it runs once in each project it is switched on in, with no task or PR, and can't filter
   by label. Its agent runs headless in an empty temporary folder and is told the project's name and folder.
-- \`filters: {labels: [...]}\` narrows the task triggers to tasks with any of the labels. The user picks the projects and
-  the epic on import, so don't try to name them.
+- \`filters: {labels: [...]}\` narrows the task triggers to tasks with any of the labels, and \`epicTasks: false\` skips
+  tasks in epics (an epic the user switches on for itself still counts). Where it runs, which projects and which epics,
+  is the user's to pick when they import it, so don't try to name them.
 - Each thing is done once: the same move never gets a second run.
 
 ## What a prompt, command or script can read

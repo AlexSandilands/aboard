@@ -70,7 +70,7 @@ describe("automationSentence", () => {
     const custom = (action: CustomDefinition["action"]): CustomDefinition => ({
       name: "x",
       trigger: { kind: "stale", status: "in_progress", hours: 48 },
-      filters: { projectIds: [], labels: [], epicId: null },
+      filters: { labels: [], epicTasks: true },
       action,
     });
     const agent = {
