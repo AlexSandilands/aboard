@@ -63,24 +63,6 @@ export function sortFindings(findings: ReadonlyArray<ReviewFinding>): ReviewFind
 export const hasOpenGating = (findings: ReadonlyArray<ReviewFinding>): boolean =>
   findings.some((f) => f.status === "open" && isGatingSeverity(f.severity));
 
-// ── Auto-review override ────────────────────────────────────────────────
-
-export type AutoReviewChoice = "inherit" | "on" | "off";
-
-export const autoReviewChoice = (value: boolean | null): AutoReviewChoice =>
-  value === null ? "inherit" : value ? "on" : "off";
-
-export const autoReviewValue = (choice: AutoReviewChoice): boolean | null =>
-  choice === "inherit" ? null : choice === "on";
-
-export function autoReviewOptions(globalOn: boolean): Array<{ value: AutoReviewChoice; label: string }> {
-  return [
-    { value: "inherit", label: `Default (${globalOn ? "on" : "off"})` },
-    { value: "on", label: "On" },
-    { value: "off", label: "Off" },
-  ];
-}
-
 // ── Skill picker ─────────────────────────────────────────────────────────
 
 /** Select values: "builtin", or "skill:<path>". Paths are unique, names may not be. */

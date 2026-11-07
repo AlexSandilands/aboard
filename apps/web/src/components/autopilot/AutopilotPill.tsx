@@ -3,7 +3,6 @@ import { PauseIcon, ZapIcon } from "lucide-react";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
-import { useSetAutopilotScope } from "~/state/mutations";
 import { useNow } from "~/hooks/useNow";
 import {
   useAutopilotOverview,
@@ -59,7 +58,6 @@ export function AutopilotPill({ project }: { project: Project }) {
   const overview = useAutopilotOverview();
   const status = useAutopilotStatus();
   const scope = useAutopilotScope(project.id);
-  const set = useSetAutopilotScope(project.id);
   const hasWork = useProjectHasOrchestrateWork(project.id);
   const showTimer = useBoardView((s) => s.showAutopilotTimer);
   const orchestrateOn =
@@ -100,7 +98,7 @@ export function AutopilotPill({ project }: { project: Project }) {
         <TooltipPopup>{tooltip}</TooltipPopup>
       </Tooltip>
       <PopoverPopup align="start" width="lg" padding="compact">
-        <ScopePopover title={project.title} entries={scope.data} set={set} projectId={project.id} error={scope.error} />
+        <ScopePopover title={project.title} scope={{ kind: "project", id: project.id }} error={scope.error} />
       </PopoverPopup>
     </Popover>
   );

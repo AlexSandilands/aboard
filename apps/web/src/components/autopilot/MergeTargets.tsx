@@ -89,7 +89,7 @@ export function MergeTargets({
                 main when it&apos;s ready, one at a time per repository. Off unless you switch it on.
               </>
             }
-            info="The same check the merge_task_pr tool uses. Flag a task in its panel's Automation section (Auto-merge: On), or ask an agent to flag it. After each merge it reads the repository's other pull requests again, so one the merge left conflicting waits for a fix."
+            info="The same check the merge_task_pr tool uses. Flag a task in its panel's Autopilot section (Autopilot may: merge it), or ask an agent to flag it. After each merge it reads the repository's other pull requests again, so one the merge left conflicting waits for a fix."
             status={flaggedStatus(info, intoMain)}
           >
             <Flow>

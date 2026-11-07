@@ -16,7 +16,7 @@ import { findingLocation, reviewBadgeVariant, SEVERITY_VARIANT, sortFindings, vi
 const STATUS_LABEL: Record<ReviewFinding["status"], string> = { open: "Open", fixed: "Fixed", wont_fix: "Won't fix" };
 
 /**
- * The task's local review: whether auto-review is on (set under Automation), actions to run a review or copy the loop
+ * The task's local review: whether auto-review is on (set under Autopilot), actions to run a review or copy the loop
  * prompt, the latest round's findings and anything still open from earlier rounds.
  */
 export function ReviewSection({ task }: { task: TaskDetail }) {
@@ -38,7 +38,7 @@ export function ReviewSection({ task }: { task: TaskDetail }) {
         <>
           {noRounds ? null : (
             <span className="text-2xs text-muted-foreground">
-              Auto-review {effectiveOn ? "on" : "off"} (set under Automation)
+              Auto-review {effectiveOn ? "on" : "off"} (set under Autopilot)
             </span>
           )}
           {task.manual ? null : (

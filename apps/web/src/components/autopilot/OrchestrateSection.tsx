@@ -1,16 +1,15 @@
-import type { AutopilotAutomation, AutopilotScopeEntry } from "@repo/contracts";
+import type { AutopilotAutomation } from "@repo/contracts";
 import { LoaderCircleIcon, PlayIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useNow } from "~/hooks/useNow";
 import { cn } from "~/lib/utils";
-import type { useSetAutopilotScope } from "~/state/mutations";
 import { useRunOrchestrateNow } from "~/state/mutations";
 import { useAutopilotOverview, useOrchestrateState } from "~/state/queries";
-import { scopeRowModel } from "./autopilot.logic";
 import { lastRunText, orchestrateLine } from "./orchestrate.logic";
 import { RunHistoryLink } from "./RunHistoryLink";
-import { ScopeCard, ScopeRow } from "./ScopeRow";
+import { ScopeCard } from "./ScopeRow";
+import { WhereRow } from "./WhereRow";
 
 /**
  * Orchestrate's card at the top of a project's Autopilot popover: its row, then one line with the next check (or why
@@ -19,16 +18,12 @@ import { ScopeCard, ScopeRow } from "./ScopeRow";
  */
 export function OrchestrateSection({
   automation,
-  entry,
   title,
   projectId,
-  set,
 }: {
   automation: AutopilotAutomation;
-  entry: AutopilotScopeEntry;
   title: string;
   projectId: string;
-  set: ReturnType<typeof useSetAutopilotScope>;
 }) {
   const overview = useAutopilotOverview();
   const state = useOrchestrateState(projectId);
@@ -38,15 +33,7 @@ export function OrchestrateSection({
   const going = line?.kind === "running" || line?.kind === "requested" || run.isPending;
   return (
     <ScopeCard>
-      <ScopeRow
-        name={automation.title}
-        description={automation.description}
-        label={`${automation.title} in ${title}`}
-        model={scopeRowModel(entry, automation.blocked, "project")}
-        scope="project"
-        disabled={set.isPending}
-        onChange={(mode) => set.mutate({ automation: automation.key, mode })}
-      />
+      <WhereRow automation={automation} scope={{ kind: "project", id: projectId }} title={title} />
       <div className="flex items-center gap-2 py-1.5">
         {state.data && line ? (
           <Tooltip>

@@ -1,15 +1,15 @@
-import type { AutopilotAutomation, AutopilotRun, AutopilotScopeEntry, AutopilotStatus } from "@repo/contracts";
+import type { AutopilotAutomation, AutopilotRun, AutopilotStatus } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   AUTOPILOT_MODES,
   BOARD_MODES,
+  boardModeToSave,
+  boardSummary,
+  boardSwitchValue,
   modeDescription,
   previewHint,
   restoreMode,
   automationTitle,
-  boardModeToSave,
-  boardSummary,
-  boardSwitchValue,
   dismissableRun,
   entryFor,
   hasEpicAutomations,
@@ -18,9 +18,7 @@ import {
   epicPillState,
   fieldText,
   formatCost,
-  inheritLabel,
   isClockTime,
-  parentEntry,
   parseLimit,
   parseNumberField,
   pillState,
@@ -28,7 +26,6 @@ import {
   projectActiveRuns,
   runsSummary,
   runStatusLabel,
-  scopeRowModel,
   scheduledAgentRuns,
   scheduledAnswerOf,
   taskActiveRun,
@@ -195,99 +192,6 @@ describe("Preview wording", () => {
     expect(previewHint(1)).toBe("Would have run once this week. Did those look right?");
     expect(previewHint(3)).toBe("Would have run 3 times this week. Did those look right?");
     expect(previewHint(0)).toMatch(/^Nothing for it to do yet/);
-  });
-});
-
-describe("inheritLabel", () => {
-  it("says what Inherit resolves to from the board's entry", () => {
-    expect(inheritLabel({ enabled: true, source: "board" })).toBe("Inherit (On from board)");
-    expect(inheritLabel({ enabled: false, source: "board" })).toBe("Inherit (Off from board)");
-  });
-
-  it("is off by default with no parent, while the board's entries load", () => {
-    expect(inheritLabel(null)).toBe("Inherit (Off by default)");
-    expect(inheritLabel({ enabled: false, source: "default" })).toBe("Inherit (Off by default)");
-  });
-
-  it("says what an epic inherits from its project's entry, which already resolves through the board", () => {
-    // The project turned it off; the board had it on.
-    const project = [{ automation: "a", enabled: false, source: "project" }] as AutopilotScopeEntry[];
-    expect(inheritLabel(parentEntry(project, "a"))).toBe("Inherit (Off from project)");
-    const fromBoard = [{ automation: "a", enabled: true, source: "board" }] as AutopilotScopeEntry[];
-    expect(inheritLabel(parentEntry(fromBoard, "a"))).toBe("Inherit (On from board)");
-  });
-
-  it("finds the board's entry for an automation", () => {
-    const entries = [{ automation: "a", enabled: true, source: "board" }] as AutopilotScopeEntry[];
-    expect(parentEntry(entries, "a")?.enabled).toBe(true);
-    expect(parentEntry(entries, "b")).toBeNull();
-    expect(parentEntry(undefined, "a")).toBeNull();
-  });
-});
-
-describe("scopeRowModel", () => {
-  it("shows Preview as on with a badge, and turns back on in the mode it was last on in", () => {
-    const preview = {
-      mode: "preview",
-      enabled: true,
-      preview: true,
-      source: "project",
-      lastOnMode: "preview",
-    } as const;
-    expect(scopeRowModel(preview, null, "project")).toMatchObject({
-      checked: true,
-      preview: true,
-      nextMode: "off",
-      note: "In Preview for this project",
-    });
-    const off = { mode: "off", enabled: false, preview: false, source: "project", lastOnMode: "preview" } as const;
-    expect(scopeRowModel(off, null, "project")).toMatchObject({ checked: false, preview: false, nextMode: "preview" });
-    expect(scopeRowModel(off, "Pick a tool", "project").canToggle).toBe(false);
-  });
-
-  it("fades an inherited switch and says where it comes from", () => {
-    expect(scopeRowModel({ mode: "inherit", enabled: true, source: "board" }, null, "project")).toEqual({
-      checked: true,
-      preview: false,
-      inherited: true,
-      nextMode: "off",
-      canToggle: true,
-      blocked: null,
-      note: "On, following the board",
-    });
-    expect(scopeRowModel({ mode: "inherit", enabled: false, source: "default" }, null, "project")).toMatchObject({
-      checked: false,
-      inherited: true,
-      nextMode: "on",
-      note: "Off by default",
-    });
-  });
-
-  it("follows the project for an epic, whatever the board says", () => {
-    const row = scopeRowModel({ mode: "inherit", enabled: false, source: "project" }, null, "epic");
-    expect(row.note).toBe("Off, following the project");
-  });
-
-  it("shows a switch set here as solid, with its own state", () => {
-    expect(scopeRowModel({ mode: "on", enabled: true, source: "project" }, null, "project")).toMatchObject({
-      checked: true,
-      inherited: false,
-      nextMode: "off",
-      note: "On for this project",
-    });
-    expect(scopeRowModel({ mode: "off", enabled: false, source: "epic" }, null, "epic")).toMatchObject({
-      checked: false,
-      inherited: false,
-      nextMode: "on",
-      note: "Off for this epic",
-    });
-  });
-
-  it("won't turn a blocked automation on, but turns it off", () => {
-    const off = scopeRowModel({ mode: "inherit", enabled: false, source: "default" }, "Pick a tool", "project");
-    expect(off).toMatchObject({ canToggle: false, blocked: "Pick a tool" });
-    const on = scopeRowModel({ mode: "on", enabled: true, source: "project" }, "Pick a tool", "project");
-    expect(on.canToggle).toBe(true);
   });
 });
 

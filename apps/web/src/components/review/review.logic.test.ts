@@ -1,9 +1,6 @@
 import type { ReviewFinding, SkillInfo, TaskReview } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
-  autoReviewChoice,
-  autoReviewOptions,
-  autoReviewValue,
   findingLocation,
   hasOpenGating,
   reviewBadgeVariant,
@@ -86,11 +83,6 @@ describe("review logic", () => {
     expect(sortFindings(visibleFindings(r, true)).map((f) => f.label)).toEqual(["R1.3", "R1.1", "R1.2"]);
     expect(hasOpenGating(r.findings)).toBe(true);
     expect(hasOpenGating([finding("x", { severity: "blocking", status: "wont_fix" })])).toBe(false);
-  });
-
-  it("round-trips the auto-review override", () => {
-    for (const value of [null, true, false]) expect(autoReviewValue(autoReviewChoice(value))).toBe(value);
-    expect(autoReviewOptions(true)[0]?.label).toBe("Default (on)");
   });
 
   it("lists built-in, discovered and missing configured skills", () => {
