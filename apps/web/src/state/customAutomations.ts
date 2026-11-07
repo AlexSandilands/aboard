@@ -63,15 +63,6 @@ export const useExportCustomAutomation = () =>
 export const useDeleteCustomAutomation = () =>
   useCustomMutation((id: string) => api<void>(`/api/autopilot/custom/${enc(id)}`, { method: "DELETE" }));
 
-/** Automations agents drafted for the user to review and import, newest first. */
-export function useAutomationDrafts() {
-  return useQuery({
-    queryKey: queryKeys.automationDrafts,
-    queryFn: ({ signal }) => api<AutomationDraft[]>("/api/autopilot/drafts", { signal }),
-    staleTime: 0,
-  });
-}
-
 /** One draft; an error once it was imported, dismissed or expired. */
 export function useAutomationDraft(id: string | undefined) {
   return useQuery({

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   activeSectionId,
+  automationOfTarget,
+  autopilotTabOf,
   editorListSection,
+  isEditorPath,
   isSettingsGroup,
   parseSettingsTarget,
   providerOfTarget,
@@ -78,8 +81,8 @@ describe("parseSettingsTarget", () => {
 
 describe("sectionOf", () => {
   it("maps a section or a row inside it to the section", () => {
-    expect(sectionOf("autopilot.engine")?.label).toBe("Autopilot");
-    expect(sectionOf("autopilot.engine.quiet-hours")?.id).toBe("autopilot.engine");
+    expect(sectionOf("autopilot.automations")?.label).toBe("Automations");
+    expect(sectionOf("autopilot.limits.quiet-hours")?.id).toBe("autopilot.limits");
     expect(sectionOf("agents.providers.claude-code.cli-path")?.id).toBe("agents.providers");
   });
 
@@ -115,7 +118,7 @@ describe("providers in the list", () => {
 describe("editorListSection", () => {
   it("returns each editor to the section listing what it edits", () => {
     expect(editorListSection("tasks")).toBe("tasks.new-tasks");
-    expect(editorListSection("autopilot")).toBe("autopilot.custom");
+    expect(editorListSection("autopilot")).toBe("autopilot.automations");
     expect(editorListSection("project")).toBe("project.recurring");
     expect(editorListSection("board")).toBe("board");
   });
@@ -212,5 +215,55 @@ describe("settingsPaletteEntries", () => {
     expect(parseSettingsTarget("models.tiers.light")).toEqual({ group: "agents", anchor: "agents.models.tiers.light" });
     expect(sectionOf("agents.models.tiers.light")?.id).toBe("agents.models");
     expect(settingsGroup("agents").sections[1]?.keywords).toEqual(expect.arrayContaining(["session model", "--model"]));
+  });
+});
+
+describe("the Autopilot tabs", () => {
+  it("sends the old page's anchors to where they are now", () => {
+    expect(redirectSettingsTarget("autopilot.engine")).toBe("autopilot.automations");
+    expect(redirectSettingsTarget("autopilot.engine.settings")).toBe("autopilot.limits");
+    expect(redirectSettingsTarget("autopilot.engine.quiet-hours")).toBe("autopilot.limits.quiet-hours");
+    expect(redirectSettingsTarget("autopilot.engine.pause-all")).toBe("autopilot.automations.pause-all");
+    expect(redirectSettingsTarget("autopilot.engine.automation-fix_prs")).toBe("autopilot.automations.fix_prs");
+    expect(redirectSettingsTarget("autopilot.engine.orchestrate")).toBe("autopilot.automations.orchestrate");
+    expect(redirectSettingsTarget("autopilot.engine.orchestrate.countdown")).toBe(
+      "board.appearance.autopilot-countdown",
+    );
+    expect(redirectSettingsTarget("autopilot.custom")).toBe("autopilot.automations");
+    expect(redirectSettingsTarget("autopilot.custom.variables.list")).toBe("autopilot.limits.variables.list");
+    // Today's targets stay as they are.
+    expect(redirectSettingsTarget("autopilot.limits.dry-run")).toBe("autopilot.limits.dry-run");
+    expect(redirectSettingsTarget("autopilot.automations.digest")).toBe("autopilot.automations.digest");
+  });
+
+  it("parses an old anchor as the tab it is on now", () => {
+    expect(parseSettingsTarget("autopilot.engine.dry-run")).toEqual({
+      group: "autopilot",
+      anchor: "autopilot.limits.dry-run",
+    });
+  });
+
+  it("knows which tab a target is on", () => {
+    expect(autopilotTabOf("autopilot.limits.quiet-hours")).toBe("limits");
+    expect(autopilotTabOf("autopilot.runs")).toBe("runs");
+    expect(autopilotTabOf("autopilot.automations.fix_prs")).toBe("automations");
+    expect(autopilotTabOf("autopilot.limitsx")).toBe("automations");
+    expect(autopilotTabOf(null)).toBe("automations");
+  });
+
+  it("reads the automation a target picks, but not the tab's own rows", () => {
+    expect(automationOfTarget("autopilot.automations.review_prs")).toBe("review_prs");
+    expect(automationOfTarget("autopilot.automations.custom:abc")).toBe("custom:abc");
+    expect(automationOfTarget("autopilot.automations.pause-all")).toBeNull();
+    expect(automationOfTarget("autopilot.automations")).toBeNull();
+    expect(automationOfTarget("autopilot.limits.dry-run")).toBeNull();
+  });
+
+  it("counts the Runs and Limits tabs as pages, not editors", () => {
+    expect(isEditorPath("/settings/autopilot")).toBe(false);
+    expect(isEditorPath("/settings/autopilot/limits")).toBe(false);
+    expect(isEditorPath("/settings/autopilot/runs/all")).toBe(false);
+    expect(isEditorPath("/settings/autopilot/custom/new")).toBe(true);
+    expect(isEditorPath("/settings/tasks/templates/new")).toBe(true);
   });
 });

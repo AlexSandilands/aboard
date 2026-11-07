@@ -202,11 +202,21 @@ export const orchestrate = defineAutomation({
     "Every few minutes, an agent looks over the project's work: nudges or restarts stalled threads, retries failed runs, " +
     "merges ready tasks flagged for auto-merge, and flags what needs you.",
   needsAgent: true,
+  group: "ship",
   // A schedule per project, with no task, so an epic has nothing to switch.
   epicScope: false,
   schema,
   fields: [
-    { key: "everyMinutes", label: "Every", kind: "number", min: 5, max: 1440, step: 5, unit: "minutes" },
+    {
+      key: "everyMinutes",
+      label: "Every",
+      kind: "number",
+      tier: "essential",
+      min: 5,
+      max: 1440,
+      step: 5,
+      unit: "minutes",
+    },
     {
       key: "mayMerge",
       label: "May merge",
@@ -216,6 +226,7 @@ export const orchestrate = defineAutomation({
     {
       key: "instructions",
       label: "Extra instructions",
+      tier: "essential",
       kind: "text",
       multiline: true,
       placeholder: "E.g. hold PRs that change the board's layout for me to check.",

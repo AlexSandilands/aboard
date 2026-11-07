@@ -2,6 +2,7 @@ import type {
   AutopilotEngineSettings,
   AutopilotField,
   AutopilotRun,
+  AutomationGroup,
   ModelChoice,
   OperationId,
   Project,
@@ -109,6 +110,8 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
   description: string;
   /** Starts an agent: counts against the concurrency and daily caps and waits out quiet hours. */
   needsAgent: boolean;
+  /** Where Settings → Autopilot lists it; unset is the user's own (a custom automation). */
+  group?: AutomationGroup;
   /**
    * The action can take long (a shell command, or waiting on an agent) without being an agent run for the caps, so
    * the engine doesn't hold up the rest of its pass for it. At most AUTOPILOT_BACKGROUND_MAX of these that aren't

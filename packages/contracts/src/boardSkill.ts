@@ -434,7 +434,7 @@ A value that doesn't exist (a schedule has no task) is empty in a prompt and the
 These keep an automation reusable, so it needn't be edited for each project or person.
 
 - **Variables** (\`{{vars.jira_key}}\`) are values the **user** sets per project, or for the whole board, under Settings →
-  Autopilot → Custom automations → Variables: a Jira key, a team, a board id. You can't set or read them. Just name
+  Autopilot → Limits & safety → Variables: a Jira key, a team, a board id. You can't set or read them. Just name
   the one you need. **An automation that names a variable doesn't run in a project with no value for it**, so say in
   your \`note\` which variables to set; the draft's result also lists the projects that have none. Only some reads
   count as optional (so they never block a project): \`.get("team", "")\` in Python and a destructure with a default in
@@ -687,7 +687,7 @@ Don't run a script that approves, merges, deletes or posts for real just to test
 a throwaway target.
 
 In your \`note\`, tell the user to read the script on the import page, then use **Test run** in the automation's editor (Settings →
-Autopilot → Custom automations; the import page shows scripts read-only) and switch it on with **dry run** first: a dry run records what each run would have done, under **What it would run**, and does nothing
+Autopilot → Automations, under Yours; the import page shows scripts read-only) and switch it on with **dry run** first: a dry run records what each run would have done, under **What it would run**, and does nothing
 (a dry run still runs a check script for real).
 
 ## Hand it over
@@ -735,7 +735,7 @@ print(f'Task #{task["number"]}: ticket key found')
 }
 \`\`\`
 
-Note to the user: "Set the \`jira_key\` variable (Settings → Autopilot → Custom automations → Variables, or per project);
+Note to the user: "Set the \`jira_key\` variable (Settings → Autopilot → Limits & safety → Variables, or per project);
 projects without it are skipped. Only reads the task's title; changes nothing."
 
 ### A check script that starts one agent per item

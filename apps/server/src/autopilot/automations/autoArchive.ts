@@ -27,9 +27,10 @@ export const autoArchive = defineAutomation({
   description:
     "Archives tasks that have been in Done for more than the set number of days, and finished epics with their tasks.",
   needsAgent: false,
+  group: "upkeep",
   epicScope: true,
   schema: z.object({ days: z.number().int().min(1).default(14) }),
-  fields: [{ key: "days", label: "Days in Done", kind: "number", min: 1, step: 1, unit: "days" }],
+  fields: [{ key: "days", label: "Days in Done", kind: "number", tier: "essential", min: 1, step: 1, unit: "days" }],
   defaults: { days: 14 },
   check: ({ services, projects, now }) =>
     projects.flatMap(({ project, config }): Candidate[] => {

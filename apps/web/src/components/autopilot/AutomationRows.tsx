@@ -1,5 +1,4 @@
 import {
-  AUTOPILOT_ORCHESTRATE,
   INHERIT,
   parseModelChoice,
   ReviewSkillRef,
@@ -20,10 +19,8 @@ import { inheritDetail } from "~/components/models/choicePicker.logic";
 import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
 import { ReviewSkillSelect } from "~/components/settings/ReviewSettingsSection";
 import {
-  FoldedSettingsSection,
   SETTINGS_TEXT_WIDTH,
   SettingResetButton,
-  SettingsGroup,
   SettingsNote,
   SettingsRow,
   UnitInput,
@@ -107,71 +104,6 @@ export function AutomationRows({ projectId }: { projectId: string | null }) {
         />
       ))}
     </>
-  );
-}
-
-/**
- * The board's automations as folded sections, for the Autopilot settings page: the header has the automation's
- * On / Off switch and what it is set to; opening it shows what it does and its config.
- */
-export function AutomationSections() {
-  const { message, items, pending = false, rejected = 0 } = useScopeAutomations(null);
-  if (message) {
-    return (
-      <SettingsGroup>
-        <SettingsNote>{message}</SettingsNote>
-      </SettingsGroup>
-    );
-  }
-  return (
-    <div className="space-y-2">
-      {items
-        // Orchestrate has an area of its own above this list (OrchestrateSettings).
-        .filter(({ automation }) => automation.key !== AUTOPILOT_ORCHESTRATE)
-        .map(({ automation, entry, onMode, onConfig }) => (
-          <FoldedSettingsSection
-            key={automation.key}
-            id={`autopilot.engine.automation-${automation.key}`}
-            title={automation.title}
-            summary={boardSummary(entry.mode)}
-            control={
-              <ModeSwitch
-                label={`${automation.title} for the board`}
-                modes={BOARD_MODES}
-                value={boardSwitchValue(entry.mode)}
-                disabled={pending}
-                blocked={automation.blocked}
-                onChange={(mode) => onMode(boardModeToSave(mode))}
-              />
-            }
-          >
-            <p className="px-3 py-3 text-xs leading-normal text-muted-foreground/80 sm:px-4">
-              {automation.description}
-            </p>
-            {automation.blocked ? (
-              <div className="px-3 pb-3 sm:px-4">
-                <BlockedWarning reason={automation.blocked} />
-              </div>
-            ) : null}
-            {automation.needs ? (
-              <div className="px-3 pb-3 sm:px-4">
-                <NeedsVariablesWarning needs={automation.needs} />
-              </div>
-            ) : null}
-            {automation.fields.map((field) => (
-              <AutomationField
-                key={field.key}
-                automation={automation}
-                field={field}
-                entry={entry}
-                projectId={null}
-                rejected={rejected}
-                onConfig={onConfig}
-              />
-            ))}
-          </FoldedSettingsSection>
-        ))}
-    </div>
   );
 }
 

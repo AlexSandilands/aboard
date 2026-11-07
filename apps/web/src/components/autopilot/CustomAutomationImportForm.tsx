@@ -375,7 +375,7 @@ export function CustomAutomationImportForm({
             {needs.length > 0 ? (
               <Section
                 title="Variables it reads"
-                hint="The file doesn't carry their values: they are yours. Set them for every project under Settings → Autopilot → Custom automations, or in a project's settings. It doesn't run in a project where one has no value."
+                hint="The file doesn't carry their values: they are yours. Set them for every project under Settings → Autopilot → Limits & safety → Variables, or in a project's settings. It doesn't run in a project where one has no value."
               >
                 <VariableNeedsList needs={needs} />
               </Section>

@@ -17,6 +17,7 @@ export const unblockDependents = defineAutomation({
   title: "Unblock dependents",
   description: "Notifies you when the last task blocking another reaches Done.",
   needsAgent: false,
+  group: "upkeep",
   schema: z.object({}),
   fields: [],
   defaults: {},

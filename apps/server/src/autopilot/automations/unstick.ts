@@ -39,13 +39,22 @@ export const unstick = defineAutomation({
     "Tells you when an In Progress task has had no activity, or its T3 thread has been waiting on you, for too long. " +
     "Needs no agent and changes nothing; Orchestrate is what gets stalled work moving.",
   needsAgent: false,
+  group: "upkeep",
   schema: z.object({
     staleHours: z.number().min(1).default(24),
     waitingMinutes: z.number().min(1).default(30),
   }),
   fields: [
-    { key: "staleHours", label: "No activity for", kind: "number", min: 1, step: 1, unit: "hours" },
-    { key: "waitingMinutes", label: "Thread waiting for", kind: "number", min: 1, step: 5, unit: "minutes" },
+    { key: "staleHours", label: "No activity for", kind: "number", tier: "essential", min: 1, step: 1, unit: "hours" },
+    {
+      key: "waitingMinutes",
+      label: "Thread waiting for",
+      kind: "number",
+      tier: "essential",
+      min: 1,
+      step: 5,
+      unit: "minutes",
+    },
   ],
   defaults: { staleHours: 24, waitingMinutes: 30 },
   check: ({ services, projects, now }) =>

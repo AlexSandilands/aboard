@@ -2,7 +2,7 @@
  * `pnpm sandbox`: runs this checkout's board on its own ports so a change can be tried in the browser
  * without touching the board the user runs from main.
  *
- *   pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|none]   isolated: own server, temp data dir, seeded (default)
+ *   pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|autopilot|none]   isolated: own server, temp data dir, seeded (default)
  *   pnpm sandbox --desktop                            also opens the Electron shell on the sandbox (isolated only)
  *   pnpm sandbox --prod                               serves a production build instead of Vite's dev server (no hot reload)
  *   pnpm sandbox --live                               Vite only, on the real server's data (writes are rejected)

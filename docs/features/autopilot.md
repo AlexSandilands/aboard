@@ -156,8 +156,8 @@ leave them out.
 ### Run history
 
 The Run history page (`/settings/autopilot/runs/$automation`, `RunHistory`) lists every run of one automation, newest
-first, or of all of them with `all`. Orchestrate's area, a custom automation's editor and the Automations heading link to
-it. It is for reading what scheduled agents did, since their runs have no task panel, and for clearing out old runs.
+first, or of all of them with `all`: the Runs tab of Settings → Autopilot. An automation's detail and a custom
+automation's editor link to its own. It is for reading what scheduled agents did, since their runs have no task panel, and for clearing out old runs.
 
 - **The list.** `GET /api/autopilot/runs/history` (`ListAutopilotRunsQuery`, `AutopilotRunPage` in
   `packages/contracts/src/autopilotRunHistory.ts`) takes `automation` (a key or `all`) and optionally `projectId`,
@@ -245,7 +245,7 @@ switches nothing on either, since only the user's import saves the automation it
 
 | Route                                           | Does                                                   |
 | ----------------------------------------------- | ------------------------------------------------------ |
-| `GET /api/autopilot`                            | Pause, engine settings and the catalogue (with each automation's field descriptors and defaults) |
+| `GET /api/autopilot`                            | Pause, engine settings and the catalogue (with each automation's group, field descriptors and defaults), plus today's agent runs and spend, Needs you and each automation's last finished run, for the settings page |
 | `PATCH /api/autopilot/engine`                   | Updates engine settings; `quietHours` may be partial   |
 | `POST /api/autopilot/pause`, `/resume`          | Pause all, and back                                    |
 | `GET /api/autopilot/board`, `/projects/:id`, `/projects/:id/epics/:epicId` | Each automation at that scope: its own mode and config, and what it resolves to (an epic's through its project and the board) |
@@ -882,8 +882,8 @@ the automation. Runs stay, under the old key.
   action is (or stays) a shell command, a script or an agent with a check script needs an `Origin` header, which browsers send and the guard checks is the
   board's; agents and scripts usually send none. It's a guard rail against an agent setting up a command by
   accident, not a boundary. Every change publishes `autopilot.changed`.
-- **UI**: **Settings → Autopilot → Custom automations** (`CustomAutomationsSection`, the editor
-  `CustomAutomationEditorForm` as a sub-page, `/settings/autopilot/custom/<id>`). The preview runs the same contracts helpers as the server
+- **UI**: listed under **Yours** in Settings → Autopilot → Automations (`AutomationsSplit`), with the editor
+  `CustomAutomationEditorForm` as a sub-page, `/settings/autopilot/custom/<id>`. The preview runs the same contracts helpers as the server
   on the newest board task the filters let through (`customAutomations.logic.ts`). Switches are the usual rows and
   lane popover entries, since those list the catalogue.
 
@@ -921,7 +921,7 @@ Named values an automation reads instead of branching on the project (#238): a J
 most 50 per list; `automationVariables.ts` in contracts).
 
 - **Where they live.** The board's are the `automationVariables` setting (`PATCH /api/settings`, edited under **Settings →
-  Autopilot → Custom automations → Variables**); a project's overrides are `projects.variables_json` (migration 036,
+  Autopilot → Limits & safety → Variables**); a project's overrides are `projects.variables_json` (migration 036,
   `PATCH /api/projects/:id` with `variables`, edited under the project's Autopilot overrides). `effectiveVariables` lays
   the project's over the board's. Both writes publish `autopilot.changed`, since a row's "Needs" line depends on them.
 - **How they are read.** A prompt reads `{{vars.<name>}}`; a command, script or check reads `<PREFIX>_VAR_<NAME>`
@@ -1159,7 +1159,7 @@ on the REST writes is unchanged, so this opens no path to setting up a command o
   on the board's URL), the expiry, whether a script needs confirming (or, for a command, reading), the slots to fill and, per variable
   the action reads, the projects with no value for it, so the agent can tell the user. The result says nothing is set
   up until the user imports it. Orchestrate's agent is denied the tool.
-- **The user.** Each draft sends an `automation_draft` notification (task-less; the inbox opens Custom automations).
+- **The user.** Each draft sends an `automation_draft` notification (task-less; the inbox opens Needs you in Settings → Autopilot).
   That section lists the drafts with **Review** and **Dismiss**. The import page with `?draft=` loads it
   (`GET /api/autopilot/drafts/:id`, NOT_FOUND once gone) into the same untrusted preview, script confirmation, inputs and
   slots as a file, under a banner naming who drafted it and their note, and sends `draftId` with the import, which
@@ -1517,9 +1517,13 @@ One file under `apps/server/src/autopilot/automations/`, added to `AUTOMATIONS` 
   action that isn't an agent run (a digest waiting on its summary): the engine doesn't wait for it before the next
   candidate. Agent actions always go on in the background.
 - `epicScope` (optional, default true): false when no candidate is ever a task in an epic, so an epic can't switch it.
+- `group`: the heading Settings → Autopilot lists it under (`ship`, `prs` or `upkeep`; unset is `yours`, as for a
+  custom automation).
 - `schema`, `fields`, `defaults`: the config, parsed with zod over the defaults; `fields` describe the form the
   UI renders (boolean, number, text, time, select, skill; a skill field's `builtinLabel` renames its built-in entry,
-  and a text field's `multiline` makes it a text area).
+  and a text field's `multiline` makes it a text area). A field's `tier` is `essential` for what most people set,
+  shown with the automation; anything else (and unset) sits under its closed Advanced section. Runner, model, budget,
+  timeout and T3 access are always advanced. Add the automation's sentence to `automationSentence` too.
 - `check(ctx)`: reads the board and returns candidates, only for `ctx.projects` (and the board when `ctx.board`
   is set). It must be cheap: it runs every pass.
 - `act(candidate, ctx)`: does the work, with `ctx.actor` as the actor of any change, and returns the outcome.
@@ -1536,21 +1540,57 @@ How Autopilot looks on the board (the lane pill, the epic button, the header pau
 task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilot-on-the-board). The settings are in
 `components/autopilot/`:
 
-- **Settings → Autopilot** (`AutopilotEngineSection`, self-contained: it reads and writes its own queries):
-  Pause all, dry run, concurrency, the daily caps, quiet hours (a switch and a start and end time), PR review
-  rounds, the fix threshold and worktree retention. A number that is out of range is put back with a toast; an empty cap means no cap.
-- **Orchestrate** (`OrchestrateSettings`, section `autopilot.engine.orchestrate`), between the engine settings and the
-  Automations heading: its board switch and config (the same `AutomationField` rows), the **Countdown on lanes** switch for the lane pill's timer
-  (`showAutopilotTimer`, a per-browser display preference) and a **View
-  all runs** row that opens its [run history](#run-history). It is left out of the folded list below. The Automations
-  heading has an **All runs** link to the history of every automation.
-- **Automations** (`AutomationSections`): one folded section per other automation with its On / Off switch at
-  the board in the header (no Inherit; see [Switches and scopes](#switches-and-scopes)); opening it shows what it does and a form generated from its `fields`: a switch, number, text, 24-hour time
-  or select per field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is
-  stored as a `ReviewSkillRef`, and an unset one is the built-in skill, labelled with the field's `builtinLabel` when
-  it has one, such as the digest's own skill). A project's settings page shows them as rows
-  (`AutomationRows`, the config behind a **Settings** disclosure), where Inherit follows the board; an epic's switches (its button's popover) follow its project. The lane and epic popovers show them as a faded switch while it follows the scope above and a solid one with a ↺ reset once set (see [board-layout.md](board-layout.md#autopilot-on-the-board)). Config set at a scope is sent whole (the server replaces it), so editing one
-  key sends the scope's other keys with it; the reset button beside a field's title (shown only while the key is set at that scope) removes the key so it inherits.
+**Settings → Autopilot** is three tabs (`AutopilotTabs` in `AutopilotPage.tsx`), each a sidebar entry:
+
+- **Automations** (`/settings/autopilot`, section `autopilot.automations`, `AutopilotAutomationsTab`):
+  - **The status strip**: Running, Paused or Nothing is on; today's agent runs and spend (`overview.today`,
+    `todaySummary`) and the limits in one line (`limitsSummary`, both in `packages/contracts/src/autopilotSentence.ts`);
+    **Pause all** (`autopilot.automations.pause-all`) and a link to Limits & safety.
+  - **Needs you** (`autopilot.automations.needs-you`, hidden when empty), from `overview.needsYou` (`AutopilotNeed`,
+    built by the service's `overview()`): failed runs whose flag still stands on their task (one per task, the latest;
+    **Retry** when `canRetryRun`, **Dismiss**), drafts agents wrote (**Review** opens the import page, **Dismiss**),
+    and automations that can't run as set up, their `blocked` or `needs` (**Fix** picks the built-in, or opens a
+    custom one's editor).
+  - **The list and detail** (`AutomationsSplit`), the Providers page's `SplitCard`. Every automation is listed once,
+    under its `group` heading (`AUTOMATION_GROUPS`: Ship work, Pull requests, Upkeep, then Yours for custom
+    automations, which have no group of their own). A row has an icon, the name with a dot (green on, red when the
+    last run failed), a line saying where it is on and how its last run went (`rowSubline`, from each project's scope
+    and `overview.lastRuns`), and its board switch (On saves `on`, off saves `inherit`, as the old switch did). An
+    automation off on the board and in every project is dimmed, as a switched-off provider is; its switch stays.
+    **+ Add automation** opens a chooser: New (the editor) or Import. `?automation=<key>` picks a row; with none,
+    the first is shown.
+  - **The detail**: a header with the status line (`statusLine`) and **Switch on/off**, plus **Export** and
+    **Delete** for a custom automation; **What it does**, one sentence read from its effective config
+    (`automationSentence`; a custom automation's from its trigger and action) with **All runs**; **Where it runs**,
+    still the board's On / Off and a line naming the projects it is on in, which a project sets in its lane pill or
+    settings; **Settings**, the fields whose `tier` is `essential`; and **Advanced**, closed, with every other field.
+    Its heading gets a dot when an advanced value isn't the default (`advancedChanged`). A field without a tier is
+    advanced. A custom automation's trigger and action are edited in its editor (**Edit**,
+    `/settings/autopilot/custom/<id>`).
+  - At phone width the card shows one side at a time: the list, then the detail with an **All automations** link back.
+- **Runs** (`/settings/autopilot/runs/$automation`): the [run history](#run-history) of every automation (`all`) or
+  one.
+- **Limits & safety** (`/settings/autopilot/limits`, `AutopilotLimits`): spending and timing (concurrency, the daily
+  caps, quiet hours), the PR automations' rounds and fix threshold, safety (dry run for every automation, worktree
+  retention), and the board's variables. A number that is out of range is put back with a toast; an empty cap means
+  no cap.
+
+Old links still work: `redirectSettingsTarget` sends `autopilot.engine.*` to the limits rows or, for
+`autopilot.engine.automation-<key>` and `autopilot.engine.orchestrate`, to `autopilot.automations.<key>` (which picks
+it), and `autopilot.custom` to the list (its variables to Limits & safety). The router redirects such a hash to the
+tab's path. Orchestrate's **Countdown on lanes** (`showAutopilotTimer`, a per-browser display preference) is
+**Autopilot countdown on lanes** in Settings → Appearance.
+
+The fields are a form generated from the automation's `fields`: a switch, number, text, 24-hour time or select per
+field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is stored as a
+`ReviewSkillRef`, and an unset one is the built-in skill, labelled with the field's `builtinLabel` when it has one,
+such as the digest's own skill). A project's settings page shows every automation as rows (`AutomationRows`, the
+config behind a **Settings** disclosure), where Inherit follows the board; an epic's switches (its button's popover)
+follow its project. The lane and epic popovers show them as a faded switch while it follows the scope above and a
+solid one with a ↺ reset once set (see [board-layout.md](board-layout.md#autopilot-on-the-board)). Config set at a
+scope is sent whole (the server replaces it), so editing one key sends the scope's other keys with it; the reset
+button beside a field's title (shown only while the key is set at that scope) removes the key so it inherits.
+
 - Saves reach the server one at a time per scope, each built from the latest saved config when it runs, so two quick
   edits can't undo each other. The server's reply goes straight into the query cache, and `autopilot.changed`
   (which every settings change also publishes) refetches the scopes, so another window's edit shows up too. The
@@ -1642,7 +1682,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `apps/server/src/integrations/gitRemote.ts` | `remoteRepo`, `repoWebUrl` and the cached repository URL per folder |
 | `apps/server/src/db/migrations/036_project_variables.sql` | `projects.variables_json`, a project's variable overrides |
 | `apps/web/src/components/autopilot/VariablesEditor.tsx`, `VariablesSection.tsx`, `variables.logic.ts`, `SdkStatusBar.tsx`, `InsertChips.tsx` | The variables editors, the "Variables it reads" list, the insert chips and the status line |
-| `apps/web/src/components/autopilot/CustomAutomation*.tsx` | The custom automation list and editor |
+| `apps/web/src/components/autopilot/CustomAutomation*.tsx` | The custom automation editor and import page |
 | `apps/web/src/components/autopilot/ScriptField.tsx`, `ScriptEditor*.tsx`, `scripts.logic.ts` | The script editor (CodeMirror, lazy), language notes, starters, the test run panel |
 | `apps/server/src/services/testScript.ts` | Running a draft script once for the editor's test run |
 | `packages/contracts/src/automationBundle.ts`, `automationExamples.ts` | The shareable file (version 2 with a script), and the shipped examples, with the "Review repo PRs" check script |
@@ -1657,6 +1697,9 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
 | `packages/contracts/src/autopilotRunHistory.ts` | The run history's filter, query and page, and the delete's input, result and kept reasons |
 | `apps/server/src/db/migrations/034_autopilot_runs_automation_index.sql` | The index the history page's filter and paging read |
 | `apps/web/src/components/autopilot/RunHistory.tsx`, `RunHistoryRow.tsx`, `runHistory.logic.ts` | The run history page, a run's row, and the URL-to-filter logic |
-| `apps/web/src/components/autopilot/OrchestrateSettings.tsx` | Orchestrate's area in Settings → Autopilot |
+| `apps/web/src/components/autopilot/AutopilotPage.tsx` | Settings → Autopilot's tabs, the status strip and Needs you |
+| `apps/web/src/components/autopilot/AutomationsSplit.tsx`, `automationList.logic.ts` | The list and detail: groups, rows, dimming, the Advanced section and its dot |
+| `apps/web/src/components/autopilot/AutopilotSettingsSection.tsx` | The Limits & safety tab, and a project's Autopilot overrides |
+| `packages/contracts/src/autopilotSentence.ts` | `automationSentence`, `limitsSummary`, `todaySummary` |
 | `apps/web/src/state/autopilotRunHistory.ts` | The history's infinite query, the delete preview and the delete |
 | `apps/web/src/components/autopilot/` | The pill, epic button, their shared popover (`ScopePopover`), badge, panel section and settings (`autopilot.logic.ts` holds the tested logic) |

@@ -226,7 +226,7 @@ export function NeedsVariablesWarning({ needs }: { needs: string }) {
       <AlertTitle className="text-sm">{needs}</AlertTitle>
       <AlertDescription>
         It doesn&apos;t run in those projects until the variable has a value there: set it in the project&apos;s
-        settings, or for every project under Settings → Autopilot → Custom automations.
+        settings, or for every project under Settings → Autopilot → Limits &amp; safety → Variables.
       </AlertDescription>
     </Alert>
   );

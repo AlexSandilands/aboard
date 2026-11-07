@@ -141,10 +141,18 @@ export function describeInherited(resolved: Pick<ResolvedAutopilot, "enabled" | 
 
 // ── Automation catalogue ─────────────────────────────────────────────────
 
+/**
+ * How far into an automation's detail a field sits: essential ones show with it, advanced ones under its closed
+ * Advanced section. Unset is advanced, so a new field stays out of the way until someone decides it is essential.
+ */
+export const AutopilotFieldTier = z.enum(["essential", "advanced"]);
+export type AutopilotFieldTier = z.infer<typeof AutopilotFieldTier>;
+
 const FieldBase = {
   key: z.string(),
   label: z.string(),
   help: z.string().optional(),
+  tier: AutopilotFieldTier.optional(),
 };
 
 /** One config field of an automation, described so the UI can render its form without knowing the automation. */
@@ -195,6 +203,34 @@ export const AutopilotField = z.discriminatedUnion("kind", [
 ]);
 export type AutopilotField = z.infer<typeof AutopilotField>;
 
+/** A field's tier; unset is advanced. */
+export const fieldTier = (field: Pick<AutopilotField, "tier">): AutopilotFieldTier => field.tier ?? "advanced";
+
+/** An automation's fields split by tier, each in the order the automation lists them. */
+export function splitFieldsByTier<F extends Pick<AutopilotField, "tier">>(
+  fields: readonly F[],
+): { essential: F[]; advanced: F[] } {
+  return {
+    essential: fields.filter((f) => fieldTier(f) === "essential"),
+    advanced: fields.filter((f) => fieldTier(f) === "advanced"),
+  };
+}
+
+/**
+ * Where an automation is listed in Settings → Autopilot: shipping work, pull requests, upkeep of the board, or the
+ * user's own (custom automations, and anything that doesn't say).
+ */
+export const AutomationGroup = z.enum(["ship", "prs", "upkeep", "yours"]);
+export type AutomationGroup = z.infer<typeof AutomationGroup>;
+
+/** The list's headings, in the order the groups are listed. */
+export const AUTOMATION_GROUPS: ReadonlyArray<{ value: AutomationGroup; label: string }> = [
+  { value: "ship", label: "Ship work" },
+  { value: "prs", label: "Pull requests" },
+  { value: "upkeep", label: "Upkeep" },
+  { value: "yours", label: "Yours" },
+];
+
 export const AutopilotAutomation = z.object({
   key: z.string(),
   title: z.string(),
@@ -203,6 +239,8 @@ export const AutopilotAutomation = z.object({
   needsAgent: z.boolean(),
   /** An epic can switch it on or off for its tasks. False for automations that don't act on tasks in an epic. */
   epicScope: z.boolean(),
+  /** Where the settings page lists it. Defaults to the user's own, as for a custom automation. */
+  group: AutomationGroup.default("yours"),
   /** Why it can't be switched on yet ("Won't work until you fill in: Jira tools"), or null. */
   blocked: z.string().nullable().default(null),
   /** Which projects it is on in won't run it for lack of a variable ("Needs `jira_key` in: billing"), or null. */
@@ -335,11 +373,49 @@ export const AutopilotStatus = z.object({
 });
 export type AutopilotStatus = z.infer<typeof AutopilotStatus>;
 
-/** `GET /api/autopilot`: engine settings, pause and the catalogue. */
+/**
+ * Something in Autopilot only the user can sort out, for the Needs you list: a failed run still flagged on its task
+ * (a task-less failure isn't flagged; its automation's row shows it),
+ * a draft an agent wrote for them to review, or an automation that can't run as set up (a tool slot or variable
+ * missing).
+ */
+export const AutopilotNeed = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("failed_run"),
+    run: AutopilotRun,
+    /** The automation's title, or its key when it is gone. */
+    title: z.string(),
+    /** "#12 Rewrite the cart drawer". Only a run on a task is flagged, so there always is one. */
+    task: z.string(),
+  }),
+  z.object({
+    kind: z.literal("draft"),
+    draftId: z.string(),
+    name: z.string(),
+    createdBy: z.string(),
+    createdAt: z.string(),
+  }),
+  z.object({
+    kind: z.literal("setup"),
+    automation: z.string(),
+    title: z.string(),
+    /** What is missing, as the automation's `blocked` or `needs` says it. */
+    reason: z.string(),
+  }),
+]);
+export type AutopilotNeed = z.infer<typeof AutopilotNeed>;
+
+/** `GET /api/autopilot`: engine settings, pause and the catalogue, and what the page's status strip reads. */
 export const AutopilotOverview = z.object({
   paused: z.boolean(),
   engine: AutopilotEngineSettings,
   automations: z.array(AutopilotAutomation),
+  /** Since local midnight: real agent runs started (as the daily run cap counts them) and what runs cost. */
+  today: z.object({ agentRuns: z.number().int(), spendUsd: z.number() }),
+  /** Newest first within each kind: failed runs, then drafts, then setup gaps. */
+  needsYou: z.array(AutopilotNeed),
+  /** Each automation's latest real run that has finished, for its row in the list; none for one that never ran. */
+  lastRuns: z.array(z.object({ automation: z.string(), status: AutopilotRunStatus, at: z.string() })),
 });
 export type AutopilotOverview = z.infer<typeof AutopilotOverview>;
 

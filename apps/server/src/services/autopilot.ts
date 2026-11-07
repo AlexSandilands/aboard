@@ -23,6 +23,7 @@ import {
   ScheduledAgentRunOutput,
   unretiredKey,
   type AutopilotAutomation,
+  type AutopilotNeed,
   type AutopilotOverview,
   type AutopilotRun,
   type AutopilotRunPage,
@@ -37,6 +38,7 @@ import {
   type UpdateAutopilotSettingInput,
 } from "@repo/contracts";
 import { AUTOPILOT_AUTO_ARCHIVE } from "../autopilot/automations/autoArchive.ts";
+import { startOfDay } from "../autopilot/limits.ts";
 import type { ActionResult, Automation, AutomationConfig, Candidate, RunPatch } from "../autopilot/types.ts";
 import { nowIso } from "../db/database.ts";
 import type { Repos } from "../db/repos/index.ts";
@@ -86,6 +88,7 @@ export const describeAutomation = (a: Automation, needs: string | null = null): 
   description: a.description,
   needsAgent: a.needsAgent,
   epicScope: a.epicScope ?? true,
+  group: a.group ?? "yours",
   blocked: a.blocked ?? null,
   needs,
   fields: a.fields,
@@ -462,12 +465,83 @@ export function createAutopilotService(
     return automation.needs(on);
   };
 
+  const usage = (agentAutomations: readonly string[], since: string) => {
+    const agents = new Set(agentAutomations);
+    return {
+      started: repos.autopilotRuns.startedSince(agentAutomations, since),
+      spendUsd: repos.autopilotRuns.spendSince(since),
+      active: repos.autopilotRuns
+        .withStatus(AUTOPILOT_ACTIVE_STATUSES)
+        .filter(
+          (r) =>
+            !r.dryRun &&
+            agents.has(r.automation) &&
+            !r.dedupeKey.startsWith(FIX_GAVE_UP_KEY_PREFIX) &&
+            !r.dedupeKey.startsWith(FIX_RESOLVE_KEY_PREFIX) &&
+            !r.dedupeKey.startsWith(CHECK_FAILED_KEY_PREFIX),
+        ).length,
+    };
+  };
+
+  /**
+   * The Needs you list: failed runs whose flag still stands on their task (one per task, the latest), drafts waiting
+   * for review, then automations that can't run as set up. Only a run on a task is flagged (and can be dismissed), so
+   * a task-less failure (a digest's) shows on its automation's row instead.
+   */
+  const needsYou = (described: readonly AutopilotAutomation[]): AutopilotNeed[] => {
+    const titles = new Map(described.map((a) => [a.key, a.title]));
+    const seen = new Set<string>();
+    const failed = repos.autopilotRuns.standingFailures(50).flatMap((run): AutopilotNeed[] => {
+      const taskId = run.taskId!;
+      if (seen.has(taskId)) return [];
+      seen.add(taskId);
+      const task = repos.tasks.get(taskId);
+      if (!task || task.archivedAt) return [];
+      return [
+        {
+          kind: "failed_run",
+          run,
+          title: titles.get(run.automation) ?? run.automation,
+          task: `#${task.number} ${task.title}`,
+        },
+      ];
+    });
+    const now = core.now().getTime();
+    const drafts = repos.autopilotDrafts
+      .all()
+      .filter((d) => Date.parse(d.expiresAt) > now)
+      .map((d): AutopilotNeed => ({
+        kind: "draft",
+        draftId: d.id,
+        name: d.bundle.name,
+        createdBy: d.createdBy,
+        createdAt: d.createdAt,
+      }));
+    const setup = described.flatMap((a): AutopilotNeed[] =>
+      a.blocked || a.needs
+        ? [{ kind: "setup", automation: a.key, title: a.title, reason: (a.blocked ?? a.needs)! }]
+        : [],
+    );
+    return [...failed, ...drafts, ...setup];
+  };
+
   return {
-    overview: () => ({
-      paused: loadAutopilotStatus(repos).paused,
-      engine: loadAutopilotEngine(repos),
-      automations: deps.automations().map((automation) => describeAutomation(automation, needsOf(automation))),
-    }),
+    overview: () => {
+      const automations = deps.automations().map((automation) => describeAutomation(automation, needsOf(automation)));
+      const agents = deps
+        .automations()
+        .filter((a) => a.needsAgent)
+        .map((a) => a.key);
+      const { started, spendUsd } = usage(agents, startOfDay(core.now()));
+      return {
+        paused: loadAutopilotStatus(repos).paused,
+        engine: loadAutopilotEngine(repos),
+        automations,
+        today: { agentRuns: started, spendUsd },
+        needsYou: needsYou(automations),
+        lastRuns: repos.autopilotRuns.latestFinished(),
+      };
+    },
     status: () => loadAutopilotStatus(repos),
     automations: () => deps.automations(),
     engine: () => loadAutopilotEngine(repos),
@@ -627,23 +701,7 @@ export function createAutopilotService(
       repos.autopilotSettings.all().find((s) => s.scopeKind === "board" && s.automation === automation)?.updatedAt ??
       null,
     finishedWithWorktree: () => repos.autopilotRuns.finishedWithWorktree(),
-    usage(agentAutomations, since) {
-      const agents = new Set(agentAutomations);
-      return {
-        started: repos.autopilotRuns.startedSince(agentAutomations, since),
-        spendUsd: repos.autopilotRuns.spendSince(since),
-        active: repos.autopilotRuns
-          .withStatus(AUTOPILOT_ACTIVE_STATUSES)
-          .filter(
-            (r) =>
-              !r.dryRun &&
-              agents.has(r.automation) &&
-              !r.dedupeKey.startsWith(FIX_GAVE_UP_KEY_PREFIX) &&
-              !r.dedupeKey.startsWith(FIX_RESOLVE_KEY_PREFIX) &&
-              !r.dedupeKey.startsWith(CHECK_FAILED_KEY_PREFIX),
-          ).length,
-      };
-    },
+    usage,
     record({ automation, candidate, dryRun }) {
       const at = nowIso();
       const run: AutopilotRun = {

@@ -33,11 +33,11 @@ and a click tries again.
 
 | Page             | Sections                                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------- |
-| **Board**        | [Appearance](#appearance) (colors & themes, contrast, glass, sidebar banner, priority lane and its pinned height, scroll to a task, panel animations, fonts), Notifications, Data (backup to git, archived projects, recently deleted tasks and how long they are kept) |
+| **Board**        | [Appearance](#appearance) (colors & themes, contrast, glass, sidebar banner, priority lane and its pinned height, scroll to a task, the Autopilot countdown on lanes, panel animations, fonts), Notifications, Data (backup to git, archived projects, recently deleted tasks and how long they are kept) |
 | **Keybindings**  | [Shortcuts](using-the-board.md#keyboard) by group (General, Navigation, Layout, Tasks), with a search box |
 | **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), [Suggestions](#suggested-changes) |
 | **Agents**       | [Providers](#providers) (T3 Code, Claude Code, Codex and GitHub Copilot, once you add them: [connecting agents](connect-agents.md), [T3 Code](t3-code.md)), [Models](#models) (the Light, Standard and Deep tiers and custom models picked by a task label), Operations (the model each kind of run uses) |
-| **Autopilot**    | [Autopilot](autopilot.md) (pause, limits, quiet hours, then each automation), [Custom automations](custom-automations.md) |
+| **Autopilot**    | [Automations](autopilot.md#switching-automations-on) (status, Needs you, every automation and [your own](custom-automations.md) in one list), [Runs](autopilot.md#run-history), [Limits & safety](autopilot.md#limits) (caps, quiet hours, dry run, variables) |
 | **Integrations** | GitHub, Ticket systems, Terminal |
 | **Project**      | General (name, icon, folder), Planning skill, Review skill, Reviewer model, Autopilot overrides, [Recurring tasks](recurring-tasks.md), Danger zone |
 

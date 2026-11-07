@@ -73,7 +73,7 @@ function Inbox({ onClose }: { onClose: () => void }) {
     if (n.taskId) void openTask(n.taskId);
     else if (n.kind === "suggestion") openSettings("tasks.suggestions");
     // The section lists the drafts waiting, each with a link to its import page.
-    else if (n.kind === "automation_draft") openSettings("autopilot.custom");
+    else if (n.kind === "automation_draft") openSettings("autopilot.automations.needs-you");
     else if (n.kind === "backup_notice") openSettings("board.data");
     onClose();
   };

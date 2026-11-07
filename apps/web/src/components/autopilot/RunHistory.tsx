@@ -48,13 +48,14 @@ export function RunHistory({
   automation,
   search,
   onSearch,
-  onBack,
+  onShowAll,
 }: {
   /** An automation's key, or `AUTOPILOT_ALL_RUNS`. */
   automation: string;
   search: RunHistorySearch;
   onSearch: (next: RunHistorySearch) => void;
-  onBack: () => void;
+  /** Shown on one automation's history: back to every automation's. */
+  onShowAll?: () => void;
 }) {
   const overview = useAutopilotOverview();
   const board = useBoard();
@@ -96,11 +97,13 @@ export function RunHistory({
   return (
     <div className="flex flex-col gap-4 px-3 sm:px-4">
       <div className="flex flex-col gap-2">
-        <Button variant="ghost-muted" size="sm" className="-ms-2 w-fit" onClick={onBack}>
-          <ChevronLeftIcon />
-          Autopilot settings
-        </Button>
-        <h1 className="font-semibold text-xl leading-none">Run history{title ? `: ${title}` : ""}</h1>
+        {onShowAll ? (
+          <Button variant="ghost-muted" size="sm" className="-ms-2 w-fit" onClick={onShowAll}>
+            <ChevronLeftIcon />
+            Every automation&apos;s runs
+          </Button>
+        ) : null}
+        {title ? <h2 className="text-base font-medium text-foreground">{title}</h2> : null}
         <p className="max-w-xl text-xs text-muted-foreground">
           {title ? `Every ${title} run` : "Every run of every automation"}, newest first. Runs are only deleted when you
           delete them here.

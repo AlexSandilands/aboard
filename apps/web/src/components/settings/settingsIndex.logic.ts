@@ -58,8 +58,8 @@ export const DYNAMIC_ROW_PREFIXES: ReadonlyArray<string> = [
   "integrations.tickets.system-",
 ];
 
-/** Orchestrate's own area on the Autopilot page: its switch, config, per-project checks and run history. */
-const ORCHESTRATE_AREA_ID = "autopilot.engine.orchestrate";
+/** Orchestrate's row in the Autopilot list, which opens its detail. */
+const ORCHESTRATE_ID = "autopilot.automations.orchestrate";
 
 /** Titles and descriptions of the built-in automations, as the server defines them (a test compares the titles). */
 export const AUTOMATION_ENTRIES: ReadonlyArray<{
@@ -346,76 +346,100 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "The most one board review may spend, in US dollars (claude --max-budget-usd).",
     ["board reviewer", "cost", "spend", "dollars", "limit"],
   ),
-  // Autopilot › engine
+  // Autopilot › automations
   draft(
-    "autopilot.engine.pause-all",
+    "autopilot.automations.pause-all",
     "Pause all",
     "Stops every new Autopilot run, whatever the switches say. Runs already going finish. A backup restore never lifts it.",
-    ["stop", "halt", "disable", "kill switch"],
+    ["stop", "halt", "disable", "kill switch", "resume"],
   ),
   draft(
-    "autopilot.engine.dry-run",
+    "autopilot.automations.needs-you",
+    "Needs you",
+    "Failed runs to retry or dismiss, drafts agents wrote for you to review, and automations missing a tool or variable.",
+    ["failed", "retry", "dismiss", "drafts", "review", "attention"],
+  ),
+  // Autopilot › limits & safety
+  draft(
+    "autopilot.limits.spending",
+    "Spending & timing",
+    "How many agent runs Autopilot has open at once, its daily caps on runs and spend, and its quiet hours.",
+    ["limits", "caps", "budget", "concurrency"],
+  ),
+  draft(
+    "autopilot.limits.pull-requests",
+    "Pull request limits",
+    "Review rounds and fix attempts per pull request, and the lowest severity the PR automations fix.",
+    ["review prs", "fix prs", "rounds", "threshold"],
+  ),
+  draft(
+    "autopilot.limits.safety",
+    "Safety",
+    "Dry run for every automation, and how long a finished run's worktree is kept.",
+    ["dry run", "simulate"],
+  ),
+  draft(
+    "autopilot.limits.dry-run",
     "Dry run",
     "Records what each automation would do as a skipped run and does nothing. Turn it on to watch a new automation before trusting it.",
     ["simulate", "test", "watch", "skipped"],
   ),
   draft(
-    "autopilot.engine.max-concurrent",
+    "autopilot.limits.max-concurrent",
     "Agent runs at once",
     "How many of Autopilot's agent runs can be open at once. Not a limit on your machine. Counts runs Autopilot has open. A T3 thread Autopilot started counts only against Start planned, while it is working; threads you start yourself never count.",
     ["concurrency", "parallel", "limit", "simultaneous"],
   ),
   draft(
-    "autopilot.engine.daily-run-cap",
+    "autopilot.limits.daily-run-cap",
     "Daily run cap",
     "The most agent runs to start per day (local time). Leave empty for no cap.",
     ["limit", "per day", "maximum", "runs"],
   ),
   draft(
-    "autopilot.engine.daily-spend-cap",
+    "autopilot.limits.daily-spend-cap",
     "Daily spend cap",
     "No more agent runs start once today's runs have cost this much. Leave empty for no cap.",
     ["budget", "limit", "cost", "dollars", "money"],
   ),
   draft(
-    "autopilot.engine.quiet-hours",
+    "autopilot.limits.quiet-hours",
     "Quiet hours",
     "No agent runs start in this window (local time, and it may cross midnight). Automations that only change the board still run.",
     ["night", "schedule", "time window", "sleep", "off hours"],
   ),
   draft(
-    "autopilot.engine.pr-review-rounds",
+    "autopilot.limits.pr-review-rounds",
     "PR review rounds",
     "How many review rounds the PR review automation runs on a pull request, and Fix PRs' attempts on its review and failing checks.",
     ["review prs", "fix prs", "limit", "github"],
   ),
   draft(
-    "autopilot.engine.pr-comment-rounds",
+    "autopilot.limits.pr-comment-rounds",
     "PR comment rounds",
     "How many attempts Fix PRs makes on a pull request for other people's review comments and requests for changes.",
     ["fix prs", "review bot", "colleague", "limit", "github"],
   ),
   draft(
-    "autopilot.engine.pr-fix-threshold",
+    "autopilot.limits.pr-fix-threshold",
     "PR fix threshold",
     "The lowest severity of finding the PR automations ask an agent to fix.",
     ["fix prs", "severity", "blocking", "major", "minor"],
   ),
   draft(
-    "autopilot.engine.worktree-retention",
+    "autopilot.limits.worktree-retention",
     "Worktree retention",
     "How long a finished headless run's worktree is kept when its PR hasn't merged.",
     ["cleanup", "delete", "days", "git worktree", "disk"],
   ),
-  // Autopilot › custom automations
   draft(
-    "autopilot.custom.variables",
+    "autopilot.limits.variables",
     "Variables",
     "Values custom automations read in every project, which a project can override.",
     ["vars", "parameters", "jira key", "project name", "custom automations"],
   ),
   draft(
-    "autopilot.custom.variables.list",
+    "autopilot.limits.variables.list",
     "Automation variables",
     "Values custom automations read as {{vars.name}}, an environment variable or vars on stdin. An automation that needs one doesn't run in a project where it has no value. Not for secrets.",
     ["vars", "parameters", "environment variable", "stdin", "{{vars"],
@@ -734,8 +758,8 @@ function generated(): Draft[] {
         ]),
       ),
     ),
-    ...AUTOMATION_ENTRIES.map(({ key, title, description }) => ({
-      ...draft(`autopilot.engine.automation-${key}`, title, description, [
+    ...AUTOMATION_ENTRIES.map(({ key, title, description }) =>
+      draft(`autopilot.automations.${key}`, title, description, [
         "automation",
         "autopilot",
         "switch",
@@ -743,17 +767,16 @@ function generated(): Draft[] {
         "on",
         "off",
       ]),
-      foldedIn: `autopilot.engine.automation-${key}`,
-    })),
+    ),
     draft(
-      ORCHESTRATE_AREA_ID,
+      ORCHESTRATE_ID,
       "Orchestrate",
       "Every few minutes, an agent looks over the project's work: nudges stalled threads, retries failed runs, merges ready tasks flagged for auto-merge, and flags what needs you.",
       ["automation", "autopilot", "switch", "babysit", "next check", "run now", "run history", "handover"],
     ),
     draft(
-      `${ORCHESTRATE_AREA_ID}.countdown`,
-      "Countdown on lanes",
+      "board.appearance.autopilot-countdown",
+      "Autopilot countdown on lanes",
       "The lane's Autopilot pill counts down to Orchestrate's next check (Autopilot · 12m) while it is on in the project.",
       ["autopilot", "timer", "next run", "pill", "clock", "orchestrate"],
     ),
@@ -777,7 +800,10 @@ function resolve(entry: Draft): SettingsIndexEntry {
 
 // Cards that name a thing the user would call a section: the entry says "card" so a row of the same name sorts first.
 const CARD_IDS: ReadonlySet<string> = new Set([
-  ORCHESTRATE_AREA_ID,
+  ORCHESTRATE_ID,
+  "autopilot.limits.spending",
+  "autopilot.limits.pull-requests",
+  "autopilot.limits.safety",
   "board.data.backup",
   "board.data.archived-projects",
   "board.data.recently-deleted",
@@ -788,7 +814,7 @@ const CARD_IDS: ReadonlySet<string> = new Set([
   ...OPERATION_GROUPS.map((group) => `agents.operations.${group.id}`),
   "project.autopilot.automations",
   "project.autopilot.variables",
-  "autopilot.custom.variables",
+  "autopilot.limits.variables",
   "project.recurring.rules",
   "project.recurring.examples",
 ]);

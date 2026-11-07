@@ -37,11 +37,12 @@ export function SettingsSubsection({ id, children }: { id: string; children: Rea
   );
 }
 
-export type StatusTone = "success" | "warning" | "muted";
+export type StatusTone = "success" | "warning" | "danger" | "muted";
 
 const DOT_TONES: Record<StatusTone, string> = {
   success: "bg-success",
   warning: "bg-warning",
+  danger: "bg-destructive",
   muted: "bg-muted-foreground/40",
 };
 
