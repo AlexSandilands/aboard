@@ -10,7 +10,14 @@ import {
   type Project,
   type TaskSummary,
 } from "@repo/contracts";
-import { ClipboardCopyIcon, LightbulbIcon, ListTodoIcon, SparklesIcon, TerminalIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  ClipboardCopyIcon,
+  LightbulbIcon,
+  ListTodoIcon,
+  SparklesIcon,
+  TerminalIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import type { SyntheticEvent } from "react";
 import { Button } from "~/components/ui/button";
@@ -283,6 +290,7 @@ export function AskAgentMenu({
   variant = "ghost-muted",
   size = "xs",
   triggerLabel,
+  caret = false,
   children,
 }: {
   /** The trigger's accessible name when it shows no text. */
@@ -299,6 +307,8 @@ export function AskAgentMenu({
   size?: "xs" | "sm" | "icon-xs";
   /** The trigger's text; without it the trigger is the icon alone, named by `label`. */
   triggerLabel?: string;
+  /** A ▾ after the text, where the trigger sits among plain buttons and should read as a menu. */
+  caret?: boolean;
   children?: ReactNode;
 }) {
   const board = useBoard().data;
@@ -322,6 +332,7 @@ export function AskAgentMenu({
       >
         {children ?? <SparklesIcon />}
         {triggerLabel}
+        {caret && triggerLabel ? <ChevronDownIcon className="opacity-70" /> : null}
       </MenuTrigger>
       <MenuPopup align="end">
         {projects.map((project) => (

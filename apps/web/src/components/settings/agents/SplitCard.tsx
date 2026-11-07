@@ -104,7 +104,7 @@ export function SplitListItem({
   icon: ReactNode;
   title: string;
   badge?: ReactNode;
-  subtitle?: string | null;
+  subtitle?: ReactNode;
   selected: boolean;
   onSelect: () => void;
   trailing?: ReactNode;

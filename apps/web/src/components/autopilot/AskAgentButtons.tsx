@@ -36,11 +36,17 @@ export function AskToFix({
   automationTitle,
   task,
   variant = "ghost-muted",
+  triggerLabel = "Ask an agent to fix",
+  caret = false,
 }: {
   run: AutopilotRun;
   automationTitle: string;
   task: string | null;
   variant?: "ghost-muted" | "outline";
+  /** The trigger's text; the menu's own label still names the failed run. */
+  triggerLabel?: string;
+  /** A ▾ after the text, beside other buttons. */
+  caret?: boolean;
 }) {
   const customs = useCustomAutomations().data;
   return (
@@ -59,7 +65,8 @@ export function AskToFix({
       projectId={run.projectId}
       writesCode
       variant={variant}
-      triggerLabel="Ask an agent to fix"
+      triggerLabel={triggerLabel}
+      caret={caret}
     />
   );
 }

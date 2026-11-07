@@ -55,14 +55,19 @@ or **Dismiss**), and an automation that can't run until you fill in a tool, a va
 
 Then every automation, in a list down the left grouped as **Ship work**, **Pull requests**, **Upkeep** and
 **Yours** (the ones you made or imported). Each row has the automation's switch for the whole board and says where
-it's on and how its last run went. One that is off everywhere is greyed out but stays in the list, so you can
-switch it on. Click a row to see it on the right:
+it's on and how its last run went, led by anything the switch can't show: **Preview**, **Paused** in a project, or
+**Last run failed**. One that is off everywhere is greyed out but stays in the list, so you can switch it on. A
+project's own setting beats the board's, so when the board is off but some projects switched it on themselves, the
+switch sits half way and the row says "On in 5 projects"; switching it off then asks whether to turn it off
+everywhere (clearing those projects' own On) or only for the board. Click a row to see it on the right:
 
 - one sentence saying what it does with your settings ("Every weekday at 09:00, write a plain list of what changed
   on the board"), and **All runs**;
-- **Mode**: **Off**, **Preview** or **On** for the board (see [Trying one out with Preview](#trying-one-out-with-preview));
+- **Mode**: **Off**, **Preview** or **On** for the board (see [Trying one out with Preview](#trying-one-out-with-preview)).
+  When projects set their own On it says so, with **Turn off everywhere**;
 - **Where it runs**: one sentence saying where it is on ("On everywhere except payments-api; epic #5 Off"), **Everywhere**
-  or **Only in…** (then pick the projects), and its **Exceptions**: a project or epic that runs differently, each a chip
+  or **Only in…** (then pick the projects: one chip each, or on a board with more than 8 projects a "5 of 20
+  projects" button that opens a searchable list), and its **Exceptions**: a project or epic that runs differently, each a chip
   you can remove, with **+ Exception** to add one. The lane pill and the epic button edit the same thing, so they always
   agree;
 - **Settings**: the few options most people change;
@@ -426,8 +431,8 @@ Other automations have their own guides: [Recurring tasks](recurring-tasks.md) a
 The **Runs** tab of Settings → Autopilot lists every run, newest first, with more loading as you scroll. Each run shows its
 status, automation, project and task, when it ran, what it said it did or why it failed, and what it cost. Click a run
 to open the rest: its full output (the error output for a failure), the handover a scheduled agent left, the model,
-the session and a link to its thread. A failed run you can try again has **Retry** on its row, and an opened failure has
-**Ask an agent to fix**, which hands the error and output to an agent session.
+and links to open its thread and its session. A failed run has its actions on its row, open or closed: **Retry** when
+it can be tried again, and **Ask an agent**, which hands the error and output to an agent session.
 
 A run that stopped because the pull request moved on while it worked shows as **Deferred: head moved**: nothing went
 wrong, and Autopilot acts on the new commit next.

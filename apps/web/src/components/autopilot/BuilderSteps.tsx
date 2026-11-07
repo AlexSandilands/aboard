@@ -70,7 +70,7 @@ import { InsertChips, insertIntoTextarea } from "./InsertChips";
 import { insertChips, knownVariables } from "./insertChips.logic";
 import { RunHistoryLink } from "./RunHistoryLink";
 import { ScriptField, ScriptTest } from "./ScriptField";
-import { ScriptWarning } from "./ScriptWarning";
+import { RunsAsYouBadge, ScriptWarning } from "./ScriptWarning";
 import { SdkStatusBar } from "./SdkStatusBar";
 import { VariableNeedsList } from "./VariablesEditor";
 import { variableNeeds } from "./variables.logic";
@@ -92,10 +92,13 @@ export interface StepProps {
 }
 
 /** The step's title and, under it, its body as one settings card. */
-export function StepCard({ title, children }: { title: string; children: ReactNode }) {
+export function StepCard({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return (
     <section className="space-y-2.5">
-      <h2 className="px-1 text-base font-medium">{title}</h2>
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <h2 className="text-base font-medium">{title}</h2>
+        {aside}
+      </div>
       <SettingsGroup>{children}</SettingsGroup>
     </section>
   );
@@ -523,7 +526,14 @@ export function DetailsStep(props: StepProps) {
         ? "Which command?"
         : "The script";
   return (
-    <StepCard title={title}>
+    <StepCard
+      title={title}
+      aside={
+        form.actionKind === "agent" ? null : (
+          <RunsAsYouBadge kind={form.actionKind === "shell" ? "command" : "script"} />
+        )
+      }
+    >
       {form.actionKind === "agent" ? (
         <AgentDetails {...props} />
       ) : form.actionKind === "script" ? (
@@ -719,7 +729,6 @@ function ScriptDetails({ form, patch, projects, tasks }: StepProps) {
   return (
     <>
       <Block>
-        <ScriptWarning />
         <ScriptField
           kind="action"
           form={form}
@@ -793,14 +802,6 @@ function CommandDetails({ form, patch, projects, boardVariables }: StepProps) {
             onChange={(event) => patch({ timeoutSeconds: event.currentTarget.value })}
           />
         </Field>
-        <Alert variant="warning">
-          <AlertDescription>
-            The command runs on this machine as you, whenever the trigger fires in a project it is on in. On Windows,
-            don&apos;t pass a value as an argument to another program: PowerShell doesn&apos;t escape the quotes in it,
-            and .cmd programs such as npm and pnpm hand it to cmd.exe, so a task title could add a command. Let the
-            program read the variable itself.
-          </AlertDescription>
-        </Alert>
       </Block>
       <MoreOptions form={form}>
         <Block>

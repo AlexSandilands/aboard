@@ -76,3 +76,17 @@ export function ownSettingsLabel(
   if (keys.length === 0) return null;
   return keys.map((key) => automation.fields.find((f) => f.key === key)?.label ?? key).join(", ");
 }
+
+/** Up to this many projects, Only in… shows one chip per project; past it, a searchable picker, so chips can't wrap without limit. */
+export const PROJECT_CHIPS_MAX = 8;
+
+export const usesProjectPicker = (projectCount: number): boolean => projectCount > PROJECT_CHIPS_MAX;
+
+/** The projects whose title holds the search, ignoring case and surrounding spaces; all of them for an empty one. */
+export function filterProjects<P extends { title: string }>(projects: readonly P[], query: string): P[] {
+  const q = query.trim().toLowerCase();
+  return q ? projects.filter((p) => p.title.toLowerCase().includes(q)) : [...projects];
+}
+
+/** The picker button's label: "5 of 20 projects". */
+export const pickerLabel = (on: number, total: number): string => `${on} of ${total} projects`;
