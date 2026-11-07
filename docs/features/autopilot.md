@@ -83,8 +83,11 @@ previews every automation at once.
 - **Turning it on.** Going from Preview to On counts as switching it on (`onEnabled`, `onEpicEnabled`): a custom
   automation re-arms and Recurring tasks restarts, so On acts on what happens from then, not on what Preview saw. Dry
   runs are deduped apart from real ones, so the Preview runs stay as history.
-- **Start planned's room.** Its check leaves the tasks in Preview out of the slots it hands the engine, since the
-  engine only records them: a Preview epic can't take the room a live task needs.
+- **Start planned's room.** Its check resolves each task as the engine will: a task that resolves Off (outside an epic
+  that is on, in a project that is off) is left out, and one in Preview is handed over outside the slots, since the
+  engine only records it. Neither can take the room a live task needs.
+- **A custom automation's preview text** is built per task: its epic's mode when the epic has its own setting, else
+  its project's, so a task in a Preview epic of a live project still gets "what it would run".
 - **Elsewhere.** The merge gate treats Review PRs in Preview as off, since it reviews nothing for real; a Recurring
   section in Preview says no task is made.
 - **New automations save in Preview.** Creating, importing or importing a draft writes a board row in Preview

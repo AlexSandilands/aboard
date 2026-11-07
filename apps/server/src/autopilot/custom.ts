@@ -459,7 +459,17 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
     }
     // The same for every project, so read once per pass.
     const ownEpics = services.autopilot.epicsWithOwnSetting({ key: customAutomationKey(custom.id) });
+    const self = services.autopilot.automations().find((a) => a.key === customAutomationKey(custom.id));
     return scoped.flatMap(({ project, dryRun }) => {
+      // Whether a task's run would be a dry run: its own epic's setting when it has one, else the project's (which may
+      // be in Preview while a live epic makes the project as a whole not dry).
+      const projectPreview =
+        ctx.engine.dryRun || (self ? services.autopilot.resolve(self, project.id).preview : dryRun);
+      const dryFor = (task: TaskSummary): boolean =>
+        ctx.engine.dryRun ||
+        (task.parent && ownEpics.has(task.parent.id) && self
+          ? services.autopilot.resolve(self, project.id, task.parent.id).preview
+          : projectPreview);
       const tasks = services.tasks.summaries({ projectId: project.id });
       const byId = new Map(tasks.map((t) => [t.id, t]));
       const eligible = tasks.filter(matches);
@@ -494,13 +504,14 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
           services,
         ).map(({ key, data, what }): Candidate => {
           // Only build the preview (it reads the task's detail) for candidates the engine hasn't seen yet.
-          const fresh = !services.autopilot.hasRun(customAutomationKey(custom.id), key, dryRun);
+          const dry = dryFor(task);
+          const fresh = !services.autopilot.hasRun(customAutomationKey(custom.id), key, dry);
           return {
             dedupeKey: key,
             summary: `${isAgent ? "start an agent on" : `run "${custom.name}" for`} #${task.number} (${what})`,
             taskId: task.id,
             data,
-            ...(fresh && dryRun
+            ...(fresh && dry
               ? { preview: preview(customValues(custom, project, task, data, scopes.get(project.id)), task, services) }
               : {}),
           };

@@ -215,6 +215,21 @@ describe("start planned tasks: preview", () => {
     expect(requests.map((r) => r.run.taskId)).toEqual([live.id]);
     expect(runs().find((r) => r.taskId === previewed.id)).toMatchObject({ dryRun: true, status: "skipped" });
   });
+
+  it("gives no room to a task the engine would drop: outside an epic that is on, in a project that is off", async () => {
+    const { s, task, pass, requests, project } = setup();
+    const beta = s.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
+    const inEpic = task("In the epic");
+    const epic = s.tasks.createEpic({ projectId: project.id, title: "On" }, [inEpic.id], "user");
+    // Ahead of everything, in a project that is off: it must not take the only slot.
+    const outside = task("Outside the epic");
+    s.tasks.update(outside.id, { priority: true }, "user");
+    const live = s.tasks.create({ projectId: beta.id, title: "Live", plan, autopilot: true });
+    s.autopilot.setScope("epic", epic.id, AUTOPILOT_START_PLANNED, { mode: "preview" }, project.id);
+    s.autopilot.setScope("project", beta.id, AUTOPILOT_START_PLANNED, { mode: "on" });
+    await pass();
+    expect(requests.map((r) => r.run.taskId)).toEqual([live.id]);
+  });
 });
 
 describe("start planned tasks: priority", () => {
@@ -711,8 +726,9 @@ describe("start planned tasks: one attempt per entry into Planned", () => {
 
 describe("start planned tasks: skipped when no longer eligible", () => {
   it("skips a task whose flag was switched off between the check and the action", async () => {
-    const { s, task } = setup();
+    const { s, task, turnOn } = setup();
     const t = task("Flagged");
+    turnOn();
     const [candidate] = await startPlanned.check({
       services: s,
       engine: s.autopilot.engine(),

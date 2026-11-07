@@ -200,17 +200,22 @@ export const startPlanned = defineAutomation({
           a.projectIndex - b.projectIndex ||
           (a.task.position < b.task.position ? -1 : a.task.position > b.task.position ? 1 : 0),
       )
-      .map(({ task }) => ({
-        candidate: {
-          dedupeKey: `start:${task.id}:${task.statusChangedAt}`,
-          summary: `start #${task.number} "${task.title}"`,
-          taskId: task.id,
-        } satisfies Candidate,
-        // In Preview where the task is (its epic, project or the board): the engine only records it, so it takes no room.
-        preview:
-          engine.dryRun ||
-          (self !== undefined && services.autopilot.resolve(self, task.projectId, task.parent?.id ?? null).preview),
-      }));
+      .flatMap(({ task }) => {
+        // As the engine resolves the task (its epic, project or the board). Off there, the engine drops it, so it must
+        // take no room; in Preview the engine only records it, so it takes none either.
+        const resolved = self && services.autopilot.resolve(self, task.projectId, task.parent?.id ?? null);
+        if (resolved && !resolved.enabled) return [];
+        return [
+          {
+            candidate: {
+              dedupeKey: `start:${task.id}:${task.statusChangedAt}`,
+              summary: `start #${task.number} "${task.title}"`,
+              taskId: task.id,
+            } satisfies Candidate,
+            preview: engine.dryRun || (resolved?.preview ?? false),
+          },
+        ];
+      });
     const previewed = candidates.filter((c) => c.preview).map((c) => c.candidate);
     // A dry run only previews, whatever is working.
     if (engine.dryRun) return previewed;

@@ -576,6 +576,25 @@ describe("custom automations: filters and scopes", () => {
     expect(shellRuns).toHaveLength(0);
   });
 
+  it("previews a task in an epic in Preview with what it would run, while its project runs for real", async () => {
+    const { s, task, define, pass, shellRuns, shell, project, runsOf } = setup();
+    const custom = define({ name: "Ping", trigger: { kind: "status_change", to: "review" }, action: shell() });
+    const key = customAutomationKey(custom.id);
+    const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+    s.autopilot.setScope("epic", epic.id, key, { mode: "preview" }, project.id);
+    await tick();
+    const inEpic = task("In the epic");
+    s.tasks.update(inEpic.id, { epicId: epic.id }, "agent");
+    const outside = task("Outside");
+    s.tasks.move(inEpic.id, { status: "review" }, "agent");
+    s.tasks.move(outside.id, { status: "review" }, "agent");
+    await pass();
+    expect(shellRuns.map((r) => r.env[brandEnv("TASK_ID")])).toEqual([outside.id]);
+    const previewed = runsOf().find((r) => r.taskId === inEpic.id);
+    expect(previewed).toMatchObject({ dryRun: true, status: "skipped" });
+    expect(previewed!.detail).toContain("./notify.sh");
+  });
+
   it("saves in Preview, records what it would run, and doesn't redo that once turned on", async () => {
     const { s, task, define, pass, shellRuns, shell, runsOf } = setup();
     const custom = define({ name: "Ping", trigger: { kind: "status_change", to: "review" }, action: shell() }, null);
