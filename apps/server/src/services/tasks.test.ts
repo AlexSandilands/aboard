@@ -370,6 +370,34 @@ describe("events", () => {
       expect(s.tasks.detail(epic.id).children).toEqual([]);
     });
 
+    it("undoes an epic deleted with its tasks from the full id list, in any order", () => {
+      const { s, project } = setup();
+      const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+      const a = s.tasks.create({ projectId: project.id, title: "A", epicId: epic.id, plan: plan("a") });
+      const b = s.tasks.create({ projectId: project.id, title: "B", epicId: epic.id, plan: plan("a") });
+      const deleted = s.tasks.delete([epic.id], { withTasks: true }, "user");
+      expect(s.tasks.restore([epic.id, a.id, b.id], "user").sort()).toEqual(deleted.sort());
+      expect(
+        s.tasks
+          .detail(epic.id)
+          .children.map((c) => c.id)
+          .sort(),
+      ).toEqual([a.id, b.id].sort());
+      expect(s.tasks.trash()).toEqual([]);
+    });
+
+    it("keeps an epic's task picked with it in the epic, whichever order the bulk delete lists them", () => {
+      const { s, project } = setup();
+      for (const order of ["epic first", "task first"]) {
+        const epic = s.tasks.create({ projectId: project.id, title: `Epic ${order}`, kind: "epic" });
+        const a = s.tasks.create({ projectId: project.id, title: "A", epicId: epic.id, plan: plan("a") });
+        const deleted = s.tasks.delete(order === "epic first" ? [epic.id, a.id] : [a.id, epic.id], {}, "user");
+        expect(s.tasks.trash().find((t) => t.id === a.id)?.withEpic).toBe(epic.number);
+        s.tasks.restore(deleted, "user");
+        expect(s.tasks.summary(a.id).parent?.id).toBe(epic.id);
+      }
+    });
+
     it("brings a task back loose when its epic is still in the trash", () => {
       const { s, project } = setup();
       const epic = s.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });

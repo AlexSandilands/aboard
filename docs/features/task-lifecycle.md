@@ -149,7 +149,8 @@ and come back with it; queries over them that don't join `tasks` use `liveTask(c
 reference to a trashed task (`#N` or its id) fails with `NOT_FOUND: Task #N was deleted…`, never another task.
 
 - **Delete** (`tasks.delete(refs, {withTasks})`, `DELETE /api/tasks/:id?withTasks=1`, `POST /api/tasks/bulk-delete`):
-  one write and one stamp per call, later than any stamp already in the trash, so two deletes never share one. Logs
+  one write and one stamp per call, later than any stamp already in the trash, so two deletes never share one. Epics go
+  last, so an epic picked together with one of its tasks takes that task with it (same stamp, same parent). Logs
   `deleted`, publishes `task.deleted`, republishes the cards that block it, are blocked by it or were closed against it,
   and logs `child_removed` (`deleted`) on its epic, which re-derives. Returns the ids that went, for Undo.
 - **An epic** is deleted alone or **with its tasks** (the dialog's switch). With them, its tasks (archived ones
@@ -159,7 +160,8 @@ reference to a trashed task (`#N` or its id) fails with `NOT_FOUND: Task #N was 
   clears the stamp and puts the task at the end of its lane in the same status (an archived one keeps its place),
   logs `restored`, and republishes it. It rejoins its epic while that one is live, unarchived and in the same
   project; otherwise it comes back loose. An epic brings back the tasks that share its stamp
-  (`trashedWith`), not ones deleted on their own. Restoring a task that isn't in the trash is `VALIDATION`.
+  (`trashedWith`), not ones deleted on their own. Epics are restored first, so an Undo's full id list (an epic
+  and its tasks) works in any order. Restoring a task that wasn't in the trash is `VALIDATION`.
 - **Purge** (`tasks.purge(refs)`, Settings → **Delete now**, `POST /api/tasks/trash/purge`; `purgeExpired()` at
   startup and every hour in `server.ts`) removes the row for good: the plan, links, events, review rounds and
   relations cascade, an epic takes the tasks deleted with it, tasks closed against it keep their resolution and log

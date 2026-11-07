@@ -998,7 +998,11 @@ export function createTasksService(
         const latest = repos.tasks.latestDeletedAt();
         const now = nowIso();
         const at = latest && latest >= now ? new Date(Date.parse(latest) + 1).toISOString() : now;
-        const tasks = [...new Map(refs.map((ref) => [service.resolveId(ref), null])).keys()].map(record);
+        // Epics last: an epic's task picked with it is then in the trash with the epic's stamp and parent, so restoring
+        // the epic brings it back too, whichever order the picks came in.
+        const tasks = [...new Map(refs.map((ref) => [service.resolveId(ref), null])).keys()]
+          .map(record)
+          .sort((a, b) => Number(a.kind === "epic") - Number(b.kind === "epic"));
         const deleted: string[] = [];
         for (const task of tasks) {
           // Already gone with an epic earlier in this call.
@@ -1011,11 +1015,12 @@ export function createTasksService(
 
     restore(refs, actor) {
       return core.write((fx) => {
+        // All checked before any comes back: an Undo lists an epic and the tasks deleted with it, and restoring the
+        // epic takes those back first, so they are skipped below rather than refused. Epics first, so a task doesn't
+        // come back loose while its epic is still in the trash a step behind it.
+        const tasks = refs.map(trashedRecord).sort((a, b) => Number(b.kind === "epic") - Number(a.kind === "epic"));
         const restored: string[] = [];
-        for (const ref of refs) {
-          const task = trashedRecord(ref);
-          if (restored.includes(task.id)) continue;
-          // Restored with its epic earlier in this call, or already back.
+        for (const task of tasks) {
           const current = repos.tasks.getAny(task.id);
           if (!current?.deletedAt) continue;
           restored.push(...restoreIn(current, actor, fx));

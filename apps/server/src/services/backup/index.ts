@@ -130,7 +130,7 @@ export function createBackupService(
         if (repos.tasks.get(taskId)) {
           if (!force) throw new AppError("CONFLICT", `Task #${number} is still on the board. Use force to replace it.`);
           closedAgainst = repos.tasks.resolvedBy([taskId]).map((t) => t.id);
-          children = repos.tasks.childrenOf([taskId]).map((t) => t.id);
+          children = repos.tasks.childIdsAny(taskId);
           relations = repos.relations.forTasks([taskId]).map((r) => ({
             blocker_id: r.blockerId,
             blocked_id: r.blockedId,
@@ -139,7 +139,9 @@ export function createBackupService(
           }));
           repos.tasks.delete(taskId);
         } else if (repos.tasks.getAny(taskId)) {
-          // In the trash here: the backup's copy replaces it, and keeps its number.
+          // In the trash here: the backup's copy replaces it, and keeps its number. An epic keeps its tasks, those
+          // deleted with it included, so they can still come back into it.
+          children = repos.tasks.childIdsAny(taskId);
           repos.tasks.delete(taskId);
         }
         const projectId = String(bundle.task.project_id);
@@ -176,7 +178,7 @@ export function createBackupService(
         }
         for (const id of children) {
           // A task that moved to another project since the backup stays loose: an epic's tasks share its project.
-          if (repos.tasks.get(id)?.projectId === projectId) {
+          if (repos.tasks.getAny(id)?.projectId === projectId) {
             db.prepare("UPDATE tasks SET parent_id = ? WHERE id = ?").run(taskId, id);
           }
           fx.task(id);

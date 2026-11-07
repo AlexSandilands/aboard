@@ -277,6 +277,10 @@ export function createTasksRepo(sql: Sql) {
         )
         .map(toRecord);
     },
+    /** Ids of every child of `epicId`, those in the trash too: what replacing the epic's row must reattach. */
+    childIdsAny(epicId: string): string[] {
+      return sql.all<{ id: string }>("SELECT id FROM tasks WHERE parent_id = ?", epicId).map((r) => r.id);
+    },
     /** Children of `epicId` in the trash with exactly `deletedAt`: the ones deleted together with it. */
     trashedWith(epicId: string, deletedAt: string): TaskRecord[] {
       return sql

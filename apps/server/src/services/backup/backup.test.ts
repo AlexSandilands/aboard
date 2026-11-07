@@ -684,6 +684,19 @@ describe("restoreTask", () => {
     }
   });
 
+  it("keeps an epic's trashed tasks attached when a backup replaces the epic", () => {
+    const { s, idea } = seed();
+    const epicId = s.tasks.summary(idea.id).parent!.id;
+    const epicNumber = s.tasks.summary(epicId).number;
+    const dump = s.backup.dump();
+    s.tasks.delete([epicId], { withTasks: true }, "user");
+    s.backup.restoreTask(dump, epicNumber, { actor: "user" });
+    // The epic is back; its task is still in the trash, and restoring it brings it back into the epic.
+    expect(s.tasks.trash().map((t) => t.id)).toEqual([idea.id]);
+    s.tasks.restore([idea.id], "user");
+    expect(s.tasks.summary(idea.id).parent?.id).toBe(epicId);
+  });
+
   it("brings a task in the trash back from a backup without force, keeping its number", () => {
     const { s, b } = seed();
     const dump = s.backup.dump();
