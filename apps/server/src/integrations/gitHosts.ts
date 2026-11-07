@@ -119,9 +119,11 @@ export function gitHostIssues(hosts: GitHosts): {
   getIssue(ref: IssueRef): Promise<HostIssue>;
   listSubIssues(ref: IssueRef): Promise<string[]>;
 } {
+  /** The host serving the issue, once its CLI is signed in there: its token is only ever sent to such a host. */
   const on = async (ref: IssueRef): Promise<GitHost> => {
     const host = await hosts.resolve(ref.host);
     if (!host) throw new AppError("VALIDATION", `No git host the board knows serves ${ref.host}`);
+    await host.requireSignedIn(ref.host);
     return host;
   };
   return {

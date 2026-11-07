@@ -23,7 +23,7 @@ const refuse = (task: TaskSummary, why: string) =>
  * the PR still targets the default branch and still has the head that was checked. The merge moves the task to Done.
  */
 export async function mergeTaskPr(
-  deps: { services: Services; merges: Pick<PrMerges, "mergeIntoDefaultBranch">; hosts: Pick<GitHosts, "forHost"> },
+  deps: { services: Services; merges: Pick<PrMerges, "mergeIntoDefaultBranch">; hosts: Pick<GitHosts, "resolve"> },
   taskId: string,
   input: { method?: MergeMethod | undefined },
   actor: string,
@@ -83,7 +83,7 @@ export async function mergeTaskPr(
     );
   }
   if (snapshot?.canMerge === false) {
-    const label = hosts.forHost(link.ref.host)?.definition.label ?? "git host";
+    const label = (await hosts.resolve(link.ref.host))?.definition.label ?? "git host";
     throw refuse(task, `the signed-in ${label} account can't merge it`);
   }
   const allowed = snapshot?.mergeMethods ?? [];

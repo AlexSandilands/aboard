@@ -67,6 +67,16 @@ describe("reading an issue to import", () => {
     );
   });
 
+  it("sends no request, so no token, to a host gh isn't signed in to", async () => {
+    const { urls, issues: read } = issues(() => Response.json({}));
+    const ref = { host: "github.attacker.example", repo: "a/b", number: 1 };
+    await expect(read.getIssue(ref)).rejects.toThrow(
+      "GitHub CLI (gh) is not signed in to github.attacker.example: run `gh auth login --hostname github.attacker.example`",
+    );
+    await expect(read.listSubIssues(ref)).rejects.toThrow(/not signed in to github\.attacker\.example/);
+    expect(urls).toEqual([]);
+  });
+
   it("pages through the sub-issues, once each", async () => {
     const page = (n: number, from: number) =>
       Array.from({ length: n }, (_, i) => ({ html_url: `https://github.com/acme/app/issues/${from + i}` }));
