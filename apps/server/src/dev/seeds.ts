@@ -1171,11 +1171,13 @@ const autopilot: Scenario = (s, opts) => {
     s.autopilot.setScope("board", null, key, { mode: "on" });
   }
   s.autopilot.setScope("board", null, "fix_prs", { config: { resolveThreads: false } });
-  // Review PRs' other people's PRs: on with nobody listed in one project (Needs setup), and a colleague's PR it found
-  // clean but left for the user to approve (Needs you).
-  const [first] = s.projects.list();
+  // Review PRs' other people's PRs: on with nobody listed in one project (Needs setup), and in another a colleague's PR
+  // it found clean but left for the user to approve (Needs you).
+  const [first, second] = s.projects.list();
+  if (second)
+    s.autopilot.setScope("project", second.id, "review_prs", { config: { otherPrs: true, otherAuthors: "" } });
   if (first) {
-    s.autopilot.setScope("project", first.id, "review_prs", { config: { otherPrs: true, otherAuthors: "" } });
+    s.autopilot.setScope("project", first.id, "review_prs", { config: { otherPrs: true, otherAuthors: "mara-k" } });
     const now = new Date().toISOString();
     s.repoPrReviews.record({
       host: "github.com",

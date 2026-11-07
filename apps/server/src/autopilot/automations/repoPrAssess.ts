@@ -72,7 +72,52 @@ export interface RepoPrPlan {
   ownThreads: Array<{ rootId: number; threadId: string; canResolve: boolean; replied: boolean }>;
 }
 
-export type Assessment = { kind: "skip"; why: string } | { kind: "review"; plan: RepoPrPlan };
+/** Why a PR isn't reviewed now. `ends_wait` codes also take it off Needs you: the user no longer needs to approve it. */
+export type SkipCode =
+  | "not_open"
+  | "author"
+  | "stopped"
+  | "person_reviewed"
+  | "checks"
+  | "quiet"
+  | "other_reviewer"
+  | "reviewed"
+  | "waiting_author"
+  | "merges_only"
+  | "unchanged";
+
+export type Assessment = { kind: "skip"; code: SkipCode; why: string } | { kind: "review"; plan: RepoPrPlan };
+
+/** Skips after which nobody needs to approve the PR any more: it closed, it was stopped, or a person reviewed it. */
+export const ENDS_WAIT: ReadonlySet<SkipCode> = new Set(["not_open", "stopped", "person_reviewed"]);
+
+/**
+ * What stops Autopilot from posting on the PR at all, read from the PR as it is now: closed or a draft, the user's
+ * `/autopilot stop`, or a person's approval or request for changes that still stands. Null when nothing does.
+ */
+export function standingBlock(pr: RepoPr): { code: SkipCode; why: string } | null {
+  if (pr.state !== "open" || pr.draft) return { code: "not_open", why: "not open, or a draft" };
+  const me = pr.viewer;
+  const controls = pr.comments
+    .filter((c) => c.author === me && parseReviewMarker(c.body) === null)
+    .flatMap((c) => {
+      const command = parseControlCommand(c.body);
+      return command ? [{ at: ts(c.createdAt), command }] : [];
+    })
+    .sort((a, b) => a.at - b.at);
+  if (controls.at(-1)?.command === "stop") return { code: "stopped", why: "stopped with /autopilot stop" };
+  if (
+    pr.latestReviews.some(
+      (r) =>
+        (r.state === "APPROVED" || r.state === "CHANGES_REQUESTED") &&
+        r.author !== pr.author &&
+        parseReviewMarker(r.body) === null,
+    )
+  ) {
+    return { code: "person_reviewed", why: "a person already reviewed it" };
+  }
+  return null;
+}
 
 const EPOCH = 0;
 const ts = (iso: string | null | undefined): number => (iso ? Date.parse(iso) : NaN);
@@ -121,11 +166,11 @@ export async function assessRepoPr(
   now: Date,
   unchangedSince: (base: string) => Promise<boolean>,
 ): Promise<Assessment> {
-  const skip = (why: string): Assessment => ({ kind: "skip", why });
+  const skip = (code: SkipCode, why: string): Assessment => ({ kind: "skip", code, why });
   const me = pr.viewer;
   const author = pr.author;
-  if (pr.state !== "open" || pr.draft) return skip("not open, or a draft");
-  if (!author || author === me || !settings.authors.has(author)) return skip("its author isn't on the list");
+  if (pr.state !== "open" || pr.draft) return skip("not_open", "not open, or a draft");
+  if (!author || author === me || !settings.authors.has(author)) return skip("author", "its author isn't on the list");
   const head = pr.headOid;
 
   // The user's control comments (theirs, without a marker): the newest one wins.
@@ -136,7 +181,7 @@ export async function assessRepoPr(
       return command ? [{ at: ts(c.createdAt), command, id: c.id }] : [];
     })
     .sort((a, b) => a.at - b.at);
-  if (controls.at(-1)?.command === "stop") return skip("stopped with /autopilot stop");
+  if (controls.at(-1)?.command === "stop") return skip("stopped", "stopped with /autopilot stop");
   const resume = controls.findLast((c) => c.command === "resume") ?? null;
   const since = resume?.at ?? EPOCH;
 
@@ -149,7 +194,7 @@ export async function assessRepoPr(
         parseReviewMarker(r.body) === null,
     )
   ) {
-    return skip("a person already reviewed it");
+    return skip("person_reviewed", "a person already reviewed it");
   }
   const myLatest = pr.latestReviews.findLast((r) => r.author === me);
   const approvalActive = myLatest?.state === "APPROVED";
@@ -222,10 +267,11 @@ export async function assessRepoPr(
   if (lastHandoff) lastHandoff.latest = last?.kind === "escalated" && last.at === lastHandoff.at;
 
   // Wait until the checks have finished, and then for the quiet period after the last one (or the push).
-  if (pr.checks.pending.length > 0) return skip(`waiting for checks: ${pr.checks.pending.join(", ")}`);
+  if (pr.checks.pending.length > 0) return skip("checks", `waiting for checks: ${pr.checks.pending.join(", ")}`);
   const headCommit = pr.commits.find((c) => c.oid === head) ?? pr.commits.at(-1);
   const settled = Math.max(ts(headCommit?.committedDate) || 0, ts(pr.checks.latestAt) || 0);
-  if (now.getTime() - settled < settings.quietMinutes * 60_000) return skip("in the quiet period after a push");
+  if (now.getTime() - settled < settings.quietMinutes * 60_000)
+    return skip("quiet", "in the quiet period after a push");
 
   // Give the author time to answer another reviewer's fresh threads.
   for (const t of pr.threads) {
@@ -233,7 +279,7 @@ export async function assessRepoPr(
     if (t.resolved || !first || first.author === me || first.author === author) continue;
     const answered = t.comments.slice(1).some((c) => c.author === author);
     if (!answered && now.getTime() - ts(first.createdAt) < settings.waitMinutes * 60_000) {
-      return skip("waiting for the author to answer another reviewer");
+      return skip("other_reviewer", "waiting for the author to answer another reviewer");
     }
   }
 
@@ -249,7 +295,7 @@ export async function assessRepoPr(
   let replyId = 0;
   if (!last) mode = "full";
   else if (last.head === head) {
-    if (last.kind !== "changes") return skip("already reviewed at this commit");
+    if (last.kind !== "changes") return skip("reviewed", "already reviewed at this commit");
     // A reply from the author on one of Autopilot's open threads, after its last review: a dispute.
     for (const t of pr.threads) {
       const first = t.comments[0];
@@ -258,14 +304,16 @@ export async function assessRepoPr(
         if (c.author === author && ts(c.createdAt) > last.at) replyId = Math.max(replyId, c.id);
       }
     }
-    if (!replyId) return skip("waiting for the author");
+    if (!replyId) return skip("waiting_author", "waiting for the author");
     mode = "dispute";
   } else if (last.kind === "approve") {
-    if (approvalActive && (await unchangedSince(last.head))) return skip("only merges since the approval");
+    if (approvalActive && (await unchangedSince(last.head)))
+      return skip("merges_only", "only merges since the approval");
     mode = "delta";
     baseHead = last.head;
   } else if (last.kind === "escalated") {
-    if (await unchangedSince(last.head)) return skip("nothing the author wrote changed since the hand-off");
+    if (await unchangedSince(last.head))
+      return skip("unchanged", "nothing the author wrote changed since the hand-off");
     mode = "followup";
     baseHead = last.head;
   } else mode = "full";

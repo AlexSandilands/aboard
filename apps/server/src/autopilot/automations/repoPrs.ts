@@ -38,7 +38,15 @@ import {
   type Candidate,
   type CheckContext,
 } from "../types.ts";
-import { assessRepoPr, otherPrsSettings, type OtherPrsSettings, type RepoPrPlan } from "./repoPrAssess.ts";
+import {
+  ENDS_WAIT,
+  approvalGate,
+  assessRepoPr,
+  otherPrsSettings,
+  standingBlock,
+  type OtherPrsSettings,
+  type RepoPrPlan,
+} from "./repoPrAssess.ts";
 
 // Review PRs' second source: other people's PRs (docs/features/autopilot.md#other-peoples-prs). Open PRs by the authors
 // the user lists, in the project's repository, that no task links to. A read-only agent reviews one and answers with
@@ -173,6 +181,13 @@ export interface RepoPrData {
   closingIssues: number[];
   referencingIssues: number[];
   plan: RepoPrPlan;
+  /**
+   * The PR waits for the user's approval at this head, and the gate passes now (a required check re-run green, an
+   * issue linked): approve on the review already done, with no agent.
+   */
+  approveReady?: boolean;
+  /** Which try at this review this is, from 1: a post GitHub failed on in passing is tried again. */
+  attempt?: number;
 }
 
 /** A project's repository couldn't be read: one failed run says so (a day at a time per error). */
@@ -238,9 +253,11 @@ async function pollProject(
   const services = ctx.services;
   const listing = await gitHosts.listOpenPrs(host, repo);
   const open = new Set(listing.map((p) => p.number));
-  // A PR that closed or merged no longer waits for anyone.
+  // A PR that closed or merged no longer waits for anyone, nor one whose author left the list (it isn't read again).
   for (const state of services.repoPrReviews.inRepo(host, repo)) {
-    if (state.readySince && !open.has(state.number)) services.repoPrReviews.clearReady(host, repo, state.number);
+    if (state.readySince && (!open.has(state.number) || !settings.authors.has(state.author ?? ""))) {
+      services.repoPrReviews.clearReady(host, repo, state.number);
+    }
   }
   const linked = taskPrNumbers(services, project.id, host, repo);
   const items: RepoPrData[] = [];
@@ -255,11 +272,45 @@ async function pollProject(
         gitHosts.unchangedSince(ref, base, pr.headOid, pr.baseRef).catch(() => false),
       );
       const state = services.repoPrReviews.get(host, repo, pr.number);
-      if (state?.readySince && (state.headOid !== pr.headOid || readyEnds(assessed))) {
+      if (
+        state?.readySince &&
+        (state.headOid !== pr.headOid || (assessed.kind === "skip" && ENDS_WAIT.has(assessed.code)))
+      ) {
         services.repoPrReviews.clearReady(host, repo, pr.number);
       }
-      if (assessed.kind === "skip") continue;
+      let approveReady = false;
+      if (assessed.kind === "skip") {
+        // Waiting for the user at this head: the gate may have changed since without a push.
+        const waiting = state?.readySince && state.outcome === "ready" && state.headOid === pr.headOid;
+        if (!waiting || assessed.code !== "reviewed") continue;
+        const gate = approvalGate(pr, settings);
+        if (gate.length > 0 || !settings.approve) {
+          const why = gate.length > 0 ? gate.join("; ") : APPROVE_OFF;
+          if (why !== state.reasonDetail) {
+            services.repoPrReviews.record({ ...state, reasonDetail: why, updatedAt: new Date().toISOString() });
+          }
+          continue;
+        }
+        approveReady = true;
+      }
+      const plan: RepoPrPlan =
+        assessed.kind === "review"
+          ? assessed.plan
+          : {
+              mode: "delta",
+              baseHead: null,
+              roundsUsed: state!.round,
+              round: state!.round,
+              maxRounds: settings.maxRounds,
+              resumeId: 0,
+              replyId: 0,
+              resumed: false,
+              gate: [],
+              lastHandoff: null,
+              ownThreads: [],
+            };
       items.push({
+        ...(approveReady ? { approveReady } : {}),
         kind: "repo_pr",
         projectId: project.id,
         host,
@@ -275,7 +326,7 @@ async function pollProject(
         crossRepository: pr.isCrossRepository,
         closingIssues: pr.closingIssues,
         referencingIssues: pr.referencingIssues,
-        plan: assessed.plan,
+        plan,
       });
     } catch (error) {
       errors.push(`#${listed.number}: ${messageOf(error)}`);
@@ -284,10 +335,11 @@ async function pollProject(
   return { items, error: errors.length > 0 ? `Couldn't read ${repo} ${errors.join("; ")}` : null };
 }
 
-/** A PR waiting for the user's approval stops waiting once someone reviewed it, it was stopped, or it closed. */
-const readyEnds = (assessed: Awaited<ReturnType<typeof assessRepoPr>>): boolean =>
-  assessed.kind === "skip" &&
-  (assessed.why.startsWith("a person") || assessed.why.startsWith("stopped") || assessed.why.startsWith("not open"));
+/** The reason a clean PR waits for the user when nothing in the gate stops it. */
+const APPROVE_OFF = "Autopilot doesn't approve here (Approve is off)";
+
+/** Tries per review when GitHub fails in passing while it posts, before the run fails. */
+export const REPO_REVIEW_ATTEMPTS = 3;
 
 /**
  * Other people's PRs to review in the projects where the source is on. Reading a repository takes a while, so it runs
@@ -340,11 +392,20 @@ export function otherPrCandidates(ctx: CheckContext<Record<string, unknown>>): C
       if (runs.some((r) => r.dedupeKey.startsWith(prefix) && (r.status === "queued" || r.status === "running"))) {
         continue;
       }
+      const base = `${repoPrDedupeKey(item, item.headOid, item.plan.resumeId, item.plan.replyId)}${item.approveReady ? ":approve" : ""}`;
+      const tries = runs.filter((r) => r.dedupeKey === base || r.dedupeKey.startsWith(`${base}:a`));
+      // Only a try skipped for GitHub failing in passing leaves the review open for another.
+      if (tries.some((r) => !(r.status === "skipped" && r.output?.retry === true))) continue;
+      if (tries.length >= REPO_REVIEW_ATTEMPTS) continue;
+      const attempt = tries.length + 1;
       candidates.push({
-        dedupeKey: repoPrDedupeKey(item, item.headOid, item.plan.resumeId, item.plan.replyId),
-        summary: `review ${item.repo}#${item.number} by ${item.author} at ${item.headOid.slice(0, 7)} (${item.plan.mode}, round ${item.plan.round} of ${item.plan.maxRounds})`,
+        dedupeKey: attempt === 1 ? base : `${base}:a${attempt}`,
+        summary: item.approveReady
+          ? `approve ${item.repo}#${item.number} at ${item.headOid.slice(0, 7)}: the gate passes now`
+          : `review ${item.repo}#${item.number} by ${item.author} at ${item.headOid.slice(0, 7)} (${item.plan.mode}, round ${item.plan.round} of ${item.plan.maxRounds})`,
         projectId: project.id,
-        data: item,
+        ...(item.approveReady ? { startsNoAgent: true } : {}),
+        data: { ...item, attempt },
       });
     }
   }
@@ -477,6 +538,8 @@ export function renderHandoff(input: {
   round: number;
   maxRounds: number;
   headOid: string;
+  /** False for a ready-for-approval that only re-checks a small change: it uses no round. */
+  counted?: boolean;
 }): string {
   const points = input.issues.filter((i) => !i.fyi);
   const fyi = input.issues.filter((i) => i.fyi);
@@ -506,7 +569,7 @@ export function renderHandoff(input: {
         head: input.headOid,
         reason: input.reason,
         round: input.round,
-        counted: 1,
+        counted: input.counted === false ? 0 : 1,
       }),
     ].join("\n"),
   );
@@ -591,7 +654,7 @@ export function settleDecision(
     }
     return { outcome: "changes_requested", reason: null, why: "", checklist: [] };
   }
-  const blocked = [...item.plan.gate, ...(settings.approve ? [] : ["Autopilot doesn't approve here (Approve is off)"])];
+  const blocked = [...item.plan.gate, ...(settings.approve ? [] : [APPROVE_OFF])];
   if (blocked.length > 0) return { outcome: "ready", reason: "gate", why: blocked.join("; "), checklist: [] };
   return { outcome: "approved", reason: null, why: "", checklist: [] };
 }
@@ -732,42 +795,67 @@ export async function actRepoPr(
   const live = await gitHosts.prHead(ref);
   if (live !== item.headOid) return { status: "skipped", summary: `PR #${item.number} moved on to ${shortSha(live)}` };
 
+  const state = services.repoPrReviews.get(item.host, item.repo, item.number);
   let verdict: RepoPrReviewVerdict;
-  try {
-    const result = await runner.start({
-      run,
-      label: `Review PRs · ${item.repo}#${item.number} round ${item.plan.round}`,
-      prompt: repoPrPrompt(item, skillText(config)),
-      operation: "prReview",
-      options: config,
-      access: "read-only",
-      runTools: { toolSet: "repoPrReview", target: { kind: "pr", ...ref } },
-      untrustedInput: true,
-      outputSchema: REPO_PR_REVIEW_OUTPUT_SCHEMA,
-      repo: project.workspaceRoot,
-      // A fork's branch isn't on origin: that review reads through the tools alone.
-      ...(project.workspaceRoot && !item.crossRepository
-        ? { checkout: { branch: item.headRef, tag: `pr${item.number}` }, expectHead: item.headOid }
-        : {}),
-    });
-    const parsed = RepoPrReviewVerdict.safeParse(result.output);
-    if (!parsed.success) {
-      throw new Error(`The reviewer's answer wasn't a decision: ${parsed.error.issues[0]?.message ?? "invalid"}`);
+  if (item.approveReady) {
+    // The review at this head found it clean; only the gate held the approval, and the poll saw it pass now.
+    verdict = {
+      decision: "approve",
+      summary: `Autopilot's review at \`${shortSha(item.headOid)}\` found this clean, and the approval gate passes now${state?.reasonDetail ? ` (it was held by: ${state.reasonDetail})` : ""}.`,
+      issues: [],
+      counted: false,
+    };
+  } else
+    try {
+      const result = await runner.start({
+        run,
+        label: `Review PRs · ${item.repo}#${item.number} round ${item.plan.round}`,
+        prompt: repoPrPrompt(item, skillText(config)),
+        operation: "prReview",
+        options: config,
+        access: "read-only",
+        runTools: { toolSet: "repoPrReview", target: { kind: "pr", ...ref } },
+        untrustedInput: true,
+        outputSchema: REPO_PR_REVIEW_OUTPUT_SCHEMA,
+        repo: project.workspaceRoot,
+        // A fork's branch isn't on origin: that review reads through the tools alone.
+        ...(project.workspaceRoot && !item.crossRepository
+          ? { checkout: { branch: item.headRef, tag: `pr${item.number}` }, expectHead: item.headOid }
+          : {}),
+      });
+      const parsed = RepoPrReviewVerdict.safeParse(result.output);
+      if (!parsed.success) {
+        throw new Error(`The reviewer's answer wasn't a decision: ${parsed.error.issues[0]?.message ?? "invalid"}`);
+      }
+      verdict = parsed.data;
+    } catch (error) {
+      if (error instanceof WorktreeHeadError) {
+        const now = await gitHosts.prHead(ref).catch(() => null);
+        if (error.moved || (now && now !== item.headOid)) return SKIP_MOVED(item.number);
+      }
+      throw error;
     }
-    verdict = parsed.data;
-  } catch (error) {
-    if (error instanceof WorktreeHeadError) {
-      const now = await gitHosts.prHead(ref).catch(() => null);
-      if (error.moved || (now && now !== item.headOid)) return SKIP_MOVED(item.number);
-    }
-    throw error;
-  }
+
+  // What the post rests on, read again now, not as the poll saw it minutes ago: the head, the user's stop, a person's
+  // review, and the approval gate (a check re-run red, `Closes #n` removed). An approval is never posted on old facts.
+  const fresh = await gitHosts.readRepoPr(ref);
+  if (fresh.headOid !== item.headOid) return SKIP_MOVED(item.number);
+  const block = standingBlock(fresh);
+  if (block) return { status: "skipped", summary: `PR #${item.number}: ${block.why}, so nothing was posted` };
+  const current: RepoPrData = { ...item, plan: { ...item.plan, gate: approvalGate(fresh, settings) } };
 
   const issues = normaliseIssues(verdict.issues);
-  const settled = settleDecision(verdict, item, settings);
-  const counted = settled.outcome === "approved" && item.plan.mode === "delta" ? verdict.counted !== false : true;
+  const settled = settleDecision(verdict, current, settings);
+  if (item.approveReady && settled.outcome !== "approved") {
+    return { status: "skipped", summary: `PR #${item.number} still waits for your approval: ${settled.why}` };
+  }
+  // A small re-check after an approval or a ready-for-approval uses no round, when the reviewer says so.
+  const small = (settled.outcome === "approved" || settled.outcome === "ready") && verdict.counted === false;
+  const counted = !(
+    small &&
+    (item.plan.mode === "delta" || item.plan.mode === "followup" || item.approveReady === true)
+  );
   const round = item.plan.round;
-  const state = services.repoPrReviews.get(item.host, item.repo, item.number);
   let url: string | null = null;
   let handoffComment: { nodeId: string; url: string } | null = null;
 
@@ -802,6 +890,7 @@ export async function actRepoPr(
         round,
         maxRounds: item.plan.maxRounds,
         headOid: item.headOid,
+        counted,
       });
       // The same reason as the hand-off still standing: edit that comment instead of adding another.
       const last = item.plan.lastHandoff;
@@ -814,7 +903,20 @@ export async function actRepoPr(
     }
   } catch (error) {
     if (error instanceof StaleReviewError) return SKIP_MOVED(item.number);
-    if (isTransientHostError(error)) throw new Error(`${messageOf(error)} (PR #${item.number})`, { cause: error });
+    // GitHub failing in passing: nothing was decided on the PR, so the next pass tries again, a few times.
+    if (isTransientHostError(error)) {
+      const attempt = item.attempt ?? 1;
+      if (attempt < REPO_REVIEW_ATTEMPTS) {
+        return {
+          status: "skipped",
+          summary: `${messageOf(error)} (PR #${item.number}, try ${attempt} of ${REPO_REVIEW_ATTEMPTS}, will retry)`,
+          output: { retry: true },
+        };
+      }
+      throw new Error(`${messageOf(error)} (PR #${item.number}, after ${REPO_REVIEW_ATTEMPTS} tries)`, {
+        cause: error,
+      });
+    }
     throw error;
   }
 

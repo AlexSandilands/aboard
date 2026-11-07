@@ -77,9 +77,13 @@ function setup() {
   const resolved: string[] = [];
   /** The heads prHead answers in turn (the last repeats); empty is the PR's own head. */
   let heads: string[] = [];
+  /** Runs while the agent reviews: what changes on GitHub between the poll and the post. */
+  let duringReview: (() => void) | null = null;
+  let postErrors: string[] = [];
   const runner: Runner = {
     start: async (request): Promise<RunnerResult> => {
       requests.push(request);
+      duringReview?.();
       return { runner: "headless", result: null, output: verdict };
     },
   };
@@ -97,6 +101,8 @@ function setup() {
     postReview: async (_ref, input) => {
       const head = heads[0] ?? live ?? pr.headOid;
       if (!head.startsWith(input.reviewedSha)) throw new StaleReviewError(head, input.reviewedSha);
+      const failure = postErrors.shift();
+      if (failure) throw new Error(failure);
       reviews.push(input);
       return {
         id: 500 + reviews.length,
@@ -164,6 +170,8 @@ function setup() {
     setPr: (next: Partial<RepoPr>) => (pr = { ...pr, ...next }),
     answer: (next: RepoPrReviewVerdict) => (verdict = next),
     setHeads: (next: string[]) => (heads = next),
+    whileReviewing: (fn: (() => void) | null) => (duringReview = fn),
+    failPosts: (...messages: string[]) => (postErrors = messages),
     setLive: (sha: string | null) => (live = sha),
     state: () => s.repoPrReviews.get("github.com", "acme/app", 42),
   };
@@ -240,6 +248,158 @@ describe("other people's PRs: approving", () => {
     await t.pass();
     expect(t.state()?.readySince).toBeNull();
     expect(t.s.autopilot.overview().needsYou.filter((n) => n.kind === "pr_approval")).toHaveLength(0);
+  });
+});
+
+describe("other people's PRs: facts read again before posting", () => {
+  it("doesn't approve when a required check turned red after the poll: the PR waits for the user", async () => {
+    const t = setup();
+    t.turnOn();
+    t.whileReviewing(() => t.setPr({ checks: { pending: [], failing: ["test"], missing: [], latestAt: hourAgo() } }));
+    await t.pass();
+    expect(t.reviews).toHaveLength(0);
+    expect(t.comments[0]!.body).toContain("required checks not green: test");
+    expect(t.lastOutput()).toMatchObject({ outcome: "ready" });
+  });
+
+  it("posts nothing when the user stopped it or a person reviewed it meanwhile", async () => {
+    for (const change of [
+      {
+        comments: [
+          {
+            id: 7,
+            nodeId: "IC_7",
+            url: URL42,
+            author: ME,
+            body: "/autopilot stop",
+            createdAt: hourAgo(),
+            editedAt: null,
+          },
+        ],
+      },
+      { latestReviews: [{ author: "carol", state: "CHANGES_REQUESTED", body: "No" }] },
+    ] satisfies Array<Partial<RepoPr>>) {
+      const t = setup();
+      t.turnOn();
+      t.whileReviewing(() => t.setPr(change));
+      await t.pass();
+      expect(t.reviews).toHaveLength(0);
+      expect(t.comments).toHaveLength(0);
+      expect(t.runs()[0]).toMatchObject({ status: "skipped" });
+    }
+  });
+
+  it("tries a post GitHub failed on in passing again on the next pass", async () => {
+    const t = setup();
+    t.turnOn();
+    t.failPosts("HTTP 502: try again");
+    await t.pass();
+    expect(t.runs()[0]).toMatchObject({ status: "skipped", output: { retry: true } });
+    await t.pass();
+    expect(t.reviews).toHaveLength(1);
+    expect(t.runs().map((r) => r.dedupeKey.endsWith(":a2"))).toContain(true);
+  });
+});
+
+describe("other people's PRs: waiting for the user's approval", () => {
+  it("approves without another review once the gate passes at the same head", async () => {
+    const t = setup();
+    t.turnOn();
+    t.setPr({ checks: { pending: [], failing: ["test"], missing: [], latestAt: hourAgo() } });
+    await t.pass();
+    expect(t.state()?.readySince).not.toBeNull();
+    // The check is re-run green; the PR now carries Autopilot's Ready comment.
+    t.setPr({
+      checks: { pending: [], failing: [], missing: [], latestAt: hourAgo() },
+      comments: [
+        {
+          id: 901,
+          nodeId: "IC_901",
+          url: URL42,
+          author: ME,
+          body: t.comments[0]!.body,
+          createdAt: hourAgo(),
+          editedAt: null,
+        },
+      ],
+    });
+    await t.pass();
+    expect(t.requests).toHaveLength(1);
+    expect(t.reviews).toHaveLength(1);
+    expect(t.reviews[0]!.event).toBe("approve");
+    expect(parseReviewMarker(t.reviews[0]!.body)).toMatchObject({ verdict: "approve", counted: "0" });
+    expect(t.state()).toMatchObject({ outcome: "approved", readySince: null });
+  });
+
+  it("keeps the reason it waits for current when the gate changes without a push", async () => {
+    const t = setup();
+    t.turnOn({ otherApprove: true });
+    t.setPr({ checks: { pending: [], failing: ["test"], missing: [], latestAt: hourAgo() } });
+    await t.pass();
+    t.setPr({
+      checks: { pending: [], failing: ["lint"], missing: [], latestAt: hourAgo() },
+      comments: [
+        {
+          id: 901,
+          nodeId: "IC_901",
+          url: URL42,
+          author: ME,
+          body: t.comments[0]!.body,
+          createdAt: hourAgo(),
+          editedAt: null,
+        },
+      ],
+    });
+    await t.pass();
+    expect(t.state()?.reasonDetail).toBe("required checks not green: lint");
+    expect(t.reviews).toHaveLength(0);
+  });
+
+  it("drops the PR from Needs you once the source is off or its author left the list", async () => {
+    const t = setup();
+    t.turnOn({ otherApprove: false });
+    await t.pass();
+    const listed = () => t.s.autopilot.overview().needsYou.filter((n) => n.kind === "pr_approval");
+    expect(listed()).toHaveLength(1);
+    t.turnOn({ otherApprove: false, otherAuthors: "bob" });
+    expect(listed()).toHaveLength(0);
+    t.turnOn({ otherApprove: false });
+    expect(listed()).toHaveLength(1);
+    t.turnOn({ otherPrs: false });
+    expect(listed()).toHaveLength(0);
+  });
+
+  it("uses no round for a ready-for-approval the reviewer calls a small re-check", async () => {
+    const t = setup();
+    t.turnOn({ otherApprove: false });
+    t.setPr({
+      headOid: B,
+      comments: [
+        {
+          id: 901,
+          nodeId: "IC_901",
+          url: URL42,
+          author: ME,
+          body: renderHandoff({
+            summary: "Clean.",
+            issues: [],
+            viewer: ME,
+            reason: "gate",
+            why: "Approve is off",
+            checklist: [],
+            round: 1,
+            maxRounds: 3,
+            headOid: A,
+          }),
+          createdAt: hourAgo(),
+          editedAt: null,
+        },
+      ],
+    });
+    t.answer({ decision: "approve", summary: "Only answers the earlier point.", issues: [], counted: false });
+    await t.pass();
+    expect(t.requests[0]!.prompt).toContain("Mode: **followup**");
+    expect(parseReviewMarker(t.comments[0]!.body)).toMatchObject({ counted: "0" });
   });
 });
 

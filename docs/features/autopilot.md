@@ -476,7 +476,8 @@ out the mode and the approval gate from the PR's history, and posts. The gate is
   issues, files, the newest 100 commits with parent counts, the head's checks with `isRequired`, latest reviews,
   reviews, comments with edit times, threads with comments, dismissed reviews and the open issues of the same
   repository that mention it). The base branch's required checks also come from its rulesets (REST
-  `rules/branches/<base>`), so a required check that never reported is seen. Drafts, PRs linked to a task that isn't
+  `rules/branches/<base>`) and its classic branch protection (`baseRef.branchProtectionRule
+  .requiredStatusCheckContexts`), so a required check that never reported is seen. Drafts, PRs linked to a task that isn't
   manual (those are the task source's and Fix PRs'), and PRs of anyone else are skipped. A read that fails becomes a
   failed task-less run, once a day per error, so it isn't silent.
 - **History from the markers.** Nothing about a PR's history has to be remembered: everything Autopilot posts ends
@@ -498,9 +499,11 @@ out the mode and the approval gate from the PR's history, and posts. The gate is
     reply's id goes in the key), else skipped; a newer head after an approval is `delta` (skipped when its approval
     still stands and nothing the author wrote changed); after a hand-off, `followup` (skipped likewise); else
     `full`. `full`, `dispute` and `followup` past the rounds become `cap_reached`;
-  - "nothing the author wrote changed" is `GitHost.unchangedSince`: compare `base...head` is identical or only
-    merge commits; after a rebase, the PR's change against its base branch is the same patch (hunk line numbers
-    ignored). A hand-off edited later counts from its edit.
+  - "nothing the author wrote changed" is `GitHost.unchangedSince`: the PR's change against its base branch
+    (`compare <base>...<old head>` and `...<new head>`) is the same patch, hunk line numbers ignored. That holds after
+    merging the base branch in or rebasing onto it, and fails for a merge of any other branch, an edited merge, and any
+    file GitHub serves no patch for (binary, too large), which can't be compared. A hand-off edited later counts from
+    its edit.
   - The key is `review:repo:<host>/<repo>#<n>:<head12>:r<resume id>[:c<reply id>]`; one review of a PR runs at a time.
 - **The gate** (`approvalGate`): a closing issue (when required), every required check green and reported, at most
   100 files (all of them read), no sensitive path. The agent is told the reasons but not asked to obey them.
@@ -514,12 +517,18 @@ out the mode and the approval gate from the PR's history, and posts. The gate is
   (`REPO_PR_REVIEW_OUTPUT_SCHEMA`): the PR review's answer plus `decision` (approve, request_changes, escalate), an
   `escalation` (reason: departure, dependency, security, dispute or vague; one line; a checklist), `disputes` per
   thread of its own (accepted, rejected, unsure, with a reply) and `counted`.
+- **Read again before posting.** The poll can be minutes old by the time the agent answers, so `actRepoPr` reads the PR
+  again (`readRepoPr`) before it posts anything: a moved head skips the run, `/autopilot stop`, a person's standing
+  review or a closed PR skips it with nothing posted (`standingBlock`), and the gate is worked out afresh, so an
+  approval never rests on a check that has since turned red or a `Closes #n` that was removed.
 - **What the server does with it** (`settleDecision`). Minor points and nits are always FYI. An approval with a
   blocking or major point open is a request for changes. A request for changes in `cap_reached` is a hand-off for
   `cap`. An approval with the gate failing, or with **Approve** off, is `ready`. Only a clean approval past the gate
   is posted as one: `postReview` with `event: "approve"` (or `request_changes`, blocking and major points inline,
   folded into the body when GitHub refuses them), refused with `StaleReviewError` if the head moved, which skips the
-  run. `counted` is honoured only for a delta approval.
+  run. `counted: false` is honoured for an approval or a ready-for-approval in `delta` or `followup`, so small re-checks
+  don't walk a PR into the round limit. GitHub failing in passing while posting (`isTransientHostError`) skips the run
+  with `output.retry`, and the next pass tries again under `<key>:a<n>`, up to `REPO_REVIEW_ATTEMPTS` (3).
 - **Hand-offs.** The head is read again first; a moved PR skips the run with nothing posted or written. One comment
   (`renderHandoff`): the header, the round, "Handed to @you for manual review (<reason>): <why>" or "Ready for
   @you's approval: <gate>", the summary, every point, the checklist, and that Autopilot looks again by itself on a push.
@@ -528,8 +537,12 @@ out the mode and the approval gate from the PR's history, and posts. The gate is
   or one titled `Review PR #n:`) or creates one (manual, label `review`, the PR linked, the checklist), and asks for
   attention only when the task is new or the reason changed; a repeat adds a note. A `ready` PR makes no task and
   pings nobody: it goes under **Needs you** (`AutopilotNeed` kind `pr_approval`, from `repo_pr_reviews.ready_since`)
-  with a `pr_ready` notification, and leaves it once a person reviews it, it is stopped, closed or merged, or a new
-  head comes.
+  with a `pr_ready` notification, and leaves it once a person reviews it, it is stopped, closed or merged, a new
+  head comes, or its author leaves the list; the list also hides rows of projects where the source or Review PRs is
+  off. While it waits, each poll works the gate out again at that head: a reason that changed is updated, and once the
+  gate passes (a required check re-run green, an issue linked) and Approve is on, it is approved with no agent run
+  (`approveReady`, key `…:approve`, `counted=0`), on the review already done. Skips carry a typed `code`
+  (`ENDS_WAIT` lists the ones that end the wait).
 - **Afterwards.** Its own threads the review says are fixed, and disputes it accepted, are resolved
   (`resolveReviewThread`); accepted and rejected disputes get the agent's reply on the thread. An approval, or the
   first review after a resume, closes the PR's hand-off task (a note, attention cleared, Done). Fix PRs never acts

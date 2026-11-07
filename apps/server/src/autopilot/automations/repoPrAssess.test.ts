@@ -107,7 +107,7 @@ describe("other people's PRs: which to review", () => {
   it("leaves a PR a person approved or asked changes on, the user by hand included", async () => {
     for (const author of ["carol", ME]) {
       const a = await assess(pr({ latestReviews: [{ author, state: "APPROVED", body: "LGTM" }] }));
-      expect(a).toEqual({ kind: "skip", why: "a person already reviewed it" });
+      expect(a).toMatchObject({ kind: "skip", code: "person_reviewed" });
     }
     // Autopilot's own approval isn't a person's.
     const own = await assess(
@@ -289,7 +289,7 @@ describe("other people's PRs: the mode", () => {
 describe("other people's PRs: stop and resume", () => {
   it("stops on the user's /autopilot stop, and starts afresh on a later resume", async () => {
     const stop = comment("/autopilot stop", ago(200));
-    expect(await assess(pr({ comments: [stop] }))).toEqual({ kind: "skip", why: "stopped with /autopilot stop" });
+    expect(await assess(pr({ comments: [stop] }))).toMatchObject({ kind: "skip", code: "stopped" });
     // Someone else's command doesn't count.
     expect((await assess(pr({ comments: [comment("/autopilot stop", ago(200), { author: AUTHOR })] }))).kind).toBe(
       "review",

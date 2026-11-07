@@ -187,6 +187,13 @@ describe("mapRepoPr", () => {
     ]);
   });
 
+  it("counts classic branch protection's required checks, so one that never reported fails", () => {
+    const raw = recorded({
+      baseRef: { branchProtectionRule: { requiredStatusCheckContexts: ["test", "deploy-preview"] } },
+    });
+    expect(mapRepoPr(raw, "acme/app", []).checks.missing).toEqual(["deploy-preview"]);
+  });
+
   it("refuses an answer of another shape", () => {
     expect(() => mapRepoPr({ repository: null }, "acme/app", [])).toThrow("unexpected PR shape");
   });
@@ -247,15 +254,36 @@ describe("unchangedSince", () => {
   };
   const ref = { host: "github.com", repo: "acme/app", number: 42 };
 
-  it("is true when every commit since merges another branch in", async () => {
-    const api = fakeApi({ "/compare/old...new": { status: "ahead", commits: [{ parents: [1, 2] }] } });
+  it("is true after merging the base branch in: the change against it is the same patch", async () => {
+    const api = fakeApi({
+      "/compare/main...old": { status: "ahead", files: [{ filename: "a.ts", patch: "@@ -1,1 +1,2 @@\n+a" }] },
+      "/compare/main...new": { status: "ahead", files: [{ filename: "a.ts", patch: "@@ -1,1 +1,2 @@\n+a" }] },
+    });
     expect(await createGithubRepoPrs(api).unchangedSince(ref, "old", "new", "main")).toBe(true);
+  });
+
+  it("is false for a merge that brings in other code, and for a file served with no patch", async () => {
+    const otherBranch = fakeApi({
+      "/compare/main...old": { status: "ahead", files: [{ filename: "a.ts", patch: "+a" }] },
+      "/compare/main...new": {
+        status: "ahead",
+        files: [
+          { filename: "a.ts", patch: "+a" },
+          { filename: "b.ts", patch: "+from another branch" },
+        ],
+      },
+    });
+    expect(await createGithubRepoPrs(otherBranch).unchangedSince(ref, "old", "new", "main")).toBe(false);
+    const binary = fakeApi({
+      "/compare/main...old": { status: "ahead", files: [{ filename: "logo.png" }] },
+      "/compare/main...new": { status: "ahead", files: [{ filename: "logo.png" }] },
+    });
+    expect(await createGithubRepoPrs(binary).unchangedSince(ref, "old", "new", "main")).toBe(false);
   });
 
   it("after a rebase, compares the change against the base branch, ignoring where its hunks moved", async () => {
     const patch = (at: number) => `@@ -${at},3 +${at},4 @@\n context\n+added\n`;
     const api = fakeApi({
-      "/compare/old...new": { status: "diverged", commits: [{ parents: [1] }] },
       "/compare/main...old": { status: "ahead", files: [{ filename: "a.ts", patch: patch(10) }] },
       "/compare/main...new": { status: "ahead", files: [{ filename: "a.ts", patch: patch(14) }] },
     });
@@ -264,7 +292,6 @@ describe("unchangedSince", () => {
 
   it("is false when the author changed something", async () => {
     const api = fakeApi({
-      "/compare/old...new": { status: "ahead", commits: [{ parents: [1] }] },
       "/compare/main...old": { status: "ahead", files: [{ filename: "a.ts", patch: "+a" }] },
       "/compare/main...new": { status: "ahead", files: [{ filename: "a.ts", patch: "+b" }] },
     });

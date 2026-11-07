@@ -35,6 +35,7 @@ export const REPO_PR_QUERY = `query RepoPullRequest($owner: String!, $name: Stri
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
       number url title state isDraft author { login } headRefOid headRefName baseRefName isCrossRepository
+      baseRef { branchProtectionRule { requiredStatusCheckContexts } }
       closingIssuesReferences(first: 10) { nodes { number } }
       files(first: 100) { totalCount nodes { path } }
       commits(last: 100) { nodes { commit { oid committedDate parents { totalCount } } } }
@@ -99,6 +100,11 @@ export const RepoPrData = z.object({
       headRefOid: z.string(),
       headRefName: z.string(),
       baseRefName: z.string(),
+      baseRef: z
+        .object({
+          branchProtectionRule: z.object({ requiredStatusCheckContexts: z.array(z.string()).nullish() }).nullish(),
+        })
+        .nullish(),
       isCrossRepository: z.boolean().nullish(),
       closingIssuesReferences: nodes(z.object({ number: z.number() })).nullish(),
       files: z.object({ totalCount: z.number(), nodes: z.array(z.object({ path: z.string() }).nullable()) }).nullish(),
@@ -283,7 +289,10 @@ export function mapRepoPr(raw: unknown, repo: string, requiredContexts: readonly
       committedDate: n.commit.committedDate,
       parents: n.commit.parents.totalCount,
     })),
-    checks: mapRepoPrChecks(checks, requiredContexts),
+    // Required by the rulesets (read by the caller) or by classic branch protection (read here).
+    checks: mapRepoPrChecks(checks, [
+      ...new Set([...requiredContexts, ...(pr.baseRef?.branchProtectionRule?.requiredStatusCheckContexts ?? [])]),
+    ]),
     latestReviews: present(pr.latestReviews?.nodes).map((r) => ({
       author: lower(r.author),
       state: r.state.toUpperCase(),
@@ -368,14 +377,12 @@ const RulesJson = z.array(
 const CompareJson = z
   .object({
     status: z.string(),
-    commits: z.array(z.object({ parents: z.array(z.unknown()) }).loose()).optional(),
     files: z.array(z.object({ filename: z.string(), patch: z.string().optional() }).loose()).optional(),
   })
   .loose();
 
 /** A patch with its hunk headers' line numbers dropped, so the same change on a moved base compares equal. */
-const normalizePatch = (patch: string | undefined): string =>
-  (patch ?? "").replace(/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/gm, "@@");
+const normalizePatch = (patch: string): string => patch.replace(/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/gm, "@@");
 
 /** GitHub serves at most 300 files in a compare; past that it can't tell. */
 const COMPARE_FILE_LIMIT = 300;
@@ -475,24 +482,30 @@ export function createGithubRepoPrs(api: GithubApi) {
     },
 
     /**
-     * Whether nothing the author wrote changed between two heads: every commit since `base` merges another branch in,
-     * or (after a rebase, when `base` is no longer an ancestor) the PR's change against `baseRef` is the same patch.
+     * Whether nothing the author wrote changed between two heads: the PR's change against `baseRef` is the same patch
+     * before and after (hunk line numbers aside), which holds after merging the base branch in or rebasing onto it, and
+     * fails for a merge of any other branch or an edited merge. A file GitHub serves no patch for (binary, too large)
+     * can't be compared, so it counts as changed.
      */
     async unchangedSince(ref: PrRef, base: string, head: string, baseRef: string): Promise<boolean> {
       if (base === head) return true;
-      const since = await compare(ref.host, ref.repo, base, head);
-      if (since.status === "identical") return true;
-      if (since.status === "ahead" && (since.commits ?? []).every((c) => c.parents.length > 1)) return true;
       const [before, after] = await Promise.all([
         compare(ref.host, ref.repo, baseRef, base),
         compare(ref.host, ref.repo, baseRef, head),
       ]);
       const files = (c: typeof before) => c.files ?? [];
       if (files(before).length >= COMPARE_FILE_LIMIT || files(after).length >= COMPARE_FILE_LIMIT) return false;
-      const patches = (c: typeof before) =>
-        new Map(files(c).map((f) => [f.filename, normalizePatch(typeof f.patch === "string" ? f.patch : undefined)]));
+      const patches = (c: typeof before): Map<string, string> | null => {
+        const map = new Map<string, string>();
+        for (const f of files(c)) {
+          if (typeof f.patch !== "string") return null;
+          map.set(f.filename, normalizePatch(f.patch));
+        }
+        return map;
+      };
       const a = patches(before);
       const b = patches(after);
+      if (!a || !b) return false;
       return a.size === b.size && [...a].every(([file, patch]) => b.get(file) === patch);
     },
 
