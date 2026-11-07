@@ -387,15 +387,18 @@ interface DialogsState {
   closeTaskAs: { tasks: Array<Pick<TaskSummary, "id" | "number" | "projectId">>; resolution: PickResolution } | null;
   openCloseTaskAs: (tasks: NonNullable<DialogsState["closeTaskAs"]>["tasks"], resolution: PickResolution) => void;
   closeCloseTaskAs: () => void;
-  /** The delete confirmation; `onDeleted` runs once it is confirmed (the panel closes itself). */
-  deleteTask: { task: Pick<TaskSummary, "id" | "number">; onDeleted?: () => void } | null;
-  openDeleteTask: (task: NonNullable<DialogsState["deleteTask"]>["task"], onDeleted?: () => void) => void;
+  /** The delete confirmation for one task or the picked cards; `onDeleted` runs once it is confirmed (the panel closes itself). */
+  deleteTask: { tasks: DeletableTask[]; onDeleted?: () => void } | null;
+  openDeleteTask: (tasks: DeletableTask[], onDeleted?: () => void) => void;
   closeDeleteTask: () => void;
   /** The pasted image open in the preview. */
   imagePreview: { id: string; filename: string } | null;
   openImagePreview: (image: { id: string; filename: string }) => void;
   closeImagePreview: () => void;
 }
+
+/** What the delete confirmation needs of a task. */
+export type DeletableTask = Pick<TaskSummary, "id" | "number" | "title" | "kind">;
 
 /** True while any of the app's dialogs is open (what the `dialogOpen` shortcut condition means). */
 export function anyDialogOpen(state: DialogsState): boolean {
@@ -449,7 +452,7 @@ export const useDialogs = create<DialogsState>()((set) => ({
   closeTemplateDraft: () => set({ templateDraft: null }),
   openCloseTaskAs: (tasks, resolution) => set({ closeTaskAs: { tasks, resolution } }),
   closeCloseTaskAs: () => set({ closeTaskAs: null }),
-  openDeleteTask: (task, onDeleted) => set({ deleteTask: { task, ...(onDeleted ? { onDeleted } : {}) } }),
+  openDeleteTask: (tasks, onDeleted) => set({ deleteTask: { tasks, ...(onDeleted ? { onDeleted } : {}) } }),
   closeDeleteTask: () => set({ deleteTask: null }),
   openImagePreview: (imagePreview) => set({ imagePreview }),
   closeImagePreview: () => set({ imagePreview: null }),

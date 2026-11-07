@@ -153,7 +153,8 @@ describe("imports service", () => {
     const task = s.tasks.create({ projectId: project.id, sourceUrl: issue });
     s.tasks.update(task.id, { archived: true }, "user");
     expect(s.imports.pending()).toEqual([]);
-    s.tasks.delete(task.id, "user");
+    s.tasks.delete([task.id], {}, "user");
+    s.tasks.purge([task.id], "user");
     expect(s.imports.get(task.id)).toBeNull();
   });
 });

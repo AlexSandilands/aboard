@@ -254,7 +254,8 @@ export function createAttachmentsService(core: Core, dir: string): AttachmentsSe
       }
       if (!existsSync(dir)) return;
       for (const name of readdirSync(dir)) {
-        if (name !== PENDING_DIR && !repos.tasks.get(name)) rmSync(join(dir, name), { recursive: true, force: true });
+        if (name !== PENDING_DIR && !repos.tasks.getAny(name))
+          rmSync(join(dir, name), { recursive: true, force: true });
       }
       // Files waiting for a task whose row is gone: a whole-board restore swaps the database, and a crash between
       // writing a file and its row leaves one too. Old enough that an upload still being recorded isn't caught.

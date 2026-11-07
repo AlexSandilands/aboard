@@ -28,6 +28,7 @@ const idle: KeybindingContext = {
   dialogOpen: false,
   settingsOpen: false,
   panelOpen: false,
+  cardFocus: false,
   canGoBack: false,
 };
 
@@ -110,6 +111,15 @@ describe("resolveCommand", () => {
     expect(resolveCommand(key("j"), { ...open, popupFocus: true }, false)).toBeNull();
     expect(resolveCommand(key("j"), { ...open, overlayOpen: true }, false)).toBeNull();
     expect(resolveCommand(key("j", { ctrlKey: true }), open, false)).toBeNull();
+  });
+
+  it("deletes on Delete from a focused card or the open panel, never while typing or in a dialog", () => {
+    expect(resolveCommand(key("Delete"), { ...idle, cardFocus: true }, false)).toBe("task.delete");
+    expect(resolveCommand(key("Delete"), { ...idle, panelOpen: true }, false)).toBe("task.delete");
+    expect(resolveCommand(key("Delete"), idle, false)).toBeNull();
+    expect(resolveCommand(key("Delete"), { ...idle, panelOpen: true, editableFocus: true }, false)).toBeNull();
+    expect(resolveCommand(key("Delete"), { ...idle, cardFocus: true, dialogOpen: true }, false)).toBeNull();
+    expect(resolveCommand(key("Delete"), { ...idle, panelOpen: true, settingsOpen: true }, false)).toBeNull();
   });
 
   it("lets the last matching binding win", () => {

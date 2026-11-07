@@ -24,7 +24,7 @@ steps current, group large features into epics, link the task's ticket and the T
 | File               | Tools                                                                                                   |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
 | `tools/read.ts`    | `board_overview`, `board_activity`, `list_projects`, `list_templates`, `list_tasks`, `get_task`, `epic_overview`, `get_handoff_prompt` (all read-only) |
-| `tools/tasks.ts`   | `add_to_backlog`, `create_task`, `create_epic`, `move_task`, `close_task`, `update_task`, `delete_task`, `add_note`, `request_attention` |
+| `tools/tasks.ts`   | `add_to_backlog`, `create_task`, `create_epic`, `move_task`, `close_task`, `update_task`, `add_note`, `request_attention` |
 | `tools/plans.ts`   | `set_plan`, `update_plan`, `add_steps`, `update_step`                                                   |
 | `tools/links.ts`   | `link` (PR URL, ticket key or URL, URL, a T3 thread `{environmentId, threadId}` or bare thread ID; idempotent), `unlink` (a link's URL, ticket key or id) |
 | `tools/merge.ts`   | `merge_task_pr`: merges a task flagged for auto-merge's PR into the default branch (see [github-prs.md](github-prs.md#merge_task_pr)) |
@@ -117,8 +117,8 @@ text when both are present.
 
 - Most mutating tools return a headline plus the full task render without the activity log: status,
   labels, progress, current step, description, plan context, the plan with step ids
-  (`1.2 [x] Title  (id: …)   <- current`), step notes, review state, links and **Missing links**. `add_to_backlog`, `link`, `add_note` and
-  `delete_task` return one line; `start_review` and `submit_review` return the review brief or result.
+  (`1.2 [x] Title  (id: …)   <- current`), step notes, review state, links and **Missing links**. `add_to_backlog`, `link` and `add_note`
+  return one line; `start_review` and `submit_review` return the review brief or result.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
   review round is waiting. It also lists the task's pasted **Images** with their absolute file paths, so an agent
   can open a screenshot as a file ([attachments.md](attachments.md)).
@@ -297,6 +297,9 @@ The sandbox sets `brandEnv("USER_HOME")` to a folder of its own, so trying this 
   without another call.
 - **A cheap path for everything.** `add_to_backlog` and `close_task` need no plan, so the gate never pushes
   an agent into faking one.
+- **No delete tool.** Deleting is the user's alone (task menu, Delete key, bulk menu), so the trash only ever holds
+  their own deletes. Agents close or archive instead, and a reference to a deleted task returns
+  `NOT_FOUND: Task #N was deleted…`, never a different task ([task-lifecycle.md](task-lifecycle.md#deleting)).
 
 ## Code map
 

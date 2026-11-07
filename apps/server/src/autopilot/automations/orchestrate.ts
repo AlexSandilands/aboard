@@ -105,7 +105,6 @@ export const ORCHESTRATE_DENIED_BOARD_TOOLS = [
   "update_task",
   "move_task",
   "close_task",
-  "delete_task",
   "set_plan",
   "update_plan",
   "add_steps",

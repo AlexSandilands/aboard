@@ -145,17 +145,33 @@ describe("REST", () => {
     vi.restoreAllMocks();
   });
 
-  it("deletes a task permanently only once it is archived", async () => {
+  it("moves a task to the trash, lists it there, restores it and purges it", async () => {
     const h = await setup();
-    const active = await h.request(`/api/tasks/%23${h.task.number}`, { method: "DELETE" });
-    expect(active.status).toBe(400);
-    expect(await errorCode(active)).toBe("VALIDATION");
-
-    await h.request(`/api/tasks/${h.task.id}`, { method: "PATCH", json: { archived: true } });
-    expect((await h.request(`/api/tasks/%23${h.task.number}`, { method: "DELETE" })).status).toBe(204);
+    const deleted = await h.request(`/api/tasks/%23${h.task.number}`, { method: "DELETE" });
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toEqual({ deleted: [h.task.id] });
     expect((await h.request(`/api/tasks/${h.task.id}`)).status).toBe(404);
-    const archivedList = (await (await h.request("/api/tasks?includeArchived=true")).json()) as unknown[];
-    expect(archivedList).toHaveLength(0);
+    expect((await (await h.request("/api/tasks?includeArchived=true")).json()) as unknown[]).toHaveLength(0);
+    const trash = (await (await h.request("/api/tasks/trash")).json()) as Array<{ id: string; purgeAt: string }>;
+    expect(trash.map((t) => t.id)).toEqual([h.task.id]);
+
+    const restored = await h.request("/api/tasks/restore", { method: "POST", json: { tasks: [h.task.id] } });
+    expect(await restored.json()).toEqual({ restored: [h.task.id] });
+    expect((await h.request(`/api/tasks/${h.task.id}`)).status).toBe(200);
+
+    const bulk = await h.request("/api/tasks/bulk-delete", { method: "POST", json: { tasks: [`#${h.task.number}`] } });
+    expect(await bulk.json()).toEqual({ deleted: [h.task.id] });
+    const purge = await h.request("/api/tasks/trash/purge", { method: "POST", json: { tasks: [h.task.id] } });
+    expect(purge.status).toBe(204);
+    expect((await (await h.request("/api/tasks/trash")).json()) as unknown[]).toEqual([]);
+  });
+
+  it("deletes an epic with its tasks when asked", async () => {
+    const h = await setup();
+    const epic = h.services.tasks.create({ projectId: h.project.id, title: "Epic", kind: "epic" });
+    const child = h.services.tasks.create({ projectId: h.project.id, title: "Child", epicId: epic.id });
+    const res = await h.request(`/api/tasks/${epic.id}?withTasks=1`, { method: "DELETE" });
+    expect(((await res.json()) as { deleted: string[] }).deleted.sort()).toEqual([epic.id, child.id].sort());
   });
 
   it("closes a task by #number reference and validates the pairing", async () => {

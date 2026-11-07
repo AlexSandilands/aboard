@@ -21,7 +21,7 @@ as the T3 thread coordinating it), notes and activity like any task. What differ
 | Can't be closed or reviewed, and its PRs merging doesn't move it as it would a task (for an integration epic the merge of its own PR from the branch is an input to its derived status, [Delivery](#delivery)) | `close`, `reviews.openRoundIn`, `links.completeIfPrsDone`, `links.setSnapshot` |
 | Epics don't nest                     | `create` / `update` in `services/tasks.ts`                     |
 | A task and its epic share a project  | `epicFor` in `services/tasks.ts`                               |
-| Can't be archived (so can't be deleted) while it has open tasks | `update` in `services/tasks.ts` |
+| Can't be archived while it has open tasks | `update` in `services/tasks.ts` |
 | Archiving it archives its Done tasks too; unarchiving brings those back | `archiveWithEpic`, `unarchiveWithEpic` in `services/tasks.ts` |
 | An archived epic is never re-derived | `syncEpicStatus` in `services/tasks.ts` |
 | Reopening or unarchiving one of its tasks unarchives it | `unarchiveEpicFor` in `services/tasks.ts` |
@@ -78,8 +78,9 @@ moves the epic to the end of its new column.
   (`epicFor`: "unarchive it first"). Both paths go through the tasks service, so the UI, REST and MCP share the rule.
 - An epic is also an Autopilot scope: its settings apply to the tasks in it while it isn't archived, and are deleted
   with it ([Autopilot](autopilot.md#switches-and-scopes)).
-- Deleting an epic leaves its tasks loose (`ON DELETE SET NULL`) and logs `epic_changed` with
-  `epicDeleted` on each. Deleting a task logs `child_removed` with `deleted` on its epic.
+- Deleting an epic either takes its tasks to the trash with it (same stamp, restored together) or leaves them loose
+  at once, logging `epic_changed` with `epicDeleted` on each ([task-lifecycle](task-lifecycle.md#deleting)). Deleting
+  a task logs `child_removed` with `deleted` on its epic.
 - The roll-up (`rollup` on `TaskSummary`: total, done and a count per status) ignores archived tasks; the
   epic's detail (`children`) still lists them.
 

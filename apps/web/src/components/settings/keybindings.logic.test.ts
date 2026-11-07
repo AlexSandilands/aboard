@@ -82,13 +82,14 @@ describe("triggersWhileTyping", () => {
 
 describe("keybindingGroups", () => {
   it("has a group per registry heading, in registry order, with a section id each", () => {
-    expect(keybindingGroups().map((group) => group.label)).toEqual(["General", "Navigation", "Layout"]);
+    expect(keybindingGroups().map((group) => group.label)).toEqual(["General", "Navigation", "Layout", "Tasks"]);
     expect(keybindingGroups().map((group) => group.sectionId)).toEqual([
       "keybindings.general",
       "keybindings.navigation",
       "keybindings.layout",
+      "keybindings.tasks",
     ]);
-    expect(keybindingGroups().map((group) => group.slug)).toEqual(["general", "navigation", "layout"]);
+    expect(keybindingGroups().map((group) => group.slug)).toEqual(["general", "navigation", "layout", "tasks"]);
   });
 
   it("turns any heading into an id segment", () => {

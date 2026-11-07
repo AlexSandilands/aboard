@@ -170,8 +170,8 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 8. **Close what's already handled.** If a task was delivered by another task, duplicates one, or is no
    longer wanted, `close_task` it with resolution `completed` / `duplicate` (plus `byTask: "#N"`) or
    `wont_do`. It moves to Done without a plan and the other task shows it also resolved this one. Don't
-   archive these: archiving hides the card and loses why it was closed. `delete_task` is permanent and
-   only works on archived tasks; use it only when the user asks for a task to be deleted.
+   archive these: archiving hides the card and loses why it was closed. Agents can't delete tasks: when the
+   user wants one gone, they delete it on the board.
 9. **Ask for the user when you need them.** `request_attention(task, message)` flags a task under Needs
    attention and sends the user a notification. Use it when you can't go on without them or they should look at
    something: you are blocked, unsure, found a problem, or have work ready to review or approve (and when the user

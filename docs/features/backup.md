@@ -6,7 +6,9 @@ machines #71 (epic #68).
 The board lives in one SQLite file. If that file is deleted or corrupted, nothing else holds the board. Backup
 writes the whole board out as JSON: on demand from the CLI, or on a schedule into a git repo the server commits
 and pushes, so the history lives off the machine. Restore loads a dump into a new database, and can also put a
-single deleted task back on a live board.
+single deleted task back on a live board. Tasks in the trash are dumped like any other, with `deleted_at` set, so a
+whole-board restore brings the trash back as it was; a dump from before the trash has no such column and loads with an
+empty one.
 
 ## How it works
 
@@ -93,7 +95,8 @@ replaces it), needs the task's project to be on the board, takes a new number if
 one, drops a "closed by" pointer to a task that no longer exists, and keeps other tasks' "closed by" pointers to
 a task it replaces. Epics work the same way: a task goes back into its epic only if that is still an epic in its
 project (else it comes back loose), a replaced epic keeps its tasks, and the epics involved re-derive their
-status ([epics](epics.md)). A dump at an older schema is first
+status ([epics](epics.md)). A task in the trash here is replaced without force, keeping its number, and every
+restored task comes back live (`deleted_at` cleared). A dump at an older schema is first
 loaded into an in-memory database, migrated and dumped again, so its rows fit the current tables. The CLI
 sends it to the running server (`POST /api/backup/restore-task`) so open boards update, or writes the
 database directly when no server is running.

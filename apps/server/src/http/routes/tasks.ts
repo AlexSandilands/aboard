@@ -1,5 +1,7 @@
 import {
   type AddLinkResult,
+  type DeleteTasksResult,
+  TaskRefsInput,
   CloseTaskInput,
   CreateTaskInput,
   LinkInput,
@@ -26,6 +28,8 @@ const TaskListQuery = z.object({
   includeArchived: queryFlag,
   attention: queryFlag,
 });
+
+const DeleteTaskQuery = z.object({ withTasks: queryFlag });
 
 /** /api/tasks — task cards, plan replacement, phases, links and notes scoped to a task. */
 export function registerTaskRoutes(app: Hono, { services, integrations }: AppContext): void {
@@ -57,6 +61,33 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
       return c.json(task, 201);
     }),
   );
+  // The trash (task-lifecycle.md#deleting). Registered before /api/tasks/:id so "trash" isn't read as a task id.
+  app.get(
+    "/api/tasks/trash",
+    handle((c) => c.json(services.tasks.trash())),
+  );
+  app.post(
+    "/api/tasks/bulk-delete",
+    handle(async (c) => {
+      const input = await parseBody(c, TaskRefsInput);
+      return c.json({ deleted: services.tasks.delete(input.tasks, {}, actorOf(c)) } satisfies DeleteTasksResult);
+    }),
+  );
+  app.post(
+    "/api/tasks/restore",
+    handle(async (c) => {
+      const input = await parseBody(c, TaskRefsInput);
+      return c.json({ restored: services.tasks.restore(input.tasks, actorOf(c)) });
+    }),
+  );
+  app.post(
+    "/api/tasks/trash/purge",
+    handle(async (c) => {
+      const input = await parseBody(c, TaskRefsInput);
+      services.tasks.purge(input.tasks, actorOf(c));
+      return noContent(c);
+    }),
+  );
   app.get(
     "/api/tasks/:id",
     handle((c) => c.json(services.tasks.detail(taskId(c)))),
@@ -68,8 +99,10 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
   app.delete(
     "/api/tasks/:id",
     handle((c) => {
-      services.tasks.delete(taskId(c), actorOf(c));
-      return noContent(c);
+      const { withTasks } = parseQuery(c, DeleteTaskQuery);
+      return c.json({
+        deleted: services.tasks.delete([taskId(c)], { withTasks }, actorOf(c)),
+      } satisfies DeleteTasksResult);
     }),
   );
   app.put(

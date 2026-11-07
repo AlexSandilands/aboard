@@ -60,7 +60,7 @@ export function createImportsRepo(sql: Sql) {
       return sql
         .all<ImportRow>(
           `SELECT i.* FROM task_imports i JOIN tasks t ON t.id = i.task_id
-           WHERE i.status = ? AND t.archived_at IS NULL ORDER BY i.created_at, i.task_id`,
+           WHERE i.status = ? AND t.archived_at IS NULL AND t.deleted_at IS NULL ORDER BY i.created_at, i.task_id`,
           status,
         )
         .map(toImport);

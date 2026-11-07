@@ -11,6 +11,7 @@ export const KeybindingCommand = z.enum([
   "task.reveal",
   "sidebar.toggle",
   "panel.toggle",
+  "task.delete",
 ]);
 export type KeybindingCommand = z.infer<typeof KeybindingCommand>;
 
@@ -28,6 +29,8 @@ export const KEYBINDING_CONTEXT_KEYS = [
   "settingsOpen",
   /** The task detail panel is open. */
   "panelOpen",
+  /** Focus is on a card on the board. */
+  "cardFocus",
   /** Escape has somewhere to go back to: the task panel is open, or Settings or Stats is showing. */
   "canGoBack",
 ] as const;
@@ -65,6 +68,13 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingCommand, KeybindingDef> = {
     group: "Navigation",
     key: "j",
     when: `panelOpen && !settingsOpen && ${NO_FOCUS_CLAIM}`,
+  },
+  // The focused card first, else the open panel's task; it only opens the confirmation.
+  "task.delete": {
+    title: "Delete the focused card or the open task",
+    group: "Tasks",
+    key: "delete",
+    when: `(cardFocus || panelOpen) && !settingsOpen && !dialogOpen && ${NO_FOCUS_CLAIM}`,
   },
   // Not in text fields, where mod+b is bold.
   "sidebar.toggle": {

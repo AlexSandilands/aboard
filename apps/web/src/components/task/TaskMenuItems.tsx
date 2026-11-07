@@ -121,6 +121,7 @@ export function TaskMenuItems({
   const { mutate: resolveTask } = useResolveTask();
   const queryClient = useQueryClient();
   const actions = useTaskMenuActions(task, onOpenPlanEditor);
+  const deleteShortcut = useShortcutLabel("task.delete");
   const board = useBoard().data;
   const epics = epicOptions(board?.tasks ?? [], task);
   const archived = task.archivedAt !== null;
@@ -244,15 +245,15 @@ export function TaskMenuItems({
         </MenuItem>
       )}
       {item("archive")}
-      {archived ? (
-        // Deleting is a second step after archiving, so it never sits next to everyday actions.
-        <MenuItem variant="destructive" onClick={() => useDialogs.getState().openDeleteTask(task, onDeleted)}>
-          <Trash2Icon />
-          Delete permanently…
-        </MenuItem>
-      ) : null}
       <MenuSeparator />
       {item("copy-link")}
+      <MenuSeparator />
+      {/* Last and set apart, so it never sits next to everyday actions; it confirms, and Undo brings the task back. */}
+      <MenuItem variant="destructive" onClick={() => useDialogs.getState().openDeleteTask([task], onDeleted)}>
+        <Trash2Icon />
+        Delete…
+        {deleteShortcut ? <MenuShortcut>{deleteShortcut}</MenuShortcut> : null}
+      </MenuItem>
     </>
   );
 }

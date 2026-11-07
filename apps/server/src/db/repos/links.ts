@@ -113,7 +113,7 @@ export function createLinksRepo(sql: Sql) {
     byKindActive(kind: LinkKind): LinkRow[] {
       return sql.all<LinkRow>(
         `SELECT l.* FROM task_links l JOIN tasks t ON t.id = l.task_id
-         WHERE l.kind = ? AND t.archived_at IS NULL ORDER BY l.created_at, l.rowid`,
+         WHERE l.kind = ? AND t.archived_at IS NULL AND t.deleted_at IS NULL ORDER BY l.created_at, l.rowid`,
         kind,
       );
     },
@@ -121,7 +121,7 @@ export function createLinksRepo(sql: Sql) {
     byThread(environmentId: string, threadId: string): LinkRow[] {
       return sql.all<LinkRow>(
         `SELECT l.* FROM task_links l JOIN tasks t ON t.id = l.task_id
-         WHERE l.kind = 't3_thread' AND t.archived_at IS NULL
+         WHERE l.kind = 't3_thread' AND t.archived_at IS NULL AND t.deleted_at IS NULL
            AND json_extract(l.ref_json, '$.environmentId') = ? AND json_extract(l.ref_json, '$.threadId') = ?
          ORDER BY l.created_at, l.rowid`,
         environmentId,
@@ -174,7 +174,7 @@ export function createLinksRepo(sql: Sql) {
           `SELECT l.url, l.id AS link_id, l.task_id, t.project_id, l.created_at AS opened_at,
                   json_extract(l.pr_changes_json, '$.merged') AS at
            FROM task_links l JOIN tasks t ON t.id = l.task_id
-           WHERE l.kind = 'pr' AND l.pr_changes_json IS NOT NULL
+           WHERE l.kind = 'pr' AND l.pr_changes_json IS NOT NULL AND t.deleted_at IS NULL
              AND json_extract(l.pr_changes_json, '$.merged') >= ? AND json_extract(l.pr_changes_json, '$.merged') < ?
            ORDER BY at, l.id`,
           from,
@@ -214,7 +214,7 @@ export function createLinksRepo(sql: Sql) {
                       PARTITION BY l.kind, COALESCE(json_extract(l.ref_json, '$.sessionId'), json_extract(l.ref_json, '$.threadId'), l.id)
                       ORDER BY l.created_at, l.id
                     ) AS n
-             FROM task_links l JOIN tasks t ON t.id = l.task_id WHERE l.kind IN ('agent_session', 't3_thread')
+             FROM task_links l JOIN tasks t ON t.id = l.task_id WHERE l.kind IN ('agent_session', 't3_thread') AND t.deleted_at IS NULL
            ) WHERE n = 1 AND at >= ? AND at < ? ORDER BY at`,
           from,
           to,
