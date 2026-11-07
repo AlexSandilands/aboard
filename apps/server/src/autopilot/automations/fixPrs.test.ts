@@ -367,6 +367,25 @@ describe("fix PRs: triggers", () => {
     expect(requests).toHaveLength(1);
   });
 
+  it("points the fixer at the earlier review whose points a conflict resolution review carried", async () => {
+    const { requests, setPr, pass, turnOn, reviewed } = setup();
+    turnOn();
+    setPr({ headOid: SHA_B });
+    reviewed({
+      headOid: SHA_B,
+      reviewId: 950,
+      reviewUrl: "https://github.com/acme/app/pull/7#pullrequestreview-950",
+      basis: "conflict_review",
+      carriedFrom: SHA_A,
+      openFrom: { reviewId: 900, reviewUrl: "https://github.com/acme/app/pull/7#pullrequestreview-900" },
+    });
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.prompt).toContain("gh api repos/acme/app/pulls/7/reviews/950/comments");
+    expect(requests[0]!.prompt).toContain("only checked how merge conflicts were resolved");
+    expect(requests[0]!.prompt).toContain("gh api repos/acme/app/pulls/7/reviews/900/comments");
+  });
+
   it("ignores a review that was clean, gave up, or is of an older head", async () => {
     const { requests, setPr, pass, turnOn, reviewed } = setup();
     turnOn();

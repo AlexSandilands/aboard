@@ -1228,10 +1228,34 @@ describe("review PRs: a head that moved by merging the base in", () => {
     const verdict = currentPrReview(s.autopilot.runsForTask(task.id), linkId(), SHA_B)!;
     expect(verdict).toMatchObject({ basis: "conflict_review", actionable: 2, handoff: "fix" });
     expect(verdict.counts.major).toBe(2);
+    expect(verdict.openFrom).toEqual({
+      reviewId: 101,
+      reviewUrl: "https://github.com/acme/app/pull/7#pullrequestreview-101",
+    });
     expect(runs()[0]!.summary).toContain("and 2 still open from round 1");
     expect(posts[1]!.input.body).toContain(
       "Round 1's review (https://github.com/acme/app/pull/7#pullrequestreview-101) left 2 points at or above major open",
     );
+  });
+
+  it("counts a granted round in a later resolution review's 'round N of M'", async () => {
+    const { s, requests, posts, setPr, pass, turnOn, prSettings, moveHead, runs } = setup();
+    prSettings({ rounds: 1 });
+    turnOn();
+    setPr({ baseRef: "main" });
+    await pass();
+    setPr({ headOid: SHA_B, baseRef: "main" });
+    await pass();
+    s.autopilot.retry(runs()[0]!.id, "user");
+    await pass();
+    expect(requests).toHaveLength(2);
+    moveHead(SHA_B, SHA_C, "resolved");
+    setPr({ headOid: SHA_C, baseRef: "main" });
+    await pass();
+    expect(requests).toHaveLength(3);
+    expect(requests[2]!.prompt).toContain("after review round 2 of 2");
+    expect(posts.at(-1)!.input.body).toContain("after round 2 of 2");
+    expect(reviewOf(runs()[0]!)).toMatchObject({ round: 2, maxRounds: 2 });
   });
 
   it("still gives up after a resolution review on the last round when earlier points are open", async () => {

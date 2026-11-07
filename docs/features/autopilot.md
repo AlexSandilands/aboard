@@ -538,7 +538,8 @@ approves, asks for changes or hands them to the user.
     --remerge-diff` of the resolved merges inlined as untrusted text (cut at `MAX_REMERGE_DIFF`, 40,000 characters).
     It is posted like any review, headed "Conflict resolution review (not counted), after round N of M"; its output
     has `basis: "conflict_review"` and the last counted round. Its verdict also counts what the review before it left
-    open (counts, `actionable` and so `handoff`; the posted body names that review), since the merge didn't change the
+    open (counts, `actionable` and so `handoff`; the posted body names that review, and `openFrom` points Fix PRs at
+    it), since the merge didn't change the
     PR's own code: a clean resolution can't wave through points nobody fixed. A git too old to check a merge (no `merge-tree
     --write-tree`) treats it as resolved, and one with no `--remerge-diff` gets a full review instead, still
     uncounted. At most `CONFLICT_REVIEWS_PER_PR` (5) per PR, as many as Fix PRs' conflict attempts; past that the run
@@ -546,12 +547,14 @@ approves, asks for changes or hands them to the user.
     reviews …". A resolution review that fails is flagged like any failure but keeps its `basis`, so it costs no
     round.
   - **A change of the PR's own** is a counted round while rounds are left. With none left the run is skipped and
-    flagged, so the card says why the PR waits: "PR #N changed after Review PRs' last round (3 of 3, at `<sha>`):
+    flagged, so the card says why the PR waits: "PR #N changed after Review PRs' last round (round 3, at `<sha>`):
     `<reason>`. Review and merge it yourself, or retry this run to allow one more round." Retrying it (the run's
-    Retry, or `retry_autopilot_run`) grants exactly one more round for that PR: the retried run keeps
-    `output.roundsUsedUp`, and each such run of the link (read through its retired key) adds one to the PR's rounds.
-    Retrying the conflict-review notice (`output.conflictReviewsUsedUp`) allows one more resolution review the same
-    way.
+    Retry, or `retry_autopilot_run`) grants exactly one more round for that PR at that head: the retried run keeps
+    `output.roundsUsedUp`, and a retried notice whose (retired) key is of the PR's current head adds one to its rounds.
+    A later head goes back to the configured rounds, and a notice of an older head can't be retried (the board calls it
+    history), so no round is banked for later. A resolution review after a granted round still says "round 4 of 4"
+    (`maxRounds` is at least that of the review it follows). Retrying the conflict-review notice
+    (`output.conflictReviewsUsedUp`) allows one more resolution review the same way.
   - **When git can't tell** (a project with no folder, a base branch the poller hasn't read, a fetch that fails, a
     commit git doesn't have), the move counts as a change: it may cost a round, but never lets code through
     unreviewed. A PR with no verdict yet is always a counted round.

@@ -161,6 +161,11 @@ export const PrReviewRunOutput = z.object({
   basis: PrReviewBasis.optional(),
   /** With `basis`: the reviewed head the verdict was carried from (or whose merge was reviewed). */
   carriedFrom: z.string().optional(),
+  /**
+   * A conflict review's: the earlier review whose points are still open and counted here, so the fix automation reads
+   * them there (this review's own comments are only about the merge).
+   */
+  openFrom: z.object({ reviewId: z.number().int().nullable(), reviewUrl: z.string() }).optional(),
 });
 export type PrReviewRunOutput = z.infer<typeof PrReviewRunOutput>;
 

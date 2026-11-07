@@ -580,7 +580,7 @@ function taskPrCandidates({ services, projects }: CheckContext<ReviewPrsConfig>)
           {
             dedupeKey,
             summary: data.last
-              ? `review PR #${ref.number} at ${shortSha(headOid)} (after ${shortSha(data.last.headOid)}, ${counted.length} of ${maxRounds} rounds used)`
+              ? `review PR #${ref.number} at ${shortSha(headOid)} (after ${shortSha(data.last.headOid)}, ${counted.length} of ${Math.max(maxRounds, counted.length)} rounds used)`
               : `review PR #${ref.number} at ${shortSha(headOid)} (round ${round} of ${maxRounds})`,
             taskId: task.id,
             data,
@@ -743,8 +743,10 @@ async function postReview(
   const task = services.tasks.summary(candidate.taskId!);
   // A resolution review keeps the round of the review it follows; a counted one is the next round.
   const round = resolution ? resolution.last.round : data.round;
+  // A round granted at an older head isn't in this head's count; the review it follows still says how many there were.
+  const maxRounds = resolution ? Math.max(data.maxRounds, resolution.last.maxRounds) : data.maxRounds;
   const basis: PrReviewBasis | undefined = resolution ? "conflict_review" : undefined;
-  const threshold = effectiveFixThreshold(fixThresholdFor(services, task), round, data.maxRounds);
+  const threshold = effectiveFixThreshold(fixThresholdFor(services, task), round, maxRounds);
   // A resolution review looks only at the merge: what the review before it left open is still open, since the PR's own
   // code didn't change. Its verdict counts those too, so it can't wave through points nobody fixed.
   const stillOpen = resolution && resolution.last.actionable > 0 ? resolution.last : null;
@@ -761,7 +763,7 @@ async function postReview(
         task,
         pr: data,
         round,
-        maxRounds: data.maxRounds,
+        maxRounds,
         threshold,
         earlier: data.earlier,
         skill: config.skill,
@@ -799,7 +801,7 @@ async function postReview(
     verdict = parsed.data;
     const rendered = renderReview(verdict, {
       round,
-      maxRounds: data.maxRounds,
+      maxRounds,
       headOid: data.headOid,
       basis,
       ...(stillOpen ? { stillOpen } : {}),
@@ -850,7 +852,7 @@ async function postReview(
   const { fyi } = own;
   const counts: SeverityCounts = stillOpen ? addCounts(own.counts, stillOpen.counts) : own.counts;
   const actionable = actionableCount(own.counts, threshold) + (stillOpen?.actionable ?? 0);
-  const handoff = reviewHandoff(actionable, round, data.maxRounds);
+  const handoff = reviewHandoff(actionable, round, maxRounds);
   const resolvedThreads =
     data.earlier.length > 0 && (verdict.fixed?.length ?? 0) > 0
       ? await resolveConfirmedThreads(
@@ -866,7 +868,7 @@ async function postReview(
     prUrl: data.url,
     headOid: posted.headOid,
     round,
-    maxRounds: data.maxRounds,
+    maxRounds,
     reviewUrl: posted.url,
     reviewId: posted.id,
     counts,
@@ -876,10 +878,14 @@ async function postReview(
     handoff,
     ...(resolvedThreads > 0 ? { resolvedThreads } : {}),
     ...(resolution ? { basis: "conflict_review" as const, carriedFrom: resolution.last.headOid } : {}),
+    // Where the points still open were raised, for Fix PRs: this review's own comments are only about the merge.
+    ...(stillOpen
+      ? { openFrom: stillOpen.openFrom ?? { reviewId: stillOpen.reviewId, reviewUrl: stillOpen.reviewUrl } }
+      : {}),
   };
   const which = resolution
-    ? `reviewed how the conflicts merging ${resolution.baseRef} in were resolved (not counted, after round ${round} of ${data.maxRounds})`
-    : `round ${round} of ${data.maxRounds}`;
+    ? `reviewed how the conflicts merging ${resolution.baseRef} in were resolved (not counted, after round ${round} of ${maxRounds})`
+    : `round ${round} of ${maxRounds}`;
 
   services.tasks.addNote(
     task.id,
@@ -901,7 +907,7 @@ async function postReview(
       return { summary: `${head}; ${actionable} at or above ${threshold} to fix`, output };
     case "gave_up":
       return {
-        summary: `Autopilot gave up on PR #${data.number} after ${data.maxRounds} review rounds: ${actionable} at or above ${threshold} still open (${found})`,
+        summary: `Autopilot gave up on PR #${data.number} after ${maxRounds} review rounds: ${actionable} at or above ${threshold} still open (${found})`,
         output,
         needsAttention: true,
       };
