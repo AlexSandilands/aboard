@@ -113,9 +113,8 @@ describe("Orchestrate", () => {
     // It reads text anyone can write, so it can't flag tasks for auto-merge, or close, move or delete them.
     expect(request.deniedTools).toEqual(ORCHESTRATE_DENIED_TOOLS);
     expect(request.deniedTools).toContain(`mcp__${BRAND.id}__update_task`);
-    expect(request.deniedTools).not.toContain(`mcp__${BRAND.id}__merge_task_pr`);
+    expect(request.deniedTools).toContain(`mcp__${BRAND.id}__merge_task_pr`);
     expect(request.outputSchema).toMatchObject({ required: ["summary", "handover"] });
-    expect(request.prompt).toContain("merge_task_pr(task)");
     // The allow list takes plain commands only, so the prompt says so rather than leaving a refusal to read as "Bash is off".
     expect(request.prompt).toContain("Run each `gh` command on its own, one per Bash call");
     expect(request.prompt).toContain("not that Bash is off");
@@ -178,15 +177,17 @@ describe("Orchestrate", () => {
     expect(agentRuns.map((r) => r.label)).toEqual(["Orchestrate · Alpha", "Orchestrate · Beta"]);
   });
 
-  it("denies merge_task_pr and says not to merge with May merge off, and appends the user's instructions", async () => {
+  it("always denies merge_task_pr, says to leave merging to Merge ready PRs, and appends the user's instructions", async () => {
     const { busyTask, pass, on, agentRuns } = setup();
     busyTask();
-    on({ mayMerge: false, instructions: "Hold anything touching the editor." });
+    on({ instructions: "Hold anything touching the editor." });
     await pass();
     const request = agentRuns[0]!;
-    expect(request.deniedTools).toEqual([...ORCHESTRATE_DENIED_TOOLS, `mcp__${BRAND.id}__merge_task_pr`]);
-    expect(request.prompt).toContain("Don't merge");
-    expect(request.prompt).not.toContain("merge_task_pr(task)");
+    expect(request.deniedTools).toEqual(ORCHESTRATE_DENIED_TOOLS);
+    expect(request.deniedTools).toContain(`mcp__${BRAND.id}__merge_task_pr`);
+    expect(request.prompt).toContain("Don't merge; list what's ready");
+    expect(request.prompt).toContain("Merge ready PRs");
+    expect(request.prompt).not.toContain("merge_task_pr");
     expect(request.prompt).toContain("Hold anything touching the editor.");
   });
 });
@@ -195,7 +196,7 @@ describe("orchestratePrompt", () => {
   const project = { id: "p1", title: "Alpha", workspaceRoot: "/work/alpha" };
 
   it("names the project, its live folder and the tools for each kind of stall", () => {
-    const prompt = orchestratePrompt({ project, mayMerge: true, instructions: "", handover: null });
+    const prompt = orchestratePrompt({ project, instructions: "", handover: null });
     expect(prompt).toContain('board_overview(workspacePath "/work/alpha")');
     expect(prompt).toContain("Don't read or edit files in the project's folder (/work/alpha)");
     for (const tool of ["message_task_thread", "start_task_thread", "retry_autopilot_run", "request_attention"]) {
@@ -203,12 +204,12 @@ describe("orchestratePrompt", () => {
     }
     expect(prompt).toContain("Never start a second thread on a task");
     expect(prompt).toContain("never start one yourself");
-    expect(prompt).toContain("re-check the other open PRs' checks");
+    expect(prompt).toContain("leaves another open PR red or conflicting");
     expect(prompt).not.toContain("The user's own instructions");
   });
 
   it("asks for no PR while the local review loop is still going, and judges stalls by state, not activity age", () => {
-    const prompt = orchestratePrompt({ project, mayMerge: true, instructions: "", handover: null });
+    const prompt = orchestratePrompt({ project, instructions: "", handover: null });
     expect(prompt).toContain("**Review with no PR:**");
     expect(prompt).toContain("no PR is expected yet");
     expect(prompt).toContain("never ask the thread for one then");
@@ -223,7 +224,6 @@ describe("orchestratePrompt", () => {
   it("uses the project id when the project has no folder", () => {
     const prompt = orchestratePrompt({
       project: { ...project, workspaceRoot: null },
-      mayMerge: true,
       instructions: "",
       handover: null,
     });

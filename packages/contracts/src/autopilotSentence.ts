@@ -76,7 +76,7 @@ export function automationSentence(
     case AUTOPILOT_START_PLANNED:
       return `When a Planned task is flagged for Autopilot, has a plan and nothing blocks it, start an agent on it following ${skillPhrase(config.skill, "the default workflow")}.`;
     case AUTOPILOT_ORCHESTRATE:
-      return `Every ${plural(num(config, "everyMinutes", 30), "minute")}, if a project has work in flight, an agent looks it over: nudges or restarts stalled threads, retries failed runs${config.mayMerge === false ? "" : ", merges ready tasks flagged for auto-merge"} and flags what needs you.`;
+      return `Every ${plural(num(config, "everyMinutes", 30), "minute")}, if a project has work in flight, an agent looks it over: nudges or restarts stalled threads, retries failed runs, lists what's ready to merge and flags what needs you.`;
     case AUTOPILOT_REVIEW_PRS: {
       const rounds = `, up to ${plural(num(config, "rounds", 3), "round")} per PR`;
       const drafts = config.reviewDrafts === true ? " (drafts too)" : "";
@@ -96,7 +96,9 @@ export function automationSentence(
         : `When a task's PR has ${listPhrase(triggers)}, send an agent to fix it.`;
     }
     case AUTOPILOT_MERGE_EPIC_PRS:
-      return "When a task's PR into its epic's integration branch is reviewed, green and mergeable, merge it into that branch. Never into main.";
+      return config.intoMain === true
+        ? "When a task's PR is reviewed, green and mergeable, merge it: into its epic's branch if the epic has one, or into main if you flagged the task Auto-merge."
+        : "When a task's PR into its epic's branch is reviewed, green and mergeable, merge it into that branch. Into main is off, so nothing merges into main.";
     case AUTOPILOT_RECURRING:
       return "Make a task from a template whenever one of a project's recurring rules comes due.";
     case AUTO_ARCHIVE:

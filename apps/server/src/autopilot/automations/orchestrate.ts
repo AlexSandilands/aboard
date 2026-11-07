@@ -30,8 +30,8 @@ const TITLE = "Orchestrate";
 
 /**
  * What the agent may run besides the board's tools and the read-only file and git list: reading pull requests and
- * CI, and re-running a failed CI job (a flaky runner). Nothing here writes code or merges; merging goes through
- * merge_task_pr, which the server gates.
+ * CI, and re-running a failed CI job (a flaky runner). Nothing here writes code or merges: merging is Merge ready
+ * PRs' (mergeEpicPrs.ts), which needs no agent.
  */
 export const ORCHESTRATE_TOOLS = [
   "Bash(gh pr view *)",
@@ -45,7 +45,6 @@ export const ORCHESTRATE_TOOLS = [
 
 const schema = z.object({
   everyMinutes: z.number().int().min(5).max(1440),
-  mayMerge: z.boolean(),
   instructions: z.string().max(10_000),
   budgetUsd: RUNNER_OPTION_SHAPE.budgetUsd,
   timeoutMinutes: RUNNER_OPTION_SHAPE.timeoutMinutes,
@@ -55,7 +54,6 @@ type OrchestrateConfig = z.infer<typeof schema>;
 
 const defaults: OrchestrateConfig = {
   everyMinutes: 30,
-  mayMerge: true,
   instructions: "",
   budgetUsd: RUNNER_DEFAULTS.budgetUsd,
   timeoutMinutes: RUNNER_DEFAULTS.timeoutMinutes,
@@ -74,11 +72,11 @@ function ranManuallySince(services: Services, projectId: string, since: Date, dr
 }
 
 /**
- * The board tools an Orchestrate run uses: reading the board, notes, asking the user, and the unstick and merge tools.
- * It reads text anyone can write (PR comments, CI logs), so every other board tool is denied (below): none of them
- * may hand it a way past the merge gate, such as creating a task flagged for auto-merge, linking a PR of its choosing,
- * or marking review findings away, nor close, archive or delete tasks. A test checks every registered tool is in one
- * list or the other, so a new tool has to be placed.
+ * The board tools an Orchestrate run uses: reading the board, notes, asking the user, and the unstick tools. It reads
+ * text anyone can write (PR comments, CI logs), so every other board tool is denied (below): none of them may hand it
+ * a way past the merge gate, such as creating a task flagged for auto-merge, linking a PR of its choosing, or marking
+ * review findings away, nor merge (that is Merge ready PRs'), close, archive or delete tasks. A test checks every
+ * registered tool is in one list or the other, so a new tool has to be placed.
  */
 export const ORCHESTRATE_BOARD_TOOLS = [
   "board_overview",
@@ -94,7 +92,6 @@ export const ORCHESTRATE_BOARD_TOOLS = [
   "start_task_thread",
   "message_task_thread",
   "retry_autopilot_run",
-  "merge_task_pr",
 ] as const;
 
 /** Board tools an Orchestrate run never gets, whatever else allows them (see ORCHESTRATE_BOARD_TOOLS). */
@@ -119,6 +116,8 @@ export const ORCHESTRATE_DENIED_BOARD_TOOLS = [
   "suggest_change",
   // Orchestrating never needs to set up an automation for the user.
   "draft_automation",
+  // Merging is Merge ready PRs' job, which needs no agent; Orchestrate only reports what looks ready.
+  "merge_task_pr",
   // Read-only, but orchestrating doesn't need it, and a transcript holds whatever a session read.
   "get_session_transcript",
 ] as const;
@@ -126,30 +125,23 @@ export const ORCHESTRATE_DENIED_BOARD_TOOLS = [
 export const ORCHESTRATE_DENIED_TOOLS = ORCHESTRATE_DENIED_BOARD_TOOLS.map((tool) => `mcp__${BRAND.id}__${tool}`);
 
 /**
- * The shipped prompt, from the T3 Code "babysitter" threads it replaces. Merging follows only the per-task auto-merge
- * flag (which merge_task_pr enforces) and the user's own instructions, appended last; the prompt adds no policy of
- * its own on what to hold back.
+ * The shipped prompt, from the T3 Code "babysitter" threads it replaces. It never merges: Merge ready PRs does, for
+ * tasks flagged for auto-merge, so the run only lists what looks ready. The user's own instructions are appended last.
  */
 export function orchestratePrompt(input: {
   project: Pick<Project, "id" | "title" | "workspaceRoot">;
-  mayMerge: boolean;
   instructions: string;
   handover: string | null;
 }): string {
-  const { project, mayMerge } = input;
+  const { project } = input;
   const mcp = BRAND.id;
   const where = project.workspaceRoot ? `workspacePath "${project.workspaceRoot}"` : `projectId "${project.id}"`;
-  const merge = mayMerge
-    ? [
-        `3. **Merge what's ready.** Only tasks flagged for auto-merge (get_task shows "Auto-merge: on"); never change that flag. For each such task in Review with an open PR, call merge_task_pr(task). The board checks everything (local review finished and clean, Autopilot's PR review clean on the latest head, no changes requested, checks green, no conflicts) and refuses with the reason otherwise: a refusal is not an error, so act on the reason (step 2) or wait. Never merge with gh or git.`,
-        "   - Merge one at a time, in an order that avoids conflicts: the smallest or most independent first, and a task before the ones that build on it.",
-        "   - After each merge, re-check the other open PRs' checks, not just their mergeability: PRs that each passed can fail once another lands. If one turns red or conflicting, tell its thread to merge the default branch and push.",
-      ]
-    : [
-        "3. **Don't merge.** The user has turned merging off for this automation: list the tasks that look ready in your summary instead.",
-      ];
+  const merge = [
+    `3. **Don't merge; list what's ready.** Never merge, with any tool, \`gh\` or git. ${BRAND.name} Autopilot's Merge ready PRs automation merges tasks the user flagged for auto-merge (get_task shows "Auto-merge: on") once their PR is reviewed, green and mergeable, one at a time, and it needs nothing from you. In your summary, list the tasks in Review whose PR looks ready, and say for each whether it is flagged for auto-merge.`,
+    "   - When a merge into the default branch leaves another open PR red or conflicting, that is a stall like any other: tell its thread to merge the default branch and push (step 2).",
+  ];
   const parts = [
-    `You are ${BRAND.name} Autopilot's Orchestrate automation for the project "${project.title}". You run every few minutes, unattended, to keep its work moving: unstick what has stalled and get finished work merged. Nobody is watching; you can't ask questions. Be efficient: if nothing is stalled${mayMerge ? " and nothing is ready to merge" : ""}, say so in a line and stop.`,
+    `You are ${BRAND.name} Autopilot's Orchestrate automation for the project "${project.title}". You run every few minutes, unattended, to keep its work moving: unstick what has stalled and report what is ready to merge. Nobody is watching; you can't ask questions. Be efficient: if nothing is stalled, say so in a line and stop.`,
     [
       "0. **Ground rules.**",
       `   - Act only on this project. Use the ${mcp} MCP server for the board, and \`gh\` for pull requests and CI (pass the PR's URL, or -R owner/repo: you are in an empty temporary folder, not the repository).`,
@@ -177,7 +169,7 @@ export function orchestratePrompt(input: {
       "   After you trigger something, give it a run's interval to happen before touching that task again.",
     ].join("\n"),
     merge.join("\n"),
-    "4. **Finish** with a short status: what you unstuck and why, what you merged, and what needs the user.",
+    "4. **Finish** with a short status: what you unstuck and why, what looks ready to merge, and what needs the user.",
   ];
   if (input.instructions.trim()) {
     parts.push(
@@ -191,16 +183,16 @@ export function orchestratePrompt(input: {
 /**
  * Orchestrate (#138): a scheduled agent per project that does what the T3 "babysitter" threads did, now built in.
  * On every `everyMinutes` slot from local midnight, for a project with work to look at, it starts a task-less
- * headless run with the board's tools, read-only files and git, and the `gh` reads in ORCHESTRATE_TOOLS. It merges
- * only through merge_task_pr, so only tasks flagged for auto-merge, and not at all with `mayMerge` off. Its handover
- * carries what it is holding or waiting on to the next run.
+ * headless run with the board's tools, read-only files and git, and the `gh` reads in ORCHESTRATE_TOOLS. It never
+ * merges (merge_task_pr is denied): Merge ready PRs does that. Its handover carries what it is holding or waiting on
+ * to the next run.
  */
 export const orchestrate = defineAutomation({
   key: AUTOPILOT_ORCHESTRATE,
   title: TITLE,
   description:
     "Every few minutes, an agent looks over the project's work: nudges or restarts stalled threads, retries failed runs, " +
-    "merges ready tasks flagged for auto-merge, and flags what needs you.",
+    "lists what's ready to merge, and flags what needs you.",
   needsAgent: true,
   group: "ship",
   // A schedule per project, with no task, so an epic has nothing to switch.
@@ -216,12 +208,6 @@ export const orchestrate = defineAutomation({
       max: 1440,
       step: 5,
       unit: "minutes",
-    },
-    {
-      key: "mayMerge",
-      label: "May merge",
-      kind: "boolean",
-      help: "Merge ready pull requests of tasks flagged for auto-merge. Off: it only reports them.",
     },
     {
       key: "instructions",
@@ -260,7 +246,6 @@ export const orchestrate = defineAutomation({
       const preview = () =>
         orchestratePrompt({
           project,
-          mayMerge: config.mayMerge,
           instructions: config.instructions,
           handover: services.autopilot.lastHandover(AUTOPILOT_ORCHESTRATE, project.id),
         });
@@ -299,7 +284,6 @@ export const orchestrate = defineAutomation({
       label: `${TITLE} · ${project.title}`,
       prompt: orchestratePrompt({
         project,
-        mayMerge: config.mayMerge,
         instructions: config.instructions,
         handover: services.autopilot.lastHandover(AUTOPILOT_ORCHESTRATE, project.id),
       }),
@@ -313,9 +297,7 @@ export const orchestrate = defineAutomation({
       untrustedInput: true,
       boardTools: true,
       tools: ORCHESTRATE_TOOLS,
-      deniedTools: config.mayMerge
-        ? ORCHESTRATE_DENIED_TOOLS
-        : [...ORCHESTRATE_DENIED_TOOLS, `mcp__${BRAND.id}__merge_task_pr`],
+      deniedTools: ORCHESTRATE_DENIED_TOOLS,
       outputSchema: SCHEDULED_AGENT_OUTPUT_SCHEMA,
     });
     const { result: _final, output, ...patch } = result;

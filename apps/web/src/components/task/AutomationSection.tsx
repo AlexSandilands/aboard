@@ -60,7 +60,10 @@ export function AutomationSection({ task }: { task: TaskDetail }) {
                 <ReviewModelPicker task={task} onChange={(model) => change({ setting: "reviewModel", model })} />
               </Row>
             ) : null}
-            <Row label="Auto-merge" hint="Whether an agent may merge this task's pull request with merge_task_pr">
+            <Row
+              label="Auto-merge"
+              hint="Whether this task's pull request may merge into main without you: by Autopilot's Merge ready PRs (with Into main on) or an agent's merge_task_pr"
+            >
               <ChoiceSelect
                 ariaLabel="Auto-merge for this task"
                 items={AUTO_MERGE_OPTIONS}

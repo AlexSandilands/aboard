@@ -83,6 +83,7 @@ import {
 import { BOARD_MODES, boardModeToSave, boardSwitchValue } from "./autopilot.logic";
 import { bundleFilename } from "./customAutomationImport.logic";
 import { BlockedWarning, NeedsVariablesWarning } from "./InputsAndSlots";
+import { MergeTargets } from "./MergeTargets";
 import { ModeSwitch } from "./ModeSwitch";
 import { RunHistoryLink } from "./RunHistoryLink";
 
@@ -340,7 +341,11 @@ function AutomationDetail({
           status={reach.projects.length > 0 ? `On in ${reach.projects.join(", ")}` : "On in no project"}
         />
       </DetailSection>
-      {essential.length > 0 ? <DetailSection title="Settings">{essential.map(field)}</DetailSection> : null}
+      {automation.key === AUTOPILOT_MERGE_EPIC_PRS ? (
+        <MergeTargets automation={automation} entry={entry} rejected={rejected} onConfig={onConfig} />
+      ) : essential.length > 0 ? (
+        <DetailSection title="Settings">{essential.map(field)}</DetailSection>
+      ) : null}
       {automation.key === AUTOPILOT_RECURRING ? (
         <DetailSection title="Rules">
           <SettingsRow

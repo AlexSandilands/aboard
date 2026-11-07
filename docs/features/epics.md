@@ -163,9 +163,9 @@ Board task: #123. How an epic's tasks reach the default branch (`tasks.delivery`
 - **Pull requests to main** (null, or `main` once someone chose it): each task opens its PR to the default branch
   and the user merges it. A task blocked by it becomes startable after that.
 - **Integration branch** (`integration`): the epic has a branch `epic/<number>-<slug>` (`epicBranchName`). Its tasks
-  start from origin's copy of it and open their PRs against it; Autopilot's Merge into epic branch merges each one
+  start from origin's copy of it and open their PRs against it; Autopilot's Merge ready PRs merges each one
   there once it is reviewed and green, and keeps a draft PR from the branch into the default branch, which only the
-  user merges ([Autopilot](autopilot.md); [its title](autopilot.md#merge-into-epic-branch) is a Conventional Commits
+  user merges ([Autopilot](autopilot.md); [its title](autopilot.md#merge-ready-prs) is a Conventional Commits
   header when the task PRs' are). It suits an epic whose tasks build on each other, which would otherwise
   stop at every merge.
 
@@ -193,13 +193,13 @@ reads it from the task.
   tooltip names the branch and says it isn't on main yet), `get_task` says "Delivery: merged into epic/…; not on the
   default branch yet", and a [follow-up](agent-handoff.md#follow-up-finished-tasks) on it starts from the branch
   (`unmergedEpicBranch` in `delivery.ts`). All of these go once the epic merges.
-- **Marking merged.** For a merge with no PR to watch (Merge into epic branch is off, GitHub polling is off, or the
+- **Marking merged.** For a merge with no PR to watch (Merge ready PRs is off, GitHub polling is off, or the
   branch merged some other way), **Mark merged into main** in that popover, or `move_task(epic, done)`, stores
   `integration_merged_at` on the epic (`integration_marked_merged` event) and `syncEpic` makes it Done (`status_changed`
   with `markedMerged`; a PR merge logs `mergedPr` instead). It is refused while the epic has open tasks or none, and for
   any epic that doesn't deliver through a branch; other status moves of an epic are refused as before. Changing the
   delivery clears the mark, and so does a task of the epic being open again (reopened, or added): the mark covered the
-  branch as it stood, so the epic waits for a merge again once its tasks finish. A merge seen through the epic's PR stays on record (that PR did merge); Merge into epic branch doesn't open another PR once the epic's has merged, so that new work is delivered by hand. Unlinking the merged PR (or reopening a task) pulls a Done epic back to Review or the
+  branch as it stood, so the epic waits for a merge again once its tasks finish. A merge seen through the epic's PR stays on record (that PR did merge); Merge ready PRs doesn't open another PR once the epic's has merged, so that new work is delivered by hand. Unlinking the merged PR (or reopening a task) pulls a Done epic back to Review or the
   task's column, and a later merge or finish brings it back.
 - **Going back** to main is refused once one of its tasks has started (`startedEpicTasks`: In Progress, Review, or
   Done without being closed), since their branches and PRs already target the epic's branch.

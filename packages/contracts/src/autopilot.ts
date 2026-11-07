@@ -327,7 +327,7 @@ export const AutopilotEngineSettings = z.object({
   worktreeRetentionDays: z.number().int().min(1).max(365),
   /**
    * What agent automations run with when no scope of theirs sets it. Review rounds, comment rounds and the fix
-   * threshold were engine settings before 043_autopilot_agent_defaults moved them into Review PRs and Fix PRs.
+   * threshold were engine settings before 044_autopilot_agent_defaults moved them into Review PRs and Fix PRs.
    */
   agentDefaults: AutopilotAgentDefaults,
 });

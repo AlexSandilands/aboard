@@ -402,7 +402,7 @@ const ConfigSchema = z.object({
   /** The skill the agent follows on top of the fix prompt; the built-in entry is the prompt alone. */
   skill: ReviewSkillRef,
   // These three were engine settings (prReviewRounds, prCommentRounds, prFixThreshold) before
-  // 043_autopilot_agent_defaults. Review PRs reads the threshold too (fixThresholdFor): it decides what a review asks
+  // 044_autopilot_agent_defaults. Review PRs reads the threshold too (fixThresholdFor): it decides what a review asks
   // to have fixed.
   /** Attempts per PR on failing checks and Autopilot's review. */
   attempts: z.number().int().min(1).max(10),

@@ -14,8 +14,11 @@ describe("automationSentence", () => {
     expect(say("digest", { mode: "summarised", time: "08:30", weekdaysOnly: true })).toBe(
       "Every weekday at 08:30, write an agent's summary of what changed on the board.",
     );
-    expect(say("orchestrate", { everyMinutes: 15, mayMerge: false })).toContain("Every 15 minutes");
-    expect(say("orchestrate", { everyMinutes: 15, mayMerge: false })).not.toContain("merges");
+    expect(say("orchestrate", { everyMinutes: 15 })).toContain("Every 15 minutes");
+    expect(say("orchestrate", { everyMinutes: 15 })).toContain("lists what's ready to merge");
+    expect(say("orchestrate", { everyMinutes: 15 })).not.toContain("merges");
+    expect(say("merge_epic_prs", { intoMain: false })).toContain("nothing merges into main");
+    expect(say("merge_epic_prs", { intoMain: true })).toContain("or into main if you flagged the task Auto-merge");
     expect(say("review_prs", { skill: { source: "global", name: "security-review" } })).toContain(
       "with the security-review skill",
     );

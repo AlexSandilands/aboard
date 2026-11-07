@@ -297,7 +297,7 @@ const ConfigSchema = z.object({
   runner: z.enum(["auto", "headless"]),
   skill: ReviewSkillRef,
   reviewDrafts: z.boolean(),
-  /** Reviews per PR. An engine setting (prReviewRounds) before 043_autopilot_agent_defaults. */
+  /** Reviews per PR. An engine setting (prReviewRounds) before 044_autopilot_agent_defaults. */
   rounds: z.number().int().min(1).max(10),
 });
 
