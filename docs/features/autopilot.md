@@ -88,8 +88,9 @@ previews every automation at once.
   engine only records it. Neither can take the room a live task needs.
 - **A custom automation's preview text** is built per task: its epic's mode when the epic has its own setting, else
   its project's, so a task in a Preview epic of a live project still gets "what it would run".
-- **Elsewhere.** The merge gate treats Review PRs in Preview as off, since it reviews nothing for real; a Recurring
-  section in Preview says no task is made.
+- **Elsewhere.** The merge gate counts Review PRs in Preview (or under Preview everything) as on, so a merge still
+  waits for its review: that review doesn't come until it is turned on, which holds merges back rather than letting a
+  PR through unreviewed. A Recurring section in Preview says no task is made.
 - **New automations save in Preview.** Creating, importing or importing a draft writes a board row in Preview
   (`customAutomations` insert), with `last_on_mode` Preview.
 - **The last on-mode.** `autopilot_settings.last_on_mode` (migration 043, which also widens the mode CHECK) keeps the

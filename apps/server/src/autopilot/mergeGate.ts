@@ -30,12 +30,15 @@ export const isPrLink = (link: TaskLink): link is PrLink => link.kind === "pr" &
 export const headSeenSince = (link: PrLink, changes: PrChanges | undefined): number =>
   Date.parse(changes?.newHead ?? link.createdAt);
 
-/** Review PRs reviews the task's PRs for real. In Preview it only records what it would review, so it holds nothing back. */
+/**
+ * Review PRs is on for the task, in Preview too: a merge then waits for its review. In Preview (or under Preview
+ * everything) that review never comes, which holds merges back rather than letting a PR through unreviewed.
+ */
 const reviewPrsOn = (services: Services, task: TaskSummary): boolean => {
   const automation = services.autopilot.automations().find((a) => a.key === AUTOPILOT_REVIEW_PRS);
-  if (automation === undefined || services.autopilot.engine().dryRun) return false;
-  const resolved = services.autopilot.resolve(automation, task.projectId, task.parent?.id ?? null);
-  return resolved.enabled && !resolved.preview;
+  return (
+    automation !== undefined && services.autopilot.resolve(automation, task.projectId, task.parent?.id ?? null).enabled
+  );
 };
 
 /**
