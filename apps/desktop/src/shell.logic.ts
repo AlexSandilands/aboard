@@ -336,7 +336,10 @@ export function updateNotification(state: DesktopUpdateState): { title: string; 
     };
   }
   if (state.status === "available") {
-    const how = state.noticeVia === "pacman" ? "Update it with pacman -Syu." : "Download it from the release page.";
+    const how =
+      state.noticeVia === "pacman"
+        ? "Update it with pacman -Syu or your AUR helper."
+        : "Download it from the release page.";
     return { title: `${BRAND.name} v${state.version} is available`, body: how };
   }
   return null;

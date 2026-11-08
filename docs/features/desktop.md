@@ -116,7 +116,7 @@ in the background, and installs only when you click **Restart to update**.
 - **Installing** (`installUpdate` in `main.ts`). The state goes to `installing`, the shell waits for a server restart
   in flight, stops the server it owns (gracefully: the WAL checkpoint) and calls `quitAndInstall(true, true)`: the
   per-user NSIS installer runs silently with no admin prompt and starts the new version; the AppImage replaces its
-  file and relaunches. An attached server isn't ours and stays up. If the installer can't start, the state goes back
+  file (named for the new version) and relaunches; Start at login is pointed at the new file when the app starts. A quit while the server stops for an install waits for it. An attached server isn't ours and stays up. If the installer can't start, the state goes back
   to `ready` with the error, the server starts again and the window reloads. **Restart server** is disabled meanwhile.
 - **Where it shows.** The **tray** has **Check for updates automatically** (under Start at login, a square icon on
   Linux) and one update item that follows the state (`updateMenuItem`): Check for updates, Checking…, Downloading vX…

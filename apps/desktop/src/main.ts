@@ -97,6 +97,8 @@ let tray: Tray | null = null;
 let quitting = false;
 /** Whether this shell runs the server itself (not attached to `pnpm dev`'s), so it may restart it. */
 let ownsServer = false;
+/** The owned server stopping for an update install, which a quit meanwhile waits for. */
+let stopping: Promise<void> | null = null;
 /** The server restart in progress, if any; `server` is null meanwhile. */
 let restart: Promise<void> | null = null;
 /** What the shell remembers about itself, read once the profile path is final. */
@@ -314,7 +316,12 @@ function installUpdate(): void {
       const owned = ownsServer ? server : null;
       server = null;
       refreshTrayMenu();
-      await owned?.stop();
+      stopping = owned ? owned.stop() : null;
+      try {
+        await stopping;
+      } finally {
+        stopping = null;
+      }
     },
     async () => {
       if (!ownsServer || server || quitting) return;
@@ -522,6 +529,8 @@ async function start(): Promise<void> {
   }
   refreshTrayMenu();
   window = createWindow(showRequested || !process.argv.includes(HIDDEN_ARG));
+  // An AppImage update moves the app to a file named for the new version; point Start at login at this one.
+  if (process.platform === "linux" && process.env.APPIMAGE && startAtLogin.get()) startAtLogin.set(true);
   updater.start();
 }
 
@@ -582,6 +591,13 @@ if (app.requestSingleInstanceLock()) {
       event.preventDefault();
       window?.hide();
       void restart.finally(() => app.quit());
+      return;
+    }
+    // A quit while an update install stops the server waits for that stop, like a restart.
+    if (stopping) {
+      event.preventDefault();
+      window?.hide();
+      void stopping.finally(() => app.quit());
       return;
     }
     if (!server?.owned) return;

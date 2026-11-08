@@ -64,7 +64,7 @@ and a click tries again.
   to update** pill in the title bar, and the same item in the tray menu. Nothing installs until you click it. The
   restart takes a few seconds; agents reconnect by themselves.
 - **The .deb, .rpm, tarball and Arch packages** are only told: Settings and the tray say "vX available" with a link
-  to the release notes. Update them the way you installed them (`pacman -Syu` for the Arch repo).
+  to the release notes. Update them the way you installed them (`pacman -Syu` for the Arch repo, your AUR helper for the AUR package).
 - **Check for updates automatically** (here or in the tray) stops the hourly check. **Check now** still works.
 - The first release with updates can't update an older install: install it by hand once.
 

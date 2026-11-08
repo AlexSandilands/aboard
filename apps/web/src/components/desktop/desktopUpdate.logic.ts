@@ -86,7 +86,7 @@ export function updateStatusView(state: DesktopUpdateState, now: number): Update
         badge: { label: `v${state.version} available`, tone: "info" },
         text:
           state.noticeVia === "pacman"
-            ? "Installed with pacman: update with pacman -Syu."
+            ? "Installed with pacman: update with pacman -Syu, or your AUR helper for the AUR package."
             : "Installed by a package: download the new one from the release page.",
         percent: null,
         button: { label: "Release notes", action: "notes", primary: false },
