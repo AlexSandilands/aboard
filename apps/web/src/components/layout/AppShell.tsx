@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useEffectEvent, useRef } from "react";
 import { CommandPalette } from "~/components/command/CommandPalette";
 import { useCloseTask, useJumpToTask, useOpenTask, useSelectedTaskId } from "~/components/board/boardNavigation";
+import { UpdatePill } from "~/components/desktop/UpdatePill";
 import { useNotificationDelivery } from "~/components/notifications/useNotificationDelivery";
 import { AppDialogs } from "~/components/settings/AppDialogs";
 import { ThemeEditorHost } from "~/components/settings/ThemeEditorHost";
@@ -64,6 +65,7 @@ export function AppShell({
       <CommandPalette />
       <AppDialogs />
       <ThemeEditorHost />
+      <UpdatePill />
     </SidebarProvider>
   );
 }

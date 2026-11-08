@@ -7,7 +7,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import pkg from "../../../package.json" with { type: "json" };
-import { BRAND } from "@repo/contracts";
+import { BRAND, BRAND_REPOSITORY, brandEnv } from "@repo/contracts";
 import { Arch, Platform, build } from "electron-builder";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -26,15 +26,26 @@ const TARGETS: Partial<Record<NodeJS.Platform, { platform: Platform; targets: st
 const host = TARGETS[process.platform];
 if (!host) throw new Error(`No package targets for ${process.platform}.`);
 const requested = process.argv.slice(2);
+if (!BRAND_REPOSITORY)
+  throw new Error("The root package.json `repository` must be a GitHub URL: the updater reads releases from it.");
+/**
+ * For trying updates locally only: a build that reads its feed from this URL (a folder you serve with a newer build's
+ * files and `latest*.yml`) instead of GitHub. Release builds never set it.
+ */
+const testFeed = process.env[brandEnv("UPDATE_FEED_URL")];
 
 await build({
   projectDir: root,
   targets: host.platform.createTarget(requested.length > 0 ? requested : host.targets, Arch.x64),
   publish: "never",
   config: {
-    // CI uploads the files itself. Left unset, a GH_TOKEN in the environment makes electron-builder set up GitHub
-    // publishing and auto-update files, and fail when it can't work out the repo.
-    publish: null,
+    // Where the packaged app looks for updates: electron-builder writes `app-update.yml` into resources and the
+    // `latest*.yml` feed and blockmaps beside the installers. It never uploads (`publish: "never"` above); CI
+    // does. The repo is spelled out because electron-builder can't work it out from a tag checkout, and a GH_TOKEN in
+    // the environment then made it crash after building (a3644be9).
+    publish: testFeed
+      ? { provider: "generic", url: testFeed }
+      : { provider: "github", owner: BRAND_REPOSITORY.owner, repo: BRAND_REPOSITORY.repo, releaseType: "release" },
     appId: `com.${BRAND.id}.desktop`,
     productName: BRAND.name,
     executableName: BRAND.id,

@@ -34,12 +34,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # files: the installers, which SHA256SUMS covers. blockmaps: what the updater downloads only the changed
+          # blocks with (the AppImage carries its own inside). feed: the update feed the installed app reads.
           - os: windows-latest
             name: windows
             files: "*-Setup-*.exe"
+            blockmaps: "*-Setup-*.exe.blockmap"
+            feed: latest.yml
           - os: ubuntu-latest
             name: linux
             files: "*.AppImage *.deb *.rpm *.tar.gz"
+            blockmaps: ""
+            feed: latest-linux.yml
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -65,7 +71,9 @@ jobs:
         run: |
           sha256sum ${{ matrix.files }} > SHA256SUMS-${{ matrix.name }}.txt
           cat SHA256SUMS-${{ matrix.name }}.txt
-          gh release upload "$TAG" ${{ matrix.files }} SHA256SUMS-${{ matrix.name }}.txt --clobber
+          gh release upload "$TAG" ${{ matrix.files }} ${{ matrix.blockmaps }} SHA256SUMS-${{ matrix.name }}.txt --clobber
+          # The feed last: an installed app that reads it must find the files it names already there.
+          gh release upload "$TAG" ${{ matrix.feed }} --clobber
 
   pacman:
     needs: package

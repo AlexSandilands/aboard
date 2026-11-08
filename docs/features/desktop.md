@@ -39,7 +39,8 @@ An unexpected exit after startup shows an error and quits the app.
 - Closing the window hides it to the tray, so agents keep their MCP endpoint. **Quit** in the tray stops
   an owned server first.
 - The tray menu: Open, **Copy MCP URL** (with `?token=` when set), **Tray icon**, **Start at login**
-  (packaged only; starts hidden), **Restart server**, Quit. Every item has an icon. On Linux Start at login is a
+  (packaged only; starts hidden), **Check for updates automatically**, the update item ([updates](#updates)),
+  **Restart server**, Quit. Every item has an icon. On Linux Start at login is a
   plain item whose icon is a ticked or empty square, because Qt menus put a real checkbox in a column left of the
   icons; elsewhere it is a checkbox.
   Electron's login items only exist on Windows and macOS, so on Linux the item writes
@@ -90,6 +91,50 @@ The window is frameless with Windows' native controls painted over the page (`ti
   `setBackgroundColor` (optional on the bridge, as older shells lack it), which the shell paints the window and the
   overlay with instead of its default ([appearance.md](appearance.md)). In a plain browser `desktopBridge` is absent.
 
+### Updates
+
+The packaged app updates itself from the project's GitHub releases (`apps/desktop/src/updater.ts`). It checks, downloads
+in the background, and installs only when you click **Restart to update**.
+
+- **Modes** (`updateMode` in `shell.logic.ts`). The Windows installer and the AppImage **self-update** with
+  electron-updater (`NsisUpdater` / `AppImageUpdater`, built explicitly: electron-updater's own pick would use the
+  pkexec-based .deb/.rpm/pacman updaters). The .deb, .rpm, tarball and the Arch packages are **notice-only**: the
+  shell reads the latest release's `latest-linux.yml` (where `resources/app-update.yml` points, `noticeFeedUrl`), compares its version with `BRAND.version` and says a newer
+  one is out, with "update with pacman -Syu" for the Arch packages (running from `/opt/<id>/` with pacman installed and no `resources/package-type`) and "download it from the release page" for the rest. Nothing writes over a package manager's files.
+  Updates are **disabled** in dev builds, the sandbox shell and builds from source (a version that isn't a release's
+  date, like `0.1.0`), and nothing touches the network then.
+- **Feed.** `package.ts` gives electron-builder a `github` publish config with the owner and repo from the root
+  `package.json` `repository` (`BRAND_REPOSITORY`), so it writes `resources/app-update.yml` and the `latest*.yml`
+  feed; it never publishes. CI uploads the feed last ([releases](releases.md#the-workflow)).
+- **When.** 15 seconds after start, then hourly, while **Check for updates automatically** is on (`autoCheckUpdates`
+  in `prefs.json`, default on). **Check now** works either way. `autoDownload` is on and `autoInstallOnAppQuit` off,
+  so a quit (Windows shutting down, say) never starts an installer. A check that fails is quiet: a 404 (the release's
+  files still uploading) or no network reads "Couldn't reach GitHub…" in Settings and is tried again within the hour.
+- **State.** One `DesktopUpdateState` (contracts): `mode`, `status` (`idle`, `checking`, `up-to-date`, `downloading`
+  with `percent`, `ready`, `installing`, `available`, `error`), the new `version`, `checkedAt`, `error`. `reduceUpdate`
+  moves it; a ready update survives later checks and errors, and so does a version a notice-only install knows of.
+- **Installing** (`installUpdate` in `main.ts`). The state goes to `installing`, the shell waits for a server restart
+  in flight, stops the server it owns (gracefully: the WAL checkpoint) and calls `quitAndInstall(true, true)`: the
+  per-user NSIS installer runs silently with no admin prompt and starts the new version; the AppImage replaces its
+  file and relaunches. An attached server isn't ours and stays up. If the installer can't start, the state goes back
+  to `ready` with the error, the server starts again and the window reloads. **Restart server** is disabled meanwhile.
+- **Where it shows.** The **tray** has **Check for updates automatically** (under Start at login, a square icon on
+  Linux) and one update item that follows the state (`updateMenuItem`): Check for updates, Checking…, Downloading vX…
+  n%, Restart to update to vX, vX available: release notes, or a disabled "Updates off in dev builds". An **OS
+  notification** says once per version (`notifiedUpdate` in `prefs.json`) that an update is ready, or available on a
+  notice-only install; clicking it opens Settings → Board → **Desktop app** through `onNotificationClick` with
+  `settingsTarget`. That **Settings** section shows the version, the status and the matching button, and the same
+  auto-check switch ([board layout](board-layout.md#the-settings-page)). While an update is ready, a **Restart to
+  update** pill sits in the title bar just left of the native controls (`components/desktop/UpdatePill.tsx`, mounted
+  once in `AppShell`); it sets `--title-bar-pill-space`, which `--workspace-native-controls-inset` adds, so whichever
+  top bar is at the right edge makes room.
+- **Bridge.** `getUpdateState`, `onUpdateState`, `checkForUpdates`, `installUpdate`, `setAutoCheckUpdates`,
+  `openReleaseNotes`, all optional on `DesktopBridge` (a page can be newer than its shell). The main process checks
+  the sender like every other channel; the page reads state through `useDesktopUpdate`, which validates it.
+- **Trying it.** `pnpm desktop:package AppImage tar.gz` with the root `package.json` version set to a release date
+  builds an app that checks; `brandEnv("UPDATE_FEED_URL")` set to a URL while packaging (test builds only, see
+  `package.ts`) points it at a `generic` feed you serve yourself, with a newer build's AppImage and `latest-linux.yml`.
+
 ### Building and packaging
 
 - `scripts/build.ts`: esbuild bundles `src/main.ts` (ESM) and `src/preload.ts` (CJS, since the preload is
@@ -136,16 +181,22 @@ home; `--desktop` waits a few seconds and reports the log if the shell exits at 
   the window is useless without it.
 - **Packaging config is code.** `package.ts` derives every name from `BRAND`, so renaming the product is a
   `package.json` change.
+- **Updates install on a click, never by themselves.** The download happens in the background, but restarting stops
+  the server agents are talking to, so the user picks the moment. Updates aren't signature-checked until the
+  installer is signed (#18 sets `win.publisherName`); the sha512 in the feed over HTTPS is the check meanwhile.
+- **Package-manager installs are only told.** Replacing a .deb's or pacman's files from the app would leave the
+  package manager's database wrong and need root.
 
 ## Code map
 
 | File                                  | What it does                                                     |
 | ------------------------------------- | ---------------------------------------------------------------- |
 | `apps/desktop/src/main.ts`            | Window, tray, single instance, quit, theme IPC                   |
-| `apps/desktop/src/desktopPrefs.ts`    | `prefs.json`: the tray icon style, read and written              |
+| `apps/desktop/src/desktopPrefs.ts`    | `prefs.json`: tray icon style, auto-check, last notified update  |
+| `apps/desktop/src/updater.ts`         | `Updater`: checks, downloads, installs; the update state         |
 | `apps/desktop/src/icon.ts`            | Window, tray and menu icon images                                |
 | `apps/desktop/src/server.ts`          | `connectServer`: probe, attach, spawn, stop                      |
-| `apps/desktop/src/shell.logic.ts`     | Pure helpers (tested): health check, navigation, log tail        |
+| `apps/desktop/src/shell.logic.ts`     | Pure helpers (tested): health check, navigation, log tail, update mode and state |
 | `apps/desktop/src/titleBar.ts`        | Title bar overlay options and sync                               |
 | `apps/desktop/src/loginItem.ts`       | Start at login: Electron's login item, or an XDG autostart entry on Linux |
 | `packages/contracts/src/desktop.ts`   | `desktopSandboxEnv`, `readDesktopSandbox` (sandbox shell wiring and guard) |
@@ -153,3 +204,4 @@ home; `--desktop` waits a few seconds and reports the log if the shell exits at 
 | `apps/desktop/scripts/*.ts`           | Build, launch, package                                           |
 | `apps/server/scripts/bundle.ts`       | The server bundle                                                |
 | `apps/web/src/lib/windowControlsOverlay.ts`, `hooks/useTheme.ts` | The web side of the title bar and theme |
+| `apps/web/src/components/desktop/*`   | `useDesktopUpdate`, the Desktop app settings section, the update pill |

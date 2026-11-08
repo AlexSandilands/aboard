@@ -24,6 +24,8 @@ Publishing starts `.github/workflows/release.yml`. When it finishes, the release
 | `aboard-<version>.x86_64.rpm`                    | Fedora, openSUSE                                    |
 | `aboard-<version>-linux-x64.tar.gz`              | The unpacked app; the Arch package installs this    |
 | `SHA256SUMS-windows.txt`, `SHA256SUMS-linux.txt` | Checksums of the files above                        |
+| `Aboard-Setup-<version>.exe.blockmap`            | Lets the Windows updater fetch only changed blocks  |
+| `latest.yml`, `latest-linux.yml`                 | The update feed the installed app reads             |
 
 and the pacman repo serves the new version, so `pacman -Syu` picks it up.
 
@@ -45,6 +47,17 @@ off first.
 version, runs `pnpm desktop:package` (which builds the targets for the runner's OS, see
 `apps/desktop/scripts/package.ts`) and uploads the results with `gh release upload --clobber`. Ubuntu
 installs `rpm` first, for rpmbuild.
+
+Each job uploads in two steps: the installers, the Windows blockmap and the checksums first, then the update
+feed (`latest.yml` on Windows, `latest-linux.yml` on Linux). An installed app that reads the feed mid-upload
+then finds every file it names already there; one that checks before the feed is up sees the previous version,
+or a 404 on the very first release, and tries again within the hour. The checksums cover the installers only.
+The AppImage carries its blockmap inside it, so Linux uploads none.
+
+electron-builder writes the feed because `package.ts` gives it a `github` publish config, with the owner and repo
+read from the root `package.json` `repository`; it also writes `resources/app-update.yml` into the app, which
+is where the updater looks. It never uploads anything itself (`publish: "never"`). How the app uses the feed:
+[desktop](desktop.md#updates).
 
 Once both have finished, `pacman` and `aur` update the Arch packages from the release's Linux tarball, each
 skipping with a notice when its secret is missing. The release itself is unaffected either way.
@@ -131,6 +144,13 @@ against: the same set as the .deb, plus `alsa-lib`, which a minimal Arch install
 - **The AUR's .SRCINFO written in Node, not by makepkg.** The AUR job then needs no Arch container, and it's
   covered by the makepkg check above instead.
 - **The installer isn't signed.** Signing needs a paid certificate; until then SmartScreen warns on first run.
+- **Updates aren't signed either.** The updater checks the download against the sha512 in the feed, over HTTPS:
+  the same trust as downloading the installer by hand. Once the installer is signed, `win.publisherName` in
+  `package.ts` makes the updater check the signature too.
+- **The feed goes up last.** GitHub has no atomic upload of several files, so ordering is what keeps an app from
+  reading a feed whose installer isn't there yet.
+- **Updates start with the release after the first one that has the updater.** An older install has no updater
+  to ask, so it has to be updated by hand once.
 
 ## Alternatives considered
 

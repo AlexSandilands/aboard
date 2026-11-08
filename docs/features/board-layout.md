@@ -428,6 +428,12 @@ providers, tiers and custom models are each a row in a list, however many there 
   notes, or why nothing can. With no CLI provider added and switched on (`activeProviderIds`) nothing can run, so the
   rows are dimmed and inert under one notice instead of each carrying the same reason.
 
+Board has one section that only exists in the desktop app: **Desktop app** (`board.desktop`,
+`components/desktop/DesktopAppSection.tsx`), the app's version with its update status and **Check now** /
+**Restart to update** / **Release notes**, and **Check for updates automatically**. `visibleSections` leaves it out
+of the sidebar, and `SettingsSearch` out of the results, in a browser (`DESKTOP_ONLY_SECTIONS`). How updates work:
+[desktop](desktop.md#updates).
+
 Models and Operations show only once a provider is added.
 
 `autopilot` is three tabs, each a sidebar section with a path of its own: **Automations** (`autopilot.automations`,

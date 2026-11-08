@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent } from "react";
 import { useOpenTask } from "~/components/board/boardNavigation";
+import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import { desktopBridge } from "~/lib/desktopBridge";
 import { useMarkNotificationRead } from "~/state/mutations";
 import { useNotifications } from "~/state/queries";
@@ -12,6 +13,7 @@ import { setNotificationOpener, startTabCoordination, type OpenNotification } fr
  */
 export function useNotificationDelivery() {
   const openTask = useOpenTask();
+  const openSettings = useOpenSettings();
   const markRead = useMarkNotificationRead();
   const unread = useNotifications().data?.unread;
 
@@ -20,10 +22,15 @@ export function useNotificationDelivery() {
     if (taskId) void openTask(taskId);
   });
 
+  const openSettingsAt = useEffectEvent((target: string) => openSettings(target, { highlight: true }));
+
   useEffect(() => startTabCoordination(), []);
   useEffect(() => {
     setNotificationOpener((n) => open(n));
-    const unsubscribe = desktopBridge()?.onNotificationClick((n) => open(n));
+    // The shell's own notifications (an update) open Settings; they aren't in the inbox, so there's nothing to mark.
+    const unsubscribe = desktopBridge()?.onNotificationClick((n) =>
+      n.settingsTarget ? openSettingsAt(n.settingsTarget) : open(n),
+    );
     return () => {
       setNotificationOpener(null);
       unsubscribe?.();

@@ -179,6 +179,19 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "No pop-up while quiet hours are on; they still land in the inbox.",
     ["silence", "do not disturb", "night"],
   ),
+  // Board › Desktop app (only in the desktop shell)
+  draft(
+    "board.desktop.version",
+    "Version",
+    "The desktop app's version, and its updates from the project's GitHub releases: check now, restart to update, release notes.",
+    ["update", "updates", "upgrade", "check for updates", "restart to update", "release notes", "download"],
+  ),
+  draft(
+    "board.desktop.auto-check",
+    "Check for updates automatically",
+    "Checks an hour apart and downloads new versions in the background. Nothing installs until you restart.",
+    ["auto-update", "automatic updates", "background", "tray"],
+  ),
   // Board › Data
   draft("board.data.backup", "Backup", "Writes the board as JSON into a git repo and commits when it changes.", [
     "git",

@@ -66,11 +66,13 @@
 }
 
 /* Desktop title bar: top bars shrink to the overlay's height, and the header at the right edge
-   pads past the native min/max/close buttons. */
+   pads past the native min/max/close buttons, and past the "Restart to update" pill while it shows
+   (components/desktop/UpdatePill.tsx sets --title-bar-pill-space). */
 .wco {
   --workspace-topbar-height: max(40px, env(titlebar-area-height, 52px));
+  --workspace-native-controls-width: calc(100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px));
   --workspace-native-controls-inset: calc(
-    100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px) + 0.75rem
+    var(--workspace-native-controls-width) + 0.75rem + var(--title-bar-pill-space, 0px)
   );
 }
 

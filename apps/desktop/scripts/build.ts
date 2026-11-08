@@ -37,6 +37,12 @@ const MENU_ICONS: Record<string, string> = {
   power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
   square: '<rect width="18" height="18" x="3" y="3" rx="2"/>',
   "square-check": '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/>',
+  search: '<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>',
+  download: '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
+  rocket:
+    '<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>',
+  "external-link":
+    '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
 };
 /** The stroke colour per menu theme: the set is named for the theme it is drawn for, so "light" is dark ink. */
 const MENU_THEMES = { light: "#27272a", dark: "#e4e4e7" };
@@ -53,6 +59,8 @@ await build({
   format: "esm",
   target: "node24",
   external: ["electron"],
+  // electron-updater is CommonJS and requires Node's built-ins, which an ESM bundle can only do through this.
+  banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' },
   logLevel: "warning",
 });
 await build({

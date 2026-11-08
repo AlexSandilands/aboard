@@ -33,7 +33,7 @@ and a click tries again.
 
 | Page             | Sections                                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------- |
-| **Board**        | [Appearance](#appearance) (colors & themes, contrast, glass, sidebar banner, priority lane and its pinned height, scroll to a task, the Autopilot countdown on lanes, panel animations, fonts), Notifications, Data (backup to git, archived projects, recently deleted tasks and how long they are kept) |
+| **Board**        | [Appearance](#appearance) (colors & themes, contrast, glass, sidebar banner, priority lane and its pinned height, scroll to a task, the Autopilot countdown on lanes, panel animations, fonts), Notifications, [Desktop app](#updating-the-desktop-app) (desktop app only), Data (backup to git, archived projects, recently deleted tasks and how long they are kept) |
 | **Keybindings**  | [Shortcuts](using-the-board.md#keyboard) by group (General, Navigation, Layout, Tasks), with a search box |
 | **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), [Suggestions](#suggested-changes) |
 | **Agents**       | [Providers](#providers) (T3 Code, Claude Code, Codex and GitHub Copilot, once you add them: [connecting agents](connect-agents.md), [T3 Code](t3-code.md)), [Models](#models) (the Light, Standard and Deep tiers and custom models picked by a task label), Operations (the model each kind of run uses) |
@@ -54,6 +54,19 @@ and a click tries again.
 - On the Autopilot page each automation is a row with its switch; clicking it shows what it does, its Off / Preview /
   On mode and its settings. Only a project's or epic's switch has Inherit.
 - The Project page has a picker at the top. It starts on the project the board was showing, else the first one.
+
+## Updating the desktop app
+
+**Board → Desktop app** shows the app's version and whether a newer one is out. It only appears in the desktop app.
+
+- **Windows and the AppImage update themselves.** The app checks GitHub releases shortly after it starts and then
+  every hour, downloads a new version in the background, and tells you once it's ready: a notification, a **Restart
+  to update** pill in the title bar, and the same item in the tray menu. Nothing installs until you click it. The
+  restart takes a few seconds; agents reconnect by themselves.
+- **The .deb, .rpm, tarball and Arch packages** are only told: Settings and the tray say "vX available" with a link
+  to the release notes. Update them the way you installed them (`pacman -Syu` for the Arch repo).
+- **Check for updates automatically** (here or in the tray) stops the hourly check. **Check now** still works.
+- The first release with updates can't update an older install: install it by hand once.
 
 ## Models
 

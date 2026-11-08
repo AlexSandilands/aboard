@@ -21,3 +21,24 @@ export const storageKey = (key: string): string => `${BRAND.id}:${key}`;
 
 /** Header REST clients use to say which agent made a write. */
 export const ACTOR_HEADER = `x-${BRAND.id}-actor`;
+
+/** A GitHub repository, as the desktop updater and the release workflow need it. */
+export interface GitHubRepository {
+  owner: string;
+  repo: string;
+}
+
+/**
+ * Reads owner and repo from a package.json `repository` URL (`git+https://github.com/o/r.git`, `https://github.com/o/r`,
+ * `git@github.com:o/r.git` or the `github:o/r` shorthand). Null for anything not on GitHub.
+ */
+export function parseGitHubRepository(url: string): GitHubRepository | null {
+  const match =
+    /^(?:github:|(?:git\+)?(?:https?|ssh|git):\/\/(?:git@)?github\.com\/|git@github\.com:)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(
+      url.trim(),
+    );
+  return match ? { owner: match[1]!, repo: match[2]! } : null;
+}
+
+/** Where the product's releases are published: the root package.json `repository`, when it is on GitHub. */
+export const BRAND_REPOSITORY = parseGitHubRepository(pkg.repository.url);

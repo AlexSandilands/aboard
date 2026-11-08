@@ -84,6 +84,10 @@ Server = https://github.com/AlexSandilands/aboard/releases/download/pacman
 
 Then `sudo pacman -Syu aboard`. Updates come with your normal `pacman -Syu` (or `paru`).
 
+The Windows installer and the AppImage update themselves: the app downloads a new version in the background and
+installs it when you click **Restart to update**. The other packages tell you when a new version is out
+([updating](docs/guide/settings.md#updating-the-desktop-app)).
+
 The Windows installer isn't code-signed yet, so SmartScreen warns the first time you run it: **More info → Run
 anyway**.
 
