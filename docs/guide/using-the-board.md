@@ -221,11 +221,15 @@ When Claude Code, Codex or Copilot CLI is installed and added in **Settings → 
 set there), **New Claude Code session…**, **New Codex session…** and **New Copilot CLI session…** open the CLI in a
 terminal with the task's prompt already typed in. The dialog lets you edit the prompt, switch to planning, pick a model (filled in from the task's
 suggested tier, set in **Settings → Agents → Models**) and choose where it runs: a new git worktree
-from a branch you pick (the default), or the project's own folder. The board links the session to the task straight
+from a branch you pick (the default), the task's own worktree, or the project's own folder. The board links the session to the task straight
 away; a Codex session links itself once it starts, since Codex picks its own session id. On Windows Terminal, a task's sessions open as tabs of one window named after the task, and
 opening a session that is still running brings that window back to the front. On Windows a prompt with a `%` in it,
 or longer than about 8,000 characters, can't go on the command line: the session starts with a short pointer to the
 task instead, and the full prompt is on your clipboard to paste.
+
+In both dialogs the branch list starts with the task's own branches, under **This task**: its pull requests' branches,
+its T3 threads' and the ones its sessions run on, each marked with where it came from. Pick one that already has a
+worktree to carry on in that worktree (a quick fix on the task's branch, say) instead of making a new one.
 
 ## The card menu
 

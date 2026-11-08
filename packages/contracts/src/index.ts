@@ -26,6 +26,7 @@ export * from "./operations.ts";
 export * from "./backup.ts";
 export * from "./agentSessions.ts";
 export * from "./sessionLaunch.ts";
+export * from "./taskBranches.ts";
 export * from "./providers.ts";
 export * from "./templates.ts";
 export * from "./autopilot.ts";

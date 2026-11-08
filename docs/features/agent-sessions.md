@@ -212,10 +212,15 @@ model for the task's model, which model that is and what picked it (a label's cu
   its command line, so the server gives them to the task and adds `[Attached image "<name>" is saved at: <path>]`
   lines (T3 Code's wording) to the prompt and to the short prompt; Claude Code opens the file with Read. A planning
   session's images stay unclaimed, in the pending folder (see [attachments.md](attachments.md#in-the-launch-dialogs));
-- **New worktree** from a branch, or **This checkout**. (A fix from a PR's **Fix in →** has neither choice: it runs in a
-  new worktree on the PR's own branch, below.) The branch starts on the task's integration branch when its
-  epic delivers through one (origin's copy first, as the T3 dialog does), else origin's copy of the default branch
-  (the local one when origin has none), as Autopilot's worktrees start from it.
+- **New worktree** from a branch, **Task worktree**, or **This checkout**. (A fix from a PR's **Fix in →** has none of
+  these: it runs in a new worktree on the PR's own branch, below.) The branch starts on the task's integration branch
+  when its epic delivers through one (origin's copy first, as the T3 dialog does), else origin's copy of the default
+  branch (the local one when origin has none), as Autopilot's worktrees start from it. The branch picker is the T3
+  dialog's, with the task's own branches pinned above the full list
+  ([agent-handoff.md](agent-handoff.md#the-tasks-branches)). **Task worktree** shows when one of the task's branches is
+  checked out in a worktree of the project, and runs the session in that worktree with no new branch
+  (`existing_worktree`); picking a pinned branch with a worktree selects it too, and a pinned branch without one is a
+  base for a new worktree.
 
 It loads like the T3 dialog (see [agent-handoff.md](agent-handoff.md#the-launch-dialog)): the prompt can be edited at
 once while the model, effort and workspace controls show skeletons; the choices follow a refresh of the options until
@@ -226,7 +231,9 @@ server runs the options' three git calls (`rev-parse`, `for-each-ref`, the defau
 `POST /api/tasks/:id/sessions` then:
 
 1. for a new worktree, runs `createWorktree` under `<worktreesDir>/sessions` on a new `<brand>/<task#>-<id8>` branch.
-   Autopilot's cleanup never removes these: they are the user's;
+   Autopilot's cleanup never removes these: they are the user's. For a task worktree it makes nothing, after checking
+   with `git worktree list` that the folder is a live worktree of the project (not its own checkout) with that branch
+   checked out (`findWorktree`), since the path comes from the browser;
 2. builds `claude [--model m] [--effort e] --session-id <uuid> --name "Implementing #N" -- <prompt>` (`--` so a
    prompt starting with `-` isn't read as an option), or Copilot's
    `copilot [--model m] [--reasoning-effort e] --session-id <uuid> --name … -i <prompt>`, with a session id the board

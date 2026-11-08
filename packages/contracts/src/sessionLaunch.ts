@@ -3,6 +3,7 @@ import { AgentHarness, AGENT_HARNESSES } from "./agentSessions.ts";
 import { LaunchAttachmentIds } from "./attachments.ts";
 import { BRAND } from "./brand.ts";
 import { cliEffortFor, CliEffort } from "./modelTiers.ts";
+import { TaskBranch } from "./taskBranches.ts";
 
 // Starting a new Claude Code, Codex or Copilot CLI session on a task from the board: the CLI opens in a terminal with the
 // hand-off prompt, in a new worktree or the project's checkout. See docs/features/agent-sessions.md.
@@ -33,12 +34,18 @@ export type AgentClis = z.infer<typeof AgentClis>;
 
 /**
  * Where a new session runs: a new worktree branched from `baseRef`, a new worktree on a pull request's own `branch`
- * (origin's copy; the session pushes back to it), or the project's own checkout.
+ * (origin's copy; the session pushes back to it), an existing worktree of the project that has `branch` checked out
+ * (a task's own, from its branches), or the project's own checkout.
  */
 export const SessionWorkspace = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("current") }),
   z.object({ mode: z.literal("new_worktree"), baseRef: z.string().trim().min(1) }),
   z.object({ mode: z.literal("pr_branch"), branch: z.string().trim().min(1) }),
+  z.object({
+    mode: z.literal("existing_worktree"),
+    worktreePath: z.string().trim().min(1),
+    branch: z.string().trim().min(1),
+  }),
 ]);
 export type SessionWorkspace = z.infer<typeof SessionWorkspace>;
 
@@ -53,6 +60,8 @@ export const SessionLaunchOptions = z.object({
   branches: z.array(z.string()),
   /** The default branch, or the current one when there is no telling. */
   defaultBaseRef: z.string().nullable(),
+  /** The task's own branches, pinned at the top of the branch picker. Absent from older servers. */
+  taskBranches: z.array(TaskBranch).optional(),
   /**
    * Each harness's model for the model new sessions on the task start on (resolveOperationChoice("launch"): the
    * board's setting, else a custom model one of its labels picks, else its suggested tier), from Settings; null when none is set.

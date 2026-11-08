@@ -10,6 +10,9 @@ import {
   type TaskStatus,
   type TicketSystem,
 } from "@repo/contracts";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { createContext } from "../context.ts";
 import type { Db } from "../db/database.ts";
 import type { Services } from "../services/types.ts";
@@ -25,6 +28,8 @@ const AGENT = "claude-code";
 export interface SeedOptions {
   /** Workspace of the first project, so project-scoped features (skills, T3 launch) have a real folder. */
   workspaceRoot?: string;
+  /** The data dir being seeded, for a scenario that needs files of its own (deleted with the sandbox). */
+  dataDir?: string;
 }
 
 type Scenario = (s: Services, opts: SeedOptions) => void;
@@ -1371,7 +1376,85 @@ const crowded: Scenario = (s, opts) => {
   for (const title of [...names, ...more, ...rest]) s.projects.create({ title });
 };
 
+/**
+ * A task whose work is on several branches, for the hand-off dialogs' pinned "This task" group: a small git repository
+ * in the data dir with two task worktrees, and links that name branches (an open PR, a T3 thread, a Codex session in a
+ * worktree, a draft PR with no worktree, a merged PR).
+ */
+const branches: Scenario = (s, opts) => {
+  const base = opts.dataDir ?? opts.workspaceRoot;
+  if (!base) throw new Error("The branches seed needs a folder for its repository");
+  const repo = join(base, "branches-repo");
+  const worktrees = join(base, "branches-worktrees");
+  mkdirSync(repo, { recursive: true });
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync("git", ["-c", "user.name=Seed", "-c", "user.email=seed@example.com", ...args], {
+      cwd,
+      stdio: "ignore",
+    });
+  git(repo, "init", "--quiet", "--initial-branch=main");
+  writeFileSync(join(repo, "README.md"), "Branch picker demo\n");
+  git(repo, "add", "README.md");
+  git(repo, "commit", "--quiet", "-m", "first");
+  for (const branch of ["feat/handoff-task-branch", "codex/branch-picker-cli", "fix/poller-retry", "old/first-try"]) {
+    git(repo, "branch", branch);
+  }
+  const taskWorktree = join(worktrees, "handoff-task-branch");
+  const codexWorktree = join(worktrees, "branch-picker-cli");
+  git(repo, "worktree", "add", "--quiet", taskWorktree, "feat/handoff-task-branch");
+  git(repo, "worktree", "add", "--quiet", codexWorktree, "codex/branch-picker-cli");
+
+  // The CLI dialogs, offered when their CLI is on PATH. Launching from them opens a real terminal.
+  s.settings.update({
+    providers: [
+      { id: "claude-code", enabled: true },
+      { id: "codex", enabled: true },
+    ],
+  });
+  const project = s.projects.create({ title: "Branch picker", workspaceRoot: repo });
+  const now = new Date().toISOString();
+  const prSnapshot = (headRef: string, state: PrSnapshot["state"], title: string): PrSnapshot => ({
+    state,
+    title,
+    checks: "passing",
+    reviewDecision: null,
+    mergeable: "mergeable",
+    headRef,
+    updatedAt: now,
+  });
+  const taskId = addTask(s, project.id, {
+    title: "Provide branch name on code handoff menu",
+    status: "in_progress",
+    links: [
+      "https://github.com/example/shop/pull/48",
+      "https://github.com/example/shop/pull/52",
+      "https://github.com/example/shop/pull/61",
+    ],
+  });
+  const [merged, draft, open] = s.tasks.detail(taskId).links;
+  s.links.setSnapshot(merged!.id, prSnapshot("old/first-try", "merged", "First try"));
+  s.links.setSnapshot(draft!.id, prSnapshot("fix/poller-retry", "draft", "Retry the poller"));
+  s.links.setSnapshot(open!.id, prSnapshot("feat/handoff-task-branch", "open", "Pin the task's branches"));
+  const thread = s.links.add(taskId, { t3Thread: { environmentId: "seed-env", threadId: "seed-branches" } }, AGENT);
+  s.links.setSnapshot(thread.id, {
+    title: "Pin the task's branches",
+    status: "idle",
+    settled: true,
+    branch: "feat/handoff-task-branch",
+  } satisfies T3ThreadSnapshot);
+  s.links.add(
+    taskId,
+    {
+      agentSession: { harness: "codex", sessionId: "00000000-0000-4000-8000-000000000136", cwd: codexWorktree },
+      label: "Implementing #1",
+    },
+    AGENT,
+  );
+  addTask(s, project.id, { title: "A task with no branch yet", status: "planned" });
+};
+
 export const SCENARIOS = {
+  branches,
   basic,
   review,
   threads,
@@ -1416,7 +1499,7 @@ export function seedDatabase(dbPath: string, scenario: ScenarioName, opts: SeedO
   try {
     // Every scenario's tasks link tickets, which need a system to belong to.
     ctx.services.settings.update({ ticketSystems: [SEED_TICKET_SYSTEM] });
-    SCENARIOS[scenario](ctx.services, opts);
+    SCENARIOS[scenario](ctx.services, { dataDir: dirname(dbPath), ...opts });
     if (scenario === "stats") spreadOverWeeks(ctx.db);
   } finally {
     ctx.db.close();

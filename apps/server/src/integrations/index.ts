@@ -342,7 +342,14 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     },
     testT3: () => t3.test(),
     connectT3: (value) => t3.connect(value),
-    t3LaunchOptions: (taskId) => t3.launchOptions(taskId),
+    async t3LaunchOptions(taskId) {
+      // The task's branches come from git, beside T3's options; a git failure only leaves the pinned group out.
+      const [options, taskBranches] = await Promise.all([
+        t3.launchOptions(taskId),
+        sessionLaunch.taskBranches(taskId).catch(() => []),
+      ]);
+      return { ...options, taskBranches };
+    },
     t3ProjectLaunchOptions: (projectId) => t3.projectLaunchOptions(projectId),
     t3ModelCatalog: () => t3.modelCatalog(),
     startT3Thread: (taskId, input, actor) => t3.startThread(taskId, input, actor),

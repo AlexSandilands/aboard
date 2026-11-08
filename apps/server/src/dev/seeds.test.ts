@@ -39,7 +39,8 @@ describe("seed scenarios", () => {
   it.each(Object.keys(SCENARIOS) as ScenarioName[])(
     "%s seeds a fresh data dir",
     (scenario) => {
-      expect(seeded(scenario).tasks.length).toBeGreaterThan(5);
+      // The branches scenario is one task about its branches (and one without), not a board.
+      expect(seeded(scenario).tasks.length).toBeGreaterThan(scenario === "branches" ? 1 : 5);
     },
     60_000,
   );

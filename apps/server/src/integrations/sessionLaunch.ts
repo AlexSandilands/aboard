@@ -28,6 +28,7 @@ import {
   type StartPlanningSessionInput,
   type StartSessionInput,
   type StartSessionResult,
+  type TaskBranch,
   type TaskSummary,
   withAttachedImages,
 } from "@repo/contracts";
@@ -38,6 +39,7 @@ import type { Services } from "../services/types.ts";
 import type { RunGit } from "./backup.ts";
 import { remoteRepo } from "./gitRemote.ts";
 import { resolveExecutable } from "./claudeCli.ts";
+import { findWorktree, taskBranches, worktreesOf } from "./taskBranches.ts";
 import { messageOf } from "./util.ts";
 import {
   copyCommand,
@@ -63,6 +65,8 @@ const SESSION_BRANCH_PREFIX = `${BRAND.id}/`;
 export interface SessionLaunchIntegration {
   /** What the launch dialog offers for a task: CLIs, branches, the tier's models. */
   options(taskId: string): Promise<SessionLaunchOptions>;
+  /** The task's own branches and their worktrees, for the T3 dialog's picker (the session dialog's options carry them). */
+  taskBranches(taskId: string): Promise<TaskBranch[]>;
   /**
    * Makes the worktree when asked, opens the CLI in a terminal and links the session (unless the CLI picks its own
    * session id: then the session links itself). A terminal that won't start isn't an error: the result carries the
@@ -345,9 +349,10 @@ export function createSessionLaunch(deps: {
       const { task, root } = subject(taskId);
       const settings = deps.services().settings.get();
       const h = deps.host();
-      const { isRepo, branches, defaultBranch } = root
-        ? await branchesOf(root)
-        : { isRepo: false, branches: [], defaultBranch: null };
+      const [{ isRepo, branches, defaultBranch }, worktrees] = await Promise.all([
+        root ? branchesOf(root) : { isRepo: false, branches: [], defaultBranch: null },
+        root ? worktreesOf(deps.runGit, root) : [],
+      ]);
       const defaultBaseRef =
         // Origin's copy first, as Autopilot's worktrees start from it: a local default branch can be behind.
         (defaultBranch &&
@@ -370,6 +375,7 @@ export function createSessionLaunch(deps: {
         isRepo,
         branches,
         defaultBaseRef,
+        taskBranches: await taskBranches({ task, root, defaultBranch, runGit: deps.runGit, worktrees }),
         models: {
           "claude-code": cliModel("claude-code"),
           codex: cliModel("codex"),
@@ -386,6 +392,12 @@ export function createSessionLaunch(deps: {
           : null,
         namedWindow: "launch" in resolved && resolved.focus !== undefined,
       };
+    },
+
+    async taskBranches(taskId) {
+      const { task, root } = subject(taskId);
+      const defaultBranch = root ? await defaultBranchOf(deps.runGit, root).catch(() => null) : null;
+      return taskBranches({ task, root, defaultBranch, runGit: deps.runGit });
     },
 
     async start(taskId, rawInput, actor) {
@@ -417,7 +429,18 @@ export function createSessionLaunch(deps: {
           );
         }
       }
-      if (workspace.mode !== "current") {
+      if (workspace.mode === "existing_worktree") {
+        // Only a live worktree of this project on that branch: the path came from the browser.
+        const worktree = await findWorktree(deps.runGit, root, workspace.worktreePath, workspace.branch);
+        if (!worktree || !isDirectory(worktree.path)) {
+          throw new AppError(
+            "VALIDATION",
+            `${workspace.worktreePath} isn't a worktree of this project with ${workspace.branch} checked out`,
+          );
+        }
+        cwd = worktree.path;
+        branch = worktree.branch;
+      } else if (workspace.mode !== "current") {
         try {
           // A pull request's branch is on origin, and origin's copy is the one to build on; the session pushes back to it.
           const worktree = await createWorktree(deps.runGit, {

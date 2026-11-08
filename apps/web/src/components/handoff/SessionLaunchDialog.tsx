@@ -29,23 +29,32 @@ import { effortAfterModelChange } from "./cliEffort.logic";
 import { copyFixPrompt } from "./FixPrMenu";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
 import { LaunchUnavailable, ToolbarSkeleton } from "./LaunchStates";
+import { BranchPicker } from "./BranchPicker";
 import { ComposerControl, ComposerStrip } from "./T3LaunchPickers";
 import {
+  branchRows,
   emptySessionPickState,
   harnessLabel,
   modelError,
+  pickPinnedBranch,
   pickSessionBy,
   picksAfterPlanToggle,
+  pinnedBranchRows,
   startedDescription,
   syncSessionPicks,
+  taskWorktreeWhere,
   toSessionWorkspace,
+  whereBranch,
+  whereBranchLabel,
   type SessionPicks,
+  type SessionWhere,
 } from "./sessionLaunch.logic";
 
-const WHERE_ITEMS = [
-  { value: "new_worktree", label: "New worktree" },
-  { value: "current", label: "This checkout" },
-] as const;
+const WHERE_LABELS = {
+  new_worktree: "New worktree",
+  existing_worktree: "Task worktree",
+  current: "This checkout",
+} as const;
 
 /**
  * "New Claude Code / Codex / Copilot CLI session": the hand-off prompt to edit, a model and where to run, then the CLI
@@ -136,13 +145,24 @@ function SessionLaunch({
  */
 export function announceSession(
   result: StartSessionResult,
-  { harness, prompt, taskNumbers }: { harness: AgentHarness; prompt: string; taskNumbers: readonly number[] },
+  {
+    harness,
+    prompt,
+    taskNumbers,
+    existingWorktree = false,
+  }: {
+    harness: AgentHarness;
+    prompt: string;
+    taskNumbers: readonly number[];
+    /** The session runs in a task's existing worktree rather than a new one. */
+    existingWorktree?: boolean;
+  },
 ) {
   if (!result.launched) {
     const toastId = toastManager.add({
       type: "error",
       title: "Couldn't open a terminal",
-      description: `${result.error ?? "The terminal didn't start."} Run the command yourself instead${result.branch ? `: it runs in the new worktree on ${result.branch}` : ""}.`,
+      description: `${result.error ?? "The terminal didn't start."} Run the command yourself instead${result.branch ? `: it runs in ${existingWorktree ? "the task's worktree" : "the new worktree"} on ${result.branch}` : ""}.`,
       actionProps: {
         children: "Copy command",
         onClick: () => {
@@ -157,7 +177,7 @@ export function announceSession(
     const toastId = toastManager.add({
       type: "success",
       title: `Started ${harnessLabel(harness)}`,
-      description: [result.shortReason, startedDescription(result, harness, taskNumbers, copied)]
+      description: [result.shortReason, startedDescription(result, harness, taskNumbers, copied, existingWorktree)]
         .filter(Boolean)
         .join(" "),
       // The clipboard can refuse a write that comes after the request; a click is a fresh gesture.
@@ -302,7 +322,12 @@ function Composer({
       },
       {
         onSuccess: (result) => {
-          announceSession(result, { harness, prompt, taskNumbers: [task.number] });
+          announceSession(result, {
+            harness,
+            prompt,
+            taskNumbers: [task.number],
+            existingWorktree: workspace.mode === "existing_worktree",
+          });
           // Closed even when the terminal didn't open, so starting again doesn't quietly make a second worktree
           // beside the one the command uses.
           onDone();
@@ -436,25 +461,38 @@ function Composer({
   );
 }
 
-/** Where a task's session runs: a new worktree from a branch, or the project's checkout. */
+/**
+ * Where a task's session runs: a new worktree from a branch, one of the task's own worktrees, or the project's
+ * checkout. The branch picker pins the task's branches: one with a worktree runs the session there.
+ */
 function WhereStrip({
   options,
   where,
   onChange,
 }: {
   options: SessionLaunchOptions;
-  where: SessionPicks["where"];
-  onChange: (where: SessionPicks["where"]) => void;
+  where: SessionWhere;
+  onChange: (where: SessionWhere) => void;
 }) {
+  const taskWorktree = taskWorktreeWhere(options);
+  const items = [
+    { value: "new_worktree" as const, label: WHERE_LABELS.new_worktree },
+    ...(taskWorktree ? [{ value: "existing_worktree" as const, label: WHERE_LABELS.existing_worktree }] : []),
+    { value: "current" as const, label: WHERE_LABELS.current },
+  ];
   return (
     <>
       <Select
-        items={WHERE_ITEMS}
+        items={items}
         value={where.mode}
         disabled={!options.isRepo}
         onValueChange={(value) =>
           onChange(
-            value === "current" ? { mode: "current" } : { mode: "new_worktree", baseRef: options.defaultBaseRef },
+            value === "current"
+              ? { mode: "current" }
+              : value === "existing_worktree" && taskWorktree
+                ? taskWorktree
+                : { mode: "new_worktree", baseRef: options.defaultBaseRef },
           )
         }
       >
@@ -462,33 +500,39 @@ function WhereStrip({
           <SelectValue />
         </SelectTrigger>
         <SelectPopup>
-          {WHERE_ITEMS.map((item) => (
+          {items.map((item) => (
             <SelectItem key={item.value} value={item.value}>
               {item.label}
             </SelectItem>
           ))}
         </SelectPopup>
       </Select>
-      {where.mode === "new_worktree" ? (
-        <Select
-          items={options.branches.map((b) => ({ value: b, label: b }))}
-          value={where.baseRef}
-          onValueChange={(value) => onChange({ mode: "new_worktree", baseRef: value })}
-        >
-          <SelectTrigger size="sm" variant="ghost" aria-label="Branch to start from" className="w-auto max-w-64">
-            <SelectValue placeholder="Choose a branch" />
-          </SelectTrigger>
-          <SelectPopup>
-            {options.branches.map((branch) => (
-              <SelectItem key={branch} value={branch}>
-                {branch}
-              </SelectItem>
-            ))}
-          </SelectPopup>
-        </Select>
-      ) : (
+      {where.mode === "current" ? (
         <span className="truncate px-2 text-xs text-muted-foreground" title={options.workspaceRoot ?? undefined}>
           {options.workspaceRoot ?? "No project folder"}
+        </span>
+      ) : (
+        <span
+          className="flex min-w-0 items-center gap-1"
+          title={where.mode === "existing_worktree" ? where.worktreePath : undefined}
+        >
+          <BranchPicker
+            label={whereBranchLabel(where)}
+            disabled={false}
+            pinned={pinnedBranchRows(options)}
+            rows={branchRows(options)}
+            selected={whereBranch(where)}
+            onPick={(baseRef) => onChange({ mode: "new_worktree", baseRef })}
+            onPickPinned={(name) => {
+              const next = pickPinnedBranch(options, name);
+              if (next) onChange(next);
+            }}
+            footer={
+              pinnedBranchRows(options).length > 0
+                ? "A task branch with its own worktree runs the session there. Pick it under All refs to branch from it."
+                : null
+            }
+          />
         </span>
       )}
     </>

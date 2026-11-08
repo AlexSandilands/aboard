@@ -558,6 +558,85 @@ describe("starting a session in a new worktree", { timeout: PROCESS_TEST_TIMEOUT
   });
 });
 
+describe("the task's own branches", { timeout: PROCESS_TEST_TIMEOUT }, () => {
+  it("pins the branches the task's links are on, with their worktrees, and runs a session in one", async () => {
+    const repo = createGitFixture();
+    try {
+      const app = appWith({ repo: repo.checkout, worktrees: repo.worktrees });
+      const worktree = join(repo.worktrees, "task-wt");
+      git(repo.checkout, "worktree", "add", "--quiet", worktree, "feature");
+      const pr = app.services.links.add(app.task.id, { value: "https://github.com/acme/app/pull/7" }, "agent");
+      app.services.links.setSnapshot(pr.id, {
+        state: "open",
+        title: "Feature",
+        checks: "none",
+        reviewDecision: null,
+        mergeable: "mergeable",
+        headRef: "feature",
+        updatedAt: null,
+      });
+      // A Codex session in a folder inside the worktree, and a planning session in the checkout, which says nothing.
+      app.services.links.add(
+        app.task.id,
+        {
+          agentSession: {
+            harness: "codex",
+            sessionId: "0b5e7c1e-0000-4000-8000-000000000001",
+            cwd: join(worktree, "src"),
+          },
+        },
+        "agent",
+      );
+      app.services.links.add(
+        app.task.id,
+        {
+          agentSession: {
+            harness: "claude-code",
+            sessionId: "0b5e7c1e-0000-4000-8000-000000000002",
+            cwd: repo.checkout,
+          },
+        },
+        "agent",
+      );
+
+      const options = (await (await app.request(`/api/tasks/${app.task.id}/session-launch-options`)).json()) as {
+        taskBranches: unknown;
+      };
+      expect(options.taskBranches).toEqual([
+        {
+          name: "feature",
+          sources: [
+            { kind: "pr", label: "PR #7 open", inactive: false },
+            { kind: "agent_session", label: "Codex session", inactive: false },
+          ],
+          worktreePath: expect.stringContaining("task-wt"),
+          inactive: false,
+        },
+      ]);
+
+      const { status, body } = await app.start({
+        workspace: { mode: "existing_worktree", worktreePath: worktree, branch: "feature" },
+      });
+      expect(status).toBe(201);
+      expect(body).toMatchObject({ launched: true, branch: "feature" });
+      expect(git(body.cwd, "rev-parse", "--abbrev-ref", "HEAD")).toBe("feature");
+      expect(app.spawned[0]!.cwd).toBe(body.cwd);
+      expect(app.sessionLinks().find((l) => l.label === "Implementing #1")?.ref.cwd).toBe(body.cwd);
+
+      // Only a live worktree of the project, with that branch: not the checkout, another branch or a made-up folder.
+      for (const workspace of [
+        { worktreePath: worktree, branch: "main" },
+        { worktreePath: repo.checkout, branch: "main" },
+        { worktreePath: join(repo.worktrees, "nowhere"), branch: "feature" },
+      ]) {
+        expect((await app.start({ workspace: { mode: "existing_worktree", ...workspace } })).status).toBe(400);
+      }
+    } finally {
+      repo.cleanup();
+    }
+  });
+});
+
 describe("shortPrompt for a fix", () => {
   it("names the PR's branch and keeps the safety rules", () => {
     const text = shortPrompt("fix", { id: "t-1", number: 78 }, "claude-code", "linux", "feat/x");

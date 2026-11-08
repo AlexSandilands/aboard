@@ -15,7 +15,7 @@ import {
   type TaskSummary,
 } from "@repo/contracts";
 import { AlertCircleIcon, ArrowUpIcon, LightbulbIcon } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from "~/components/ui/dialog";
@@ -43,13 +43,15 @@ import {
   selectionAfterPlanToggle,
   syncPicks,
   toLaunchWorkspace,
+  withTaskRefs,
   type Picks,
 } from "./handoff.logic";
 import { copyHandoffPrompt, copySuggestEpicsPrompt } from "./HandoffActions";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
 import { LaunchUnavailable, ToolbarSkeleton } from "./LaunchStates";
 import { usePlanPrompt } from "./PlanTasksDialog";
-import { AccessPicker, ComposerControl, ComposerStrip, RefPicker, WorkspaceMenu } from "./T3LaunchPickers";
+import { RefPicker } from "./BranchPicker";
+import { AccessPicker, ComposerControl, ComposerStrip, WorkspaceMenu } from "./T3LaunchPickers";
 import { T3ModelPicker } from "~/components/models/T3ModelPicker";
 
 /**
@@ -345,7 +347,7 @@ function LaunchContent({
 
 function Composer({
   subject,
-  options,
+  options: loaded,
   failure,
   starter,
   onDone,
@@ -359,6 +361,12 @@ function Composer({
   onDone: () => void;
 }) {
   const { promptFor } = subject;
+  // The task's branches pinned, with their worktrees on T3's refs. A PR fix works on the PR's branch, so it has none.
+  const fixing = !!subject.fixBranch;
+  const options = useMemo(
+    () => (loaded ? (fixing ? { ...loaded, taskBranches: [] } : withTaskRefs(loaded)) : undefined),
+    [loaded, fixing],
+  );
   const [planWithMe, setPlanWithMe] = useState(subject.initialPlan);
   const [prompt, setPrompt] = useState(() => promptFor(planWithMe));
   // The choices start from the options. The dialog may open on cached ones that a refresh then changes (the task's

@@ -16,6 +16,7 @@ import {
   type T3ModelSelection,
   type T3Ref,
   type T3RuntimeMode,
+  type TaskBranchSource,
   type TaskSummary,
   unmergedEpicBranch,
 } from "@repo/contracts";
@@ -378,14 +379,19 @@ export const WORKSPACE_LABELS: Record<WorkspaceMode, string> = {
   previous: "Previous worktree",
 };
 
-/** The workspace trigger label; picking a ref with its own worktree under Current checkout runs there. */
+/**
+ * The workspace trigger label; picking a ref with its own worktree under Current checkout runs there: "Task worktree"
+ * when it is one of the task's branches.
+ */
 export function workspaceLabel(
-  options: Pick<T3LaunchOptions, "refs" | "workspaceRoot">,
+  options: Pick<T3LaunchOptions, "refs" | "workspaceRoot" | "taskBranches">,
   choice: WorkspaceChoice,
 ): string {
   if (choice.mode === "current") {
     const ref = selectedRef(options, choice);
-    if (ref && refWorktree(ref, options.workspaceRoot)) return "Current worktree";
+    if (ref && refWorktree(ref, options.workspaceRoot)) {
+      return options.taskBranches?.some((b) => b.name === ref.name) ? "Task worktree" : "Current worktree";
+    }
   }
   return WORKSPACE_LABELS[choice.mode];
 }
@@ -400,4 +406,105 @@ export function refLabel(
   if (!ref) return "No branch";
   if (choice.mode !== "new_worktree") return ref.name;
   return `From ${options.defaults.startFromOrigin && !ref.isRemote ? `origin/${ref.name}` : ref.name}`;
+}
+
+// ── The task's own branches ──────────────────────────────────────────────
+
+/** A row of a branch picker: what picking it selects (`value`), how it shows, and why it can't be picked. */
+export interface BranchRow {
+  value: string;
+  name: string;
+  badge: string | null;
+  disabledReason: string | null;
+}
+
+/** A row of the pinned "This task" group: also where the board found the branch. */
+export interface PinnedBranchRow extends BranchRow {
+  sources: readonly TaskBranchSource[];
+  inactive: boolean;
+}
+
+/**
+ * The options with the task's worktrees on their refs: T3 lists only the first 100 refs, and may not know a worktree
+ * the board does, so a task branch checked out in a worktree is added or given its folder. Then picking it runs the
+ * thread there whatever T3 reported. The same object back when there is nothing to add, so the dialog's picks stay.
+ */
+export function withTaskRefs(options: T3LaunchOptions): T3LaunchOptions {
+  const inWorktrees = (options.taskBranches ?? []).filter((b) => b.worktreePath);
+  if (inWorktrees.length === 0) return options;
+  let changed = false;
+  const refs = options.refs.map((ref) => {
+    const branch = ref.isRemote || ref.worktreePath ? undefined : inWorktrees.find((b) => b.name === ref.name);
+    if (!branch) return ref;
+    changed = true;
+    return { ...ref, worktreePath: branch.worktreePath };
+  });
+  for (const branch of inWorktrees) {
+    if (refs.some((r) => !r.isRemote && r.name === branch.name)) continue;
+    changed = true;
+    refs.push({
+      name: branch.name,
+      isRemote: false,
+      current: false,
+      isDefault: false,
+      worktreePath: branch.worktreePath,
+    });
+  }
+  return changed ? { ...options, refs } : options;
+}
+
+/** The ref a task branch picks: its local branch, else origin's copy. */
+const taskRef = (refs: readonly T3Ref[], name: string): T3Ref | undefined =>
+  refs.find((r) => !r.isRemote && r.name === name) ?? refs.find((r) => r.isRemote && r.name === `origin/${name}`);
+
+/**
+ * The pinned rows of the T3 dialog's picker. A branch with its own worktree can always be picked (it runs there); one
+ * without follows the ref rules, so under Current checkout it is disabled. A branch T3 doesn't list is left out.
+ */
+export function pinnedRefRows(
+  options: Pick<T3LaunchOptions, "refs" | "workspaceRoot" | "taskBranches">,
+  choice: WorkspaceChoice,
+): PinnedBranchRow[] {
+  return (options.taskBranches ?? []).flatMap((branch) => {
+    const ref = taskRef(options.refs, branch.name);
+    if (!ref) return [];
+    const worktree = refWorktree(ref, options.workspaceRoot);
+    return [
+      {
+        value: ref.name,
+        name: branch.name,
+        badge: refBadge(ref, options.workspaceRoot),
+        disabledReason: worktree ? null : refDisabledReason(ref, choice.mode, options.workspaceRoot),
+        sources: branch.sources,
+        inactive: branch.inactive,
+      },
+    ];
+  });
+}
+
+/** Every ref, as rows of the T3 dialog's picker. */
+export const refRows = (
+  options: Pick<T3LaunchOptions, "refs" | "workspaceRoot">,
+  choice: WorkspaceChoice,
+): BranchRow[] =>
+  options.refs.map((ref) => ({
+    value: ref.name,
+    name: ref.name,
+    badge: refBadge(ref, options.workspaceRoot),
+    disabledReason: refDisabledReason(ref, choice.mode, options.workspaceRoot),
+  }));
+
+/**
+ * Picking a pinned branch: one with its own worktree runs the thread in it (Current checkout on that ref, whatever the
+ * workspace was); one without is picked like any ref. To branch a new worktree from a task's worktree branch, pick it
+ * in the full list.
+ */
+export function pickPinnedRef(
+  options: Pick<T3LaunchOptions, "refs" | "workspaceRoot">,
+  choice: WorkspaceChoice,
+  value: string,
+): WorkspaceChoice {
+  const ref = options.refs.find((r) => r.name === value);
+  if (ref && refWorktree(ref, options.workspaceRoot)) return { mode: "current", ref: value };
+  return { mode: choice.mode === "previous" ? "new_worktree" : choice.mode, ref: value };
 }
