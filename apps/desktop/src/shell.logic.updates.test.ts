@@ -86,8 +86,14 @@ describe("reduceUpdate", () => {
   it("marks a notice-only find as available, and keeps it through a failed check", () => {
     let s = reduceUpdate(notice, { type: "found", version: "2026.11.10", at: 1 });
     expect(s).toMatchObject({ status: "available", version: "2026.11.10", noticeVia: "pacman" });
+    // The hourly re-check: checking, then failing, keeps the version on show.
+    s = reduceUpdate(s, { type: "checking" });
+    expect(s).toMatchObject({ status: "available", version: "2026.11.10" });
     s = reduceUpdate(s, { type: "error", message: "offline", at: 2 });
-    expect(s.status).toBe("available");
+    expect(s).toMatchObject({ status: "available", version: "2026.11.10" });
+    // A newer one replaces it.
+    s = reduceUpdate(s, { type: "found", version: "2026.11.12", at: 3 });
+    expect(s.version).toBe("2026.11.12");
   });
 
   it("keeps a ready update through later checks and errors", () => {

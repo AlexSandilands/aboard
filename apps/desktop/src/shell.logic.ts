@@ -220,7 +220,10 @@ export function reduceUpdate(state: DesktopUpdateState, event: UpdateEvent): Des
     case "auto-check":
       return { ...state, autoCheck: event.enabled };
     case "checking":
-      return BUSY.has(state.status) ? state : { ...state, status: "checking", error: null };
+      // A version a notice-only install already knows of stays on show while it checks again.
+      return BUSY.has(state.status) || state.status === "available"
+        ? state
+        : { ...state, status: "checking", error: null };
     case "up-to-date":
       if (BUSY.has(state.status)) return state;
       return { ...state, status: "up-to-date", version: null, percent: null, checkedAt: event.at, error: null };
