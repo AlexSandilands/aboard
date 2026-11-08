@@ -50,9 +50,9 @@ Secret scanning and push protection are on already and aren't managed by the scr
 An integration epic's branch (`epic/<number>-<slug>`, [Epics](epics.md#delivery)) collects its tasks' PRs, each
 squashed into one Conventional commit with its `(#N)`. Merge its PR into `main` with **Rebase and merge**: each of
 those commits lands on `main` on its own, so `git bisect`, `git revert` and `git blame` see the task PRs rather than
-one commit for the whole epic. The board's merge dialog offers rebase but never preselects it
-(`pickMergeMethod` doesn't reuse a last pick of rebase), so it is always a deliberate choice; on GitHub's own merge
-button, check the method before merging, since it remembers the last one.
+one commit for the whole epic. The board's merge dialog doesn't remember a rebase of
+an `epic/…` branch (`rememberMergeMethod`), so the next PR is offered squash again; on GitHub's own merge button,
+check the method before merging, since it remembers the last one.
 
 Keep the branch close to `main` while it lives:
 
@@ -125,7 +125,7 @@ back on. The same goes for deleting a release tag.
   Conventional, which the PR title check guarantees. An integration branch's PR squashed would land as one commit
   for the whole epic (#32 was 250 files), so it is rebase-merged: its commits are already one per task PR. GitHub
   allows merge methods per base branch, not per head branch, so nothing stops a rebase merge of an ordinary PR; the
-  board never defaults to rebase, and commitlint keeps every commit Conventional if it happens.
+  board doesn't carry a rebase of an epic branch over to the next merge, and commitlint keeps every commit Conventional if it happens.
 - **Settings in the repo.** The rules are reviewed in a PR like code, and the script brings a fresh fork or a
   reset repo back to the same state.
 - **No CODEOWNERS.** It only does something when code-owner review is required, which one person can't give.

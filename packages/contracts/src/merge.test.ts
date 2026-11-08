@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MergePrInput, pickMergeMethod, prMergeAction, PrSnapshot } from "./index.ts";
+import { MergePrInput, pickMergeMethod, prMergeAction, PrSnapshot, rememberMergeMethod } from "./index.ts";
 
 const snapshot = (overrides: Partial<PrSnapshot> = {}): PrSnapshot => ({
   state: "open",
@@ -59,16 +59,20 @@ describe("prMergeAction", () => {
 
 describe("pickMergeMethod", () => {
   it("prefers the last pick, then squash, merge, rebase", () => {
-    expect(pickMergeMethod(["squash", "merge", "rebase"], "merge")).toBe("merge");
+    expect(pickMergeMethod(["squash", "merge", "rebase"], "rebase")).toBe("rebase");
     expect(pickMergeMethod(["merge", "rebase"], "squash")).toBe("merge");
     expect(pickMergeMethod(["rebase", "merge", "squash"], null)).toBe("squash");
     expect(pickMergeMethod(["rebase"], undefined)).toBe("rebase");
     expect(pickMergeMethod([], "squash")).toBeNull();
   });
+});
 
-  it("doesn't reuse a last pick of rebase", () => {
-    expect(pickMergeMethod(["squash", "rebase"], "rebase")).toBe("squash");
-    expect(pickMergeMethod(["rebase"], "rebase")).toBe("rebase");
+describe("rememberMergeMethod", () => {
+  it("keeps a rebase of an epic branch from becoming the repo's default", () => {
+    expect(rememberMergeMethod("rebase", "epic/12-checkout")).toBe(false);
+    expect(rememberMergeMethod("rebase", "feat/merge")).toBe(true);
+    expect(rememberMergeMethod("rebase", null)).toBe(true);
+    expect(rememberMergeMethod("squash", "epic/12-checkout")).toBe(true);
   });
 });
 
