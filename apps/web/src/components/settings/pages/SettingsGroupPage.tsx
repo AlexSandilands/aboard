@@ -2,8 +2,10 @@ import type { AppSettings } from "@repo/contracts";
 import { useParams } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { AutopilotAutomationsTab } from "~/components/autopilot/AutopilotPage";
+import { DesktopAppSection } from "~/components/desktop/DesktopAppSection";
 import { NotificationsSection } from "~/components/notifications/NotificationsSection";
 import { VersionAndSocial } from "~/components/social/SocialSettings";
+import { desktopBridge } from "~/lib/desktopBridge";
 import { useIntegrationsStatus, useSettings } from "~/state/queries";
 import { AgentsPage } from "../agents/AgentsPage";
 import { AppearanceSection } from "../AppearanceSection";
@@ -56,6 +58,11 @@ function GroupContent({ group }: { group: Exclude<SettingsGroupId, "project"> })
           <SettingsSubsection id="board.notifications">
             <WithSettings>{(settings) => <NotificationsSection settings={settings} />}</WithSettings>
           </SettingsSubsection>
+          {desktopBridge() ? (
+            <SettingsSubsection id="board.desktop">
+              <DesktopAppSection />
+            </SettingsSubsection>
+          ) : null}
           <SettingsSubsection id="board.data">
             <WithSettings>{(settings) => <BackupSection settings={settings} />}</WithSettings>
             <ArchivedProjectsSection />

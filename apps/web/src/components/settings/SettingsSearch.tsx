@@ -5,6 +5,7 @@ import { type ReactNode, useEffect, useEffectEvent, useId, useMemo, useRef, useS
 import { isEditableTarget, isInsidePopup } from "~/components/layout/keyboard";
 import { Button } from "~/components/ui/button";
 import { SidebarContent, SidebarHeader, SidebarInput, useSidebar } from "~/components/ui/sidebar";
+import { desktopBridge } from "~/lib/desktopBridge";
 import { cn } from "~/lib/utils";
 import { useAskSettings } from "~/state/mutations";
 import { useProviders, useSettings } from "~/state/queries";
@@ -12,9 +13,11 @@ import { usePalette } from "~/state/ui";
 import { settingsIndex, settingsLocation, type SettingsIndexEntry } from "./settingsIndex.logic";
 import { SettingsAskRow, type AskState } from "./SettingsAskRow";
 import { askUnavailableReason } from "./providers.logic";
+import { DESKTOP_ONLY_SECTIONS } from "./settingsNav.logic";
 import { askEntries, initialActive, isSearchShortcut, moveResult, searchSettings } from "./settingsSearch.logic";
 
-const ENTRIES = settingsIndex();
+// The Desktop app section only exists in the desktop shell; the preload runs before any of the page does.
+const ENTRIES = settingsIndex().filter((entry) => desktopBridge() || !DESKTOP_ONLY_SECTIONS.has(entry.sectionId));
 const ASK_ENTRIES = askEntries(ENTRIES);
 const CLI_SETTING = ENTRIES.find((entry) => entry.id === "agents.providers.claude-code.cli-path");
 

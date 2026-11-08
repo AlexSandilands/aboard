@@ -42,6 +42,15 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     sections: [
       section("board.appearance", "Appearance", ["theme", "dark", "light", "banner", "contrast", "font"]),
       section("board.notifications", "Notifications", ["pop-ups", "alerts", "quiet hours"]),
+      section("board.desktop", "Desktop app", [
+        "updates",
+        "update",
+        "version",
+        "auto-update",
+        "check for updates",
+        "restart to update",
+        "release notes",
+      ]),
       section("board.data", "Data", ["backup", "git", "machine name", "archived projects", "restore"]),
     ],
   },
@@ -321,14 +330,20 @@ export function providerOfTarget(target: string | null | undefined): ProviderId 
   return group === "agents" && page === "providers" && parsed.success ? parsed.data : null;
 }
 
+/** Sections that only exist in the desktop app. */
+export const DESKTOP_ONLY_SECTIONS: ReadonlySet<string> = new Set(["board.desktop"]);
+
 /**
  * The sub-sections the list shows for a group: on Agents only Providers until the user adds one, since Models and
- * Operations have nothing to set without one.
+ * Operations have nothing to set without one; Board's Desktop app only in the desktop shell.
  */
 export function visibleSections(
   group: SettingsGroupDef,
   added: ReadonlyArray<{ id: ProviderId }> | undefined,
+  desktop = false,
 ): ReadonlyArray<SettingsSectionDef> {
+  if (group.id === "board")
+    return desktop ? group.sections : group.sections.filter((s) => !DESKTOP_ONLY_SECTIONS.has(s.id));
   if (group.id !== "agents" || (added?.length ?? 0) > 0) return group.sections;
   return group.sections.filter((entry) => entry.id === "agents.providers");
 }

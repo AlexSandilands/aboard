@@ -113,6 +113,12 @@ describe("providers in the list", () => {
     ]);
     expect(visibleSections(settingsGroup("tasks"), undefined)).toBe(settingsGroup("tasks").sections);
   });
+
+  it("shows Board's Desktop app only in the desktop shell", () => {
+    const board = settingsGroup("board");
+    expect(visibleSections(board, undefined).map((s) => s.id)).not.toContain("board.desktop");
+    expect(visibleSections(board, undefined, true).map((s) => s.id)).toContain("board.desktop");
+  });
 });
 
 describe("editorListSection", () => {

@@ -8,16 +8,25 @@ export type TrayIconStyle = (typeof TRAY_ICON_STYLES)[number];
 /** What the shell itself remembers: preferences about the shell, not the board, so they aren't in the web settings. */
 export interface DesktopPrefs {
   trayIcon: TrayIconStyle;
+  /** Check for updates by itself, hourly. Check now works either way. */
+  autoCheckUpdates: boolean;
+  /** The newest version an OS notification has announced, so each version is announced once, across restarts. */
+  notifiedUpdate: string | null;
 }
 
-const DEFAULTS: DesktopPrefs = { trayIcon: "colour" };
+const DEFAULTS: DesktopPrefs = { trayIcon: "colour", autoCheckUpdates: true, notifiedUpdate: null };
 const FILE = "prefs.json";
 
 /** Keeps what is valid and defaults the rest, so a hand-edited or older file never stops the shell starting. */
 export function parsePrefs(value: unknown): DesktopPrefs {
   const raw = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
   const trayIcon = TRAY_ICON_STYLES.find((style) => style === raw.trayIcon);
-  return { trayIcon: trayIcon ?? DEFAULTS.trayIcon };
+  return {
+    trayIcon: trayIcon ?? DEFAULTS.trayIcon,
+    autoCheckUpdates: typeof raw.autoCheckUpdates === "boolean" ? raw.autoCheckUpdates : DEFAULTS.autoCheckUpdates,
+    notifiedUpdate:
+      typeof raw.notifiedUpdate === "string" && raw.notifiedUpdate.length <= 50 ? raw.notifiedUpdate : null,
+  };
 }
 
 /** Reads `<dir>/prefs.json`; a missing or corrupt file gives the defaults. */

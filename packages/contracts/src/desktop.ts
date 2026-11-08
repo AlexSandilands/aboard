@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { brandEnv } from "./brand.ts";
 
 /** The web app's theme choice; the desktop shell styles the native window controls to match. */
@@ -10,7 +11,58 @@ export interface DesktopNotification {
   body: string;
   /** The task a click opens. */
   taskId: string | null;
+  /**
+   * A settings target a click opens instead (`board.desktop`). Only the shell's own notifications (an update) set
+   * it; they aren't board notifications, so there is nothing to mark read.
+   */
+  settingsTarget?: string;
 }
+
+/**
+ * How this install gets updates. `self-update`: the Windows installer and the AppImage download and install new
+ * versions themselves. `notice-only`: package-manager installs (.deb, .rpm, tarball, pacman, AUR) are only told a
+ * new version is out. `disabled`: dev and sandbox shells and builds from source; `disabledReason` says which.
+ */
+export const DesktopUpdateMode = z.enum(["self-update", "notice-only", "disabled"]);
+export type DesktopUpdateMode = z.infer<typeof DesktopUpdateMode>;
+
+/**
+ * Where an update stands. `idle` before the first check; `ready` once a self-update is downloaded; `available` when a
+ * notice-only install learns of a newer version; `error` when the last check failed.
+ */
+export const DesktopUpdateStatus = z.enum([
+  "idle",
+  "checking",
+  "up-to-date",
+  "downloading",
+  "ready",
+  "installing",
+  "available",
+  "error",
+]);
+export type DesktopUpdateStatus = z.infer<typeof DesktopUpdateStatus>;
+
+/** The shell's one update state, which the tray, Settings and the title-bar pill all show. */
+export const DesktopUpdateState = z.object({
+  mode: DesktopUpdateMode,
+  disabledReason: z.string().nullable(),
+  /** The running version. */
+  currentVersion: z.string(),
+  /** Whether the shell checks by itself (hourly). Check now works either way. */
+  autoCheck: z.boolean(),
+  status: DesktopUpdateStatus,
+  /** The newer version being downloaded, ready or available. */
+  version: z.string().nullable(),
+  /** Download progress, 0-100, while downloading. */
+  percent: z.number().nullable(),
+  /** When the last check finished (ms since the epoch), successful or not. */
+  checkedAt: z.number().nullable(),
+  /** Why the last check or install failed, in a sentence. */
+  error: z.string().nullable(),
+  /** On a notice-only install, how to get the new version: through pacman, or a download from the release page. */
+  noticeVia: z.enum(["pacman", "download"]).nullable(),
+});
+export type DesktopUpdateState = z.infer<typeof DesktopUpdateState>;
 
 /**
  * The unread count as the shell shows it: a number on the taskbar button and a dot on the tray icon. Windows has no
@@ -36,6 +88,20 @@ export interface DesktopBridge {
   setBadge(badge: DesktopBadge): void;
   /** Returns the unsubscribe function. */
   onNotificationClick(listener: (notification: DesktopNotification) => void): () => void;
+  /**
+   * Updates of the desktop app itself. Optional, like `setBackgroundColor`: a shell from before updates has none.
+   * `getUpdateState` resolves to the current state; `onUpdateState` gets every change after that.
+   */
+  getUpdateState?(): Promise<DesktopUpdateState>;
+  /** Returns the unsubscribe function. */
+  onUpdateState?(listener: (state: DesktopUpdateState) => void): () => void;
+  /** Checks now, whether or not automatic checks are on. */
+  checkForUpdates?(): void;
+  /** Stops the server, installs the downloaded update and restarts the app. Only does something while `ready`. */
+  installUpdate?(): void;
+  setAutoCheckUpdates?(enabled: boolean): void;
+  /** Opens the release page of the newer version (or the releases list) in the browser. */
+  openReleaseNotes?(): void;
 }
 
 /** The ports the user's own board runs on (`pnpm dev`, the desktop app). A sandbox never uses them. */

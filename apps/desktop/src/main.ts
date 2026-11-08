@@ -1,7 +1,16 @@
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BRAND, brandEnv, readDesktopSandbox, type DesktopBadge } from "@repo/contracts";
+import {
+  BRAND,
+  BRAND_REPOSITORY,
+  brandEnv,
+  readDesktopSandbox,
+  type DesktopBadge,
+  type DesktopNotification,
+  type DesktopUpdateState,
+} from "@repo/contracts";
 import {
   BrowserWindow,
   Menu,
@@ -14,28 +23,42 @@ import {
   ipcMain,
   nativeImage,
   nativeTheme,
+  net,
   shell,
 } from "electron";
-import { TRAY_ICON_STYLES, readPrefs, writePrefs, type TrayIconStyle } from "./desktopPrefs.ts";
+import { TRAY_ICON_STYLES, readPrefs, writePrefs, type DesktopPrefs, type TrayIconStyle } from "./desktopPrefs.ts";
 import { appIcon, menuIcon, trayIcon } from "./icon.ts";
 import {
+  CHECK_FOR_UPDATES_CHANNEL,
+  GET_UPDATE_STATE_CHANNEL,
+  INSTALL_UPDATE_CHANNEL,
   NOTIFICATION_CLICK_CHANNEL,
   NOTIFY_CHANNEL,
+  OPEN_RELEASE_NOTES_CHANNEL,
+  SET_AUTO_CHECK_UPDATES_CHANNEL,
   SET_BACKGROUND_CHANNEL,
   SET_BADGE_CHANNEL,
   SET_THEME_CHANNEL,
+  UPDATE_STATE_CHANNEL,
 } from "./ipc.ts";
 import { loginItem } from "./loginItem.ts";
 import { ServerStartError, connectServer, type BoardServer, type ServerOptions } from "./server.ts";
 import {
   allowSubFrameNavigation,
   decideNavigation,
+  initialUpdateState,
   isDesktopTheme,
+  noticeFeedUrl,
+  noticeVia,
   parseBackgroundColor,
   parseDesktopBadge,
   parseDesktopNotification,
+  updateMenuItem,
+  updateMode,
+  updateNotification,
 } from "./shell.logic.ts";
 import { syncTitleBar, titleBarOptions } from "./titleBar.ts";
+import { Updater } from "./updater.ts";
 
 const port = parsePort(process.env[brandEnv("PORT")]);
 /** Set by `pnpm desktop`: load the Vite dev server and attach to the API server `pnpm dev` runs. */
@@ -74,6 +97,8 @@ let tray: Tray | null = null;
 let quitting = false;
 /** Whether this shell runs the server itself (not attached to `pnpm dev`'s), so it may restart it. */
 let ownsServer = false;
+/** The owned server stopping for an update install, which a quit meanwhile waits for. */
+let stopping: Promise<void> | null = null;
 /** The server restart in progress, if any; `server` is null meanwhile. */
 let restart: Promise<void> | null = null;
 /** What the shell remembers about itself, read once the profile path is final. */
@@ -87,6 +112,52 @@ const MAX_SHOWN = 50;
 let showRequested = false;
 /** The board's theme background, reported by the page; null until it does (the default theme's is used). */
 let pageBackground: string | null = null;
+
+/** Off in dev and sandbox shells and builds from source; see `updateMode`. */
+const updates = updateMode({
+  packaged: app.isPackaged,
+  sandbox: sandbox !== null,
+  platform: process.platform,
+  appImage: process.env.APPIMAGE,
+  version: BRAND.version,
+});
+
+/** electron-builder's .deb and .rpm name themselves in `resources/package-type`; the tarball has none. */
+function packageType(): string | null {
+  try {
+    return readFileSync(join(process.resourcesPath, "package-type"), "utf8").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** `resources/app-update.yml`, written by electron-builder from package.ts's publish config. */
+function appUpdateConfig(): string | null {
+  try {
+    return readFileSync(join(process.resourcesPath, "app-update.yml"), "utf8");
+  } catch {
+    return null;
+  }
+}
+
+const updater = new Updater({
+  initial: initialUpdateState(
+    updates,
+    BRAND.version,
+    prefs.autoCheckUpdates,
+    updates.mode === "notice-only"
+      ? noticeVia(
+          packageType(),
+          // The Arch packages install the tarball in /opt/<id>; a tarball unpacked anywhere else is a download.
+          existsSync("/usr/bin/pacman") && process.execPath.startsWith(`/opt/${BRAND.id}/`),
+        )
+      : null,
+  ),
+  repo: BRAND_REPOSITORY,
+  noticeFeed: updates.mode === "notice-only" ? noticeFeedUrl(appUpdateConfig()) : null,
+  fetch: (input, init) => net.fetch(input instanceof URL ? input.href : input, init),
+  onChange: onUpdateState,
+});
 
 function parsePort(value: string | undefined): number {
   const parsed = Number(value);
@@ -180,6 +251,92 @@ function applyBadge(next: DesktopBadge): void {
   tray?.setToolTip(next.count > 0 ? `${productName}: ${next.description}` : productName);
 }
 
+/** Shows an OS notification; clicking it shows the window and tells the page what was clicked. */
+function showToast(notification: DesktopNotification): void {
+  if (!Notification.isSupported()) return;
+  const toast = new Notification({ title: notification.title, body: notification.body, icon: appIcon() });
+  shown.add(toast);
+  // Windows doesn't always report a toast that timed out into the Action Center as closed.
+  if (shown.size > MAX_SHOWN) shown.delete(shown.values().next().value!);
+  toast.on("click", () => {
+    shown.delete(toast);
+    showWindow();
+    window?.webContents.send(NOTIFICATION_CLICK_CHANNEL, notification);
+  });
+  toast.on("close", () => shown.delete(toast));
+  toast.on("failed", () => shown.delete(toast));
+  toast.show();
+}
+
+function savePrefs(next: DesktopPrefs, what: string): void {
+  prefs = next;
+  try {
+    writePrefs(app.getPath("userData"), prefs);
+  } catch (error) {
+    // The choice still applies until the shell quits.
+    console.error(`[${BRAND.id}] could not save the ${what}:`, error);
+  }
+}
+
+/** Every change to the update state reaches the page, the tray and, once per version, an OS notification. */
+function onUpdateState(state: DesktopUpdateState): void {
+  window?.webContents.send(UPDATE_STATE_CHANNEL, state);
+  refreshTrayMenu();
+  const notice = updateNotification(state);
+  if (!notice || !state.version || prefs.notifiedUpdate === state.version) return;
+  savePrefs({ ...prefs, notifiedUpdate: state.version }, "notified update");
+  showToast({
+    id: `update-${state.version}`,
+    ...notice,
+    taskId: null,
+    settingsTarget: "board.desktop",
+  });
+}
+
+function setAutoCheckUpdates(enabled: boolean): void {
+  savePrefs({ ...prefs, autoCheckUpdates: enabled }, "update check choice");
+  updater.setAutoCheck(enabled);
+  refreshTrayMenu();
+}
+
+function openReleaseNotes(): void {
+  const url = updater.releaseNotesUrl();
+  if (url) void shell.openExternal(url);
+}
+
+/**
+ * Restarts into the downloaded update. The server we run stops first, gracefully (its WAL checkpoint), after any
+ * restart in flight; an attached server isn't ours and stays up. If the installer can't start, the server comes
+ * back and the app keeps running, with the error in Settings.
+ */
+function installUpdate(): void {
+  void updater.install(
+    async () => {
+      if (restart) await restart;
+      const owned = ownsServer ? server : null;
+      server = null;
+      refreshTrayMenu();
+      stopping = owned ? owned.stop() : null;
+      try {
+        await stopping;
+      } finally {
+        stopping = null;
+      }
+    },
+    async () => {
+      if (!ownsServer || server || quitting) return;
+      try {
+        server = await connectServer(serverOptions);
+        void window?.loadURL(withToken(boardUrl(), "hash"));
+      } catch (error) {
+        if (!quitting && (await reportStartFailure(error)) === 0) app.quit();
+      } finally {
+        refreshTrayMenu();
+      }
+    },
+  );
+}
+
 function showWindow(): void {
   // Before the first start there is nothing to show yet; during a restart the window exists and shows the board.
   if (!server && !window) {
@@ -206,6 +363,8 @@ function menuIsDark(): boolean {
 
 function buildTrayMenu(): Menu {
   const dark = menuIsDark();
+  const update = updater.state;
+  const updateItem = updateMenuItem(update);
   return Menu.buildFromTemplate([
     { label: `Open ${productName}`, icon: menuIcon("app-window", dark), click: showWindow },
     {
@@ -245,12 +404,36 @@ function buildTrayMenu(): Menu {
       // A dev build would register the bare electron binary.
       enabled: app.isPackaged,
     },
+    {
+      label: "Check for updates automatically",
+      ...(process.platform === "linux"
+        ? {
+            icon: menuIcon(update.autoCheck ? "square-check" : "square", dark),
+            click: () => setAutoCheckUpdates(!updater.state.autoCheck),
+          }
+        : {
+            type: "checkbox" as const,
+            checked: update.autoCheck,
+            click: (item: MenuItem) => setAutoCheckUpdates(item.checked),
+          }),
+      enabled: update.mode !== "disabled",
+    },
     { type: "separator" },
+    {
+      label: updateItem.label,
+      icon: menuIcon(updateItem.icon, dark),
+      enabled: updateItem.action !== null,
+      click: () => {
+        if (updateItem.action === "check") updater.check();
+        else if (updateItem.action === "install") installUpdate();
+        else if (updateItem.action === "notes") openReleaseNotes();
+      },
+    },
     {
       label: restart ? "Restarting server…" : "Restart server",
       icon: menuIcon("rotate-cw", dark),
-      // An attached server (`pnpm dev`) isn't ours to stop.
-      enabled: ownsServer && !restart,
+      // An attached server (`pnpm dev`) isn't ours to stop; an update being installed has stopped it on purpose.
+      enabled: ownsServer && !restart && update.status !== "installing",
       click: restartServer,
     },
     { type: "separator" },
@@ -263,13 +446,7 @@ function refreshTrayMenu(): void {
 }
 
 function setTrayIconStyle(style: TrayIconStyle): void {
-  prefs = { ...prefs, trayIcon: style };
-  try {
-    writePrefs(app.getPath("userData"), prefs);
-  } catch (error) {
-    // The choice still applies until the shell quits.
-    console.error(`[${BRAND.id}] could not save the tray icon choice:`, error);
-  }
+  savePrefs({ ...prefs, trayIcon: style }, "tray icon choice");
   tray?.setImage(trayIcon(style, badge.count > 0));
   refreshTrayMenu();
 }
@@ -310,7 +487,7 @@ const serverOptions: ServerOptions = {
 
 /** Stops the server we run and starts it again, then reloads the window onto the new one. */
 function restartServer(): void {
-  if (!ownsServer || restart) return;
+  if (!ownsServer || restart || updater.state.status === "installing") return;
   const old = server;
   // The window keeps showing the board, which reconnects by itself; until then nothing is served.
   server = null;
@@ -352,6 +529,9 @@ async function start(): Promise<void> {
   }
   refreshTrayMenu();
   window = createWindow(showRequested || !process.argv.includes(HIDDEN_ARG));
+  // An AppImage update moves the app to a file named for the new version; point Start at login at this one.
+  if (process.platform === "linux" && process.env.APPIMAGE && startAtLogin.get()) startAtLogin.set(true);
+  updater.start();
 }
 
 if (app.requestSingleInstanceLock()) {
@@ -366,24 +546,25 @@ if (app.requestSingleInstanceLock()) {
     if (!isDesktopTheme(theme) || decideNavigation(sender, boardUrl()) !== "allow") return;
     nativeTheme.themeSource = theme;
   });
-  // Only the board page may ask for notifications and badges.
-  const fromBoard = (event: Electron.IpcMainEvent) =>
+  // Only the board page may ask for notifications, badges and updates.
+  const fromBoard = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) =>
     decideNavigation(event.senderFrame?.url ?? "", boardUrl()) === "allow";
   ipcMain.on(NOTIFY_CHANNEL, (event, value: unknown) => {
     const notification = parseDesktopNotification(value);
-    if (!notification || !fromBoard(event) || !Notification.isSupported()) return;
-    const toast = new Notification({ title: notification.title, body: notification.body, icon: appIcon() });
-    shown.add(toast);
-    // Windows doesn't always report a toast that timed out into the Action Center as closed.
-    if (shown.size > MAX_SHOWN) shown.delete(shown.values().next().value!);
-    toast.on("click", () => {
-      shown.delete(toast);
-      showWindow();
-      window?.webContents.send(NOTIFICATION_CLICK_CHANNEL, notification);
-    });
-    toast.on("close", () => shown.delete(toast));
-    toast.on("failed", () => shown.delete(toast));
-    toast.show();
+    if (notification && fromBoard(event)) showToast(notification);
+  });
+  ipcMain.handle(GET_UPDATE_STATE_CHANNEL, (event) => (fromBoard(event) ? updater.state : null));
+  ipcMain.on(CHECK_FOR_UPDATES_CHANNEL, (event) => {
+    if (fromBoard(event)) updater.check();
+  });
+  ipcMain.on(INSTALL_UPDATE_CHANNEL, (event) => {
+    if (fromBoard(event)) installUpdate();
+  });
+  ipcMain.on(SET_AUTO_CHECK_UPDATES_CHANNEL, (event, enabled: unknown) => {
+    if (typeof enabled === "boolean" && fromBoard(event)) setAutoCheckUpdates(enabled);
+  });
+  ipcMain.on(OPEN_RELEASE_NOTES_CHANNEL, (event) => {
+    if (fromBoard(event)) openReleaseNotes();
   });
   ipcMain.on(SET_BACKGROUND_CHANNEL, (event, value: unknown) => {
     const color = parseBackgroundColor(value);
@@ -404,11 +585,19 @@ if (app.requestSingleInstanceLock()) {
   });
   app.on("before-quit", (event) => {
     quitting = true;
+    updater.stop();
     // A restart in flight stops the server it started once it sees we're quitting; wait for that.
     if (restart) {
       event.preventDefault();
       window?.hide();
       void restart.finally(() => app.quit());
+      return;
+    }
+    // A quit while an update install stops the server waits for that stop, like a restart.
+    if (stopping) {
+      event.preventDefault();
+      window?.hide();
+      void stopping.finally(() => app.quit());
       return;
     }
     if (!server?.owned) return;

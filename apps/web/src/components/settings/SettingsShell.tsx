@@ -1,5 +1,6 @@
 // Adapted from T3 Code (apps/web/src/routes/settings.tsx, components/settings/SettingsSidebarNav.tsx,
 // SettingsBreadcrumb.tsx, components/sidebar/SidebarChrome.tsx), MIT — see NOTICE.
+import { desktopBridge } from "~/lib/desktopBridge";
 import { Outlet, useLocation, useSearch } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
@@ -147,7 +148,7 @@ export function SettingsSidebar() {
                       <span className="truncate">{group.label}</span>
                     </SidebarMenuButton>
                     <SidebarMenuSub className="mt-0.5 mb-1.5">
-                      {visibleSections(group, settings.data?.providers).map((section) => (
+                      {visibleSections(group, settings.data?.providers, desktopBridge() !== null).map((section) => (
                         <SidebarMenuSubItem key={section.id}>
                           <SidebarMenuSubButton
                             // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- the label is the children useRender merges in
