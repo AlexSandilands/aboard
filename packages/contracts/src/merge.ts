@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EPIC_BRANCH_PREFIX } from "./delivery.ts";
 import { MergeMethod, type PrSnapshot, type TaskStatus } from "./schemas.ts";
 
 /**
@@ -33,6 +34,15 @@ export function pickMergeMethod(
 ): MergeMethod | null {
   if (lastPicked && allowed.includes(lastPicked)) return lastPicked;
   return METHOD_PREFERENCE.find((m) => allowed.includes(m)) ?? null;
+}
+
+/**
+ * Whether a pick becomes the repo's method to offer next. A rebase merge of an integration epic's branch lands
+ * its task PRs' commits one by one; offering it again would do that to the next ordinary PR, so the repo's
+ * usual method is kept instead.
+ */
+export function rememberMergeMethod(method: MergeMethod, headRef: string | null | undefined): boolean {
+  return !(method === "rebase" && headRef?.startsWith(EPIC_BRANCH_PREFIX));
 }
 
 export const MergePrAction = z.enum(["merge", "auto", "disable_auto"]);

@@ -1,4 +1,11 @@
-import { pickMergeMethod, prMergeAction, type MergeMethod, type TaskLink, type TaskSummary } from "@repo/contracts";
+import {
+  pickMergeMethod,
+  prMergeAction,
+  rememberMergeMethod,
+  type MergeMethod,
+  type TaskLink,
+  type TaskSummary,
+} from "@repo/contracts";
 import { GitBranchIcon, GitMergeIcon, TriangleAlertIcon } from "lucide-react";
 import { useState } from "react";
 import { Alert, AlertDescription } from "~/components/ui/alert";
@@ -54,7 +61,7 @@ function MergeContent({ task, link, onDone }: { task: TaskSummary; link: PolledP
 
   const confirm = () => {
     if (!method) return;
-    remember(repoKey, method);
+    if (rememberMergeMethod(method, snapshot?.headRef)) remember(repoKey, method);
     merge.mutate({ linkId: link.id, action, method }, { onSuccess: onDone });
   };
 
