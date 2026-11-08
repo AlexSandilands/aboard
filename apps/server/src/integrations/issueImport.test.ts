@@ -30,6 +30,9 @@ function setup(
     getIssue?: () => Promise<IssueDetails>;
     /** Sub-issue URLs by the parent issue's number; none by default. */
     listSubIssues?: (ref: { number: number }) => Promise<string[]>;
+    getMilestone?: () => Promise<{ title: string; description: string }>;
+    /** The milestone's open issue URLs; none by default. */
+    listMilestoneIssues?: () => Promise<string[]>;
     runImport?: (job: ImportJob) => Promise<ImportOutcome>;
     /** The MCP servers the CLI reports as connected. */
     servers?: string[];
@@ -48,6 +51,9 @@ function setup(
     issues: {
       getIssue: opts.getIssue ?? (() => Promise.resolve(issue)),
       listSubIssues: opts.listSubIssues ?? (() => Promise.resolve([])),
+      getMilestone:
+        opts.getMilestone ?? (() => Promise.resolve({ title: "Checkout v2", description: "The new checkout." })),
+      listMilestoneIssues: opts.listMilestoneIssues ?? (() => Promise.resolve([])),
     },
     runImport: (job) => {
       jobs.push(job);
@@ -536,5 +542,101 @@ describe("importing an epic", () => {
       "PROJ-7 is an epic with 1 task, but this task can't become an epic: it is a priority. Its tasks weren't imported.",
     ]);
     expect(jobs).toHaveLength(1);
+  });
+});
+
+describe("importing a milestone", () => {
+  const sorted = (values: string[]) => [...values].sort((a, b) => a.localeCompare(b));
+  const MILESTONE = "https://github.com/acme/app/milestone/7";
+  const gh = (n: number) => `https://github.com/acme/app/issues/${n}`;
+  const summarised = (job: ImportJob) =>
+    Promise.resolve(
+      job.source.kind === "milestone"
+        ? { ...outcome, title: "Ship the new checkout", labels: ["epic-ish"] }
+        : {
+            ...outcome,
+            title: `Do #${job.source.kind === "issue" ? job.source.number : "?"}`,
+          },
+    );
+
+  it("summarises it into an epic whose open issues each import on their own", async () => {
+    const { create, run, jobs } = setup({
+      runImport: summarised,
+      listMilestoneIssues: () => Promise.resolve([gh(1), gh(2)]),
+    });
+    const epic = await run(create(MILESTONE).id);
+    expect(epic).toMatchObject({
+      kind: "epic",
+      title: "Ship the new checkout",
+      import: { status: "done" },
+    });
+    expect(epic.links[0]).toMatchObject({ kind: "url", url: MILESTONE });
+    expect(jobs[0]?.source).toEqual({
+      kind: "milestone",
+      repo: "acme/app",
+      number: 7,
+      url: MILESTONE,
+      title: "Checkout v2",
+      body: "The new checkout.",
+    });
+    expect(jobs.slice(1).map((j) => j.source.kind)).toEqual(["issue", "issue"]);
+    expect(sorted(epic.children.map((c) => c.title))).toEqual(["Do #1", "Do #2"]);
+    expect(epic.children.every((c) => c.import?.status === "done")).toBe(true);
+  });
+
+  it("uses the milestone as written when the model can't summarise it", async () => {
+    const { s, create, run, warnings } = setup({
+      runImport: (job) =>
+        job.source.kind === "milestone" ? Promise.reject(new Error("CLI crashed")) : Promise.resolve(outcome),
+      listMilestoneIssues: () => Promise.resolve([gh(1)]),
+    });
+    const epic = await run(create(MILESTONE).id);
+    expect(epic).toMatchObject({
+      kind: "epic",
+      title: "Checkout v2",
+      description: "The new checkout.",
+      labels: [],
+    });
+    expect(warnings).toContain(
+      `[import] ${MILESTONE}: summarising failed, using the milestone as written: CLI crashed`,
+    );
+    s.settings.update({ issueImportEnabled: false });
+    const plain = await run(create(MILESTONE).id);
+    expect(plain.title).toBe("Checkout v2");
+  });
+
+  it("fails the import when the milestone or its issues can't be read", async () => {
+    const unread = setup({
+      getMilestone: () => Promise.reject(new Error("Could not read acme/app milestone 7: Not Found")),
+    });
+    const task = await unread.run(unread.create(MILESTONE).id);
+    expect(task).toMatchObject({
+      kind: "task",
+      import: {
+        status: "failed",
+        error: "Could not read acme/app milestone 7: Not Found",
+      },
+    });
+    expect(unread.jobs).toEqual([]);
+
+    const noIssues = setup({
+      listMilestoneIssues: () => Promise.reject(new Error("rate limited")),
+    });
+    expect((await noIssues.run(noIssues.create(MILESTONE).id)).import).toMatchObject({
+      status: "failed",
+      error: "rate limited",
+    });
+  });
+
+  it("queues at most 50 of its issues and gives the total", async () => {
+    const { create, run, jobs } = setup({
+      listMilestoneIssues: () => Promise.resolve(Array.from({ length: 60 }, (_, i) => gh(i + 1))),
+    });
+    const epic = await run(create(MILESTONE).id);
+    expect(epic.children).toHaveLength(50);
+    expect(jobs).toHaveLength(51);
+    expect(epic.events.filter((e) => e.type === "note").map((e) => String(e.payload.text))).toEqual([
+      "acme/app milestone 7 has 60 open issues; only the first 50 were imported. Add the rest by pasting their keys or URLs.",
+    ]);
   });
 });

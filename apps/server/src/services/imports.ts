@@ -87,6 +87,17 @@ export function createImportsService(
     epic: NonNullable<ImportResult["epic"]>,
   ): string[] => {
     const tasks = deps.tasks();
+    const milestone = source.sourceKind === "milestone";
+    // A milestone's children are GitHub issues; anything else's are the same kind of issue as their epic.
+    const childKind = milestone ? "issue" : source.sourceKind;
+    if (milestone && epic.children.length === 0 && repos.tasks.get(taskId)?.parentId === null) {
+      tasks.addNote(
+        taskId,
+        `${sourceLabel} has no open issues, so it was imported as a task. Paste it again once it has some.`,
+        IMPORT_ACTOR,
+      );
+      return [];
+    }
     // An empty epic and one whose children couldn't be listed (no search tool allowed, or a search that failed)
     // look the same, so it stays a task rather than becoming an empty epic nobody would notice.
     if (epic.children.length === 0 && repos.tasks.get(taskId)?.parentId === null) {
@@ -101,7 +112,9 @@ export function createImportsService(
     if (unable) {
       tasks.addNote(
         taskId,
-        `${sourceLabel} is an epic with ${epic.total} ${epic.total === 1 ? "task" : "tasks"}, but this task can't become an epic: ${unable}. Its tasks weren't imported.`,
+        milestone
+          ? `${sourceLabel} has ${epic.total} open ${epic.total === 1 ? "issue" : "issues"}, but this task can't become an epic: ${unable}. Its issues weren't imported.`
+          : `${sourceLabel} is an epic with ${epic.total} ${epic.total === 1 ? "task" : "tasks"}, but this task can't become an epic: ${unable}. Its tasks weren't imported.`,
         IMPORT_ACTOR,
       );
       return [];
@@ -118,14 +131,15 @@ export function createImportsService(
       if (seen.size >= IMPORT_CHILDREN_MAX) break;
       // Ticket children come from the model, which has just read text anyone could write: anything but a ticket
       // (a GitHub URL, say, which would be read with the user's gh) is dropped rather than trusted. A child is always
-      // the same kind of issue as its epic, and a ticket's children are tickets of its own system.
+      // the same kind of issue as its epic (a milestone's are GitHub issues), and a ticket's children are tickets of its
+      // own system.
       // Only the epic's own system is tried, since key patterns overlap (Jira's and Linear's) and the first system
       // listed would otherwise win a bare key.
       const childSource = parseImportSource(
         child,
         source.systemId ? settings.ticketSystems.filter((t) => t.id === source.systemId) : settings.ticketSystems,
       );
-      if (childSource?.kind !== source.sourceKind) {
+      if (!childSource || childSource.kind === "milestone" || childSource.kind !== childKind) {
         unreadable++;
         continue;
       }
@@ -161,12 +175,12 @@ export function createImportsService(
     if (elsewhere.length) lines.push(`Left where they are, not added: ${elsewhere.join(", ")}.`);
     if (epic.total > IMPORT_CHILDREN_MAX) {
       lines.push(
-        `${sourceLabel} has ${epic.total} tasks; only the first ${IMPORT_CHILDREN_MAX} were imported. Add the rest by pasting their keys or URLs.`,
+        `${sourceLabel} has ${epic.total} ${milestone ? "open issues" : "tasks"}; only the first ${IMPORT_CHILDREN_MAX} were imported. Add the rest by pasting their keys or URLs.`,
       );
     }
     if (unreadable) {
       lines.push(
-        `Skipped ${unreadable === 1 ? "a child issue that wasn't" : `${unreadable} child issues that weren't`} ${source.sourceKind === "ticket" ? "a ticket of its system" : "a GitHub issue"}.`,
+        `Skipped ${unreadable === 1 ? "a child issue that wasn't" : `${unreadable} child issues that weren't`} ${childKind === "ticket" ? "a ticket of its system" : "a GitHub issue"}.`,
       );
     }
     if (lines.length) tasks.addNote(taskId, lines.join("\n\n"), IMPORT_ACTOR);

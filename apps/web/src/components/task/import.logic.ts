@@ -1,11 +1,23 @@
-import { parseImportSource, ticketLabel, type TaskImport, type TaskKind, type TicketSystem } from "@repo/contracts";
+import {
+  parseGithubMilestone,
+  parseImportSource,
+  ticketLabel,
+  type TaskImport,
+  type TaskKind,
+  type TicketSystem,
+} from "@repo/contracts";
 
-/** Where a task's import reads from: "<System> PROJ-1" or "GitHub acme/app#45". */
+/** Where a task's import reads from: "<System> PROJ-1" or "GitHub acme/app#45" or "GitHub acme/app milestone 7". */
 export function importSourceLabel(sourceUrl: string, ticketSystems: readonly TicketSystem[] = []): string {
   const source = parseImportSource(sourceUrl, ticketSystems);
   if (source?.kind === "ticket") return ticketLabel(ticketSystems, source.ref);
-  if (source?.kind === "issue") return `GitHub ${source.placeholder}`;
+  if (source?.kind === "issue" || source?.kind === "milestone") return `GitHub ${source.placeholder}`;
   return sourceUrl;
+}
+
+/** Whether an import reads a GitHub milestone, which becomes an epic of its open issues. */
+export function isMilestoneImport(sourceUrl: string): boolean {
+  return parseGithubMilestone(sourceUrl) !== null;
 }
 
 /** What the card and panel say while an import runs. Null once it has finished or failed. */

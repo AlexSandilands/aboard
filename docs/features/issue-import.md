@@ -1,10 +1,10 @@
 # Issue import
 
-Board tasks: #62, #77 (epics), #247 (epic), #249. Verified against Claude Code 2.1.301 and gh 2.96 (October 2026).
+Board tasks: #62, #77 (epics), #247 (epic), #249, #84 (milestones). Verified against Claude Code 2.1.301 and gh 2.96 (October 2026).
 
-Pasting a ticket key or URL of a configured [ticket system](ticket-systems.md) (Jira, Linear, an in-house tracker), or a
-GitHub issue URL, as a new task's title creates the task at once and fills in its title, description and labels in the
-background. The task is usable straight away; the details arrive a few seconds later.
+Pasting a ticket key or URL of a configured [ticket system](ticket-systems.md) (Jira, Linear, an in-house tracker), a
+GitHub issue URL or a GitHub milestone URL, as a new task's title creates the task at once and fills in its title,
+description and labels in the background; a milestone becomes an epic of its open issues ([Milestones](#milestones)). The task is usable straight away; the details arrive a few seconds later.
 
 ## How it works
 
@@ -12,19 +12,20 @@ background. The task is usable straight away; the details arrive a few seconds l
 
 In the command palette (**New task…**), the title box recognises:
 
-| Pasted text                                 | Row it shows                       |
-| ------------------------------------------- | ---------------------------------- |
-| `PROJ-123`                                  | Import PROJ-123 from <System name> |
-| a ticket URL a system's URL pattern matches | Import PROJ-123 from <System name> |
-| `https://<host>/<owner>/<repo>/issues/45`   | Import owner/repo#45 from GitHub   |
+| Pasted text                                 | Row it shows                              |
+| ------------------------------------------- | ----------------------------------------- |
+| `PROJ-123`                                  | Import PROJ-123 from <System name>        |
+| a ticket URL a system's URL pattern matches | Import PROJ-123 from <System name>        |
+| `https://<host>/<owner>/<repo>/issues/45`   | Import owner/repo#45 from GitHub          |
+| `https://<host>/<owner>/<repo>/milestone/7` | Import owner/repo milestone 7 from GitHub |
 
 `parseImportSource(value, systems)` (`packages/contracts/src/links.ts`) decides, with the key and URL patterns of the
 configured systems, the first matching system winning (see [ticket systems](ticket-systems.md#classifying-a-link)). With
 no systems configured no key is a ticket. Ordinary titles, pull request URLs and anything no system's pattern matches
-(`UTF-8`) are not issues. Only the Backlog flow imports: a task that opens the plan editor is titled by the user.
+(`UTF-8`) are not issues, and neither is a repository's list of milestones (`/milestones`). Only the Backlog flow imports: a task that opens the plan editor is titled by the user.
 
 Submitting sends `sourceUrl` on `POST /api/tasks`. The server (`tasks.create`) parses it, titles the task
-with a placeholder (`PROJ-123` or `owner/repo#45`), links the issue, records the import as **pending** in
+with a placeholder (`PROJ-123`, `owner/repo#45` or `owner/repo milestone 7`), links the issue, records the import as **pending** in
 `task_imports` and returns; the route then starts the background job. For a ticket the record keeps its system as
 `system_id`, so editing or reordering the systems later doesn't move it. The MCP tools don't take a `sourceUrl`.
 Imported tasks land in Backlog like any task created without a plan, and a source can't be combined with a plan.
@@ -114,6 +115,31 @@ An issue that is an epic becomes one on the board, and its children become its t
 - **The note.** One note by `import` on the epic says what didn't simply become a new task: children that moved in,
   ones left in another epic, skipped keys, and the total when the issue has more than 50.
 
+### Milestones
+
+A GitHub milestone (`/<owner>/<repo>/milestone/<n>`, on any host gh is signed in to) imports as an epic of its open
+issues, through the same path as an issue with sub-issues.
+
+- **Recognising it.** `parseImportSource` returns `kind: "milestone"` (`parseGithubMilestone`); `classifyLink` still
+  calls the URL a plain `url` link, so there is no new link kind and `task_links` wasn't rebuilt. The import record's
+  `source_kind` is `milestone` (047_milestone_imports).
+- **Reading it.** `importMilestone` (`issueImport.ts`) reads the milestone (`getMilestone`: REST
+  `repos/{o}/{r}/milestones/{n}`) and its open issues (`listMilestoneIssues`:
+  `repos/{o}/{r}/issues?milestone={n}&state=open&sort=created&direction=asc`, paged, at most 1000, leaving out the
+  entries with `pull_request`, which are PRs). Both go through `gitHostIssues` to a host whose `capabilities.milestones`
+  is on. Unlike sub-issues, a failed read of the issues fails the import: they are what a milestone is imported for.
+- **Summarising it.** The same run as a GitHub issue (`summarise`): no tools, `--strict-mcp-config`, Codex read-only
+  with its warning, on the issue import operation's model. The prompt asks for an epic's summary of the milestone's
+  title and description, fenced as `<milestone-…>`. When the model can't run, the milestone's title and description
+  (cut to 4000 characters) stand, with no labels.
+- **Filling it.** The result always carries `epic` (the first 50 issue URLs and the count of all), and `fillEpic` takes
+  it from there as for any epic: children must be GitHub issues, dedupe, the 50 cap and the note, worded for open
+  issues. A milestone with no open issues stays a task with a note saying so.
+
+Not imported: closed issues, the due date, and anything added to the milestone later; the epic is a snapshot.
+
+### Progress
+
 The panel's import callout shows "Importing the epic's tasks: 12 of 30" while any child import is pending
 (`epicImportProgress`). The board needs nothing new: the epic's `task.upserted` carries `kind: "epic"`, so the card
 becomes a band, and each child's upsert puts it in the band.
@@ -169,7 +195,8 @@ after success so the task still says where it came from.
 ### The links
 
 A ticket is linked as a `ticket` link, a GitHub issue URL as an `issue` link (`ref` host, repo and number; `snapshot`
-state and title). The snapshot is read once, at import. Nothing polls issue state.
+state and title). The snapshot is read once, at import. Nothing polls issue state. A milestone URL is a plain `url`
+link.
 
 ### Backups
 
@@ -215,6 +242,8 @@ over as that model on Claude Code; an install that never saved one now runs the 
 - **Children are full imports.** Each child gets its own run and its own title, summary and labels, through the same
   queue, rather than a list of bare keys the user has to fill in.
 - **No duplicates.** A child already on the board in the project joins the epic instead of being created again.
+- **A milestone is an epic.** It groups issues for a goal, as an epic does, so it reuses the epic path (children,
+  queue, dedupe, cap, note) rather than adding a bulk import of its own, and its link stays a plain URL.
 
 ## Alternatives considered
 
@@ -228,21 +257,24 @@ over as that model on Claude Code; an install that never saved one now runs the 
 | Poll imported issues' state                    | Out of scope; the snapshot is a record of what was imported                          |
 | One ticket run that also summarises every child | One long run per epic, and a child's failure would fail them all                    |
 | Import all of an epic's children, however many | A runaway epic would queue hundreds of runs; 50 covers real epics, the note says more |
+| A `milestone` link kind with a polled state    | Rebuilds `task_links` for a badge nothing needs; the import is a snapshot            |
+| A milestone's closed issues too                | Done work would land in Backlog as new tasks                                         |
 
 ## Code map
 
 | File                                         | What it does                                                          |
 | -------------------------------------------- | --------------------------------------------------------------------- |
-| `packages/contracts/src/links.ts`            | `parseImportSource`, the `issue` link classification                  |
+| `packages/contracts/src/links.ts`            | `parseImportSource`, `parseGithubMilestone`, the `issue` link classification |
 | `packages/contracts/src/ticketSystems.ts`    | `importTools`, `importInstructions` of a system                       |
 | `apps/server/src/services/imports.ts`        | Import state: begin, claim, complete, fail, retry; `fillEpic`         |
 | `apps/server/src/services/tasks.ts`          | `create` with `sourceUrl`; `makeEpic`                                 |
 | `apps/server/src/integrations/issueImport.ts`| The background job                                                    |
 | `apps/server/src/integrations/headlessImport.ts` | Prompt, `claude` arguments, output, the write-tool deny rules     |
 | `apps/server/src/integrations/claudeCli.ts`  | Running `claude -p` and reading its result, shared with the reviewer  |
-| `apps/server/src/integrations/gitHosts.ts`   | `gitHostIssues`: `getIssue`, `listSubIssues` on the issue's host      |
-| `apps/server/src/integrations/githubReads.ts`, `githubHost.ts` | GitHub's issue and sub-issue reads                   |
+| `apps/server/src/integrations/gitHosts.ts`   | `gitHostIssues`: `getIssue`, `listSubIssues`, `getMilestone`, `listMilestoneIssues` on the issue's host |
+| `apps/server/src/integrations/githubReads.ts`, `githubHost.ts` | GitHub's issue, sub-issue and milestone reads        |
 | `apps/server/src/db/migrations/008_issue_imports.sql` | `task_imports`, and `issue` in `task_links`'s kinds          |
+| `apps/server/src/db/migrations/047_milestone_imports.sql` | `milestone` in `task_imports`' source kinds              |
 | `apps/web/src/components/command/palette.logic.ts` | `issueImportRow`                                                |
 | `apps/web/src/components/task/ImportCallout.tsx`   | Pending and failed states in the panel; an epic's progress      |
 | `apps/web/src/components/settings/IssueImportSection.tsx` | The settings                                             |

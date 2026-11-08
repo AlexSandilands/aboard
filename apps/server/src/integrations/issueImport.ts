@@ -3,14 +3,22 @@ import {
   IMPORT_TICKET_NEEDS,
   parseImportSource,
   resolveOperationModel,
+  type MilestoneRef,
   type TaskLink,
 } from "@repo/contracts";
 import { tmpdir } from "node:os";
 import type { ImportRecord } from "../db/repos/imports.ts";
+import { IMPORT_CHILDREN_MAX } from "../services/imports.ts";
 import type { ImportResult, Services } from "../services/types.ts";
-import type { HostIssue } from "./gitHost.ts";
+import type { HostIssue, HostMilestone } from "./gitHost.ts";
 import { messageOf } from "./util.ts";
-import { listConnectedMcpServers, runIssueImport, writeToolDenyRules, type RunImport } from "./headlessImport.ts";
+import {
+  listConnectedMcpServers,
+  runIssueImport,
+  writeToolDenyRules,
+  type IssueSource,
+  type RunImport,
+} from "./headlessImport.ts";
 import type { Logger } from "./util.ts";
 
 /** Runs an import may start before it is given up on; each restart mid-import counts as one. */
@@ -34,7 +42,7 @@ export interface IssueImporter {
 }
 
 /**
- * Fills in tasks created from a ticket or a GitHub issue: reads the issue, has a small model turn it into a title,
+ * Fills in tasks created from a ticket, a GitHub issue or a GitHub milestone: reads the issue, has a small model turn it into a title,
  * description and labels, and records the result (or why it failed) on the task's import. A GitHub issue still
  * imports, as its raw title and body, when the model can't run. A ticket can only be read by the model, through the
  * user's own MCP server for its system.
@@ -45,6 +53,9 @@ export function createIssueImporter(deps: {
   issues: {
     getIssue(ref: { host: string; repo: string; number: number }): Promise<IssueDetails>;
     listSubIssues(ref: { host: string; repo: string; number: number }): Promise<string[]>;
+    getMilestone(ref: MilestoneRef): Promise<Pick<HostMilestone, "title" | "description">>;
+    /** The URLs of the milestone's open issues, without its pull requests. */
+    listMilestoneIssues(ref: MilestoneRef): Promise<string[]>;
   };
   runImport?: RunImport;
   listMcpServers?: (cli: string | null, cwd: string) => Promise<string[]>;
@@ -88,17 +99,66 @@ export function createIssueImporter(deps: {
         });
     const epic = subIssues.length > 0 ? { epic: { children: subIssues, total: subIssues.length } } : {};
 
+    return summarise(
+      record,
+      {
+        kind: "issue",
+        repo: source.ref.repo,
+        number: source.ref.number,
+        url: source.url,
+        title: issue.title,
+        body: issue.body,
+        labels: issue.labels,
+      },
+      epic,
+    );
+  };
+
+  /**
+   * A GitHub milestone becomes an epic, and its open issues its tasks. Unlike an issue's sub-issues, a failed read of
+   * its issues fails the import: they are what a milestone is imported for.
+   */
+  const importMilestone = async (record: ImportRecord): Promise<ImportResult> => {
+    const s = deps.services();
+    const source = parseImportSource(record.sourceUrl, s.settings.get().ticketSystems);
+    if (source?.kind !== "milestone") throw new Error(`${record.sourceUrl} is not a GitHub milestone`);
+    const milestone = await deps.issues.getMilestone(source.ref);
+    const issues = await deps.issues.listMilestoneIssues(source.ref);
+    return summarise(
+      record,
+      {
+        kind: "milestone",
+        repo: source.ref.repo,
+        number: source.ref.number,
+        url: source.url,
+        title: milestone.title,
+        body: milestone.description,
+      },
+      { epic: { children: issues.slice(0, IMPORT_CHILDREN_MAX), total: issues.length } },
+    );
+  };
+
+  /**
+   * Has the model turn a GitHub issue or milestone into a title, summary and labels. When it can't run (turned off, no
+   * provider, a failure) the source's own title, body and labels stand, so the import still succeeds.
+   */
+  const summarise = async (
+    record: ImportRecord,
+    source: Exclude<IssueSource, { kind: "ticket" }>,
+    epic: Pick<ImportResult, "epic">,
+  ): Promise<ImportResult> => {
+    const s = deps.services();
     const raw = (): ImportResult => ({
-      title: issue.title,
-      description: issue.body.trim() ? issue.body.trim().slice(0, RAW_BODY_MAX) : null,
-      labels: issue.labels,
+      title: source.title,
+      description: source.body.trim() ? source.body.trim().slice(0, RAW_BODY_MAX) : null,
+      labels: source.kind === "issue" ? source.labels : [],
       ...epic,
     });
     const settings = s.settings.get();
     if (!settings.issueImportEnabled) return raw();
     const resolved = resolveOperationModel("issueImport", {}, settings);
     if (!resolved.ok) {
-      log.warn(`[import] ${record.sourceUrl}: not summarised, using the issue as written: ${resolved.reason}`);
+      log.warn(`[import] ${record.sourceUrl}: not summarised, using the ${source.kind} as written: ${resolved.reason}`);
       return raw();
     }
     // Only a provider the user chose carries one (resolveOperationModel never falls back to it).
@@ -111,22 +171,16 @@ export function createIssueImporter(deps: {
         model: resolved.model,
         effort: resolved.effort,
         budgetUsd: settings.issueImportBudgetUsd,
-        source: {
-          kind: "issue",
-          repo: source.ref.repo,
-          number: source.ref.number,
-          url: source.url,
-          title: issue.title,
-          body: issue.body,
-          labels: issue.labels,
-        },
+        source,
         boardLabels: s.labels.usage().map((l) => l.name),
         importTools: [],
         denyTools: [],
       });
       return { title: outcome.title, description: outcome.description, labels: outcome.labels, ...epic };
     } catch (error) {
-      log.warn(`[import] ${record.sourceUrl}: summarising failed, using the issue as written: ${messageOf(error)}`);
+      log.warn(
+        `[import] ${record.sourceUrl}: summarising failed, using the ${source.kind} as written: ${messageOf(error)}`,
+      );
       return raw();
     }
   };
@@ -211,7 +265,11 @@ export function createIssueImporter(deps: {
       if (record.attempts > MAX_IMPORT_ATTEMPTS) {
         throw new Error(`Gave up after ${MAX_IMPORT_ATTEMPTS} attempts; use Retry to try again`);
       }
-      const result = await (record.sourceKind === "ticket" ? importTicket(record) : importGithub(record));
+      const result = await (record.sourceKind === "ticket"
+        ? importTicket(record)
+        : record.sourceKind === "milestone"
+          ? importMilestone(record)
+          : importGithub(record));
       // An epic's children each run their own import, through the same queue.
       for (const child of s.imports.complete(taskId, result).childImports) enqueue(child);
     } catch (error) {

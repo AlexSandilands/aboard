@@ -171,7 +171,7 @@ export interface IssueImportRow {
 }
 
 /**
- * Recognises a pasted ticket key or URL of a configured system, or a GitHub issue URL, in the title box. Only for tasks that land in Backlog:
+ * Recognises a pasted ticket key or URL of a configured system, or a GitHub issue or milestone URL, in the title box. Only for tasks that land in Backlog:
  * a task that opens the plan editor is titled by the user.
  */
 export function issueImportRow(
@@ -189,6 +189,9 @@ export function issueImportRow(
         ? (ticketSystems.find((s) => s.id === source.ref.system)?.name ?? source.ref.system)
         : "GitHub"
     }`,
-    description: "Fills in the title, description and labels from the issue in the background",
+    description:
+      source.kind === "milestone"
+        ? "Imports it as an epic of its open issues in the background"
+        : "Fills in the title, description and labels from the issue in the background",
   };
 }

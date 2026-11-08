@@ -1,5 +1,13 @@
 import { GITHUB_HOST } from "@repo/contracts";
-import type { GitHostDefinition, GitHostStatus, IssueRef, MergeMethod, PrRef, TaskLink } from "@repo/contracts";
+import type {
+  GitHostDefinition,
+  GitHostStatus,
+  IssueRef,
+  MergeMethod,
+  MilestoneRef,
+  PrRef,
+  TaskLink,
+} from "@repo/contracts";
 import { AppError } from "../errors.ts";
 import {
   GitHostError,
@@ -7,6 +15,7 @@ import {
   type EpicPrInput,
   type GitHost,
   type HostIssue,
+  type HostMilestone,
   type PostedReview,
   type OpenPrListing,
   type PostedComment,
@@ -155,9 +164,11 @@ export function gitHostActions(
 export function gitHostIssues(hosts: GitHosts): {
   getIssue(ref: IssueRef): Promise<HostIssue>;
   listSubIssues(ref: IssueRef): Promise<string[]>;
+  getMilestone(ref: MilestoneRef): Promise<HostMilestone>;
+  listMilestoneIssues(ref: MilestoneRef): Promise<string[]>;
 } {
   /** The host serving the issue, once its CLI is signed in there: its token is only ever sent to such a host. */
-  const on = async (ref: IssueRef): Promise<GitHost> => {
+  const on = async (ref: IssueRef | MilestoneRef): Promise<GitHost> => {
     const host = await hosts.resolve(ref.host);
     if (!host) throw new AppError("VALIDATION", `No git host the board knows serves ${ref.host}`);
     await host.requireSignedIn(ref.host);
@@ -184,6 +195,31 @@ export function gitHostIssues(hosts: GitHosts): {
         throw new AppError(
           "VALIDATION",
           `Could not read the sub-issues of ${ref.repo}#${ref.number}: ${messageOf(error)}`,
+        );
+      }
+    },
+    async getMilestone(ref) {
+      const host = await on(ref);
+      if (!host.capabilities.milestones) {
+        throw new AppError("VALIDATION", `${host.definition.label} has no milestones to import`);
+      }
+      try {
+        return await host.getMilestone(ref);
+      } catch (error) {
+        if (error instanceof GitHostError && error.reason === "missing-tool") {
+          throw new AppError("VALIDATION", error.message);
+        }
+        throw new AppError("VALIDATION", `Could not read ${ref.repo} milestone ${ref.number}: ${messageOf(error)}`);
+      }
+    },
+    async listMilestoneIssues(ref) {
+      const host = await on(ref);
+      try {
+        return await host.listMilestoneIssues(ref);
+      } catch (error) {
+        throw new AppError(
+          "VALIDATION",
+          `Could not read the issues of ${ref.repo} milestone ${ref.number}: ${messageOf(error)}`,
         );
       }
     },

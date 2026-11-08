@@ -49,8 +49,8 @@ moves the epic to the end of its new column.
 
 - `epicId` on create or update (uuid, `#N` or `N`) puts a task in an epic; `null` takes it out. Each change
   logs `epic_changed` on the task and `child_added` / `child_removed` on the epic.
-- Pasting a Jira epic, or a GitHub issue with sub-issues, as a new task's title makes the task an epic once its import
-  finishes (`tasks.makeEpic`, logging `became_epic`), with its child issues as its tasks; a child already on the board
+- Pasting a Jira epic, a GitHub issue with sub-issues, or a GitHub milestone, as a new task's title makes the task an
+  epic once its import finishes (`tasks.makeEpic`, logging `became_epic`), with its child issues as its tasks; a child already on the board
   in the project joins it. The only way a task becomes an epic; see [Issue import](issue-import.md#epics).
 - Moving a task to another project takes it out of its epic, unless the same update names an epic there.
 - Moving an epic to another project takes its tasks with it.

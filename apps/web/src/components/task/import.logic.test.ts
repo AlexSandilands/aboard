@@ -1,6 +1,12 @@
 import { TICKET_SYSTEM_PRESETS, type TaskImport } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { epicImportProgress, importFailure, importPendingLabel, importSourceLabel } from "./import.logic";
+import {
+  epicImportProgress,
+  importFailure,
+  importPendingLabel,
+  importSourceLabel,
+  isMilestoneImport,
+} from "./import.logic";
 
 const imp = (
   status: TaskImport["status"],
@@ -16,6 +22,9 @@ describe("import labels", () => {
     expect(importSourceLabel("https://jira.example.com/browse/PROJ-2", systems)).toBe("Jira PROJ-2");
     expect(importSourceLabel("PROJ-1")).toBe("PROJ-1");
     expect(importSourceLabel("https://github.com/acme/app/issues/45")).toBe("GitHub acme/app#45");
+    expect(importSourceLabel("https://github.com/acme/app/milestone/7")).toBe("GitHub acme/app milestone 7");
+    expect(isMilestoneImport("https://github.com/acme/app/milestone/7")).toBe(true);
+    expect(isMilestoneImport("https://github.com/acme/app/issues/7")).toBe(false);
   });
 
   it("shows fetching only while pending", () => {
