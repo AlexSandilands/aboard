@@ -4,6 +4,7 @@ import type {
   GitHostStatus,
   IssueRef,
   MergeMethod,
+  MilestoneRef,
   MergePrInput,
   PrMergeState,
   PrRef,
@@ -113,6 +114,15 @@ export interface HostIssue {
   state: "open" | "closed";
   labels: string[];
   author: string | null;
+}
+
+/** A milestone as an import reads it. */
+export interface HostMilestone {
+  number: number;
+  url: string;
+  title: string;
+  description: string;
+  state: "open" | "closed";
 }
 
 /** One page of text: its number from 1, how many there are, and the text itself. */
@@ -350,6 +360,8 @@ export interface GitHostCapabilities {
   reviewThreads: boolean;
   /** Issues with sub-issues, which an import turns into tasks. */
   subIssues: boolean;
+  /** Milestones, which an import turns into an epic of their open issues. */
+  milestones: boolean;
   /** Making a private repository for the backup. */
   createRepo: boolean;
 }
@@ -440,6 +452,9 @@ export interface GitHost extends GitHostReads {
   setPrBody(ref: PrRef, body: string): Promise<void>;
   /** The URLs of an issue's sub-issues, in the host's order; none for an issue without any. */
   listSubIssues(ref: IssueRef): Promise<string[]>;
+  getMilestone(ref: MilestoneRef): Promise<HostMilestone>;
+  /** The URLs of a milestone's open issues, oldest first; never its pull requests. */
+  listMilestoneIssues(ref: MilestoneRef): Promise<string[]>;
   /**
    * Makes a private repository under the signed-in account on the kind's main host, for the backup. `webUrl` is its
    * page, `pushUrl` what git pushes to, over the protocol the CLI tells git to use.

@@ -761,8 +761,9 @@ export const CreateTaskInput = z
     /** Tasks that block this one (uuid, "#42" or "42"). */
     blockedBy: z.array(z.string().trim().min(1)).optional(),
     /**
-     * A ticket key or URL, or a GitHub issue URL. The task is created at once with the issue as its title and link,
-     * and a background job fills in the title, description and labels. Can't be combined with a plan.
+     * A ticket key or URL, or a GitHub issue or milestone URL. The task is created at once with the issue as its title
+     * and link, and a background job fills in the title, description and labels (a milestone becomes an epic of its
+     * open issues). Can't be combined with a plan.
      */
     sourceUrl: z.string().trim().min(1).optional(),
     /**

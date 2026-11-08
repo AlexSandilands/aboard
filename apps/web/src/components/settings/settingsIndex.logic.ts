@@ -285,13 +285,13 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "tasks.new-tasks.issue-import",
     "Issue import",
-    "Paste a ticket key or URL, or a GitHub issue URL, as a new task's title and Claude Code fills it in.",
-    ["ticket", "github issue", "import", "claude"],
+    "Paste a ticket key or URL, or a GitHub issue or milestone URL, as a new task's title and Claude Code fills it in.",
+    ["ticket", "github issue", "milestone", "import", "claude"],
   ),
   draft(
     "tasks.new-tasks.import-enabled",
     "Fill in imported tasks",
-    "Paste a ticket key or URL, or a GitHub issue URL, as a new task's title and Claude Code fills in its description.",
+    "Paste a ticket key or URL, or a GitHub issue or milestone URL, as a new task's title and Claude Code fills in its description.",
     ["issue import", "ticket", "github issue", "claude", "autofill"],
   ),
   draft(

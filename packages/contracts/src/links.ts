@@ -13,6 +13,8 @@ export type ClassifiedLink =
 // Any host, since GitHub Enterprise lives on its own domains. The server decides which hosts to poll.
 const GITHUB_PR = /^https?:\/\/([^/\s?#@]+)\/([^/\s?#]+\/[^/\s?#]+)\/pull\/(\d+)(?:[/?#]|$)/i;
 const GITHUB_ISSUE = /^https?:\/\/([^/\s?#@]+)\/([^/\s?#]+\/[^/\s?#]+)\/issues\/(\d+)(?:[/?#]|$)/i;
+// One milestone's page (`/milestone/7`), not the list of them (`/milestones`).
+const GITHUB_MILESTONE = /^https?:\/\/([^/\s?#@]+)\/([^/\s?#]+\/[^/\s?#]+)\/milestone\/(\d+)(?:[/?#]|$)/i;
 const ADO_PR = /^https?:\/\/[^/\s]*(dev\.azure\.com|visualstudio\.com)\/.+\/pullrequest\/(\d+)/i;
 const BITBUCKET_PR = /^https?:\/\/bitbucket\.org\/([^/\s]+\/[^/\s]+)\/pull-requests\/(\d+)/i;
 const T3_DEEP_LINK = /^t3code(?:-[a-z]+)?:\/\/threads\/([^/\s]+)\/([^/?#\s]+)/i;
@@ -119,14 +121,32 @@ export function isLinkKind(value: string): value is LinkKind {
   return LinkKind.options.includes(value as LinkKind);
 }
 
+/** A GitHub milestone: its host, `owner/repo` and number. */
+export interface MilestoneRef {
+  host: string;
+  repo: string;
+  number: number;
+}
+
+/**
+ * The milestone a GitHub milestone page URL (`https://<host>/<owner>/<repo>/milestone/<n>`, on any host for GitHub
+ * Enterprise) names, or null. `classifyLink` still calls it a plain `url` link: only an import reads it.
+ */
+export function parseGithubMilestone(value: string): MilestoneRef | null {
+  const match = GITHUB_MILESTONE.exec(value.trim());
+  return match ? { host: match[1]!.toLowerCase(), repo: match[2]!, number: Number(match[3]) } : null;
+}
+
 /** What a task can be imported from: what to link, and the title to show until its details are fetched. */
 export type ImportSource =
   | { kind: "ticket"; ref: TicketRef; url: string; placeholder: string }
-  | { kind: "issue"; ref: IssueRef; url: string; placeholder: string };
+  | { kind: "issue"; ref: IssueRef; url: string; placeholder: string }
+  /** A milestone imports as an epic, its open issues as its tasks. */
+  | { kind: "milestone"; ref: MilestoneRef; url: string; placeholder: string };
 
 /**
- * Recognises text that is a ticket of one of `systems` (a bare key or one of its URLs) or a GitHub issue URL, and
- * nothing else: a PR URL, other links and ordinary titles are null.
+ * Recognises text that is a ticket of one of `systems` (a bare key or one of its URLs), a GitHub issue URL or a GitHub
+ * milestone URL, and nothing else: a PR URL, other links and ordinary titles are null.
  */
 export function parseImportSource(value: string, systems: readonly TicketSystem[] | null = []): ImportSource | null {
   const input = value.trim();
@@ -136,6 +156,15 @@ export function parseImportSource(value: string, systems: readonly TicketSystem[
     return { kind: "issue", ref: link.ref, url: link.url, placeholder: `${link.ref.repo}#${link.ref.number}` };
   }
   if (link?.kind === "ticket") return { kind: "ticket", ref: link.ref, url: link.url, placeholder: link.ref.key };
+  const milestone = link?.kind === "url" ? parseGithubMilestone(input) : null;
+  if (milestone) {
+    return {
+      kind: "milestone",
+      ref: milestone,
+      url: input,
+      placeholder: `${milestone.repo} milestone ${milestone.number}`,
+    };
+  }
   return null;
 }
 

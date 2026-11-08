@@ -195,6 +195,16 @@ describe("issueImportRow", () => {
     });
   });
 
+  it("offers to import a GitHub milestone as an epic", () => {
+    expect(issueImportRow(" https://ghe.example.com/team/svc/milestone/3 ", "backlog")).toEqual({
+      sourceUrl: "https://ghe.example.com/team/svc/milestone/3",
+      title: "Import team/svc milestone 3 from GitHub",
+      description: "Imports it as an epic of its open issues in the background",
+    });
+    expect(issueImportRow("https://github.com/acme/app/milestones", "backlog")).toBeNull();
+    expect(issueImportRow("https://github.com/acme/app/milestone/3", "planned")).toBeNull();
+  });
+
   it("leaves ordinary titles, pull requests and planned tasks alone", () => {
     expect(issueImportRow("Fix PROJ-123 login", "backlog", systems)).toBeNull();
     expect(issueImportRow("https://github.com/acme/app/pull/45", "backlog")).toBeNull();

@@ -5,7 +5,13 @@ import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import { useRetryImport } from "~/state/mutations";
 import { useSettings } from "~/state/queries";
-import { epicImportProgress, importFailure, importPendingLabel, importSourceLabel } from "./import.logic";
+import {
+  epicImportProgress,
+  importFailure,
+  importPendingLabel,
+  importSourceLabel,
+  isMilestoneImport,
+} from "./import.logic";
 
 /**
  * Shows a task's import while it runs, and why it failed with a Retry; for an imported epic, how far its tasks'
@@ -18,6 +24,8 @@ export function ImportCallout({ task }: { task: TaskDetail }) {
   const failure = importFailure(task, ticketSystems);
   const epicProgress = epicImportProgress(task);
   if (!pending && !failure && !epicProgress) return null;
+  const source = task.import ? importSourceLabel(task.import.sourceUrl, ticketSystems) : "";
+  const milestone = task.import ? isMilestoneImport(task.import.sourceUrl) : false;
   return (
     <div className="flex min-w-0 items-start gap-2.5 rounded-xl border border-border/60 bg-card/40 p-3 text-sm">
       {failure ? (
@@ -39,8 +47,9 @@ export function ImportCallout({ task }: { task: TaskDetail }) {
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="font-semibold text-foreground/90">{pending}</span>
             <span className="text-muted-foreground">
-              Reading {importSourceLabel(task.import!.sourceUrl, ticketSystems)} to fill in the title, description and
-              labels.
+              {milestone
+                ? `Reading ${source} to make it an epic of its open issues.`
+                : `Reading ${source} to fill in the title, description and labels.`}
             </span>
           </div>
           {/* An import can be left pending with nothing running it (its task was archived over a restart). */}
@@ -62,7 +71,7 @@ export function ImportCallout({ task }: { task: TaskDetail }) {
               Importing the epic&apos;s tasks: {epicProgress!.done} of {epicProgress!.total}
             </span>
             <span className="text-muted-foreground">
-              {importSourceLabel(task.import!.sourceUrl, ticketSystems)} is an epic. Each of its tasks fills in its
+              {source} {milestone ? "became an epic of its open issues" : "is an epic"}. Each of its tasks fills in its
               details as its issue is read.
             </span>
           </div>

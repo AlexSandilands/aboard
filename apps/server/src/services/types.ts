@@ -159,7 +159,7 @@ export interface TasksService {
   resolveId(ref: string): string;
   /**
    * Lands in "planned" when `plan` is given (with ≥1 step), else "backlog". Appends to the end of the column.
-   * With `sourceUrl` (a ticket key or URL, or a GitHub issue URL) the task is titled and linked after the issue and
+   * With `sourceUrl` (a ticket key or URL, or a GitHub issue or milestone URL) the task is titled and linked after the issue and
    * an import is left pending; throws VALIDATION when the source isn't recognised. The caller starts the import.
    */
   create(input: CreateTaskInput, opts?: CreateTaskOptions): TaskDetail;

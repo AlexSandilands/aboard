@@ -1,11 +1,13 @@
 # Importing tickets and GitHub issues
 
-Paste a ticket from one of your [ticket systems](using-the-board.md#links) (Jira, Linear or your own) or a GitHub issue
-as a new task's title and the board creates the task, then fills in a concise title, a summary and labels for you.
+Paste a ticket from one of your [ticket systems](using-the-board.md#links) (Jira, Linear or your own), a GitHub issue or
+a GitHub milestone as a new task's title and the board creates the task, then fills in a concise title, a summary and
+labels for you.
 
 1. Open the command palette (**Ctrl/Cmd K**, or press **N**) and choose **New task…** and a project.
-2. Paste a ticket key (`PROJ-123`), a ticket URL or a GitHub issue URL (`https://github.com/owner/repo/issues/45`).
-   The description box turns into an **Import** row that says where it reads from, such as "Import PROJ-123 from Jira".
+2. Paste a ticket key (`PROJ-123`), a ticket URL, a GitHub issue URL (`https://github.com/owner/repo/issues/45`) or a
+   GitHub milestone URL (`https://github.com/owner/repo/milestone/7`). The description box turns into an **Import** row
+   that says where it reads from, such as "Import PROJ-123 from Jira".
 3. Press **Enter**. The task lands in Backlog and its panel opens, showing "Fetching details…" for a few
    seconds.
 
@@ -28,10 +30,18 @@ in at most 50 tasks; its notes say when the ticket has more.
 The task stays a task, with a note saying why, if it can't be an epic by the time the import finishes: you gave
 it a plan, put it in an epic, flagged it for Autopilot or marked it a priority.
 
+## Milestones
+
+A GitHub milestone always imports as an epic: the milestone's title and description become the epic's, and each of its
+**open** issues becomes a task in it, imported like any pasted issue. Its pull requests and closed issues are left out.
+The same rules as for an epic apply: at most 50 issues (the notes give the total), issues already on the board join the
+epic, and a milestone with no open issues stays a task with a note. The epic isn't kept in step with the milestone
+afterwards; paste an issue added later on its own. The milestone's due date isn't imported.
+
 ## What you need
 
-- **GitHub issues** need the [GitHub CLI](https://cli.github.com) signed in (`gh auth login`). The board
-  summarises the issue with Claude Code; without it, the issue's own title and text are used instead.
+- **GitHub issues and milestones** need the [GitHub CLI](https://cli.github.com) signed in (`gh auth login`). The
+  board summarises the issue or milestone with Claude Code; without it, its own title and text are used instead.
 - **Tickets** are read through your own MCP server for that system in Claude Code, so you need one connected
   (`claude mcp list` shows it as connected), such as Atlassian's for Jira or Linear's, added for you rather than for one
   project (`claude mcp add --scope user …`). In the system's settings, list the **import tools** the run may call, as

@@ -321,7 +321,28 @@ describe("parseImportSource", () => {
     });
   });
 
+  it("reads a GitHub milestone URL on any host, and leaves it a plain url link", () => {
+    expect(parseImportSource("https://github.com/acme/app/milestone/7")).toEqual({
+      kind: "milestone",
+      ref: { host: "github.com", repo: "acme/app", number: 7 },
+      url: "https://github.com/acme/app/milestone/7",
+      placeholder: "acme/app milestone 7",
+    });
+    expect(parseImportSource("https://GHE.example.com/team/svc/milestone/12?closed=1")).toMatchObject({
+      kind: "milestone",
+      ref: { host: "ghe.example.com", repo: "team/svc", number: 12 },
+      url: "https://GHE.example.com/team/svc/milestone/12?closed=1",
+    });
+    expect(classifyLink("https://github.com/acme/app/milestone/7")).toEqual({
+      kind: "url",
+      url: "https://github.com/acme/app/milestone/7",
+    });
+  });
+
   it("is null for anything else", () => {
+    expect(parseImportSource("https://github.com/acme/app/milestones", ticketSystems)).toBeNull();
+    expect(parseImportSource("https://github.com/acme/app/milestone/new", ticketSystems)).toBeNull();
+    expect(parseImportSource("https://github.com/acme/app/milestone/7x", ticketSystems)).toBeNull();
     expect(parseImportSource("https://github.com/acme/app/pull/45", ticketSystems)).toBeNull();
     expect(parseImportSource("https://github.com/acme/app/issues", ticketSystems)).toBeNull();
     expect(parseImportSource("https://example.com/browse", ticketSystems)).toBeNull();

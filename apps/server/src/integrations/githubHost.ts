@@ -191,6 +191,23 @@ const asMergeState = (value: string | null | undefined): MergeTarget["mergeState
 // ── Issues ───────────────────────────────────────────────────────────────
 
 const SubIssueJson = z.object({ html_url: z.string() }).loose();
+const MilestoneJson = z
+  .object({
+    number: z.number(),
+    html_url: z.string(),
+    title: z.string(),
+    description: z.string().nullable().optional(),
+    state: z.string(),
+  })
+  .loose();
+/** `owner/repo` with each part encoded for a REST path. */
+const encodedRepo = (repo: string): string =>
+  repo
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+/** The issues list holds pull requests too, marked by `pull_request`. */
+const MilestoneIssueJson = z.object({ html_url: z.string(), pull_request: z.unknown().optional() }).loose();
 
 // ── Hints ────────────────────────────────────────────────────────────────
 
@@ -304,7 +321,7 @@ export function createGithubHost(deps: { runGh?: RunGh; fetch?: FetchFn } = {}):
   return {
     kind: "github",
     definition: GITHUB_HOST,
-    capabilities: { autoMerge: true, reviewThreads: true, subIssues: true, createRepo: true },
+    capabilities: { autoMerge: true, reviewThreads: true, subIssues: true, milestones: true, createRepo: true },
     ...createGithubReads(api),
 
     status: () => gh.current(),
@@ -555,11 +572,40 @@ export function createGithubHost(deps: { runGh?: RunGh; fetch?: FetchFn } = {}):
         });
       });
     },
+    async getMilestone(ref) {
+      const parsed = MilestoneJson.safeParse(
+        await api.rest(ref.host, `/repos/${encodedRepo(ref.repo)}/milestones/${ref.number}`),
+      );
+      if (!parsed.success) throw new Error("GitHub's answer for the milestone wasn't in the expected shape");
+      const milestone = parsed.data;
+      return {
+        number: milestone.number,
+        url: milestone.html_url,
+        title: milestone.title,
+        description: milestone.description ?? "",
+        state: milestone.state === "closed" ? "closed" : "open",
+      };
+    },
+    async listMilestoneIssues(ref) {
+      const path = `/repos/${encodedRepo(ref.repo)}/issues?milestone=${ref.number}&state=open&sort=created&direction=asc`;
+      const urls: string[] = [];
+      // At most 1000: the import takes the first 50 and only counts the rest.
+      for (let page = 1; page <= 10; page += 1) {
+        const body = await api.rest(ref.host, `${path}&per_page=100&page=${page}`);
+        const items = z.array(MilestoneIssueJson).safeParse(body);
+        if (!items.success) throw new Error("GitHub's answer for the milestone's issues wasn't in the expected shape");
+        urls.push(
+          ...items.data
+            .filter((i) => i.pull_request == null)
+            .map((i) => i.html_url)
+            .filter((u) => /^https?:\/\//.test(u)),
+        );
+        if (items.data.length < 100) break;
+      }
+      return [...new Set(urls)];
+    },
     async listSubIssues(ref) {
-      const path = `/repos/${ref.repo
-        .split("/")
-        .map((part) => encodeURIComponent(part))
-        .join("/")}/issues/${ref.number}/sub_issues`;
+      const path = `/repos/${encodedRepo(ref.repo)}/issues/${ref.number}/sub_issues`;
       const urls: string[] = [];
       // GitHub serves at most 100 a page, and an issue holds at most 100 sub-issues.
       for (let page = 1; page <= 10; page += 1) {

@@ -457,7 +457,7 @@ export function createTasksService(
         if (input.sourceUrl && !source) {
           throw new AppError(
             "VALIDATION",
-            `Not a ticket key or URL of a configured ticket system, or a GitHub issue URL: ${input.sourceUrl}`,
+            `Not a ticket key or URL of a configured ticket system, or a GitHub issue or milestone URL: ${input.sourceUrl}`,
           );
         }
         if (source && input.plan)

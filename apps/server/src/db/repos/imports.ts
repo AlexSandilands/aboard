@@ -1,14 +1,14 @@
 import type { ImportStatus } from "@repo/contracts";
 import { jsonList, type Sql } from "./sql.ts";
 
-export type ImportSourceKind = "ticket" | "issue";
+export type ImportSourceKind = "ticket" | "issue" | "milestone";
 
 /** A task_imports row in domain shape. */
 export interface ImportRecord {
   taskId: string;
   sourceUrl: string;
   sourceKind: ImportSourceKind;
-  /** The ticket system a ticket import reads from; null for a GitHub issue. */
+  /** The ticket system a ticket import reads from; null for a GitHub issue or milestone. */
   systemId: string | null;
   status: ImportStatus;
   error: string | null;

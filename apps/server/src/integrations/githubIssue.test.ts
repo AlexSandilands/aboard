@@ -96,3 +96,57 @@ describe("reading an issue to import", () => {
     );
   });
 });
+
+describe("reading a milestone to import", () => {
+  const ref = { host: "github.com", repo: "acme/app", number: 7 };
+
+  it("reads its title and description from the milestone's own host", async () => {
+    const { urls, issues: read } = issues(() =>
+      Response.json({
+        number: 7,
+        html_url: "https://ghe.example.com/team/svc/milestone/7",
+        title: "v2",
+        description: null,
+        state: "open",
+      }),
+    );
+    expect(await read.getMilestone({ ...ref, host: "ghe.example.com", repo: "team/svc" })).toEqual({
+      number: 7,
+      url: "https://ghe.example.com/team/svc/milestone/7",
+      title: "v2",
+      description: "",
+      state: "open",
+    });
+    expect(urls).toEqual(["https://ghe.example.com/api/v3/repos/team/svc/milestones/7"]);
+  });
+
+  it("pages through its open issues, leaving out pull requests", async () => {
+    const issue = (n: number) => ({ html_url: `https://github.com/acme/app/issues/${n}` });
+    const pr = (n: number) => ({ html_url: `https://github.com/acme/app/pull/${n}`, pull_request: { url: "x" } });
+    const { urls, issues: read } = issues((url) =>
+      Response.json(
+        url.endsWith("&page=1")
+          ? [...Array.from({ length: 99 }, (_, i) => issue(i + 1)), pr(500)]
+          : [issue(200), { ...issue(201), pull_request: null }],
+      ),
+    );
+    const found = await read.listMilestoneIssues(ref);
+    expect(found).toHaveLength(101);
+    expect(found).not.toContain("https://github.com/acme/app/pull/500");
+    expect(urls).toEqual([
+      "https://api.github.com/repos/acme/app/issues?milestone=7&state=open&sort=created&direction=asc&per_page=100&page=1",
+      "https://api.github.com/repos/acme/app/issues?milestone=7&state=open&sort=created&direction=asc&per_page=100&page=2",
+    ]);
+  });
+
+  it("says which milestone failed, and sends nothing to a host gh isn't signed in to", async () => {
+    const failing = issues(() => Response.json({ message: "Not Found" }, { status: 404 })).issues;
+    await expect(failing.getMilestone(ref)).rejects.toThrow("Could not read acme/app milestone 7: Not Found");
+    await expect(failing.listMilestoneIssues(ref)).rejects.toThrow(
+      "Could not read the issues of acme/app milestone 7: Not Found",
+    );
+    const { urls, issues: read } = issues(() => Response.json({}));
+    await expect(read.getMilestone({ ...ref, host: "github.attacker.example" })).rejects.toThrow(/not signed in/);
+    expect(urls).toEqual([]);
+  });
+});

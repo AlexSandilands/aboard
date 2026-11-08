@@ -158,3 +158,87 @@ describe("imports service", () => {
     expect(s.imports.get(task.id)).toBeNull();
   });
 });
+
+describe("importing a milestone", () => {
+  const milestone = "https://github.com/acme/app/milestone/7";
+  const gh = (n: number) => `https://github.com/acme/app/issues/${n}`;
+  const result = (children: string[], total = children.length) => ({
+    title: "Checkout v2",
+    description: "Ship the new checkout.",
+    labels: [],
+    epic: { children, total },
+  });
+  const notes = (task: { events: Array<{ type: string; payload: Record<string, unknown> }> }) =>
+    task.events.filter((e) => e.type === "note").map((e) => String(e.payload.text));
+
+  it("titles it after the milestone and links the page as a plain url", () => {
+    const { s, project } = setup();
+    const task = s.tasks.create({ projectId: project.id, sourceUrl: milestone });
+    expect(task).toMatchObject({ title: "acme/app milestone 7", import: { status: "pending" } });
+    expect(task.links).toEqual([expect.objectContaining({ kind: "url", url: milestone })]);
+    expect(s.imports.get(task.id)?.sourceKind).toBe("milestone");
+  });
+
+  it("becomes an epic of its open issues, each a pending import of its own", () => {
+    const { s, project } = setup();
+    const task = s.tasks.create({ projectId: project.id, sourceUrl: milestone });
+    const { childImports } = s.imports.complete(task.id, result([gh(1), gh(2), gh(1), "PROJ-9", "nonsense"]));
+    const epic = s.tasks.detail(task.id);
+    expect(epic).toMatchObject({ kind: "epic", title: "Checkout v2", import: { status: "done" } });
+    expect(childImports).toHaveLength(2);
+    expect(epic.children.map((c) => [c.title, c.import?.status])).toEqual([
+      ["acme/app#1", "pending"],
+      ["acme/app#2", "pending"],
+    ]);
+    // A milestone holds GitHub issues: anything else in its list is dropped.
+    expect(notes(epic)).toEqual(["Skipped 2 child issues that weren't a GitHub issue."]);
+  });
+
+  it("moves a loose task already linked to one of its issues in, and leaves one in another epic", () => {
+    const { s, project } = setup();
+    const loose = s.tasks.create({ projectId: project.id, sourceUrl: gh(1) });
+    const other = s.tasks.createEpic({ projectId: project.id, title: "Other" }, [], "user");
+    const placed = s.tasks.create({ projectId: project.id, sourceUrl: gh(2), epicId: other.id });
+    const task = s.tasks.create({ projectId: project.id, sourceUrl: milestone });
+    const { childImports } = s.imports.complete(task.id, result([gh(1), gh(2), gh(3)]));
+    expect(childImports).toHaveLength(1);
+    expect(s.tasks.summary(loose.id).parent?.id).toBe(task.id);
+    expect(s.tasks.summary(placed.id).parent?.id).toBe(other.id);
+    expect(notes(s.tasks.detail(task.id))).toEqual([
+      `Already on the board, so moved into this epic: #${loose.number}.\n\nLeft where they are, not added: acme/app#2 (#${placed.number} is in epic #${other.number}).`,
+    ]);
+  });
+
+  it("imports the first 50 open issues and says how many there are", () => {
+    const { s, project } = setup();
+    const task = s.tasks.create({ projectId: project.id, sourceUrl: milestone });
+    const children = Array.from({ length: 50 }, (_, i) => gh(i + 1));
+    expect(s.imports.complete(task.id, result(children, 80)).childImports).toHaveLength(50);
+    expect(notes(s.tasks.detail(task.id))).toEqual([
+      "acme/app milestone 7 has 80 open issues; only the first 50 were imported. Add the rest by pasting their keys or URLs.",
+    ]);
+  });
+
+  it("stays a task with a note when it has no open issues", () => {
+    const { s, project } = setup();
+    const task = s.tasks.create({ projectId: project.id, sourceUrl: milestone });
+    expect(s.imports.complete(task.id, result([])).childImports).toEqual([]);
+    const done = s.tasks.detail(task.id);
+    expect(done).toMatchObject({ kind: "task", title: "Checkout v2", import: { status: "done" } });
+    expect(notes(done)).toEqual([
+      "acme/app milestone 7 has no open issues, so it was imported as a task. Paste it again once it has some.",
+    ]);
+  });
+
+  it("stays a task with a note when the task can't become an epic", () => {
+    const { s, project } = setup();
+    const task = s.tasks.create({ projectId: project.id, sourceUrl: milestone });
+    s.tasks.update(task.id, { priority: true }, "user");
+    expect(s.imports.complete(task.id, result([gh(1), gh(2)])).childImports).toEqual([]);
+    const done = s.tasks.detail(task.id);
+    expect(done.kind).toBe("task");
+    expect(notes(done)).toEqual([
+      "acme/app milestone 7 has 2 open issues, but this task can't become an epic: it is a priority. Its issues weren't imported.",
+    ]);
+  });
+});
