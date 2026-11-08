@@ -205,7 +205,7 @@ export const branchRows = (options: BranchOptions): BranchRow[] =>
     disabledReason: null,
   }));
 
-/** The task's newest branch with a worktree, for the Task worktree choice; null when none has one. */
+/** The task's first branch with a worktree in picker order (open PRs first), for the Task worktree choice; null when none has one. */
 export function taskWorktreeWhere(options: BranchOptions): SessionWhere | null {
   const branch = options.taskBranches?.find((b) => b.worktreePath);
   return branch ? { mode: "existing_worktree", worktreePath: branch.worktreePath!, branch: branch.name } : null;
