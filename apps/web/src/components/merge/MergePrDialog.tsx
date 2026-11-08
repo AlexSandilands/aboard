@@ -54,7 +54,8 @@ function MergeContent({ task, link, onDone }: { task: TaskSummary; link: PolledP
 
   const confirm = () => {
     if (!method) return;
-    remember(repoKey, method);
+    // Rebase is for integration branches; keep the repo's usual method as the one to offer next.
+    if (method !== "rebase") remember(repoKey, method);
     merge.mutate({ linkId: link.id, action, method }, { onSuccess: onDone });
   };
 

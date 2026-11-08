@@ -143,9 +143,10 @@ order as T3 Code's PR panel. Only a task in **Review** whose PR the account can 
 The panel's PR row shows the button; the card shows a merge icon next to the PR chip. While the PR has something to fix
 the slot is Fix in → instead, and Merge is in the row's menu ([below](#fixing-a-pr-by-hand)). Both open
 `MergePrDialog`, where the method can be changed. It offers the method last picked for the repo
-(`useMergeMethods`, in local storage), else squash, merge, rebase, whichever the repo allows. A last pick of rebase
-isn't reused: it's meant for integration branches ([GitHub setup](github-setup.md#merging-an-integration-branch)),
-and offering it next would land an ordinary PR's commits one by one.
+(`useMergeMethods`, in local storage), else squash, merge, rebase, whichever the repo allows. Rebase is never
+remembered, and a last pick of rebase stored earlier isn't reused: it's meant for integration branches
+([GitHub setup](github-setup.md#merging-an-integration-branch)), and offering it next would land an ordinary PR's
+commits one by one.
 
 `POST /api/links/:id/merge` with `{action: "merge" | "auto" | "disable_auto", method}`:
 
