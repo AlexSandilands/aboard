@@ -19,11 +19,14 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const rulesetsDir = join(root, ".github/rulesets");
 const workflowsDir = join(root, ".github/workflows");
 
-/** Squash only, titled by the PR (which CI lints), so `main` gets one Conventional commit per PR. */
+/**
+ * Squash, titled by the PR (which CI lints), so `main` gets one Conventional commit per PR. Rebase too, for
+ * integration branches: their commits are already one squashed sub-PR each, so each lands on its own.
+ */
 const REPO_OPTIONS = {
   allow_squash_merge: true,
   allow_merge_commit: false,
-  allow_rebase_merge: false,
+  allow_rebase_merge: true,
   squash_merge_commit_title: "PR_TITLE",
   squash_merge_commit_message: "COMMIT_MESSAGES",
   allow_auto_merge: true,

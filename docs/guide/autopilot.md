@@ -339,7 +339,8 @@ start means the epic stops every time a task is done. An epic can instead delive
   the epic branch** under Needs attention and you get a notification. Merge it yourself.
 - After the first merge it opens a **draft pull request** from the epic's branch into the default branch, links it
   on the epic and keeps its description listing every task with its pull request and reviews. If it conflicts with
-  the default branch, Fix PRs merges the default branch in. **Only you merge that pull request.**
+  the default branch, Fix PRs merges the default branch in. **Only you merge that pull request.** A rebase merge
+  keeps each task's commit on the default branch; a squash makes the whole epic one commit.
 - You can go back to pull requests to main until one of the epic's tasks has started.
 
 Switch **Merge ready PRs** on for the epic (or its project).

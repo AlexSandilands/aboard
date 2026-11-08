@@ -26,12 +26,16 @@ export function prMergeAction(taskStatus: TaskStatus, snapshot: PrSnapshot | nul
 
 const METHOD_PREFERENCE: readonly MergeMethod[] = ["squash", "merge", "rebase"];
 
-/** The method to offer: the last one picked for the repo if still allowed, else squash, merge, rebase. */
+/**
+ * The method to offer: the last one picked for the repo if still allowed, else squash, merge, rebase. A
+ * last pick of rebase isn't reused: it's for integration branches, and offering it next would land an
+ * ordinary PR's work-in-progress commits on the default branch one by one.
+ */
 export function pickMergeMethod(
   allowed: readonly MergeMethod[],
   lastPicked: MergeMethod | null | undefined,
 ): MergeMethod | null {
-  if (lastPicked && allowed.includes(lastPicked)) return lastPicked;
+  if (lastPicked && lastPicked !== "rebase" && allowed.includes(lastPicked)) return lastPicked;
   return METHOD_PREFERENCE.find((m) => allowed.includes(m)) ?? null;
 }
 

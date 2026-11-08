@@ -59,11 +59,16 @@ describe("prMergeAction", () => {
 
 describe("pickMergeMethod", () => {
   it("prefers the last pick, then squash, merge, rebase", () => {
-    expect(pickMergeMethod(["squash", "merge", "rebase"], "rebase")).toBe("rebase");
+    expect(pickMergeMethod(["squash", "merge", "rebase"], "merge")).toBe("merge");
     expect(pickMergeMethod(["merge", "rebase"], "squash")).toBe("merge");
     expect(pickMergeMethod(["rebase", "merge", "squash"], null)).toBe("squash");
     expect(pickMergeMethod(["rebase"], undefined)).toBe("rebase");
     expect(pickMergeMethod([], "squash")).toBeNull();
+  });
+
+  it("doesn't reuse a last pick of rebase", () => {
+    expect(pickMergeMethod(["squash", "rebase"], "rebase")).toBe("squash");
+    expect(pickMergeMethod(["rebase"], "rebase")).toBe("rebase");
   });
 });
 
