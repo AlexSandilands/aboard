@@ -24,7 +24,7 @@ harness-specific way. It offers two levels:
 |---|---|---|---|
 | **Copy prompt** | Any harness with the MCP server registered | Copies a ready-to-paste prompt | Open a session, paste, send |
 | **New T3 Code thread** | T3 Code, with a token set | Creates the T3 thread, starts the agent and links the thread to the task | Pick model and workspace, press Send |
-| **New Claude Code / Copilot CLI session** | The CLI installed (PATH or Settings) | Makes a worktree, opens the CLI in a terminal with the prompt and links the session | Pick model and workspace, press Send ([agent sessions](agent-sessions.md#starting-a-session)) |
+| **New Claude Code / Codex / Copilot CLI session** | The CLI installed (PATH or Settings) | Makes a worktree (or uses the task's), opens the CLI in a terminal with the prompt and links the session (Codex links itself) | Pick model and workspace, press Send ([agent sessions](agent-sessions.md#starting-a-session)) |
 
 Both hand-offs send the same kind of prompt, so the agent behaves the same either way.
 
@@ -90,7 +90,7 @@ finished turn but the last.
 - **T3 Code**: the launch dialog, without **Plan with me** and starting in the project's checkout (planning writes no
   code). `POST /api/projects/:id/plan-thread` checks the tasks before anything starts, starts the thread titled
   "Planning #3, #4: <project>" and links it to every task.
-- **Claude Code or Copilot CLI**: `POST /api/projects/:id/plan-session` opens the CLI in the project's checkout and
+- **Claude Code, Codex or Copilot CLI**: `POST /api/projects/:id/plan-session` opens the CLI in the project's checkout and
   links the one session to every task, labelled "Planning #3, #4"
   ([agent-sessions.md](agent-sessions.md#starting-a-session)).
 - **Copy prompt** copies it for any harness; that agent links itself to each task.
@@ -235,8 +235,9 @@ there yet from one that refused. Autopilot waits on those ([Runners](autopilot.m
 - **effort** (and fast mode where the model has it) and **access**: Supervised, Auto-accept edits, Auto or
   Full access, limited to what the provider supports;
 - **workspace**: Current checkout, New worktree or Previous worktree;
-- **branch**: a searchable list of refs, labelled current, worktree, remote or default. The list holds the
-  first 100 refs T3 returns, searched in the browser; a branch beyond that can't be picked yet.
+- **branch**: a searchable list of refs, labelled current, worktree, remote or default, with the task's own branches
+  pinned above it (see [The task's branches](#the-tasks-branches)). The list holds the first 100 refs T3 returns,
+  searched in the browser; a branch beyond that can't be picked yet, unless it is one of the task's in a worktree.
 
 The choices start from your T3 settings, resolved the way T3 resolves them for a new thread: the project's
 default model, then the environment default, then the first ready provider's default model. A work launch
@@ -256,7 +257,7 @@ background refresh fails the dialog stays as it is; the error panel only replace
 
 Both launch dialogs are `max-w-220` wide, enough for the toolbar with a long model name. The toolbar stays on one row:
 on a narrower window the model picker is the one control that shrinks, truncating its name (the full name is its
-tooltip), so Send is never pushed out of the composer. The Claude Code / Copilot session dialog has the same composer,
+tooltip), so Send is never pushed out of the composer. The Claude Code / Codex / Copilot session dialog has the same composer,
 model and effort pickers and loading (see [agent-sessions.md](agent-sessions.md)).
 
 Launches carry a `commandId`, which T3 uses to de-duplicate them, and a `threadId` the dialog makes with it
@@ -321,8 +322,38 @@ The workspace and branch choices map to T3's `workspaceStrategy`:
 | You choose | T3 does |
 |---|---|
 | New worktree, from branch X | Creates a new worktree on a new `t3/xxxx` branch based on X. T3 renames the branch after the first message. With "start new worktrees from origin" on, a local X starts from `origin/X`; a remote ref is used as is. |
-| A branch that already has its own worktree, or Previous worktree | Runs the thread in that existing worktree folder. |
+| A branch that already has its own worktree, or Previous worktree | Runs the thread in that existing worktree folder. The workspace reads "Task worktree" when the branch is one of the task's, else "Current worktree". |
 | Current checkout | Runs the thread in the project folder on whatever branch is checked out. |
+
+#### The task's branches
+
+Both launch dialogs (T3 and the CLI sessions) pin the task's own branches in a **This task** group at the top of the
+branch picker (`BranchPicker`), so a quick session on the work already under way doesn't need the branch's name. Each
+shows where the board found it, as chips: `PR #61 open`, `T3 thread`, `Codex session`. The search filters the group
+too, and each branch also stays in its usual place in the full list.
+
+- **Where they come from.** `linkBranches` (contracts) reads the task's links: an open, draft, merged or closed PR's
+  head branch (not a fork's), a T3 thread's branch (not an archived one), and for each agent session, of any harness,
+  the branch of the worktree its `cwd` is in. The server answers that last one, and which worktree each branch is
+  checked out in, with one `git worktree list --porcelain` in the project's folder (`integrations/taskBranches.ts`);
+  a session in the project's own folder is skipped, as that folder's branch is whatever is checked out now. Nothing is
+  stored: it is worked out when the launch options load (`t3-launch-options`, `session-launch-options`), with no git
+  call for a task without such links. A git failure only leaves the group out.
+- **Order.** Branches of open PRs first, then the other active ones, newest link first, then those whose PRs all merged
+  or closed, dimmed. A branch found several ways is listed once with each source.
+- **Left out.** The default branch and the epic's integration branch: they are bases, not the task's work. A task with
+  no known branch has no group, and the picker looks as before. So do Plan tasks, Suggest epics and a PR's **Fix in →**.
+- **Picking one with its own worktree runs the session there**, whatever workspace was chosen: in T3 the dialog switches
+  to Current checkout on that branch ("Task worktree"), which T3 runs as `existing_worktree`; the board adds the
+  worktree to T3's refs (`withTaskRefs`) when T3 didn't list it or its folder. The CLI dialog sends the new
+  `existing_worktree` workspace ([agent-sessions.md](agent-sessions.md#starting-a-session)). To branch a new worktree
+  from such a branch instead, pick it in the full list.
+- **One without a worktree** follows the rules of any ref: a base under New worktree (its local copy, else origin's),
+  disabled under Current checkout.
+
+Agents aren't asked to report a branch. A session that moves itself into a worktree after linking keeps the folder it
+linked from, since Claude Code finds a session to resume, and its title, by the folder it started in; its branch shows
+once it has a PR or a T3 thread.
 
 ### Linking an existing thread
 
@@ -405,6 +436,8 @@ the user turns on **Let agents start threads** ([epics.md](epics.md#t3-code-thre
 | `apps/server/src/integrations/t3Rpc.ts` | Minimal Effect-RPC client: ticket, socket, request/Exit frames, error mapping |
 | `apps/server/src/integrations/t3Launch.ts` | Lenient schemas for T3's responses, defaults, the suggested tier's model (`resolveSuggestion`), workspace → `workspaceStrategy`, a launch without the dialog (`autoLaunchSettings`) |
 | `apps/server/src/integrations/t3.ts` | `launchOptions`, `startThread` and `launchTaskThread`, and linking the new thread to the task; `startProjectThread` for a project's Suggest epics |
-| `apps/web/src/components/handoff/` | Buttons, the dialog (for a task, a project or a set of tasks to plan) and its pickers, `PlanTasksDialog`; pasted images (`LaunchImages.tsx`, `launchImages.logic.ts`); pure logic in `handoff.logic.ts` |
+| `packages/contracts/src/taskBranches.ts` | The task's branches: `TaskBranch` and `linkBranches` (sources, order, exclusions) |
+| `apps/server/src/integrations/taskBranches.ts` | Sessions' branches and each branch's worktree from `git worktree list`; `findWorktree` checks an `existing_worktree` launch |
+| `apps/web/src/components/handoff/` | Buttons, the dialog (for a task, a project or a set of tasks to plan) and its pickers (`BranchPicker.tsx`: the branch picker with the pinned group), `PlanTasksDialog`; pasted images (`LaunchImages.tsx`, `launchImages.logic.ts`); pure logic in `handoff.logic.ts` |
 | `apps/web/src/components/board/boardSelection.logic.ts` | Ctrl/⌘-click picking of cards, and which of them a planning session can take |
 | `apps/web/src/components/settings/agents/ModelsSection.tsx`, `modelTiers.logic.ts` | Settings → Agents → Models; which providers' rows show and the per-tier update (`modelTiers.logic.ts` is tested) |

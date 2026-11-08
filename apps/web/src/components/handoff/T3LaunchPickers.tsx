@@ -6,13 +6,11 @@ import {
   ChevronDownIcon,
   FolderGit2Icon,
   FolderIcon,
-  GitBranchIcon,
   HistoryIcon,
   LockIcon,
   LockOpenIcon,
-  SearchIcon,
 } from "lucide-react";
-import { useState, type ComponentProps } from "react";
+import { type ComponentProps } from "react";
 import {
   Menu,
   MenuGroup,
@@ -23,18 +21,8 @@ import {
   MenuTrigger,
 } from "~/components/ui/menu";
 import { ClaudeAI, OpenAI } from "~/components/handoff/providerIcons";
-import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { cn } from "~/lib/utils";
-import {
-  refBadge,
-  refDisabledReason,
-  refLabel,
-  selectedRef,
-  WORKSPACE_LABELS,
-  workspaceLabel,
-  type WorkspaceChoice,
-  type WorkspaceMode,
-} from "./handoff.logic";
+import { WORKSPACE_LABELS, workspaceLabel, type WorkspaceChoice, type WorkspaceMode } from "./handoff.logic";
 
 /** T3's composer toolbar control ("sm"), or its dimmer strip control below the composer ("xs"). */
 export function ComposerControl({
@@ -161,82 +149,5 @@ export function WorkspaceMenu({
         </MenuGroup>
       </MenuPopup>
     </Menu>
-  );
-}
-
-export function RefPicker({
-  options,
-  choice,
-  onChange,
-}: {
-  options: T3LaunchOptions;
-  choice: WorkspaceChoice;
-  onChange: (choice: WorkspaceChoice) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const current = selectedRef(options, choice);
-  const q = query.trim().toLowerCase();
-  const refs = options.refs.filter((ref) => !q || ref.name.toLowerCase().includes(q));
-  const disabled = !options.isRepo || choice.mode === "previous";
-  return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) setQuery("");
-      }}
-    >
-      <PopoverTrigger render={<ComposerControl size="xs" aria-label="Branch" disabled={disabled} />}>
-        <GitBranchIcon />
-        <span className="max-w-56 truncate">{options.isRepo ? refLabel(options, choice) : "Not a git repository"}</span>
-        <Chevron />
-      </PopoverTrigger>
-      <PopoverPopup align="end" padding="none" className="before:hidden">
-        <div className="flex max-h-80 w-screen max-w-80 flex-col overflow-hidden p-1.5">
-          <label className="mx-1 mb-1 flex items-center gap-2 border-b border-border px-1 pb-2 text-sm focus-within:border-primary">
-            <SearchIcon aria-hidden className="size-4 text-muted-foreground" />
-            <input
-              autoFocus
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search refs..."
-              className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
-            />
-          </label>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {refs.map((ref) => {
-              const reason = refDisabledReason(ref, choice.mode, options.workspaceRoot);
-              const badge = refBadge(ref, options.workspaceRoot);
-              return (
-                <button
-                  key={ref.name}
-                  type="button"
-                  disabled={reason !== null}
-                  title={reason ?? undefined}
-                  aria-current={ref.name === current?.name || undefined}
-                  onClick={() => {
-                    onChange({ ...choice, ref: ref.name });
-                    setOpen(false);
-                  }}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-accent focus-visible:bg-accent disabled:cursor-not-allowed disabled:opacity-45 aria-current:bg-accent/60"
-                >
-                  <span className="min-w-0 flex-1 truncate">{ref.name}</span>
-                  {badge ? <span className="shrink-0 text-xs text-muted-foreground/70">{badge}</span> : null}
-                </button>
-              );
-            })}
-            {refs.length === 0 ? (
-              <p className="px-2 py-6 text-center text-xs text-muted-foreground">No refs found</p>
-            ) : null}
-          </div>
-          {choice.mode === "current" ? (
-            <p className="border-t border-border/70 px-2 pt-2 pb-1 text-xs leading-snug text-muted-foreground">
-              Other branches need a checkout. Pick New worktree to start from one.
-            </p>
-          ) : null}
-        </div>
-      </PopoverPopup>
-    </Popover>
   );
 }

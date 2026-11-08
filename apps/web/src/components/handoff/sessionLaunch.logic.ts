@@ -9,9 +9,16 @@ import {
   type StartSessionResult,
 } from "@repo/contracts";
 import { initialEffort } from "./cliEffort.logic";
+import type { BranchRow, PinnedBranchRow } from "./handoff.logic";
 
-/** Where the dialog will start the session: a new worktree from a branch, or the project's checkout. */
-export type SessionWhere = { mode: "new_worktree"; baseRef: string | null } | { mode: "current" };
+/**
+ * Where the dialog will start the session: a new worktree from a branch, a task's existing worktree, or the project's
+ * checkout.
+ */
+export type SessionWhere =
+  | { mode: "new_worktree"; baseRef: string | null }
+  | { mode: "existing_worktree"; worktreePath: string; branch: string }
+  | { mode: "current" };
 
 /**
  * A new worktree when the folder is a repository, else the checkout itself. The worktree starts from the task's
@@ -32,6 +39,7 @@ export function initialWhere(
 /** The workspace to send, or null while a worktree has no branch to start from. */
 export function toSessionWorkspace(where: SessionWhere): SessionWorkspace | null {
   if (where.mode === "current") return { mode: "current" };
+  if (where.mode === "existing_worktree") return where;
   return where.baseRef ? { mode: "new_worktree", baseRef: where.baseRef } : null;
 }
 
@@ -134,8 +142,12 @@ export function startedDescription(
   /** The tasks the session is linked to: one, or several for a planning session. */
   taskNumbers: readonly number[],
   copied: boolean,
+  /** The session runs in a task's existing worktree rather than a new one. */
+  existingWorktree = false,
 ): string {
-  const where = result.branch ? ` It runs in a new worktree on ${result.branch}.` : "";
+  const where = result.branch
+    ? ` It runs in ${existingWorktree ? "the task's worktree" : "a new worktree"} on ${result.branch}.`
+    : "";
   const short = !result.shortPrompt
     ? ""
     : copied
@@ -150,3 +162,62 @@ export function startedDescription(
 }
 
 export const harnessLabel = (harness: AgentHarness): string => AGENT_HARNESSES[harness].label;
+
+// ── The task's own branches ──────────────────────────────────────────────
+
+type BranchOptions = Pick<SessionLaunchOptions, "branches" | "taskBranches">;
+
+/** The base a task branch gives a new worktree: the local branch, else origin's copy; null when neither is listed. */
+const taskBaseRef = (options: BranchOptions, name: string): string | null =>
+  options.branches.includes(name) ? name : options.branches.includes(`origin/${name}`) ? `origin/${name}` : null;
+
+/** Where picking a pinned branch runs the session: in its worktree when it has one, else a new worktree from it. */
+export function pickPinnedBranch(options: BranchOptions, name: string): SessionWhere | null {
+  const branch = options.taskBranches?.find((b) => b.name === name);
+  if (!branch) return null;
+  if (branch.worktreePath) return { mode: "existing_worktree", worktreePath: branch.worktreePath, branch: name };
+  const baseRef = taskBaseRef(options, name);
+  return baseRef ? { mode: "new_worktree", baseRef } : null;
+}
+
+/** The pinned "This task" rows of the session dialog's picker. */
+export function pinnedBranchRows(options: BranchOptions): PinnedBranchRow[] {
+  return (options.taskBranches ?? []).map((branch) => {
+    const baseRef = taskBaseRef(options, branch.name);
+    return {
+      value: branch.name,
+      name: branch.name,
+      badge: branch.worktreePath ? "worktree" : baseRef?.startsWith("origin/") ? "remote" : null,
+      disabledReason:
+        branch.worktreePath || baseRef ? null : "Not among the repository's branches: fetch it to start from it",
+      sources: branch.sources,
+      inactive: branch.inactive,
+    };
+  });
+}
+
+/** Every branch a new worktree can start from, as picker rows. */
+export const branchRows = (options: BranchOptions): BranchRow[] =>
+  options.branches.map((b) => ({
+    value: b,
+    name: b,
+    badge: b.startsWith("origin/") ? "remote" : null,
+    disabledReason: null,
+  }));
+
+/** The task's newest branch with a worktree, for the Task worktree choice; null when none has one. */
+export function taskWorktreeWhere(options: BranchOptions): SessionWhere | null {
+  const branch = options.taskBranches?.find((b) => b.worktreePath);
+  return branch ? { mode: "existing_worktree", worktreePath: branch.worktreePath!, branch: branch.name } : null;
+}
+
+/** The branch picker's label: "From <base>" for a new worktree, the branch for a task worktree. */
+export function whereBranchLabel(where: SessionWhere): string {
+  if (where.mode === "existing_worktree") return where.branch;
+  if (where.mode === "new_worktree") return where.baseRef ? `From ${where.baseRef}` : "Choose a branch";
+  return "";
+}
+
+/** The picked branch, to mark in the picker. */
+export const whereBranch = (where: SessionWhere): string | null =>
+  where.mode === "existing_worktree" ? where.branch : where.mode === "new_worktree" ? where.baseRef : null;

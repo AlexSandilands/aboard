@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LaunchAttachmentIds } from "./attachments.ts";
+import { TaskBranch } from "./taskBranches.ts";
 
 // Shapes for starting a T3 Code thread from a task. They are our own normalized subsets of T3's
 // server config (providers, models, settings) and VCS refs, not T3's wire types.
@@ -116,6 +117,8 @@ export const T3LaunchOptions = z.object({
   previousWorktree: z.object({ worktreePath: z.string(), branch: z.string().nullable() }).nullable(),
   /** Null when the task has no suggested model. Applies to work launches; planning keeps the default. */
   suggestion: T3LaunchSuggestion.nullable(),
+  /** The task's own branches, pinned at the top of the branch picker. Absent for a launch with no task. */
+  taskBranches: z.array(TaskBranch).optional(),
   defaults: z.object({
     /** T3's own new-thread default, ignoring the task's suggestion. */
     modelSelection: T3ModelSelection.nullable(),

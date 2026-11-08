@@ -9,7 +9,11 @@ import {
   picksAfterPlanToggle,
   startedDescription,
   syncSessionPicks,
+  pickPinnedBranch,
+  pinnedBranchRows,
+  taskWorktreeWhere,
   toSessionWorkspace,
+  whereBranchLabel,
 } from "./sessionLaunch.logic";
 
 const options = { models: { "claude-code": "opus", codex: null, "copilot-cli": null } };
@@ -133,5 +137,55 @@ describe("the session dialog's choices", () => {
     // A model the user chose stays.
     const chosen = { ...working, model: "haiku" };
     expect(picksAfterPlanToggle(chosen, loaded, "claude-code", false)).toBe(chosen);
+  });
+});
+
+describe("the task's branches in the session dialog", () => {
+  const source = { kind: "pr" as const, label: "PR #7 open", inactive: false };
+  const repo = {
+    branches: ["main", "local-only", "origin/main", "origin/pushed"],
+    taskBranches: [
+      { name: "in-wt", sources: [source], worktreePath: "/wt/in-wt", inactive: false },
+      { name: "pushed", sources: [source], worktreePath: null, inactive: false },
+      { name: "local-only", sources: [source], worktreePath: null, inactive: false },
+      { name: "gone", sources: [source], worktreePath: null, inactive: true },
+    ],
+  };
+
+  it("runs in a branch's worktree, else branches a new worktree from it, local copy first", () => {
+    expect(pickPinnedBranch(repo, "in-wt")).toEqual({
+      mode: "existing_worktree",
+      worktreePath: "/wt/in-wt",
+      branch: "in-wt",
+    });
+    expect(pickPinnedBranch(repo, "pushed")).toEqual({ mode: "new_worktree", baseRef: "origin/pushed" });
+    expect(pickPinnedBranch(repo, "local-only")).toEqual({ mode: "new_worktree", baseRef: "local-only" });
+    expect(pickPinnedBranch(repo, "gone")).toBeNull();
+  });
+
+  it("badges and disables the pinned rows", () => {
+    expect(pinnedBranchRows(repo).map((r) => [r.name, r.badge, r.disabledReason === null, r.inactive])).toEqual([
+      ["in-wt", "worktree", true, false],
+      ["pushed", "remote", true, false],
+      ["local-only", null, true, false],
+      ["gone", null, false, true],
+    ]);
+    expect(pinnedBranchRows({ branches: ["main"] })).toEqual([]);
+  });
+
+  it("offers Task worktree only when a branch has one, and sends it as is", () => {
+    const where = taskWorktreeWhere(repo);
+    expect(where).toEqual({ mode: "existing_worktree", worktreePath: "/wt/in-wt", branch: "in-wt" });
+    expect(toSessionWorkspace(where!)).toEqual(where);
+    expect(whereBranchLabel(where!)).toBe("in-wt");
+    expect(whereBranchLabel({ mode: "new_worktree", baseRef: "origin/main" })).toBe("From origin/main");
+    expect(taskWorktreeWhere({ branches: [], taskBranches: [repo.taskBranches[1]!] })).toBeNull();
+  });
+
+  it("says the session runs in the task's worktree, not a new one", () => {
+    const result = { branch: "in-wt", shortPrompt: null, linkId: "l1" };
+    expect(startedDescription(result, "claude-code", [3], false, true)).toBe(
+      "#3 is linked to the new session. It runs in the task's worktree on in-wt.",
+    );
   });
 });

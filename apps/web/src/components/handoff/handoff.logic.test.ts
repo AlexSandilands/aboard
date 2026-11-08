@@ -18,6 +18,9 @@ import {
   launchModelSelection,
   modelTraits,
   optionValue,
+  pickPinnedRef,
+  pinnedRefRows,
+  withTaskRefs,
   refBadge,
   refDisabledReason,
   refLabel,
@@ -393,5 +396,67 @@ describe("workspace", () => {
     expect(refLabel(options, { mode: "new_worktree", ref: null })).toBe("From origin/main");
     expect(refLabel(options, { mode: "new_worktree", ref: "origin/main" })).toBe("From origin/main");
     expect(refLabel(options, { mode: "previous", ref: null })).toBe("t3/prev");
+  });
+});
+
+describe("the task's branches in the T3 dialog", () => {
+  const pr = { kind: "pr" as const, label: "PR #7 open", inactive: false };
+  const session = { kind: "agent_session" as const, label: "Codex session", inactive: false };
+  const withBranches: T3LaunchOptions = {
+    ...options,
+    taskBranches: [
+      // T3 lists feature without a worktree; the board knows one.
+      { name: "feature", sources: [pr], worktreePath: "C:/wt/feature", inactive: false },
+      // Beyond the refs T3 listed.
+      { name: "codex/far", sources: [session], worktreePath: "C:/wt/far", inactive: false },
+      // Only on origin, no worktree.
+      { name: "main-ish", sources: [pr], worktreePath: null, inactive: true },
+    ],
+    refs: [
+      ...options.refs,
+      { name: "origin/main-ish", isRemote: true, current: false, isDefault: false, worktreePath: null },
+    ],
+  };
+  const merged = withTaskRefs(withBranches);
+
+  it("puts the task's worktrees on T3's refs, and returns the same options when there are none", () => {
+    expect(merged.refs.find((r) => r.name === "feature")?.worktreePath).toBe("C:/wt/feature");
+    expect(merged.refs.find((r) => r.name === "codex/far")).toMatchObject({
+      isRemote: false,
+      worktreePath: "C:/wt/far",
+    });
+    expect(withTaskRefs(options)).toBe(options);
+  });
+
+  it("pins each branch with its sources; one without a worktree is disabled under Current checkout", () => {
+    const rows = pinnedRefRows(merged, { mode: "current", ref: null });
+    expect(rows.map((r) => [r.value, r.badge, r.disabledReason === null])).toEqual([
+      ["feature", "worktree", true],
+      ["codex/far", "worktree", true],
+      ["origin/main-ish", "remote", false],
+    ]);
+    expect(rows[0]!.sources).toEqual([pr]);
+    expect(pinnedRefRows(merged, { mode: "new_worktree", ref: null }).every((r) => r.disabledReason === null)).toBe(
+      true,
+    );
+    expect(pinnedRefRows(options, { mode: "current", ref: null })).toEqual([]);
+  });
+
+  it("runs in the task's worktree when one is picked from the group, from any workspace", () => {
+    const choice = pickPinnedRef(merged, { mode: "new_worktree", ref: null }, "feature");
+    expect(choice).toEqual({ mode: "current", ref: "feature" });
+    expect(toLaunchWorkspace(merged, choice)).toEqual({
+      mode: "existing_worktree",
+      worktreePath: "C:/wt/feature",
+      branch: "feature",
+    });
+    expect(workspaceLabel(merged, choice)).toBe("Task worktree");
+    // Another branch's worktree is still just the current one.
+    expect(workspaceLabel(merged, { mode: "current", ref: "t3/wt" })).toBe("Current worktree");
+    // Without a worktree it is a base, as any ref.
+    expect(pickPinnedRef(merged, { mode: "new_worktree", ref: null }, "origin/main-ish")).toEqual({
+      mode: "new_worktree",
+      ref: "origin/main-ish",
+    });
   });
 });

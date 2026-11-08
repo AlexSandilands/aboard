@@ -11,7 +11,7 @@ code. One command does all of it; don't rebuild it by hand.
 
 ## Pick a mode
 
-- **Isolated (default):** `pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|autopilot|crowded|none]`. This checkout's server on
+- **Isolated (default):** `pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|autopilot|crowded|branches|none]`. This checkout's server on
   a temp data dir and its own home folder for skills, pollers off, T3 Code integration off, Vite with hot reload. Use it for anything:
   web, server or contracts changes, and anything that writes.
 - **Desktop:** `pnpm sandbox --desktop [--seed ...]`. The isolated sandbox plus the Electron shell attached
