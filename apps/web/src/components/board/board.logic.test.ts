@@ -87,6 +87,7 @@ function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
 function board(tasks: TaskSummary[], projects = [project("p"), project("q")]): BoardSnapshot {
   return {
     projects,
+    generalProjectId: null,
     tasks,
     labelColors: {},
     integrations: {

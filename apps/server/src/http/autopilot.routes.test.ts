@@ -35,6 +35,7 @@ const projectWide = defineAutomation({
   description: "Acts per project.",
   needsAgent: false,
   epicScope: false,
+  needsRepo: true,
   schema: z.object({}),
   fields: [],
   defaults: {},
@@ -259,6 +260,10 @@ describe("Autopilot REST routes", () => {
     expect(overview.automations.map((a) => [a.key, a.epicScope])).toEqual([
       ["archive", true],
       ["project_wide", false],
+    ]);
+    expect(overview.automations.map((a) => [a.key, a.needsRepo])).toEqual([
+      ["archive", false],
+      ["project_wide", true],
     ]);
 
     const epic = h.services.tasks.createEpic({ projectId: h.project.id, title: "E" }, [], "agent");

@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { AutopilotMode, AutopilotScopeKind } from "./autopilot.ts";
 
-// "Where it runs": one automation's switches at every scope, read as one sentence and edited as Everywhere / Only in…
-// / exceptions. It is only a presentation of the same `autopilot_settings` rows that `resolveAutopilot` reads: the
+// "Where it runs": one automation's switches at every scope, read as one sentence and edited as the project table.
+// It is only a presentation of the same `autopilot_settings` rows that `resolveAutopilot` reads: the
 // board's mode, each project's and each epic's. Nothing here stores anything new (docs/features/autopilot.md).
 
 /** One stored switch: an automation's mode at one scope. Only rows that aren't Inherit exist, so only those are listed. */
@@ -216,10 +216,6 @@ export function modeToBe(parentOn: boolean, on: boolean): AutopilotMode {
   return on ? "on" : "off";
 }
 
-const writeIf = (writes: WhereWrite[], target: WhereTarget, current: AutopilotMode, next: AutopilotMode): void => {
-  if (current !== next) writes.push({ target, mode: next });
-};
-
 /**
  * The board on (or in Preview, as `mode` says; a board that is already on or in Preview keeps its mode), and the rows
  * that only made sense under Only in… dropped: a project set On or to Preview (redundant now, and it would keep the
@@ -227,53 +223,36 @@ const writeIf = (writes: WhereWrite[], target: WhereTarget, current: AutopilotMo
  * stay, as the exceptions. The board goes first, so nothing is off on the way.
  */
 export function whereEverywhere(input: WhereInput, mode: "on" | "preview" = "on"): WhereWrite[] {
+  return everywhereWrites(input, mode, false);
+}
+
+/**
+ * Every project on: `whereEverywhere`, but a project set Off is cleared too, so it follows the board. The project
+ * table's header needs this because it shows the rows, and a row left Off would keep the column from turning on. The
+ * board still goes first, so nothing is off on the way. An epic's own setting is left alone unless it now only
+ * repeats its project, as under Everywhere.
+ */
+export function whereOnEverywhere(input: WhereInput, mode: "on" | "preview" = "on"): WhereWrite[] {
+  return everywhereWrites(input, mode, true);
+}
+
+function everywhereWrites(input: WhereInput, mode: "on" | "preview", clearOff: boolean): WhereWrite[] {
   const writes: WhereWrite[] = [];
   const current = boardState(input.board);
   const next: WhereState = current !== "off" ? current : mode;
   if (current === "off") writes.push({ target: { kind: "board" }, mode });
   for (const project of input.projects) {
-    if (project.mode === "on" || project.mode === "preview") {
+    if (project.mode === "on" || project.mode === "preview" || (clearOff && project.mode === "off")) {
       writes.push({ target: { kind: "project", id: project.id }, mode: "inherit" });
     }
   }
   for (const epic of input.epics) {
     const project = input.projects.find((p) => p.id === epic.projectId);
     if (!project || epic.mode === "inherit") continue;
-    // What its project ends up as: Off if it is set Off, else the board's state (its own row was just dropped).
-    const projectEnds: WhereState = project.mode === "off" ? "off" : next;
+    // What its project ends up as: Off if it stays set Off, else the board's state (its own row was just dropped).
+    const projectEnds: WhereState = project.mode === "off" && !clearOff ? "off" : next;
     if (epic.mode === projectEnds) {
       writes.push({ target: { kind: "epic", id: epic.id, projectId: epic.projectId }, mode: "inherit" });
-    }
-  }
-  return writes;
-}
-
-/**
- * Only in these projects: those projects on (in Preview if that is what they or the board had), then the board off
- * (Inherit, which is Off), then any other project that was on back to Inherit. A project already Off stays so; it is
- * just redundant while the board is off. The order matters because each write is its own request and the server acts
- * on each: a project in the set is on before the board goes off, so it is never off on the way (which would drop a Run
- * now request or restart a schedule), and a refused write leaves it running where it was.
- */
-export function whereOnlyIn(input: WhereInput, projectIds: ReadonlyArray<string>): WhereWrite[] {
-  const writes: WhereWrite[] = [];
-  const board = boardState(input.board);
-  for (const project of input.projects) {
-    if (!projectIds.includes(project.id)) continue;
-    // Keeps its own on-mode; one that followed the board keeps the board's; anything else comes on.
-    const next: AutopilotMode =
-      project.mode === "on" || project.mode === "preview"
-        ? project.mode
-        : project.mode === "inherit" && isOn(board)
-          ? board
-          : "on";
-    writeIf(writes, { kind: "project", id: project.id }, project.mode, next);
-  }
-  // The board is saved as Inherit rather than Off, as its own switch does: both resolve to Off.
-  if (input.board !== "inherit" && input.board !== "off") writes.push({ target: { kind: "board" }, mode: "inherit" });
-  for (const project of input.projects) {
-    if (!projectIds.includes(project.id) && (project.mode === "on" || project.mode === "preview")) {
-      writes.push({ target: { kind: "project", id: project.id }, mode: "inherit" });
     }
   }
   return writes;
@@ -301,16 +280,24 @@ export function whereOffEverywhere(input: WhereInput): WhereWrite[] {
   return writes;
 }
 
-/** The projects that are on now (in Preview too), for "Only in…" to start from when it is picked over Everywhere. */
-export function currentOnProjects(input: WhereInput): string[] {
-  return input.projects.filter((p) => projectIsOn(input.board, p)).map((p) => p.id);
-}
-
 /** Switches one project on or off, as itself and not as an override when the board already gives that. */
 export function whereProject(input: WhereInput, projectId: string, on: boolean): WhereWrite[] {
   const project = input.projects.find((p) => p.id === projectId);
   if (!project || projectIsOn(input.board, project) === on) return [];
   return [{ target: { kind: "project", id: projectId }, mode: modeToBe(isOn(boardState(input.board)), on) }];
+}
+
+/**
+ * Puts a running project into Preview or back to acting for real, storing nothing when that is what the board gives.
+ * A project that is off has nothing to preview, so it gets no write.
+ */
+export function whereProjectPreview(input: WhereInput, projectId: string, preview: boolean): WhereWrite[] {
+  const project = input.projects.find((p) => p.id === projectId);
+  if (!project) return [];
+  const state = projectState(input.board, project);
+  const next: WhereState = preview ? "preview" : "on";
+  if (state === "off" || state === next) return [];
+  return [{ target: { kind: "project", id: projectId }, mode: boardState(input.board) === next ? "inherit" : next }];
 }
 
 /** Switches one epic on or off, as itself and not as an override when its project already gives that. */
@@ -325,54 +312,6 @@ export function whereEpic(input: WhereInput, epicId: string, on: boolean): Where
       mode: modeToBe(projectIsOn(input.board, project), on),
     },
   ];
-}
-
-/** A project or epic that + Exception can offer, with the mode it would be given. */
-export interface WhereCandidate extends WhereException {
-  /** Set for an epic, which is saved through its project. */
-  projectId?: string;
-}
-
-/**
- * What + Exception offers: while it runs everywhere, each project not yet Off (to switch off); always, each epic
- * not yet an exception, to the opposite of its project. Under Only in… a project is picked with its chip instead.
- */
-export function whereCandidates(input: WhereInput): WhereCandidate[] {
-  const out: WhereCandidate[] = [];
-  if (isOn(boardState(input.board))) {
-    for (const p of input.projects) {
-      if (projectIsOn(input.board, p)) out.push({ scope: "project", id: p.id, label: p.title, mode: "off" });
-    }
-  }
-  const taken = new Set(epicExceptions(input).map((e) => e.id));
-  for (const epic of input.epics) {
-    const project = input.projects.find((p) => p.id === epic.projectId);
-    if (!project || taken.has(epic.id)) continue;
-    out.push({
-      scope: "epic",
-      id: epic.id,
-      label: epicLabel(epic),
-      mode: projectIsOn(input.board, project) ? "off" : "on",
-      projectId: epic.projectId,
-    });
-  }
-  return out;
-}
-
-/** Adds an exception: the row's own mode, explicit. */
-export function whereAddException(
-  candidate: Pick<WhereCandidate, "scope" | "id" | "mode" | "projectId">,
-): WhereWrite[] {
-  if (candidate.scope === "project") return [{ target: { kind: "project", id: candidate.id }, mode: candidate.mode }];
-  if (!candidate.projectId) return [];
-  return [{ target: { kind: "epic", id: candidate.id, projectId: candidate.projectId }, mode: candidate.mode }];
-}
-
-/** Removes an exception: the row follows the scope above again. */
-export function whereRemoveException(input: WhereInput, exception: Pick<WhereException, "scope" | "id">): WhereWrite[] {
-  if (exception.scope === "project") return [{ target: { kind: "project", id: exception.id }, mode: "inherit" }];
-  const epic = input.epics.find((e) => e.id === exception.id);
-  return epic ? [{ target: { kind: "epic", id: epic.id, projectId: epic.projectId }, mode: "inherit" }] : [];
 }
 
 /**

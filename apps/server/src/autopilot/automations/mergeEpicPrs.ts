@@ -248,6 +248,7 @@ export const mergeEpicPrs = defineAutomation({
   description:
     "Merges a task's PR once it's reviewed, green and mergeable: into its epic's branch when the epic has one, and into main for tasks you flagged Auto-merge, if you switch that on.",
   needsAgent: false,
+  needsRepo: true,
   group: "prs",
   schema,
   fields: [

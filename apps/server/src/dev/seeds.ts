@@ -1367,7 +1367,7 @@ const autopilot: Scenario = (s, opts) => {
   });
 };
 
-/** Autopilot's board on more projects than Where it runs shows as chips, so it shows its project picker. */
+/** Autopilot's board on more projects than Where it runs lists without a search box, so its rows scroll and it shows the search. */
 const crowded: Scenario = (s, opts) => {
   autopilot(s, opts);
   const names = ["billing-service", "auth-gateway", "admin-console", "search-indexer", "data-pipeline", "ios-widgets"];

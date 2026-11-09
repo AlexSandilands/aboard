@@ -76,8 +76,8 @@ says what to fix.
      `pnpm run notify "$env:ABOARD_TASK_TITLE"` is unsafe. Have the program read the variable itself instead:
      `pnpm run notify`, with `process.env.ABOARD_TASK_TITLE` in the script. Using a value inside PowerShell
      (`Write-Output`, `-match`, a `.ps1` script) is fine.
-3. **Where**: where it runs, picked the same way as on its page: **Everywhere** or **Only in…** some projects (as
-   chips, or past eight projects a searchable list). For a saved automation this changes its switches straight away.
+3. **Where**: where it runs, picked in the same table as on its page: **All projects**, or a switch for each project
+   (past eight projects a search box shows above them). For a saved automation this changes its switches straight away.
    Then, for a task trigger, **With any of these labels** (blank is any task) and **Tasks in epics**: switch it off to
    skip tasks in epics. One epic can still be switched on for itself from its popover on the board.
 4. **Review & try**: the sentence, each step in one line with an **Edit** that goes back to it, and:

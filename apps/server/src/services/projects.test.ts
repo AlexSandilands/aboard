@@ -57,6 +57,13 @@ describe("projects", () => {
   });
 
   describe("General", () => {
+    it("is named on the board snapshot, once there is one", () => {
+      const { services: s } = createTestHarness();
+      expect(s.board.snapshot().generalProjectId).toBeNull();
+      s.projects.ensureGeneral();
+      expect(s.board.snapshot().generalProjectId).toBe(s.projects.general().id);
+    });
+
     it("is made once on start, with no folder, and a second start keeps it", () => {
       const { services: s } = createTestHarness();
       expect(s.projects.list()).toEqual([]);

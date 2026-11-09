@@ -179,6 +179,7 @@ export const startPlanned = defineAutomation({
   description:
     "Starts an agent on each Planned task whose Autopilot flag is On, once it has a plan and nothing blocks it.",
   needsAgent: true,
+  needsRepo: true,
   group: "ship",
   schema: ConfigSchema,
   fields: FIELDS,
