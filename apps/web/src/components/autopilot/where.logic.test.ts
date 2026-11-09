@@ -12,6 +12,7 @@ import {
   PROJECT_CHIPS_MAX,
   scopeIsOn,
   scopeToggle,
+  tableProjects,
   turnsOn,
   usesProjectSearch,
   whereScopes,
@@ -159,13 +160,31 @@ describe("ownSettingsLabel", () => {
   });
 });
 
+describe("tableProjects", () => {
+  const scopes = {
+    projects: [
+      { id: "p1", title: "storefront" },
+      { id: "g", title: "General" },
+    ],
+    epics: [],
+    generalId: "g",
+  };
+
+  it("leaves General out only for an automation that needs a repository", () => {
+    expect(tableProjects(scopes, true).map((p) => p.id)).toEqual(["p1"]);
+    expect(tableProjects(scopes, false).map((p) => p.id)).toEqual(["p1", "g"]);
+  });
+
+  it("keeps every project when there is no General", () => {
+    expect(tableProjects({ ...scopes, generalId: null }, true).map((p) => p.id)).toEqual(["p1", "g"]);
+  });
+});
+
 describe("the table's header", () => {
-  it("reads on, off or mixed from its rows, and the board's value with no rows", () => {
-    expect(columnState([true, true], false)).toBe("on");
-    expect(columnState([false, false], true)).toBe("off");
-    expect(columnState([true, false], true)).toBe("mixed");
-    expect(columnState([], true)).toBe("on");
-    expect(columnState([], false)).toBe("off");
+  it("reads on, off or mixed from its rows", () => {
+    expect(columnState([true, true])).toBe("on");
+    expect(columnState([false, false])).toBe("off");
+    expect(columnState([true, false])).toBe("mixed");
   });
 
   it("turns on only from all off: mixed counts as on somewhere", () => {

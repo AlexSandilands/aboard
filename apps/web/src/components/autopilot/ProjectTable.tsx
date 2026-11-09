@@ -19,8 +19,6 @@ import { columnState, filterProjects, headerTurnsOn, usesProjectSearch, type Hea
 export interface ProjectTableColumn {
   key: string;
   label: string;
-  /** The stored board value: only used when there are no rows to read. */
-  boardOn: boolean;
   isOn: (projectId: string) => boolean;
   onToggle: (projectId: string, on: boolean) => void;
   /** Sets the whole column, dropping its per-project switches. */
@@ -81,6 +79,7 @@ export function ProjectTable({
   disabled,
   blocked,
   flush = false,
+  empty = "There are no projects yet.",
 }: {
   label: string;
   /** The rows, in lane order. */
@@ -99,6 +98,8 @@ export function ProjectTable({
   blocked: string | null;
   /** Sits straight in a card of its own, so it draws no border and the line under it brings its own inset. */
   flush?: boolean;
+  /** Said instead of the table when it has no rows. */
+  empty?: string;
 }) {
   const differing = projects.filter((p) => differs(p.id)).length;
   // A table with something to explain opens on it; one with nothing to say stays one line.
@@ -107,7 +108,9 @@ export function ProjectTable({
   const [query, setQuery] = useState("");
   const [asking, setAsking] = useState<{ column: ProjectTableColumn; on: boolean; loss: HeaderLoss } | null>(null);
 
-  if (projects.length === 0) return <p className="text-xs text-muted-foreground">There are no projects yet.</p>;
+  if (projects.length === 0) {
+    return <p className={cn("text-xs text-muted-foreground", flush && "px-3 py-3 sm:px-4")}>{empty}</p>;
+  }
 
   const template: CSSProperties = {
     gridTemplateColumns: `minmax(0, 1fr) repeat(${columns.length}, ${columns.length === 1 ? "4.5rem" : "3.75rem"})`,
@@ -116,7 +119,7 @@ export function ProjectTable({
   const shown = usesProjectSearch(projects.length) ? filterProjects(projects, query) : projects;
 
   const headerClick = (column: ProjectTableColumn) => {
-    const on = headerTurnsOn(columnState(rowIds.map(column.isOn), column.boardOn));
+    const on = headerTurnsOn(columnState(rowIds.map(column.isOn)));
     const loss = column.headerLoss(on);
     if (loss) setAsking({ column, on, loss });
     else column.onHeader(on);
@@ -155,7 +158,7 @@ export function ProjectTable({
               </div>
             ))}
             {columns.map((column) => {
-              const state = columnState(rowIds.map(column.isOn), column.boardOn);
+              const state = columnState(rowIds.map(column.isOn));
               const turnOnBlocked = headerTurnsOn(state) && Boolean(blocked);
               return (
                 // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- only stops a click on the switch reaching the row
@@ -365,7 +368,7 @@ function HeaderClearDialog({
             {ask ? lossWhere(ask.loss) : ""}{" "}
             {ask?.on
               ? `${one ? "is" : "are"} switched off on ${one ? "its" : "their"} own. This clears that, so ${one ? "it follows" : "they follow"} All projects.`
-              : `${one ? "sets its" : "set their"} own On, which beats All projects. This clears that, so it runs nowhere.`}
+              : `${one ? "has its own setting" : "have their own setting"}, which beats All projects. This clears that, so it runs nowhere.`}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

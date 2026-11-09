@@ -10,7 +10,7 @@ import {
 import { DetailSection } from "~/components/settings/agents/SplitCard";
 import { Skeleton } from "~/components/ui/skeleton";
 import { ProjectTable, type ProjectTableColumn } from "./ProjectTable";
-import { draftHeader, draftRowOn, draftRowToggle, headerLoss, type DraftWhere } from "./where.logic";
+import { draftHeader, draftRowOn, draftRowToggle, headerLoss, tableProjects, type DraftWhere } from "./where.logic";
 import { useWhere } from "./useWhere";
 
 /**
@@ -85,7 +85,7 @@ function LiveProjects({
     if (writes.length > 0) apply.mutate(writes);
   };
   const board = boardState(input.board);
-  const projects = scopes.projects.filter((p) => !(automation.needsRepo && p.id === scopes.generalId));
+  const projects = tableProjects(scopes, automation.needsRepo);
   const shownIds = projects.map((p) => p.id);
   const stateOf = (id: string) => {
     const project = input.projects.find((p) => p.id === id);
@@ -94,7 +94,6 @@ function LiveProjects({
   const column: ProjectTableColumn = {
     key: "on",
     label: "On",
-    boardOn: board !== "off",
     isOn: (id) => stateOf(id) !== "off",
     onToggle: (id, on) => save(whereProject(input, id, on)),
     onHeader: (on) => save(on ? whereOnEverywhere(input, everywhereMode) : whereOffEverywhere(input)),
@@ -117,6 +116,7 @@ function LiveProjects({
       disabled={apply.isPending}
       blocked={automation.blocked}
       flush={flush}
+      empty={automation.needsRepo ? "No projects with a repository yet." : undefined}
     />
   );
 }
@@ -142,7 +142,6 @@ export function DraftProjects({
   const column: ProjectTableColumn = {
     key: "on",
     label: "On",
-    boardOn: everywhere,
     isOn: (id) => draftRowOn(draft, id),
     onToggle: (id, on) => onChange(draftRowToggle(draft, allIds, id, on)),
     onHeader: (on) => onChange(draftHeader(on)),

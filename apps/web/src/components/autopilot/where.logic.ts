@@ -38,6 +38,10 @@ export function whereScopes(board: BoardSnapshot | undefined, epicScope: boolean
   return { projects, epics, generalId: board.generalProjectId };
 }
 
+/** The table's rows: an automation that needs a repository leaves out General, which has none. */
+export const tableProjects = (scopes: WhereScopes, needsRepo: boolean): WhereScopes["projects"] =>
+  needsRepo ? scopes.projects.filter((p) => p.id !== scopes.generalId) : scopes.projects;
+
 /** Whether any of the writes turns something on: refused by the server for an automation that is blocked. */
 export const turnsOn = (writes: ReadonlyArray<WhereWrite>): boolean =>
   writes.some((w) => w.mode === "on" || w.mode === "preview");
@@ -84,12 +88,8 @@ export function ownSettingsLabel(
 /** What a table header switch shows for its column: the rows' states, not the stored board value. */
 export type ColumnState = "on" | "off" | "mixed";
 
-/**
- * Whether the column is on in every row, in none or in some. With no rows to read (a board with no project the
- * automation can use), it falls back to the board's own value.
- */
-export function columnState(rows: readonly boolean[], boardOn: boolean): ColumnState {
-  if (rows.length === 0) return boardOn ? "on" : "off";
+/** Whether the column is on in every row, in none or in some. */
+export function columnState(rows: readonly boolean[]): ColumnState {
   const on = rows.filter(Boolean).length;
   if (on === 0) return "off";
   return on === rows.length ? "on" : "mixed";

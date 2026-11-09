@@ -8,6 +8,15 @@ const essentials = (key: string) =>
     .map((f) => f.key);
 
 describe("the built-in catalogue", () => {
+  it("flags the automations that need a repository, and only those", () => {
+    expect(AUTOMATIONS.filter((a) => a.needsRepo).map((a) => a.key)).toEqual([
+      "start_planned",
+      "review_prs",
+      "fix_prs",
+      "merge_epic_prs",
+    ]);
+  });
+
   it("lists every built-in under a group of its own, never the user's", () => {
     expect(AUTOMATIONS.filter((a) => !a.group || a.group === "yours").map((a) => a.key)).toEqual([]);
   });
