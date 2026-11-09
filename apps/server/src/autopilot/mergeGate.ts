@@ -2,6 +2,7 @@ import {
   AUTOPILOT_ACTIVE_STATUSES,
   AUTOPILOT_FIX_PRS,
   AUTOPILOT_REVIEW_PRS,
+  reviewsTaskPrs,
   currentPrReview,
   reviewIsInProgress,
   type AutopilotRun,
@@ -31,14 +32,14 @@ export const headSeenSince = (link: PrLink, changes: PrChanges | undefined): num
   Date.parse(changes?.newHead ?? link.createdAt);
 
 /**
- * Review PRs is on for the task, in Preview too: a merge then waits for its review. In Preview (or under Preview
+ * Review PRs reviews the task's PR, in Preview too: a merge then waits for its review. In Preview (or under Preview
  * everything) that review never comes, which holds merges back rather than letting a PR through unreviewed.
  */
 const reviewPrsOn = (services: Services, task: TaskSummary): boolean => {
   const automation = services.autopilot.automations().find((a) => a.key === AUTOPILOT_REVIEW_PRS);
-  return (
-    automation !== undefined && services.autopilot.resolve(automation, task.projectId, task.parent?.id ?? null).enabled
-  );
+  if (!automation) return false;
+  const resolved = services.autopilot.resolve(automation, task.projectId, task.parent?.id ?? null);
+  return resolved.enabled && reviewsTaskPrs(resolved);
 };
 
 /**

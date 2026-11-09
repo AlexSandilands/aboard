@@ -10,6 +10,14 @@ import { FINDING_SEVERITIES, FindingSeverity, type SeverityCounts } from "./revi
 /** The automation's key, stored in settings and runs. */
 export const AUTOPILOT_REVIEW_PRS = "review_prs";
 
+/**
+ * Whether Review PRs reviews a task's PR where it resolves like this: Your PRs is on, or the task's epic set its own On
+ * or Preview, which can only mean its tasks' PRs. Used by the check and by the merge gate, so a PR isn't held for a
+ * review that will never come.
+ */
+export const reviewsTaskPrs = (resolved: { source: string; config: Record<string, unknown> | null }): boolean =>
+  resolved.source === "epic" || resolved.config?.ownPrs !== false;
+
 /** The fix automation's key (docs/features/autopilot.md#fix-prs), which acts on the reviews' hand-off. */
 export const AUTOPILOT_FIX_PRS = "fix_prs";
 

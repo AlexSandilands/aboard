@@ -394,7 +394,7 @@ its own. Built-in automations can't be replaced; say which of their settings to 
    out there is nothing to do.
 
 3. **Don't rebuild what is built in.** Reviewing pull requests is Review PRs' job: the PRs linked to tasks, and, with
-   its Other people's PRs setting and a list of authors, anyone else's (it approves only past a gate the board checks,
+   its Others' column and the people it lists, anyone else's (it approves only past a gate the board checks,
    asks for changes or hands the PR to the user). Point the user there instead of drafting a PR-review automation.
 
 4. **Never ask an agent to do what the script can.** A prompt that says "fetch the open PRs, then review each" should

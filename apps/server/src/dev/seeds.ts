@@ -1195,7 +1195,7 @@ const autopilot: Scenario = (s, opts) => {
     },
   });
   s.autopilot.setScope("board", null, "fix_prs", { config: { resolveThreads: false } });
-  // Review PRs' other people's PRs: on with nobody listed in one project (Needs setup), and in another a colleague's PR
+  // Review PRs' other people's PRs: on with nobody listed in one project (its row asks for people), and in another a colleague's PR
   // it found clean but left for the user to approve (Needs you).
   const [first, second] = s.projects.list();
   if (second)

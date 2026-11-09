@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import {
   AUTOPILOT_FIX_PRS,
   AUTOPILOT_REVIEW_PRS,
+  reviewsTaskPrs,
   BRAND,
   BUILTIN_REVIEW_SKILL_BODY,
   PR_REVIEW_OUTPUT_SCHEMA,
@@ -55,12 +56,11 @@ import {
 import {
   OTHER_PRS_ADVANCED_FIELDS,
   OTHER_PRS_DEFAULTS,
-  OTHER_PRS_ESSENTIAL_FIELDS,
+  OTHER_PRS_TABLE_FIELDS,
   OTHER_PRS_SHAPE,
   actRepoPr,
   isRepoPrData,
   otherPrCandidates,
-  otherPrsNeeds,
 } from "./repoPrs.ts";
 
 export { AUTOPILOT_REVIEW_PRS };
@@ -407,6 +407,8 @@ const ConfigSchema = z.object({
   reviewDrafts: z.boolean(),
   /** Reviews per PR. An engine setting (prReviewRounds) before 044_autopilot_agent_defaults. */
   rounds: z.number().int().min(1).max(10),
+  /** Review task PRs here. Off where only other people's PRs are wanted; a project switched off has neither. */
+  ownPrs: z.boolean(),
   ...OTHER_PRS_SHAPE,
 });
 type ReviewPrsConfig = z.infer<typeof ConfigSchema>;
@@ -467,7 +469,15 @@ export const reviewPrs = defineAutomation({
       help: "Reviews of one PR, each after new commits.",
       info: "The last round asks for no fixes below the fix threshold. Fix PRs' attempts on checks and reviews should be at least this.",
     },
-    ...OTHER_PRS_ESSENTIAL_FIELDS,
+    {
+      key: "ownPrs",
+      label: "Your PRs",
+      kind: "boolean",
+      tier: "essential",
+      inWhereTable: true,
+      help: "Review pull requests linked to tasks.",
+    },
+    ...OTHER_PRS_TABLE_FIELDS,
     {
       key: "reviewDrafts",
       label: "Review drafts",
@@ -521,9 +531,9 @@ export const reviewPrs = defineAutomation({
     skill: { source: "builtin" },
     reviewDrafts: false,
     rounds: 3,
+    ownPrs: true,
     ...OTHER_PRS_DEFAULTS,
   },
-  needs: otherPrsNeeds,
   check: (ctx) => [...taskPrCandidates(ctx), ...otherPrCandidates(ctx)],
   act: async (candidate, ctx): Promise<ActionResult> =>
     isRepoPrData(candidate.data) ? actRepoPr(candidate, ctx) : actTaskPr(candidate, ctx),
@@ -537,6 +547,12 @@ const basisOf = (output: Record<string, unknown> | null | undefined): PrReviewBa
 function taskPrCandidates({ services, projects }: CheckContext<ReviewPrsConfig>): Candidate[] {
   return projects.flatMap(({ project, config }): Candidate[] =>
     services.tasks.summaries({ projectId: project.id }).flatMap((task): Candidate[] => {
+      if (
+        !config.ownPrs &&
+        !(task.parent && reviewsTaskPrs(services.autopilot.resolve(reviewPrs, project.id, task.parent.id)))
+      ) {
+        return [];
+      }
       if (task.kind === "epic" || task.manual || task.archivedAt !== null || task.status === "done") return [];
       // The local review comes first: a PR opened before it ended would be reviewed twice, and on a head the loop
       // is about to change. A task not yet in Review hasn't started its loop (the move to Review opens round 1), so

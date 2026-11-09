@@ -68,7 +68,8 @@ everywhere (clearing those projects' own On) or only for the board. Click a row 
 - **Where it runs**: a table with a row for each project under **All projects**. A row's switch turns the automation
   on or off there; the switch on **All projects** shows what the rows add up to, sitting half way when they differ. A
   click on it switches every project off, or on when all are off, and asks first if that would lose switches you set
-  on a project. A blue dot marks a project set differently from the rest. Click a project to find its **Preview**
+  on a project. A blue dot marks a project set differently from the rest. Review PRs has more columns: see
+  [Other people's PRs](#other-peoples-prs). Click a project to find its **Preview**
   switch; a project in Preview shows amber with a badge. Past eight projects a search box shows above the rows. The
   line under the table says what new projects get. Automations that need a repository leave out the General project.
   Epics aren't listed here: an epic's own setting is on its button on the board, and it still beats its project's.
@@ -140,9 +141,12 @@ automation alone.
 ### Other people's PRs
 
 Review PRs can also review your colleagues' pull requests, ones no task links to, and act on them as you: approve,
-ask for changes, or hand them to you. Turn on **Other people's PRs** in a project's Review PRs settings and list the
-**Authors** whose PRs it reviews (their GitHub logins, comma separated). On with no authors, it says **Needs setup**
-and does nothing. If you ran a custom automation that reviews PRs, switch it off in that project first; Review PRs
+ask for changes, or hand them to you. In Review PRs' **Where it runs** table each project has **Your PRs** and
+**Others'**, and a project runs while either is on. Turn on **Others'** and pick the **People** whose PRs it reviews:
+click the initials to open their name pills, and **Add** a GitHub login that isn't listed yet. **All projects** holds
+the default list; a project with its own list uses that instead, and the ↶ beside People goes back to the default. A
+row with Others' on and nobody listed shows **Add** and reviews nothing. **Approve** sets, per project, whether it may
+approve as you; without it a clean PR waits for your approval. If you ran a custom automation that reviews PRs, switch it off in that project first; Review PRs
 reads what it posted (its hidden `autopilot-review` markers), so rounds, approvals and hand-offs carry over.
 
 - **When.** Every five minutes it reads the repository (the project folder's `origin`). It waits for the checks to

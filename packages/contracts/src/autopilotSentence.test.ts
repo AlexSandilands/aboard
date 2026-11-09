@@ -27,15 +27,19 @@ describe("automationSentence", () => {
     expect(say("start_planned", { skill: { source: "builtin" } })).toContain("following the default workflow");
   });
 
-  it("adds other people's PRs to Review PRs when that source is on", () => {
-    expect(say("review_prs")).not.toContain("Also review");
-    expect(say("review_prs", { otherPrs: true, otherAuthors: "Alice, @bob", otherApprove: true })).toContain(
-      "Also review open PRs by alice, bob that no task links to: approve it when it is clean and the gate passes",
-    );
-    expect(say("review_prs", { otherPrs: true, otherAuthors: "" })).toContain("nobody yet (add authors)");
-    expect(say("review_prs", { otherPrs: true, otherAuthors: "alice" })).toContain(
-      "a clean one waits for your approval",
-    );
+  it("always describes both Review PRs sources, naming nobody: the table says who and where", () => {
+    const sentence = say("review_prs", {
+      reviewDrafts: true,
+      otherPrs: true,
+      otherAuthors: "alice",
+      otherApprove: true,
+    });
+    expect(sentence).toContain("(drafts too)");
+    expect(sentence).toContain("up to 3 rounds per PR");
+    expect(sentence).toContain("Also review open PRs by the people you choose that no task links to");
+    expect(sentence).toContain("A clean one is approved where you allow it, and otherwise waits for you.");
+    expect(sentence).not.toContain("alice");
+    expect(say("review_prs")).toBe(sentence.replace(" (drafts too)", ""));
   });
 
   it("lists only the triggers Fix PRs reacts to, and says when none is on", () => {
