@@ -1,5 +1,4 @@
 import {
-  boardState,
   projectState,
   stateOf,
   whereEpic,
@@ -107,15 +106,14 @@ export interface HeaderLoss {
 
 /**
  * What a header click takes away, or null when it takes nothing a person set. Switching off drops every own On or
- * Preview (`whereOwnOn`); turning on drops the projects set Off, but only under a board that is on: under one that is
- * off those rows change nothing. Projects missing from `shown` (General, where it is left out) go unmentioned, since
- * nobody can see them to miss them.
+ * Preview (`whereOwnOn`); turning on drops the projects set Off, under a board that is off too: the rows show nothing
+ * there, but the click would start the automation in a project someone excluded. Projects missing from `shown`
+ * (General, where it is left out) go unmentioned, since nobody can see them to miss them.
  */
 export function headerLoss(input: WhereInput, shown: readonly string[], turnOn: boolean): HeaderLoss | null {
   const titles = (projects: ReadonlyArray<{ id: string; title: string }>) =>
     projects.filter((p) => shown.includes(p.id)).map((p) => p.title);
   if (turnOn) {
-    if (boardState(input.board) === "off") return null;
     const projects = titles(input.projects.filter((p) => p.mode === "off"));
     return projects.length > 0 ? { projects, epics: 0 } : null;
   }

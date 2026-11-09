@@ -214,13 +214,17 @@ describe("the table's header", () => {
     expect(headerLoss(where("on", ["off", "inherit", "inherit"]), shown, false)).toBeNull();
   });
 
-  it("warns before turning on only over projects a board that is on has set Off", () => {
+  it("warns before turning on over projects set Off, under a board that is off too", () => {
     expect(headerLoss(where("on", ["off", "off", "off"]), shown, true)).toEqual({
       projects: ["project 0", "project 1", "project 2"],
       epics: 0,
     });
-    // Under a board that is off, Off changes nothing.
-    expect(headerLoss(where("off", ["off", "inherit", "inherit"]), shown, true)).toBeNull();
+    // The click would start it in a project someone excluded, though the row shows nothing yet.
+    expect(headerLoss(where("off", ["off", "inherit", "inherit"]), shown, true)).toEqual({
+      projects: ["project 0"],
+      epics: 0,
+    });
+    expect(headerLoss(where("off", ["inherit", "inherit", "inherit"]), shown, true)).toBeNull();
   });
 
   it("doesn't warn about a project the table doesn't list", () => {

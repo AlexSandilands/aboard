@@ -106,7 +106,7 @@ export function ProjectTable({
   const [open, setOpen] = useState(differing > 0);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [asking, setAsking] = useState<{ column: ProjectTableColumn; on: boolean; loss: HeaderLoss } | null>(null);
+  const [asking, setAsking] = useState<{ key: string; on: boolean; loss: HeaderLoss } | null>(null);
 
   if (projects.length === 0) {
     return <p className={cn("text-xs text-muted-foreground", flush && "px-3 py-3 sm:px-4")}>{empty}</p>;
@@ -121,7 +121,7 @@ export function ProjectTable({
   const headerClick = (column: ProjectTableColumn) => {
     const on = headerTurnsOn(columnState(rowIds.map(column.isOn)));
     const loss = column.headerLoss(on);
-    if (loss) setAsking({ column, on, loss });
+    if (loss) setAsking({ key: column.key, on, loss });
     else column.onHeader(on);
   };
 
@@ -229,7 +229,8 @@ export function ProjectTable({
         onOpenChange={(next) => (next ? null : setAsking(null))}
         title={title}
         ask={asking}
-        onConfirm={() => asking?.column.onHeader(asking.on)}
+        // Looked up now: the switches can change over the event stream while the dialog is open.
+        onConfirm={() => asking && columns.find((c) => c.key === asking.key)?.onHeader(asking.on)}
       />
     </div>
   );
