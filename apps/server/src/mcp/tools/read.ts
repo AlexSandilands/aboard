@@ -296,7 +296,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
         "The 'where was I' call. Full task detail: description, plan context, every phase/step with its status " +
         "and id (1.2 [x] ...), the current step, links with live PR/thread state, and recent activity including " +
         "handover notes. ALWAYS call this before resuming work on an existing task, then act on any 'Missing links' " +
-        "it lists (the task's ticket, your T3 thread). Images the user pasted into the text (a screenshot of a bug) " +
+        "it lists (the task's ticket and, if you're working on it, your own session or thread). Images the user pasted into the text (a screenshot of a bug) " +
         "are listed under 'Images' with their absolute file paths: open them with your file tools.",
       inputSchema: {
         task: taskField,

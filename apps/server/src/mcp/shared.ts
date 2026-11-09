@@ -15,6 +15,7 @@ import {
   PlanInput,
   parsePlanMarkdown,
   providerActive,
+  selfLinkLookups,
   SUGGESTED_MODEL_REASON_MAX,
   type Project,
   type TaskDetail,
@@ -22,7 +23,7 @@ import {
   type TaskSummary,
   unmergedEpicBranch,
 } from "@repo/contracts";
-import { deliveryHint, renderTaskShort, type ChildActivity } from "./format.ts";
+import { deliveryHint, renderTaskShort, type ChildActivity, type SelfLinkAsk } from "./format.ts";
 import type { AppContext } from "../app.ts";
 import { boardUrlOf } from "../config.ts";
 import { AppError } from "../errors.ts";
@@ -205,9 +206,15 @@ export const autopilotValue = (choice: z.infer<typeof autopilotField>): boolean 
 export const t3ThreadField = z
   .object({
     environmentId: z.string().min(1).describe("From the T3 tool t3_environment_read."),
-    threadId: z.string().min(1).describe("From the T3 tool t3_thread_configuration."),
+    threadId: z
+      .string()
+      .min(1)
+      .describe(`The thread's id, from ${selfLinkLookups("t3-code")}.`),
   })
-  .describe("The T3 Code thread doing this work, so the user can jump back to it from the board.");
+  .describe(
+    "The T3 Code thread doing this work, so the user can jump back to it from the board. Simpler: pass the bare thread " +
+      "id, which needs no environmentId and which the board checks.",
+  );
 
 export const planPhasesField = z
   .array(
@@ -412,7 +419,14 @@ export function taskResult(
   services: Services,
   taskId: string,
   headline: string,
-  opts: { planningHints?: boolean; closing?: boolean; deliveryHint?: boolean; captureHint?: boolean } = {},
+  opts: {
+    planningHints?: boolean;
+    closing?: boolean;
+    deliveryHint?: boolean;
+    captureHint?: boolean;
+    /** The caller is starting work: the result says how to link its own session or thread. */
+    selfLink?: SelfLinkAsk;
+  } = {},
 ): CallToolResult {
   const task = services.tasks.detail(taskId);
   const project = safeProject(services, task.projectId);
@@ -424,8 +438,10 @@ export function taskResult(
     opts.deliveryHint || opts.planningHints
       ? epicDeliveryHint(services, task.kind === "epic" ? task.id : (task.parent?.id ?? null))
       : null;
+  const selfLink = opts.selfLink ? { selfLink: opts.selfLink } : {};
   const body = opts.planningHints
     ? renderTaskShort(task, project, {
+        ...selfLink,
         labelsInUse: services.labels.usage(),
         modelHint: true,
         captureHint: true,
@@ -436,6 +452,7 @@ export function taskResult(
         ticketSystems,
       })
     : renderTaskShort(task, project, {
+        ...selfLink,
         progress,
         autoReview,
         deliveryHint: delivery,

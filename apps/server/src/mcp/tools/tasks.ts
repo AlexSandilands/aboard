@@ -3,6 +3,8 @@ import {
   classifyLink,
   CloseTaskInput,
   isT3ThreadId,
+  rejectedValueText,
+  SELF_LINK_T3_REFUSED,
   TaskResolution,
   templateHasPlan,
   TaskStatusInput,
@@ -11,7 +13,7 @@ import {
 } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import type { Services } from "../../services/types.ts";
-import { missingScreenshotsWarning, resolutionText, socialBreakHint, statusLabel } from "../format.ts";
+import { harnessOfClient, missingScreenshotsWarning, resolutionText, socialBreakHint, statusLabel } from "../format.ts";
 import { openRoundInstructions } from "./reviews.ts";
 import {
   actorField,
@@ -43,6 +45,7 @@ import {
   taskField,
   taskResult,
   textResult,
+  type ToolContext,
   type ToolRegistrar,
   type WritingProjectArgs,
   newProjectNotice,
@@ -58,37 +61,46 @@ const linksField = z
   .array(z.string().min(1))
   .optional()
   .describe(
-    "Ticket keys, PR URLs or URLs to attach. Ticket keys in the title may be linked automatically; unlink removes a wrong one.",
+    "Ticket keys, PR URLs, URLs or a bare T3 thread id to attach. Ticket keys in the title may be linked automatically; unlink removes a wrong one.",
   );
 
 /**
- * The links to create a task with, and the values left out: a bare value no ticket system matches (an agent told to
- * pass "the ticket key" on a board with no systems, say) would otherwise fail the whole create.
+ * The links to create a task with, and what to say about the values left out. A value that can't be linked (one no
+ * ticket system matches, on a board with no systems, or a T3 thread the board can't find) would otherwise fail the
+ * whole create. Values go through resolveLinkInput first, as on `link`, so a bare T3 thread id works here too.
  */
-function linkInputs(
-  services: Services,
+async function linkInputs(
+  { services, ctx }: Pick<ToolContext, "services" | "ctx">,
   args: { links?: string[] | undefined; t3Thread?: T3ThreadRef | undefined },
-): { links: LinkInput[]; skipped: string[] } {
+): Promise<{ links: LinkInput[]; note: string }> {
   const ticketSystems = services.settings.get().ticketSystems;
   const known = (value: string) =>
     isT3ThreadId(value) ||
     classifyLink(value, { ticketSystems }) !== null ||
     classifyLink(value.toUpperCase(), { ticketSystems })?.kind === "ticket";
   const values = args.links ?? [];
-  return {
-    links: [
-      ...values.filter(known).map((value) => ({ value })),
-      ...(args.t3Thread ? [{ t3Thread: args.t3Thread }] : []),
-    ],
-    skipped: values.filter((value) => !known(value)),
-  };
+  const links: LinkInput[] = [];
+  const notes: string[] = [];
+  for (const value of values.filter(known)) {
+    try {
+      const { input, warning } = await ctx.integrations.resolveLinkInput({ value });
+      links.push(input);
+      if (warning) notes.push(`Warning: ${warning}.`);
+    } catch (error) {
+      if (!(error instanceof AppError)) throw error;
+      const retry = isT3ThreadId(value) ? ` ${SELF_LINK_T3_REFUSED}` : "";
+      notes.push(`Not linked: ${rejectedValueText(value)} (${error.message}).${retry}`);
+    }
+  }
+  if (args.t3Thread) links.push({ t3Thread: args.t3Thread });
+  const skipped = values.filter((value) => !known(value)).map(rejectedValueText);
+  if (skipped.length) {
+    notes.push(
+      `Not linked: ${skipped.join(", ")} (no ticket system set up in Settings matches ${skipped.length === 1 ? "it" : "them"}).`,
+    );
+  }
+  return { links, note: notes.map((n) => ` ${n}`).join("") };
 }
-
-/** Says which links weren't added, and why. */
-const skippedText = (skipped: readonly string[]): string =>
-  skipped.length
-    ? ` Not linked: ${skipped.join(", ")} (no ticket system set up in Settings matches ${skipped.length === 1 ? "it" : "them"}).`
-    : "";
 
 /**
  * The template an agent named, found before a project is auto-created so a typo doesn't leave one behind. A project
@@ -127,7 +139,7 @@ function templateFor(
  * Task lifecycle tools: add_to_backlog, create_task, create_epic, move_task, close_task, update_task,
  * add_note, request_attention.
  */
-export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor }) => {
+export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor, client }) => {
   server.registerTool(
     "add_to_backlog",
     {
@@ -140,8 +152,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         "doesn't know the repo yet it creates a project for it, and the result starts by saying so. For work that belongs to no code project (a " +
         "document to update, something to review), pass general: true instead: it files the task in the General " +
         "project. Pass the ticket key in links if there is one, " +
-        "epic when it is part of a larger feature, blockedBy when other tasks must finish first, and t3Thread when " +
-        "running inside T3 Code. Set autopilot only if the user has said whether Autopilot may start it, autoMerge " +
+        "epic when it is part of a larger feature, blockedBy when other tasks must finish first, and, if you are " +
+        "filing work you will do in T3 Code, your thread id in links. Set autopilot only if the user has said whether Autopilot may start it, autoMerge " +
         "only if the user has said its PR may be merged without them, and priority only if the user has asked for it. Pass " +
         "manual: true for a to-do a person does rather than code (agents and Autopilot leave it alone). Pass " +
         "template (a name from list_templates, such as Bug or Spike) to start from the user's template: its " +
@@ -172,11 +184,11 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
       },
     },
     (args) =>
-      run(() => {
+      run(async () => {
         requireWritingProject(args);
         const template = templateFor(services, args);
         const { project, created } = writingProject(services, args);
-        const { links, skipped } = linkInputs(services, args);
+        const { links, note } = await linkInputs({ services, ctx }, args);
         const task = services.tasks.create({
           projectId: project.id,
           ...(args.title ? { title: args.title } : {}),
@@ -196,7 +208,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         const plan = task.progress.total ? ` with its ${task.progress.total}-step plan` : "";
         const from = template ? ` from template ${template.name}${plan}` : "";
         return textResult(
-          `${newProjectNotice(project, created, "this task")}Added #${task.number} "${task.title}" to Backlog in ${project.title}${where}${from}.${skippedText(skipped)}`,
+          `${newProjectNotice(project, created, "this task")}Added #${task.number} "${task.title}" to Backlog in ${project.title}${where}${from}.${note}`,
         );
       }),
   );
@@ -209,8 +221,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         "Create a task you are about to work on, with its plan, in one call. Lands in Planned. A plan is required: " +
         "either structured `phases` or a `markdown` checklist. A good plan has 1-4 phases, each with 3-8 concrete, " +
         "verifiable steps ('Add links table migration', not 'Do backend'). Optionally attach links (PR URLs, ticket " +
-        "keys, URLs; link the ticket now, not at PR time) and, when running inside T3 Code, t3Thread so the user " +
-        "can jump back to your thread. Tag it with labels for the kind of work (ui, backend, ...) and set " +
+        "keys, URLs; link the ticket now, not at PR time) and, when running inside T3 Code, your thread id, so the " +
+        "user can jump back to your thread. Tag it with labels for the kind of work (ui, backend, ...) and set " +
         "suggestedModel to the tier its implementation needs, epic when it is part of a larger feature, and " +
         "blockedBy when other tasks must be Done first. For work that belongs to no code project, pass general: true " +
         "instead of workspacePath. When the result asks about the Autopilot flag, ask the user " +
@@ -242,12 +254,12 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
       },
     },
     (args) =>
-      run(() => {
+      run(async () => {
         requireWritingProject(args);
         const plan = planFromArgs(args);
         const template = templateFor(services, args, { needsPlan: !args.manual, hasPlan: plan !== null });
         const { project, created } = writingProject(services, args);
-        const { links, skipped } = linkInputs(services, args);
+        const { links, note } = await linkInputs({ services, ctx }, args);
         const task = services.tasks.create({
           projectId: project.id,
           ...(args.title ? { title: args.title } : {}),
@@ -268,7 +280,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         return taskResult(
           services,
           task.id,
-          `${newProjectNotice(project, created, "this task")}Created task #${task.number} in ${project.title}.${skippedText(skipped)}`,
+          `${newProjectNotice(project, created, "this task")}Created task #${task.number} in ${project.title}.${note}`,
           {
             planningHints: true,
           },
@@ -285,7 +297,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
         "columns its tasks are in. An epic has no plan and no column of its own: its tasks carry the plans, and its " +
         "status follows them (the furthest-back open task sets it; Done once they all are). Pass tasks to put " +
         'existing tasks in it now; add new ones later with create_task or add_to_backlog (epic: "#N"). Epics don\'t ' +
-        "nest. Link the T3 thread that will coordinate it with t3Thread. Pass delivery only once the user has chosen " +
+        "nest. Link the T3 thread that will coordinate it by passing its id in links. Pass delivery only once the user has chosen " +
         "how its tasks are delivered (pull requests to main, or an integration branch).",
       inputSchema: {
         title: z.string().min(1).describe("Short name for the feature."),
@@ -323,7 +335,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
             );
           }
         }
-        const { links, skipped } = linkInputs(services, args);
+        const { links, note } = await linkInputs({ services, ctx }, args);
         const epic = services.tasks.createEpic(
           {
             projectId: project.id,
@@ -336,7 +348,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
           actor(args.actor),
         );
         const added = children.length ? ` with ${children.map((c) => `#${c.number}`).join(", ")}` : "";
-        const headline = `${newProjectNotice(project, created, "this epic")}Created epic #${epic.number} in ${project.title}${added}.${skippedText(skipped)}`;
+        const headline = `${newProjectNotice(project, created, "this epic")}Created epic #${epic.number} in ${project.title}${added}.${note}`;
         if (args.delivery) {
           try {
             await ctx.integrations.setEpicDelivery(epic.id, args.delivery, actor(args.actor));
@@ -356,7 +368,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
       title: "Move task to a status",
       description:
         "Change a task's status: backlog -> planned -> in_progress -> review -> done (any direction is allowed). " +
-        "Move to in_progress when you start implementing (and link your T3 thread if the task doesn't have it yet), to review when the work is done, and to done " +
+        "Move to in_progress when you start implementing (the result says how to link your own session or thread), to review when the work is done, and to done " +
         "when merged or verified. Mark every plan step done (or skipped) before moving on to review or done; the result lists any still open. Leaving Backlog requires a plan, except for a manual task; if you get PLAN_REQUIRED, call set_plan first. " +
         "With auto-review on, moving to review opens a local review round and the result tells you how to run " +
         "the review loop; finish it before opening the PR (a PR opened earlier is reviewed on GitHub too), then always open the PR and link it, even if findings are still open at the round limit (list them in the PR description), or push to the PR already linked. Otherwise link the PR before moving to review. " +
@@ -406,6 +418,9 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor 
               : null;
           return taskResult(services, id, [moved, screenshots, early, review].filter(Boolean).join("\n\n"), {
             closing: summary.kind !== "epic" && summary.status === "done" && !wasDone,
+            ...(summary.status === "in_progress" && args.status === "in_progress"
+              ? { selfLink: { harness: harnessOfClient(client()), label: `Implementing #${summary.number}` } }
+              : {}),
           });
         },
         { PLAN_REQUIRED: PLAN_REQUIRED_HINT },

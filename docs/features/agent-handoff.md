@@ -369,7 +369,7 @@ once it has a PR or a T3 thread.
   panel says T3 isn't running.
 - A browser URL of the detected T3, `<origin>/<environmentId>/<threadId>`. Other URLs stay plain links.
 
-The REST route and the `link` tool call `Integrations.resolveLinkInput` before `links.add`
+The REST route, the `link` tool and the `links` of `add_to_backlog`, `create_task` and `create_epic` call `Integrations.resolveLinkInput` before `links.add`
 (`T3Integration.resolveThread`), which asks the live shell whether the thread exists (exact ID, archived
 threads included):
 
@@ -378,7 +378,7 @@ threads included):
 | Connected, thread exists | Linked in the detected environment |
 | Connected, no such thread | Rejected: "No T3 Code thread with ID …" |
 | Detected but unpaired or unreachable | Linked unchecked; the response carries a `warning` (a toast in the panel, a `Warning:` line from `link`) |
-| Not detected | A bare ID is rejected; a browser URL is just a URL |
+| Not detected | A bare ID is rejected (when creating a task, the task is still made and the result says it wasn't linked); a browser URL is just a URL |
 
 ## Decisions
 

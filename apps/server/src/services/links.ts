@@ -1,6 +1,7 @@
 import {
   agentSessionUrl,
   classifyLink,
+  rejectedValueText,
   nextPrChanges,
   t3DesktopThreadUrl,
   type ClassifiedLink,
@@ -39,13 +40,13 @@ export function classifyLinkInput(input: LinkInput, ticketSystems: readonly Tick
   // Keys are usually upper case; one an agent typed in lower case ("abc-12") counts when only its upper case matches.
   const asUpper = classifyLink(value.toUpperCase(), { ticketSystems });
   const classified = classifyLink(value, { ticketSystems }) ?? (asUpper?.kind === "ticket" ? asUpper : null);
-  if (!classified) throw new AppError("VALIDATION", `Not a recognisable link: ${value}`);
+  if (!classified) throw new AppError("VALIDATION", `Not a recognisable link: ${rejectedValueText(value)}`);
   const canonical: ClassifiedLink =
     classified.kind === "t3_thread" ? { ...classified, url: t3DesktopThreadUrl(classified.ref) } : classified;
   if (!input.kind || input.kind === canonical.kind) return canonical;
   if (input.kind === "url") return { kind: "url", url: canonical.url };
   if (input.kind === "pr" && canonical.kind === "url") return { kind: "pr", url: canonical.url, ref: null };
-  throw new AppError("VALIDATION", `"${value}" does not look like a ${input.kind} link`);
+  throw new AppError("VALIDATION", `${rejectedValueText(value)} does not look like a ${input.kind} link`);
 }
 
 /** A session's window and a thread's role are stored beside the ref (see toLink); relinking a session keeps its window. */

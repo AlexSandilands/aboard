@@ -7,6 +7,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
+import { AGENT_HARNESSES, SELF_LINK_FAILED, SELF_LINK_OTHER_HOST } from "@repo/contracts";
 import { harnessOfClient } from "./format.ts";
 
 const ID = "b76a4a91-3196-48df-a421-9a32d5ac9978";
@@ -89,10 +90,11 @@ describe("agent sessions over MCP", () => {
   });
 
   it("asks Claude Code for its session in get_task until it is linked", async () => {
-    const { client, task } = await setup();
+    const { h, client, task } = await setup();
+    h.services.tasks.move(task.id, { status: "in_progress" }, "test");
     const before = text(await client.callTool({ name: "get_task", arguments: { task: `#${task.number}` } }));
     expect(before).toContain(
-      `Your session: if you are the one working on this task, link(task: "#${task.number}", agentSession: {harness: "claude-code", sessionId: <$CLAUDE_CODE_SESSION_ID>`,
+      `Your session: only if you're working on this task, link(task: "#${task.number}", agentSession: {harness: "claude-code", sessionId: <$CLAUDE_CODE_SESSION_ID>`,
     );
     await client.callTool({
       name: "link",
@@ -108,18 +110,21 @@ describe("agent sessions over MCP", () => {
   it("asks for the session that orchestrates an epic, with its own label", async () => {
     const { h, client, task } = await setup();
     const epic = h.services.tasks.create({ projectId: task.projectId, title: "Feature", kind: "epic" });
+    h.services.tasks.update(task.id, { epicId: epic.id }, "test");
+    h.services.tasks.move(task.id, { status: "in_progress" }, "test");
     const detail = text(await client.callTool({ name: "get_task", arguments: { task: `#${epic.number}` } }));
-    expect(detail).toContain("Your session: if you are the one working on this epic");
+    expect(detail).toContain("Your session: only if you're working on this epic");
     expect(detail).toContain("e.g. Orchestrating #N");
   });
 
   it("asks Codex for $CODEX_THREAD_ID, without promising a live status", async () => {
     // What codex-cli 0.166.0 sends; the stateless server reads the client from it on tool calls.
-    const { client, task } = await setup("codex-mcp-client/0.166.0");
+    const { h, client, task } = await setup("codex-mcp-client/0.166.0");
+    h.services.tasks.move(task.id, { status: "in_progress" }, "test");
     const ask = () => client.callTool({ name: "get_task", arguments: { task: `#${task.number}` } });
     const before = text(await ask());
     expect(before).toContain(
-      `Your session: if you are the one working on this task, link(task: "#${task.number}", agentSession: {harness: "codex", sessionId: <$CODEX_THREAD_ID>`,
+      `Your session: only if you're working on this task, link(task: "#${task.number}", agentSession: {harness: "codex", sessionId: <$CODEX_THREAD_ID>`,
     );
     expect(before).toContain("so the user can reopen it in a terminal from the board");
     expect(before).not.toContain("see it running");
@@ -135,9 +140,102 @@ describe("agent sessions over MCP", () => {
   });
 
   it("doesn't ask other clients", async () => {
-    const { client, task } = await setup("vscode/1.105.0");
+    const { h, client, task } = await setup("vscode/1.105.0");
+    h.services.tasks.move(task.id, { status: "in_progress" }, "test");
     const detail = text(await client.callTool({ name: "get_task", arguments: { task: `#${task.number}` } }));
     expect(detail).not.toContain("Your session:");
+  });
+
+  it("asks nothing of a session that only reads a task in Backlog or Planned", async () => {
+    const { h, client, task } = await setup();
+    for (const status of ["backlog", "planned"] as const) {
+      h.services.tasks.move(task.id, { status }, "test");
+      const detail = text(await client.callTool({ name: "get_task", arguments: { task: `#${task.number}` } }));
+      expect(detail).not.toContain("Your session:");
+      expect(detail).not.toContain("T3 thread:");
+      expect(detail).not.toContain("Link your work:");
+    }
+  });
+
+  it("says how to look up a T3 thread on a task in progress", async () => {
+    const { h, client, task } = await setup();
+    h.services.tasks.move(task.id, { status: "in_progress" }, "test");
+    const detail = text(await client.callTool({ name: "get_task", arguments: { task: `#${task.number}` } }));
+    expect(detail).toContain(
+      `T3 thread: only if you're working on this task in T3 Code, link(task: "#${task.number}", value: "<thread id>")`,
+    );
+    expect(detail).toContain("t3_thread_configure");
+    expect(detail).toContain("T3 references");
+    expect(detail).toContain(SELF_LINK_FAILED);
+  });
+
+  const reminderOf = (result: unknown) => text(result).split("Link your work:")[1] ?? "";
+
+  it("reminds the caller how to link itself when it sets a plan or starts the task", async () => {
+    const { h, client, task } = await setup();
+    h.services.tasks.move(task.id, { status: "backlog" }, "test");
+    const planned = await client.callTool({
+      name: "set_plan",
+      arguments: { task: `#${task.number}`, markdown: "## P\n- [ ] s" },
+    });
+    expect(reminderOf(planned)).toContain('label: "Planning #');
+    expect(reminderOf(planned)).toContain("$CLAUDE_CODE_SESSION_ID");
+    expect(reminderOf(planned)).not.toContain("$CODEX_THREAD_ID");
+    const started = await client.callTool({
+      name: "move_task",
+      arguments: { task: `#${task.number}`, status: "in_progress" },
+    });
+    expect(reminderOf(started)).toContain('label: "Implementing #');
+    expect(reminderOf(started)).toContain("t3_thread_configure");
+    // The reminder says it all, so Missing links doesn't repeat it.
+    expect(text(started)).not.toContain("T3 thread: only if");
+    const review = await client.callTool({
+      name: "move_task",
+      arguments: { task: `#${task.number}`, status: "planned" },
+    });
+    expect(text(review)).not.toContain("Link your work:");
+  });
+
+  it("still reminds when another thread and session are already linked", async () => {
+    const { h, client, task } = await setup();
+    h.services.links.add(task.id, { t3Thread: { environmentId: "env", threadId: "filed-it" } }, "other");
+    h.services.links.add(
+      task.id,
+      { agentSession: { harness: "claude-code", sessionId: randomUUID(), cwd: "/work/alpha" } },
+      "other",
+    );
+    const started = await client.callTool({
+      name: "move_task",
+      arguments: { task: `#${task.number}`, status: "in_progress" },
+    });
+    expect(reminderOf(started)).toContain("t3_thread_configure");
+    expect(reminderOf(started)).toContain("$CLAUDE_CODE_SESSION_ID");
+  });
+
+  it("gives a client it can't place every host's lookups and the route for other hosts", async () => {
+    const { client, task } = await setup("some-new-agent/1.0");
+    const started = await client.callTool({
+      name: "move_task",
+      arguments: { task: `#${task.number}`, status: "in_progress" },
+    });
+    for (const { idEnvVar } of Object.values(AGENT_HARNESSES)) expect(reminderOf(started)).toContain(`$${idEnvVar}`);
+    expect(reminderOf(started)).toContain(SELF_LINK_OTHER_HOST);
+  });
+
+  it("never repeats a refused value that isn't shaped like an id", async () => {
+    const { client, task } = await setup();
+    const secret = "API_KEY=abc123 PATH=/usr/bin";
+    const bad = [
+      { value: secret },
+      { agentSession: { harness: "claude-code", sessionId: secret, cwd: "/w" } },
+      { agentSession: { harness: "claude-code", sessionId: ID, cwd: secret } },
+      { agentSession: { harness: secret, sessionId: ID, cwd: "/w" } },
+    ];
+    for (const args of bad) {
+      const result = await client.callTool({ name: "link", arguments: { task: `#${task.number}`, ...args } });
+      expect((result as CallToolResult).isError).toBe(true);
+      expect(text(result)).not.toContain("abc123");
+    }
   });
 
   it.each([

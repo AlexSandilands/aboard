@@ -1,8 +1,25 @@
-import { AgentHarness, AgentSessionRef, EARLY_PR_NEXT, prWaitsForLocalReview } from "@repo/contracts";
+import {
+  AGENT_HARNESSES,
+  AgentHarness,
+  AgentSessionRef,
+  EARLY_PR_NEXT,
+  isT3ThreadId,
+  orList,
+  prWaitsForLocalReview,
+  SELF_LINK_ENV_RULE,
+  SELF_LINK_FAILED,
+  SELF_LINK_OTHER_HOST,
+  SELF_LINK_SUBAGENT,
+  SELF_LINK_T3_REFUSED,
+  SELF_LINK_WHEN,
+  selfLinkHostLine,
+} from "@repo/contracts";
 import { z } from "zod";
 import { AppError } from "../../errors.ts";
 import { linkText } from "../format.ts";
 import { actorField, run, t3ThreadField, taskField, textResult, type ToolRegistrar } from "../shared.ts";
+
+const HARNESS_NAMES = orList(Object.values(AGENT_HARNESSES).map((h) => h.label));
 
 /** link: attach PRs, ticket keys, T3 threads, agent sessions and URLs; unlink: take one off again. */
 export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor }) => {
@@ -17,13 +34,12 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
         "Link the task's ticket when the task is created or picked up, and the PR once you have opened it: with " +
         "auto-review on that is after the local review loop ends (move_task to review and finish the loop first; " +
         "Autopilot's PR review waits for it, and a PR opened earlier is reviewed on GitHub too), otherwise before " +
-        "move_task to review. Inside T3 Code, pass `t3Thread` ({environmentId, threadId} from " +
-        "t3_environment_read and t3_thread_configuration) whenever you start or resume a task, so the user can " +
-        "jump back to your thread. In Claude Code, Codex or Copilot CLI (inside T3 Code too), also pass `agentSession` " +
-        "with your own session when you start or resume a task: the board can reopen it in a terminal and, for " +
-        'Claude Code and Copilot CLI, shows whether it is running. Give a session a `label` saying what it does ("Implementing #107", "Planning #107", or "Orchestrating #107" for an epic you run): ' +
-        "the board shows it as the session's name, and linking the same session again with a new label renames it. A " +
-        "subagent shares its parent's session id, so only the main session links; a subagent must not. Pass one of value, t3Thread or agentSession per call.",
+        `move_task to review. ${SELF_LINK_WHEN} ${selfLinkHostLine("t3-code", null, "")} It lets the user jump back to ` +
+        `your thread. In ${HARNESS_NAMES} ` +
+        "(inside T3 Code too), also pass `agentSession` with your own session: the board can reopen it in a terminal and, for " +
+        'some harnesses, shows whether it is running. Give a session a `label` saying what it does ("Implementing #107", "Planning #107", or "Orchestrating #107" for an epic you run): ' +
+        `the board shows it as the session's name, and linking the same session again with a new label renames it. ${SELF_LINK_SUBAGENT} ` +
+        `${SELF_LINK_ENV_RULE} ${SELF_LINK_OTHER_HOST} ${SELF_LINK_FAILED} Pass one of value, t3Thread or agentSession per call.`,
       inputSchema: {
         task: taskField,
         value: z
@@ -36,18 +52,18 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
         t3Thread: t3ThreadField.optional(),
         agentSession: z
           .object({
-            harness: AgentHarness.describe('"claude-code", "codex" or "copilot-cli": the CLI you are running in.'),
-            sessionId: z
-              .string()
-              .describe(
-                "Your session id, a UUID: $CLAUDE_CODE_SESSION_ID in Claude Code, $CODEX_THREAD_ID in Codex, " +
-                  "$COPILOT_AGENT_SESSION_ID in Copilot CLI. Read it with the shell (echo $CLAUDE_CODE_SESSION_ID); " +
-                  "don't guess it.",
-              ),
+            harness: AgentHarness.describe(
+              `${orList(AgentHarness.options.map((h) => `"${h}"`))}: the CLI you are running in.`,
+            ),
+            sessionId: z.string().describe(
+              `Your session id, a UUID: ${Object.values(AGENT_HARNESSES)
+                .map((h) => `$${h.idEnvVar} in ${h.label}`)
+                .join(", ")}. Read that one variable with the shell; don't guess it.`,
+            ),
             cwd: z.string().describe("Absolute path of the folder the session runs in (your cwd)."),
           })
           .optional()
-          .describe("Your own Claude Code, Codex or Copilot CLI session, so the user can reopen it from the board."),
+          .describe(`Your own ${HARNESS_NAMES} session, so the user can reopen it from the board.`),
         label: z
           .string()
           .optional()
@@ -70,12 +86,20 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
           );
         }
         const id = services.tasks.resolveId(args.task);
-        const { input, warning } = await ctx.integrations.resolveLinkInput({
-          ...(args.value ? { value: args.value } : {}),
-          ...(args.t3Thread ? { t3Thread: args.t3Thread } : {}),
-          ...(agentSession?.success ? { agentSession: agentSession.data } : {}),
-          ...(args.label ? { label: args.label } : {}),
-        });
+        const { input, warning } = await ctx.integrations
+          .resolveLinkInput({
+            ...(args.value ? { value: args.value } : {}),
+            ...(args.t3Thread ? { t3Thread: args.t3Thread } : {}),
+            ...(agentSession?.success ? { agentSession: agentSession.data } : {}),
+            ...(args.label ? { label: args.label } : {}),
+          })
+          .catch((error: unknown) => {
+            // Only here: the panel's users have no t3Thread to pass, so the message itself doesn't mention it.
+            if (error instanceof AppError && args.value && isT3ThreadId(args.value)) {
+              throw new AppError(error.code, `${error.message}. ${SELF_LINK_T3_REFUSED}`);
+            }
+            throw error;
+          });
         const link = services.links.add(id, input, actor(args.actor));
         // A session's status is a local file read; show it now rather than at the next poll.
         if (link.kind === "agent_session") void ctx.integrations.refreshLink(link.id).catch(() => {});

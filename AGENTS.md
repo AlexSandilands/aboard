@@ -107,14 +107,15 @@ links, labels, review), update every place that tells them, in the same PR:
 | Tool descriptions and argument descriptions | `apps/server/src/mcp/tools/*.ts`, shared fields in `mcp/shared.ts`                                              |
 | Run tools (headless runs) and their prompt  | `apps/server/src/mcp/runTools.ts`; `reviewPrompt` in `apps/server/src/autopilot/automations/reviewPrs.ts`       |
 | Hints in results (Missing links/labels)     | `apps/server/src/mcp/format.ts`; review loop text in `tools/reviews.ts`                                         |
+| How an agent links itself, on each host     | `packages/contracts/src/selfLink.ts`: the registry the prompts, hints and tool text are built from              |
 | The hand-off prompt                         | `taskHandoffPrompt` in `packages/contracts/src/handoff.ts`                                                      |
 | The shipped skills and snippet              | `skills/aboard/SKILL.md` and `AGENTS-snippet.md`, `skills/aboard-automations/SKILL.md`, then `pnpm skill:embed` |
 | The review skill                            | `skills/aboard-review/SKILL.md` and `BUILTIN_REVIEW_SKILL_BODY`                                                 |
 | The planning skill and its prompt           | `skills/aboard-plan/SKILL.md`, `BUILTIN_PLAN_SKILL_BODY`, `planTasksPrompt`                                     |
 
 - Keep them consistent: a tool renamed in one place and not another sends agents to a tool that doesn't
-  exist. No test ties the skill to the tools; `skills.test.ts` only checks the review and planning skills against
-  their built-in bodies, and `skills/aboard/` against the copy embedded in `packages/contracts/src/boardSkill.ts`,
+  exist. Beyond the self-link lookups and rules, which `skills.test.ts` checks against the registry, no test ties the
+  skill to the tools; it otherwise only checks the review and planning skills against their built-in bodies, and `skills/aboard/` against the copy embedded in `packages/contracts/src/boardSkill.ts`,
   which the board installs into users' skill folders (`pnpm skill:embed` regenerates it).
 - If nothing an agent sees changes (UI-only work, refactors), none of these need touching.
 - How to write them is in [docs/features/mcp.md](docs/features/mcp.md#writing-tool-descriptions).

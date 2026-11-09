@@ -205,7 +205,7 @@ checks, a blocked step) keeps a row of its own for it.
 ### Missing links
 
 Task results over MCP end with **Missing links** while the task is open: ticket keys (of the configured systems) in its
-description that aren't linked yet (and in its title, for a system that doesn't link title keys itself), a T3 thread when it has none, and a PR when the local review loop has
+description that aren't linked yet (and in its title, for a system that doesn't link title keys itself), a T3 thread or the caller's session when it has none and the task is in progress (see [agent sessions](agent-sessions.md#how-an-agent-links-itself)), and a PR when the local review loop has
 ended but none is linked. Agents act on tool results more
 reliably than on instructions they read once.
 

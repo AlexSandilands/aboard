@@ -238,7 +238,9 @@ Descriptions are written for agents, and they are most of what an agent knows ab
   (`add_to_backlog`, `close_task`).
 - Put guidance agents must act on in **results** too (Missing links, Missing labels, the Autopilot flag, review loop
   instructions): agents follow a result they just got more reliably than instructions read once. Show
-  it only where it applies, or agents learn to skip it.
+  it only where it applies, or agents learn to skip it. **Link your work**, on `set_plan` and `move_task` to
+  `in_progress`, is the case in point: it comes when an agent starts work, not when it reads a task
+  ([how an agent links itself](agent-sessions.md#how-an-agent-links-itself)).
 - `get_task` must not tell a reviewer to start a reviewer: the review loop instructions come only from
   `move_task` and `start_review`.
 
