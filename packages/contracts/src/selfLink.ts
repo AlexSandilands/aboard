@@ -6,7 +6,7 @@ import { AGENT_HARNESSES, AgentHarness } from "./agentSessions.ts";
 /** One place an agent can find its own id, tried in the order listed. */
 export type SelfLinkLookup =
   | { kind: "env"; name: string }
-  | { kind: "tool"; name: string; note: string }
+  | { kind: "tool"; host: string; name: string; note: string }
   | { kind: "context"; where: string };
 
 export type SelfLinkHostId = AgentHarness | "t3-code";
@@ -44,7 +44,12 @@ const T3_CODE_HOST: SelfLinkHost = {
   id: "t3-code",
   label: "T3 Code",
   lookups: [
-    { kind: "tool", name: "t3_thread_configure", note: "call it with no arguments; threadId is in its result" },
+    {
+      kind: "tool",
+      host: "T3",
+      name: "t3_thread_configure",
+      note: "call it with no arguments; threadId is in its result",
+    },
     {
       kind: "context",
       where:
@@ -56,7 +61,11 @@ const T3_CODE_HOST: SelfLinkHost = {
   ifRefused: SELF_LINK_T3_REFUSED,
 };
 
-/** Every host an agent can link itself from. A new CLI goes in AGENT_HARNESSES; any other host is one more entry here. */
+/**
+ * Every host an agent can link itself from. A new CLI goes in AGENT_HARNESSES and reaches every text. Another kind of
+ * host is one more entry here, which the reminder picks up; the prompt lines and the Missing links hint name T3 Code and
+ * the CLIs, so they need it too.
+ */
 export const SELF_LINK_HOSTS: readonly SelfLinkHost[] = [T3_CODE_HOST, ...AgentHarness.options.map(harnessHost)];
 
 const hostOf = (id: SelfLinkHostId): SelfLinkHost => SELF_LINK_HOSTS.find((host) => host.id === id)!;
@@ -83,7 +92,7 @@ const lookupText = (lookup: SelfLinkLookup): string => {
     case "env":
       return `$${lookup.name}, read with your shell (echo $${lookup.name})`;
     case "tool":
-      return `the T3 tool ${lookup.name} (${lookup.note})`;
+      return `the ${lookup.host} tool ${lookup.name} (${lookup.note})`;
     case "context":
       return lookup.where;
   }

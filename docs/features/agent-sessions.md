@@ -50,8 +50,9 @@ and `AGENTS.md` snippet say the same.
 
 Every host's lookups and link call are in one registry, `SELF_LINK_HOSTS` in `packages/contracts/src/selfLink.ts`: T3
 Code plus one entry per `AGENT_HARNESSES` harness. Prompts, hints and tool descriptions are built from it, and
-`skills.test.ts` fails if the skill files disagree with it. A new CLI goes in `AGENT_HARNESSES`, any other host is one
-more entry there.
+`skills.test.ts` fails if the skill files disagree with it. A new CLI goes in `AGENT_HARNESSES` and reaches every text.
+Another kind of host is one more entry in `SELF_LINK_HOSTS`, which the reminder picks up; the prompt lines and the
+Missing links hint name T3 Code and the CLIs, so they need it too.
 
 | Host | Tried in order | Call |
 | --- | --- | --- |

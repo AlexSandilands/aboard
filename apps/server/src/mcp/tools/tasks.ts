@@ -84,12 +84,6 @@ async function linkInputs(
   for (const value of values.filter(known)) {
     try {
       const { input, warning } = await ctx.integrations.resolveLinkInput({ value });
-      if (input.value && isT3ThreadId(input.value)) {
-        notes.push(
-          `Not linked: ${rejectedValueText(value)} (the board can't tell which T3 Code environment it is in). ${SELF_LINK_T3_REFUSED}`,
-        );
-        continue;
-      }
       links.push(input);
       if (warning) notes.push(`Warning: ${warning}.`);
     } catch (error) {

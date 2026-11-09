@@ -254,17 +254,6 @@ describe("MCP endpoint", () => {
       expect(refused.isError).toBe(true);
       expect(text(refused)).toContain(SELF_LINK_T3_REFUSED);
     });
-
-    it("says so when the board can't place the thread's environment", async () => {
-      h.services.projects.create({ workspaceRoot: workspacePath });
-      vi.spyOn(h.integrations, "resolveLinkInput").mockResolvedValue({ input: { value: threadId } });
-      const created = await client.callTool({
-        name: "create_task",
-        arguments: { title: "Linked", workspacePath, links: [threadId], ...plan },
-      });
-      expect(created.isError).toBeFalsy();
-      expect(text(created)).toContain("the board can't tell which T3 Code environment");
-    });
   });
 
   it("get_task lists the task's pasted images with their absolute paths", async () => {
