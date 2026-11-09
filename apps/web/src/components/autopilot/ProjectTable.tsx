@@ -168,6 +168,8 @@ export function ProjectTable({
   const applyHeader = (column: ProjectTableSwitchColumn, on: boolean) => {
     column.onHeader(on);
     if (on && column.opensAllDetail?.()) setAllDetailOpen(true);
+    // What it opened for has gone, and with it the cell that would close it.
+    if (!on && column.opensAllDetail) setAllDetailOpen(false);
   };
 
   const askingColumn = asking ? columns.filter(isSwitch).find((c) => c.key === asking.key) : undefined;

@@ -149,6 +149,26 @@ describe("sourceHeaderWrites", () => {
   });
 });
 
+describe("sourceHeaderWrites and epics", () => {
+  const withEpic = (config: Record<string, unknown>) =>
+    scopes("on", {}, { a: { config } }, [{ id: "e", number: 5, projectId: "a", mode: "on" }]);
+
+  it("takes epics' own On with Your PRs off, even where Others' keeps running, and asks first", () => {
+    const t = withEpic({ otherPrs: true });
+    expect(sourceHeaderWrites(t, "ownPrs", false, "on")).toContainEqual({
+      target: { kind: "epic", id: "e", projectId: "a" },
+      mode: "inherit",
+    });
+    expect(sourceHeaderLoss(t, ["a"], "ownPrs", false)).toEqual({ projects: [], epics: 1 });
+  });
+
+  it("leaves them with Others' off while Your PRs keeps running", () => {
+    const t = withEpic({ otherPrs: true });
+    expect(sourceHeaderWrites(t, "otherPrs", false, "on").filter((w) => w.target.kind === "epic")).toEqual([]);
+    expect(sourceHeaderLoss(t, ["a"], "otherPrs", false)).toEqual({ projects: ["a"], epics: 0 });
+  });
+});
+
 describe("sourceHeaderLoss", () => {
   it("names projects with the source on when the board doesn't give it", () => {
     const t = scopes("inherit", {}, { a: { mode: "on", config: { otherPrs: true } }, b: {} });

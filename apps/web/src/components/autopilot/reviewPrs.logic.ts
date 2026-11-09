@@ -163,7 +163,8 @@ export function sourceHeaderWrites(
   for (const project of input.projects) {
     const next = { ...rowSources(scopes, project.id), [source]: on };
     writes.push(...projectWrites(scopes, after, project, next));
-    if (next.ownPrs || next.otherPrs) continue;
+    // An epic's own On only reaches its tasks' PRs, so Your PRs off everywhere takes it too.
+    if (!(source === "ownPrs" && !on) && (next.ownPrs || next.otherPrs)) continue;
     for (const epic of input.epics) {
       if (epic.projectId === project.id && (epic.mode === "on" || epic.mode === "preview")) {
         writes.push({ target: { kind: "epic", id: epic.id, projectId: project.id }, mode: "inherit" });
@@ -196,8 +197,7 @@ export function sourceHeaderLoss(
   const own = new Set(shown.filter((id) => sourceOn(scopes, id, source) && !boardSourceOn(scopes, source)));
   const epics = scopes.input.epics.filter(
     (e) =>
-      (e.mode === "on" || e.mode === "preview") &&
-      !sourceOn(scopes, e.projectId, source === "ownPrs" ? "otherPrs" : "ownPrs"),
+      (e.mode === "on" || e.mode === "preview") && (source === "ownPrs" || !sourceOn(scopes, e.projectId, "ownPrs")),
   );
   return own.size + epics.length > 0 ? { projects: titles(own), epics: epics.length } : null;
 }
