@@ -544,10 +544,7 @@ export function createAutopilotService(
     const on = repos.projects
       .list()
       .filter((p) => withEpicOn.has(p.id) || resolveAutopilot(chainFor(settings, automation.key, p.id, null)).enabled);
-    return automation.needs(on, (p) => ({
-      ...automation.defaults,
-      ...resolveAutopilot(chainFor(settings, automation.key, p.id, null)).config,
-    }));
+    return automation.needs(on);
   };
 
   const usage = (agentAutomations: readonly string[], since: string) => {

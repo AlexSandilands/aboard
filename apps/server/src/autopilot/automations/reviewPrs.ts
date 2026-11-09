@@ -55,12 +55,11 @@ import {
 import {
   OTHER_PRS_ADVANCED_FIELDS,
   OTHER_PRS_DEFAULTS,
-  OTHER_PRS_ESSENTIAL_FIELDS,
+  OTHER_PRS_TABLE_FIELDS,
   OTHER_PRS_SHAPE,
   actRepoPr,
   isRepoPrData,
   otherPrCandidates,
-  otherPrsNeeds,
 } from "./repoPrs.ts";
 
 export { AUTOPILOT_REVIEW_PRS };
@@ -407,6 +406,8 @@ const ConfigSchema = z.object({
   reviewDrafts: z.boolean(),
   /** Reviews per PR. An engine setting (prReviewRounds) before 044_autopilot_agent_defaults. */
   rounds: z.number().int().min(1).max(10),
+  /** Review task PRs here. Off where only other people's PRs are wanted; a project switched off has neither. */
+  ownPrs: z.boolean(),
   ...OTHER_PRS_SHAPE,
 });
 type ReviewPrsConfig = z.infer<typeof ConfigSchema>;
@@ -467,7 +468,15 @@ export const reviewPrs = defineAutomation({
       help: "Reviews of one PR, each after new commits.",
       info: "The last round asks for no fixes below the fix threshold. Fix PRs' attempts on checks and reviews should be at least this.",
     },
-    ...OTHER_PRS_ESSENTIAL_FIELDS,
+    {
+      key: "ownPrs",
+      label: "Your PRs",
+      kind: "boolean",
+      tier: "essential",
+      inWhereTable: true,
+      help: "Review pull requests linked to tasks.",
+    },
+    ...OTHER_PRS_TABLE_FIELDS,
     {
       key: "reviewDrafts",
       label: "Review drafts",
@@ -521,9 +530,9 @@ export const reviewPrs = defineAutomation({
     skill: { source: "builtin" },
     reviewDrafts: false,
     rounds: 3,
+    ownPrs: true,
     ...OTHER_PRS_DEFAULTS,
   },
-  needs: otherPrsNeeds,
   check: (ctx) => [...taskPrCandidates(ctx), ...otherPrCandidates(ctx)],
   act: async (candidate, ctx): Promise<ActionResult> =>
     isRepoPrData(candidate.data) ? actRepoPr(candidate, ctx) : actTaskPr(candidate, ctx),
@@ -535,82 +544,84 @@ const basisOf = (output: Record<string, unknown> | null | undefined): PrReviewBa
 
 /** Task PRs to review: the first source. */
 function taskPrCandidates({ services, projects }: CheckContext<ReviewPrsConfig>): Candidate[] {
-  return projects.flatMap(({ project, config }): Candidate[] =>
-    services.tasks.summaries({ projectId: project.id }).flatMap((task): Candidate[] => {
-      if (task.kind === "epic" || task.manual || task.archivedAt !== null || task.status === "done") return [];
-      // The local review comes first: a PR opened before it ended would be reviewed twice, and on a head the loop
-      // is about to change. A task not yet in Review hasn't started its loop (the move to Review opens round 1), so
-      // it waits too; in Review it waits while the loop runs. Without auto-review there is no loop to wait for.
-      if (prWaitsForLocalReview(task.status, task.review, services.reviews.effectiveAutoReview(task.id))) return [];
-      const links = task.links.flatMap((link) => {
-        if (link.kind !== "pr" || !link.ref || !link.snapshot) return [];
-        const { state, headOid, headRef, isCrossRepository } = link.snapshot;
-        // Merged and closed PRs are never reviewed; a draft only when asked for. A fork's branch isn't on origin.
-        if (state === "merged" || state === "closed" || (state === "draft" && !config.reviewDrafts)) return [];
-        if (isCrossRepository) return [];
-        return headOid && headRef ? [{ link, ref: link.ref, snapshot: link.snapshot, headOid, headRef }] : [];
-      });
-      if (links.length === 0) return [];
-      const runs = services.autopilot
-        .runsForTask(task.id, 500)
-        .filter((r) => r.automation === AUTOPILOT_REVIEW_PRS && !r.dryRun);
-      return links.flatMap(({ link, ref, snapshot, headOid, headRef }): Candidate[] => {
-        const headKey = prReviewDedupeKey(link.id, headOid);
-        const atHead = runs.filter((r) => r.dedupeKey === headKey || r.dedupeKey.startsWith(`${headKey}:`));
-        // Only a try that was skipped for a failure in passing leaves the head open for another.
-        if (atHead.some((r) => !(r.status === "skipped" && r.output?.retry === true))) return [];
-        const dedupeKey = atHead.length === 0 ? headKey : `${headKey}:${atHead.length + 1}`;
-        const ofLink = runs.filter((r) => isReviewOfLink(r.dedupeKey, link.id));
-        // One review at a time: a push meanwhile waits for it, then the latest head is reviewed with it in view.
-        if (ofLink.some((r) => r.status === "queued" || r.status === "running")) return [];
-        // A review that posted nothing (skipped) didn't use a round, and nor did one that only carried a verdict across
-        // a base merge or reviewed a conflict resolution. With every round used, the head still gets a run: act tells
-        // a base merge (no round needed) from a change of the PR's own, which it puts to the user.
-        const used = ofLink.filter((r) => r.status !== "skipped");
-        const counted = used.filter((r) => isCountedReview({ basis: basisOf(r.output) }));
-        const conflictReviews = used.filter((r) => basisOf(r.output) === "conflict_review").length;
-        // The user lets one more of each through by retrying the run that stopped for it, at this head only: a notice
-        // of an older head said nothing about this one, so retrying it late banks no round for later.
-        const retried = runs.filter((r) => {
-          if (!isRetried(r.dedupeKey)) return false;
-          const key = unretiredKey(r.dedupeKey);
-          return key === headKey || key.startsWith(`${headKey}:`);
+  return projects
+    .filter(({ config }) => config.ownPrs)
+    .flatMap(({ project, config }): Candidate[] =>
+      services.tasks.summaries({ projectId: project.id }).flatMap((task): Candidate[] => {
+        if (task.kind === "epic" || task.manual || task.archivedAt !== null || task.status === "done") return [];
+        // The local review comes first: a PR opened before it ended would be reviewed twice, and on a head the loop
+        // is about to change. A task not yet in Review hasn't started its loop (the move to Review opens round 1), so
+        // it waits too; in Review it waits while the loop runs. Without auto-review there is no loop to wait for.
+        if (prWaitsForLocalReview(task.status, task.review, services.reviews.effectiveAutoReview(task.id))) return [];
+        const links = task.links.flatMap((link) => {
+          if (link.kind !== "pr" || !link.ref || !link.snapshot) return [];
+          const { state, headOid, headRef, isCrossRepository } = link.snapshot;
+          // Merged and closed PRs are never reviewed; a draft only when asked for. A fork's branch isn't on origin.
+          if (state === "merged" || state === "closed" || (state === "draft" && !config.reviewDrafts)) return [];
+          if (isCrossRepository) return [];
+          return headOid && headRef ? [{ link, ref: link.ref, snapshot: link.snapshot, headOid, headRef }] : [];
         });
-        const granted = retried.filter((r) => r.output?.[ROUNDS_USED_UP] === true).length;
-        const grantedConflict = retried.filter((r) => r.output?.[CONFLICT_REVIEWS_USED_UP] === true).length;
-        const maxRounds = config.rounds + granted;
-        const round = counted.length + 1;
-        const data: ReviewData = {
-          linkId: link.id,
-          url: link.url,
-          host: ref.host,
-          repo: ref.repo,
-          number: ref.number,
-          title: snapshot.title,
-          headRef,
-          headOid,
-          round,
-          maxRounds,
-          earlier: earlierReviews(used, link.id),
-          attempt: atHead.length + 1,
-          baseRef: snapshot.baseRef ?? null,
-          last: latestPrReview(ofLink, link.id),
-          conflictReviews,
-          maxConflictReviews: CONFLICT_REVIEWS_PER_PR + grantedConflict,
-        };
-        return [
-          {
-            dedupeKey,
-            summary: data.last
-              ? `review PR #${ref.number} at ${shortSha(headOid)} (after ${shortSha(data.last.headOid)}, ${counted.length} of ${Math.max(maxRounds, counted.length)} rounds used)`
-              : `review PR #${ref.number} at ${shortSha(headOid)} (round ${round} of ${maxRounds})`,
-            taskId: task.id,
-            data,
-          },
-        ];
-      });
-    }),
-  );
+        if (links.length === 0) return [];
+        const runs = services.autopilot
+          .runsForTask(task.id, 500)
+          .filter((r) => r.automation === AUTOPILOT_REVIEW_PRS && !r.dryRun);
+        return links.flatMap(({ link, ref, snapshot, headOid, headRef }): Candidate[] => {
+          const headKey = prReviewDedupeKey(link.id, headOid);
+          const atHead = runs.filter((r) => r.dedupeKey === headKey || r.dedupeKey.startsWith(`${headKey}:`));
+          // Only a try that was skipped for a failure in passing leaves the head open for another.
+          if (atHead.some((r) => !(r.status === "skipped" && r.output?.retry === true))) return [];
+          const dedupeKey = atHead.length === 0 ? headKey : `${headKey}:${atHead.length + 1}`;
+          const ofLink = runs.filter((r) => isReviewOfLink(r.dedupeKey, link.id));
+          // One review at a time: a push meanwhile waits for it, then the latest head is reviewed with it in view.
+          if (ofLink.some((r) => r.status === "queued" || r.status === "running")) return [];
+          // A review that posted nothing (skipped) didn't use a round, and nor did one that only carried a verdict across
+          // a base merge or reviewed a conflict resolution. With every round used, the head still gets a run: act tells
+          // a base merge (no round needed) from a change of the PR's own, which it puts to the user.
+          const used = ofLink.filter((r) => r.status !== "skipped");
+          const counted = used.filter((r) => isCountedReview({ basis: basisOf(r.output) }));
+          const conflictReviews = used.filter((r) => basisOf(r.output) === "conflict_review").length;
+          // The user lets one more of each through by retrying the run that stopped for it, at this head only: a notice
+          // of an older head said nothing about this one, so retrying it late banks no round for later.
+          const retried = runs.filter((r) => {
+            if (!isRetried(r.dedupeKey)) return false;
+            const key = unretiredKey(r.dedupeKey);
+            return key === headKey || key.startsWith(`${headKey}:`);
+          });
+          const granted = retried.filter((r) => r.output?.[ROUNDS_USED_UP] === true).length;
+          const grantedConflict = retried.filter((r) => r.output?.[CONFLICT_REVIEWS_USED_UP] === true).length;
+          const maxRounds = config.rounds + granted;
+          const round = counted.length + 1;
+          const data: ReviewData = {
+            linkId: link.id,
+            url: link.url,
+            host: ref.host,
+            repo: ref.repo,
+            number: ref.number,
+            title: snapshot.title,
+            headRef,
+            headOid,
+            round,
+            maxRounds,
+            earlier: earlierReviews(used, link.id),
+            attempt: atHead.length + 1,
+            baseRef: snapshot.baseRef ?? null,
+            last: latestPrReview(ofLink, link.id),
+            conflictReviews,
+            maxConflictReviews: CONFLICT_REVIEWS_PER_PR + grantedConflict,
+          };
+          return [
+            {
+              dedupeKey,
+              summary: data.last
+                ? `review PR #${ref.number} at ${shortSha(headOid)} (after ${shortSha(data.last.headOid)}, ${counted.length} of ${Math.max(maxRounds, counted.length)} rounds used)`
+                : `review PR #${ref.number} at ${shortSha(headOid)} (round ${round} of ${maxRounds})`,
+              taskId: task.id,
+              data,
+            },
+          ];
+        });
+      }),
+    );
 }
 
 /**

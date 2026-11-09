@@ -502,7 +502,7 @@ Every change publishes `autopilot.changed`, which the web app uses to refetch th
 
 **Review PRs** (`review_prs`, #95; `automations/reviewPrs.ts`, contract in `packages/contracts/src/prReview.ts`).
 Needs an agent and is off until switched on. Reviews a pull request linked to a task and posts the review on GitHub,
-as comments only. With [Other people's PRs](#other-peoples-prs) on, it also reviews other people's open PRs and
+as comments only (task PRs only where `ownPrs` is on). With [Other people's PRs](#other-peoples-prs) on, it also reviews other people's open PRs and
 approves, asks for changes or hands them to the user.
 
 - **Trigger.** A `pr` link whose snapshot (from the `gh` poller) is open, or draft when **Review drafts** is on
@@ -644,22 +644,32 @@ approves, asks for changes or hands them to the user.
 
 #### Other people's PRs
 
-Board task #21 (epic #123). Review PRs' second source, off until **Other people's PRs** (`otherPrs`) is on in a
-project's config: open pull requests of the project's repository, by the logins in **Authors** (`otherAuthors`), that
+Board task #21 (epic #123). Review PRs' second source, off until **Others'** (`otherPrs`) is on in a
+project's config: open pull requests of the project's repository, by the logins in **People** (`otherAuthors`), that
 no task works on. It replaces the custom "Autopilot PR review" automation the owner ran, and the shipped **Review repo
 PRs** example. The difference that matters: the agent only reads and answers; the **server** finds the PRs, works
 out the mode and the approval gate from the PR's history, and posts. The gate is code, not a line in a prompt.
 `automations/repoPrs.ts` (poll, prompt, posting, board writes), `repoPrAssess.ts` (which PRs and how), contract in
 `packages/contracts/src/repoPrReview.ts`.
 
-- **Settings.** Essentials: **Other people's PRs**, **Authors** (comma separated, `parseLogins`: lower-cased, a
-  leading `@` dropped) and **Approve** (`otherApprove`, off by default). Advanced: **Require a linked issue** (on),
+- **Settings.** In the table (`inWhereTable`, so the settings draw no row): **Others'** (`otherPrs`), **People**
+  (`otherAuthors`, comma separated, `parseLogins`: lower-cased, a leading `@` dropped) and **Approve** (`otherApprove`,
+  off by default). Advanced: **Require a linked issue** (on),
   **Sensitive paths** (`DEFAULT_SENSITIVE_PATHS`: `.github/`, `tools/`, `CODEOWNERS`, `*.lock`, `package-lock.json`,
   `pnpm-lock.yaml`, `go.sum`; `dir/` is a root folder, a name with no `/` matches in any folder, `*` stops at `/`,
   `**` doesn't: `matchesPathPattern`), **Quiet period** (10 minutes), **Other reviewers' wait** (60 minutes) and
-  **Rounds** (3). On with no authors, the automation's `needs` (which now gets each project's config) says "Needs
-  setup: Other people's PRs is on with no authors in: …" on its row and under Needs you, instead of silently doing
-  nothing.
+  **Rounds** (3). The first three are per project, in the Where it runs table below. On with nobody listed it reviews
+  nothing and raises nothing: the table's row asks for people.
+- **Where it runs** (`ReviewPrsProjects`, `reviewPrs.logic.ts`). Columns **Your PRs** (`ownPrs`, default true, task PRs
+  skipped where false), **Others'**, **People** and **Approve**, the last two empty where Others' is off. The engine
+  only looks at projects where the automation is on, so a project runs if either source is on, and a source's switch
+  writes the mode together with both source keys in one PUT, so turning a switched-off project on can't bring back a
+  source left behind. A project stores a key only where it differs from the board, whose keys are the All projects row
+  (no migration: an old board's `otherPrs` and friends read the same). A project's `otherAuthors` replaces the board's
+  list; matching it again drops the key. A header click writes the board first, then each project against the new board;
+  `opensAllDetail` and `expandsOnTurnOn` open the people where a row has none. A project with no folder (General) is
+  skipped before any read, so it records no failed run. The name pills offer logins already in use: the default, each
+  project's list and authors waiting under Needs you, so nothing new is read from GitHub.
 - **Finding PRs.** The check can't read GitHub in a pass, so `otherPrCandidates` starts a read per project in the
   background every `OTHER_PRS_POLL_MS` (5 minutes, or at once when the settings change) and wakes the engine when it
   ends; each pass offers what the latest read found. The repository is the project folder's `origin`

@@ -1,4 +1,5 @@
 import {
+  AUTOPILOT_REVIEW_PRS,
   boardState,
   projectState,
   whereOffEverywhere,
@@ -10,6 +11,7 @@ import {
 import { DetailSection } from "~/components/settings/agents/SplitCard";
 import { Skeleton } from "~/components/ui/skeleton";
 import { ProjectTable, type ProjectTableColumn } from "./ProjectTable";
+import { ReviewPrsProjects } from "./ReviewPrsProjects";
 import { draftHeader, draftRowOn, draftRowToggle, headerLoss, tableProjects, type DraftWhere } from "./where.logic";
 import { useWhere } from "./useWhere";
 
@@ -81,6 +83,9 @@ function LiveProjects({
 }) {
   const { input, scopes, apply } = where;
   if (!input || !scopes) return null;
+  if (automation.key === AUTOPILOT_REVIEW_PRS) {
+    return <ReviewPrsProjects automation={automation} everywhereMode={everywhereMode} where={where} flush={flush} />;
+  }
   const save = (writes: Parameters<typeof apply.mutate>[0]) => {
     if (writes.length > 0) apply.mutate(writes);
   };

@@ -12,7 +12,6 @@ import {
   ReviewSkillRef,
   countReviewIssues,
   describeCounts,
-  parseLogins,
   prReviewHeader,
   repoPrDedupeKey,
   reviewMarker,
@@ -79,21 +78,23 @@ export const OTHER_PRS_DEFAULTS = {
   otherMaxRounds: 3,
 };
 
-export const OTHER_PRS_ESSENTIAL_FIELDS: AutopilotField[] = [
+/** Set in Where it runs' columns, not as settings rows; the labels name them where a project's own settings are listed. */
+export const OTHER_PRS_TABLE_FIELDS: AutopilotField[] = [
   {
     key: "otherPrs",
-    label: "Other people's PRs",
+    label: "Others'",
     kind: "boolean",
     tier: "essential",
-    help: "Also review open PRs by the authors below that no task links to.",
+    inWhereTable: true,
+    help: "Also review open PRs by the people listed that no task links to.",
     info: "It approves them, asks for changes or hands them to you. Fix PRs never works on them.",
   },
   {
     key: "otherAuthors",
-    label: "Authors",
+    label: "People",
     kind: "text",
     tier: "essential",
-    placeholder: "alice, bob",
+    inWhereTable: true,
     help: "Logins whose pull requests are reviewed, comma separated.",
     info: "Your own are never reviewed this way.",
   },
@@ -102,6 +103,7 @@ export const OTHER_PRS_ESSENTIAL_FIELDS: AutopilotField[] = [
     label: "Approve",
     kind: "boolean",
     tier: "essential",
+    inWhereTable: true,
     help: "Approve as you when the review is clean and the gate passes.",
     info: "The gate: a linked issue, required checks green, no sensitive path. Off: a clean PR waits for your approval under Needs you.",
   },
@@ -150,20 +152,6 @@ export const OTHER_PRS_ADVANCED_FIELDS: AutopilotField[] = [
     info: "A small re-approval after a push doesn't count.",
   },
 ];
-
-/** Where Other people's PRs is on with nobody to review: it would do nothing, so the row says so. */
-export function otherPrsNeeds(
-  projects: readonly Project[],
-  configOf: (project: Project) => Record<string, unknown>,
-): string | null {
-  const empty = projects.filter((p) => {
-    const config = configOf(p);
-    return config.otherPrs === true && parseLogins(config.otherAuthors).length === 0;
-  });
-  return empty.length > 0
-    ? `Needs setup: Other people's PRs is on with no authors in: ${empty.map((p) => p.title).join(", ")}`
-    : null;
-}
 
 // ── Finding PRs ──────────────────────────────────────────────────────────
 
@@ -371,7 +359,8 @@ export function otherPrCandidates(ctx: CheckContext<Record<string, unknown>>): C
   const nowMs = ctx.now.getTime();
   const candidates: Candidate[] = [];
   for (const { project, config } of ctx.projects) {
-    if (config.otherPrs !== true) continue;
+    // A project with no folder has no repository to read (General): that is its nature, not a failed read.
+    if (config.otherPrs !== true || !project.workspaceRoot) continue;
     const settings = otherPrsSettings(config);
     if (settings.authors.size === 0) continue;
     const fingerprint = JSON.stringify({ ...settings, authors: [...settings.authors].sort() });

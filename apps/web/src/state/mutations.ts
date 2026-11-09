@@ -1,4 +1,4 @@
-import { applyWhereWrites, type WhereWrite } from "@repo/contracts";
+import { applyWhereWrites, type AutopilotMode, type WhereTarget } from "@repo/contracts";
 import type {
   DeleteTasksResult,
   AddLinkResult,
@@ -603,40 +603,89 @@ export function useSetAutopilotScope(projectId: string | null, onRejected?: () =
   });
 }
 
+/** What an edit does at one scope: its mode (unset keeps it) and config keys (undefined removes a key), saved together. */
+export interface WhereScopeWrite {
+  target: WhereTarget;
+  mode?: AutopilotMode;
+  config?: Record<string, unknown>;
+}
+
+const whereScopeKey = (target: WhereTarget) =>
+  target.kind === "board"
+    ? queryKeys.autopilotScope(null)
+    : target.kind === "project"
+      ? queryKeys.autopilotScope(target.id)
+      : queryKeys.autopilotEpicScope(target.projectId, target.id);
+
 /**
  * Saves the scope writes an edit in the Where it runs widget came to (see `autopilotWhere.ts` in contracts), one PUT
- * each, in order. The widget's rows update at once; the rows as they were are put back if one is refused, and the
- * event stream's refetches of them wait until the last write is in (see `useBoardEvents`).
+ * each, in order. A scope's mode and config go in one PUT, and config keys merge over the scope's latest saved config
+ * (the server replaces it whole), as `useSetAutopilotScope` does. The widget's rows update at once; the scopes as they
+ * were are put back if one is refused, and the event stream's refetches of them wait until the last write is in (see
+ * `useBoardEvents`).
  */
 export function useApplyWhere(automation: string) {
   const queryClient = useQueryClient();
+  const patched = (config: AutopilotConfig, keys: Record<string, unknown>): AutopilotConfig => {
+    const next = { ...config };
+    for (const [key, value] of Object.entries(keys)) {
+      if (value === undefined) delete next[key];
+      else next[key] = value;
+    }
+    return next;
+  };
   return useMutation({
     mutationKey: WHERE_MUTATION_KEY,
-    mutationFn: async (writes: ReadonlyArray<WhereWrite>) => {
-      for (const { target, mode } of writes) {
+    mutationFn: async (writes: ReadonlyArray<WhereScopeWrite>) => {
+      for (const { target, mode, config } of writes) {
         const path =
           target.kind === "board"
             ? "board"
             : target.kind === "project"
               ? `projects/${enc(target.id)}`
               : `projects/${enc(target.projectId)}/epics/${enc(target.id)}`;
-        await api(`/api/autopilot/${path}/${enc(automation)}`, { method: "PUT", body: { mode } });
+        const queryKey = whereScopeKey(target);
+        const current = config
+          ? (queryClient.getQueryData<AutopilotScopeEntry[]>(queryKey)?.find((e) => e.automation === automation)
+              ?.config ?? {})
+          : {};
+        const entries = await api<AutopilotScopeEntry[]>(`/api/autopilot/${path}/${enc(automation)}`, {
+          method: "PUT",
+          body: { mode, ...(config ? { config: patched(current, config) } : {}) },
+        });
+        if (config) queryClient.setQueryData(queryKey, entries);
       }
     },
     scope: { id: `autopilot-where:${automation}` },
     onMutate: async (writes) => {
       // A refetch already on its way would land over the optimistic rows.
-      await queryClient.cancelQueries({ queryKey: queryKeys.autopilotModes });
-      const previous = queryClient.getQueryData<AutopilotModeRow[]>(queryKeys.autopilotModes);
+      await queryClient.cancelQueries({ queryKey: queryKeys.autopilotScopeAll });
+      const modes = queryClient.getQueryData<AutopilotModeRow[]>(queryKeys.autopilotModes);
       queryClient.setQueryData<AutopilotModeRow[]>(queryKeys.autopilotModes, (rows) =>
-        rows ? applyWhereWrites(rows, automation, writes) : rows,
+        rows
+          ? applyWhereWrites(
+              rows,
+              automation,
+              writes.flatMap((w) => (w.mode ? [{ target: w.target, mode: w.mode }] : [])),
+            )
+          : rows,
       );
-      return { previous };
+      const scopes = writes.flatMap(({ target, config }) => {
+        if (!config) return [];
+        const queryKey = whereScopeKey(target);
+        const previous = queryClient.getQueryData<AutopilotScopeEntry[]>(queryKey);
+        queryClient.setQueryData<AutopilotScopeEntry[]>(queryKey, (entries) =>
+          entries?.map((e) => (e.automation === automation ? { ...e, config: patched(e.config, config) } : e)),
+        );
+        return [{ queryKey, previous }];
+      });
+      return { modes, scopes };
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll }),
     onError: (error, _writes, context) => {
       // The server may have kept the writes before the refused one; the refetch after this shows what it did keep.
-      if (context?.previous) queryClient.setQueryData(queryKeys.autopilotModes, context.previous);
+      if (context?.modes) queryClient.setQueryData(queryKeys.autopilotModes, context.modes);
+      for (const { queryKey, previous } of context?.scopes ?? []) queryClient.setQueryData(queryKey, previous);
       toastManager.add({
         type: "error",
         title: "Couldn't save where it runs",
