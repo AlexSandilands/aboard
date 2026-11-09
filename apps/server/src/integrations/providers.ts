@@ -233,6 +233,8 @@ export function createProviders(deps: {
   host: () => TerminalHost;
   userHome: string;
   t3Status: () => T3IntegrationStatus;
+  /** A full T3 Code check (discovery, then a live poll), for a re-check: `t3Status` alone is the last result. */
+  t3Refresh?: () => Promise<unknown>;
   /** A harness's models scan (agentModels.ts), which keeps its own longer cache. */
   models?: (harness: AgentHarness, refresh: boolean) => Promise<AgentModelsStatus>;
   probes?: Partial<ProviderProbes>;
@@ -427,7 +429,11 @@ export function createProviders(deps: {
   };
 
   const status = async (refresh = false, parts: ProviderParts = "all"): Promise<ProvidersStatus> => {
-    const detected = await detect(refresh, parts);
+    // Alongside the CLI checks, so a re-check waits for the slower of the two. A failed T3 check keeps the last status.
+    const [detected] = await Promise.all([
+      detect(refresh, parts),
+      refresh ? Promise.resolve(deps.t3Refresh?.()).catch(() => undefined) : undefined,
+    ]);
     const t3: ProviderStatus = {
       id: "t3-code",
       cli: null,

@@ -156,8 +156,12 @@ every provider whether added or not (the Add provider dialog shows what this mac
 rest. The CLI checks are kept for a minute by their paths and shared by both answers; the MCP and model checks are
 kept for a minute, keyed by the enabled providers and the board's URL, so a new CLI path or a provider switched on
 asks again; `?refresh=1` (Re-check) skips the cache and a refresh while a check is
-running joins it. T3 Code's part is read fresh every time. A change to the list publishes `providers.changed`, which
-updates the settings cache in every window and refetches the detection.
+running joins it. T3 Code's part is never cached: a plain read returns the integration's last status (the timer looks
+every minute), while a re-check also runs a full T3 check first (`t3.test()`: discovery, then a live poll), alongside the
+CLI checks, so a T3 started after the board shows up at once. An open page also follows T3 between re-checks: on
+`integrations.changed` the web patches T3's part of the cached detection (`withT3Status`, keeping `tokenSet`, which the
+event lacks) instead of refetching, which would re-run the CLI and MCP checks. A change to the list publishes
+`providers.changed`, which updates the settings cache in every window and refetches the detection.
 
 The MCP entry is found by URL, not name: `sameMcpUrl` treats `localhost`, `127.0.0.1` and `[::1]` as one host, compares
 the port and path, and ignores a trailing slash and the query (which may carry a token). Claude Code is asked with

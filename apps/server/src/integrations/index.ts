@@ -198,6 +198,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     host: overrides.terminalHost ?? systemTerminalHost,
     userHome: deps.config.userHome,
     t3Status: () => t3.status(),
+    t3Refresh: () => t3.test(),
     models: (harness, refresh) => agentModels.harness(harness, refresh),
     ...(overrides.providerProbes ? { probes: overrides.providerProbes } : {}),
   });

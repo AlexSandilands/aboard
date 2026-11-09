@@ -24,6 +24,8 @@ export function createTestHarness(
   overrides: {
     webPort?: number;
     token?: string;
+    /** Where T3 Code's runtime file is looked for: a temp folder, so a test decides whether T3 is running. */
+    t3Home?: string;
     sessionDirs?: SessionDirs;
     /** The user's home folder, where global skills are found and built-in ones are forked to. */
     userHome?: string;

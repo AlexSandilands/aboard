@@ -9,6 +9,8 @@ import {
   type ProviderSetting,
   type ProviderStatus,
   type ProvidersStatus,
+  type T3IntegrationStatus,
+  t3ProviderStatus,
 } from "@repo/contracts";
 import type { IntegrationDot, IntegrationTone } from "./integrations.logic";
 
@@ -165,6 +167,24 @@ export function providerLosses(id: ProviderId): string[] {
         "Copilot models leave the tier and custom-model pickers.",
       ];
   }
+}
+
+/**
+ * The cached providers with T3 Code's part replaced by a fresh integration status (the `integrations.changed` event),
+ * so an open page follows T3 starting or stopping without re-running the CLI and MCP checks. The event doesn't carry
+ * whether a token is saved, so that stays as cached. Nothing cached yet stays nothing: the first fetch will be current.
+ */
+export function withT3Status(
+  status: ProvidersStatus | undefined,
+  t3: T3IntegrationStatus,
+): ProvidersStatus | undefined {
+  if (!status) return status;
+  return {
+    ...status,
+    providers: status.providers.map((p) =>
+      p.id === "t3-code" ? { ...p, t3: t3ProviderStatus(t3, p.t3?.tokenSet ?? false) } : p,
+    ),
+  };
 }
 
 /**

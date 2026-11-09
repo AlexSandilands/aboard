@@ -1,5 +1,8 @@
 import type { AgentModelsStatus, ProviderSetting, ProvidersStatus, T3IntegrationStatus } from "@repo/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 import {
   createProviders,
@@ -136,6 +139,7 @@ function service(
     now?: () => number;
     env?: Record<string, string>;
     t3?: T3IntegrationStatus;
+    t3Refresh?: () => Promise<unknown>;
     models?: (harness: string, refresh: boolean) => Promise<AgentModelsStatus>;
   } = {},
 ) {
@@ -164,6 +168,7 @@ function service(
     host: () => host(opts.env),
     userHome: "/home/u",
     t3Status: () => opts.t3 ?? T3_OFF,
+    ...(opts.t3Refresh ? { t3Refresh: opts.t3Refresh } : {}),
     ...(opts.models ? { models: opts.models } : {}),
     probes: {
       resolve: (command) => `/bin/${command}`,
@@ -429,6 +434,25 @@ describe("providers: T3 Code and models", () => {
     });
   });
 
+  it("checks T3 Code again on a re-check only, and shows what that found", async () => {
+    const opts: { t3?: T3IntegrationStatus; t3Refresh?: () => Promise<unknown> } = {};
+    const t3Refresh = vi.fn<() => Promise<unknown>>(() => {
+      opts.t3 = { ...T3_OFF, detected: true, origin: "http://127.0.0.1:3773", liveStatus: "ok" };
+      return Promise.resolve(opts.t3);
+    });
+    opts.t3Refresh = t3Refresh;
+    const { svc } = service({}, opts);
+    expect(providerOf(await svc.status(), "t3-code").t3?.detected).toBe(false);
+    expect(t3Refresh).not.toHaveBeenCalled();
+    expect(providerOf(await svc.status(true), "t3-code").t3).toMatchObject({ detected: true, liveStatus: "ok" });
+    expect(t3Refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the last T3 Code status when the re-check throws", async () => {
+    const { svc } = service({}, { t3Refresh: () => Promise.reject(new Error("boom")) });
+    expect(providerOf(await svc.status(true), "t3-code").t3?.detected).toBe(false);
+  });
+
   it("scans models only for providers added and on", async () => {
     const models = vi.fn<(harness: string) => Promise<AgentModelsStatus>>((harness) =>
       Promise.resolve({
@@ -510,6 +534,51 @@ describe("GET /api/providers", () => {
     const calls = version.mock.calls.length;
     await h.request("/api/providers?refresh=1");
     expect(version.mock.calls.length).toBe(calls + 3);
+  });
+});
+
+describe("GET /api/providers: T3 Code started after the board", () => {
+  const homes: string[] = [];
+  afterEach(() => {
+    for (const dir of homes.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("finds T3 Code on a re-check, with no timer running", async () => {
+    const t3Home = mkdtempSync(join(tmpdir(), "t3home-"));
+    homes.push(t3Home);
+    mkdirSync(join(t3Home, "userdata"));
+    const origin = "http://127.0.0.1:3773";
+    const h = createTestHarness({
+      t3Home,
+      integrations: {
+        providerProbes: { resolve: () => null, version: () => Promise.resolve("2.0.0"), readFile: () => null },
+        fetch: (url) =>
+          Promise.resolve(
+            url.endsWith("/.well-known/t3/environment")
+              ? new Response(JSON.stringify({ environmentId: "env-1", label: "MY-PC" }))
+              : new Response("{}", { status: 404 }),
+          ),
+      },
+    });
+    const t3Of = async (path: string) =>
+      ((await (await h.request(path)).json()) as ProvidersStatus).providers.find((p) => p.id === "t3-code")!.t3!;
+
+    // The board came up first: no runtime file, and a plain read doesn't look again.
+    expect((await t3Of("/api/providers")).detected).toBe(false);
+    writeFileSync(
+      join(t3Home, "userdata", "server-runtime.json"),
+      JSON.stringify({
+        version: 1,
+        pid: 1,
+        host: "127.0.0.1",
+        port: 3773,
+        origin,
+        startedAt: "2026-10-12T22:36:33.817Z",
+      }),
+    );
+    expect((await t3Of("/api/providers")).detected).toBe(false);
+    expect(await t3Of("/api/providers?refresh=1")).toMatchObject({ detected: true, origin });
+    expect((await t3Of("/api/providers")).detected).toBe(true);
   });
 });
 
