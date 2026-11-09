@@ -84,7 +84,9 @@ The window is frameless with Windows' native controls painted over the page (`ti
 - The web app detects it with `navigator.windowControlsOverlay` and sets a `.wco` class on `<html>`
   (`apps/web/src/lib/windowControlsOverlay.ts`). CSS uses it to size the top bars and keep content clear of
   the controls (`--workspace-native-controls-inset`).
-- Top bars carry `.drag-region`; buttons and inputs inside them opt out of dragging.
+- Top bars carry `.drag-region`; buttons and inputs inside them opt out of dragging. Popups portalled out of a
+  top bar miss that rule, and drag hit-testing ignores z-index, so a popup overlapping a bar must opt out itself
+  with `[-webkit-app-region:no-drag]` (the menu and popover primitives do).
 - The web app reports its theme through `window.desktopBridge.setTheme` (`DesktopBridge` in
   `packages/contracts/src/desktop.ts`, exposed by `preload.ts`). The main process checks the sender's
   origin, sets `nativeTheme` and recolours the overlay. It also sends the theme's background as `#rrggbb` through
