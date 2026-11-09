@@ -175,8 +175,16 @@ describe("approve", () => {
     });
   });
 
-  it("the header clears every row's own value", () => {
-    const t = scopes("on", {}, { a: { config: { otherApprove: true } }, b: {} });
+  it("the header clears the own value of each row showing Approve, and leaves a hidden one's opt-out", () => {
+    const t = scopes(
+      "on",
+      {},
+      {
+        a: { config: { otherPrs: true, otherApprove: true } },
+        b: {},
+        hidden: { config: { otherApprove: false } },
+      },
+    );
     expect(approveHeaderWrites(t, false)).toEqual([
       { target: { kind: "board" }, config: { otherApprove: undefined } },
       { target: { kind: "project", id: "a" }, config: { otherApprove: undefined } },

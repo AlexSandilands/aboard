@@ -216,6 +216,18 @@ describe("review PRs: triggers", () => {
     expect(requests).toHaveLength(1);
   });
 
+  it("reviews a task whose epic has its own On even where Your PRs is off", async () => {
+    const { requests, setPr, pass, turnOn, s, project, task } = setup();
+    turnOn({ ownPrs: false });
+    const epic = s.tasks.createEpic({ projectId: project.id, title: "Checkout" }, [task.id], "user");
+    setPr();
+    await pass();
+    expect(requests).toHaveLength(0);
+    s.autopilot.setScope("epic", epic.id, AUTOPILOT_REVIEW_PRS, { mode: "on" }, project.id);
+    await pass();
+    expect(requests).toHaveLength(1);
+  });
+
   it("does nothing while the automation is off", async () => {
     const { requests, setPr, pass } = setup();
     setPr();

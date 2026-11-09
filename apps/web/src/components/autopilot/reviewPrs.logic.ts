@@ -218,7 +218,8 @@ export function approveHeaderWrites(scopes: ReviewPrsScopes, on: boolean): Revie
   return [
     { target: { kind: "board" }, config: { otherApprove: on ? true : undefined } },
     ...scopes.input.projects
-      .filter((p) => ownFlag(scopes, p.id, "otherApprove") !== null)
+      // A row showing no Approve keeps its own: it comes back when Others' does.
+      .filter((p) => ownFlag(scopes, p.id, "otherApprove") !== null && sourceOn(scopes, p.id, "otherPrs"))
       .map((p): ReviewPrsWrite => ({ target: { kind: "project", id: p.id }, config: { otherApprove: undefined } })),
   ];
 }

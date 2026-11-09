@@ -661,7 +661,8 @@ out the mode and the approval gate from the PR's history, and posts. The gate is
   **Rounds** (3). The first three are per project, in the Where it runs table below. On with nobody listed it reviews
   nothing and raises nothing: the table's row asks for people.
 - **Where it runs** (`ReviewPrsProjects`, `reviewPrs.logic.ts`). Columns **Your PRs** (`ownPrs`, default true, task PRs
-  skipped where false), **Others'**, **People** and **Approve**, the last two empty where Others' is off. The engine
+  skipped where false, unless the task's epic set its own On or Preview: `reviewsTaskPrs`, which the merge gate reads
+  too, so a PR isn't held for a review that won't come), **Others'**, **People** and **Approve**, the last two empty where Others' is off. The engine
   only looks at projects where the automation is on, so a project runs if either source is on, and a source's switch
   writes the mode together with both source keys in one PUT, so turning a switched-off project on can't bring back a
   source left behind. A project stores a key only where it differs from the board, whose keys are the All projects row

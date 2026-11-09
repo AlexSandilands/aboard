@@ -35,6 +35,7 @@ import {
   type AutomationWeek,
   type AutopilotAutoPause,
   type AutopilotAutomation,
+  type AutopilotModeSource,
   type AutopilotHint,
   type AutopilotNeed,
   type AutopilotOverview,
@@ -133,6 +134,8 @@ export interface ResolvedAutomation {
   enabled: boolean;
   /** In Preview: its runs here are dry runs. */
   preview: boolean;
+  /** The scope whose switch decided it. */
+  source: AutopilotModeSource;
   /** Parsed over the automation's defaults; null when the stored config no longer parses. */
   config: AutomationConfig | null;
 }
@@ -927,6 +930,7 @@ export function createAutopilotService(
       return {
         enabled: automation.alwaysOn ? true : resolved.enabled,
         preview: automation.alwaysOn ? false : resolved.preview,
+        source: resolved.source,
         config: parsed.success ? parsed.data : null,
       };
     },
