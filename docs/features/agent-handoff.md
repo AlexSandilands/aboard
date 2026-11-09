@@ -222,7 +222,9 @@ catch T3 mid-start. So anything that acts on T3 (launch options, a launch, the m
 thread) that finds it not detected looks again first (`ensureDetected` in `integrations/t3.ts`), and a launch whose
 shell request gets no answer looks again once in case T3 moved. Only then does it fail, with "T3 Code is not running"
 or the shell's error, tagged `details.t3 = "unreachable"` (`isT3Unavailable`) so a caller can tell a T3 that isn't
-there yet from one that refused. Autopilot waits on those ([Runners](autopilot.md#runners)).
+there yet from one that refused. Autopilot waits on those ([Runners](autopilot.md#runners)). Settings → Agents →
+Providers does the same: **Re-check** runs a full T3 check, and the open page follows the minute timer by patching
+the cached detection on `integrations.changed` ([Providers and detection](agent-sessions.md#providers-and-detection)).
 
 #### The launch dialog
 

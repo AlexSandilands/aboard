@@ -1,4 +1,4 @@
-import type { ProviderSetting, ProviderStatus, ProvidersStatus } from "@repo/contracts";
+import type { ProviderSetting, ProviderStatus, ProvidersStatus, T3IntegrationStatus } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   activeHarnesses,
@@ -14,6 +14,7 @@ import {
   t3Dot,
   versionOf,
   withoutProvider,
+  withT3Status,
   withProvider,
 } from "./providers.logic";
 
@@ -170,5 +171,52 @@ describe("askUnavailableReason", () => {
         agent({ cli: { found: false } }),
       ),
     ).toBe("The Claude Code CLI wasn't found at /opt/claude.");
+  });
+});
+
+describe("withT3Status", () => {
+  const cached = (t3Patch: Partial<NonNullable<ProviderStatus["t3"]>> = {}): ProvidersStatus => ({
+    mcpUrl: "http://127.0.0.1:4317/mcp",
+    checkedAt: "2026-11-09T00:00:00.000Z",
+    providers: [t3({ detected: false, origin: null, liveStatus: "off", ...t3Patch }), agent()],
+  });
+  const live = (patch: Partial<T3IntegrationStatus> = {}): T3IntegrationStatus => ({
+    detected: true,
+    origin: "http://127.0.0.1:3773",
+    environmentId: "env-1",
+    label: "MY-PC",
+    liveStatus: "ok",
+    error: null,
+    ...patch,
+  });
+
+  it("flips T3 Code to detected when the event says it appeared", () => {
+    const next = withT3Status(cached(), live());
+    expect(next?.providers[0]?.t3).toMatchObject({ detected: true, origin: "http://127.0.0.1:3773", liveStatus: "ok" });
+  });
+
+  it("flips it back when T3 Code goes away", () => {
+    const next = withT3Status(
+      cached({ detected: true, origin: "http://127.0.0.1:3773" }),
+      live({ detected: false, origin: null, label: null, liveStatus: "off" }),
+    );
+    expect(next?.providers[0]?.t3).toMatchObject({ detected: false, origin: null, liveStatus: "off" });
+  });
+
+  it("keeps the saved-token flag from the cache, which the event doesn't carry", () => {
+    expect(withT3Status(cached({ tokenSet: true }), live())?.providers[0]?.t3?.tokenSet).toBe(true);
+    expect(withT3Status(cached({ tokenSet: false }), live())?.providers[0]?.t3?.tokenSet).toBe(false);
+  });
+
+  it("leaves the other providers and the rest of the status as they were", () => {
+    const before = cached();
+    const next = withT3Status(before, live());
+    expect(next?.providers[1]).toBe(before.providers[1]);
+    expect(next?.mcpUrl).toBe(before.mcpUrl);
+    expect(next?.checkedAt).toBe(before.checkedAt);
+  });
+
+  it("stays undefined when nothing is cached yet", () => {
+    expect(withT3Status(undefined, live())).toBeUndefined();
   });
 });

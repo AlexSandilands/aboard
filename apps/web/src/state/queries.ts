@@ -41,7 +41,7 @@ import { projectHasOrchestrateWork } from "~/components/autopilot/orchestrate.lo
 import { followupEpicBranch } from "~/components/handoff/handoff.logic";
 import { deliverNotification } from "~/components/notifications/delivery";
 import { withCreated } from "~/components/notifications/notifications.logic";
-import { agentClisOf } from "~/components/settings/providers.logic";
+import { agentClisOf, withT3Status } from "~/components/settings/providers.logic";
 import { ApiError, api, eventsUrl } from "~/lib/api";
 import { snapshotCardRects } from "~/components/board/cardMotion";
 import { applyBoardEvent, eventMovesCards } from "./boardReducer";
@@ -350,7 +350,8 @@ export function useTerminalInfo(enabled = true) {
 /**
  * Every provider as detected here: its CLI, MCP registration, T3 Code's status and the models scan. The one detection
  * source, shared by Settings → Agents → Providers and every menu that offers a provider. The server caches the CLI checks for
- * a minute; Re-check asks past it, and a provider change (providers.changed) asks again.
+ * a minute; Re-check asks past it (and looks for T3 Code again), and a provider change (providers.changed) asks again.
+ * T3 Code's part follows integrations.changed without a refetch.
  */
 export function useProviders(enabled = true) {
   return useQuery({
@@ -654,6 +655,8 @@ export function useBoardEvents() {
       }
       if (event.type === "integrations.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.integrations });
+        // Patched rather than invalidated: refetching would re-run the CLI and MCP checks on every flip of T3's status.
+        queryClient.setQueryData<ProvidersStatus>(queryKeys.providers, (status) => withT3Status(status, event.t3));
       }
       if (event.type === "suggestions.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.suggestions });
