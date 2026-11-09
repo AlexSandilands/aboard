@@ -99,7 +99,7 @@ describe("sourceHeaderWrites", () => {
   it("switching a source off keeps a project running on the other, and its own switch beats the new board", () => {
     const t = scopes("on", {}, { a: {}, b: { config: { otherPrs: true } } });
     expect(sourceHeaderWrites(t, "ownPrs", false, "on")).toEqual([
-      { target: { kind: "board" }, mode: "inherit", config: { ownPrs: false, otherPrs: undefined } },
+      { target: { kind: "board" }, mode: "inherit", config: { ownPrs: undefined, otherPrs: undefined } },
       { target: { kind: "project", id: "b" }, mode: "on", config: { ownPrs: false } },
     ]);
   });
@@ -112,7 +112,11 @@ describe("sourceHeaderWrites", () => {
       mode: "inherit",
       config: { ownPrs: undefined, otherPrs: undefined },
     });
-    expect(writes).toContainEqual({ target: { kind: "project", id: "a" }, mode: "preview" });
+    expect(writes).toContainEqual({
+      target: { kind: "project", id: "a" },
+      mode: "preview",
+      config: { ownPrs: undefined },
+    });
   });
 
   it("clears the board's source keys when nothing is left running, so a later Mode On does something", () => {
