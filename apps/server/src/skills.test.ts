@@ -8,9 +8,14 @@ import {
   checkAutomationDraft,
   BUILTIN_PLAN_SKILL_BODY,
   BUILTIN_REVIEW_SKILL_BODY,
+  SELF_LINK_ENV_RULE,
+  SELF_LINK_FAILED,
+  SELF_LINK_HOSTS,
+  SELF_LINK_OTHER_HOST,
+  SELF_LINK_WHEN,
   SHIPPED_SKILLS,
 } from "@repo/contracts";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -69,6 +74,29 @@ describe("skills", () => {
   it("keeps skills/aboard/SKILL.md and AGENTS-snippet.md identical to the embedded text", () => {
     expect(shipped("aboard", "SKILL.md")).toBe(boardSkillFile());
     expect(shipped("aboard", "AGENTS-snippet.md")).toBe(BOARD_AGENTS_SNIPPET);
+  });
+
+  it.each(["SKILL.md", "AGENTS-snippet.md"])("%s says what the self-link registry says", (name) => {
+    const text = shipped("aboard", name).replace(/`/g, "").replace(/\s+/g, " ");
+    const lookups = SELF_LINK_HOSTS.flatMap((host) =>
+      host.lookups.map((l) => (l.kind === "env" ? `$${l.name}` : l.kind === "tool" ? l.name : l.where)),
+    );
+    const rules = [SELF_LINK_WHEN, SELF_LINK_ENV_RULE, SELF_LINK_OTHER_HOST, SELF_LINK_FAILED];
+    expect([...lookups, ...rules].filter((line) => !text.includes(line))).toEqual([]);
+    expect(text).not.toMatch(/no environment variable/i);
+  });
+
+  it("names no T3 tool that no longer exists in anything shipped to agents", () => {
+    const root = new URL("../../../", import.meta.url);
+    const stale = ["t3_thread", "configuration"].join("_");
+    const files = ["skills", "packages/contracts/src", "apps/server/src/mcp", "apps/server/src/autopilot"].flatMap(
+      (dir) =>
+        readdirSync(new URL(dir, root), { recursive: true, encoding: "utf8" })
+          .filter((file) => /\.(ts|md)$/.test(file) && !file.endsWith(".test.ts"))
+          .map((file) => `${dir}/${file}`),
+    );
+    expect(files.length).toBeGreaterThan(50);
+    expect(files.filter((file) => readFileSync(new URL(file, root), "utf8").includes(stale))).toEqual([]);
   });
 
   it("tells agents to capture, look at and attach screenshots of UI changes", () => {

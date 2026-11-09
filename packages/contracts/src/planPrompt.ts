@@ -4,6 +4,7 @@ import { LaunchAttachmentIds } from "./attachments.ts";
 import { BRAND } from "./brand.ts";
 import type { PlanSkillRef } from "./reviews.ts";
 import type { Project, TaskSummary } from "./schemas.ts";
+import { SELF_LINK_RULES, sessionLinkLine, t3ThreadLinkLine } from "./selfLink.ts";
 import { CliEffort } from "./modelTiers.ts";
 import { CliModel } from "./sessionLaunch.ts";
 import { StartT3ThreadInput } from "./t3Launch.ts";
@@ -148,10 +149,7 @@ export function planTasksPrompt({
     "",
     linked
       ? startedSessionLine(harness ?? null, label, "every task")
-      : "If you're running in T3 Code, link this thread to every task with link(task, t3Thread: {environmentId, threadId}) " +
-        "from t3_environment_read and t3_thread_configuration. In Claude Code, Codex or Copilot CLI, link your own session to " +
-        `every task with link(task, agentSession: {harness, sessionId, cwd}, label: "${label}"), the id from ` +
-        "$CLAUDE_CODE_SESSION_ID, $CODEX_THREAD_ID or $COPILOT_AGENT_SESSION_ID (unless you're told the board linked it for you).",
+      : `${t3ThreadLinkLine("to every task", true)} ${sessionLinkLine({ label, everyTask: true })} ${SELF_LINK_RULES}`,
     "",
     ...planSkillLines(skill),
   ].join("\n");

@@ -39,11 +39,42 @@ different label renames the session (also logged as `link_updated`). The id must
 absolute path, with trailing separators dropped (`AgentSessionRef`). The board links sessions it starts itself, such as Autopilot's headless runs, through
 `services.links.add` with the same input; their folder can be a worktree outside the project.
 
-Agents are asked for it in three places: the `link` tool's description and the server instructions, the
-hand-off and planning prompts, and `get_task`'s **Missing links**, which asks only when the MCP client is Claude
-Code, Codex or Copilot CLI (`harnessOfClient` in `apps/server/src/mcp/format.ts`). Codex names itself
-`codex-mcp-client` in `initialize` and in its User-Agent (checked on codex-cli 0.166.0); the server is stateless, so
-tool calls read it from the User-Agent. The shipped skill and `AGENTS.md` snippet say the same.
+Agents are told this in four places: the `link` tool's description and the server instructions, the hand-off and
+planning prompts, the results of `set_plan` and `move_task` to `in_progress`, and `get_task`'s **Missing links**. The
+session hint in **Missing links** asks only when the MCP client is Claude Code, Codex or Copilot CLI (`harnessOfClient`
+in `apps/server/src/mcp/format.ts`). Codex names itself `codex-mcp-client` in `initialize` and in its User-Agent
+(checked on codex-cli 0.166.0); the server is stateless, so tool calls read it from the User-Agent. The shipped skill
+and `AGENTS.md` snippet say the same.
+
+### How an agent links itself
+
+Every host's lookups and link call are in one registry, `SELF_LINK_HOSTS` in `packages/contracts/src/selfLink.ts`: T3
+Code plus one entry per `AGENT_HARNESSES` harness. Prompts, hints and tool descriptions are built from it, and
+`skills.test.ts` fails if the skill files disagree with it. A new CLI goes in `AGENT_HARNESSES`, any other host is one
+more entry there.
+
+| Host | Tried in order | Call |
+| --- | --- | --- |
+| T3 Code | the `t3_thread_configure` tool with no arguments, then the T3 references attached to the conversation's messages | `link(value: "<thread id>")` |
+| Claude Code, Codex, Copilot CLI | the harness's one variable, in the table above | `link(agentSession: {…}, label)` |
+| Anything else | a URL for the session or thread, if the host has one | `link(value: "<url>", label)` |
+
+- **When.** An agent links when it creates a task or starts planning or implementing one, not when it only reads,
+  notes, triages or moves one. `set_plan` and `move_task` to `in_progress` carry the reminder even when another thread
+  or session is linked, as whoever filed the task may have linked theirs. **Missing links** asks only on a task in
+  progress. The board never links a session just because it called the board.
+- **Environment.** Agents read only the named variable and are told never to list their environment. T3 Code has
+  `$T3CODE_THREAD_ID`, deliberately not used: T3's own tool and message references need no shell.
+- **A bare thread id is enough.** The board adds the environment and checks the thread exists, on `link` and on the
+  `links` of `add_to_backlog`, `create_task` and `create_epic`. A thread it can't place doesn't fail a create: the result
+  says it wasn't linked. `t3Thread: {environmentId, threadId}` stays accepted.
+- **When nothing works,** the agent says so in its reply, with what it tried, records the same with `add_note`, and
+  carries on. It doesn't use `request_attention` for this.
+- **Refused values** are repeated in errors only when id-shaped (`rejectedValueText`), so text pasted by mistake stays
+  out of logs and transcripts.
+
+Not done: the host passing its identity when the agent connects to MCP, which would spare agents the lookup and could
+be added later. Until then the board can't force a link or detect a missing one.
 
 ### Live status
 

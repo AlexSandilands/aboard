@@ -1,5 +1,13 @@
 import type { Hono } from "hono";
-import { ACTOR_HEADER, BRAND } from "@repo/contracts";
+import {
+  ACTOR_HEADER,
+  BRAND,
+  SELF_LINK_RULES,
+  SELF_LINK_SUBAGENT,
+  SELF_LINK_WHEN,
+  sessionLinkLine,
+  t3ThreadLinkLine,
+} from "@repo/contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { AppContext } from "../app.ts";
@@ -40,8 +48,8 @@ const INSTRUCTIONS = `${BRAND.name} is the user's local kanban board for trackin
 - Manual tasks (marked "manual" in results) are to-dos for a person, not code: they need no plan, and agents and Autopilot leave them alone, so never work on one, hand it off or link a session or thread to it. When your work waits on something only a person can do (an access request, a sign-off), add it with manual: true on add_to_backlog or create_task and pass it as blockedBy on your task.
 - request_attention(task, message) flags a task for the user (Needs attention plus a notification) when you can't go on without them or they should look at something: you are blocked, unsure, found a problem, or have work ready to review. Say exactly what to look at. It interrupts them, so don't use it for progress (add_note) or when nothing is for them to act on; clear: true removes it once resolved.
 - End each session with add_note: a handover of what's done, what's left and the next action.
-- In T3 Code: call t3_thread_configuration (threadId) and t3_environment_read (environmentId) once and pass them as t3Thread to create_task/add_to_backlog, and to link whenever you start or resume an existing task in this thread.
-- In Claude Code, Codex or Copilot CLI (inside T3 Code too): when you start or resume a task, link your own session with link(agentSession: {harness, sessionId, cwd}, label); the id is $CLAUDE_CODE_SESSION_ID, $CODEX_THREAD_ID or $COPILOT_AGENT_SESSION_ID. The user can then reopen it in a terminal from the board, and see whether a Claude Code or Copilot CLI session is running. Give it a short label saying what this session does, such as "Implementing #107", "Planning #107" or, for an epic you orchestrate, "Orchestrating #107": it is the name the board shows (link again with a new label when the work changes). A subagent has the same session id as the session that started it, so only the main session links; a subagent must never link or relabel it.
+- ${SELF_LINK_WHEN} set_plan and move_task to in_progress remind you how. Linking again is harmless, even when someone else's thread or session is already linked. ${t3ThreadLinkLine("to the task")} When creating a task, the same id goes in links. ${sessionLinkLine({ label: "<what this session does>", also: true })} ${SELF_LINK_RULES}
+- The user can reopen a linked session in a terminal from the board, and see whether a Claude Code or Copilot CLI session is running. Give it a short label saying what this session does, such as "Implementing #107", "Planning #107" or, for an epic you orchestrate, "Orchestrating #107": it is the name the board shows (link again with a new label when the work changes). ${SELF_LINK_SUBAGENT}
 - To audit how a task went, get_session_transcript(task) reads a condensed, redacted transcript of a Claude Code session linked to it.`;
 
 /** Generic HTTP client user agents that say nothing about which agent is calling. */

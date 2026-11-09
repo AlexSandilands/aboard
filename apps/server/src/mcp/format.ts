@@ -1,5 +1,9 @@
 import {
   AGENT_HARNESSES,
+  SELF_LINK_FAILED,
+  selfLinkCall,
+  selfLinkLookups,
+  selfLinkReminder,
   type AgentHarness,
   attachmentIdsIn,
   TASK_STATUSES,
@@ -42,6 +46,12 @@ import type { SessionTranscript } from "../integrations/sessionTranscript.ts";
  * The harness an MCP client is, when it can link its own session: Claude Code says `claude-code`; Copilot CLI's name
  * has `copilot` in it, which VS Code's ("Visual Studio Code") doesn't; Codex says `codex-mcp-client` (codex-cli 0.166.0).
  */
+/** Who is starting work (null for a client the board can't place), and the name its session should go by. */
+export interface SelfLinkAsk {
+  harness: AgentHarness | null;
+  label: string;
+}
+
 export function harnessOfClient(client: string | undefined): AgentHarness | null {
   if (!client) return null;
   if (/claude[-_ ]?code/i.test(client)) return "claude-code";
@@ -355,6 +365,7 @@ export function missingLinkHints(
   sessionHarness: AgentHarness | null = null,
   ticketSystems: readonly TicketSystem[] = [],
   autoReview = false,
+  selfLinkHints = true,
 ): string[] {
   if (task.status === "done" || task.archivedAt) return [];
   const ref = `"#${task.number}"`;
@@ -371,16 +382,20 @@ export function missingLinkHints(
     .map((t) => `${ticketLabel(ticketSystems, t)}: link(task: ${ref}, value: "${t.key}")`);
   // No agent works on a manual task, so it has no thread, session or PR to link.
   if (task.manual) return hints;
-  if (!task.links.some((l) => l.kind === "t3_thread")) {
+  // Reading a task isn't working on it, so a session looking at one in Backlog or Planned isn't asked to link itself.
+  const asksForSelf = selfLinkHints && task.status === "in_progress";
+  const noun = task.kind === "epic" ? "epic" : "task";
+  if (asksForSelf && !task.links.some((l) => l.kind === "t3_thread")) {
     hints.push(
-      `T3 thread: if you are running in T3 Code, link(task: ${ref}, t3Thread: {environmentId, threadId}) with ids ` +
-        "from t3_environment_read and t3_thread_configuration",
+      `T3 thread: only if you're working on this ${noun} in T3 Code, ${selfLinkCall("t3-code", ref, "")}, with the id ` +
+        `from ${selfLinkLookups("t3-code")}. ${SELF_LINK_FAILED}`,
     );
   }
   const needsSession =
-    sessionHarness && !task.links.some((l) => l.kind === "agent_session" && l.ref.harness === sessionHarness);
+    asksForSelf &&
+    sessionHarness &&
+    !task.links.some((l) => l.kind === "agent_session" && l.ref.harness === sessionHarness);
   if (needsSession) {
-    const { idEnvVar } = AGENT_HARNESSES[sessionHarness];
     const example = task.kind === "epic" ? "Orchestrating" : "Implementing";
     // The board can't read a Codex session's state, so all it offers there is resuming it.
     const why =
@@ -388,8 +403,7 @@ export function missingLinkHints(
         ? "so the user can reopen it in a terminal from the board"
         : "so the user can see it running and reopen it in a terminal from the board";
     hints.push(
-      `Your session: if you are the one working on this ${task.kind === "epic" ? "epic" : "task"}, link(task: ${ref}, agentSession: {harness: "${sessionHarness}", sessionId: <$${idEnvVar}>, ` +
-        `cwd: <your working directory>}, label: "<what this session does, e.g. ${example} #N>"), ${why}`,
+      `Your session: only if you're working on this ${noun}, ${selfLinkCall(sessionHarness, ref, `<what this session does, e.g. ${example} #N>`)}, ${why}`,
     );
   }
   // No PR is linked in Review: exactly one line says why, so nobody asks for one mid-loop (the PR is opened once the
@@ -768,6 +782,8 @@ export function renderTaskDetail(
     captureHint?: boolean;
     /** The harness calling, when it is one that can link its own session; the Missing links hint asks for it. */
     sessionHarness?: AgentHarness | null;
+    /** The caller is starting work on the task: tell it how to link itself, whatever is linked already. */
+    selfLink?: SelfLinkAsk;
     /** Whether Start planned tasks is on for the task's scope, which makes the Autopilot flag worth asking about. */
     autopilotHint?: boolean;
     /** The epic delivery question (deliveryHint), when the caller found it applies. */
@@ -885,10 +901,21 @@ export function renderTaskDetail(
     lines.push("", "Links:");
     for (const link of task.links) lines.push(`- ${linkText(link, opts.ticketSystems)}`);
   }
-  const missing = missingLinkHints(task, opts.sessionHarness ?? null, opts.ticketSystems, opts.autoReview ?? false);
+  const reminder = opts.selfLink && !task.manual && task.status !== "done" && !task.archivedAt ? opts.selfLink : null;
+  const missing = missingLinkHints(
+    task,
+    opts.sessionHarness ?? null,
+    opts.ticketSystems,
+    opts.autoReview ?? false,
+    reminder === null,
+  );
   if (missing.length) {
     lines.push("", "Missing links:");
     for (const hint of missing) lines.push(`- ${hint}`);
+  }
+  if (reminder) {
+    lines.push("", "Link your work:");
+    for (const line of selfLinkReminder({ task: `"#${task.number}"`, ...reminder })) lines.push(`- ${line}`);
   }
   const progress = opts.progress
     ? progressHints(task, opts.progress.now, { closing: opts.progress.closing ?? false })
@@ -929,6 +956,7 @@ export function renderTaskShort(
     progress?: { now: number; closing?: boolean };
     autoReview?: boolean;
     ticketSystems?: readonly TicketSystem[];
+    selfLink?: SelfLinkAsk;
   } = {},
 ): string {
   return renderTaskDetail(task, project, { ...opts, events: 0 });

@@ -3,6 +3,13 @@ import { BRAND } from "./brand.ts";
 import { describeChoice, resolveTaskModel, type ModelProfile } from "./modelProfiles.ts";
 import { modelTierDescription, type ModelTiers } from "./modelTiers.ts";
 import type { Project, TaskSummary } from "./schemas.ts";
+import {
+  SELF_LINK_ENV_RULE,
+  SELF_LINK_FAILED,
+  SELF_LINK_RULES,
+  sessionLinkLine,
+  t3ThreadLinkLine,
+} from "./selfLink.ts";
 
 /**
  * "work" picks the task up; "plan" asks the agent to shape the plan with the user first; "orchestrate" (epics
@@ -253,11 +260,9 @@ export function taskHandoffPrompt({
     "",
     linkedThread
       ? "This thread is already linked to the task; don't link it again."
-      : "Link the task to its ticket with link if it has one, and, if you're running in T3 Code, to this " +
-          "thread with link(t3Thread: {environmentId, threadId}) from t3_environment_read and t3_thread_configuration.",
-    "In Claude Code, Codex or Copilot CLI, also link your own session with link(agentSession: {harness, sessionId, cwd}, " +
-      `label: "${mode === "plan" ? "Planning" : "Implementing"} #${task.number}"), the id from $CLAUDE_CODE_SESSION_ID, ` +
-      "$CODEX_THREAD_ID or $COPILOT_AGENT_SESSION_ID, so it can be reopened from the board under that name (unless you're told the board linked it for you).",
+      : `Link the task to its ticket with link if it has one. ${t3ThreadLinkLine("to the task")}`,
+    sessionLinkLine({ label: `${mode === "plan" ? "Planning" : "Implementing"} #${task.number}`, also: true }),
+    SELF_LINK_RULES,
   );
   return lines.join("\n");
 }
@@ -309,10 +314,9 @@ function followupPrompt(
       : linked.linkedThread
         ? ["This thread is already linked to the task; don't link it again."]
         : [
-            "In Claude Code, Codex or Copilot CLI, link your own session with link(agentSession: {harness, sessionId, cwd}, " +
-              `label: "Follow-up on #${task.number}"), the id from $CLAUDE_CODE_SESSION_ID, $CODEX_THREAD_ID or $COPILOT_AGENT_SESSION_ID, ` +
-              "so it can be reopened from the board under that name (unless you're told the board linked it for you). Don't link a T3 thread to the task: the board " +
+            `${sessionLinkLine({ label: `Follow-up on #${task.number}` })} Don't link a T3 thread to the task: the board ` +
               "would take it for the thread that did the work.",
+            `${SELF_LINK_ENV_RULE} ${SELF_LINK_FAILED}`,
           ]),
   ].join("\n");
 }
@@ -385,10 +389,9 @@ function orchestratePrompt(
       : linked.linkedThread
         ? ["This thread is already linked to the epic; don't link it again."]
         : [
-            `If you're running in T3 Code, link this thread to ${ref} with link(t3Thread: {environmentId, threadId}) from t3_environment_read and t3_thread_configuration.`,
-            "In Claude Code, Codex or Copilot CLI, also link your own session with link(agentSession: {harness, sessionId, cwd}, " +
-              `label: "Orchestrating ${ref}"), the id from $CLAUDE_CODE_SESSION_ID, $CODEX_THREAD_ID or $COPILOT_AGENT_SESSION_ID, so it can be ` +
-              "reopened from the board under that name (unless you're told the board linked it for you).",
+            t3ThreadLinkLine(`to ${ref}`),
+            sessionLinkLine({ label: `Orchestrating ${ref}`, also: true }),
+            SELF_LINK_RULES,
           ]),
   ].join("\n");
 }

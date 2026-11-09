@@ -22,7 +22,8 @@ describe("taskHandoffPrompt", () => {
     expect(prompt).toContain("add_note");
     expect(prompt).toContain("never all at the end of a phase");
     expect(prompt).not.toContain("already linked");
-    expect(prompt).toContain("link(t3Thread: {environmentId, threadId})");
+    expect(prompt).toContain('link(value: "<thread id>")');
+    expect(prompt).toContain("t3_thread_configure");
     expect(prompt).toContain("its ticket with link");
   });
 
@@ -135,7 +136,7 @@ describe("taskHandoffPrompt", () => {
   });
 
   it("asks a planning session to link itself too", () => {
-    expect(taskHandoffPrompt({ task, boardUrl: "http://x", mode: "plan" })).toContain("link(t3Thread:");
+    expect(taskHandoffPrompt({ task, boardUrl: "http://x", mode: "plan" })).toContain('link(value: "<thread id>")');
   });
 });
 

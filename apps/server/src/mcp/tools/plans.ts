@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { attachmentToken, MAX_LAUNCH_IMAGES, StepStatus } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
-import { batchedCompletionHint } from "../format.ts";
+import { batchedCompletionHint, harnessOfClient } from "../format.ts";
 import {
   actorField,
   planFromArgs,
@@ -20,7 +20,7 @@ const stepField = z
 const SHOWN_DELETED = 15;
 
 /** Plan tools: set_plan, update_plan, add_steps, update_step. */
-export const registerPlanTools: ToolRegistrar = (server, { services, actor }) => {
+export const registerPlanTools: ToolRegistrar = (server, { services, actor, client }) => {
   server.registerTool(
     "set_plan",
     {
@@ -64,7 +64,10 @@ export const registerPlanTools: ToolRegistrar = (server, { services, actor }) =>
               ? `
 Deleted ${deleted.length} step(s): ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}.`
               : "";
-          return taskResult(services, task.id, `Plan set for #${task.number}.${dropped}`, { planningHints: true });
+          return taskResult(services, task.id, `Plan set for #${task.number}.${dropped}`, {
+            planningHints: true,
+            selfLink: { harness: harnessOfClient(client()), label: `Planning #${task.number}` },
+          });
         },
         {
           CONFLICT:

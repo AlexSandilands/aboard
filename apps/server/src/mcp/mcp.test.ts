@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { AppError } from "../errors.ts";
 import { ORCHESTRATE_BOARD_TOOLS, ORCHESTRATE_DENIED_BOARD_TOOLS } from "../autopilot/automations/orchestrate.ts";
 import { TEST_JIRA } from "../test/fixtures.ts";
 import { createTestHarness } from "../test/harness.ts";
@@ -201,6 +202,57 @@ describe("MCP endpoint", () => {
     expect(linked.isError).toBeFalsy();
     expect(text(linked)).toContain("Warning: Linked without checking the thread exists");
     expect(h.services.tasks.detail(task.id).links).toMatchObject([{ kind: "t3_thread", ref: { threadId } }]);
+  });
+
+  describe("a bare T3 thread id when creating a task", () => {
+    const threadId = "bca46358-2812-4417-93f7-e151c0f96292";
+    const workspacePath = "C:/Fake/proj";
+    const plan = { markdown: "## P\n- [ ] s" };
+
+    it.each([
+      ["add_to_backlog", {}],
+      ["create_task", plan],
+      ["create_epic", {}],
+    ] as const)("%s links it as a thread", async (name, extra) => {
+      h.services.projects.create({ workspaceRoot: workspacePath });
+      vi.spyOn(h.integrations, "resolveLinkInput").mockResolvedValue({
+        input: { t3Thread: { environmentId: "env-1", threadId } },
+        warning: "Linked without checking the thread exists",
+      });
+      const created = await client.callTool({
+        name,
+        arguments: { title: "Linked", workspacePath, links: [threadId], ...extra },
+      });
+      expect(created.isError).toBeFalsy();
+      expect(text(created)).toContain("Warning: Linked without checking the thread exists.");
+      const project = h.services.projects.resolve({ workspacePath }, { autoCreate: false });
+      const task = h.services.tasks.summaries({ projectId: project.id }).find((t) => t.title === "Linked");
+      expect(h.services.tasks.detail(task!.id).links).toMatchObject([{ kind: "t3_thread", ref: { threadId } }]);
+    });
+
+    it("still creates the task, and says why, when the thread can't be found", async () => {
+      h.services.projects.create({ workspaceRoot: workspacePath });
+      vi.spyOn(h.integrations, "resolveLinkInput").mockRejectedValue(
+        new AppError("VALIDATION", `No T3 Code thread with ID ${threadId}`),
+      );
+      const created = await client.callTool({
+        name: "create_task",
+        arguments: { title: "Linked", workspacePath, links: [threadId], ...plan },
+      });
+      expect(created.isError).toBeFalsy();
+      expect(text(created)).toContain(`Not linked: ${threadId} (No T3 Code thread with ID ${threadId}).`);
+    });
+
+    it("says so when the board can't place the thread's environment", async () => {
+      h.services.projects.create({ workspaceRoot: workspacePath });
+      vi.spyOn(h.integrations, "resolveLinkInput").mockResolvedValue({ input: { value: threadId } });
+      const created = await client.callTool({
+        name: "create_task",
+        arguments: { title: "Linked", workspacePath, links: [threadId], ...plan },
+      });
+      expect(created.isError).toBeFalsy();
+      expect(text(created)).toContain("the board can't tell which T3 Code environment");
+    });
   });
 
   it("get_task lists the task's pasted images with their absolute paths", async () => {
@@ -672,7 +724,7 @@ describe("MCP endpoint", () => {
     expect(detail).toContain(`Jira CORE-1200: link(task: "${ref}", value: "CORE-1200")`);
     expect(detail).not.toContain("Jira CORE-1245:");
     expect(detail).not.toContain("UTF-8:");
-    expect(detail).toContain(`link(task: "${ref}", t3Thread: {environmentId, threadId})`);
+    expect(detail).not.toContain("T3 thread:");
 
     await client.callTool({ name: "link", arguments: { task: ref, value: "CORE-1200" } });
     const linked = await client.callTool({

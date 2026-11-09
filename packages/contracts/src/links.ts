@@ -22,6 +22,12 @@ const T3_DEEP_LINK = /^t3code(?:-[a-z]+)?:\/\/threads\/([^/\s]+)\/([^/?#\s]+)/i;
 /** T3 thread ids are UUIDs, or `thread:…` composites of them. */
 const T3_THREAD_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|thread:[^\s/?#]+)$/i;
 
+/**
+ * How an error names a value it refused: the value only when it looks like an id. Anything else may be text an agent
+ * pasted by mistake (a line of its environment, say), which shouldn't be repeated into logs and transcripts.
+ */
+export const rejectedValueText = (value: string): string => (/^[\w.:#-]{1,128}$/.test(value) ? value : "that value");
+
 /** The T3 server this board found, as far as links need it. */
 export interface T3Target {
   environmentId: string | null;
