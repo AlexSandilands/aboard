@@ -35,18 +35,19 @@ at every scope. Projects and epics offer Inherit / Off / Preview / On.
 | On    | Preview | Inherit | Preview (project) |
 | Preview | Inherit | On    | On (epic)      |
 
-**Where it runs** is the same rows read as one sentence. `describeWhere` (`packages/contracts/src/autopilotWhere.ts`)
+**Where it runs** is the same rows read as one sentence and edited as one table. `describeWhere` (`packages/contracts/src/autopilotWhere.ts`)
 turns an automation's modes at every scope into a reach and its exceptions: **Everywhere** is the board On;
 **Only in…** is the board off with some projects On; **nowhere** is neither. An exception is a project or epic whose own
 setting differs from what it would follow: a project Off under Everywhere, an epic set against its project (an epic
 set the same as its project is not one). "On everywhere except payments-api; epic #5 Off" is the sentence for the
-board On, payments-api Off and epic #5 Off. Everywhere also drops the rows Only in… left (a project set On, an epic set the same as its project), so a later Switch off of the board really is off. Nothing is stored for it: the edits (`whereEverywhere`, `whereOnlyIn`,
-`whereProject`, `whereEpic`, `whereAddException`, `whereRemoveException`) return the plain `PUT` writes (a scope and a
+board On, payments-api Off and epic #5 Off. Switching on over the board's row drops the rows a project or epic only repeated, so a later Switch off of the board really is off. Nothing is stored for it: the edits (`whereEverywhere`, `whereOnEverywhere`, `whereOffEverywhere`,
+`whereProject`, `whereProjectPreview`, `whereEpic`) return the plain `PUT` writes (a scope and a
 mode), and a toggle that gives what the scope above already gives saves Inherit rather than an override
 (`modeToBe`), so a project that is switched on and off again leaves no row. Each write is its own request and the
-server acts on each, so the order is part of the contract: Only in… turns the picked projects On before the board goes
-off (nothing that stays on is ever off on the way, which would drop a Run now request or restart a schedule), and
-Everywhere turns the board on first. `useApplyWhere` sends them in order and the event stream holds back the switches'
+server acts on each, so the order is part of the contract: a write that turns the board on sends it first, so nothing
+is off on the way, which would drop a Run now request or restart a schedule (`whereEverywhere` keeps projects set Off,
+and `whereOnEverywhere`, the table header's on click, clears them too), and `whereOffEverywhere` clears epics and
+projects before the board. `useApplyWhere` sends them in order and the event stream holds back the switches'
 refetch until the last is in (`WHERE_MUTATION_KEY`). The tests run every board × project × epic
 combination against `resolveAutopilot`.
 
@@ -1106,10 +1107,10 @@ preview or a script's test run, and the name, pre-filled from the trigger and ac
 the Where step put it, or **Save and turn on** switches it On there after it is created (`useTurnOnCustomAutomation`:
 the board, or each of its projects); an existing one opens at Review.
 
-**Where** decides where it runs with its switches, and nothing else: the same **Everywhere / Only in…** choice, chips
-and picker as the automation's [Where it runs](#the-ui) (`ProjectsChoice` in `WhereItRuns.tsx`). For a saved automation
-the step is `WhereProjects`, which writes its switches as they are picked, like its page; for a new one (or an import,
-or Edit first) it is `DraftProjects`, kept in the form (`everywhere`, `projectIds`) and sent as the create input's
+**Where** decides where it runs with its switches, and nothing else: the same [project table](#the-ui) as the
+automation's page (`ProjectTable.tsx`). For a saved automation the step is `WhereProjects`, which writes its switches
+as they are picked, like its page; for a new one (or an import, or Edit first) it is `DraftProjects`, kept in the form
+(`everywhere`, `projectIds`) and sent as the create input's
 `projectIds`: empty saves a board row in Preview, otherwise a project row in Preview for each, with the board off. Under
 it, for a task trigger: **With any of these labels** (`filters.labels`) and a **Tasks in epics** switch
 (`filters.epicTasks`, default on). Off, a task in an epic is skipped unless that epic has a setting of its own for the
@@ -1959,15 +1960,23 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
     effective config (`automationSentence`; a custom automation's from its trigger and action) with **All runs**, and
     the **Mode · for the board** row, the board's Off · Preview · On, saying what the mode does (`modeDescription`;
     with a check script, that it still runs for real; when mixed, "**Off for the board.** On in 5 projects, which
-    set their own." (a project only in Preview is named as Preview) with a **Turn off everywhere** link); **Where it runs** (`WhereItRuns`): the sentence (`describeWhere`, "Preview
-    everywhere", "On only in storefront; Preview in docs"), an **Everywhere / Only in…** control with the projects as
-    chips under Only in… (amber when only in Preview; past `PROJECT_CHIPS_MAX`, 8 projects, one "5 of 20 projects ▾"
-    button instead, opening a searchable checklist with All and None, `ProjectPicker`), and **Exceptions** as removable chips (a project's or epic's own
-    setting, with the mode it has: On, Preview or Off) with **+ Exception**, which offers the projects not yet Off under
-    Everywhere and the epics that aren't exceptions yet, each with the mode it would be given (On or Off). Everywhere
-    turns an off automation on in the mode `restoreMode` gives. It reads `useAutopilotModes` and the board's projects and
+    set their own." (a project only in Preview is named as Preview) with a **Turn off everywhere** link); **Where it runs** (`WhereItRuns`), the shared `ProjectTable`: a Stacked header row, **All projects**, over one row
+    per project. All projects is the board's scope and each project row an override, written only where it differs
+    from the board (a dot marks one; when the table is collapsed, "N differ" counts them). The rows are the project's
+    effective state. The header shows what they add up to, so on, off or the middle position (`columnState`, the
+    list's tint): a click on on or middle switches the column off (`whereOffEverywhere`, which also clears epics set
+    On), a click on off turns it on for every project (`whereOnEverywhere`, in the mode `restoreMode` gives), and when
+    that would drop switches a person set it asks first (`headerLoss`, `HeaderClearDialog`). "New projects: on." under
+    the table says what the stored board value gives, which a mixed header can't. Epics are not in the table: they
+    stay in the board's epic popover, and an epic's own setting still beats its project's. Past `PROJECT_CHIPS_MAX`,
+    8 projects, a search box shows above the rows; about ten rows fit before they scroll, with the header outside the
+    scroll area and both reserving the same scrollbar gutter so the columns stay in line. Clicking a project row
+    expands it, with one labelled **Preview** switch (`whereProjectPreview`, nothing stored when the project matches
+    the board); in Preview the row's switches turn amber and it shows a badge. An automation with `needsRepo` (Start
+    planned tasks, Review PRs, Fix PRs, Merge ready PRs) leaves out the General project, which the board names with
+    `generalProjectId` on its snapshot. Only the table leaves it out: no row's switch can reach it, and a header click clears General's own setting along with the rest. It reads `useAutopilotModes` and the board's projects and
     unarchived epics (epics only for an automation with `epicScope`), writes through `useApplyWhere` (one PUT per write,
-    shown at once and refetched on error), and a blocked automation can't be switched on or into Preview from it;
+    shown at once and refetched on error), and a blocked automation can't be switched on or into Preview from it: anything that would is disabled and shows why;
     **Settings**, the fields whose `tier` is `essential`; and **Advanced**, closed, with every other field.
     Its heading says how many differ from their default ("Agent, Fix skill · 2 changed", `advancedChangedCount`). A
     field without a tier is advanced. Every row has one short description line, the rest behind an info button

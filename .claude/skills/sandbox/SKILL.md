@@ -43,8 +43,8 @@ Seeds (`apps/server/src/dev/seeds.ts`):
   No PRs, sessions or review rounds are backdated, so those charts stay flat.
 - `autopilot`: the showcase board with Autopilot set up for Settings → Autopilot: five automations on for the board
   in dry run (so no agent ever starts), a failed run, an agent's draft and a custom automation with an empty tool slot.
-- `crowded`: the `autopilot` board plus eighteen empty projects, past the eight Where it runs shows as chips, so it
-  shows its project picker.
+- `crowded`: the `autopilot` board plus eighteen empty projects, past the eight Where it runs shows without a search
+  box, so its rows scroll and it shows the search.
 - `dense`: for checking rendering cost. A project with twenty cards in every column, one with an epic whose children
   span every column, fifteen cards spread across the columns beside the same fifteen in backlog, and a single card.
   Pair it with `--prod`.

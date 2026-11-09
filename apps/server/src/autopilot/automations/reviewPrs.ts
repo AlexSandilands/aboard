@@ -445,6 +445,7 @@ export const reviewPrs = defineAutomation({
   description:
     "Reviews pull requests linked to tasks and posts the review on GitHub as comments, again when the PR's head commit changes.",
   needsAgent: true,
+  needsRepo: true,
   group: "prs",
   schema: ConfigSchema,
   fields: [

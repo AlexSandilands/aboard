@@ -68,7 +68,7 @@ export const needsScriptConfirm = (bundle: AutomationBundle, draft: Pick<ImportD
 
 /** Why this can't be imported as filled in (the server's checks, run first), or null. An empty slot is allowed. */
 export function importProblem(bundle: AutomationBundle, draft: ImportDraft): string | null {
-  if (!draft.everywhere && draft.projectIds.length === 0) return "Pick a project, or choose Everywhere";
+  if (!draft.everywhere && draft.projectIds.length === 0) return "Pick a project, or switch on All projects";
   const request = draftToRequest(bundle, draft);
   const parsed = CreateCustomAutomationInput.safeParse(
     bundleToDefinition(bundle, {

@@ -118,6 +118,7 @@ export const describeAutomation = (
   description: a.description,
   needsAgent: a.needsAgent,
   epicScope: a.epicScope ?? true,
+  needsRepo: a.needsRepo ?? false,
   alwaysOn: a.alwaysOn ?? false,
   group: a.group ?? "yours",
   blocked: a.blocked ?? null,

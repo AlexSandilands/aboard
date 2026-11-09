@@ -552,6 +552,7 @@ export const fixPrs = defineAutomation({
   description:
     "Fixes linked pull requests when checks fail, they conflict, a reviewer asks for changes or comments, or Autopilot's review finds issues.",
   needsAgent: true,
+  needsRepo: true,
   group: "prs",
   schema: ConfigSchema,
   fields: FIELDS,

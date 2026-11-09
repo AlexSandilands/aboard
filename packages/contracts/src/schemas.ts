@@ -632,6 +632,8 @@ export type T3IntegrationStatus = z.infer<typeof T3IntegrationStatus>;
 
 export const BoardSnapshot = z.object({
   projects: z.array(Project),
+  /** The General project (no folder, for work that belongs to no repo), or null while none exists. */
+  generalProjectId: z.string().nullable(),
   tasks: z.array(TaskSummary),
   /** Label colour overrides by label; labels not listed take a hue hashed from their name. */
   labelColors: z.record(z.string(), LabelHue),
