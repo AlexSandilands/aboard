@@ -193,6 +193,8 @@ const FieldBase = {
   info: z.string().optional(),
   /** Drawn in that field's row, its control beside that one's, rather than as a row of its own. */
   inRowOf: z.string().optional(),
+  /** Set per project in Where it runs: the automation's settings draw no row for it. */
+  inWhereTable: z.boolean().optional(),
   tier: AutopilotFieldTier.optional(),
 };
 

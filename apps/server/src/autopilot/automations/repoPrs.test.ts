@@ -754,13 +754,23 @@ describe("other people's PRs: what is left alone", () => {
     expect(t.requests).toHaveLength(0);
   });
 
-  it("says Needs setup when on with nobody to review, and reviews nothing", async () => {
+  it("reviews nothing with nobody listed, and raises nothing about it", async () => {
     const t = setup();
     t.turnOn({ otherAuthors: "" });
     await t.pass();
     expect(t.requests).toHaveLength(0);
     const row = t.s.autopilot.overview().automations.find((a) => a.key === AUTOPILOT_REVIEW_PRS)!;
-    expect(row.needs).toBe("Needs setup: Other people's PRs is on with no authors in: Alpha");
+    expect(row.needs).toBeNull();
+    expect(t.runs()).toHaveLength(0);
+  });
+
+  it("doesn't read a repository, or record a failed read, for a project with no folder", async () => {
+    const t = setup();
+    t.s.projects.update(t.project.id, { workspaceRoot: null });
+    t.turnOn();
+    await t.pass();
+    expect(t.requests).toHaveLength(0);
+    expect(t.runs()).toHaveLength(0);
   });
 
   it("does nothing while the source is off", async () => {

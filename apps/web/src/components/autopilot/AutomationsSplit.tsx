@@ -469,8 +469,8 @@ function AutomationDetail({
   const { automation, entry, reach, custom, lastRun, previewRuns, onConfig } = item;
   const board = useBoardMode(item);
   const navigate = useNavigate();
-  // A field drawn in another's row (`inRowOf`) gets no row of its own.
-  const { essential, advanced } = splitFieldsByTier(automation.fields.filter((f) => !f.inRowOf));
+  // A field drawn in another's row (`inRowOf`), or set in the Where it runs table, gets no row of its own.
+  const { essential, advanced } = splitFieldsByTier(automation.fields.filter((f) => !f.inRowOf && !f.inWhereTable));
   const overview = useAutopilotOverview().data;
   const agentDefaults = overview?.engine.agentDefaults ?? {};
   const hints = hintsFor(overview?.hints ?? [], automation.key);

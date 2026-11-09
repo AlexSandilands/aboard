@@ -278,6 +278,16 @@ describe("merge into epic branch", () => {
     expect(merges).toEqual([{ linkId: linkId(), input: expect.objectContaining({ headOid: SHA_B }) }]);
   });
 
+  it("doesn't wait for a review where Your PRs is off, since none will come", async () => {
+    const { s, project, setPr, toReview, pass, turnOn, merges } = setup();
+    turnOn();
+    s.autopilot.setScope("project", project.id, AUTOPILOT_REVIEW_PRS, { mode: "on", config: { ownPrs: false } });
+    toReview();
+    setPr();
+    await pass();
+    expect(merges).toHaveLength(1);
+  });
+
   it("with Review PRs in Preview, still waits for a real review rather than merging unreviewed", async () => {
     const { s, project, setPr, toReview, pass, turnOn, merges, reviewed } = setup();
     turnOn();

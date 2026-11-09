@@ -622,13 +622,11 @@ export function useBoardEvents() {
       }
       // Also sent when a switch or config changes, so another window's edit refreshes the lanes' scopes.
       if (event.type === "autopilot.changed") {
-        // Each write of a Where it runs edit publishes this; refetching the switches between them would show the
-        // edit half done. The edit refetches them once it has saved every write.
-        const whereBusy = queryClient.isMutating({ mutationKey: WHERE_MUTATION_KEY }) > 0;
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.autopilotScopeAll,
-          predicate: (query) => !(whereBusy && query.queryKey[1] === "modes"),
-        });
+        // Each write of a Where it runs edit publishes this; refetching the scopes between them would show the edit
+        // half done, and its config writes merge into the cached scope. The edit refetches them once every write is in.
+        if (queryClient.isMutating({ mutationKey: WHERE_MUTATION_KEY }) === 0) {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotScopeAll });
+        }
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotRunsAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilotOrchestrateAll });
         void queryClient.invalidateQueries({ queryKey: queryKeys.autopilot });

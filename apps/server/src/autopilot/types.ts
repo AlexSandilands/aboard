@@ -162,10 +162,9 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
   blocked?: string | null;
   /**
    * Why it won't run in some of the projects it is on in (a custom automation naming a variable they have no value for),
-   * given those projects and each one's config (defaults, then the board's and the project's keys), or null. Shown on
-   * its row and under Needs you; its check skips them meanwhile.
+   * given those projects, or null. Shown on its row and under Needs you; its check skips them meanwhile.
    */
-  needs?: (projects: readonly Project[], configOf: (project: Project) => AutomationConfig) => string | null;
+  needs?: (projects: readonly Project[]) => string | null;
   /** Parses the merged config; it should give every field a default. */
   schema: z.ZodType<C>;
   /** How the UI renders the config form. */
