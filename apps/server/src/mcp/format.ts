@@ -1,6 +1,7 @@
 import {
   AGENT_HARNESSES,
   SELF_LINK_FAILED,
+  SELF_LINK_T3_REFUSED,
   selfLinkCall,
   selfLinkLookups,
   selfLinkReminder,
@@ -42,16 +43,16 @@ import type { SessionTranscript } from "../integrations/sessionTranscript.ts";
 
 /** Plaintext renderings for agents. Compact, stable, no JSON dumps. */
 
-/**
- * The harness an MCP client is, when it can link its own session: Claude Code says `claude-code`; Copilot CLI's name
- * has `copilot` in it, which VS Code's ("Visual Studio Code") doesn't; Codex says `codex-mcp-client` (codex-cli 0.166.0).
- */
 /** Who is starting work (null for a client the board can't place), and the name its session should go by. */
 export interface SelfLinkAsk {
   harness: AgentHarness | null;
   label: string;
 }
 
+/**
+ * The harness an MCP client is, when it can link its own session: Claude Code says `claude-code`; Copilot CLI's name
+ * has `copilot` in it, which VS Code's ("Visual Studio Code") doesn't; Codex says `codex-mcp-client` (codex-cli 0.166.0).
+ */
 export function harnessOfClient(client: string | undefined): AgentHarness | null {
   if (!client) return null;
   if (/claude[-_ ]?code/i.test(client)) return "claude-code";
@@ -388,7 +389,7 @@ export function missingLinkHints(
   if (asksForSelf && !task.links.some((l) => l.kind === "t3_thread")) {
     hints.push(
       `T3 thread: only if you're working on this ${noun} in T3 Code, ${selfLinkCall("t3-code", ref, "")}, with the id ` +
-        `from ${selfLinkLookups("t3-code")}. ${SELF_LINK_FAILED}`,
+        `from ${selfLinkLookups("t3-code")}. ${SELF_LINK_T3_REFUSED} ${SELF_LINK_FAILED}`,
     );
   }
   const needsSession =

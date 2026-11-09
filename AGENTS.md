@@ -114,8 +114,8 @@ links, labels, review), update every place that tells them, in the same PR:
 | The planning skill and its prompt           | `skills/aboard-plan/SKILL.md`, `BUILTIN_PLAN_SKILL_BODY`, `planTasksPrompt`                                     |
 
 - Keep them consistent: a tool renamed in one place and not another sends agents to a tool that doesn't
-  exist. No test ties the skill to the tools; `skills.test.ts` only checks the review and planning skills against
-  their built-in bodies, and `skills/aboard/` against the copy embedded in `packages/contracts/src/boardSkill.ts`,
+  exist. Beyond the self-link lookups and rules, which `skills.test.ts` checks against the registry, no test ties the
+  skill to the tools; it otherwise only checks the review and planning skills against their built-in bodies, and `skills/aboard/` against the copy embedded in `packages/contracts/src/boardSkill.ts`,
   which the board installs into users' skill folders (`pnpm skill:embed` regenerates it).
 - If nothing an agent sees changes (UI-only work, refactors), none of these need touching.
 - How to write them is in [docs/features/mcp.md](docs/features/mcp.md#writing-tool-descriptions).

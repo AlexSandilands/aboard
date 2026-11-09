@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ACTOR_HEADER, attachmentToken } from "@repo/contracts";
+import { ACTOR_HEADER, attachmentToken, SELF_LINK_T3_REFUSED } from "@repo/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -241,6 +241,18 @@ describe("MCP endpoint", () => {
       });
       expect(created.isError).toBeFalsy();
       expect(text(created)).toContain(`Not linked: ${threadId} (No T3 Code thread with ID ${threadId}).`);
+      expect(text(created)).toContain(SELF_LINK_T3_REFUSED);
+    });
+
+    it("link points a refused bare id at the explicit form", async () => {
+      const project = h.services.projects.create({ workspaceRoot: workspacePath });
+      const task = h.services.tasks.create({ projectId: project.id, title: "Linked" });
+      vi.spyOn(h.integrations, "resolveLinkInput").mockRejectedValue(
+        new AppError("VALIDATION", "T3 Code isn't running"),
+      );
+      const refused = await client.callTool({ name: "link", arguments: { task: `#${task.number}`, value: threadId } });
+      expect(refused.isError).toBe(true);
+      expect(text(refused)).toContain(SELF_LINK_T3_REFUSED);
     });
 
     it("says so when the board can't place the thread's environment", async () => {

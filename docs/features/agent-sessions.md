@@ -55,11 +55,11 @@ more entry there.
 
 | Host | Tried in order | Call |
 | --- | --- | --- |
-| T3 Code | the `t3_thread_configure` tool with no arguments, then the T3 references attached to the conversation's messages | `link(value: "<thread id>")` |
+| T3 Code | the `t3_thread_configure` tool with no arguments, then a T3 reference on the conversation's messages that identifies this thread | `link(value: "<thread id>")`; if the board refuses it, `t3_environment_read` and `link(t3Thread: {environmentId, threadId})` |
 | Claude Code, Codex, Copilot CLI | the harness's one variable, in the table above | `link(agentSession: {…}, label)` |
 | Anything else | a URL for the session or thread, if the host has one | `link(value: "<url>", label)` |
 
-- **When.** An agent links when it creates a task or starts planning or implementing one, not when it only reads,
+- **When.** An agent links when it creates a task it will work on or starts planning or implementing one, not when it only reads,
   notes, triages or moves one. `set_plan` and `move_task` to `in_progress` carry the reminder even when another thread
   or session is linked, as whoever filed the task may have linked theirs. **Missing links** asks only on a task in
   progress. The board never links a session just because it called the board.
@@ -67,7 +67,8 @@ more entry there.
   `$T3CODE_THREAD_ID`, deliberately not used: T3's own tool and message references need no shell.
 - **A bare thread id is enough.** The board adds the environment and checks the thread exists, on `link` and on the
   `links` of `add_to_backlog`, `create_task` and `create_epic`. A thread it can't place doesn't fail a create: the result
-  says it wasn't linked. `t3Thread: {environmentId, threadId}` stays accepted.
+  says it wasn't linked. Where the board can't place a thread (T3 isn't detected, or the thread is in another
+  environment), the refusal points the agent at `t3Thread: {environmentId, threadId}`, which the board doesn't check.
 - **When nothing works,** the agent says so in its reply, with what it tried, records the same with `add_note`, and
   carries on. It doesn't use `request_attention` for this.
 - **Refused values** are repeated in errors only when id-shaped (`rejectedValueText`), so text pasted by mistake stays

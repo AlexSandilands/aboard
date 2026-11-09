@@ -4,6 +4,7 @@ import {
   SELF_LINK_FAILED,
   SELF_LINK_HOSTS,
   SELF_LINK_OTHER_HOST,
+  SELF_LINK_T3_REFUSED,
   selfLinkCall,
   selfLinkHostLine,
   selfLinkHostsFor,
@@ -45,6 +46,18 @@ describe("self-link registry", () => {
     );
     expect(line).not.toContain("$");
     expect(t3ThreadLinkLine("to the task")).not.toContain("$");
+  });
+
+  it("gives T3 Code a retry the board can't refuse, in every line that names the bare id", () => {
+    expect(SELF_LINK_T3_REFUSED).toContain("t3_environment_read");
+    expect(SELF_LINK_T3_REFUSED).toContain("link(t3Thread: {environmentId, threadId})");
+    expect(selfLinkHostLine("t3-code", '"#4"', "x")).toContain(SELF_LINK_T3_REFUSED);
+    expect(t3ThreadLinkLine("to the task")).toContain(SELF_LINK_T3_REFUSED);
+    expect(selfLinkHostLine("codex", '"#4"', "x")).not.toContain(SELF_LINK_T3_REFUSED);
+  });
+
+  it("keeps the message references to the thread the agent runs in", () => {
+    expect(selfLinkLookups("t3-code")).toContain("not a thread someone mentioned");
   });
 });
 

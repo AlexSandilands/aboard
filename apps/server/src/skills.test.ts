@@ -12,6 +12,7 @@ import {
   SELF_LINK_FAILED,
   SELF_LINK_HOSTS,
   SELF_LINK_OTHER_HOST,
+  SELF_LINK_T3_REFUSED,
   SELF_LINK_WHEN,
   SHIPPED_SKILLS,
 } from "@repo/contracts";
@@ -81,7 +82,7 @@ describe("skills", () => {
     const lookups = SELF_LINK_HOSTS.flatMap((host) =>
       host.lookups.map((l) => (l.kind === "env" ? `$${l.name}` : l.kind === "tool" ? l.name : l.where)),
     );
-    const rules = [SELF_LINK_WHEN, SELF_LINK_ENV_RULE, SELF_LINK_OTHER_HOST, SELF_LINK_FAILED];
+    const rules = [SELF_LINK_WHEN, SELF_LINK_T3_REFUSED, SELF_LINK_ENV_RULE, SELF_LINK_OTHER_HOST, SELF_LINK_FAILED];
     expect([...lookups, ...rules].filter((line) => !text.includes(line))).toEqual([]);
     expect(text).not.toMatch(/no environment variable/i);
   });

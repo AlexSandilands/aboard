@@ -291,20 +291,20 @@ review as a separate pass yourself and \`submit_review\` with actor \`self-revie
 
 ## Linking your session or thread
 
-Link your own session or thread when you create a task or start planning or implementing one, not when you only read, note, triage or move one.
+Link your own session or thread when you create a task you will work on or start planning or implementing one, not when you only read, note, triage or move one.
 \`set_plan\` and \`move_task\` to \`in_progress\` remind you how, and \`get_task\` asks on a task already in progress. Linking
 again is harmless, even when someone else's thread or session is already linked, and a task can have several. A
 thread or session the board started says so in its first message.
 
 **T3 Code.** Get your thread id from the T3 tool \`t3_thread_configure\` (call it with no arguments; threadId is in its result), else from
-the T3 references attached to the messages in this conversation, then:
+the T3 references attached to this conversation's messages, only one that identifies the thread you are running in, not a thread someone mentioned, then:
 
 \`\`\`
 link(task: "#42", value: "<thread id>")
 \`\`\`
 
-The board adds the environment and checks the thread exists. When creating a task, pass the same id in \`links\` on
-\`create_task\`, \`add_to_backlog\` or \`create_epic\`. \`t3Thread: { environmentId, threadId }\` still works.
+The board adds the environment and checks the thread exists. If the board refuses the bare id, call the T3 tool t3_environment_read and retry with link(t3Thread: {environmentId, threadId}). When creating a task you will work
+on, pass the same id in \`links\` on \`create_task\`, \`add_to_backlog\` or \`create_epic\`.
 
 **Claude Code, Codex, Copilot CLI** (inside T3 Code too, as it lets the user continue in a terminal). The user can
 reopen the session in a terminal later and, for Claude Code and Copilot CLI, see from the board whether it is still running:
@@ -881,8 +881,8 @@ Track work on the user's local task board via the \`${BRAND.id}\` MCP server (Ba
 - **Already handled:** \`close_task\` with \`completed\`/\`duplicate\` + \`byTask: "#N"\`, or \`wont_do\`. No plan needed; don't archive these.
 - **Need the user?** \`request_attention(task, message)\` when you're blocked, unsure, or have something ready for them to review: it shows under Needs attention and notifies them. Say exactly what to look at. Not for progress (\`add_note\`); \`clear: true\` removes it once resolved.
 - **Handover:** end every session with \`add_note\`: done, left, gotchas, next action.
-- **Linking yourself:** Link your own session or thread when you create a task or start planning or implementing one, not when you only read, note, triage or move one. Linking again is harmless, even when someone else's is already linked.
-- **T3 Code:** get your thread id from the T3 tool \`t3_thread_configure\` (call it with no arguments; threadId is in its result), else from the T3 references attached to the messages in this conversation, then \`link(value: "<thread id>")\`; when creating a task, pass that id in \`links\`.
+- **Linking yourself:** Link your own session or thread when you create a task you will work on or start planning or implementing one, not when you only read, note, triage or move one. Linking again is harmless, even when someone else's is already linked.
+- **T3 Code:** get your thread id from the T3 tool \`t3_thread_configure\` (call it with no arguments; threadId is in its result), else from the T3 references attached to this conversation's messages, only one that identifies the thread you are running in, not a thread someone mentioned, then \`link(value: "<thread id>")\`; when creating a task you will work on, pass that id in \`links\`. If the board refuses the bare id, call the T3 tool t3_environment_read and retry with link(t3Thread: {environmentId, threadId}).
 - **Your session:** in Claude Code, Codex or Copilot CLI (inside T3 Code too), \`link(agentSession: {harness: "claude-code" | "codex" | "copilot-cli", sessionId, cwd}, label)\` with the id from \`$CLAUDE_CODE_SESSION_ID\`, \`$CODEX_THREAD_ID\` or \`$COPILOT_AGENT_SESSION_ID\` and your working directory. The \`label\` says what the session does (\`Implementing #42\`, \`Planning #42\`, \`Orchestrating #42\` for an epic) and is the name the board shows. A subagent shares its parent's session id, so only the main session links; a subagent must not. The board can reopen it in a terminal, and shows whether a Claude Code or Copilot CLI session is running.
 - **When a lookup fails:** Read only the variable named for your host; never list your environment. On a host not listed here, if your session or thread has a URL, link(value: "<url>", label: "<what this session does>"). If nothing works, carry on with the work, say in your reply what you tried, and record the same with add_note; never guess an id or use request_attention for it.
 - **Transcripts:** to audit how a task went, \`get_session_transcript(task)\` reads a condensed, redacted transcript of a Claude Code session linked to it, a page at a time.

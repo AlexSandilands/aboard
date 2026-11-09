@@ -17,6 +17,8 @@ export interface SelfLinkHost {
   lookups: readonly SelfLinkLookup[];
   /** The link call, with `<...>` where the agent fills in its own values. */
   call: (task: string | null, label: string) => string;
+  /** What to try when the board refuses that call, before giving up. */
+  ifRefused?: string;
 }
 
 // "task" stands for the argument itself, in a prompt that covers several tasks.
@@ -33,15 +35,25 @@ const harnessHost = (harness: AgentHarness): SelfLinkHost => {
   };
 };
 
+// T3 can run where the board doesn't detect it, or in another environment: the board then can't place a bare id, and
+// only the explicit form, which it doesn't check, still links.
+export const SELF_LINK_T3_REFUSED =
+  "If the board refuses the bare id, call the T3 tool t3_environment_read and retry with link(t3Thread: {environmentId, threadId}).";
+
 const T3_CODE_HOST: SelfLinkHost = {
   id: "t3-code",
   label: "T3 Code",
   lookups: [
     { kind: "tool", name: "t3_thread_configure", note: "call it with no arguments; threadId is in its result" },
-    { kind: "context", where: "the T3 references attached to the messages in this conversation" },
+    {
+      kind: "context",
+      where:
+        "the T3 references attached to this conversation's messages, only one that identifies the thread you are running in, not a thread someone mentioned",
+    },
   ],
   // A bare id is enough: the board adds the environment and checks the thread exists.
   call: (task) => `link(${taskArg(task)}value: "<thread id>")`,
+  ifRefused: SELF_LINK_T3_REFUSED,
 };
 
 /** Every host an agent can link itself from. A new CLI goes in AGENT_HARNESSES; any other host is one more entry here. */
@@ -50,7 +62,7 @@ export const SELF_LINK_HOSTS: readonly SelfLinkHost[] = [T3_CODE_HOST, ...AgentH
 const hostOf = (id: SelfLinkHostId): SelfLinkHost => SELF_LINK_HOSTS.find((host) => host.id === id)!;
 
 export const SELF_LINK_WHEN =
-  "Link your own session or thread when you create a task or start planning or implementing one, not when you only read, note, triage or move one.";
+  "Link your own session or thread when you create a task you will work on or start planning or implementing one, not when you only read, note, triage or move one.";
 
 export const SELF_LINK_ENV_RULE = "Read only the variable named for your host; never list your environment.";
 
@@ -84,8 +96,10 @@ export const selfLinkCall = (id: SelfLinkHostId, task: string | null, label: str
   hostOf(id).call(task, label);
 
 /** One host's whole answer: the call and where its id comes from. */
-export const selfLinkHostLine = (id: SelfLinkHostId, task: string | null, label: string): string =>
-  `${hostOf(id).label}: ${selfLinkCall(id, task, label)}, with the id from ${selfLinkLookups(id)}.`;
+export const selfLinkHostLine = (id: SelfLinkHostId, task: string | null, label: string): string => {
+  const { label: host, ifRefused } = hostOf(id);
+  return `${host}: ${selfLinkCall(id, task, label)}, with the id from ${selfLinkLookups(id)}.${ifRefused ? ` ${ifRefused}` : ""}`;
+};
 
 /** The hosts a caller could be on: T3 Code hosts the CLIs, so it stays listed, and an unknown client gets them all. */
 export const selfLinkHostsFor = (harness: AgentHarness | null): readonly SelfLinkHostId[] =>
@@ -105,10 +119,11 @@ export function selfLinkReminder(input: { task: string; label: string; harness: 
 
 /** The prompt line for T3 Code. `where` reads "to the task" or "to every task"; every task needs a task argument. */
 export function t3ThreadLinkLine(where: string, everyTask = false): string {
-  return `If you're running in T3 Code, link this thread ${where} with ${selfLinkCall("t3-code", everyTask ? "task" : null, "")}, the id from ${selfLinkLookups("t3-code")}.`;
+  return `If you're running in T3 Code, link this thread ${where} with ${selfLinkCall("t3-code", everyTask ? "task" : null, "")}, the id from ${selfLinkLookups("t3-code")}. ${SELF_LINK_T3_REFUSED}`;
 }
 
-const orList = (items: readonly string[]): string =>
+/** "A, B or C". */
+export const orList = (items: readonly string[]): string =>
   items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} or ${items[items.length - 1]}`;
 
 /** The prompt line for the CLIs, naming every harness and the variable its id is in. */

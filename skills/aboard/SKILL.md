@@ -287,20 +287,20 @@ review as a separate pass yourself and `submit_review` with actor `self-review`.
 
 ## Linking your session or thread
 
-Link your own session or thread when you create a task or start planning or implementing one, not when you only read, note, triage or move one.
+Link your own session or thread when you create a task you will work on or start planning or implementing one, not when you only read, note, triage or move one.
 `set_plan` and `move_task` to `in_progress` remind you how, and `get_task` asks on a task already in progress. Linking
 again is harmless, even when someone else's thread or session is already linked, and a task can have several. A
 thread or session the board started says so in its first message.
 
 **T3 Code.** Get your thread id from the T3 tool `t3_thread_configure` (call it with no arguments; threadId is in its result), else from
-the T3 references attached to the messages in this conversation, then:
+the T3 references attached to this conversation's messages, only one that identifies the thread you are running in, not a thread someone mentioned, then:
 
 ```
 link(task: "#42", value: "<thread id>")
 ```
 
-The board adds the environment and checks the thread exists. When creating a task, pass the same id in `links` on
-`create_task`, `add_to_backlog` or `create_epic`. `t3Thread: { environmentId, threadId }` still works.
+The board adds the environment and checks the thread exists. If the board refuses the bare id, call the T3 tool t3_environment_read and retry with link(t3Thread: {environmentId, threadId}). When creating a task you will work
+on, pass the same id in `links` on `create_task`, `add_to_backlog` or `create_epic`.
 
 **Claude Code, Codex, Copilot CLI** (inside T3 Code too, as it lets the user continue in a terminal). The user can
 reopen the session in a terminal later and, for Claude Code and Copilot CLI, see from the board whether it is still running:

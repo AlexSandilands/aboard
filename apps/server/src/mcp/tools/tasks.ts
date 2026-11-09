@@ -4,6 +4,7 @@ import {
   CloseTaskInput,
   isT3ThreadId,
   rejectedValueText,
+  SELF_LINK_T3_REFUSED,
   TaskResolution,
   templateHasPlan,
   TaskStatusInput,
@@ -85,7 +86,7 @@ async function linkInputs(
       const { input, warning } = await ctx.integrations.resolveLinkInput({ value });
       if (input.value && isT3ThreadId(input.value)) {
         notes.push(
-          `Not linked: ${rejectedValueText(value)} (the board can't tell which T3 Code environment it is in).`,
+          `Not linked: ${rejectedValueText(value)} (the board can't tell which T3 Code environment it is in). ${SELF_LINK_T3_REFUSED}`,
         );
         continue;
       }
@@ -93,7 +94,8 @@ async function linkInputs(
       if (warning) notes.push(`Warning: ${warning}.`);
     } catch (error) {
       if (!(error instanceof AppError)) throw error;
-      notes.push(`Not linked: ${rejectedValueText(value)} (${error.message}).`);
+      const retry = isT3ThreadId(value) ? ` ${SELF_LINK_T3_REFUSED}` : "";
+      notes.push(`Not linked: ${rejectedValueText(value)} (${error.message}).${retry}`);
     }
   }
   if (args.t3Thread) links.push({ t3Thread: args.t3Thread });
