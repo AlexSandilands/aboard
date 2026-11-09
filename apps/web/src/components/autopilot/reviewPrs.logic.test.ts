@@ -100,8 +100,30 @@ describe("sourceHeaderWrites", () => {
     const t = scopes("on", {}, { a: {}, b: { config: { otherPrs: true } } });
     expect(sourceHeaderWrites(t, "ownPrs", false, "on")).toEqual([
       { target: { kind: "board" }, mode: "inherit", config: { ownPrs: false, otherPrs: undefined } },
-      { target: { kind: "project", id: "b" }, mode: "on" },
+      { target: { kind: "project", id: "b" }, mode: "on", config: { ownPrs: false } },
     ]);
+  });
+
+  it("keeps Preview on a project still running when the board stops under it", () => {
+    const t = scopes("preview", { ownPrs: false, otherPrs: true }, { a: { config: { ownPrs: true } }, b: {} });
+    const writes = sourceHeaderWrites(t, "otherPrs", false, "on");
+    expect(writes[0]).toEqual({
+      target: { kind: "board" },
+      mode: "inherit",
+      config: { ownPrs: undefined, otherPrs: undefined },
+    });
+    expect(writes).toContainEqual({ target: { kind: "project", id: "a" }, mode: "preview" });
+  });
+
+  it("clears the board's source keys when nothing is left running, so a later Mode On does something", () => {
+    const writes = sourceHeaderWrites(scopes("on", {}, { a: {} }), "ownPrs", false, "on");
+    expect(writes[0]).toEqual({
+      target: { kind: "board" },
+      mode: "inherit",
+      config: { ownPrs: undefined, otherPrs: undefined },
+    });
+    expect(Object.keys(writes[0]!.config!)).toEqual(["ownPrs", "otherPrs"]);
+    expect(writes[0]!.config!.ownPrs).toBeUndefined();
   });
 
   it("turning a source on clears the projects that opted out", () => {

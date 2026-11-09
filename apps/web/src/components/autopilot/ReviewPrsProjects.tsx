@@ -220,7 +220,7 @@ export function ReviewPrsProjects({
     sourceColumn("ownPrs", "Your PRs"),
     {
       ...sourceColumn("otherPrs", "Others'"),
-      expandsOnTurnOn: true,
+      expandsOnTurnOn: (id) => peopleIn(scopes, id).length === 0,
       opensAllDetail: () => boardPeople(scopes).length === 0,
     },
     {

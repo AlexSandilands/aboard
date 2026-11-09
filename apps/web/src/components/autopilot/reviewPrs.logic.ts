@@ -84,7 +84,11 @@ function projectWrites(
   const runs = target.ownPrs || target.otherPrs;
   const state = stateOf(project.mode, after.state);
   let mode: AutopilotMode | undefined;
-  if (isOn(state) !== runs) mode = modeToBe(isOn(after.state), runs);
+  if (isOn(state) !== runs) {
+    // A project that keeps running when the board stops under it keeps what it was doing: Preview stays Preview.
+    const before = stateIn(scopes, project.id);
+    mode = runs && isOn(before) ? before : modeToBe(isOn(after.state), runs);
+  }
   // Its own On or Preview now only repeats the board.
   else if (runs && project.mode === after.state) mode = "inherit";
 
@@ -143,13 +147,9 @@ export function sourceHeaderWrites(
   const runs = target.ownPrs || target.otherPrs;
   const after: BoardAfter = {
     state: !runs ? "off" : current !== "off" ? current : mode,
-    // With nothing running the other source's key can stay as it is: only the column clicked is decided.
-    sources: runs
-      ? target
-      : {
-          ownPrs: source === "ownPrs" ? on : boardSource(scopes, "ownPrs"),
-          otherPrs: source === "otherPrs" ? on : boardSource(scopes, "otherPrs"),
-        },
+    // With nothing running the keys go back to their defaults: a later Mode On, which writes only the mode, then
+    // reviews task PRs as a first-time board does, not nothing at all.
+    sources: runs ? target : { ownPrs: true, otherPrs: false },
   };
   const boardMode: AutopilotMode | undefined = runs === isOn(current) ? undefined : runs ? mode : "inherit";
   const config = {

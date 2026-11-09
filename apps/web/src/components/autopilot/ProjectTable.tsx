@@ -33,8 +33,8 @@ export interface ProjectTableSwitchColumn extends ColumnBase {
   headerLoss: (on: boolean) => HeaderLoss | null;
   /** Only these rows have the column: the rest stay empty and don't count towards the header. Unset is every row. */
   appliesTo?: (projectId: string) => boolean;
-  /** Turning a row on expands it, for what it now needs filled in. */
-  expandsOnTurnOn?: boolean;
+  /** Whether turning this row on expands it, for what it now needs filled in. */
+  expandsOnTurnOn?: (projectId: string) => boolean;
   /** Turning the header on opens All projects' detail, when this says it has something to fill in. */
   opensAllDetail?: () => boolean;
 }
@@ -404,7 +404,7 @@ function ProjectRow({
                 title={turnOnBlocked && blocked ? blocked : undefined}
                 onCheckedChange={(next) => {
                   column.onToggle(project.id, next);
-                  if (next && column.expandsOnTurnOn && !expanded) onExpand();
+                  if (next && column.expandsOnTurnOn?.(project.id) && !expanded) onExpand();
                 }}
               />
             </div>
