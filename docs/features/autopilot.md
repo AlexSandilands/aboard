@@ -1974,7 +1974,7 @@ task panel's Autopilot section) is in [board-layout.md](board-layout.md#autopilo
     expands it, with one labelled **Preview** switch (`whereProjectPreview`, nothing stored when the project matches
     the board); in Preview the row's switches turn amber and it shows a badge. An automation with `needsRepo` (Start
     planned tasks, Review PRs, Fix PRs, Merge ready PRs) leaves out the General project, which the board names with
-    `generalProjectId` on its snapshot; nothing stored for it changes. It reads `useAutopilotModes` and the board's projects and
+    `generalProjectId` on its snapshot. Only the table leaves it out: no row's switch can reach it, and a header click clears General's own setting along with the rest. It reads `useAutopilotModes` and the board's projects and
     unarchived epics (epics only for an automation with `epicScope`), writes through `useApplyWhere` (one PUT per write,
     shown at once and refetched on error), and a blocked automation can't be switched on or into Preview from it: anything that would is disabled and shows why;
     **Settings**, the fields whose `tier` is `essential`; and **Advanced**, closed, with every other field.

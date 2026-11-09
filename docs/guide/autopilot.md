@@ -81,7 +81,7 @@ everywhere (clearing those projects' own On) or only for the board. Click a row 
   **↶ Reset** on the group puts all of them back. Advanced's heading counts what you've changed ("Agent · 2 changed").
   The longer explanation of a setting is behind the ⓘ by its name.
 
-The switch on each row is the shortcut for **Everywhere** (there's nothing above the board to inherit from, so an
+The switch on each row turns the automation on or off for the board (there's nothing above the board to inherit from, so an
 automation you haven't switched on is off). A project's own **Settings → Project → Automations** is a read-only list of
 what each automation does there, with a **Change** button that opens it here. On a phone the list and an automation take turns: tap a row, and **All
 automations** takes you back.

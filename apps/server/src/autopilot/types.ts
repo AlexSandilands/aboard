@@ -146,7 +146,8 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
   epicScope?: boolean;
   /**
    * It works on a repository (default false), so the project table leaves out the General project, which has none. Only
-   * the table reads it: a stored General row stays and the automation's own check still decides what runs.
+   * the table reads it: a row's switch can't reach General, a header click clears General's own setting with the rest,
+   * and the automation's own check still decides what runs.
    */
   needsRepo?: boolean;
   /**
