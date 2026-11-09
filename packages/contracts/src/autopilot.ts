@@ -280,6 +280,8 @@ export const AutopilotAutomation = z.object({
   needsAgent: z.boolean(),
   /** An epic can switch it on or off for its tasks. False for automations that don't act on tasks in an epic. */
   epicScope: z.boolean(),
+  /** It works on a repository, so the project table leaves out the General project, which has none. */
+  needsRepo: z.boolean().default(false),
   /** It has no switch: it runs wherever it has work (Recurring tasks, whose rules each have their own). */
   alwaysOn: z.boolean().default(false),
   /** Where the settings page lists it. Defaults to the user's own, as for a custom automation. */

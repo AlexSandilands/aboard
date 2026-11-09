@@ -52,7 +52,7 @@ export function stepProblem(form: CustomForm, step: BuilderStep): string | null 
       return result.ok ? null : result.error;
     }
     case 3: {
-      if (!form.everywhere && form.projectIds.length === 0) return "Pick a project, or choose Everywhere";
+      if (!form.everywhere && form.projectIds.length === 0) return "Pick a project, or switch on All projects";
       const result = customFormToInput({ ...form, name: form.name.trim() || NAME_PLACEHOLDER });
       return result.ok ? null : result.error;
     }

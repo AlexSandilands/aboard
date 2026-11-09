@@ -58,6 +58,7 @@ function task(id: string, status: TaskSummary["status"], position: string): Task
 
 const board = (tasks: TaskSummary[]): BoardSnapshot => ({
   projects: [],
+  generalProjectId: null,
   tasks,
   labelColors: {},
   integrations: {

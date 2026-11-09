@@ -145,6 +145,11 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
    */
   epicScope?: boolean;
   /**
+   * It works on a repository (default false), so the project table leaves out the General project, which has none. Only
+   * the table reads it: a stored General row stays and the automation's own check still decides what runs.
+   */
+  needsRepo?: boolean;
+  /**
    * It has no switch at any scope: every project is on for it, and the user's own rules (Recurring tasks) decide what
    * runs. The service refuses to switch it. Pause all still holds it back.
    */

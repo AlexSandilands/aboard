@@ -1,7 +1,9 @@
 import {
+  boardState,
   projectState,
   stateOf,
   whereEpic,
+  whereOwnOn,
   whereProject,
   type AutopilotAutomation,
   type BoardSnapshot,
@@ -14,6 +16,8 @@ import {
 export interface WhereScopes {
   /** In lane order. */
   projects: Array<{ id: string; title: string }>;
+  /** The General project, or null when there is none: an automation that needs a repository leaves it out. */
+  generalId: string | null;
   /** Epics not archived, by number; an archived epic no longer counts as a scope. Empty when the automation has no epic scope. */
   epics: Array<{ id: string; number: number; projectId: string; title: string }>;
 }
@@ -31,7 +35,7 @@ export function whereScopes(board: BoardSnapshot | undefined, epicScope: boolean
         .sort((a, b) => a.number - b.number)
         .map((t) => ({ id: t.id, number: t.number, projectId: t.projectId, title: t.title }))
     : [];
-  return { projects, epics };
+  return { projects, epics, generalId: board.generalProjectId };
 }
 
 /** Whether any of the writes turns something on: refused by the server for an automation that is blocked. */
@@ -77,16 +81,76 @@ export function ownSettingsLabel(
   return keys.map((key) => automation.fields.find((f) => f.key === key)?.label ?? key).join(", ");
 }
 
-/** Up to this many projects, Only in… shows one chip per project; past it, a searchable picker, so chips can't wrap without limit. */
+/** What a table header switch shows for its column: the rows' states, not the stored board value. */
+export type ColumnState = "on" | "off" | "mixed";
+
+/**
+ * Whether the column is on in every row, in none or in some. With no rows to read (a board with no project the
+ * automation can use), it falls back to the board's own value.
+ */
+export function columnState(rows: readonly boolean[], boardOn: boolean): ColumnState {
+  if (rows.length === 0) return boardOn ? "on" : "off";
+  const on = rows.filter(Boolean).length;
+  if (on === 0) return "off";
+  return on === rows.length ? "on" : "mixed";
+}
+
+/** What a click on the header does: mixed counts as on somewhere, so only a column that is all off turns on. */
+export const headerTurnsOn = (state: ColumnState): boolean => state === "off";
+
+/** The per-project switches a header click would drop, for asking first. */
+export interface HeaderLoss {
+  /** Titles of the projects listed in the table. */
+  projects: string[];
+  epics: number;
+}
+
+/**
+ * What a header click takes away, or null when it takes nothing a person set. Switching off drops every own On or
+ * Preview (`whereOwnOn`); turning on drops the projects set Off, but only under a board that is on: under one that is
+ * off those rows change nothing. Projects missing from `shown` (General, where it is left out) go unmentioned, since
+ * nobody can see them to miss them.
+ */
+export function headerLoss(input: WhereInput, shown: readonly string[], turnOn: boolean): HeaderLoss | null {
+  const titles = (projects: ReadonlyArray<{ id: string; title: string }>) =>
+    projects.filter((p) => shown.includes(p.id)).map((p) => p.title);
+  if (turnOn) {
+    if (boardState(input.board) === "off") return null;
+    const projects = titles(input.projects.filter((p) => p.mode === "off"));
+    return projects.length > 0 ? { projects, epics: 0 } : null;
+  }
+  const own = whereOwnOn(input);
+  const projects = titles(own.projects);
+  return projects.length + own.epics.length > 0 ? { projects, epics: own.epics.length } : null;
+}
+
+/** The builder's and import's choice, kept in the form until saved. */
+export interface DraftWhere {
+  everywhere: boolean;
+  projectIds: string[];
+}
+
+export const draftRowOn = (draft: DraftWhere, id: string): boolean => draft.everywhere || draft.projectIds.includes(id);
+
+/** One row's switch. Under Everywhere that means picking all the others, so nothing else changes. */
+export function draftRowToggle(draft: DraftWhere, allIds: readonly string[], id: string, on: boolean): DraftWhere {
+  const picked = draft.everywhere ? [...allIds] : draft.projectIds.filter((other) => allIds.includes(other));
+  return {
+    everywhere: false,
+    projectIds: on ? [...picked.filter((other) => other !== id), id] : picked.filter((other) => other !== id),
+  };
+}
+
+/** The header's click: every project, new ones too, or none. Either way no project is picked on its own any more. */
+export const draftHeader = (turnOn: boolean): DraftWhere => ({ everywhere: turnOn, projectIds: [] });
+
+/** Up to this many projects, the table shows them all; past it, a search box above the rows. */
 export const PROJECT_CHIPS_MAX = 8;
 
-export const usesProjectPicker = (projectCount: number): boolean => projectCount > PROJECT_CHIPS_MAX;
+export const usesProjectSearch = (projectCount: number): boolean => projectCount > PROJECT_CHIPS_MAX;
 
 /** The projects whose title holds the search, ignoring case and surrounding spaces; all of them for an empty one. */
 export function filterProjects<P extends { title: string }>(projects: readonly P[], query: string): P[] {
   const q = query.trim().toLowerCase();
   return q ? projects.filter((p) => p.title.toLowerCase().includes(q)) : [...projects];
 }
-
-/** The picker button's label: "5 of 20 projects". */
-export const pickerLabel = (on: number, total: number): string => `${on} of ${total} projects`;

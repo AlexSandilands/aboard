@@ -1,14 +1,19 @@
 import type { BoardSnapshot, WhereInput } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  columnState,
+  draftHeader,
+  draftRowOn,
+  draftRowToggle,
   filterProjects,
+  headerLoss,
+  headerTurnsOn,
   ownSettingsLabel,
-  pickerLabel,
   PROJECT_CHIPS_MAX,
   scopeIsOn,
   scopeToggle,
   turnsOn,
-  usesProjectPicker,
+  usesProjectSearch,
   whereScopes,
 } from "./where.logic";
 
@@ -36,6 +41,7 @@ const board = {
     task("e11", 11, "p3", "epic"),
     task("t1", 1, "p1", "task"),
   ],
+  generalProjectId: "p2",
 } as unknown as BoardSnapshot;
 
 describe("whereScopes", () => {
@@ -49,6 +55,7 @@ describe("whereScopes", () => {
         { id: "e5", number: 5, projectId: "p1", title: "Task 5" },
         { id: "e7", number: 7, projectId: "p2", title: "Task 7" },
       ],
+      generalId: "p2",
     });
   });
 
@@ -152,11 +159,95 @@ describe("ownSettingsLabel", () => {
   });
 });
 
-describe("the project picker", () => {
-  it("keeps chips up to 8 projects and uses the picker past that", () => {
-    expect(usesProjectPicker(0)).toBe(false);
-    expect(usesProjectPicker(PROJECT_CHIPS_MAX)).toBe(false);
-    expect(usesProjectPicker(PROJECT_CHIPS_MAX + 1)).toBe(true);
+describe("the table's header", () => {
+  it("reads on, off or mixed from its rows, and the board's value with no rows", () => {
+    expect(columnState([true, true], false)).toBe("on");
+    expect(columnState([false, false], true)).toBe("off");
+    expect(columnState([true, false], true)).toBe("mixed");
+    expect(columnState([], true)).toBe("on");
+    expect(columnState([], false)).toBe("off");
+  });
+
+  it("turns on only from all off: mixed counts as on somewhere", () => {
+    expect(headerTurnsOn("off")).toBe(true);
+    expect(headerTurnsOn("mixed")).toBe(false);
+    expect(headerTurnsOn("on")).toBe(false);
+  });
+
+  const where = (
+    boardMode: WhereInput["board"],
+    modes: Array<WhereInput["board"]>,
+    epics: Array<WhereInput["board"]> = [],
+  ) =>
+    ({
+      board: boardMode,
+      projects: modes.map((mode, i) => ({ id: `p${i}`, title: `project ${i}`, mode })),
+      epics: epics.map((mode, i) => ({ id: `e${i}`, number: i, projectId: "p0", mode })),
+    }) satisfies WhereInput;
+  const shown = ["p0", "p1", "p2"];
+
+  it("warns before switching off the projects and epics that set their own On or Preview", () => {
+    expect(headerLoss(where("off", ["on", "preview", "off"], ["on", "off"]), shown, false)).toEqual({
+      projects: ["project 0", "project 1"],
+      epics: 1,
+    });
+    // A project set Off stays Off, so it isn't lost.
+    expect(headerLoss(where("on", ["off", "inherit", "inherit"]), shown, false)).toBeNull();
+  });
+
+  it("warns before turning on only over projects a board that is on has set Off", () => {
+    expect(headerLoss(where("on", ["off", "off", "off"]), shown, true)).toEqual({
+      projects: ["project 0", "project 1", "project 2"],
+      epics: 0,
+    });
+    // Under a board that is off, Off changes nothing.
+    expect(headerLoss(where("off", ["off", "inherit", "inherit"]), shown, true)).toBeNull();
+  });
+
+  it("doesn't warn about a project the table doesn't list", () => {
+    expect(headerLoss(where("off", ["on", "inherit"]), ["p1"], false)).toBeNull();
+    expect(headerLoss(where("on", ["off", "inherit"]), ["p1"], true)).toBeNull();
+  });
+});
+
+describe("a draft's table", () => {
+  const all = ["a", "b", "c"];
+
+  it("reads a row as on under Everywhere or when picked", () => {
+    expect(draftRowOn({ everywhere: true, projectIds: [] }, "a")).toBe(true);
+    expect(draftRowOn({ everywhere: false, projectIds: ["b"] }, "a")).toBe(false);
+    expect(draftRowOn({ everywhere: false, projectIds: ["b"] }, "b")).toBe(true);
+  });
+
+  it("switching a row off under Everywhere picks all the others", () => {
+    expect(draftRowToggle({ everywhere: true, projectIds: [] }, all, "b", false)).toEqual({
+      everywhere: false,
+      projectIds: ["a", "c"],
+    });
+  });
+
+  it("adds and removes picked projects, dropping ones no longer listed", () => {
+    expect(draftRowToggle({ everywhere: false, projectIds: ["a", "gone"] }, all, "c", true)).toEqual({
+      everywhere: false,
+      projectIds: ["a", "c"],
+    });
+    expect(draftRowToggle({ everywhere: false, projectIds: ["a", "c"] }, all, "a", false)).toEqual({
+      everywhere: false,
+      projectIds: ["c"],
+    });
+  });
+
+  it("a header click leaves no project picked on its own", () => {
+    expect(draftHeader(true)).toEqual({ everywhere: true, projectIds: [] });
+    expect(draftHeader(false)).toEqual({ everywhere: false, projectIds: [] });
+  });
+});
+
+describe("the project search", () => {
+  it("shows past 8 projects", () => {
+    expect(usesProjectSearch(0)).toBe(false);
+    expect(usesProjectSearch(PROJECT_CHIPS_MAX)).toBe(false);
+    expect(usesProjectSearch(PROJECT_CHIPS_MAX + 1)).toBe(true);
     expect(PROJECT_CHIPS_MAX).toBe(8);
   });
 
@@ -165,9 +256,5 @@ describe("the project picker", () => {
     expect(filterProjects(projects, " STORE ").map((p) => p.title)).toEqual(["storefront", "Store admin"]);
     expect(filterProjects(projects, "")).toHaveLength(3);
     expect(filterProjects(projects, "nothing")).toEqual([]);
-  });
-
-  it("labels the button with how many it runs in", () => {
-    expect(pickerLabel(5, 20)).toBe("5 of 20 projects");
   });
 });
