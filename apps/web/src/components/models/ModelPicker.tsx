@@ -1,7 +1,7 @@
 // Ported from T3 Code's ProviderModelPicker (MIT, see NOTICE): the trigger, and the popup holding the picker with
 // its docked effort column. The adapters (ModelChoicePicker, CliModelPicker, T3ModelPicker) build what it lists.
 import { ChevronDownIcon } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { ComposerControl } from "~/components/handoff/T3LaunchPickers";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
@@ -42,7 +42,11 @@ function lockBackgroundScroll(popup: HTMLElement | null) {
 }
 
 export interface ModelPickerProps {
-  model: PickerModel;
+  /**
+   * What the list shows. A function is called only while the popup is open: building the rows reads every provider's
+   * models, and a settings page has a dozen pickers that re-render on each change while they sit closed.
+   */
+  model: PickerModel | (() => PickerModel);
   typedRows?: TypedRowsFor;
   loading?: boolean;
   emptyLabel?: string;
@@ -62,6 +66,23 @@ export interface ModelPickerProps {
    * moves to them; a pick of a row that `closes` (a tier, the CLI's default) closes it.
    */
   effortColumn?: ReactNode;
+  /** Builds the effort column only while the popup is open, in place of `effortColumn`. */
+  renderEffortColumn?: () => ReactNode;
+}
+
+/** Calls `model` once the popup renders it, not while the picker sits closed. */
+function LazyContent({
+  model,
+  ...props
+}: Omit<ComponentProps<typeof ModelPickerContent>, "model"> & {
+  model: ModelPickerProps["model"];
+}) {
+  return <ModelPickerContent model={typeof model === "function" ? model() : model} {...props} />;
+}
+
+/** Calls `render` once the popup renders it. */
+function Deferred({ render }: { render: () => ReactNode }) {
+  return render();
 }
 
 export function ModelPicker(props: ModelPickerProps) {
@@ -69,7 +90,7 @@ export function ModelPicker(props: ModelPickerProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
   const openSettings = useOpenSettings();
-  const docked = props.effortColumn !== undefined;
+  const docked = props.effortColumn !== undefined || props.renderEffortColumn !== undefined;
 
   /** Focuses the selected level, else the first; with "any", the column's first enabled row. */
   const focusEffort = (rows: "levels" | "any") => {
@@ -98,7 +119,7 @@ export function ModelPicker(props: ModelPickerProps) {
   const tooltip = [label, props.triggerSuffix].filter(Boolean).join(" · ");
 
   const content = (
-    <ModelPickerContent
+    <LazyContent
       model={props.model}
       typedRows={props.typedRows}
       loading={props.loading}
@@ -173,7 +194,7 @@ export function ModelPicker(props: ModelPickerProps) {
                 searchInputRef.current?.focus();
               }}
             >
-              {props.effortColumn}
+              {props.renderEffortColumn ? <Deferred render={props.renderEffortColumn} /> : props.effortColumn}
             </div>
           </div>
         ) : (

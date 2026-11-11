@@ -1,5 +1,6 @@
 // Adapted from T3 Code (apps/web/src/routes/settings.tsx, components/settings/SettingsSidebarNav.tsx,
 // SettingsBreadcrumb.tsx, components/sidebar/SidebarChrome.tsx), MIT — see NOTICE.
+import type { AppSettings } from "@repo/contracts";
 import { desktopBridge } from "~/lib/desktopBridge";
 import { Outlet, useLocation, useSearch } from "@tanstack/react-router";
 import {
@@ -29,7 +30,7 @@ import {
   useSidebar,
 } from "~/components/ui/sidebar";
 import { cn } from "~/lib/utils";
-import { useSettings } from "~/state/queries";
+import { useSettingsSelect } from "~/state/queries";
 import { useSuggestions } from "~/state/suggestions";
 import { useSettingsNav } from "~/state/ui";
 import { SettingsSearch } from "./SettingsSearch";
@@ -93,6 +94,8 @@ export function useSettingsBack(): () => unknown {
  * of it. The section in view is highlighted. A search box above it finds any setting and jumps to it. On narrow
  * windows this is the off-canvas sheet, which closes on a pick.
  */
+const selectProviders = (settings: AppSettings) => settings.providers;
+
 export function SettingsSidebar() {
   const { group: current, inEditor } = useSettingsLocation();
   const project = useSettingsProjectParam();
@@ -102,7 +105,7 @@ export function SettingsSidebar() {
   const { isMobile, setOpenMobile } = useSidebar();
   // Open suggestions wait on the user, so their section shows how many.
   const openSuggestions = useSuggestions().data?.open ?? 0;
-  const settings = useSettings();
+  const providers = useSettingsSelect(selectProviders);
   const countOf = (sectionId: string) => (sectionId === "tasks.suggestions" ? openSuggestions : 0);
 
   const go = (target: string, group: SettingsGroupId) => {
@@ -148,7 +151,7 @@ export function SettingsSidebar() {
                       <span className="truncate">{group.label}</span>
                     </SidebarMenuButton>
                     <SidebarMenuSub className="mt-0.5 mb-1.5">
-                      {visibleSections(group, settings.data?.providers, desktopBridge() !== null).map((section) => (
+                      {visibleSections(group, providers, desktopBridge() !== null).map((section) => (
                         <SidebarMenuSubItem key={section.id}>
                           <SidebarMenuSubButton
                             // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- the label is the children useRender merges in

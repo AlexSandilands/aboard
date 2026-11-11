@@ -638,8 +638,8 @@ Code's keybindings: a command, a key and a `when`, and when several match a key 
   when a bare character would run the command while typing in a field (`triggersWhileTyping`) sit under the title.
   Reset shows only on a row that differs from the default, and Reset all beside the search box once anything does
   (`keybindings.logic.ts` keeps the stored map free of values equal to the default; saves are built from the cache,
-  which is patched at once, or from the newest save while any is still in flight (an earlier reply must not
-  rewind it), so edits in a row don't lose each other). Sub-sections have ids `keybindings.<group>` and rows
+  which every settings write patches at once and an earlier reply can't rewind ([live-sync](live-sync.md#mutations)),
+  so edits in a row don't lose each other). Sub-sections have ids `keybindings.<group>` and rows
   `keybindings.<group>.<command>`, which the settings index generates from the registry.
 - **Showing them.** `useShortcutLabel(command)` gives the current key as text (`Ctrl+K`, `⌘K`) for the board
   header's search button, the close-panel, new-task and hide-sidebar tooltips, and the palette rows for New task and Settings:

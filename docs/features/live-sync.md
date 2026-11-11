@@ -45,7 +45,7 @@ to its TanStack Query cache.
 
 The hooks in `state/mutations.ts` don't write their results into the cache: the server's event brings
 the change. Errors become toasts, unless the caller handles them. Two exceptions write the response: settings
-replace the settings query, and `useSetLabelColor` replaces the board's `labelColors`.
+writes (below), and `useSetLabelColor` replaces the board's `labelColors`.
 
 Edits the user should see at once are applied to the cache before the request:
 
@@ -57,6 +57,14 @@ Edits the user should see at once are applied to the cache before the request:
   patch the open task's detail.
 - **Label colours:** `useSetLabelColor` patches `labelColors` before the request and refetches the board
   on error.
+- **Settings:** every settings write (`useUpdateSettings`, and `useUpdateProviders`, saved views and keybindings
+  on top of it; `settingsWriteOptions` in `state/settingsWrites.ts`) patches the settings query in `onMutate`
+  with `applySettingsPatch`, which mirrors the server's merges (`operationModels` with null removing one,
+  `handoffMenus`, `modelTiers`, `notifications`). The writes share one mutation `scope`, so they reach the server
+  in order, and anything that puts a server copy in the cache (a write's reply, a refetch, `providers.changed`)
+  goes through `withPendingSettingsWrites`, which re-applies the writes still in flight, so an earlier reply
+  can't flash a later edit back. A failed write refetches the settings, which drops it and keeps the rest, and
+  shows a toast.
 
 Apart from the card move and label colours, these are patched by the caller and refetch the query on
 error. Follow the same
@@ -91,5 +99,6 @@ filters live in the URL (`?labels=`, `?project=`). See [board-layout.md](board-l
 | `apps/web/src/state/queries.ts`          | Queries and `useBoardEvents`                                    |
 | `apps/web/src/state/boardReducer.ts`     | `applyBoardEvent`, optimistic moves and rollback (tested)       |
 | `apps/web/src/state/mutations.ts`        | Mutations, `useMoveTask`, `useSetLabelColor`                    |
+| `apps/web/src/state/settingsWrites.ts`   | Optimistic, ordered settings writes (tested)                    |
 | `apps/web/src/state/ui.ts`               | zustand UI stores                                               |
 | `apps/web/src/lib/api.ts`                | `api()` fetch wrapper, token capture, `eventsUrl()`             |

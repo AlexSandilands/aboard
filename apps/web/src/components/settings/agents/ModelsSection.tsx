@@ -91,7 +91,23 @@ const providerIcon = (provider: TierProvider) =>
 const DESCRIPTION_INFO =
   "Prompts copied from a task name the tier by this, so an agent reading one knows what to start on, e.g. “Sonnet, medium”. Empty: T3 Code's model for the tier, when one is set.";
 
-export function ModelsSection({ settings, t3 }: { settings: AppSettings; t3: T3IntegrationStatus | undefined }) {
+/** What the Models section reads, so a change elsewhere doesn't re-render it. */
+export type ModelsSettings = Pick<AppSettings, "providers" | "modelTiers" | "modelProfiles" | "t3TokenSet">;
+
+/** Picks ModelsSettings for useSettingsSelect. */
+export const selectModelsSettings = ({
+  providers,
+  modelTiers,
+  modelProfiles,
+  t3TokenSet,
+}: AppSettings): ModelsSettings => ({
+  providers,
+  modelTiers,
+  modelProfiles,
+  t3TokenSet,
+});
+
+export function ModelsSection({ settings, t3 }: { settings: ModelsSettings; t3: T3IntegrationStatus | undefined }) {
   const shown = visibleTierProviders(tierProviderState(settings.providers));
   const t3Ready = settings.t3TokenSet && t3?.detected === true;
   const catalog = useT3ModelCatalog(t3Ready && shown.includes("t3"));
@@ -214,7 +230,15 @@ export function ModelsSection({ settings, t3 }: { settings: AppSettings; t3: T3I
   );
 }
 
-function TierDetail({ tier, settings, providers }: { tier: ModelTier; settings: AppSettings; providers: Providers }) {
+function TierDetail({
+  tier,
+  settings,
+  providers,
+}: {
+  tier: ModelTier;
+  settings: ModelsSettings;
+  providers: Providers;
+}) {
   const updateSettings = useUpdateSettings();
   const edits = useRef(createTierEdits()).current;
   const { label, description } = MODEL_TIERS.find((t) => t.value === tier)!;

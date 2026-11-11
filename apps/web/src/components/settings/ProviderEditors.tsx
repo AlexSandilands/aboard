@@ -44,9 +44,24 @@ function EditorSection({ title, children }: { title: string; children: ReactNode
   );
 }
 
+/** What the provider editors read: their switches and fields, so a change elsewhere doesn't re-render them. */
+export type ProviderEditorSettings = Pick<
+  AppSettings,
+  "providers" | "handoffMenus" | "t3TokenSet" | "t3LinkTarget" | "agentT3Threads"
+>;
+
+/** Picks ProviderEditorSettings for useSettingsSelect. */
+export const selectProviderEditorSettings = ({
+  providers,
+  handoffMenus,
+  t3TokenSet,
+  t3LinkTarget,
+  agentT3Threads,
+}: AppSettings): ProviderEditorSettings => ({ providers, handoffMenus, t3TokenSet, t3LinkTarget, agentT3Threads });
+
 export interface ProviderEditorProps {
   id: ProviderId;
-  settings: AppSettings;
+  settings: ProviderEditorSettings;
   status: ProviderStatus | undefined;
   /** The T3 integration's own status, which the pairing row writes into after Connect or Test. */
   t3: T3IntegrationStatus | undefined;
@@ -355,7 +370,7 @@ function CliPathRow({
   rowId: string;
   title: string;
   info: string;
-  settings: AppSettings;
+  settings: ProviderEditorSettings;
 }) {
   const updateProviders = useUpdateProviders();
   const cli = PROVIDERS[id].cli ?? "";
@@ -548,7 +563,7 @@ function HandoffMenuRow({
   id: string;
   target: HandoffTarget;
   what: string;
-  settings: AppSettings;
+  settings: ProviderEditorSettings;
 }) {
   const updateSettings = useUpdateSettings();
   return (
