@@ -3,6 +3,7 @@ import {
   cacheReadShare,
   totalTokens,
   type CostSource,
+  type PriceSource,
   type TaskUsage,
   type TaskUsageRow,
   type TokenUsage,
@@ -102,6 +103,23 @@ export function usageTotalDetail(usage: TaskUsage): string {
   if (usage.tokens.requests) parts.push(`${formatRequests(usage.tokens.requests)} premium req`);
   if (usage.unpricedTokens > 0) parts.push(`${formatTokens(usage.unpricedTokens)} unpriced`);
   return parts.join(" · ");
+}
+
+/** A fetch time as the local day it fell on, `2026-11-11`, matching the built-in table's date. */
+const localDay = (iso: string): string => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/**
+ * Where an estimate's prices came from, for the panel's and the stats page's footnotes: "LiteLLM's list prices
+ * (fetched 2026-11-11)", or the built-in table's date and why it is used.
+ */
+export function priceSourceText(prices: PriceSource): string {
+  if (prices.source === "litellm") return `LiteLLM's list prices (fetched ${localDay(prices.asOf)})`;
+  const why = prices.status === "off" ? "fetching is off" : "LiteLLM's list unavailable";
+  return `the board's built-in list prices (as of ${prices.asOf}; ${why})`;
 }
 
 const formatRequests = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));

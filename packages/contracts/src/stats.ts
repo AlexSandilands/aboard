@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PriceSource } from "./modelPricing.ts";
 import { parseProjectScope } from "./savedViews.ts";
 
 // Weekly trends over the board's history, or daily for a single week (docs/features/stats.md).
@@ -104,5 +105,7 @@ export const StatsResponse = z.object({
   breakdowns: z.record(z.string(), StatsBreakdown),
   /** Things a reader should know about the numbers, e.g. a project whose git history couldn't be read. */
   notes: z.array(z.string()),
+  /** Where the cost series' prices came from, for the Tokens & cost footnote. */
+  prices: PriceSource,
 });
 export type StatsResponse = z.infer<typeof StatsResponse>;

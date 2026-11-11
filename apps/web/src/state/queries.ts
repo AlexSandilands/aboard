@@ -1,4 +1,5 @@
 import type {
+  ModelPricesStatus,
   AgentHarness,
   AgentCliStatus,
   AgentModels,
@@ -81,6 +82,7 @@ export const queryKeys = {
   autopilotOrchestrate: (projectId: string) => ["autopilotOrchestrate", projectId] as const,
   autopilotRuns: (scope: AutopilotRunsScope) => ["autopilotRuns", scope] as const,
   terminal: ["terminal"] as const,
+  modelPrices: ["modelPrices"] as const,
   /** The full detection; also the prefix of the CLI-only one, so invalidating it refreshes both. */
   providers: ["providers"] as const,
   providerClis: ["providers", "cli"] as const,
@@ -333,6 +335,16 @@ export function useIntegrationsStatus(enabled = true) {
   return useQuery({
     queryKey: queryKeys.integrations,
     queryFn: ({ signal }) => api<IntegrationsStatus>("/api/integrations/status", { signal }),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/** Where usage estimates' prices come from: LiteLLM's fetched list or the built-in table. */
+export function useModelPrices(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.modelPrices,
+    queryFn: ({ signal }) => api<ModelPricesStatus>("/api/model-prices", { signal }),
     enabled,
     staleTime: 30_000,
   });

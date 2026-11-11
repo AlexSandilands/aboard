@@ -49,7 +49,7 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 
 | Variable                  | Default                     | Meaning                                                            |
 | ------------------------- | --------------------------- | ------------------------------------------------------------------ |
-| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, `instance-id` (this board's id, see features/backup.md), and `worktrees/` for Autopilot's headless runs |
+| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, `instance-id` (this board's id, see features/backup.md), `model-prices.json` (the last LiteLLM price list fetched, not backed up; features/token-usage.md), and `worktrees/` for Autopilot's headless runs |
 | `brandEnv("PORT")`        | `4317`                      | Listen port. Also read by Vite's proxy and the desktop shell       |
 | `brandEnv("WEB_PORT")`    | `5317`                      | Vite's port. The guard allows it as an Origin                      |
 | `brandEnv("TOKEN")`       | none                        | Optional bearer token for `/api/*`, `/mcp` and `/events`           |
@@ -172,6 +172,9 @@ on independent timers:
 - **T3 Code:** discovery every 60 seconds from `~/.t3/userdata/server-runtime.json`, live thread status
   every 20 seconds while a browser is connected and a token is set, project import, and thread launches
   over T3's WebSocket RPC. See [agent-handoff.md](features/agent-handoff.md).
+- **Model prices:** an hourly check fetches LiteLLM's model price list from GitHub once it is a day old (and on
+  Refresh now), unless the `modelPriceFetch` setting is off; the last good copy is kept in the data dir. The only
+  outbound call that isn't to a git host or T3 Code. See [token-usage.md](features/token-usage.md#litellms-price-list).
 - **Issue import:** not a timer. A task created with a `sourceUrl` starts a background job (the issue's git host, then
   `claude -p`); imports left pending by a restart resume at startup. See
   [issue-import.md](features/issue-import.md).

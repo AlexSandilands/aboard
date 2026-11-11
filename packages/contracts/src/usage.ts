@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PriceSource } from "./modelPricing.ts";
 
 // Tokens agents spent on a task's sessions, threads and board runs, with an API-equivalent cost worked out from
 // modelPricing.ts when read. See docs/features/token-usage.md.
@@ -123,7 +124,7 @@ export const TaskUsage = z.object({
   /** reported only when every priced row was; estimated when any was estimated; unknown when nothing had a price. */
   costSource: CostSource,
   unpricedTokens: Count,
-  /** The price table's date, for the "API-equivalent" footnote. */
-  pricesAsOf: z.string(),
+  /** Where the prices came from and as of when, for the "API-equivalent" footnote. */
+  prices: PriceSource,
 });
 export type TaskUsage = z.infer<typeof TaskUsage>;

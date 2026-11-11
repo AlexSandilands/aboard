@@ -12,6 +12,7 @@ import {
   usageSummary,
   usageSummaryParts,
   usageTotalDetail,
+  priceSourceText,
 } from "./usage.logic";
 
 const row = (over: Partial<TaskUsageRow> = {}): TaskUsageRow => ({
@@ -40,8 +41,23 @@ const usage = (over: Partial<TaskUsage> = {}): TaskUsage => ({
   costUsd: 5.031,
   costSource: "estimated",
   unpricedTokens: 0,
-  pricesAsOf: "2026-11-11",
+  prices: { source: "litellm", asOf: "2026-11-11T09:00:00.000Z", status: "fresh" },
   ...over,
+});
+
+describe("price source", () => {
+  it("names LiteLLM with its fetch day, or the built-in table with its date and why", () => {
+    const at = new Date(2026, 10, 11, 9).toISOString();
+    expect(priceSourceText({ source: "litellm", asOf: at, status: "cached" })).toBe(
+      "LiteLLM's list prices (fetched 2026-11-11)",
+    );
+    expect(priceSourceText({ source: "built_in", asOf: "2026-11-11", status: "unavailable" })).toBe(
+      "the board's built-in list prices (as of 2026-11-11; LiteLLM's list unavailable)",
+    );
+    expect(priceSourceText({ source: "built_in", asOf: "2026-11-11", status: "off" })).toBe(
+      "the board's built-in list prices (as of 2026-11-11; fetching is off)",
+    );
+  });
 });
 
 describe("usage formatting", () => {

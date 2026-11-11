@@ -373,7 +373,7 @@ describe("get_task's usage line", () => {
         costUsd: 1.5,
         costSource: "estimated",
         unpricedTokens: 54_000,
-        pricesAsOf: "2026-11-11",
+        prices: { source: "built_in", asOf: "2026-11-11", status: "unavailable" },
       }),
     ).toBe(
       "Usage: ~$1.50 API-equivalent · 400k tokens (75% of input from cache) · Claude Code 1 · sessions shared with #7 · 54k tokens on models with no price",
