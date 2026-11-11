@@ -277,7 +277,7 @@ Manual, with the card where you dropped it.
 | `Ctrl/Cmd ,` | [Settings](settings.md) |
 | `N`          | New task             |
 | `J`          | Jump to the open task's card on the board |
-| `Esc`        | Close the task panel, or leave Settings or Stats |
+| `Esc`        | Close the task panel, or Settings or Stats       |
 | `Ctrl/Cmd B` | Show or hide the sidebar |
 | `Ctrl/Cmd Alt B` | Close the task panel, or reopen the last task |
 | `Delete`     | Delete the focused card or the open task (asks first) |

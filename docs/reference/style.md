@@ -72,6 +72,7 @@ Rules carried over (from `C:\Code\t3code\docs\internals\web-ui.md` + AGENTS.md "
 | Attention rows / compact task rows | `SidebarThreadRow` in `W/components/Sidebar.tsx` ~1112 & ~1959–2225; status text map ~1301 |
 | Section headers ("Needs attention", "Projects") | `W/components/ui/collapsible-section-header.tsx` |
 | Project icon / monogram / colours / identity | `W/components/ProjectFavicon.tsx`, `W/components/ProjectMonogram.tsx`, `W/projectIconColors.ts`, `W/projectIdentity.ts`, `C:\Code\t3code\packages\contracts\src\project.ts` (schema) |
+| Route window (Settings, Stats): `layout/AppRouteModal.tsx`, settings rail and header | `W/components/AppRouteModal.tsx`, `W/routes/_chat.tsx`, `W/routes/_chat.settings.tsx`, `W/components/settings/SettingsSidebarNav.tsx` |
 | Icon picker dialog | `W/components/settings/ProjectIconPickerDialog.tsx`, `W/projectIconOptions.ts` |
 | Command palette, view stack, Kbd footer, folder browse | `W/components/CommandPalette.tsx`, `CommandPalette.logic.ts`, `CommandPaletteContent.tsx`, `CommandPaletteResults.tsx` |
 | "Setup Required" badge | `Button variant="warning-outline" size="micro"` (CommandPalette ~1540) |

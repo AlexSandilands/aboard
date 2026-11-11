@@ -93,8 +93,11 @@ export function useLeaveEditor() {
   );
 }
 
-/** Back to the board, as it was when Settings opened. */
-export function useLeaveSettings() {
+/**
+ * Leaves a window (Settings or Stats) for the board as it was when the window opened, which is also what the board
+ * behind it has been showing. The windows call this once they have closed (`AppRouteModal`'s `onClosed`).
+ */
+export function useLeaveWindow() {
   const navigate = useNavigate();
   return useCallback(() => {
     void navigate({ to: "/", search: useSettingsNav.getState().boardReturn });

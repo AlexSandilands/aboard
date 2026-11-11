@@ -1,10 +1,9 @@
-// Adapted from T3 Code (apps/web/src/routes/settings.tsx, components/settings/SettingsSidebarNav.tsx,
-// SettingsBreadcrumb.tsx, components/sidebar/SidebarChrome.tsx), MIT — see NOTICE.
+// Adapted from T3 Code (apps/web/src/routes/_chat.settings.tsx, components/settings/SettingsSidebarNav.tsx,
+// SettingsBreadcrumb.tsx), MIT — see NOTICE.
 import type { AppSettings } from "@repo/contracts";
 import { desktopBridge } from "~/lib/desktopBridge";
 import { Outlet, useLocation, useSearch } from "@tanstack/react-router";
 import {
-  ArrowLeftIcon,
   BlocksIcon,
   BotIcon,
   FolderIcon,
@@ -15,10 +14,14 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
-import { SidebarBrandRow } from "~/components/sidebar/SidebarBrandRow";
+import {
+  APP_WINDOW_HEADER_CLASS,
+  AppRouteModal,
+  AppRouteModalClose,
+  closeAppWindow,
+} from "~/components/layout/AppRouteModal";
 import {
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarMenu,
   SidebarMenuButton,
@@ -26,8 +29,6 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarTrigger,
-  useSidebar,
 } from "~/components/ui/sidebar";
 import { cn } from "~/lib/utils";
 import { useSettingsSelect } from "~/state/queries";
@@ -45,7 +46,7 @@ import {
   type SettingsGroupId,
   visibleSections,
 } from "./settingsNav.logic";
-import { useLeaveEditor, useLeaveSettings, useOpenSettings } from "./settingsNavigation";
+import { useLeaveEditor, useLeaveWindow, useOpenSettings } from "./settingsNavigation";
 
 const GROUP_ICONS: Record<SettingsGroupId, LucideIcon> = {
   board: SquareKanbanIcon,
@@ -70,46 +71,59 @@ function useSettingsProjectParam(): string | undefined {
   return useSearch({ strict: false, select: (search) => search.project });
 }
 
-/** Route component for `/settings`: the page beside the settings list (`AppFrame` swaps the list in). */
+/**
+ * Route component for `/settings`: the Settings window over the board, with the settings list in a rail beside the
+ * page. Closing it returns to the board as it was.
+ */
 export function SettingsShell() {
+  const leave = useLeaveWindow();
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <Outlet />
-    </div>
+    <AppRouteModal label="Settings" onClosed={leave}>
+      <div className="relative flex min-h-0 flex-1">
+        <SettingsRail />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <Outlet />
+        </div>
+      </div>
+    </AppRouteModal>
   );
 }
 
-/** What Esc does in Settings: leave an editor for its page, and a page for the board. */
+/** What Esc does in Settings: leave an editor for its page, and close the window from a page. */
 export function useSettingsBack(): () => unknown {
   const { group, inEditor } = useSettingsLocation();
   const project = useSettingsProjectParam();
-  const leave = useLeaveSettings();
   const leaveEditor = useLeaveEditor();
-  if (!inEditor || !group) return leave;
+  if (!inEditor || !group) return closeAppWindow;
   return () => leaveEditor(group, project);
 }
 
 const selectProviders = (settings: AppSettings) => settings.providers;
 
 /**
- * The settings list: each group's heading opens its page, and the sub-section links beneath scroll to that part
- * of it. The section in view is highlighted. A search box above it finds any setting and jumps to it. On narrow
- * windows this is the off-canvas sheet, which closes on a pick.
+ * The settings list, in a rail at the window's left: each group's heading opens its page, and the sub-section links
+ * beneath scroll to that part of it. The section in view is highlighted. A search box above it finds any setting and
+ * jumps to it. Below `md` it is a rail of the groups' icons, and searching expands it over the page with the full
+ * list, until a pick or its close button.
  */
-export function SettingsSidebar() {
+function SettingsRail() {
   const { group: current, inEditor } = useSettingsLocation();
   const project = useSettingsProjectParam();
   const active = useSettingsNav((s) => s.activeSection);
   const openSettings = useOpenSettings();
-  const leave = useLeaveSettings();
-  const { isMobile, setOpenMobile } = useSidebar();
+  const [expanded, setExpanded] = useState(false);
   // Open suggestions wait on the user, so their section shows how many.
   const openSuggestions = useSuggestions().data?.open ?? 0;
   const providers = useSettingsSelect(selectProviders);
   const countOf = (sectionId: string) => (sectionId === "tasks.suggestions" ? openSuggestions : 0);
+  // The list is taller than a short window: keep the page being shown in view.
+  const listRef = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    if (current) listRef.current?.querySelector(`[data-group="${current}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [current]);
 
   const go = (target: string, group: SettingsGroupId) => {
-    if (isMobile) setOpenMobile(false);
+    setExpanded(false);
     // Highlight the pick right away rather than wait for the scroll to reach it.
     if (target !== group) useSettingsNav.getState().setActiveSection(target);
     // Moving within a page replaces the entry, so Back doesn't step through every section visited.
@@ -120,7 +134,7 @@ export function SettingsSidebar() {
   };
 
   const openResult = (entry: SettingsIndexEntry) => {
-    if (isMobile) setOpenMobile(false);
+    setExpanded(false);
     useSettingsNav.getState().setActiveSection(entry.sectionId);
     openSettings(entry.id, {
       project: entry.group === "project" ? project : undefined,
@@ -131,26 +145,34 @@ export function SettingsSidebar() {
   };
 
   return (
-    <>
-      <SidebarBrandRow />
-      <SettingsSearch onOpen={openResult}>
-        <SidebarContent>
+    <nav
+      aria-label="Settings"
+      className={cn(
+        "flex w-60 shrink-0 flex-col border-e bg-sidebar text-sidebar-foreground max-md:w-14",
+        expanded && "max-md:absolute max-md:inset-y-0 max-md:start-0 max-md:z-10 max-md:w-full",
+      )}
+    >
+      <SettingsSearch onOpen={openResult} expanded={expanded} onExpandedChange={setExpanded}>
+        <SidebarContent className="overflow-x-hidden">
           <SidebarGroup>
-            <SidebarMenu>
+            <SidebarMenu ref={listRef}>
               {SETTINGS_GROUPS.map((group) => {
                 const Icon = GROUP_ICONS[group.id];
                 const here = group.id === current;
                 return (
-                  <SidebarMenuItem key={group.id}>
+                  <SidebarMenuItem key={group.id} data-group={group.id}>
                     <SidebarMenuButton
                       isActive={here && (inEditor || active === null)}
                       aria-current={here ? "page" : undefined}
+                      title={group.label}
+                      // In the icon rail the sections are hidden, so the page's icon stays lit wherever it is scrolled.
+                      className={cn(here && !expanded && "max-md:bg-sidebar-row-active max-md:text-sidebar-foreground")}
                       onClick={() => go(group.id, group.id)}
                     >
                       <Icon />
-                      <span className="truncate">{group.label}</span>
+                      <span className={cn("truncate", !expanded && "max-md:sr-only")}>{group.label}</span>
                     </SidebarMenuButton>
-                    <SidebarMenuSub className="mt-0.5 mb-1.5">
+                    <SidebarMenuSub className={cn("mt-0.5 mb-1.5", !expanded && "max-md:hidden")}>
                       {visibleSections(group, providers, desktopBridge() !== null).map((section) => (
                         <SidebarMenuSubItem key={section.id}>
                           <SidebarMenuSubButton
@@ -181,28 +203,13 @@ export function SettingsSidebar() {
           </SidebarGroup>
         </SidebarContent>
       </SettingsSearch>
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={() => {
-                if (isMobile) setOpenMobile(false);
-                leave();
-              }}
-            >
-              <ArrowLeftIcon />
-              <span>Back</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
-    </>
+    </nav>
   );
 }
 
 /**
- * The page's top bar: the sidebar toggle when the list is hidden, and "Settings / Group[ / Editor]". On an editor
- * the group crumb goes back to its page.
+ * The window's header: "Settings / Group[ / Editor]", the page's actions and the close button. On an editor the
+ * group crumb goes back to its page.
  */
 export function SettingsTopBar({
   group,
@@ -213,13 +220,11 @@ export function SettingsTopBar({
   editor?: string | null;
   actions?: ReactNode;
 }) {
-  const { isMobile, open } = useSidebar();
   const openSettings = useOpenSettings();
   const project = useSettingsProjectParam();
   const crumbs = settingsCrumbs(group, editor);
   return (
-    <header className="drag-region flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-2 ps-(--workspace-gutter-start) pe-(--workspace-gutter-end) wco:pe-(--workspace-native-controls-inset)">
-      {isMobile || !open ? <SidebarTrigger variant="ghost-muted" size="icon-sm" aria-label="Toggle sidebar" /> : null}
+    <header className={APP_WINDOW_HEADER_CLASS}>
       <nav aria-label="Settings breadcrumb" className="min-w-0">
         <ol className="m-0 flex min-w-0 list-none items-center gap-2 p-0 text-sm font-medium">
           {crumbs.map((crumb, index) => {
@@ -254,7 +259,10 @@ export function SettingsTopBar({
           })}
         </ol>
       </nav>
-      {actions ? <div className="ms-auto flex shrink-0 items-center gap-1.5">{actions}</div> : null}
+      <div className="ms-auto flex shrink-0 items-center gap-1.5">
+        {actions}
+        <AppRouteModalClose />
+      </div>
     </header>
   );
 }
