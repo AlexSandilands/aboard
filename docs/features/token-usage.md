@@ -54,8 +54,9 @@ archiving a rollout doesn't read it as new.
 
 Files are read when a session or thread is linked, on the session poll for running sessions, on the T3 poll for working
 threads (at most once a minute) and once when a thread settles, when a headless run ends, and on a 10-minute sweep of
-every linked session (archived tasks included), which also runs 30 seconds after start. The sweep skips files whose
-size hasn't changed. A task's card is refreshed at most once a minute because of usage.
+every linked session and T3 thread (archived tasks included), which also runs 30 seconds after start. The sweep
+re-reads every thread, since the T3 poll runs only while a browser is connected: turns taken with no board open, or
+across a restart, are counted there. It skips files whose size hasn't changed. A task's card is refreshed at most once a minute because of usage.
 
 ### Cost
 

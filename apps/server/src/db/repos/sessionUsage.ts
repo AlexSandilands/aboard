@@ -298,10 +298,6 @@ export function createSessionUsageRepo(sql: Sql) {
       for (const r of rows) if (!map.has(r.session_id)) map.set(r.session_id, r.automation);
       return map;
     },
-    /** Whether the board has ever recorded the sessions behind a thread. */
-    hasThread(threadId: string): boolean {
-      return sql.get("SELECT 1 FROM session_usage_thread WHERE thread_id = ? LIMIT 1", threadId) !== undefined;
-    },
     /** The sessions and threads a task links, with the sessions behind those threads: what its purge may delete. */
     linkedBy(taskId: string): { sessions: SessionKey[]; threads: string[] } {
       const threads = sql

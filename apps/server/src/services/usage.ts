@@ -74,7 +74,7 @@ export interface UsageService {
   scanThread(threadId: string): Promise<boolean>;
   /** Stores a headless run's own usage, unless its session has a transcript (which is read instead). */
   recordRun(run: RunUsageRecord): void;
-  /** Reads every linked session, and every thread not read before (archived tasks included). */
+  /** Reads every linked session and thread again (archived tasks included). */
   sweep(): Promise<void>;
   /** A task's usage: every session and thread it links, in full, and its board runs. Null when there is none. */
   taskUsage(taskId: string): TaskUsage | null;
@@ -292,8 +292,15 @@ export function createUsageService(
         // One unreadable file doesn't stop the rest.
       }
     }
+    // Every linked thread, not only ones never read: the live T3 poll runs only while a browser is connected and
+    // remembers status only in memory, so turns taken with no board open or across a restart are caught here. The
+    // provider transcripts behind a thread are re-read with it (unchanged files are skipped by size).
     for (const threadId of threads) {
-      if (!usage.hasThread(threadId)) await scanThread(threadId);
+      try {
+        await scanThread(threadId);
+      } catch {
+        // One thread T3 can't serve doesn't stop the rest.
+      }
     }
   };
 

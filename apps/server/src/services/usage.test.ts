@@ -316,6 +316,31 @@ describe("usage service", () => {
     expect(stored()).toHaveLength(1);
     usage.stop();
   });
+
+  it("sweeps a linked thread again, so work done with no board open is counted", async () => {
+    const turn = (input: number) => [{ day: DAY, model: "glm-4.6", tokens: { ...EMPTY_TOKEN_USAGE, input } }];
+    const thread: T3ThreadUsage = {
+      providerThreads: [
+        { id: "pt-1", driver: "claudeAgent", harness: "claude-code", nativeId: S1 },
+        { id: "pt-2", driver: "opencode", harness: null, nativeId: null },
+      ],
+      turns: new Map([["pt-2", turn(40)]]),
+    };
+    const { task, transcript, usage, linkThread, stored } = setup({ "thread-1": thread });
+    const a = task("A");
+    transcript(S1, message(S1, "m1", 5));
+    linkThread(a.id, "thread-1");
+    await usage.sweep();
+    const first = sum(stored());
+
+    // The thread worked again while no browser was connected: no live poll saw it.
+    transcript(S1, message(S1, "m2", 7));
+    thread.turns.set("pt-2", turn(100));
+    await usage.sweep();
+    // The provider's transcript grew by 10 + 7 + 100 and T3's turns by 60.
+    expect(sum(stored())).toBe(first + 117 + 60);
+    usage.stop();
+  });
 });
 
 describe("get_task's usage line", () => {
