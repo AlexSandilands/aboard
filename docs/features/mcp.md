@@ -224,6 +224,10 @@ read-only text over a window `[since, until)`, for the improvement automation, a
 - **Latest note per task:** the last note anyone but Autopilot wrote on each task, newest first (usually its
   handover). Notes have no "needs the user" flag; what needs the user shows as a run's `needsAttention` or an
   attention reason on the task.
+- **Spend:** tokens and API-equivalent cost used on the window's local days, attributed as on the stats page (each
+  session once, under the task that linked it first): the total, unpriced tokens, cost by model, harness and
+  automation, what Autopilot's runs reported themselves, and the top tasks by cost
+  ([token-usage.md](token-usage.md)).
 
 Task refs (`#42`) let the agent open one with `get_task`.
 

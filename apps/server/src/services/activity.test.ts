@@ -1,5 +1,7 @@
 import { AUTOPILOT_REVIEW_PRS, AUTOPILOT_UNSTICK, UNSTICK_STALE_PREFIX, UNSTICK_WAITING_PREFIX } from "@repo/contracts";
+import { EMPTY_TOKEN_USAGE } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createRepos } from "../db/repos/index.ts";
 import { ACTIVITY_CAPS, renderActivity } from "../mcp/activityFormat.ts";
 import { createTestHarness } from "../test/harness.ts";
 
@@ -428,6 +430,81 @@ describe("activity.between", () => {
     expect(text).toContain(`(${tasks.length - ACTIVITY_CAPS.notes} more)`);
   });
 
+  it("adds up spend: each session once under its first task, run costs as reported, unpriced tokens apart", () => {
+    const { s, db, alpha, beta, task, week } = setup();
+    const usage = createRepos(db).sessionUsage;
+    const [first, second, other] = [task(alpha.id, "First"), task(alpha.id, "Second"), task(beta.id, "Other")];
+    const session = { harness: "claude-code" as const, sessionId: "00000000-0000-4000-8000-000000000001", cwd: "/w" };
+    s.links.add(first.id, { agentSession: session }, "agent");
+    s.links.add(second.id, { agentSession: session }, "agent");
+    s.links.add(other.id, { agentSession: { ...session, sessionId: "00000000-0000-4000-8000-000000000002" } }, "agent");
+    const tokens = { ...EMPTY_TOKEN_USAGE, input: 1_000_000 };
+    const row = {
+      sourceFile: "s.jsonl",
+      source: "transcript" as const,
+      taskId: null,
+      purpose: null,
+      reportedCostUsd: null,
+    };
+    usage.add([
+      {
+        ...row,
+        harness: "claude-code",
+        sessionId: session.sessionId,
+        day: "2026-10-13",
+        model: "claude-opus-5-5",
+        tokens,
+      },
+      { ...row, harness: "claude-code", sessionId: session.sessionId, day: "2026-10-13", model: "glm-4.6", tokens },
+      {
+        ...row,
+        harness: "claude-code",
+        sessionId: "00000000-0000-4000-8000-000000000002",
+        day: "2026-10-14",
+        model: "claude-haiku-5-5",
+        tokens,
+      },
+      {
+        ...row,
+        harness: "claude-code",
+        sessionId: "review-1",
+        sourceFile: "",
+        source: "run_output",
+        taskId: second.id,
+        purpose: "review",
+        reportedCostUsd: 0.5,
+        day: "2026-10-14",
+        model: "claude-sonnet-5-5",
+        tokens,
+      },
+      // Outside the window.
+      {
+        ...row,
+        harness: "claude-code",
+        sessionId: session.sessionId,
+        day: "2026-10-01",
+        model: "claude-opus-5-5",
+        tokens,
+      },
+    ]);
+
+    const spend = week().spend;
+    expect(spend.costUsd).toBeCloseTo(4 + 0.1 + 0.5);
+    expect(spend.unpricedTokens).toBe(1_000_000);
+    expect(spend.tasks.map((t) => [t.title, Number(t.costUsd.toFixed(2))])).toEqual([
+      ["First", 4],
+      ["Second", 0.5],
+      ["Other", 0.1],
+    ]);
+    expect(spend.automations).toEqual([{ key: "Board review", costUsd: 0.5 }]);
+    const text = renderActivity(week());
+    expect(text).toContain("~$4.60 API-equivalent · 4.0M tokens (1.0M on models with no price, not in the cost)");
+    expect(text).toContain("By model: claude-opus-5-5 $4.00, claude-sonnet-5-5 $0.50, claude-haiku-5-5 $0.10");
+    expect(text).toContain("By harness: Claude Code $4.60");
+    expect(text).toMatch(/Top tasks:\n {4}#\d+ First — \$4\.00/);
+    expect(s.activity.between(at(12, 0), at(19, 0), beta.id).spend.costUsd).toBeCloseTo(0.1);
+  });
+
   it("says none for an empty period", () => {
     const { s } = setup();
     const text = renderActivity(s.activity.between(at(1, 0), at(2, 0)));
@@ -436,5 +513,6 @@ describe("activity.between", () => {
     expect(text).toContain("Autopilot runs:\n  none");
     expect(text).toContain("Stalls (0):\n  none");
     expect(text).toContain("Latest note per task (0, newest first):\n  none");
+    expect(text).toContain("counts once):\n  none recorded");
   });
 });

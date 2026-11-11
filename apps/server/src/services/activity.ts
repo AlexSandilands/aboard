@@ -3,6 +3,8 @@ import {
   AUTOPILOT_REVIEW_PRS,
   AUTOPILOT_UNSTICK,
   BOARD_RESTARTED_ERROR,
+  estimateCostUsd,
+  ModelPriceOverrides,
   UNSTICK_STALE_PREFIX,
   type AutopilotRun,
   type AutopilotRunStatus,
@@ -14,6 +16,10 @@ import {
   type TaskStatus,
 } from "@repo/contracts";
 import type { Core } from "./core.ts";
+
+/** A date's local calendar day, YYYY-MM-DD, as usage rows store it. */
+const localDay = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 /** The statuses a task waits in before Done, in column order. */
 export const OPEN_STATUSES = ["backlog", "planned", "in_progress", "review"] as const satisfies readonly TaskStatus[];
@@ -125,6 +131,30 @@ export interface NoteActivity extends ActivityTask {
   text: string;
 }
 
+/** One line of a spend list: what it is and its cost in dollars. */
+export interface SpendItem {
+  key: string;
+  costUsd: number;
+}
+
+/**
+ * What agents spent in the window (token-usage.md): API-equivalent estimates, except a run's own reported cost. Each
+ * session counts once under the task that linked it first, as on the stats page; usage is by local day, so the window
+ * is widened to whole days.
+ */
+export interface SpendActivity {
+  costUsd: number;
+  tokens: number;
+  unpricedTokens: number;
+  tasks: Array<ActivityTask & { costUsd: number }>;
+  models: SpendItem[];
+  harnesses: SpendItem[];
+  /** Board runs by automation (or "review" for the board reviewer). */
+  automations: SpendItem[];
+  /** What Autopilot's runs reported themselves (Claude Code runs only), whatever the tokens say. */
+  autopilotReportedUsd: number;
+}
+
 export interface BoardActivity {
   from: string;
   to: string;
@@ -139,6 +169,7 @@ export interface BoardActivity {
   runs: AutomationActivity[];
   stalls: Stall[];
   notes: NoteActivity[];
+  spend: SpendActivity;
 }
 
 /** What happened on the board in a window, read from the activity log, reviews and Autopilot runs. */
@@ -249,8 +280,10 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
         const key = `${stall.taskId}:${stall.kind}`;
         if (!stalls.has(key)) stalls.set(key, stall);
       };
+      let autopilotReportedUsd = 0;
       for (const run of repos.autopilotRuns.between(start, end, [])) {
         if (!inScope(run.taskId, run.projectId)) continue;
+        autopilotReportedUsd += run.costUsd ?? 0;
         const ref = taskRef(run.taskId);
         let group = byAutomation.get(run.automation);
         if (!group) {
@@ -339,6 +372,61 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
         });
       }
 
+      // Spend, attributed as the stats page does it.
+      const prices = ModelPriceOverrides.safeParse(repos.settings.get("modelPriceOverrides") ?? {}).data ?? {};
+      const owners = repos.sessionUsage.owners();
+      const spendOf = (map: Map<string, number>, key: string, cost: number) => map.set(key, (map.get(key) ?? 0) + cost);
+      const [byTask, byModel, byHarness, byPurpose] = [
+        new Map<string, number>(),
+        new Map<string, number>(),
+        new Map<string, number>(),
+        new Map<string, number>(),
+      ];
+      const spend: SpendActivity = {
+        costUsd: 0,
+        tokens: 0,
+        unpricedTokens: 0,
+        tasks: [],
+        models: [],
+        harnesses: [],
+        automations: [],
+        autopilotReportedUsd,
+      };
+      const nextDay = new Date(to.getFullYear(), to.getMonth(), to.getDate() + 1);
+      for (const row of repos.sessionUsage.rowsBetween(localDay(from), localDay(nextDay))) {
+        const owner = row.taskId
+          ? { taskId: row.taskId, viaThread: false }
+          : (owners.get(`${row.harness}:${row.sessionId}`) ?? null);
+        if (projectId && !(owner && inScope(owner.taskId))) continue;
+        const t = row.tokens;
+        const tokens = t.input + t.output + t.cacheRead + t.cacheWrite5m + t.cacheWrite1h;
+        spend.tokens += tokens;
+        const cost =
+          row.source === "run_output" && row.reportedCostUsd !== null
+            ? row.reportedCostUsd
+            : estimateCostUsd(row.model || null, t, prices);
+        if (cost === null) {
+          spend.unpricedTokens += tokens;
+          continue;
+        }
+        spend.costUsd += cost;
+        spendOf(byModel, row.model || "unknown model", cost);
+        spendOf(byHarness, row.harness === "t3" || owner?.viaThread ? "t3_thread" : row.harness, cost);
+        if (row.purpose) spendOf(byPurpose, row.purpose, cost);
+        if (owner && taskRef(owner.taskId)) spendOf(byTask, owner.taskId, cost);
+      }
+      const ranked = (map: Map<string, number>): SpendItem[] =>
+        [...map]
+          .map(([key, costUsd]) => ({ key, costUsd }))
+          .sort((a, b) => b.costUsd - a.costUsd || a.key.localeCompare(b.key));
+      spend.tasks = ranked(byTask).map(({ key, costUsd }) => ({ ...taskRef(key)!, costUsd }));
+      spend.models = ranked(byModel);
+      spend.harnesses = ranked(byHarness);
+      spend.automations = ranked(byPurpose).map(({ key, costUsd }) => ({
+        key: key === "review" ? "Board review" : deps.automationTitle(key),
+        costUsd,
+      }));
+
       return {
         from: start,
         to: end,
@@ -356,6 +444,7 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
         runs,
         stalls: [...stalls.values()].sort((a, b) => a.at.localeCompare(b.at)),
         notes,
+        spend,
       };
     },
   };

@@ -12,6 +12,8 @@ export const ACTIVITY_CAPS = {
   failures: 5,
   stalls: 10,
   notes: 8,
+  spendTasks: 8,
+  spendItems: 6,
 } as const;
 
 const NOTE_LENGTH = 200;
@@ -137,6 +139,48 @@ function runLines(activity: BoardActivity): string[] {
   return lines;
 }
 
+const HARNESS_NAMES: Record<string, string> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  "copilot-cli": "Copilot CLI",
+  t3_thread: "T3 Code threads",
+};
+
+const usd = (n: number) => (n > 0 && n < 0.01 ? "<$0.01" : `$${n.toFixed(2)}`);
+
+function compactTokens(n: number): string {
+  if (n >= 1e6) return `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M`;
+  if (n >= 1e3) return `${Math.round(n / 1e3)}k`;
+  return String(n);
+}
+
+function spendLines(activity: BoardActivity): string[] {
+  const s = activity.spend;
+  if (s.tokens === 0 && s.autopilotReportedUsd === 0) return ["  none recorded"];
+  const lines = [
+    `  ~${usd(s.costUsd)} API-equivalent · ${compactTokens(s.tokens)} tokens${
+      s.unpricedTokens > 0 ? ` (${compactTokens(s.unpricedTokens)} on models with no price, not in the cost)` : ""
+    }`,
+  ];
+  const list = (label: string, items: Array<{ key: string; costUsd: number }>, name = (k: string) => k) => {
+    if (items.length === 0) return;
+    const shown = items.slice(0, ACTIVITY_CAPS.spendItems).map((i) => `${name(i.key)} ${usd(i.costUsd)}`);
+    const hidden = items.length - shown.length;
+    lines.push(`  ${label}: ${shown.join(", ")}${hidden > 0 ? `, ${hidden} more` : ""}`);
+  };
+  list("By model", s.models);
+  list("By harness", s.harnesses, (k) => HARNESS_NAMES[k] ?? k);
+  list("Board runs by automation", s.automations);
+  if (s.autopilotReportedUsd > 0) lines.push(`  Autopilot runs reported ${usd(s.autopilotReportedUsd)} themselves`);
+  if (s.tasks.length > 0) {
+    lines.push("  Top tasks:");
+    for (const t of s.tasks.slice(0, ACTIVITY_CAPS.spendTasks))
+      lines.push(`    ${ref(t)} ${t.title} — ${usd(t.costUsd)}`);
+    lines.push(...more(ACTIVITY_CAPS.spendTasks, s.tasks.length, "    "));
+  }
+  return lines;
+}
+
 /** The text board_activity returns: one section per question, each cut to its cap. */
 export function renderActivity(activity: BoardActivity): string {
   const scope = activity.project ? activity.project.title : "all projects";
@@ -165,6 +209,12 @@ export function renderActivity(activity: BoardActivity): string {
     lines.push(`  ${ref(n)} ${stamp(n.at)} ${n.actor}: ${cut(n.text, NOTE_LENGTH)}`);
   }
   lines.push(...more(ACTIVITY_CAPS.notes, activity.notes.length, "  "));
+
+  lines.push(
+    "",
+    "Spend (estimates at API list prices; a session shared by tasks counts once):",
+    ...spendLines(activity),
+  );
 
   lines.push("", "Drill into a task with get_task.");
   return lines.join("\n");
