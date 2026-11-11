@@ -1,4 +1,4 @@
-import { UNSTICK_STALE_PREFIX } from "@repo/contracts";
+import { EMPTY_TOKEN_USAGE, UNSTICK_STALE_PREFIX, type TokenUsage } from "@repo/contracts";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -898,5 +898,83 @@ describe("stats.weekly commits", () => {
     vi.setSystemTime(new Date(at(14, 12).getTime() + 11 * 60_000));
     expect((await s.stats.weekly(4)).series.commits!.total).toBe(1);
     expect(logs).toHaveLength(3);
+  });
+});
+
+describe("token usage", () => {
+  const SESSION = "709f26ed-ce2f-4449-b7eb-3bb01f89f268";
+  const tokens = (over: Partial<TokenUsage>): TokenUsage => ({ ...EMPTY_TOKEN_USAGE, ...over });
+
+  it("counts each session once, under the task that linked it first, with board runs and unpriced tokens apart", async () => {
+    const { s, alpha, beta, task, stats, values, db } = setup();
+    const a = task(alpha.id, "A");
+    const b = task(beta.id, "B");
+    const link = { agentSession: { harness: "claude-code" as const, sessionId: SESSION, cwd: "/w" } };
+    s.links.add(a.id, link, "agent");
+    s.links.add(b.id, link, "agent");
+    const usage = createRepos(db).sessionUsage;
+    const row = { sourceFile: "f", purpose: null, taskId: null, reportedCostUsd: null, source: "transcript" as const };
+    usage.add([
+      // 1M input ($3) and 3M cache reads ($0.90) on Sonnet 4.6 this week; 1M input in the previous period.
+      {
+        ...row,
+        harness: "claude-code",
+        sessionId: SESSION,
+        day: "2026-10-13",
+        model: "claude-sonnet-4-6",
+        tokens: tokens({ input: 1_000_000, cacheRead: 3_000_000 }),
+      },
+      {
+        ...row,
+        harness: "claude-code",
+        sessionId: SESSION,
+        day: "2026-09-10",
+        model: "claude-sonnet-4-6",
+        tokens: tokens({ input: 1_000_000 }),
+      },
+      // A model with no price.
+      {
+        ...row,
+        harness: "claude-code",
+        sessionId: SESSION,
+        day: "2026-10-13",
+        model: "glm-4.6",
+        tokens: tokens({ output: 500 }),
+      },
+      // The board reviewer on B, with the cost it reported.
+      {
+        ...row,
+        source: "run_output",
+        harness: "claude-code",
+        sessionId: "run-1",
+        sourceFile: "",
+        day: "2026-10-12",
+        model: "claude-sonnet-5-5",
+        taskId: b.id,
+        purpose: "review",
+        reportedCostUsd: 0.5,
+        tokens: tokens({ input: 10 }),
+      },
+    ]);
+
+    expect(await values("cost_usd.estimated")).toMatchObject({ unit: "usd", total: 4.4, previousTotal: 3 });
+    expect(await values("cost_usd.autopilot")).toMatchObject({ total: 0.5 });
+    expect((await values("tokens.input")).total).toBe(1_000_010);
+    expect((await values("tokens.cache_read")).total).toBe(3_000_000);
+    expect((await values("tokens.unpriced")).total).toBe(500);
+
+    const { breakdowns } = await stats();
+    expect(breakdowns.cost_by_task).toEqual({
+      unit: "usd",
+      items: [
+        { key: String(a.number), total: 3.9, previousTotal: 3 },
+        { key: String(b.number), total: 0.5, previousTotal: 0 },
+      ],
+    });
+    expect(breakdowns.cost_by_purpose!.items).toEqual([{ key: "review", total: 0.5, previousTotal: 0 }]);
+    expect(breakdowns.cost_by_model!.items.map((i) => i.key)).toEqual(["claude-sonnet-4-6", "claude-sonnet-5-5"]);
+
+    // Beta's stats leave out the session Alpha linked first, and keep the run that was for B.
+    expect((await values("cost_usd.estimated", 4, beta.id)).total).toBe(0.5);
   });
 });

@@ -29,8 +29,10 @@ export const StatsQuery = z
   }));
 export type StatsQuery = z.infer<typeof StatsQuery>;
 
-/** How a series' values read: a count of things, a duration in milliseconds, dollars, or an average of counts. */
-export const StatsUnit = z.enum(["count", "ms", "usd", "ratio"]);
+/**
+ * How a series' values read: a count of things, a duration in milliseconds, dollars, an average of counts, or tokens.
+ */
+export const StatsUnit = z.enum(["count", "ms", "usd", "ratio", "tokens"]);
 export type StatsUnit = z.infer<typeof StatsUnit>;
 
 /**
@@ -64,7 +66,7 @@ export const StatsSeries = z.object({
 });
 export type StatsSeries = z.infer<typeof StatsSeries>;
 
-/** One row of a breakdown: how many fell under `key` in the period, and in the one before it. */
+/** One row of a breakdown: how much fell under `key` in the period (in the breakdown's unit), and in the one before it. */
 export const StatsBreakdownItem = z.object({
   /** Null for "none": a task without that label or tier. */
   key: z.string().nullable(),
@@ -73,7 +75,7 @@ export const StatsBreakdownItem = z.object({
 });
 export type StatsBreakdownItem = z.infer<typeof StatsBreakdownItem>;
 
-/** A count split by a category over the whole period (not per bucket), largest first. */
+/** A count, or dollars or tokens (`unit`), split by a category over the whole period (not per bucket), largest first. */
 export const StatsBreakdown = z.object({
   unit: StatsUnit,
   items: z.array(StatsBreakdownItem),

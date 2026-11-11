@@ -263,6 +263,31 @@ export function createSessionUsageRepo(sql: Sql) {
         .map((r) => r.thread_id);
       return { sessions, threads };
     },
+    /**
+     * The task each session counts under on the stats page: the live task that linked it first, directly or through a
+     * T3 thread behind it (the same rule as agent_sessions_started), and whether that first link was the thread.
+     */
+    owners(): Map<string, { taskId: string; viaThread: boolean }> {
+      const rows = sql.all<{ harness: string; session_id: string; task_id: string; via: string }>(
+        `SELECT harness, session_id, task_id, via FROM (
+           SELECT json_extract(l.ref_json, '$.harness') AS harness, lower(json_extract(l.ref_json, '$.sessionId')) AS session_id,
+                  l.task_id, 'session' AS via, l.created_at AS at, l.id AS link_id
+           FROM task_links l JOIN tasks t ON t.id = l.task_id
+           WHERE l.kind = 'agent_session' AND t.deleted_at IS NULL
+           UNION ALL
+           SELECT m.harness, m.session_id, l.task_id, 'thread', l.created_at, l.id
+           FROM task_links l JOIN tasks t ON t.id = l.task_id
+           JOIN session_usage_thread m ON m.thread_id = json_extract(l.ref_json, '$.threadId')
+           WHERE l.kind = 't3_thread' AND t.deleted_at IS NULL
+         ) ORDER BY at, link_id`,
+      );
+      const owners = new Map<string, { taskId: string; viaThread: boolean }>();
+      for (const r of rows) {
+        const key = `${r.harness}:${r.session_id}`;
+        if (!owners.has(key)) owners.set(key, { taskId: r.task_id, viaThread: r.via === "thread" });
+      }
+      return owners;
+    },
     /** Whether the board has ever recorded the sessions behind a thread. */
     hasThread(threadId: string): boolean {
       return sql.get("SELECT 1 FROM session_usage_thread WHERE thread_id = ? LIMIT 1", threadId) !== undefined;
