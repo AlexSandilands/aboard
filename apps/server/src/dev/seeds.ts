@@ -14,6 +14,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createContext } from "../context.ts";
+import { seedUsage } from "./usageSeed.ts";
 import type { Db } from "../db/database.ts";
 import type { Services } from "../services/types.ts";
 
@@ -1500,7 +1501,10 @@ export function seedDatabase(dbPath: string, scenario: ScenarioName, opts: SeedO
     // Every scenario's tasks link tickets, which need a system to belong to.
     ctx.services.settings.update({ ticketSystems: [SEED_TICKET_SYSTEM] });
     SCENARIOS[scenario](ctx.services, { dataDir: dirname(dbPath), ...opts });
-    if (scenario === "stats") spreadOverWeeks(ctx.db);
+    if (scenario === "stats") {
+      seedUsage(ctx.services, ctx.db, opts);
+      spreadOverWeeks(ctx.db);
+    }
   } finally {
     ctx.db.close();
   }
