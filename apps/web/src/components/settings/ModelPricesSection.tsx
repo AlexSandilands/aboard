@@ -49,7 +49,7 @@ export function ModelPricesSection({ settings }: { settings: AppSettings }) {
       <SettingsRow
         id="integrations.model-prices.refresh"
         title="Prices in use"
-        description={status ? modelPricesLine(status, formatRelativeTimeLabel) : "Checking..."}
+        description={status ? modelPricesLine(status, formatRelativeTimeLabel) : "Checking…"}
         control={
           <Button
             size="sm"
@@ -57,7 +57,7 @@ export function ModelPricesSection({ settings }: { settings: AppSettings }) {
             disabled={!settings.modelPriceFetch || refresh.isPending}
             onClick={() => refresh.mutate()}
           >
-            {refresh.isPending ? "Refreshing..." : "Refresh now"}
+            {refresh.isPending ? "Refreshing…" : "Refresh now"}
           </Button>
         }
       />

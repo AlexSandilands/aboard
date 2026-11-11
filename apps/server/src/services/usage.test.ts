@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { EMPTY_TOKEN_USAGE, type TokenUsage } from "@repo/contracts";
+import { EMPTY_TOKEN_USAGE, type PriceTable, type TokenUsage } from "@repo/contracts";
 import { openDatabase } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
 import { claudeProjectSlug } from "../integrations/claudeSessionTitle.ts";
@@ -11,7 +11,7 @@ import { localDay } from "../integrations/usageFiles.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { restoreBoard } from "./backup/restore.ts";
 import { createCore } from "./core.ts";
-import { createUsageService } from "./usage.ts";
+import { createUsageService, type ModelPrices } from "./usage.ts";
 
 const S1 = "709f26ed-ce2f-4449-b7eb-3bb01f89f268";
 const S2 = "809f26ed-ce2f-4449-b7eb-3bb01f89f268";
@@ -33,7 +33,7 @@ const message = (session: string, id: string, output: number, model = "claude-so
     message: { id, model, usage: { input_tokens: 10, output_tokens: output, cache_read_input_tokens: 100 } },
   })}\n`;
 
-function setup(threads: Record<string, T3ThreadUsage> = {}) {
+function setup(threads: Record<string, T3ThreadUsage> = {}, modelPrices?: ModelPrices) {
   const claudeDir = mkdtempSync(join(tmpdir(), "usage-svc-"));
   roots.push(claudeDir);
   const h = createTestHarness();
@@ -53,6 +53,7 @@ function setup(threads: Record<string, T3ThreadUsage> = {}) {
   const usage = createUsageService(core, {
     dirs: { claudeDir, codexHome: join(claudeDir, "codex") },
     fetchThread: (id) => Promise.resolve(threads[id] ?? null),
+    ...(modelPrices ? { modelPrices } : {}),
   });
   const linkSession = (taskId: string, sessionId: string) =>
     s.links.add(taskId, { agentSession: { harness: "claude-code", sessionId, cwd: CWD } }, "test");
@@ -66,6 +67,27 @@ const sum = (rows: Array<{ tokens: TokenUsage }>) =>
   rows.reduce((n, r) => n + r.tokens.input + r.tokens.output + r.tokens.cacheRead, 0);
 
 describe("usage service", () => {
+  it("prices rows from the fetched LiteLLM table and says so, overrides still first", () => {
+    const fetched: PriceTable = {
+      entries: [
+        { key: "claude-sonnet-5-5", price: { input: 1, output: 1, cacheRead: 1, cacheWrite5m: 1, cacheWrite1h: 1 } },
+      ],
+    };
+    const source = { source: "litellm", asOf: AT, status: "cached" } as const;
+    const { s, task, transcript, usage, linkSession } = setup({}, () => ({ table: fetched, source }));
+    const a = task("A");
+    transcript(S1, message(S1, "m1", 5));
+    linkSession(a.id, S1);
+    usage.scanSession({ harness: "claude-code", sessionId: S1, cwd: CWD });
+    // 10 input + 5 output + 100 cache read, all at $1 per million.
+    expect(usage.taskUsage(a.id)).toMatchObject({ costUsd: 115 / 1e6, prices: source });
+    expect(usage.attributed("2000-01-01", "3000-01-01")[0]!.costUsd).toBeCloseTo(115 / 1e6);
+    expect(usage.prices()).toEqual(source);
+    s.settings.update({ modelPriceOverrides: { "claude-sonnet-5-5": { input: 2, output: 2, cacheRead: 2 } } });
+    expect(usage.taskUsage(a.id)!.costUsd).toBeCloseTo(230 / 1e6);
+    usage.stop();
+  });
+
   it("stores a session shared by two tasks once, and shows it in full on both, marked shared", () => {
     const { s, task, transcript, usage, linkSession, stored } = setup();
     const a = task("A");

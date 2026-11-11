@@ -117,9 +117,11 @@ const localDay = (iso: string): string => {
  * (fetched 2026-11-11)", or the built-in table's date and why it is used.
  */
 export function priceSourceText(prices: PriceSource): string {
-  if (prices.source === "litellm") return `LiteLLM's list prices (fetched ${localDay(prices.asOf)})`;
+  // Non-breaking hyphens, so a footnote never wraps in the middle of the date.
+  const day = (d: string) => d.replaceAll("-", "\u2011");
+  if (prices.source === "litellm") return `LiteLLM's list prices (fetched ${day(localDay(prices.asOf))})`;
   const why = prices.status === "off" ? "fetching is off" : "LiteLLM's list unavailable";
-  return `the board's built-in list prices (as of ${prices.asOf}; ${why})`;
+  return `the board's built-in list prices (as of ${day(prices.asOf)}; ${why})`;
 }
 
 const formatRequests = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
