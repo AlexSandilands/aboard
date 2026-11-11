@@ -258,6 +258,19 @@ task, and runs in the project's own folder since planning writes no code.
 The agent follows the built-in planning skill. To use one of your own, pick it under **Settings → Tasks → Planning**,
 or for one project on that project's settings page.
 
+## The task window
+
+A task with a long description or a big plan reads better larger. Open it in a window over the board: double-click
+its card, Alt+click it, choose **Open in window** from its right-click menu or the panel's **⋯** menu, use the expand
+button at the end of the panel's top bar, or press `F` with the task open. The window shows everything the panel does,
+with the plan, details and activity in a wide column and the labels, sessions, links, relations, review and Autopilot
+beside them (one column when the window is narrow, full screen on a phone). The description and plan context read at
+document size: real headings, pasted images in place, and highlighted code.
+
+`Esc`, the dock button, `F` or a click outside the window docks the task back in the side panel; `Esc` again closes it.
+The window's **×** closes the task. Some Linux desktops take Alt+click for moving windows; double-click and `F` work
+there.
+
 ## Your layout
 
 Collapse a column (Done starts collapsed) or just one project's cell, and collapse, reorder or hide the
@@ -277,7 +290,8 @@ Manual, with the card where you dropped it.
 | `Ctrl/Cmd ,` | [Settings](settings.md) |
 | `N`          | New task             |
 | `J`          | Jump to the open task's card on the board |
-| `Esc`        | Close the task panel, or Settings or Stats       |
+| `Esc`        | Dock the task window, close the task panel, or close Settings or Stats |
+| `F`          | Open the task in a window, or dock it again |
 | `Ctrl/Cmd B` | Show or hide the sidebar |
 | `Ctrl/Cmd Alt B` | Close the task panel, or reopen the last task |
 | `Delete`     | Delete the focused card or the open task (asks first) |

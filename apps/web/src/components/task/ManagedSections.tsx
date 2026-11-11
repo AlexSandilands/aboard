@@ -28,7 +28,9 @@ import {
   collapsedByDefault,
   SECTION_TITLES,
   sectionAttention,
+  sectionsInColumn,
   summarizeSection,
+  type SectionColumn,
   type SectionId,
 } from "./sections.logic";
 
@@ -68,14 +70,17 @@ function useSectionExpanded(id: SectionId, task: TaskDetail) {
 
 /**
  * The detail panel's reorderable sections in the saved order, hidden ones skipped. Each section's
- * component renders a TaskSection, which picks up its frame from context.
+ * component renders a TaskSection, which picks up its frame from context. With `column` (the task window's two
+ * columns) only that column's sections show, and a drag reorders them within it.
  */
 export function ManagedSections({
   task,
+  column,
   exclude,
   render,
 }: {
   task: TaskDetail;
+  column?: SectionColumn;
   /** Sections that don't apply to this task (an epic's plan), left out whatever the layout says. */
   exclude?: ReadonlyArray<SectionId>;
   render: (id: SectionId) => ReactNode;
@@ -85,7 +90,9 @@ export function ManagedSections({
   const showAll = useTaskPanelPrefs((s) => s.showAllSections);
   const sensors = useSortableSensors();
   const [dragging, setDragging] = useState<SectionId | null>(null);
-  const visible = layout.order.filter((id) => !layout.hidden.includes(id) && !exclude?.includes(id));
+  const order = sectionsInColumn(layout.order, column);
+  const visible = order.filter((id) => !layout.hidden.includes(id) && !exclude?.includes(id));
+  const hiddenCount = sectionsInColumn(layout.hidden, column).length;
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     setDragging(null);
@@ -117,9 +124,9 @@ export function ManagedSections({
           document.body,
         )}
       </DndContext>
-      {layout.hidden.length ? (
+      {hiddenCount ? (
         <p className="border-t border-border/65 px-3.5 pt-3 text-2xs text-muted-foreground">
-          {layout.hidden.length === 1 ? "1 hidden section" : `${layout.hidden.length} hidden sections`} ·{" "}
+          {hiddenCount === 1 ? "1 hidden section" : `${hiddenCount} hidden sections`} ·{" "}
           <button
             type="button"
             className="cursor-pointer rounded-sm underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"

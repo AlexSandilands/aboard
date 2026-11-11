@@ -115,6 +115,7 @@ export function MarkdownInput({
   onKey,
   onFocus,
   onBlur,
+  tall = false,
   className,
 }: {
   input: MarkdownInputState;
@@ -124,6 +125,8 @@ export function MarkdownInput({
   onKey?: (key: MarkdownKey) => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  /** Room for a document (the task window): a taller box that grows further before it scrolls. */
+  tall?: boolean;
   className?: string;
 }) {
   const { mode, value, emit, editor, paste } = input;
@@ -163,7 +166,7 @@ export function MarkdownInput({
           ariaLabel={ariaLabel}
           placeholder={placeholder}
           autoFocus={autoFocus}
-          className="max-h-64 overflow-y-auto"
+          className={tall ? "max-h-[60vh] min-h-48! overflow-y-auto" : "max-h-64 overflow-y-auto"}
         />
       </div>
     );
@@ -174,6 +177,7 @@ export function MarkdownInput({
         autoFocus={autoFocus}
         aria-label={ariaLabel}
         size="sm"
+        className={tall ? "[&_textarea]:min-h-48" : undefined}
         value={value}
         placeholder={placeholder}
         onChange={(event) => emit(event.currentTarget.value)}

@@ -34,11 +34,14 @@ import { StatsPage } from "./components/stats/StatsPage.tsx";
 import { parseStatsPeriod } from "./components/stats/stats.logic.ts";
 
 /**
- * Board search params: `task` opens the detail panel, and the rest are the board's filters (`BoardFilterParams`:
- * the project scope, the epic, labels, status, text and so on), which a saved view holds too.
+ * Board search params: `task` opens the detail panel, `expanded` shows it in the task window instead of docked (see
+ * `taskWindow.logic.ts`), and the rest are the board's filters (`BoardFilterParams`: the project scope, the epic,
+ * labels, status, text and so on), which a saved view holds too. `expanded` is not a filter, so saved views don't
+ * hold it.
  */
 export const BoardSearch = BoardFilterParams.extend({
   task: z.union([z.string(), z.number()]).transform(String).optional().catch(undefined),
+  expanded: z.literal(true).optional().catch(undefined),
 });
 export type BoardSearch = z.infer<typeof BoardSearch>;
 

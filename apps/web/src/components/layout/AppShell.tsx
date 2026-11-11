@@ -2,7 +2,14 @@ import { type BoardSnapshot, type KeybindingCommand, storageKey, type TaskDetail
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useEffectEvent, useRef } from "react";
 import { CommandPalette } from "~/components/command/CommandPalette";
-import { useCloseTask, useJumpToTask, useOpenTask, useSelectedTaskId } from "~/components/board/boardNavigation";
+import {
+  useCloseTask,
+  useJumpToTask,
+  useOpenTask,
+  useSelectedTaskId,
+  useSetTaskExpanded,
+  useTaskExpanded,
+} from "~/components/board/boardNavigation";
 import { UpdatePill } from "~/components/desktop/UpdatePill";
 import { useNotificationDelivery } from "~/components/notifications/useNotificationDelivery";
 import { AppDialogs } from "~/components/settings/AppDialogs";
@@ -109,6 +116,8 @@ function GlobalKeybindings({
   const jumpToTask = useJumpToTask();
   const openTask = useOpenTask();
   const closeTask = useCloseTask();
+  const expanded = useTaskExpanded();
+  const setExpanded = useSetTaskExpanded();
   const { toggleSidebar } = useSidebar();
   // The task the panel last showed, which panel.toggle reopens.
   const lastTaskId = useRef(selectedTaskId);
@@ -139,7 +148,10 @@ function GlobalKeybindings({
         onBack?.();
         return;
       case "task.reveal":
-        if (selectedTaskId) jumpToTask(selectedTaskId);
+        if (!selectedTaskId) return;
+        // The window covers the board: dock the task first, then show its card.
+        if (expanded) void setExpanded(false).then(() => jumpToTask(selectedTaskId));
+        else jumpToTask(selectedTaskId);
         return;
       case "sidebar.toggle":
         toggleSidebar();
@@ -150,6 +162,11 @@ function GlobalKeybindings({
         // Off the board (the social feed) the selected task is the one the board was left on: reopen it.
         if (selectedTaskId && location.pathname === "/") void closeTask();
         else if (lastTaskId.current) void openTask(lastTaskId.current, { reveal: false });
+        return;
+      case "panel.expand":
+        // The window animates out before the task docks (see TaskWindow).
+        if (expanded) closeAppWindow();
+        else void setExpanded(true);
         return;
       case "task.delete": {
         const cardId = focusedCardId(target);

@@ -1,5 +1,5 @@
 import { storageKey, type Project, type TaskDetail } from "@repo/contracts";
-import { FileQuestionIcon, XIcon } from "lucide-react";
+import { FileQuestionIcon, Maximize2Icon, XIcon } from "lucide-react";
 import {
   useEffect,
   useEffectEvent,
@@ -22,6 +22,7 @@ import { slideDuration, slideOffset, slidesOn, startSlide } from "~/lib/slide";
 import { useBoard, useTaskDetail } from "~/state/queries";
 import { useTaskView } from "~/state/taskView";
 import { usePanel } from "~/state/ui";
+import { cn } from "~/lib/utils";
 import { AutopilotSection } from "~/components/autopilot/AutopilotSection";
 import { LabelsSection } from "~/components/labels/LabelsSection";
 import { ReviewSection } from "~/components/review/ReviewSection";
@@ -39,13 +40,14 @@ import { ResolutionCallout } from "./ResolutionCallout";
 import { SessionsSection } from "./SessionsSection";
 import { UsageSection } from "./UsageSection";
 import { TaskActions } from "./TaskActions";
-import { ClosePanelButton, PANEL_TOP_BAR_CLASS, TaskPanelHeader } from "./TaskPanelHeader";
+import { ClosePanelButton, PANEL_TOP_BAR_CLASS, TaskPanelHeader, WINDOW_TOP_BAR_CLASS } from "./TaskPanelHeader";
 import { TaskTitle } from "./TaskTitle";
 import { usePlanActions } from "./usePlanActions";
 import { WhereItsUpTo } from "./WhereItsUpTo";
 import { EpicChildren } from "./EpicChildren";
 import { useEpicFilter, useSetEpicFilter } from "~/components/board/boardNavigation";
-import type { SectionId } from "./sections.logic";
+import type { SectionId, TaskPanelLayout } from "./sections.logic";
+import { TaskLayoutContext } from "./taskLayout";
 
 const MIN_WIDTH = 380;
 const DEFAULT_WIDTH = 540;
@@ -61,16 +63,20 @@ let handledPlanEditorRequest = 0;
 
 /**
  * Docked, resizable task detail panel for `?task=<id>`. `closing` plays the slide-out, after which
- * `onClosed` lets the parent unmount it.
+ * `onClosed` lets the parent unmount it. While the task shows in the task window (`inWindow`) the panel keeps its
+ * width with a placeholder, so the board doesn't reflow, and the task's contents live in the window alone: they have
+ * side effects that must run once (`useTaskView`, the plan editor request).
  */
 export function TaskPanel({
   taskId,
+  inWindow = false,
   closing = false,
   slideIn = true,
   onClose,
   onClosed,
 }: {
   taskId: string;
+  inWindow?: boolean;
   closing?: boolean;
   /** False for a panel that is restored, not opened (see `panelRestored`): it appears in place. Closing still slides. */
   slideIn?: boolean;
@@ -108,7 +114,7 @@ export function TaskPanel({
         className="@container absolute inset-y-0 right-0 flex min-h-0 max-w-[70vw] flex-col border-l border-border bg-background"
         style={{ width: `var(${RESIZABLE_WIDTH_PROPERTY})`, minWidth: MIN_WIDTH }}
       >
-        <TaskPanelContent key={taskId} taskId={taskId} onClose={onClose} />
+        {inWindow ? <InWindowPlaceholder /> : <TaskPanelContent key={taskId} taskId={taskId} onClose={onClose} />}
       </div>
     </aside>
   );
@@ -180,7 +186,32 @@ function ResizeHandle({ handlers }: { handlers: ResizableWidthHandlers }) {
   );
 }
 
-function TaskPanelContent({ taskId, onClose }: { taskId: string; onClose: () => void }) {
+/** What the docked panel shows behind the task window, which has the task. */
+function InWindowPlaceholder() {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+      <Maximize2Icon className="size-4" />
+      Open in a window
+    </div>
+  );
+}
+
+/**
+ * The task's details: the top bar, the body and the plan editor. Rendered once, in the docked panel or in the task
+ * window (`layout`), never both.
+ */
+export function TaskPanelContent({
+  taskId,
+  layout = "panel",
+  onClose,
+  onDock,
+}: {
+  taskId: string;
+  layout?: TaskPanelLayout;
+  onClose: () => void;
+  /** The window's Dock button. */
+  onDock?: () => void;
+}) {
   const detail = useTaskDetail(taskId);
   useTaskView(taskId, detail.data?.links.some((l) => l.kind === "pr" && l.ref !== null) ?? false);
   const projects = useBoard().data?.projects ?? EMPTY_PROJECTS;
@@ -202,7 +233,7 @@ function TaskPanelContent({ taskId, onClose }: { taskId: string; onClose: () => 
     handledPlanEditorRequest = Math.max(handledPlanEditorRequest, seenPlanEditorRequest);
   }, [seenPlanEditorRequest]);
 
-  if (detail.isPending) return <PanelSkeleton onClose={onClose} />;
+  if (detail.isPending) return <PanelSkeleton layout={layout} onClose={onClose} />;
   if (detail.isError && !detail.data) {
     const notFound = detail.error instanceof ApiError && detail.error.code === "NOT_FOUND";
     return (
@@ -237,12 +268,19 @@ function TaskPanelContent({ taskId, onClose }: { taskId: string; onClose: () => 
   const openPlanEditor = () => openEditor("outline");
   return (
     <>
-      <TaskPanelHeader task={task} onClose={onClose} onOpenPlanEditor={openPlanEditor} />
+      <TaskPanelHeader
+        task={task}
+        layout={layout}
+        onClose={onClose}
+        onDock={onDock}
+        onOpenPlanEditor={openPlanEditor}
+      />
       <div className="min-h-0 flex-1">
         <ScrollArea scrollFade>
           <PanelTaskLinksProvider>
             <TaskPanelBody
               task={task}
+              layout={layout}
               projects={projects}
               onOpenEditor={openEditor}
               titleActions={
@@ -263,13 +301,53 @@ function TaskPanelContent({ taskId, onClose }: { taskId: string; onClose: () => 
   );
 }
 
+/** The task window's width from which the sections split into two columns: about 56rem. */
+const TWO_COLUMNS_FROM = 896;
+
+/** Whether the element is at least `px` wide, following its resizes. */
+function useWiderThan(ref: RefObject<HTMLElement | null>, px: number, enabled: boolean): boolean {
+  const [wide, setWide] = useState(false);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element || !enabled) return;
+    const update = () => setWide(element.getBoundingClientRect().width >= px);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref, px, enabled]);
+  return enabled && wide;
+}
+
+/**
+ * Whether the rail fits the window's scroll area, so it can stay in view while the main column scrolls. A taller one
+ * scrolls with the page: stuck, its lower sections would be out of reach until the main column ran out.
+ */
+function useRailFits(railRef: RefObject<HTMLElement | null>, enabled: boolean): boolean {
+  const [fits, setFits] = useState(false);
+  useLayoutEffect(() => {
+    const rail = railRef.current;
+    const viewport = rail?.closest("[data-slot=scroll-area-viewport]");
+    if (!rail || !viewport || !enabled) return;
+    const update = () => setFits(rail.offsetHeight <= viewport.clientHeight);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(rail);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [railRef, enabled]);
+  return enabled && fits;
+}
+
 function TaskPanelBody({
   task,
+  layout,
   projects,
   onOpenEditor,
   titleActions,
 }: {
   task: TaskDetail;
+  layout: TaskPanelLayout;
   projects: ReadonlyArray<Project>;
   onOpenEditor: (mode: PlanEditorMode) => void;
   titleActions: ReactNode;
@@ -277,12 +355,44 @@ function TaskPanelBody({
   const actions = usePlanActions(task.id);
   const setEpicFilter = useSetEpicFilter();
   const boardEpicFilter = useEpicFilter();
-  return (
-    <div className="flex flex-col pb-10">
-      <div className="px-4 pt-4 pb-3">
+  const rootRef = useRef<HTMLDivElement>(null);
+  const inWindow = layout === "window";
+  // Layout A: the story in a main column and the properties in a sticky rail beside it. Narrower, one column in the
+  // panel's saved order, as the docked panel has it.
+  const twoColumns = useWiderThan(rootRef, TWO_COLUMNS_FROM, inWindow);
+  const railRef = useRef<HTMLDivElement>(null);
+  const railSticks = useRailFits(railRef, twoColumns);
+  const exclude = task.kind === "epic" ? EPIC_HIDDEN_SECTIONS : undefined;
+  const render = (id: SectionId) => {
+    switch (id) {
+      case "labels":
+        return <LabelsSection task={task} />;
+      case "sessions":
+        return <SessionsSection task={task} />;
+      case "usage":
+        return <UsageSection task={task} />;
+      case "links":
+        return <LinksSection task={task} />;
+      case "relations":
+        return <RelationsSection task={task} />;
+      case "review":
+        return <ReviewSection task={task} />;
+      case "autopilot":
+        return <AutopilotSection task={task} />;
+      case "plan":
+        return <PlanTimeline task={task} actions={actions} onOpenEditor={onOpenEditor} />;
+      case "details":
+        return <DetailsSection task={task} />;
+      case "activity":
+        return <ActivityLog task={task} projects={projects} />;
+    }
+  };
+  const top = (
+    <>
+      <div className={cn("px-4 pt-4 pb-3", inWindow && "sm:px-6 sm:pt-6")}>
         <TaskTitle task={task} project={projects.find((p) => p.id === task.projectId)} actions={titleActions} />
       </div>
-      <div className="flex flex-col gap-2 px-3 pb-3">
+      <div className={cn("flex flex-col gap-2 px-3 pb-3", inWindow && "sm:px-5")}>
         <AttentionRequestCallout task={task} />
         <ImportCallout task={task} />
         <ResolutionCallout task={task} />
@@ -293,43 +403,52 @@ function TaskPanelBody({
           <WhereItsUpTo task={task} actions={actions} onWritePlan={() => onOpenEditor("outline")} />
         )}
       </div>
-      <ManagedSections
-        task={task}
-        exclude={task.kind === "epic" ? EPIC_HIDDEN_SECTIONS : undefined}
-        render={(id) => {
-          switch (id) {
-            case "labels":
-              return <LabelsSection task={task} />;
-            case "sessions":
-              return <SessionsSection task={task} />;
-            case "usage":
-              return <UsageSection task={task} />;
-            case "links":
-              return <LinksSection task={task} />;
-            case "relations":
-              return <RelationsSection task={task} />;
-            case "review":
-              return <ReviewSection task={task} />;
-            case "autopilot":
-              return <AutopilotSection task={task} />;
-            case "plan":
-              return <PlanTimeline task={task} actions={actions} onOpenEditor={onOpenEditor} />;
-            case "details":
-              return <DetailsSection task={task} />;
-            case "activity":
-              return <ActivityLog task={task} projects={projects} />;
-          }
-        }}
-      />
-    </div>
+    </>
+  );
+  return (
+    <TaskLayoutContext value={layout}>
+      <div
+        ref={rootRef}
+        data-task-layout={layout}
+        className={cn(
+          "flex flex-col pb-10",
+          twoColumns && "grid grid-cols-[minmax(0,1fr)_21rem] items-start pb-0",
+          inWindow && !twoColumns && "sm:px-2",
+        )}
+      >
+        {twoColumns ? (
+          <>
+            <div className="flex min-w-0 flex-col px-2 pb-10">
+              {top}
+              <ManagedSections task={task} column="main" exclude={exclude} render={render} />
+            </div>
+            {/* The border runs the column's full height; the sections inside stay in view while they fit. */}
+            <div
+              role="complementary"
+              aria-label="Properties"
+              className="min-w-0 self-stretch border-s border-border/65"
+            >
+              <div ref={railRef} className={cn("flex flex-col pt-2 pb-10", railSticks && "sticky top-0")}>
+                <ManagedSections task={task} column="rail" exclude={exclude} render={render} />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {top}
+            <ManagedSections task={task} exclude={exclude} render={render} />
+          </>
+        )}
+      </div>
+    </TaskLayoutContext>
   );
 }
 
-function PanelSkeleton({ onClose }: { onClose: () => void }) {
+function PanelSkeleton({ layout, onClose }: { layout: TaskPanelLayout; onClose: () => void }) {
   return (
     <div aria-busy className="flex flex-col">
-      <div className={PANEL_TOP_BAR_CLASS}>
-        <ClosePanelButton onClose={onClose} />
+      <div className={layout === "window" ? WINDOW_TOP_BAR_CLASS : PANEL_TOP_BAR_CLASS}>
+        {layout === "window" ? null : <ClosePanelButton onClose={onClose} />}
         <Skeleton className="h-4 w-8" />
         <Skeleton className="h-6 w-24" />
       </div>

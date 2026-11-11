@@ -6,6 +6,7 @@ import { formatLabelFilter, parseLabelFilter } from "~/components/labels/labels.
 import type { BoardSearch } from "~/router";
 import { useProjectIds } from "~/state/queries";
 import { useReveal, useSettingsNav } from "~/state/ui";
+import { isTaskWindowSearch, withClosedTask, withExpanded, withOpenTask } from "./taskWindow.logic";
 import { clearedParams, FILTER_PARAM_KEYS, filterParams, readFilters, type FilterState } from "./boardFilters.logic";
 
 /**
@@ -37,6 +38,20 @@ export function useSelectedTaskId(): string | null {
   return useBoardSearch((search) => search.task ?? null);
 }
 
+/** `?expanded=true` with a task open: the task shows in the task window over the board, not docked. */
+export function useTaskExpanded(): boolean {
+  return useBoardSearch((search) => isTaskWindowSearch(search));
+}
+
+/** Expands the open task into the window (true) or docks it again (false). A no-op with no task open. */
+export function useSetTaskExpanded() {
+  const navigate = useNavigate();
+  return useCallback(
+    (expanded: boolean) => navigate({ to: "/", search: (prev) => withExpanded(boardSearchFrom(prev), expanded) }),
+    [navigate],
+  );
+}
+
 /**
  * `?project=` — the projects the board is scoped to, in lane order; empty is every project. Ids of projects that
  * don't exist (any more) are dropped once the board has loaded.
@@ -64,15 +79,20 @@ export function useSetLabelFilter() {
 
 /**
  * Opens a task in the panel and scrolls the board to its card (when the setting is on). A click on the card itself
- * passes `reveal: false`: the card is already under the pointer.
+ * passes `reveal: false`: the card is already under the pointer. `expanded` true opens it in the task window, false
+ * docked; left out, it opens the way the open task is shown (see `withOpenTask`).
  */
 export function useOpenTask() {
   const navigate = useNavigate();
   return useCallback(
-    (taskId: string, options?: { reveal?: boolean }) => {
-      const opened = navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), task: taskId }) });
+    (taskId: string, options?: { reveal?: boolean; expanded?: boolean }) => {
+      const opened = navigate({
+        to: "/",
+        search: (prev) => withOpenTask(boardSearchFrom(prev), taskId, options?.expanded),
+      });
       // After the navigation, so the board has the task selected (which keeps its card in a collapsed column) by then.
-      if (options?.reveal !== false)
+      // Not into the window, which covers the board.
+      if (options?.reveal !== false && !options?.expanded)
         void opened.then(
           () => useReveal.getState().requestReveal(taskId),
           () => {}, // the caller sees the failure
@@ -93,10 +113,7 @@ export function useJumpToTask() {
 
 export function useCloseTask() {
   const navigate = useNavigate();
-  return useCallback(
-    () => navigate({ to: "/", search: (prev) => ({ ...boardSearchFrom(prev), task: undefined }) }),
-    [navigate],
-  );
+  return useCallback(() => navigate({ to: "/", search: (prev) => withClosedTask(boardSearchFrom(prev)) }), [navigate]);
 }
 
 /** `?epic=`: the epic the board is filtered to. */
