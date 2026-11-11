@@ -1,3 +1,4 @@
+import type { UsageService } from "./usage.ts";
 import {
   deriveEpicRollup,
   deriveEpicStatus,
@@ -139,6 +140,8 @@ export function createTasksService(
     templates: TemplatesService;
     relations: () => RelationsModule;
     attachments: AttachmentsService;
+    /** Tokens of the task's sessions for its detail; optional so tests that build tasks alone needn't. */
+    usage?: Pick<UsageService, "taskUsage">;
   },
 ): { service: TasksService; record: (id: string) => TaskRecord } {
   const { repos } = core;
@@ -415,6 +418,7 @@ export function createTasksService(
           .resolvedBy([id])
           .flatMap((t) => (t.resolution ? [{ ...taskRef(t)!, resolution: t.resolution }] : [])),
         reviews,
+        usage: deps.usage?.taskUsage(id) ?? null,
       };
     },
 

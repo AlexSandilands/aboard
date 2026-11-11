@@ -8,6 +8,7 @@ import { AutomationVariables } from "./automationVariables.ts";
 import { BackupSettings, MachineName } from "./backup.ts";
 import { ModelChoice } from "./modelProfiles.ts";
 import { ModelPriceOverrides } from "./modelPricing.ts";
+import { TaskUsage } from "./usage.ts";
 import { OperationId, OperationModels } from "./operations.ts";
 import { ModelProfiles } from "./modelProfiles.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
@@ -618,6 +619,8 @@ export const TaskDetail = TaskSummary.extend({
   reviews: z.array(TaskReview),
   /** An epic's children, archived ones included, in board order; empty for a task. */
   children: z.array(TaskSummary),
+  /** Tokens and API-equivalent cost of its sessions, threads and board runs; null when none were read. */
+  usage: TaskUsage.nullable(),
 });
 export type TaskDetail = z.infer<typeof TaskDetail>;
 

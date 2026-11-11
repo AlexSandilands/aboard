@@ -93,6 +93,10 @@ export function createServices(deps: ServiceDeps): Services {
     onTasksDeleted: (ids) => ids.forEach((id) => attachments.removeFilesOf(id)),
   });
   const labels = createLabelsService(core);
+  const usage = createUsageService(core, {
+    dirs: deps.usageDirs ?? { claudeDir: join(deps.userHome, ".claude"), codexHome: join(deps.userHome, ".codex") },
+    ...(deps.fetchThreadUsage ? { fetchThread: deps.fetchThreadUsage } : {}),
+  });
   const templates = createTemplatesService(core, { projects });
 
   let plans: PlansModule | null = null;
@@ -111,6 +115,7 @@ export function createServices(deps: ServiceDeps): Services {
     templates,
     relations: () => relations!,
     attachments,
+    usage,
   });
   relations = createRelations(core, { resolveId: (ref) => tasks.service.resolveId(ref), record: tasks.record });
   imports = createImportsService(core, { tasks: () => tasks.service, settings });
@@ -232,10 +237,7 @@ export function createServices(deps: ServiceDeps): Services {
       automationTitle: (key) => automationTitleOf(automations(), key),
     }),
     stats: createStatsService(core, { runGit: deps.runGit ?? defaultRunGit }),
-    usage: createUsageService(core, {
-      dirs: deps.usageDirs ?? { claudeDir: join(deps.userHome, ".claude"), codexHome: join(deps.userHome, ".codex") },
-      ...(deps.fetchThreadUsage ? { fetchThread: deps.fetchThreadUsage } : {}),
-    }),
+    usage,
     digests: createDigestsService(core, {
       notifications,
       automationTitle: (key) => automationTitleOf(automations(), key),
