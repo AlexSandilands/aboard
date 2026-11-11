@@ -202,6 +202,9 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
         series(name, "tokens", "sum");
       }
       series("cost_usd.estimated", "usd", "sum");
+      for (const harness of ["claude-code", "codex", "copilot-cli", "t3_thread"]) {
+        series(`cost_usd.harness.${harness}`, "usd", "sum");
+      }
       series("cost_usd.autopilot", "usd", "sum");
       series("cycle_time.in_progress_to_done", "ms", "median");
       series("cycle_time.created_to_done", "ms", "median");
@@ -511,6 +514,7 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
           add("cost_usd.estimated", "usd", "sum", iso, cost);
           if (row.purpose) add("cost_usd.autopilot", "usd", "sum", iso, cost);
           const harness = row.harness === "t3" || owner?.viaThread ? "t3_thread" : row.harness;
+          add(`cost_usd.harness.${harness}`, "usd", "sum", iso, cost);
           usageEntries.model!.push({ key: row.model || null, at, value: cost });
           usageEntries.harness!.push({ key: harness, at, value: cost });
           if (row.purpose) usageEntries.purpose!.push({ key: row.purpose, at, value: cost });

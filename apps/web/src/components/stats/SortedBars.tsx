@@ -10,6 +10,7 @@ export function SortedBars({
   color,
   label,
   previousLabel,
+  format = String,
 }: {
   rows: ReadonlyArray<BreakdownRow>;
   /** A theme token from `SERIES_COLORS`. */
@@ -18,6 +19,8 @@ export function SortedBars({
   label: string;
   /** What the "was" figure is against: "previous 12 weeks". */
   previousLabel: string;
+  /** How a value is written; counts as they are. */
+  format?: (value: number) => string;
 }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
   return (
@@ -38,12 +41,12 @@ export function SortedBars({
             />
           </span>
           <span className="flex items-baseline gap-1.5 tabular-nums">
-            <span className="font-medium">{row.value}</span>
+            <span className="font-medium">{format(row.value)}</span>
             <span className="text-muted-foreground">
               <span className="sr-only">
-                , {row.previous} in the {previousLabel}
+                , {format(row.previous)} in the {previousLabel}
               </span>
-              <span aria-hidden>was {row.previous}</span>
+              <span aria-hidden>was {format(row.previous)}</span>
             </span>
           </span>
         </li>

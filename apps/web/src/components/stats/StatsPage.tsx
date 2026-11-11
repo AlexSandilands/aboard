@@ -225,6 +225,23 @@ const OPEN_STATUSES = [
   ["review", "Review", SERIES_COLORS.warning],
 ] as const;
 
+// What ran the sessions a cost came from, as the cost_usd.harness.* series key them.
+const COST_HARNESSES = [
+  ["claude-code", "Claude Code", SERIES_COLORS.primary],
+  ["codex", "Codex", SERIES_COLORS.info],
+  ["t3_thread", "T3 Code threads", SERIES_COLORS.success],
+  ["copilot-cli", "Copilot CLI", SERIES_COLORS.warning],
+] as const;
+
+const TOKEN_KINDS = [
+  ["input", "Input", SERIES_COLORS.primary],
+  ["output", "Output", SERIES_COLORS.success],
+  ["cache_read", "Cache read", SERIES_COLORS.muted],
+  ["cache_write", "Cache write", SERIES_COLORS.warning],
+] as const;
+
+const usd = (value: number) => formatStatsValue(value, "usd");
+
 const GAVE_UP = [
   ["review_prs", "Review PRs", SERIES_COLORS.warning],
   ["fix_prs", "Fix PRs", SERIES_COLORS.error],
@@ -240,6 +257,8 @@ const RUN_STATUSES = [
 ] as const;
 
 function StatsSections({ data }: { data: StatsResponse }) {
+  const catalogue = useAutopilotOverview().data?.automations ?? [];
+  const boardTasks = useBoard().data?.tasks ?? [];
   const per = data.bucket === "day" ? "day" : "week";
   const previousLabel = previousPeriodLabel(data);
   const count = (value: number | null) => formatStatsValue(value, "count");
@@ -270,6 +289,32 @@ function StatsSections({ data }: { data: StatsResponse }) {
       </p>
     );
   }
+
+  // Tokens & cost: sums and ratios of the period's series.
+  const total = (name: string) => seriesOf(data, name);
+  const tokenTotals = sumTotals(
+    data,
+    TOKEN_KINDS.map(([key]) => `tokens.${key}`),
+  );
+  const ratio = (a: number | null, b: number | null) => (a !== null && b ? a / b : null);
+  const perTask = {
+    total: ratio(total("cost_usd.estimated").total, total("tasks_completed").total),
+    previousTotal: ratio(total("cost_usd.estimated").previousTotal, total("tasks_completed").previousTotal),
+  };
+  const inputOf = (which: "total" | "previousTotal") =>
+    (["input", "cache_read", "cache_write"] as const).reduce((n, k) => n + (total(`tokens.${k}`)[which] ?? 0), 0);
+  const cacheShare = {
+    total: ratio(total("tokens.cache_read").total, inputOf("total")),
+    previousTotal: ratio(total("tokens.cache_read").previousTotal, inputOf("previousTotal")),
+  };
+  const purposeLabel = (key: string) =>
+    ({ review: "Board review", import: "Issue import", ask: "Settings questions", digest: "Digest" })[key] ??
+    automationTitleOf(catalogue, key) ??
+    key;
+  const taskLabel = (key: string) => {
+    const t = boardTasks.find((task) => String(task.number) === key);
+    return t ? `#${key} ${t.title}` : `#${key}`;
+  };
 
   const findingNames = FINDING_SEVERITIES.map(([severity]) => `review_findings.${severity}`);
   const automations = runsByAutomation(data.series);
@@ -572,6 +617,96 @@ function StatsSections({ data }: { data: StatsResponse }) {
       </StatsSection>
 
       <StatsSection
+        title="Tokens & cost"
+        description={`What agents used on this board's tasks and runs, by the ${per} they used it. Cost is an API-equivalent estimate at list prices; a session shared by tasks counts once, under the one that linked it first.`}
+      >
+        <Tiles>
+          {kpi("Estimated cost", "cost_usd.estimated")}
+          <KpiTile
+            label="Tokens"
+            value={formatStatsValue(tokenTotals.total, "tokens")}
+            change={changeVsPrevious(tokenTotals.total, tokenTotals.previousTotal)}
+            previousLabel={previousLabel}
+          />
+          <KpiTile
+            label="Cost per finished task"
+            value={formatStatsValue(perTask.total, "usd")}
+            change={changeVsPrevious(perTask.total, perTask.previousTotal)}
+            better="down"
+            previousLabel={previousLabel}
+          />
+          {kpi("Autopilot overhead", "cost_usd.autopilot")}
+          <KpiTile
+            label="Cache reads"
+            value={cacheShare.total === null ? "–" : `${Math.round(cacheShare.total * 100)}% of input`}
+            change={changeVsPrevious(cacheShare.total, cacheShare.previousTotal)}
+            better="up"
+            previousLabel={previousLabel}
+          />
+        </Tiles>
+        <ChartCard title={`Estimated cost per ${per}, by harness`}>
+          <WeeklyBars
+            buckets={data.buckets}
+            mode="stacked"
+            format={(value) => formatStatsValue(value, "usd")}
+            label={`Estimated cost per ${per}, by what ran the sessions`}
+            series={COST_HARNESSES.map(([key, label, color]) =>
+              chartSeries(data, `cost_usd.harness.${key}`, label, color, { zeros: true }),
+            )}
+          />
+        </ChartCard>
+        <ChartCard title={`Tokens per ${per}, by kind`}>
+          <WeeklyBars
+            buckets={data.buckets}
+            mode="stacked"
+            format={(value) => formatStatsValue(value, "tokens")}
+            label={`Tokens per ${per}, by kind`}
+            series={TOKEN_KINDS.map(([key, label, color]) =>
+              chartSeries(data, `tokens.${key}`, label, color, { zeros: true }),
+            )}
+          />
+          {(seriesOf(data, "tokens.unpriced").total ?? 0) > 0 ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {formatStatsValue(seriesOf(data, "tokens.unpriced").total, "tokens")} tokens were on models with no price,
+              so they aren't in the cost. Add their prices in Settings to count them.
+            </p>
+          ) : null}
+        </ChartCard>
+        <ChartCard title="Cost by model">
+          <Breakdown
+            rows={breakdownRows(data.breakdowns.cost_by_model, (key) => key, "Unknown model")}
+            label="Estimated cost by model"
+            previousLabel={previousLabel}
+            format={usd}
+          />
+        </ChartCard>
+        <ChartCard title="Cost by harness">
+          <Breakdown
+            rows={breakdownRows(data.breakdowns.cost_by_harness, sessionSource, "Unknown")}
+            label="Estimated cost by what ran the sessions"
+            previousLabel={previousLabel}
+            format={usd}
+          />
+        </ChartCard>
+        <ChartCard title="Autopilot cost by automation">
+          <Breakdown
+            rows={breakdownRows(data.breakdowns.cost_by_purpose, purposeLabel, "Other")}
+            label="Autopilot's own runs by automation"
+            previousLabel={previousLabel}
+            format={usd}
+          />
+        </ChartCard>
+        <ChartCard title="Top tasks by cost">
+          <Breakdown
+            rows={breakdownRows(data.breakdowns.cost_by_task, taskLabel, "No task")}
+            label="The tasks that cost the most"
+            previousLabel={previousLabel}
+            format={usd}
+          />
+        </ChartCard>
+      </StatsSection>
+
+      <StatsSection
         title="Breakdowns"
         description="The whole period split by category, largest first. A task with several labels counts under each."
       >
@@ -606,13 +741,23 @@ function Breakdown({
   rows,
   label,
   previousLabel,
+  format,
 }: {
   rows: ReturnType<typeof breakdownRows>;
   label: string;
   previousLabel: string;
+  format?: (value: number) => string;
 }) {
   if (rows.length === 0) return <p className="text-xs text-muted-foreground">Nothing in this period.</p>;
-  return <SortedBars rows={rows} color={SERIES_COLORS.primary} label={label} previousLabel={previousLabel} />;
+  return (
+    <SortedBars
+      rows={rows}
+      color={SERIES_COLORS.primary}
+      label={label}
+      previousLabel={previousLabel}
+      {...(format ? { format } : {})}
+    />
+  );
 }
 
 function StatsSection({ title, description, children }: { title: string; description: string; children: ReactNode }) {
