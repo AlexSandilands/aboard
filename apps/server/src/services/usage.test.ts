@@ -212,3 +212,41 @@ describe("usage service", () => {
     usage.stop();
   });
 });
+
+describe("get_task's usage line", () => {
+  it("says the cost, tokens, sources, sharing and what has no price", async () => {
+    const { usageLine } = await import("../mcp/format.ts");
+    expect(usageLine(null)).toBeNull();
+    expect(
+      usageLine({
+        rows: [
+          {
+            key: "claude-code:s",
+            kind: "session",
+            harness: "claude-code",
+            sessionId: "s",
+            linkId: "l",
+            label: null,
+            source: "transcript",
+            purpose: null,
+            models: [],
+            tokens: { ...EMPTY_TOKEN_USAGE, input: 100_000, cacheRead: 300_000 },
+            costUsd: 1.5,
+            costSource: "estimated",
+            unpricedTokens: 0,
+            sharedWith: [7],
+            pending: false,
+            lastDay: null,
+          },
+        ],
+        tokens: { ...EMPTY_TOKEN_USAGE, input: 100_000, cacheRead: 300_000 },
+        costUsd: 1.5,
+        costSource: "estimated",
+        unpricedTokens: 54_000,
+        pricesAsOf: "2026-11-11",
+      }),
+    ).toBe(
+      "Usage: ~$1.50 API-equivalent · 400k tokens (75% of input from cache) · Claude Code 1 · sessions shared with #7 · 54k tokens on models with no price",
+    );
+  });
+});
