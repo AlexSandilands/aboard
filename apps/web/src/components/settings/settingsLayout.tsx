@@ -210,7 +210,8 @@ export function SettingsRow({
           {status ? <div className="min-w-0 pt-0.5 text-xs text-muted-foreground">{status}</div> : null}
         </div>
         {control ? (
-          <div className="flex w-full min-w-0 shrink-0 items-center gap-2 @min-[32rem]/settings-row:w-auto @min-[32rem]/settings-row:justify-end">
+          // Stacked under the title it wraps: several buttons don't fit a phone's width beside the settings rail.
+          <div className="flex w-full min-w-0 shrink-0 flex-wrap items-center gap-2 @min-[32rem]/settings-row:w-auto @min-[32rem]/settings-row:flex-nowrap @min-[32rem]/settings-row:justify-end">
             {control}
           </div>
         ) : null}

@@ -166,12 +166,9 @@ animations at 0 and under reduced motion.
   inner wrapper pinned to the aside's right edge at `var(--resizable-width)` (at least 380px, the `@container` the
   panel's `@[460px]` queries measure). `AppLayout` keeps it mounted on the closed task until the slide-out ends.
   `panel.toggle` (Ctrl/Cmd+Alt+B) closes it or reopens the last task.
-  A panel that is restored rather than opened appears in place, with no slide: `AppLayout` decides once, when it
-  mounts (`panelRestored` in `layout/panelRestore.logic.ts`), and passes `slideIn={false}`. Restored means the board is
-  coming back from Settings or Stats on the task it left open (`boardReturn.task`, saved when the board was left), or
-  the app has just loaded on the board with `?task=`. Closing it, and any later open or close on the board, still
-  animate. A different task opened from another page (the palette or a notification in Settings) is an opening and
-  slides in; a panel that was closed stays closed.
+  A panel that is there when the app loads on the board with `?task=` appears in place, with no slide: `AppLayout`
+  decides once, when it mounts, and passes `slideIn={false}`. Closing it, and any later open or close, still animate.
+  Opening Settings or Stats doesn't unmount the board, so the panel behind the window just stays.
 
 React work is kept out of the slide, since the board's part runs on the main thread: a card prefetches its task's
 detail on pointer down (`usePrefetchTaskDetail`), so the panel renders its contents in the commit that mounts it rather

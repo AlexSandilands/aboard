@@ -12,7 +12,6 @@ import { RunHistorySearch } from "./components/autopilot/runHistory.logic.ts";
 import { AppFrame } from "./components/layout/AppFrame.tsx";
 import { boardSnapshotMotion, prepareBoardTransition, snapshotMotionSupported } from "./lib/boardMotion.ts";
 import { panelTransitionType } from "./lib/boardMotion.logic.ts";
-import { AppLayout } from "./components/layout/AppLayout.tsx";
 import { AutopilotLimitsPage } from "./components/autopilot/AutopilotPage.tsx";
 import {
   AutopilotRunsPage,
@@ -45,14 +44,16 @@ export type BoardSearch = z.infer<typeof BoardSearch>;
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
-// Pathless layout around the board and Settings, so the shell (and its live-update stream) stays mounted between them.
+// Pathless layout around every page. It renders the shell and the board itself, and keeps both mounted behind the
+// Settings and Stats windows (see `AppFrame`).
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: "_app", component: AppFrame });
 
 export const boardRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
   validateSearch: (search) => BoardSearch.parse(search),
-  component: AppLayout,
+  // No component: `AppFrame` renders the board, so it isn't remounted when a window opens over it.
+  component: () => null,
 });
 
 /** `?project=` on the project settings page and its rule editor: the project shown. */

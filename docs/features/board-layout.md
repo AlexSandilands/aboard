@@ -6,7 +6,7 @@ The filters and saved views are in [saved-views.md](saved-views.md).
 A board with many projects and a long Done column gets tall, and the task panel gets crowded. This doc
 covers how the board and the panel decide what to show: collapsible columns, collapsible and reorderable
 panel sections, column sorts, and which links a card shows. These are browser-only preferences: nothing here is stored
-on the server (saved views, which are, are in [saved-views.md](saved-views.md)). It also covers the settings page, which takes the board's place.
+on the server (saved views, which are, are in [saved-views.md](saved-views.md)). It also covers Settings, a floating window over the board.
 
 ## How it works
 
@@ -442,7 +442,7 @@ and end in one summary toast ("Moved 2 tasks to Review, 1 skipped (no plan)"). T
 
 ### The settings page
 
-Settings is a route, `/settings/<group>` with group `board`, `keybindings`, `tasks`, `agents`, `autopilot`,
+Settings is a floating window over the board, and still a route: `/settings/<group>` with group `board`, `keybindings`, `tasks`, `agents`, `autopilot`,
 `integrations` or `project` (`/settings` and unknown groups redirect to `board`). `agents` is one page
 (`agents/AgentsPage.tsx`) with three sections, the first two on the same split card (`agents/SplitCard.tsx`: a list on
 the left and the selected item's settings on the right, side by side from a 48rem container and stacked below it), so
@@ -499,11 +499,38 @@ reviewer model is its own section (`project.models.reviewer`). Targets from befo
 `autopilot/custom/<id>` and `project/recurring/<id>`, with `new` for one not saved yet. The project page and the
 rule editor take `?project=`; without it the page shows the project the board was scoped to, else the first.
 
-- **Shell.** The board and Settings sit under one pathless layout route (`_app`, `AppFrame`) that renders a single
-  `AppShell`: the resizable sidebar (an off-canvas sheet on narrow windows), the palette, the app dialogs, live sync
-  and the shortcuts. It stays mounted between them, so the event stream doesn't reconnect and miss events. On `/settings` the sidebar holds the settings list instead of the
-  projects: every group with its sections, always expanded, and **Back** at the bottom. Esc leaves an editor for its
-  page and a page for the board; Back and Esc restore the board's search as it was (`boardReturn`).
+- **Shell.** Every page sits under one pathless layout route (`_app`, `AppFrame`) that renders a single `AppShell`:
+  the resizable projects sidebar (an off-canvas sheet on narrow windows), the palette, the app dialogs, live sync and
+  the shortcuts. `AppFrame` also renders the board itself (`AppLayout`), on `/` and on the window paths (`/settings…`
+  and `/stats`, `isAppModalPath` in `layout/appModal.logic.ts`), so the board, its scroll, its open task panel and the
+  event stream survive opening and closing a window. The board route has no component of its own. Only `/social` is a
+  page that takes the board's place.
+- **The window.** `AppRouteModal` (`layout/AppRouteModal.tsx`, after T3 Code's) is a Base UI dialog the route
+  component renders itself in: at most 80rem by 60rem, full screen below `sm`, over the dialog backdrop. Settings and
+  Stats use it, and it is meant for other route windows too. The close button and a press on the backdrop close it
+  (a text selection that ends on the backdrop doesn't, and nor does any press while `backdropDismisses` is false,
+  which Settings sets on an editor sub-page so a stray press can't drop a half-filled form); it blurs the focused field first, so commit-on-blur fields
+  save, animates out and then calls `onClosed`, which navigates to the board (`useLeaveWindow`). It fades and scales
+  only while Panel animations is on (`data-panel-animations` on `<html>`, which has reduced motion resolved).
+  While a window is open `AppShell` makes the sidebar and the main area `inert`, and a sidebar sheet left open by the
+  pick that opened the window is closed (`CloseSheetOnWindow`).
+- **Esc.** The dialog's own Escape handling is cancelled. Esc is the `back` shortcut as everywhere else, so it can be
+  rebound and yields to whatever nearer the focus claims it (a menu or dialog over the window, the shortcut recorder,
+  a non-empty search box, a text field). In Settings it leaves an editor for its page and closes the window from a
+  page (`useSettingsBack`); in Stats it closes the window. `closeAppWindow()` is what it calls.
+- **The board behind.** A window's URL carries its own search (`?project=` is the project being configured, or the
+  stats page's projects), so the board must not read it. `useBoardSearch` (`board/boardNavigation.ts`) reads the board
+  route's own match on `/` (its validated search, not the layout route's raw one) and `useSettingsNav.boardReturn`
+  anywhere else; `AppLayout` saves `boardReturn` while on `/`. Every board
+  hook (`useSelectedTaskId`, `useProjectFilter`, the filters) goes through it, so the board behind a window shows
+  exactly what it showed, open panel included. When the app starts in a window (a reload, a link), `main.tsx` seeds
+  `boardReturn` with the remembered project scope, and closing the window goes to the board with it.
+- **The rail.** The settings list is a rail inside the window (`SettingsRail` in `SettingsShell.tsx`): the search
+  box, then every group with its sections, always expanded; the page shown is scrolled into view. The app sidebar
+  stays the projects list. Below `md` the rail is a strip of the groups' icons with a search button; searching
+  spreads it over the page with the full list, until a pick, Esc in the empty box, or the box's close button.
+- **The header.** `SettingsTopBar` is the window's header: the breadcrumb, the page's actions and the close button.
+  It is not a drag region.
 - **Ids.** `SETTINGS_GROUPS` (`settingsNav.logic.ts`) lists the groups and their sections. A section's id is
   `<group>.<section>` (`tasks.review`); the groups and rows inside carry `<group>.<section>.<row>` ids
   (`providers.claude-code.cli-path`). The ids are element ids and URL hashes, and are stable: settings search
@@ -517,8 +544,9 @@ rule editor take `?project=`; without it the page shows the project the board wa
   so text moved behind an info button is still found. A setting with a default can pass `resetAction`: a
   `SettingResetButton` beside the title, shown while the value differs from the default (the Appearance sliders and
   fonts, see [appearance.md](appearance.md)).
-- **Leaving.** Navigations to the board from Settings (opening a task from the palette or a notification) build on
-  `boardReturn` rather than the settings page's search (`boardSearchFrom`), so `?project=` doesn't leak onto the board.
+- **Leaving.** Navigations to the board from a window (opening a task from the palette or a notification) build on
+  `boardReturn` rather than the window's search (`boardSearchFrom`), so `?project=` doesn't leak onto the board. They
+  unmount the window at once; only its own close animates.
 - **Getting there.** `useOpenSettings()(target, { project })` takes a group, section or row id, navigates with the
   anchor as the hash and asks the page to scroll to it (`requestScroll`). The page (`SettingsScroller`) waits up to
   about two seconds for the target to render and opens a folded section that holds it. On a page that has just
@@ -611,7 +639,11 @@ Code's keybindings: a command, a key and a `when`, and when several match a key 
   `overlayOpen`, `paletteOpen`, `dialogOpen`, `settingsOpen`, `panelOpen`, `cardFocus` (a board card has focus) and
   `canGoBack`; `AppShell` builds them per
   key event (`overlayOpen` is the palette or the digest, as it always was; `dialogOpen` is any app dialog, via
-  `anyDialogOpen`). An unknown name is a parse error (`parseWhen`), so the server refuses it on save. The defaults are the old
+  `anyDialogOpen`). The Settings and Stats windows are dialogs in the DOM but not for these flags: `popupFocus`
+  (`isInsidePopup`) skips `[data-app-modal]`, and `dialogOpen` only counts the app dialogs, so the pages inside take
+  shortcuts as a page does. `settingsOpen` is the Settings window, `panelOpen` is the task panel on the board (false
+  while a window covers it), and `settings.open` in Settings closes the window (not from an editor sub-page). `panel.toggle` does nothing while a
+  window is open. An unknown name is a parse error (`parseWhen`), so the server refuses it on save. The defaults are the old
   hard-coded behaviour, e.g. `n` is `!overlayOpen && !editableFocus && !popupFocus`.
 - **Overrides.** The setting `keybindings` holds only what the user changed, per command: `{ key?, when? }` (an empty
   `when` means always). A command left out always follows the current default, so a default added or changed later
@@ -703,15 +735,16 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/task/ManagedSections.tsx`, `SectionsMenu.tsx`, `TaskSection.tsx` | Rendering, drag reorder, the customize popover |
 | `apps/web/src/state/boardView.logic.ts`                | Board view defaults and the version 0 and 1 migrations (tested)         |
 | `apps/web/src/state/ui.ts`                             | The persisted stores, and `useSettingsNav` (scroll-spy, scroll requests, `boardReturn`) |
-| `apps/web/src/components/layout/AppShell.tsx`, `AppFrame.tsx` | The frame the board and Settings share (one layout route); the app-wide shortcuts |
+| `apps/web/src/components/layout/AppShell.tsx`, `AppFrame.tsx` | The frame every page shares (one layout route), which keeps the board mounted behind a window; the app-wide shortcuts |
+| `apps/web/src/components/layout/AppRouteModal.tsx`, `appModal.logic.ts` | The floating route window (Settings, Stats), `closeAppWindow`; which paths are windows and where the board reads its search |
 | `packages/contracts/src/keybindings.ts`               | The shortcut registry, `when` parser and evaluator, overrides schema, conflicts (tested) |
 | `apps/web/src/components/layout/keyboard.logic.ts`, `useKeybindings.ts` | Matching key events, recording and formatting shortcuts (tested), the resolved bindings hook |
 | `apps/web/src/components/settings/KeybindingsSection.tsx`, `keybindings.logic.ts` | Settings → Keybindings: the page, grouping, search and the override edits (tested) |
 | `apps/web/src/components/settings/settingsNav.logic.ts` | Settings groups and section ids, targets, scroll-spy, the project shown (tested) |
-| `apps/web/src/components/settings/SettingsShell.tsx`    | The `/settings` route: the settings list, top bar and `SettingsScroller` |
+| `apps/web/src/components/settings/SettingsShell.tsx`    | The `/settings` route: the window, its rail (the settings list), header and `SettingsScroller` |
 | `apps/web/src/components/settings/SettingsSearch.tsx`, `settingsIndex.logic.ts`, `settingsSearch.logic.ts` | Settings search: the box and results, the index of every setting, matching and ranking (tested) |
 | `apps/web/src/components/settings/SettingsAskRow.tsx`, `apps/server/src/integrations/settingsAsk.ts` | The settings Ask: its row in the results, and the endpoint that asks Claude Code (server tested) |
-| `apps/web/src/components/settings/settingsNavigation.ts` | `useOpenSettings`, `useLeaveSettings`                            |
+| `apps/web/src/components/settings/settingsNavigation.ts` | `useOpenSettings`, `useLeaveWindow`                              |
 | `apps/web/src/components/settings/pages/`              | The group pages, the project page and the editor sub-pages      |
 | `apps/web/src/components/settings/integrations.logic.ts` | GitHub's and the terminal's status dots (tested)                |
 | `apps/web/src/components/settings/agents/` | Settings → Agents: the page, the split card, Providers (list, Add provider dialog, empty state), Models (tiers, custom models) and Operations; `agents.logic.ts` is tested |

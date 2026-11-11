@@ -96,6 +96,7 @@ import {
 import { DependencyLines } from "./DependencyLines";
 import { advanceReveal, revealHiddenMessage, revealProgressFor, type RevealProgress } from "./reveal.logic";
 import { revealCard } from "./revealCard";
+import { isAppModalPath } from "~/components/layout/appModal.logic";
 import { TaskCardOverlay } from "./TaskCard";
 
 const STATUS_LABEL = Object.fromEntries(TASK_STATUSES.map((s) => [s.value, s.label])) as Record<TaskStatus, string>;
@@ -157,12 +158,14 @@ export function Board() {
     if (!boardTasks) return;
     useBoardView.getState().pruneCollapsedEpics(new Set(boardTasks.filter((t) => t.kind === "epic").map((t) => t.id)));
   }, [boardTasks]);
-  // Esc drops the cards picked to plan; dialogs and menus handle their own Esc first.
+  // Esc drops the cards picked to plan; dialogs and menus handle their own Esc first, and so does a window over the
+  // board (Settings, Stats), where Esc closes the window.
   const hasPick = useBoardPick((s) => s.picked.length > 0);
   useEffect(() => {
     if (!hasPick) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || anyDialogOpen(useDialogs.getState())) return;
+      if (isAppModalPath(window.location.pathname)) return;
       useBoardPick.getState().clearPicked();
     };
     window.addEventListener("keydown", onKeyDown);

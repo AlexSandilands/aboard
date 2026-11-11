@@ -130,11 +130,13 @@ how cost is estimated.
 
 ## The page
 
-`/stats` (`StatsPage` in `apps/web/src/components/stats/`) is a top-level route under the pathless `appRoute`, like
-`/social`. It is reached from the Stats icon in the sidebar footer and the command palette's "Open stats"
-(`useOpenStats`, which carries over the projects the board is on). While it is open the footer's three icons give way
-to a single **Back** button, as in Settings, and so does Esc: both go to the board on the projects the stats page
-showed (`useLeaveStats`). `?project=` (project ids, comma-separated; none is the whole board)
+`/stats` (`StatsPage` in `apps/web/src/components/stats/`) is a route under the pathless `appRoute` that renders in a
+floating window over the board, the same shell as Settings (`AppRouteModal`, see
+[board-layout.md](board-layout.md#the-settings-page)). It is reached from the Stats icon in the sidebar footer and the
+command palette's "Open stats" (`useOpenStats`, which carries over the projects the board is on). The window's header
+holds the title, the project picker, the period and the close button; on a phone the controls take a second row. The
+close button, a press on the backdrop and Esc close it and return to the board as it was (`useLeaveWindow`): the board
+stays visible behind the window, so the projects picked in Stats don't change its scope. `?project=` (project ids, comma-separated; none is the whole board)
 and `?weeks=` (1, 4, 12 or 52; anything else reads as 12) hold the view, so links and reloads keep it.
 
 The sections are 40 px (`space-y-10`) apart; the gaps inside a section are small. With `bucket: "day"` the axis

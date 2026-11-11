@@ -15,6 +15,7 @@ import { useState, type ReactNode } from "react";
 import { BellBadge, NotificationRow } from "~/components/notifications/NotificationsBell";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { HarnessIcon, T3Icon } from "~/components/sessions/SessionParts";
+import { AppRouteModal, AppRouteModalClose } from "~/components/layout/AppRouteModal";
 import { ProjectIconPickerDialog } from "~/components/project/ProjectIconPickerDialog";
 import { SidebarStageBackdrop } from "~/components/SidebarStageBackdrop";
 import { STAGE_BANNERS } from "~/components/stage/stageBanner.logic";
@@ -227,6 +228,31 @@ function CommandSample() {
   );
 }
 
+/** The large route window (Settings, Stats). In the gallery only the close button and the backdrop close it. */
+function AppWindowSample() {
+  const [shown, setShown] = useState(false);
+  return (
+    <>
+      <Button variant="outline" onClick={() => setShown(true)}>
+        App window
+      </Button>
+      {shown ? (
+        <AppRouteModal label="Sample window" onClosed={() => setShown(false)}>
+          <header className="flex h-12 shrink-0 items-center gap-3 border-b ps-5 pe-2">
+            <h2 className="text-sm font-medium">Sample window</h2>
+            <div className="ms-auto">
+              <AppRouteModalClose />
+            </div>
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto p-5 text-sm text-muted-foreground">
+            80rem by 60rem at most, full screen below sm.
+          </div>
+        </AppRouteModal>
+      ) : null}
+    </>
+  );
+}
+
 function SampleSidebarLayout() {
   const [open, setOpen] = useState(true);
   const [sectionOpen, setSectionOpen] = useState(true);
@@ -427,6 +453,7 @@ export function StyleGallery() {
             </DialogPopup>
           </Dialog>
           <CommandSample />
+          <AppWindowSample />
         </Section>
 
         <Section title="Switch, toggle group, kbd, separator">

@@ -7,10 +7,10 @@ past, not just the time since you opened the page.
 
 ## Opening it
 
-Click the **Stats** icon at the bottom of the sidebar, or run **Open stats** from the command palette. The page
-starts on the project the board is showing, if any.
+Click the **Stats** icon at the bottom of the sidebar, or run **Open stats** from the command palette. Stats opens
+in a window over the board and starts on the project the board is showing, if any.
 
-While the page is open the icons at the bottom of the sidebar give way to a **Back** button (or press Esc) that returns to the board, on the same project.
+Close it with the **×** at its top right, **Esc**, or a click outside the window. The board behind is as you left it.
 
 At the top, pick a **project** (or **All projects**) and a **period**: the last **1w**, **4w**, **12w** or **52w**.
 The 1w view shows one bar or point per day instead of per week: the last 7 days, ending today, against the 7 before.

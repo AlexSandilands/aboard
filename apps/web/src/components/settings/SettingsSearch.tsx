@@ -4,7 +4,7 @@ import { SearchIcon, XIcon } from "lucide-react";
 import { type ReactNode, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from "react";
 import { isEditableTarget, isInsidePopup } from "~/components/layout/keyboard";
 import { Button } from "~/components/ui/button";
-import { SidebarContent, SidebarHeader, SidebarInput, useSidebar } from "~/components/ui/sidebar";
+import { SidebarContent, SidebarHeader, SidebarInput, SidebarMenuButton } from "~/components/ui/sidebar";
 import { desktopBridge } from "~/lib/desktopBridge";
 import { cn } from "~/lib/utils";
 import { useAskSettings } from "~/state/mutations";
@@ -26,12 +26,19 @@ const CLI_SETTING = ENTRIES.find((entry) => entry.id === "agents.providers.claud
  * setting's title with "Group › Sub-section" beneath. Arrows move through them, Enter opens one, Esc clears the box.
  * `/` and Ctrl/Cmd+F focus it from anywhere on the page. The first option is the Ask: the typed question put to
  * Claude Code, which answers and names the setting to go to. It starts highlighted when the text reads as a question.
+ *
+ * Below `md` the rail around it is a strip of icons with no room for the box: a search button stands in for it, and
+ * `expanded` (the rail spread over the page) shows the box, until a pick, Esc in the empty box or its close button.
  */
 export function SettingsSearch({
   onOpen,
+  expanded,
+  onExpandedChange,
   children,
 }: {
   onOpen: (entry: SettingsIndexEntry) => void;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
   children: ReactNode;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -39,7 +46,6 @@ export function SettingsSearch({
   const listId = useId();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const { open, setOpen } = useSidebar();
   const results = useMemo(() => searchSettings(ENTRIES, query), [query]);
   const question = query.trim();
   const searching = question !== "";
@@ -60,20 +66,22 @@ export function SettingsSearch({
   // Until the check comes back the row is shown as available: a miss only shows when the question is asked.
   const askUnavailable = askUnavailableReason(settings.data, claude);
 
+  const focusBox = () => {
+    onExpandedChange(true);
+    // In the icon rail the box is hidden until the rail has rendered expanded.
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+  };
+
   const onShortcut = useEffectEvent((event: KeyboardEvent) => {
     if (event.isComposing || !isSearchShortcut(event)) return;
     // Ctrl/Cmd+F works from a text field too (it is the browser's find otherwise); a typed "/" must not be taken.
     if (event.key === "/" && isEditableTarget(event.target)) return;
     if (isInsidePopup(event.target) || usePalette.getState().open) return;
-    // On a narrow window with the sheet closed the box isn't mounted: leave the browser's find alone.
-    if (!inputRef.current) return;
     event.preventDefault();
-    if (!open) setOpen(true);
-    // A hidden sidebar has no input to focus until it has rendered open.
-    requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    });
+    focusBox();
   });
 
   useEffect(() => {
@@ -88,6 +96,7 @@ export function SettingsSearch({
 
   const choose = (entry: SettingsIndexEntry) => {
     setQuery("");
+    onExpandedChange(false);
     askMutation.reset();
     onOpen(entry);
   };
@@ -102,7 +111,22 @@ export function SettingsSearch({
   return (
     <>
       <SidebarHeader className="pb-0">
-        <div className="flex h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground focus-within:bg-sidebar-row-hover hover:bg-sidebar-row-hover hover:text-sidebar-foreground">
+        {expanded ? null : (
+          <SidebarMenuButton
+            aria-label="Search settings"
+            title="Search settings"
+            className="md:hidden"
+            onClick={focusBox}
+          >
+            <SearchIcon />
+          </SidebarMenuButton>
+        )}
+        <div
+          className={cn(
+            "flex h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground focus-within:bg-sidebar-row-hover hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+            !expanded && "max-md:hidden",
+          )}
+        >
           <SearchIcon aria-hidden className="size-4 shrink-0 text-(--sidebar-icon-color)" />
           <SidebarInput
             ref={inputRef}
@@ -136,7 +160,10 @@ export function SettingsSearch({
               } else if (event.key === "Escape") {
                 event.preventDefault();
                 if (query) setQuery("");
-                else event.currentTarget.blur();
+                else {
+                  event.currentTarget.blur();
+                  onExpandedChange(false);
+                }
               }
             }}
             maxLength={SETTINGS_ASK_QUESTION_MAX}
@@ -158,7 +185,18 @@ export function SettingsSearch({
             >
               <XIcon className="size-3" />
             </Button>
-          ) : null}
+          ) : (
+            <Button
+              type="button"
+              size="icon-micro"
+              variant="ghost-muted"
+              className="shrink-0 md:hidden"
+              aria-label="Close search"
+              onClick={() => onExpandedChange(false)}
+            >
+              <XIcon className="size-3" />
+            </Button>
+          )}
         </div>
       </SidebarHeader>
       {searching ? (

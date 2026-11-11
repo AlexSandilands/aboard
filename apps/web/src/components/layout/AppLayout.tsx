@@ -6,9 +6,8 @@ import { TaskPanel } from "~/components/task/TaskPanel";
 import { boardTransitionRunning } from "~/lib/boardMotion";
 import { useMarkTaskNotificationsRead } from "~/state/mutations";
 import { useSettingsNav } from "~/state/ui";
-import { panelRestored } from "./panelRestore.logic";
 
-/** The app loaded on the board itself (not on Settings or Stats), so its first board mount is a load, not a return. */
+/** The app loaded on the board itself, so a panel on its first board mount is restored, not opened. */
 const loadedOnBoard = typeof window !== "undefined" && window.location.pathname === "/";
 let boardMounted = false;
 
@@ -26,20 +25,24 @@ function panelSlidesOut(): boolean {
  */
 const MemoBoard = memo(Board);
 
-/** Route component for "/": the board, and the `?task=` detail panel docked right. */
+/**
+ * The board, and the `?task=` detail panel docked right. `AppFrame` renders it on "/" and keeps it mounted behind the
+ * Settings and Stats windows.
+ */
 export function AppLayout() {
   const taskId = useSelectedTaskId();
   const closeTask = useCloseTask();
-  // Remembered so Settings' Back returns to this view, and its project page starts on the scoped project.
-  const search = useSearch({ from: "/_app/" });
-  useEffect(() => useSettingsNav.getState().setBoardReturn(search), [search]);
+  // Remembered while on the board: behind a window the board keeps showing this view (`useBoardSearch`), closing the
+  // window returns to it, and the project settings page starts on the scoped project. Read from the board route's
+  // match, for its validated search; undefined off the board.
+  const search = useSearch({ from: "/_app/", shouldThrow: false });
+  useEffect(() => {
+    if (search) useSettingsNav.getState().setBoardReturn(search);
+  }, [search]);
   // With panel animations on, the panel stays mounted on the task it closed on until it has slid out.
   const [shownId, setShownId] = useState(taskId);
-  // Decided on the first render only: a panel restored from Settings or on load appears in place, later opens slide.
-  const [restored, setRestored] = useState(() => {
-    const firstLoad = loadedOnBoard && !boardMounted;
-    return panelRestored(taskId, useSettingsNav.getState().boardReturn.task, firstLoad);
-  });
+  // Decided on the first render only: a panel there when the app loads appears in place, later opens slide.
+  const [restored, setRestored] = useState(() => taskId !== null && loadedOnBoard && !boardMounted);
   const [closingId, setClosingId] = useState<string | null>(null);
   if (taskId !== shownId) {
     setShownId(taskId);

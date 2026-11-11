@@ -7,10 +7,14 @@ import { UpdatePill } from "~/components/desktop/UpdatePill";
 import { useNotificationDelivery } from "~/components/notifications/useNotificationDelivery";
 import { AppDialogs } from "~/components/settings/AppDialogs";
 import { ThemeEditorHost } from "~/components/settings/ThemeEditorHost";
+import { isEditorPath } from "~/components/settings/settingsNav.logic";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
+import { AppSidebar } from "~/components/sidebar/AppSidebar";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail, useSidebar } from "~/components/ui/sidebar";
 import { queryKeys, useBoardEvents } from "~/state/queries";
 import { anyDialogOpen, type DeletableTask, useDialogs, usePalette } from "~/state/ui";
+import { closeAppWindow } from "./AppRouteModal";
+import { isAppModalPath } from "./appModal.logic";
 import { IS_MAC, isEditableTarget, isInsidePopup, isRecordingShortcut } from "./keyboard";
 import { resolveCommand, runsImmediately } from "./keyboard.logic";
 import { useResolvedKeybindings } from "./useKeybindings";
@@ -20,20 +24,18 @@ const SIDEBAR_WIDTH_STORAGE_KEY = storageKey("sidebar-width");
 const MAIN_CONTENT_MIN_WIDTH = 480;
 
 /**
- * The frame every page shares: the resizable sidebar (off-canvas on narrow windows), the main area, the palette,
- * the app dialogs, live sync and the app-wide shortcuts. The board and Settings each bring their own sidebar
- * contents. `onBack` is what Escape does when nothing nearer the focus wants it; null when it does nothing.
- * `newTaskProjectId` is where N puts a new task.
+ * The frame every page shares: the resizable projects sidebar (off-canvas on narrow windows), the main area, the
+ * palette, the app dialogs, live sync and the app-wide shortcuts. `background` is set while a window (Settings,
+ * Stats) is open over it: the sidebar and the main area are then inert. `onBack` is what Escape does when nothing
+ * nearer the focus wants it; null when it does nothing. `newTaskProjectId` is where N puts a new task.
  */
 export function AppShell({
-  sidebar,
-  sidebarLabel,
+  background = false,
   onBack,
   newTaskProjectId,
   children,
 }: {
-  sidebar: ReactNode;
-  sidebarLabel: string;
+  background?: boolean;
   onBack: (() => unknown) | null;
   newTaskProjectId?: string | null;
   children: ReactNode;
@@ -48,7 +50,8 @@ export function AppShell({
         collapsible="offcanvas"
         data-app-sidebar=""
         role="navigation"
-        aria-label={sidebarLabel}
+        aria-label="Projects"
+        inert={background}
         resizable={{
           minWidth: 208,
           maxWidth: 480,
@@ -57,10 +60,12 @@ export function AppShell({
             nextWidth <= currentWidth || wrapper.clientWidth - nextWidth >= MAIN_CONTENT_MIN_WIDTH,
         }}
       >
-        {sidebar}
+        <AppSidebar />
         <SidebarRail />
       </Sidebar>
-      <SidebarInset className="min-h-0 flex-row overflow-hidden">{children}</SidebarInset>
+      <SidebarInset className="min-h-0 flex-row overflow-hidden" inert={background}>
+        {children}
+      </SidebarInset>
       <GlobalKeybindings onBack={onBack} newTaskProjectId={newTaskProjectId ?? undefined} />
       <CommandPalette />
       <AppDialogs />
@@ -81,7 +86,7 @@ const pickDeletable = ({ id, number, title, kind }: DeletableTask): DeletableTas
  * App-wide shortcuts, from the registry in `packages/contracts/src/keybindings.ts` with the user's overrides applied
  * (Settings → Keybindings). By default Ctrl/Cmd+K opens the palette, Ctrl/Cmd+, opens Settings, N starts a new
  * task (in the scoped project), J jumps to the open task's card on the board, Esc goes back (closes the detail panel,
- * or leaves Settings), Ctrl/Cmd+B shows or hides the sidebar and Ctrl/Cmd+Alt+B closes the task panel or reopens the last task.
+ * or the Settings or Stats window), Ctrl/Cmd+B shows or hides the sidebar and Ctrl/Cmd+Alt+B closes the task panel or reopens the last task.
  * A component, not a hook, so it sits inside the SidebarProvider.
  *
  * It listens in the capture phase because card controls stop their keydowns from bubbling, which
@@ -126,7 +131,9 @@ function GlobalKeybindings({
         palette.openPalette({ kind: "new-task", projectId: newTaskProjectId });
         return;
       case "settings.open":
+        // A toggle: in Settings it closes the window, though not from an editor, whose form it would drop.
         if (!location.pathname.startsWith("/settings")) openSettings();
+        else if (!isEditorPath(location.pathname)) closeAppWindow();
         return;
       case "back":
         onBack?.();
@@ -138,7 +145,10 @@ function GlobalKeybindings({
         toggleSidebar();
         return;
       case "panel.toggle":
-        if (selectedTaskId) void closeTask();
+        // The panel behind a window stays as it is.
+        if (isAppModalPath(location.pathname)) return;
+        // Off the board (the social feed) the selected task is the one the board was left on: reopen it.
+        if (selectedTaskId && location.pathname === "/") void closeTask();
         else if (lastTaskId.current) void openTask(lastTaskId.current, { reveal: false });
         return;
       case "task.delete": {
@@ -168,8 +178,8 @@ function GlobalKeybindings({
         paletteOpen: palette.open,
         dialogOpen: anyDialogOpen(dialogs),
         settingsOpen,
-        // The task panel, not the stats page, which also has an `onBack`.
-        panelOpen: selectedTaskId !== null && !settingsOpen,
+        // On the board only: behind a window the panel still shows, but its shortcuts are off.
+        panelOpen: selectedTaskId !== null && location.pathname === "/",
         cardFocus: focusedCardId(event.target) !== null,
         canGoBack: onBack !== null,
       },

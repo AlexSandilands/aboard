@@ -25,13 +25,13 @@ export const KEYBINDING_CONTEXT_KEYS = [
   "overlayOpen",
   "paletteOpen",
   "dialogOpen",
-  /** The Settings page is showing. */
+  /** The Settings window is open. */
   "settingsOpen",
-  /** The task detail panel is open. */
+  /** The task detail panel is open on the board (not behind the Settings or Stats window). */
   "panelOpen",
   /** Focus is on a card on the board. */
   "cardFocus",
-  /** Escape has somewhere to go back to: the task panel is open, or Settings or Stats is showing. */
+  /** Escape has somewhere to go back to: the task panel is open, or the Settings or Stats window is. */
   "canGoBack",
 ] as const;
 export type KeybindingContextKey = (typeof KEYBINDING_CONTEXT_KEYS)[number];
@@ -58,7 +58,7 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingCommand, KeybindingDef> = {
   "idea.new": { title: "New task", group: "General", key: "n", when: NO_FOCUS_CLAIM },
   "settings.open": { title: "Open Settings", group: "General", key: "mod+,", when: "!overlayOpen" },
   back: {
-    title: "Back: close the panel, or leave Settings or Stats",
+    title: "Back: close the panel, or the Settings or Stats window",
     group: "Navigation",
     key: "escape",
     when: `canGoBack && ${NO_FOCUS_CLAIM}`,

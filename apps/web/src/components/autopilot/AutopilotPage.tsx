@@ -65,14 +65,14 @@ export function AutopilotTabs({ current }: { current: Tab }) {
     } else void navigate({ to: "/settings/autopilot/limits" });
   };
   return (
-    <nav aria-label="Autopilot" className="flex gap-1 border-b border-border/60 px-3 sm:px-4">
+    <nav aria-label="Autopilot" className="flex gap-1 border-b border-border/60 px-1 sm:px-4">
       {TABS.map((tab) => (
         <button
           key={tab.value}
           type="button"
           aria-current={tab.value === current ? "page" : undefined}
           className={cn(
-            "-mb-px cursor-pointer border-b-2 px-2.5 pt-1 pb-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+            "-mb-px cursor-pointer border-b-2 px-2 pt-1 pb-2 text-sm whitespace-nowrap outline-none sm:px-2.5 transition-colors focus-visible:ring-2 focus-visible:ring-ring",
             tab.value === current
               ? "border-foreground text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground",
