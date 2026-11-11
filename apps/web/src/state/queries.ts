@@ -4,6 +4,8 @@ import type {
   AgentCliStatus,
   AgentModels,
   AppSettings,
+  OperationId,
+  OperationSettings,
   AutopilotModeRow,
   AutopilotOverview,
   AutopilotActiveRun,
@@ -46,13 +48,14 @@ import { agentClisOf, withT3Status } from "~/components/settings/providers.logic
 import { ApiError, api, eventsUrl } from "~/lib/api";
 import { snapshotCardRects } from "~/components/board/cardMotion";
 import { applyBoardEvent, eventMovesCards } from "./boardReducer";
+import { SETTINGS_QUERY_KEY, withPendingSettingsWrites } from "./settingsWrites";
 
 export const queryKeys = {
   board: ["board"] as const,
   archivedTasks: ["archivedTasks"] as const,
   trash: ["trash"] as const,
   task: (id: string) => ["task", id] as const,
-  settings: ["settings"] as const,
+  settings: SETTINGS_QUERY_KEY,
   integrations: ["integrations"] as const,
   backupStatus: ["backupStatus"] as const,
   backupSetupInfo: ["backupSetupInfo"] as const,
@@ -316,11 +319,42 @@ export function useTemplates() {
   });
 }
 
+const settingsQuery = (queryClient: QueryClient) => ({
+  queryKey: queryKeys.settings,
+  queryFn: async ({ signal }: { signal: AbortSignal }) =>
+    withPendingSettingsWrites(queryClient, await api<AppSettings>("/api/settings", { signal })),
+});
+
 export function useSettings() {
-  return useQuery({
-    queryKey: queryKeys.settings,
-    queryFn: ({ signal }) => api<AppSettings>("/api/settings", { signal }),
-  });
+  const queryClient = useQueryClient();
+  return useQuery(settingsQuery(queryClient));
+}
+
+/**
+ * Part of the settings. The query's structural sharing keeps the result the same object while the parts it reads are
+ * unchanged, so a component that reads a few settings doesn't re-render on every other one. `select` must be stable
+ * (defined outside the component, or memoised).
+ */
+export function useSettingsSelect<T>(select: (settings: AppSettings) => T): T | undefined {
+  const queryClient = useQueryClient();
+  return useQuery({ ...settingsQuery(queryClient), select }).data;
+}
+
+/**
+ * The settings that say what an operation runs on: `op`'s own board choice, the tiers, custom models and providers
+ * (none for a picker that isn't an operation's), so a model picker or an operation's row skips other settings.
+ */
+export function useOperationSettings(op: OperationId | null): OperationSettings | undefined {
+  const select = useCallback(
+    (settings: AppSettings): OperationSettings => ({
+      providers: settings.providers,
+      modelTiers: settings.modelTiers,
+      modelProfiles: settings.modelProfiles,
+      operationModels: op && settings.operationModels[op] ? { [op]: settings.operationModels[op] } : {},
+    }),
+    [op],
+  );
+  return useSettingsSelect(select);
 }
 
 /** The attention inbox, newest first, with the unread count. Kept live by useBoardEvents. */
@@ -675,7 +709,7 @@ export function useBoardEvents() {
       // detection runs again since a new CLI path or provider changes what it checks.
       if (event.type === "providers.changed") {
         queryClient.setQueryData<AppSettings>(queryKeys.settings, (settings) =>
-          settings ? { ...settings, providers: event.providers } : settings,
+          settings ? withPendingSettingsWrites(queryClient, { ...settings, providers: event.providers }) : settings,
         );
         void queryClient.invalidateQueries({ queryKey: queryKeys.providers });
         void queryClient.invalidateQueries({ queryKey: queryKeys.agentModels });

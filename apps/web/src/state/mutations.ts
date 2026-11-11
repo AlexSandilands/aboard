@@ -50,7 +50,6 @@ import type {
   UpdateAutopilotSettingInput,
   TaskTemplate,
   UpdateProjectInput,
-  UpdateSettingsInput,
   UpdateTaskInput,
   UpdateTemplateInput,
   ProviderSetting,
@@ -63,6 +62,7 @@ import { snapshotCardRects } from "~/components/board/cardMotion";
 import { toastManager } from "~/components/ui/toast";
 import { applyMove, moveWasReverted, rollbackMove } from "./boardReducer";
 import { queryKeys, WHERE_MUTATION_KEY } from "./queries";
+import { settingsWriteOptions } from "./settingsWrites";
 
 /*
  * Mutation hooks. The server pushes every change back over /events, so these don't
@@ -533,48 +533,39 @@ export function useRefreshModelPrices() {
   });
 }
 
-export function useUpdateSettings() {
+/** Saves settings, optimistically and in order (settingsWriteOptions). `errorTitle` heads the toast a failure shows. */
+export function useUpdateSettings(errorTitle = "Couldn't save settings") {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: UpdateSettingsInput) => api<AppSettings>("/api/settings", { method: "PATCH", body: input }),
-    onSuccess: (settings) => queryClient.setQueryData(queryKeys.settings, settings),
-    onError: (error) =>
-      toastManager.add({
-        type: "error",
-        title: "Couldn't save settings",
-        description: error instanceof Error ? error.message : String(error),
-      }),
-  });
+  return useMutation(
+    settingsWriteOptions(
+      queryClient,
+      (input) => api<AppSettings>("/api/settings", { method: "PATCH", body: input }),
+      (error) => toastManager.add({ type: "error", title: errorTitle, description: error.message }),
+    ),
+  );
 }
 
 /**
- * Changes the added providers. The server replaces the whole list, so `change` is a function from the latest cached
- * list to the new one: calls share a scope so they reach the server in order, and each is built when it runs, after
- * the one before has updated the cache. Building it from what the page last rendered would let a quick second edit
- * (switching two providers on in a row) undo the first. Other windows' changes arrive as providers.changed.
+ * Changes the added providers. The server replaces the whole list, so `change` is a function from the latest list to
+ * the new one, applied to the cache when it's called: that already holds every earlier edit (writes are optimistic), so
+ * a quick second edit (switching two providers on in a row) builds on the first instead of undoing it. Other windows'
+ * changes arrive as providers.changed.
  */
 export function useUpdateProviders() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (change: (current: ProviderSetting[]) => ProviderSetting[]) => {
+  const update = useUpdateSettings("Couldn't save the providers");
+  const { mutate: save } = update;
+  const mutate = useCallback(
+    (change: (current: ProviderSetting[]) => ProviderSetting[]) => {
       const current = queryClient.getQueryData<AppSettings>(queryKeys.settings)?.providers ?? [];
-      return api<AppSettings>("/api/settings", { method: "PATCH", body: { providers: change(current) } });
+      save(
+        { providers: change(current) },
+        { onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.providers }) },
+      );
     },
-    scope: { id: "providers" },
-    onSuccess: (settings) => {
-      queryClient.setQueryData(queryKeys.settings, settings);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.providers });
-    },
-    // Here rather than in mutate()'s options: those only run for the latest call, and a save can be queued behind.
-    onError: (error) => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
-      toastManager.add({
-        type: "error",
-        title: "Couldn't save the providers",
-        description: error instanceof Error ? error.message : String(error),
-      });
-    },
-  });
+    [queryClient, save],
+  );
+  return { mutate, isPending: update.isPending };
 }
 
 // ── Autopilot ────────────────────────────────────────────────────────────

@@ -20,7 +20,7 @@ import { Switch } from "~/components/ui/switch";
 import { cn } from "~/lib/utils";
 import { useRecheckProviders, useUpdateProviders } from "~/state/mutations";
 import { useIntegrationsStatus, useProviders } from "~/state/queries";
-import { ProviderEditor } from "../ProviderEditors";
+import { ProviderEditor, type ProviderEditorSettings } from "../ProviderEditors";
 import { ProviderIcon } from "./ProviderIcon";
 import {
   addableProviders,
@@ -36,7 +36,7 @@ import {
 import { SettingsGroup, SettingsSectionHeader, SettingsSubsection, StatusDot } from "../settingsLayout";
 import { DetailBody, DetailHeader, SplitCard, SplitList, SplitListAction, SplitListItem } from "./SplitCard";
 
-export function ProvidersSection({ settings }: { settings: AppSettings }) {
+export function ProvidersSection({ settings }: { settings: ProviderEditorSettings }) {
   const providers = useProviders();
   const recheck = useRecheckProviders();
   const t3 = useIntegrationsStatus().data?.t3;
@@ -51,7 +51,7 @@ export function ProvidersSection({ settings }: { settings: AppSettings }) {
   const statusOf = (id: ProviderId) => providers.data?.providers.find((p) => p.id === id);
   const select = (id: ProviderId) =>
     void navigate({ to: "/settings/$group", params: { group: "agents" }, search: { provider: id }, replace: true });
-  // Each change is applied to the latest list when it runs (useUpdateProviders), not to the one this render saw.
+  // Each change is applied to the latest list, edits not yet saved included (useUpdateProviders), not to this render's.
   const save = (change: (current: AppSettings["providers"]) => AppSettings["providers"]) =>
     updateProviders.mutate(change);
 

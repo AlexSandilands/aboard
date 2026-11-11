@@ -210,8 +210,9 @@ and the MCP entry exists (a project-only entry that the CLI can't confirm is amb
 and for T3 Code green once a saved token connects; `connected: false` only adds a note, because a harness can report
 a server as down while it would connect when a session starts.
 
-The page saves the list with `useUpdateProviders`: each change is a function applied to the latest cached list, and
-the calls share a mutation scope so they reach the server in order, so two quick switches can't undo each other.
+The page saves the list with `useUpdateProviders`: each change is a function applied to the cached list when it is made,
+which already holds the edits not yet saved (settings writes are optimistic, [live-sync](live-sync.md#mutations)), and
+the saves reach the server in order, so two quick switches can't undo each other.
 
 **Upgrading.** Migration `040_providers_settings` seeds the list from what an install already uses: a CLI path set, the
 T3 token, the board reviewer on, a tier or custom model with a model (or headless runs) for a provider, and sessions or

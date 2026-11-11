@@ -1,14 +1,7 @@
 // Settings → Agents → Operations: the model each operation runs on, with the picker in the same field look as the
 // rest of the page. While no provider can run anything the rows are dimmed behind one notice instead of a warning on
 // each.
-import {
-  activeProviderIds,
-  AgentHarness,
-  OPERATIONS,
-  PROVIDERS,
-  type AppSettings,
-  type OperationId,
-} from "@repo/contracts";
+import { AgentHarness, OPERATIONS, PROVIDERS, type ModelChoice, type OperationId } from "@repo/contracts";
 import { CircleAlertIcon, TerminalIcon } from "lucide-react";
 import { resolvesTo } from "~/components/models/choicePicker.logic";
 import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
@@ -21,7 +14,9 @@ import {
   operationTarget,
 } from "~/components/models/operations.logic";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
+import { memo, useCallback } from "react";
 import { useUpdateSettings } from "~/state/mutations";
+import { useOperationSettings } from "~/state/queries";
 import { SettingsRow, SettingsSection, SettingsSubsection } from "../settingsLayout";
 import { CONTROL_PICKER } from "./SplitCard";
 
@@ -31,14 +26,15 @@ const HEADLESS_LABELS = AgentHarness.options.map((h) => PROVIDERS[h].label);
  * The model each operation runs on, at board level, with the line saying what that comes down to now. A project, a
  * task (for the reviewer) and an automation can pick their own; those are set where they live.
  */
-export function OperationsSection({ settings }: { settings: AppSettings }) {
-  // Every operation runs headless on a CLI provider; with none switched on (T3 Code alone, or all off) each row would
-  // carry the same "needs a provider" warning.
-  const blocked = activeProviderIds(settings).length === 0;
+/**
+ * `blocked`: no CLI provider is switched on. Every operation runs headless on one; with none (T3 Code alone, or all
+ * off) each row would carry the same "needs a provider" warning.
+ */
+export const OperationsSection = memo(function OperationsSection({ blocked }: { blocked: boolean }) {
   const groups = OPERATION_GROUPS.map((group) => (
     <SettingsSection key={group.id} id={`agents.operations.${group.id}`} title={group.title}>
       {group.operations.map((op) => (
-        <OperationRow key={op} op={op} settings={settings} quiet={blocked} />
+        <OperationRow key={op} op={op} quiet={blocked} />
       ))}
     </SettingsSection>
   ));
@@ -75,14 +71,24 @@ export function OperationsSection({ settings }: { settings: AppSettings }) {
       )}
     </SettingsSubsection>
   );
-}
+});
 
 function listOr(words: readonly string[]): string {
   return words.length < 2 ? (words[0] ?? "") : `${words.slice(0, -1).join(", ")} or ${words.at(-1)}`;
 }
 
-function OperationRow({ op, settings, quiet }: { op: OperationId; settings: AppSettings; quiet: boolean }) {
-  const updateSettings = useUpdateSettings();
+/**
+ * One operation's row. It reads only what its line and picker depend on (useOperationSettings), so a pick on another
+ * row, or any other setting, doesn't re-render it.
+ */
+const OperationRow = memo(function OperationRow({ op, quiet }: { op: OperationId; quiet: boolean }) {
+  const settings = useOperationSettings(op);
+  const { mutate } = useUpdateSettings();
+  const onChange = useCallback(
+    (next: ModelChoice | null) => mutate({ operationModels: boardUpdate(op, next) }),
+    [mutate, op],
+  );
+  if (!settings) return null;
   const { unset, inherit } = boardPickerRows(op, settings);
   const line = resolvesTo(op, {}, settings);
   return (
@@ -114,9 +120,9 @@ function OperationRow({ op, settings, quiet }: { op: OperationId; settings: AppS
           ariaLabel={`${OPERATIONS[op].label} model`}
           size="sm"
           className={CONTROL_PICKER}
-          onChange={(next) => updateSettings.mutate({ operationModels: boardUpdate(op, next) })}
+          onChange={onChange}
         />
       }
     />
   );
-}
+});

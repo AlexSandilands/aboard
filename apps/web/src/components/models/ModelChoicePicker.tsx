@@ -11,7 +11,7 @@ import {
   type OperationSettings,
 } from "@repo/contracts";
 import { effortLabel } from "~/components/handoff/cliEffort.logic";
-import { useAgentModels, useSettings } from "~/state/queries";
+import { useAgentModels, useOperationSettings } from "~/state/queries";
 import {
   choiceEffortColumn,
   choiceForPick,
@@ -24,7 +24,7 @@ import {
 } from "./choicePicker.logic";
 import { EffortColumn } from "./EffortColumn";
 import { ModelPicker } from "./ModelPicker";
-import type { PickerIcon } from "./modelPicker.logic";
+import type { PickerIcon, PickerModel } from "./modelPicker.logic";
 
 /** Asks the CLIs for their models only once one is added: the scan starts the CLI. */
 const hasHarness = (settings: OperationSettings | undefined) =>
@@ -60,7 +60,7 @@ export function ModelChoicePicker({
   className?: string;
   disabled?: boolean;
 }) {
-  const settings = useSettings().data;
+  const settings = useOperationSettings(op);
   const scanned = useAgentModels(hasHarness(settings));
   if (!settings) return null;
   const input = {
@@ -74,8 +74,9 @@ export function ModelChoicePicker({
     unset,
     lockedProvider,
   };
-  const model = choicePickerModel(input);
-  const pick = parsePickKey(model.selectedKey ?? "");
+  // Built only while the popup is open (ModelPicker calls it then), and once per render.
+  let built: PickerModel | null = null;
+  const model = () => (built ??= choicePickerModel(input));
   const explicit = value && value !== INHERIT && "provider" in value ? value : null;
   const trigger = choiceTrigger(
     value,
@@ -86,7 +87,7 @@ export function ModelChoicePicker({
   return (
     <ModelPicker
       model={model}
-      typedRows={(query, tab) => typedRows(model, query, tab)}
+      typedRows={(query, tab) => typedRows(model(), query, tab)}
       loading={scanned.isFetching}
       ariaLabel={ariaLabel}
       size={size}
@@ -99,10 +100,10 @@ export function ModelChoicePicker({
         const picked = parsePickKey(row.key);
         if (picked) onChange(choiceForPick(picked, value, scanned.data));
       }}
-      effortColumn={
+      renderEffortColumn={() => (
         <EffortColumn
           column={choiceEffortColumn(
-            pick,
+            parsePickKey(model().selectedKey ?? ""),
             explicit?.effort ?? null,
             scanned.data,
             explicit ? (findScanned(scanned.data, explicit.provider, explicit.model)?.label ?? explicit.model) : "",
@@ -115,7 +116,7 @@ export function ModelChoicePicker({
           }}
           onToggle={() => {}}
         />
-      }
+      )}
     />
   );
 }
@@ -166,27 +167,29 @@ export function CliModelPicker({
   onModel: (model: string | null, levels: readonly CliEffort[]) => void;
   onEffort: (effort: CliEffort | null) => void;
 }) {
-  const settings = useSettings().data;
+  const settings = useOperationSettings(null);
   const scanned = useAgentModels(true);
   if (!settings) return null;
   const saved = model?.trim() || null;
   const value: ModelChoice | null = saved ? { provider: harness, model: saved } : null;
-  const picker = choicePickerModel({
-    settings,
-    scanned: scanned.data,
-    value,
-    op: null,
-    choices: false,
-    inherit: null,
-    lockedProvider: harness,
-    defaultLabel: defaultLabel ?? null,
-  });
+  let built: PickerModel | null = null;
+  const picker = () =>
+    (built ??= choicePickerModel({
+      settings,
+      scanned: scanned.data,
+      value,
+      op: null,
+      choices: false,
+      inherit: null,
+      lockedProvider: harness,
+      defaultLabel: defaultLabel ?? null,
+    }));
   const pick: PickedChoice = { kind: "model", provider: harness, model: saved };
   const name = saved ? (findScanned(scanned.data, harness, saved)?.label ?? saved) : null;
   return (
     <ModelPicker
       model={picker}
-      typedRows={(query, tab) => typedRows(picker, query, tab)}
+      typedRows={(query, tab) => typedRows(picker(), query, tab)}
       loading={scanned.isFetching}
       emptyLabel={`No models listed. Type one to use it with ${AGENT_HARNESSES[harness].label}.`}
       ariaLabel={ariaLabel}
@@ -200,7 +203,7 @@ export function CliModelPicker({
         if (picked?.kind !== "model" || picked.model === saved) return;
         onModel(picked.model, modelLevels(scanned.data, harness, picked.model));
       }}
-      effortColumn={
+      renderEffortColumn={() => (
         <EffortColumn
           column={choiceEffortColumn(pick, effort, scanned.data, name ?? "")}
           onPick={(_group, id) => {
@@ -209,7 +212,7 @@ export function CliModelPicker({
           }}
           onToggle={() => {}}
         />
-      }
+      )}
     />
   );
 }

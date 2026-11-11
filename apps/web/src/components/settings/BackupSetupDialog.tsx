@@ -1,5 +1,6 @@
 import {
   gitHostDefinition,
+  type AppSettings,
   type BackupRemoteCheck,
   type BackupSetupInfo,
   type BackupStatus,
@@ -17,6 +18,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { api } from "~/lib/api";
 import { cn } from "~/lib/utils";
 import { queryKeys } from "~/state/queries";
+import { withPendingSettingsWrites } from "~/state/settingsWrites";
 import {
   createUnavailableReason,
   firstBackupOutcome,
@@ -123,8 +125,8 @@ function SetupSteps({
       const remote = remoteOf();
       const patch: UpdateSettingsInput = { backupDir: dir.trim(), backupRemote: remote, backupEnabled: true };
       if (machineName.trim() !== info.machineName) patch.machineName = machineName.trim();
-      const settings = await api("/api/settings", { method: "PATCH", body: patch });
-      queryClient.setQueryData(queryKeys.settings, settings);
+      const settings = await api<AppSettings>("/api/settings", { method: "PATCH", body: patch });
+      queryClient.setQueryData(queryKeys.settings, withPendingSettingsWrites(queryClient, settings));
       const status = await api<BackupStatus>("/api/backup/run", { method: "POST", body: {} });
       queryClient.setQueryData(queryKeys.backupStatus, status);
       return firstBackupOutcome(status, remote);
