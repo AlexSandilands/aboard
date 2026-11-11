@@ -7,6 +7,7 @@ import {
   type MilestoneRef,
   type TaskLink,
 } from "@repo/contracts";
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import type { ImportRecord } from "../db/repos/imports.ts";
 import { IMPORT_CHILDREN_MAX } from "../services/imports.ts";
@@ -149,7 +150,8 @@ export function createIssueImporter(deps: {
     deps.services().usage.recordRun({
       harness: run.provider,
       sessionId: null,
-      runId: `import-${taskId}`,
+      // Each run its own id: a retry adds to the task's import spend rather than replacing it.
+      runId: `import-${taskId}-${randomUUID()}`,
       taskId,
       purpose: "import",
       model: run.model,

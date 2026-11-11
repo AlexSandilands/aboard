@@ -76,8 +76,10 @@ reported, without the `~`.
 A task's panel shows every session and thread it links in full, marked "shared with #x" when another task links it
 too, plus its board runs. Stats count each session once, under the task that linked it first (directly or through a
 thread), like `agent_sessions_started`; a run counts under the task it was for, and a task-less run only on the whole
-board. A session an Autopilot run kept (`autopilot_runs.session_id`) also counts under that run's automation, for the
-Autopilot overhead and cost-by-automation figures. Unlinking keeps the rows; purging a task deletes its run rows and
+board. A session an Autopilot run kept (`autopilot_runs.session_id`) also counts under that run's automation. "Autopilot
+overhead" counts only automations; the board's own runs (`review`, `import`, `ask`) show beside them in the cost by
+run, never in Autopilot's figure. An import that fails after spending tokens records nothing: its output is lost
+with the error. Unlinking keeps the rows; purging a task deletes its run rows and
 the rows of its own sessions and threads no other task links, never those of a session unlinked earlier or a
 task-less run's.
 

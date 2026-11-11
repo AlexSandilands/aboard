@@ -58,9 +58,14 @@ export interface AttributedUsage {
   taskId: string | null;
   harness: string;
   purpose: string | null;
+  /** An Autopilot automation spent it, not a run the user started or the board's reviewer. */
+  autopilot: boolean;
   costUsd: number | null;
   tokens: number;
 }
+
+/** Purposes of the board's own runs that aren't Autopilot's: the local reviewer, issue import, Settings questions. */
+export const BOARD_RUN_PURPOSES: ReadonlySet<string> = new Set(["review", "import", "ask"]);
 
 export interface UsageService {
   /** Reads what was appended to an agent session's files since the last read; true when anything was added. */
@@ -308,11 +313,13 @@ export function createUsageService(
         ? { taskId: row.taskId, viaThread: false }
         : (owners.get(`${row.harness}:${row.sessionId}`) ?? null);
       const t = row.tokens;
+      const purpose = row.purpose ?? automations.get(row.sessionId) ?? null;
       return {
         row,
         taskId: owner?.taskId ?? null,
         harness: row.harness === "t3" || owner?.viaThread ? "t3_thread" : row.harness,
-        purpose: row.purpose ?? automations.get(row.sessionId) ?? null,
+        purpose,
+        autopilot: purpose !== null && !BOARD_RUN_PURPOSES.has(purpose),
         costUsd:
           row.source === "run_output" && row.reportedCostUsd !== null
             ? row.reportedCostUsd
@@ -398,7 +405,7 @@ export function createUsageService(
             sharedWith: others(usage.tasksForSession(key)),
           },
           rows,
-          // Copilot CLI writes nothing the board can read until the session ends.
+          // The board has no reader for Copilot CLI yet (token-usage.md), so the row says not tracked.
           rows.length === 0 && key.harness === "copilot-cli",
         ),
       );

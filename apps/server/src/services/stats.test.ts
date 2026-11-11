@@ -959,7 +959,8 @@ describe("token usage", () => {
     ]);
 
     expect(await values("cost_usd.estimated")).toMatchObject({ unit: "usd", total: 4.4, previousTotal: 3 });
-    expect(await values("cost_usd.autopilot")).toMatchObject({ total: 0.5 });
+    // The board's reviewer is a board run, not Autopilot's: it stays out of Autopilot's overhead.
+    expect((await values("cost_usd.autopilot")).total ?? 0).toBe(0);
     expect((await values("tokens.input")).total).toBe(1_000_010);
     expect((await values("tokens.cache_read")).total).toBe(3_000_000);
     expect((await values("tokens.unpriced")).total).toBe(500);

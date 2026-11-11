@@ -1,4 +1,4 @@
-import type { TicketSystem } from "@repo/contracts";
+import { EMPTY_TOKEN_USAGE, type TicketSystem } from "@repo/contracts";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { TEST_JIRA } from "../test/fixtures.ts";
@@ -75,6 +75,18 @@ function setup(
 }
 
 describe("issue import", () => {
+  it("records each import run's tokens and reported cost on its task, for a GitHub issue and a ticket", async () => {
+    const usage = [{ model: "claude-haiku-5-5", tokens: { ...EMPTY_TOKEN_USAGE, input: 1_000, output: 200 } }];
+    const { s, create, run } = setup({ runImport: () => Promise.resolve({ ...outcome, usage }) });
+    for (const url of [GH_URL, "PROJ-7"]) {
+      const task = await run(create(url).id);
+      const rows = s.usage.taskUsage(task.id)?.rows ?? [];
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ kind: "run", purpose: "import", costUsd: 0.01, costSource: "reported" });
+      expect(rows[0]!.tokens).toMatchObject({ input: 1_000, output: 200 });
+    }
+  });
+
   it("summarises a GitHub issue into the task and records its state on the link", async () => {
     const { s, create, run, jobs } = setup();
     s.tasks.create({ projectId: s.projects.list()[0]!.id, title: "Other", labels: ["ux"] });

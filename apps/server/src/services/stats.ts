@@ -488,7 +488,7 @@ export function createStatsService(
           return taskOf.get(id)!;
         };
         const usedLabels = new Map<string, string[]>();
-        for (const { row, taskId, harness, purpose, costUsd: cost, tokens } of deps.usage.attributed(
+        for (const { row, taskId, harness, purpose, autopilot, costUsd: cost, tokens } of deps.usage.attributed(
           firstDay,
           lastDay,
         )) {
@@ -507,7 +507,7 @@ export function createStatsService(
             continue;
           }
           add("cost_usd.estimated", "usd", "sum", iso, cost);
-          if (purpose) add("cost_usd.autopilot", "usd", "sum", iso, cost);
+          if (autopilot) add("cost_usd.autopilot", "usd", "sum", iso, cost);
           add(`cost_usd.harness.${harness}`, "usd", "sum", iso, cost);
           usageEntries.model!.push({ key: row.model || null, at, value: cost });
           usageEntries.harness!.push({ key: harness, at, value: cost });

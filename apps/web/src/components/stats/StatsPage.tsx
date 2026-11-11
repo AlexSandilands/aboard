@@ -688,10 +688,10 @@ function StatsSections({ data }: { data: StatsResponse }) {
             format={usd}
           />
         </ChartCard>
-        <ChartCard title="Autopilot cost by automation">
+        <ChartCard title="Cost of the board's runs">
           <Breakdown
             rows={breakdownRows(data.breakdowns.cost_by_purpose, purposeLabel, "Other")}
-            label="Autopilot's own runs by automation"
+            label="Cost of Autopilot's automations and the board's own runs (review, import, Settings questions)"
             previousLabel={previousLabel}
             format={usd}
           />
