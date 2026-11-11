@@ -277,7 +277,7 @@ describe("usage service", () => {
     })!;
     repos.autopilotRuns.update({ ...repos.autopilotRuns.get(run.id)!, sessionId: S1.toUpperCase() });
     const [row] = usage.attributed("2000-01-01", "3000-01-01");
-    expect(row).toMatchObject({ taskId: a.id, harness: "claude-code", purpose: "start_planned" });
+    expect(row).toMatchObject({ taskId: a.id, harness: "claude-code", purpose: "start_planned", autopilot: true });
     expect(row!.costUsd).toBeGreaterThan(0);
     usage.stop();
   });

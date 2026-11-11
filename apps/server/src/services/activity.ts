@@ -19,6 +19,13 @@ import type { UsageService } from "./usage.ts";
 
 const localDayOf = (d: Date): string => localDay(d.toISOString())!;
 
+/** The board's own runs, named as the stats page names them. */
+const BOARD_RUN_NAMES: Record<string, string> = {
+  review: "Board review",
+  import: "Issue import",
+  ask: "Settings questions",
+};
+
 /** The statuses a task waits in before Done, in column order. */
 export const OPEN_STATUSES = ["backlog", "planned", "in_progress", "review"] as const satisfies readonly TaskStatus[];
 
@@ -416,7 +423,7 @@ export function createActivityService(
       spend.models = ranked(byModel);
       spend.harnesses = ranked(byHarness);
       spend.automations = ranked(byPurpose).map(({ key, costUsd }) => ({
-        key: key === "review" ? "Board review" : deps.automationTitle(key),
+        key: BOARD_RUN_NAMES[key] ?? deps.automationTitle(key),
         costUsd,
       }));
 

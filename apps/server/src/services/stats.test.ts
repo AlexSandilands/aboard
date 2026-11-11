@@ -905,6 +905,25 @@ describe("token usage", () => {
   const SESSION = "709f26ed-ce2f-4449-b7eb-3bb01f89f268";
   const tokens = (over: Partial<TokenUsage>): TokenUsage => ({ ...EMPTY_TOKEN_USAGE, ...over });
 
+  it("counts an automation's runs as Autopilot overhead, and the board's own runs apart", async () => {
+    const { values, db } = setup();
+    const run = (sessionId: string, purpose: string, reportedCostUsd: number) => ({
+      harness: "claude-code" as const,
+      sessionId,
+      sourceFile: "",
+      source: "run_output" as const,
+      taskId: null,
+      purpose,
+      reportedCostUsd,
+      day: "2026-10-13",
+      model: "claude-sonnet-5-5",
+      tokens: tokens({ input: 10 }),
+    });
+    createRepos(db).sessionUsage.add([run("run-1", "improve", 0.75), run("run-2", "import", 0.25)]);
+    expect(await values("cost_usd.autopilot")).toMatchObject({ total: 0.75 });
+    expect(await values("cost_usd.estimated")).toMatchObject({ total: 1 });
+  });
+
   it("counts each session once, under the task that linked it first, with board runs and unpriced tokens apart", async () => {
     const { s, alpha, beta, task, stats, values, db, clock } = setup();
     const a = task(alpha.id, "A");
