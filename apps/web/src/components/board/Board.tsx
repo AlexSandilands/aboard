@@ -70,6 +70,7 @@ import {
   columnSortOptions,
   isColumnSort,
   isSortedColumn,
+  priorityLaneComparator,
   type ColumnSort,
   type ColumnSorts,
 } from "./columnSort.logic";
@@ -430,11 +431,12 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     task: TaskSummary,
   ): number | null => {
     if (!isSortedColumn(columnSorts, at.status)) return null;
-    const sort = columnComparator(columnSortFor(columnSorts, at.status));
+    const sort = columnSortFor(columnSorts, at.status);
     // The priority lane keeps its cards grouped by project, as buildLanes does.
-    const rank = (t: TaskSummary) => projectRank.get(t.projectId) ?? 0;
     const compare =
-      at.rowId === PRIORITY_ROW_ID ? (a: TaskSummary, b: TaskSummary) => rank(a) - rank(b) || sort(a, b) : sort;
+      at.rowId === PRIORITY_ROW_ID
+        ? priorityLaneComparator(sort, (t) => projectRank.get(t.projectId) ?? 0)
+        : columnComparator(sort);
     return sortedLandingIndex(cell, task, at.status, compare, new Date().toISOString());
   };
   /** A card as the drag logic sees it: in its row rather than just its project. */

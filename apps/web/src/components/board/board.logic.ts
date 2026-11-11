@@ -12,7 +12,7 @@ import {
   matchesTaskOwnFilters,
   type TaskOwnFilters,
 } from "./boardFilters.logic";
-import { columnComparator, columnSortFor, type ColumnSorts } from "./columnSort.logic";
+import { columnComparator, columnSortFor, priorityLaneComparator, type ColumnSorts } from "./columnSort.logic";
 
 export const STATUS_ORDER: ReadonlyArray<TaskStatus> = TASK_STATUSES.map((s) => s.value);
 /** A collapsed column shows only the first few cards of each lane until it is expanded. */
@@ -308,12 +308,9 @@ export function buildLanes(
 
   const lanes: Lane[] = [];
   if (priorityCount > 0) {
-    // Cards from different projects have no common order of their own: by project, then the column's sort.
     const rank = (task: TaskSummary) => projectOrder.get(task.projectId) ?? 0;
-    for (const status of STATUS_ORDER) {
-      const compare = columnComparator(columnSortFor(sorts, status));
-      priorityCells[status].sort((a, b) => rank(a) - rank(b) || compare(a, b));
-    }
+    for (const status of STATUS_ORDER)
+      priorityCells[status].sort(priorityLaneComparator(columnSortFor(sorts, status), rank));
     lanes.push({ priority: true, project: PRIORITY_PROJECT, bands: [], cells: priorityCells, epicChildren: {} });
   }
   for (const project of board.projects) {

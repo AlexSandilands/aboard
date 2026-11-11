@@ -5,6 +5,7 @@ import {
   columnSortFor,
   columnSortOptions,
   isSortedColumn,
+  priorityLaneComparator,
   type ColumnSort,
 } from "./columnSort.logic";
 
@@ -108,5 +109,18 @@ describe("column sort choice", () => {
     expect(isSortedColumn({ backlog: "created_desc" }, "backlog")).toBe(true);
     expect(isSortedColumn({ backlog: "manual" }, "backlog")).toBe(false);
     expect(isSortedColumn({ done: "finished" }, "done")).toBe(false);
+  });
+});
+
+describe("priorityLaneComparator", () => {
+  it("keeps cards grouped by project, each project's in the sort", () => {
+    const withProject = (id: string, projectId: string, number: number): TaskSummary => ({
+      ...card(id, { number }),
+      projectId,
+    });
+
+    const cards = [withProject("q9", "q", 9), withProject("p1", "p", 1), withProject("p5", "p", 5)];
+    const rank = (t: TaskSummary) => (t.projectId === "p" ? 0 : 1);
+    expect([...cards].sort(priorityLaneComparator("number_desc", rank)).map((c) => c.id)).toEqual(["p5", "p1", "q9"]);
   });
 });

@@ -91,3 +91,12 @@ export function columnComparator(sort: ColumnSort): Compare {
   if (sort === "finished") return primary;
   return (a, b) => primary(a, b) || byNewestCreated(a, b) || byPosition(a, b);
 }
+
+/**
+ * The priority lane's order for a sort: cards from different projects have no common order of their own, so they stay
+ * grouped by project (`rank`, the project's place on the board), each project's cards in the column's sort.
+ */
+export function priorityLaneComparator(sort: ColumnSort, rank: (task: TaskSummary) => number): Compare {
+  const compare = columnComparator(sort);
+  return (a, b) => rank(a) - rank(b) || compare(a, b);
+}
