@@ -317,8 +317,8 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "tasks.planning.skill",
     "Planning skill",
-    "What a session started with Plan tasks… follows to plan the picked tasks with you.",
-    ["plan tasks", "bulk planning", "planner", "prompt", "skill"],
+    "What a session started with Plan tasks… follows to plan the picked tasks with you. A project can pick one of its own.",
+    ["plan tasks", "bulk planning", "planner", "prompt", "skill", "project", "per project", "override"],
   ),
   // Tasks › Review
   draft(
@@ -330,8 +330,8 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "tasks.review.skill",
     "Review skill",
-    "What the reviewer follows. Skills installed for Claude Code, Copilot or Codex are listed.",
-    ["local review", "reviewer", "prompt", "skill"],
+    "What the reviewer follows. Skills installed for Claude Code, Copilot or Codex are listed. A project can pick one of its own.",
+    ["local review", "reviewer", "prompt", "skill", "project", "per project", "override"],
   ),
   draft(
     "tasks.review.rounds",
@@ -453,7 +453,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "autopilot.limits.variables.list",
     "Automation variables",
     "Values custom automations read as {{vars.name}}, an environment variable or vars on stdin. An automation that needs one doesn't run in a project where it has no value. Not for secrets.",
-    ["vars", "parameters", "environment variable", "stdin", "{{vars"],
+    ["vars", "parameters", "environment variable", "stdin", "{{vars", "project", "per project", "override"],
   ),
   // Providers › T3 Code
   draft(
@@ -645,56 +645,6 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "link",
   ]),
   draft(
-    "project.plan-skill.skill",
-    "Project planning skill",
-    "A planning skill for this project's Plan tasks… sessions, instead of the board's.",
-    ["plan tasks", "bulk planning", "override", "planner"],
-  ),
-  draft(
-    "project.review-skill.skill",
-    "Project review skill",
-    "A review skill for this project, instead of the board's.",
-    ["local review", "override", "reviewer"],
-  ),
-  draft(
-    "project.models.reviewer",
-    "Project reviewer model",
-    "The model that reviews this project's tasks, for the reviewer subagent and the board reviewer, instead of the board's.",
-    ["local review", "override", "reviewer", "tier", "opus", "subagent", "board reviewer", "model"],
-  ),
-  draft(
-    "project.autopilot.automations",
-    "Automations",
-    "What each automation does in this project, and where it runs, with a link to change it.",
-    ["automations", "inherit", "override", "per project", "where it runs"],
-  ),
-  draft(
-    "project.autopilot.variables",
-    "Automation variables",
-    "This project's overrides of the board's automation variables, which custom automations read.",
-    ["vars", "parameters", "jira key", "override", "per project", "custom automations"],
-  ),
-  draft(
-    "project.autopilot.variables.list",
-    "Variables for this project",
-    "Override the board's variables here, or add ones only this project's automations read. An empty value makes automations that need it skip this project.",
-    ["vars", "parameters", "override", "{{vars"],
-  ),
-  draft("project.recurring.rules", "Recurring tasks", "Rules that create a task from a template on a schedule.", [
-    "schedule",
-    "repeat",
-    "cron",
-    "weekly",
-    "daily",
-    "template",
-  ]),
-  draft(
-    "project.recurring.examples",
-    "Recurring task examples",
-    "Ready-made recurring rules that add a template for this project.",
-    ["suggestions", "schedule", "template"],
-  ),
-  draft(
     "project.danger-zone.archive",
     "Archive project",
     "Hides the lane and its tasks. Restore it any time from Board settings.",
@@ -779,6 +729,8 @@ function generated(): Draft[] {
           "effort",
           "resolves to",
           group.title.toLowerCase(),
+          // A project can pick its own reviewer, in project scope.
+          ...(op === "reviewer" ? ["project", "per project", "override", "board reviewer"] : []),
         ]),
       ),
     ),
@@ -836,11 +788,7 @@ const CARD_IDS: ReadonlySet<string> = new Set([
   "agents.models.tiers.list",
   "agents.models.custom.list",
   ...OPERATION_GROUPS.map((group) => `agents.operations.${group.id}`),
-  "project.autopilot.automations",
-  "project.autopilot.variables",
   "autopilot.limits.variables",
-  "project.recurring.rules",
-  "project.recurring.examples",
 ]);
 
 /** Every sub-section, card and row of the settings page, in page order. */

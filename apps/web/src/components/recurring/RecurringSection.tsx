@@ -3,7 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { DetailSection } from "~/components/settings/agents/SplitCard";
-import { SettingsNote, SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
+import { useRowScope } from "~/components/settings/SettingsScope";
+import { SettingsNote, SettingsRow } from "~/components/settings/settingsLayout";
 import { FROM_SETTINGS_LIST } from "~/components/settings/settingsNavigation";
 import { ConfirmDialog } from "~/components/task/ConfirmDialog";
 import { Badge } from "~/components/ui/badge";
@@ -51,7 +52,7 @@ function IconAction({
 
 /**
  * A project's rules as rows, each with its switch, next run and last task, and the dialog that confirms a delete. It
- * is the body of the project's Recurring tasks section and of each project's group in Settings → Autopilot.
+ * is the body of each project's group in the Recurring tasks detail in Settings → Autopilot.
  */
 export function ProjectRuleRows({ project, withAdd = false }: { project: Project; withAdd?: boolean }) {
   const navigate = useNavigate();
@@ -81,6 +82,7 @@ export function ProjectRuleRows({ project, withAdd = false }: { project: Project
     <>
       {list.length === 0 ? (
         <SettingsRow
+          scope="project"
           title={rules.error ? "Couldn't load the rules" : "No recurring tasks"}
           description={
             rules.error
@@ -96,6 +98,7 @@ export function ProjectRuleRows({ project, withAdd = false }: { project: Project
           return (
             <SettingsRow
               key={rule.id}
+              scope="project"
               title={
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate">{rule.name}</span>
@@ -142,6 +145,7 @@ export function ProjectRuleRows({ project, withAdd = false }: { project: Project
       )}
       {withAdd ? (
         <SettingsRow
+          scope="project"
           title="Add a rule"
           description={`Makes a task in ${project.title} from a template on a schedule.`}
           control={
@@ -165,83 +169,68 @@ export function ProjectRuleRows({ project, withAdd = false }: { project: Project
 }
 
 /**
- * Every project's recurring rules, a group each with its own New rule: the Recurring tasks detail in Settings →
- * Autopilot. The automation has no switch; each rule has its own.
+ * The recurring rules, the Recurring tasks detail in Settings → Autopilot: every project's, a group each with its own
+ * New rule, or with a project chosen in the scope sentence only that project's, with example rules to start from.
+ * The automation has no switch; each rule has its own.
  */
 export function RecurringRulesByProject() {
+  const { project } = useRowScope();
   const projects = useBoard().data?.projects.filter((p) => p.archivedAt === null);
+  if (project) {
+    return (
+      <>
+        <DetailSection title={project.title}>
+          <ProjectRuleRows project={project} withAdd />
+        </DetailSection>
+        <RuleExamples project={project} />
+      </>
+    );
+  }
   if (!projects) return <SettingsNote>Loading projects...</SettingsNote>;
   if (projects.length === 0) return <SettingsNote>Add a project to give it recurring rules.</SettingsNote>;
   return (
     <>
-      {projects.map((project) => (
-        <DetailSection key={project.id} title={project.title}>
-          <ProjectRuleRows project={project} withAdd />
+      {projects.map((p) => (
+        <DetailSection key={p.id} title={p.title}>
+          <ProjectRuleRows project={p} withAdd />
         </DetailSection>
       ))}
     </>
   );
 }
 
-/**
- * A project's recurring-task rules (the Recurring tasks automation of Autopilot): the rules and a few example rules to
- * start from. The rule editor is a sub-page.
- */
-export function RecurringSection({ project }: { project: Project }) {
-  const navigate = useNavigate();
+/** Example rules the project doesn't have yet, each added with a template of its own. */
+function RuleExamples({ project }: { project: Project }) {
   const addSuggested = useAddSuggestedRule(project.id);
   const rules = useRecurringRules(project.id);
   const suggestions = remainingSuggestions(rules.data ?? []);
-  const onNew = () =>
-    void navigate({
-      to: "/settings/project/recurring/$ruleId",
-      params: { ruleId: "new" },
-      search: { project: project.id },
-      state: FROM_SETTINGS_LIST,
-    });
-
+  if (suggestions.length === 0) return null;
   return (
-    <>
-      <SettingsSection
-        id="project.recurring.rules"
-        title="Recurring tasks"
-        headerAction={
-          <Button size="xs" variant="outline" onClick={onNew}>
-            <PlusIcon />
-            New rule
-          </Button>
-        }
-      >
-        <ProjectRuleRows project={project} />
-      </SettingsSection>
-      {suggestions.length > 0 ? (
-        <SettingsSection id="project.recurring.examples" title="Examples">
-          {suggestions.map((suggestion) => (
-            <SettingsRow
-              key={suggestion.id}
-              title={suggestion.name}
-              description={`${suggestion.summary}.`}
-              info="Adds a template for this project, which you can edit."
-              control={
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={addSuggested.isPending}
-                  onClick={() =>
-                    addSuggested.mutate({
-                      name: suggestion.name,
-                      template: suggestion.template,
-                      schedule: anchorSchedule(suggestion.schedule),
-                    })
-                  }
-                >
-                  Add
-                </Button>
+    <DetailSection title="Examples" info="Each adds a template for this project, which you can edit.">
+      {suggestions.map((suggestion) => (
+        <SettingsRow
+          key={suggestion.id}
+          scope="project"
+          title={suggestion.name}
+          description={`${suggestion.summary}.`}
+          control={
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={addSuggested.isPending}
+              onClick={() =>
+                addSuggested.mutate({
+                  name: suggestion.name,
+                  template: suggestion.template,
+                  schedule: anchorSchedule(suggestion.schedule),
+                })
               }
-            />
-          ))}
-        </SettingsSection>
-      ) : null}
-    </>
+            >
+              Add
+            </Button>
+          }
+        />
+      ))}
+    </DetailSection>
   );
 }

@@ -81,7 +81,7 @@ picked cards.
 The prompt (`planTasksPrompt` in `packages/contracts/src/planPrompt.ts`) lists each task with its `get_task` call and
 says how to plan: the built-in **aboard-plan** skill's text (`BUILTIN_PLAN_SKILL_BODY`, shipped as
 `skills/aboard-plan/SKILL.md`; a test keeps them identical), or a pointer to the skill chosen in Settings → Tasks →
-Planning or, per project, on its settings page (`planSkill`, the same shape as the review skill; the project's wins).
+Planning or, per project, on the same row with the project chosen in the scope sentence (`planSkill`, the same shape as the review skill; the project's wins).
 The skill has the agent research each task, print the draft plan before asking anything, approve simple tasks as a
 set and complex ones one at a time, then save each (`set_plan` with a tier, labels, `move_task` to planned) and ask
 about the Autopilot flag. It ends each turn by restating what was saved, since T3 Code folds every message of a

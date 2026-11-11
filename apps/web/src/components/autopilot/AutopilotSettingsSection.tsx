@@ -2,7 +2,6 @@ import {
   RUNNER_CHOICES,
   T3_RUNTIME_MODES,
   type AutopilotAgentDefaults,
-  type AutopilotAutomation,
   type AutopilotEngineSettings,
   type UpdateAutopilotEngineInput,
 } from "@repo/contracts";
@@ -15,18 +14,13 @@ import {
   SettingsNote,
   SettingsRow,
   SettingsSection,
-  StatusDot,
   UnitInput,
 } from "~/components/settings/settingsLayout";
-import { useOpenSettings } from "~/components/settings/settingsNavigation";
-import { Button } from "~/components/ui/button";
-import { useSetAutopilotScope, useUpdateAutopilotEngine } from "~/state/mutations";
-import { useAutopilotOverview, useAutopilotScope } from "~/state/queries";
-import { parseLimit, scopeAutomations } from "./autopilot.logic";
+import { useUpdateAutopilotEngine } from "~/state/mutations";
+import { useAutopilotOverview } from "~/state/queries";
+import { parseLimit } from "./autopilot.logic";
 import { TimeInput } from "./TimeInput";
-import { ownSettingsLabel, scopeState } from "./where.logic";
-import { useWhere } from "./useWhere";
-import { BoardVariablesSection } from "./VariablesSection";
+import { VariablesSection } from "./VariablesSection";
 
 // The row's description says what Auto means, so the select uses the short names.
 const RUNNER_OPTIONS = RUNNER_CHOICES.map(({ value, short }) => ({ value, label: short }));
@@ -47,87 +41,6 @@ export function AutopilotLimits() {
     );
   }
   return <EngineSections engine={overview.data.engine} />;
-}
-
-/**
- * A project's Autopilot in its settings, read only: what each automation does here and why, with a Change link to the
- * automation's Where it runs in Settings → Autopilot. The one place that edits where an automation runs, besides the
- * lane's pill, is that widget.
- */
-export function ProjectAutopilotSection({ projectId }: { projectId: string }) {
-  const overview = useAutopilotOverview();
-  // Recurring tasks has no switch (each rule has its own, in the project's Recurring tasks section).
-  const automations = scopeAutomations(overview.data?.automations ?? [], false);
-  return (
-    <SettingsSection id="project.autopilot.automations" title="Automations">
-      {!overview.data ? (
-        <SettingsNote>{overview.error ? overview.error.message : "Loading automations..."}</SettingsNote>
-      ) : automations.length === 0 ? (
-        <SettingsNote>No automations are installed yet.</SettingsNote>
-      ) : (
-        automations.map((automation) => (
-          <ProjectAutomationRow key={automation.key} automation={automation} projectId={projectId} />
-        ))
-      )}
-    </SettingsSection>
-  );
-}
-
-function ProjectAutomationRow({ automation, projectId }: { automation: AutopilotAutomation; projectId: string }) {
-  const { input, description } = useWhere(automation);
-  const openSettings = useOpenSettings();
-  const state = input ? scopeState(input, { kind: "project", id: projectId }) : null;
-  // A setting the project made for itself still applies over the board's, and nowhere else shows it.
-  const own = useAutopilotScope(projectId).data?.find((e) => e.automation === automation.key)?.config ?? {};
-  const ownLabel = ownSettingsLabel(automation, own);
-  const reset = useSetAutopilotScope(projectId);
-  return (
-    <SettingsRow
-      title={automation.title}
-      description={
-        <>
-          {description ? description.sentence : "Loading..."}
-          {ownLabel ? (
-            <span className="block">This project sets its own: {ownLabel}. They apply over the board&apos;s.</span>
-          ) : null}
-        </>
-      }
-      status={
-        state === null ? null : (
-          <span className="flex items-center gap-1.5">
-            <StatusDot
-              tone={state === "on" ? "success" : state === "preview" ? "warning" : "muted"}
-              label={state === "on" ? "On here" : state === "preview" ? "Preview here" : "Off here"}
-            />
-            {state === "on" ? "On here" : state === "preview" ? "Preview here" : "Off here"}
-          </span>
-        )
-      }
-      control={
-        <>
-          {ownLabel ? (
-            <Button
-              size="xs"
-              variant="ghost-muted"
-              aria-label={`Clear ${automation.title}'s own settings for this project`}
-              disabled={reset.isPending}
-              onClick={() => reset.mutate({ automation: automation.key, config: () => ({}) })}
-            >
-              Clear own settings
-            </Button>
-          ) : null}
-          <Button
-            size="xs"
-            variant="outline"
-            aria-label={`Change where ${automation.title} runs`}
-            onClick={() => openSettings(`autopilot.automations.${automation.key}`)}
-          >
-            Change
-          </Button>
-        </>
-      }
-    />
-  );
 }
 
 /** The engine's settings in three cards: spending and timing, the defaults for agent runs, and safety. */
@@ -326,7 +239,7 @@ function EngineSections({ engine }: { engine: AutopilotEngineSettings }) {
           }
         />
       </SettingsSection>
-      <BoardVariablesSection />
+      <VariablesSection />
     </>
   );
 }

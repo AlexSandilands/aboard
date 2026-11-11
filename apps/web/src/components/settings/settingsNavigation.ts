@@ -10,21 +10,29 @@ import {
   providerOfTarget,
   type SettingsGroupId,
 } from "./settingsNav.logic";
+import { scopeSearch } from "./settingsScope.logic";
 
 /** History state for opening an editor sub-page from its list, so leaving it can step back instead. */
 export const FROM_SETTINGS_LIST = { settingsEditorFromList: true } as const;
 
 /**
  * Opens Settings at a target: a group (`"autopilot"`), a section (`"project.recurring"`) or a row
- * (`"autopilot.limits.quiet-hours"`). `project` picks the project page's project; a Providers target
+ * (`"autopilot.limits.quiet-hours"`). `project` sets the scope (`?project=`; null is All projects), which otherwise
+ * stays as it is, like T3's `retainSettingsScope`; a Providers target
  * (`"agents.providers.codex.cli-path"`) picks the provider. The anchor goes in the URL hash
  * and is scrolled to once it renders, which the router can't do for content still loading. `highlight` flashes it
  * once it is in view.
  */
 export function useOpenSettings() {
   const navigate = useNavigate();
+  const router = useRouter();
   return useCallback(
-    (target = "board", options: { project?: string; replace?: boolean; highlight?: boolean } = {}) => {
+    (target = "board", options: { project?: string | null; replace?: boolean; highlight?: boolean } = {}) => {
+      // Settings opened from the board starts in All projects unless told otherwise; inside it the scope carries over.
+      const current = router.state.location.pathname.startsWith("/settings")
+        ? (router.state.location.search as { project?: string }).project
+        : undefined;
+      const scope = scopeSearch(options.project === undefined ? current : options.project);
       const parsed = parseSettingsTarget(target) ?? { group: "board" as const, anchor: null };
       useSettingsNav.getState().requestScroll(parsed.anchor ?? parsed.group, options.highlight);
       // The Autopilot page's Runs and Limits tabs have paths of their own.
@@ -34,6 +42,7 @@ export function useOpenSettings() {
           void navigate({
             to: "/settings/autopilot/runs/$automation",
             params: { automation: AUTOPILOT_ALL_RUNS },
+            search: scope,
             hash,
             hashScrollIntoView: false,
             replace: options.replace,
@@ -41,6 +50,7 @@ export function useOpenSettings() {
         } else {
           void navigate({
             to: "/settings/autopilot/limits",
+            search: scope,
             hash,
             hashScrollIntoView: false,
             replace: options.replace,
@@ -54,20 +64,13 @@ export function useOpenSettings() {
       void navigate({
         to: "/settings/$group",
         params: { group: parsed.group },
-        search:
-          parsed.group === "project" && options.project
-            ? { project: options.project }
-            : provider
-              ? { provider }
-              : automation
-                ? { automation }
-                : {},
+        search: { ...scope, ...(provider ? { provider } : automation ? { automation } : {}) },
         hash: parsed.anchor ?? "",
         hashScrollIntoView: false,
         replace: options.replace,
       });
     },
-    [navigate],
+    [navigate, router],
   );
 }
 
@@ -80,14 +83,14 @@ export function useLeaveEditor() {
   const router = useRouter();
   const openSettings = useOpenSettings();
   return useCallback(
-    (group: SettingsGroupId, project?: string) => {
+    (group: SettingsGroupId) => {
       const section = editorListSection(group);
       if (router.state.location.state.settingsEditorFromList && router.history.canGoBack()) {
         useSettingsNav.getState().requestScroll(section);
         router.history.back();
         return;
       }
-      openSettings(section, project ? { project } : {});
+      openSettings(section);
     },
     [router, openSettings],
   );

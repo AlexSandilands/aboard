@@ -385,7 +385,7 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
           summary: `skip "${custom.name}" in ${project.title}: needs ${list}`,
           projectId: project.id,
           startsNoAgent: true,
-          preview: `Needs ${list} in ${project.title}: it runs there once ${missing.length === 1 ? "it has" : "they have"} a value, set in the project's settings or board-wide in Settings → Autopilot.`,
+          preview: `Needs ${list} in ${project.title}: it runs there once ${missing.length === 1 ? "it has" : "they have"} a value, set in Settings → Autopilot → Limits & safety → Variables, for this project or board-wide.`,
         });
       }
       return false;

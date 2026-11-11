@@ -228,8 +228,8 @@ everyone who can write the text it reads is someone you trust. The editor warns,
 
 Variables are values your automations read that differ by project, so one automation works everywhere without
 branching on the project's name: a Jira key, a team, a board id. Set them for every project under **Settings →
-Autopilot → Limits & safety → Variables**, and override them for one project in its settings (**Autopilot
-overrides → Automation variables**), where you also see the board's value each override replaces.
+Autopilot → Limits & safety → Variables**, and override them for one project on the same page with that project chosen in **Applying settings
+for** at the top, where you also see the board's value each override replaces.
 
 | Where           | How to read `jira_key`                                                   |
 | --------------- | ------------------------------------------------------------------------ |

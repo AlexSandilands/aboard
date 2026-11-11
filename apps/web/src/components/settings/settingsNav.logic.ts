@@ -1,6 +1,6 @@
-// Pure helpers for the settings page: its groups and sub-sections, scroll-spy, the project it shows and the provider
-// its Providers page edits.
-import { ProviderId } from "@repo/contracts";
+// Pure helpers for the settings page: its groups and sub-sections, scroll-spy, where old targets moved, and the
+// provider its Providers page edits.
+import { AUTOPILOT_RECURRING, ProviderId } from "@repo/contracts";
 import { keybindingGroups } from "./keybindings.logic";
 
 export const SETTINGS_GROUP_IDS = [
@@ -134,6 +134,8 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     sections: [
       section("autopilot.automations", "Automations", [
         "custom automations",
+        "recurring tasks",
+        "schedule",
         "needs you",
         "pause",
         "orchestrate",
@@ -169,12 +171,8 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
     id: "project",
     label: "Project",
     sections: [
+      // Only the project itself: what a project sets for itself is on Tasks, Agents and Autopilot in its scope.
       section("project.general", "General", ["name", "icon", "folder", "workspace"]),
-      section("project.plan-skill", "Planning skill"),
-      section("project.review-skill", "Review skill"),
-      section("project.models", "Reviewer model", ["models", "review model", "board reviewer"]),
-      section("project.autopilot", "Automations", ["automations"]),
-      section("project.recurring", "Recurring tasks", ["schedule", "rules"]),
       section("project.danger-zone", "Danger zone", ["archive", "delete"]),
     ],
   },
@@ -212,7 +210,21 @@ const MOVED_TARGETS: ReadonlyArray<[string, string]> = [
   ["models.tiers", "models.tiers.list"],
   ["tasks.review.model", "models.operations.reviewer"],
   ["tasks.new-tasks.import-model", "models.operations.issueImport"],
-  ["project.review-skill.model", "project.models.reviewer"],
+  // The project page's overrides moved to the rows they override, edited in that project's scope.
+  ["project.review-skill.model", "agents.operations.reviewer"],
+  ["project.models.reviewer", "agents.operations.reviewer"],
+  ["project.models", "agents.operations.review"],
+  ["project.review-skill.skill", "tasks.review.skill"],
+  ["project.review-skill", "tasks.review"],
+  ["project.plan-skill.skill", "tasks.planning.skill"],
+  ["project.plan-skill", "tasks.planning"],
+  ["project.autopilot.variables.list", "autopilot.limits.variables.list"],
+  ["project.autopilot.variables", "autopilot.limits.variables"],
+  ["project.autopilot.automations", "autopilot.automations"],
+  ["project.autopilot", "autopilot.automations"],
+  ["project.recurring.rules", `autopilot.automations.${AUTOPILOT_RECURRING}`],
+  ["project.recurring.examples", `autopilot.automations.${AUTOPILOT_RECURRING}`],
+  ["project.recurring", `autopilot.automations.${AUTOPILOT_RECURRING}`],
 ];
 
 /**
@@ -366,8 +378,9 @@ export function editorListSection(group: SettingsGroupId): string {
       return "tasks.new-tasks";
     case "autopilot":
       return "autopilot.automations";
+    // The rule editor's path is still under project/, but the rules are listed in the Recurring tasks automation.
     case "project":
-      return "project.recurring";
+      return `autopilot.automations.${AUTOPILOT_RECURRING}`;
     default:
       return group;
   }
@@ -393,19 +406,6 @@ export function activeSectionId(
     else break;
   }
   return active;
-}
-
-/**
- * The project the project page shows: the one asked for in `?project=`, else the board's (its scope when Settings
- * opened), else the first. An id that is gone (deleted, or archived and so out of the snapshot) falls through.
- */
-export function resolveSettingsProject<P extends { id: string }>(
-  projects: ReadonlyArray<P>,
-  requested: string | null | undefined,
-  fallback: string | null | undefined,
-): P | null {
-  const byId = (id: string | null | undefined) => (id ? projects.find((p) => p.id === id) : undefined);
-  return byId(requested) ?? byId(fallback) ?? projects[0] ?? null;
 }
 
 /**

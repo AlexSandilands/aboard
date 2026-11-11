@@ -56,7 +56,7 @@ export function ScopePopover({
                     size="icon-xs"
                     variant="ghost-muted"
                     aria-label="Autopilot settings"
-                    onClick={() => openSettings("autopilot")}
+                    onClick={() => openSettings("autopilot", projectId ? { project: projectId } : {})}
                   />
                 }
               />
