@@ -7,6 +7,7 @@ import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting 
 import { AutomationVariables } from "./automationVariables.ts";
 import { BackupSettings, MachineName } from "./backup.ts";
 import { ModelChoice } from "./modelProfiles.ts";
+import { ModelPriceOverrides } from "./modelPricing.ts";
 import { OperationId, OperationModels } from "./operations.ts";
 import { ModelProfiles } from "./modelProfiles.ts";
 import { ModelTiers, SuggestedModel, SuggestedModelInput } from "./modelTiers.ts";
@@ -965,6 +966,8 @@ export const AppSettings = z
     automationVariables: AutomationVariables,
     /** Days a deleted task stays in the trash, restorable, before the purge removes it for good. */
     trashRetentionDays: TrashRetentionDays,
+    /** The user's per-model prices, which win over the built-in table for usage estimates (modelPricing.ts). */
+    modelPriceOverrides: ModelPriceOverrides,
   })
   .extend(BackupSettings.shape);
 
@@ -1006,6 +1009,8 @@ export const UpdateSettingsInput = z.object({
   /** Replaces the board's automation variables. */
   automationVariables: AutomationVariables.optional(),
   trashRetentionDays: TrashRetentionDays.optional(),
+  /** Replaces the whole set of price overrides. */
+  modelPriceOverrides: ModelPriceOverrides.optional(),
   backupEnabled: z.boolean().optional(),
   backupDir: z.string().trim().nullable().optional(),
   backupRemote: z.string().trim().nullable().optional(),

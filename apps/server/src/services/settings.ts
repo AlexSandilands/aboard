@@ -9,6 +9,7 @@ import {
   DEFAULT_REVIEW_MAX_ROUNDS,
   DEFAULT_TRASH_RETENTION_DAYS,
   EMPTY_MODEL_TIERS,
+  ModelPriceOverrides,
   type AppSettings,
   machineNameFrom,
   MODEL_PROFILES_MAX,
@@ -64,6 +65,7 @@ const DEFAULTS: StoredSettings = {
   socialNetwork: false,
   automationVariables: [],
   trashRetentionDays: DEFAULT_TRASH_RETENTION_DAYS,
+  modelPriceOverrides: {},
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,
@@ -105,6 +107,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "keybindings",
     "automationVariables",
     "trashRetentionDays",
+    "modelPriceOverrides",
   ] satisfies Array<keyof StoredSettings>),
 ]);
 
@@ -278,6 +281,8 @@ export function loadSettings(repos: Repos): StoredSettings {
     providers: storedProviderList(stored.get("providers")),
     notifications: mergeNotificationSettings(stored.get("notifications") as StoredNotificationSettings | undefined),
     keybindings: sanitizeKeybindingOverrides(stored.get("keybindings")),
+    // A hand-edited value that no longer parses prices nothing rather than failing every read.
+    modelPriceOverrides: ModelPriceOverrides.safeParse(stored.get("modelPriceOverrides") ?? {}).data ?? {},
     handoffMenus: { ...DEFAULT_HANDOFF_MENUS, ...(stored.get("handoffMenus") as StoredSettings["handoffMenus"]) },
   };
 }
@@ -375,6 +380,9 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.keybindings !== undefined) repos.settings.set("keybindings", input.keybindings);
         if (input.socialNetwork !== undefined) repos.settings.set("socialNetwork", input.socialNetwork);
         if (input.trashRetentionDays !== undefined) repos.settings.set("trashRetentionDays", input.trashRetentionDays);
+        if (input.modelPriceOverrides !== undefined) {
+          repos.settings.set("modelPriceOverrides", input.modelPriceOverrides);
+        }
         if (input.automationVariables !== undefined) {
           repos.settings.set("automationVariables", input.automationVariables);
           // Which projects a custom automation still needs a variable in shows on its row.
