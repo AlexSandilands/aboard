@@ -607,6 +607,19 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "What opening a session runs, for an example session in your home folder.",
     ["runs", "command line", "example"],
   ),
+  // Integrations › Model prices
+  draft(
+    "integrations.model-prices.fetch",
+    "Fetch prices from LiteLLM",
+    "Download LiteLLM's model price list once a day for usage cost estimates. Off, estimates use the board's built-in prices.",
+    ["litellm", "cost", "pricing", "price list", "estimate", "network", "offline", "download"],
+  ),
+  draft(
+    "integrations.model-prices.refresh",
+    "Prices in use",
+    "Which prices usage estimates use and when they were fetched, with Refresh now.",
+    ["refresh", "update prices", "fetch now", "litellm", "built-in"],
+  ),
   // Project
   draft("project.general.name", "Project name", "Shown on the lane header and in the sidebar.", [
     "rename",

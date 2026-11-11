@@ -31,6 +31,7 @@ function testConfig(overrides: Partial<Config> = {}): Config {
     sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
     worktreesDir: join(homeDir, "worktrees"),
     attachmentsDir: join(homeDir, "attachments"),
+    modelPricesPath: join(homeDir, "model-prices.json"),
     ...overrides,
   };
 }

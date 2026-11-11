@@ -18,6 +18,7 @@ const NO_PROCESSES: IntegrationOverrides = {
   runShell: () => Promise.reject(new Error("Shell commands don't run in tests")),
   runScript: () => Promise.reject(new Error("Scripts don't run in tests")),
   listMcpServers: () => Promise.resolve([]),
+  modelPricesFetch: () => Promise.reject(new Error("The network isn't reachable in tests")),
 };
 
 export function createTestHarness(

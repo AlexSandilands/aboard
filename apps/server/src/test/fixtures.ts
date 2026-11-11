@@ -46,6 +46,7 @@ export const defaultSettings: AppSettings = {
   automationVariables: [],
   trashRetentionDays: 30,
   modelPriceOverrides: {},
+  modelPriceFetch: true,
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,

@@ -19,6 +19,7 @@ import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { ApiError } from "~/lib/api";
 import { useAutopilotOverview, useBoard, useStats } from "~/state/queries";
 import { cn } from "~/lib/utils";
+import { priceSourceText } from "~/components/task/usage.logic";
 import { BucketKindContext, SERIES_COLORS, type ChartSeries } from "./chartParts";
 import { KpiTile } from "./KpiTile";
 import {
@@ -618,7 +619,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
 
       <StatsSection
         title="Tokens & cost"
-        description={`What agents used on this board's tasks and runs, by the ${per} they used it. Cost is an API-equivalent estimate at list prices; a session shared by tasks counts once, under the one that linked it first.`}
+        description={`What agents used on this board's tasks and runs, by the ${per} they used it. Cost is an API-equivalent estimate at ${priceSourceText(data.prices)}; a session shared by tasks counts once, under the one that linked it first.`}
       >
         <Tiles>
           {kpi("Estimated cost", "cost_usd.estimated")}

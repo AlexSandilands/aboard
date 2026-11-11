@@ -1,3 +1,5 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { EMPTY_TOKEN_USAGE, type TokenUsage } from "@repo/contracts";
 import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
@@ -183,4 +185,46 @@ export function seedUsage(s: Services, db: Db, opts: { workspaceRoot?: string } 
     );
   }
   usage.add(rows);
+}
+
+/** A LiteLLM entry at USD per million tokens, written per token as LiteLLM does. */
+const litellm = (
+  provider: string,
+  input: number,
+  output: number,
+  cacheRead: number,
+  extra: Record<string, number> = {},
+) => ({
+  litellm_provider: provider,
+  mode: "chat",
+  input_cost_per_token: input / 1e6,
+  output_cost_per_token: output / 1e6,
+  cache_read_input_token_cost: cacheRead / 1e6,
+  ...Object.fromEntries(Object.entries(extra).map(([k, v]) => [k, v / 1e6])),
+});
+
+/**
+ * A small LiteLLM price list fetched "now", at `<data dir>/model-prices.json`, so the sandbox prices usage from
+ * LiteLLM without reaching the network (its pollers are off, so only Refresh now would fetch). The models the seeds
+ * use, plus a reseller entry the parser ignores.
+ */
+export function seedModelPrices(dataDir: string): void {
+  const anthropic = (input: number, output: number, cacheRead: number) =>
+    litellm("anthropic", input, output, cacheRead, {
+      cache_creation_input_token_cost: input * 1.25,
+      cache_creation_input_token_cost_above_1hr: input * 2,
+    });
+  const document = {
+    "claude-opus-5-5": anthropic(4, 20, 0.2),
+    "claude-sonnet-5-5": anthropic(2, 10, 0.1),
+    "claude-haiku-5-5": anthropic(0.1, 0.5, 0.01),
+    "gpt-5.2-codex": litellm("openai", 1.75, 14, 0.175),
+    "gpt-5.1": litellm("openai", 1.25, 10, 0.125),
+    "gpt-6.1-sol": litellm("openai", 2, 10, 0.1, {
+      cache_creation_input_token_cost: 2.5,
+      cache_creation_input_token_cost_above_12hr: 5,
+    }),
+    "azure/eu/gpt-6.1-sol": litellm("azure", 2.2, 11, 0.11),
+  };
+  writeFileSync(join(dataDir, "model-prices.json"), JSON.stringify({ fetchedAt: new Date().toISOString(), document }));
 }

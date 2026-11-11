@@ -12,6 +12,11 @@ desktop app share it, so it's one board however you open it.
 The server only listens on `127.0.0.1`, port 4317. Set `ABOARD_PORT` to move it. All environment
 variables use the `ABOARD_` prefix.
 
+Once a day the board downloads [LiteLLM](https://github.com/BerriAI/litellm)'s model price list from GitHub, to
+estimate what agents' tokens would cost at API prices. Nothing about you or your board is sent. Turn it off in
+**Settings → Integrations → Model prices**; estimates then use the prices built into the board. The last list fetched
+is kept in `~/.aboard/model-prices.json`, so being offline still has prices.
+
 ## Access token
 
 Set `ABOARD_TOKEN` to require a bearer token on the API and the MCP endpoint. With a token set, open the UI at `http://127.0.0.1:4317/#token=<token>`; the page keeps it for the browser tab and strips it from the address bar. Agents send it as an `Authorization: Bearer` header.

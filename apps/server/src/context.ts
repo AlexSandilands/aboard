@@ -13,7 +13,9 @@ import type { AppContext } from "./app.ts";
 /** Wires db → bus → integrations → services. Used by main.ts and tests. */
 export function createContext(
   config: Pick<Config, "dbPath" | "port" | "webPort" | "token" | "t3Home" | "pollers" | "userHome" | "sessionDirs"> &
-    Partial<Pick<Config, "webDist" | "worktreesDir" | "attachmentsDir" | "harnessHomes" | "demo">> & {
+    Partial<
+      Pick<Config, "webDist" | "worktreesDir" | "attachmentsDir" | "harnessHomes" | "demo" | "modelPricesPath">
+    > & {
       /** This board's id (instance.ts); read from the data dir unless set. An in-memory database gets a new one. */
       instanceId?: string;
     },
@@ -24,6 +26,9 @@ export function createContext(
   const attachmentsDir =
     config.attachmentsDir ??
     (config.dbPath === ":memory:" ? join(tmpdir(), "attachments-test") : join(dirname(config.dbPath), "attachments"));
+  // An in-memory board keeps the fetched price list in memory only.
+  const modelPricesPath =
+    config.modelPricesPath ?? (config.dbPath === ":memory:" ? null : join(dirname(config.dbPath), "model-prices.json"));
   const instanceId =
     config.instanceId ?? (config.dbPath === ":memory:" ? randomUUID() : instanceIdOf(dirname(config.dbPath)));
   const bus = new EventBus();
@@ -36,6 +41,7 @@ export function createContext(
         worktreesDir: config.worktreesDir ?? join(dirname(config.dbPath), "worktrees"),
         attachmentsDir,
         instanceId,
+        modelPricesPath,
         backupDefaultDir:
           config.dbPath === ":memory:" ? join(tmpdir(), "backup-test") : join(dirname(config.dbPath), "backup"),
       },
@@ -61,6 +67,7 @@ export function createContext(
     },
     prHostHoldsTasks: (host) => integrations.prHostHoldsTasks(host),
     fetchThreadUsage: (threadId) => integrations.t3ThreadUsage(threadId),
+    modelPrices: () => integrations.modelPrices.current(),
     ...(overrides.now ? { now: overrides.now } : {}),
     ...(overrides.automations ? { automations: overrides.automations } : {}),
     ...(overrides.runShell ? { runShell: overrides.runShell } : {}),

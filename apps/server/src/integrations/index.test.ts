@@ -48,6 +48,7 @@ function setup(opts: { runGh?: RunGh; fetch?: FetchFn; githubFetch?: FetchFn; wi
         attachmentsDir: "/nonexistent/attachments",
         instanceId: "00000000-0000-4000-8000-000000000000",
         backupDefaultDir: "/nonexistent/backup",
+        modelPricesPath: null,
         port: 4317,
         webPort: 5317,
       },
@@ -56,6 +57,7 @@ function setup(opts: { runGh?: RunGh; fetch?: FetchFn; githubFetch?: FetchFn; wi
     },
     {
       log: { warn: () => {} },
+      modelPricesFetch: () => Promise.reject(new Error("no network in tests")),
       ...(opts.runGh ? { runGh: opts.runGh } : {}),
       ...(opts.fetch ? { fetch: opts.fetch } : {}),
       ...(opts.githubFetch ? { githubFetch: opts.githubFetch } : {}),

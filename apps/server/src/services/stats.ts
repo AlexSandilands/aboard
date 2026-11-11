@@ -128,7 +128,7 @@ function reduce(aggregate: Aggregate, xs: readonly number[]): number | null {
 
 export function createStatsService(
   core: Core,
-  deps: { runGit: RunGit; usage: Pick<UsageService, "attributed"> },
+  deps: { runGit: RunGit; usage: Pick<UsageService, "attributed" | "prices"> },
 ): StatsService {
   const { repos } = core;
 
@@ -602,6 +602,7 @@ export function createStatsService(
         series: out,
         breakdowns,
         notes,
+        prices: deps.usage.prices(),
       };
     },
   };

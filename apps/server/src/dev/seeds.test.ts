@@ -122,6 +122,8 @@ describe("seed scenarios", () => {
     expect(completed.values.filter((n) => (n ?? 0) > 0).length).toBeGreaterThan(8);
     expect(stats.series["cycle_time.in_progress_to_done"]!.total).toBeGreaterThan(0);
     expect(stats.series["autopilot.runs"]!.total).toBeGreaterThan(40);
+    // Priced from the seeded LiteLLM list on disk, with nothing fetched.
+    expect(stats.prices).toMatchObject({ source: "litellm", status: "cached" });
     // Seeding plus the stats read (which spawns git for commits) took 17 s on a busy Windows runner, over the default.
   }, 60_000);
 

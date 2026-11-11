@@ -29,6 +29,8 @@ The response (`StatsResponse` in `packages/contracts/src/stats.ts`) holds:
 - `from`, `to`, `previousFrom`, `projects` (`{ id, title }` for each project asked for, in the order asked; empty for the whole board), `weeks`.
 - `notes`: sentences about the numbers, e.g. a project whose commits weren't counted because its folder isn't a git
   repository. Empty when there is nothing to say.
+- `prices`: where the cost series' prices came from, `{ source, asOf, status }` (LiteLLM's fetched list or the
+  built-in table; [token-usage.md](token-usage.md#cost)), for the Tokens & cost description.
 
 Counts and costs are `0` in a quiet week. Durations and ratios are `null` when nothing in the week had one. A
 count's total is the sum, a duration's the median over the period (the mean for the `.average` series), and a
