@@ -24,6 +24,7 @@ function task(patch: Partial<SectionTask> = {}): SectionTask {
     kind: "task",
     labels: [],
     links: [],
+    usage: null,
     blockedBy: [],
     blocks: [],
     attention: [],
@@ -77,6 +78,7 @@ describe("normalizeSectionLayout", () => {
       "activity",
       "labels",
       "sessions",
+      "usage",
       "links",
       "relations",
       "autopilot",
@@ -100,6 +102,7 @@ describe("normalizeSectionLayout", () => {
       "plan",
       "labels",
       "sessions",
+      "usage",
       "links",
       "relations",
       "review",
@@ -110,8 +113,30 @@ describe("normalizeSectionLayout", () => {
   });
 
   it("keeps Sessions where the user put it once it is saved", () => {
-    const order = ["sessions", "plan", "labels", "links", "relations", "review", "autopilot", "details", "activity"];
+    const order = [
+      "sessions",
+      "plan",
+      "labels",
+      "usage",
+      "links",
+      "relations",
+      "review",
+      "autopilot",
+      "details",
+      "activity",
+    ];
     expect(normalizeSectionLayout({ order }).order).toEqual(order);
+  });
+
+  it("places Usage before Links in a layout saved without it", () => {
+    const saved = ["sessions", "plan", "labels", "links", "relations", "review", "autopilot", "details", "activity"];
+    expect(normalizeSectionLayout({ order: saved }).order.slice(0, 5)).toEqual([
+      "sessions",
+      "plan",
+      "labels",
+      "usage",
+      "links",
+    ]);
   });
 
   it("drops the Automation section a saved layout still names: it is part of Autopilot now", () => {
@@ -122,6 +147,7 @@ describe("normalizeSectionLayout", () => {
       "plan",
       "sessions",
       "labels",
+      "usage",
       "links",
       "relations",
       "autopilot",
@@ -174,6 +200,7 @@ describe("collapsedByDefault", () => {
     const empty = task();
     expect(SECTION_IDS.filter((id) => collapsedByDefault(id, empty))).toEqual([
       "sessions",
+      "usage",
       "links",
       "relations",
       "review",
@@ -189,7 +216,7 @@ describe("collapsedByDefault", () => {
       reviews: [round([])],
       planContext: "Why",
     });
-    expect(SECTION_IDS.filter((id) => collapsedByDefault(id, full))).toEqual(["sessions", "activity"]);
+    expect(SECTION_IDS.filter((id) => collapsedByDefault(id, full))).toEqual(["sessions", "usage", "activity"]);
   });
 
   it("opens Sessions and Links by their own kind of link", () => {

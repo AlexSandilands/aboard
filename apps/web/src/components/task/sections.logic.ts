@@ -3,6 +3,7 @@ import { topAttention } from "~/components/board/board.logic";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { mayState } from "./automation.logic";
 import { isSessionLink, type PlainLink } from "./links.logic";
+import { usageSummary } from "./usage.logic";
 
 type PrLink = Extract<PlainLink, { kind: "pr" }>;
 
@@ -10,6 +11,7 @@ type PrLink = Extract<PlainLink, { kind: "pr" }>;
 export const SECTION_IDS = [
   "labels",
   "sessions",
+  "usage",
   "links",
   "relations",
   "autopilot",
@@ -24,6 +26,7 @@ export type SectionId = (typeof SECTION_IDS)[number];
 export const SECTION_TITLES: Record<SectionId, string> = {
   labels: "Labels",
   sessions: "Sessions",
+  usage: "Usage",
   links: "Links",
   relations: "Relations",
   review: "Local review",
@@ -41,7 +44,7 @@ export interface SectionLayout {
 }
 
 /** Sections added after others existed sit before the one they were split from in a saved order, not at the end. */
-const SECTION_ANCHORS: Partial<Record<SectionId, SectionId>> = { sessions: "links" };
+const SECTION_ANCHORS: Partial<Record<SectionId, SectionId>> = { sessions: "links", usage: "links" };
 
 const isSectionId = (value: unknown): value is SectionId => SECTION_IDS.includes(value as SectionId);
 
@@ -98,6 +101,7 @@ export type SectionTask = Pick<
   | "kind"
   | "labels"
   | "links"
+  | "usage"
   | "blockedBy"
   | "blocks"
   | "attention"
@@ -130,6 +134,8 @@ export function collapsedByDefault(id: SectionId, task: SectionTask): boolean {
       return false;
     case "sessions":
       return !task.links.some(isSessionLink);
+    case "usage":
+      return task.usage === null;
     case "links":
       return task.links.every(isSessionLink);
     case "relations":
@@ -282,6 +288,8 @@ export function summarizeSection(
       const problem = sectionAttention("sessions", task);
       return problem ? `${count} · ${problem.message}` : String(count);
     }
+    case "usage":
+      return usageSummary(task.usage);
     case "links": {
       const count = task.links.filter((link) => !isSessionLink(link)).length;
       if (count === 0) return "None";
