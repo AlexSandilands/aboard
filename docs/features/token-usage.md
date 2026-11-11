@@ -64,7 +64,15 @@ Worked out when read, never stored: tokens × the price table in `packages/contr
 model name only (so Copilot or T3 running a known model is priced the same way). A name matches the longest key it
 starts with after lowercasing and dropping a bracketed suffix (`[1m]`) or a provider prefix; a date or a word may
 follow (`-20251001`, `-codex`) but not another version number, so an unknown newer model stays unpriced instead of
-taking an older one's price. Claude's 1-hour cache writes are priced at 2× input, 5-minute ones at 1.25×.
+taking an older one's price; a `-pro` model has its own key. Claude's 1-hour cache writes are priced at 2× input,
+5-minute ones at 1.25×. OpenAI's GPT-6 and GPT-5.6 models charge 1.25× input for a 30-minute cache write, which is the
+rate Codex's single cache-write count gets; older OpenAI models and Gemini bill writes as plain input.
+
+The table holds the standard-tier list prices from Anthropic's, OpenAI's and Google's pricing pages on
+`MODEL_PRICES_AS_OF`; update the entries and that date together. Long-context rates (Haiku 5.5 past 100K-token
+prompts, OpenAI past 272K, Gemini 3.1 Pro past 200K) aren't modelled, since a transcript doesn't give a request's
+prompt size, so very long prompts are underestimated. Models a provider doesn't list (Codex's `codex-auto-review`)
+stay unpriced.
 
 A model's prices can be added or corrected with the `modelPriceOverrides` setting (`PATCH /api/settings`;
 exported in backups). The settings page has no field for it yet. A price

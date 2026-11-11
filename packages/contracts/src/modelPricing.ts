@@ -31,7 +31,19 @@ const claude = (input: number, output: number, cacheRead = input * 0.1): Require
   cacheWrite1h: input * 2,
 });
 
-/** OpenAI and Google bill cache writes as plain input; cached input has its own rate. */
+/**
+ * OpenAI's GPT-6 and GPT-5.6 families charge cache writes: 1.25× input for 30 minutes and 2.5× for 12 hours. Codex
+ * reports them as one count, which goes to cacheWrite5m, so the shorter write's rate prices it.
+ */
+const openai = (input: number, output: number, cacheRead: number): Required<ModelPrice> => ({
+  input,
+  output,
+  cacheRead,
+  cacheWrite5m: input * 1.25,
+  cacheWrite1h: input * 2.5,
+});
+
+/** Older OpenAI models and Google bill cache writes as plain input; cached input has its own rate. */
 const cachedInput = (input: number, output: number, cacheRead: number): Required<ModelPrice> => ({
   input,
   output,
@@ -43,11 +55,16 @@ const cachedInput = (input: number, output: number, cacheRead: number): Required
 /**
  * Matched by the longest key the model name starts with, after lowercasing and dropping a bracketed suffix
  * (`claude-opus-5-5[1m]`) and a provider prefix (`anthropic/`, `openai.`). Dated ids (`claude-haiku-4-5-20251001`)
- * match their family. Haiku 5.5's higher rate past 100K-token prompts isn't modelled: transcripts don't say a
- * request's prompt size apart from its cache reads.
+ * match their family, and so do word variants (`gpt-6-astra-law`), so a `-pro` model needs its own key. Long-context
+ * rates (Haiku 5.5 past 100K-token prompts, OpenAI past 272K, Gemini 3.1 Pro past 200K) aren't modelled: transcripts
+ * don't say a request's prompt size apart from its cache reads. Each entry is the standard tier's list price on the
+ * providers' pricing pages as of MODEL_PRICES_AS_OF; a promotional price is used while it runs.
  */
 export const MODEL_PRICES: Readonly<Record<string, Required<ModelPrice>>> = {
-  // Anthropic, from the Claude API pricing table.
+  // Anthropic (platform.claude.com/docs/en/about-claude/pricing). Fable and Mythos 5.1+ read cache at 0.025× input,
+  // Opus and Sonnet 5.5 at 0.05×, the rest at 0.1×.
+  "claude-fable-5-2": claude(8, 40, 0.2),
+  "claude-mythos-5-2": claude(8, 40, 0.2),
   "claude-fable-5-1": claude(10, 50, 0.25),
   "claude-mythos-5-1": claude(10, 50, 0.25),
   "claude-fable-5": claude(10, 50, 1),
@@ -60,7 +77,7 @@ export const MODEL_PRICES: Readonly<Record<string, Required<ModelPrice>>> = {
   "claude-opus-4-5": claude(5, 25),
   "claude-opus-4-1": claude(15, 75),
   "claude-opus-4": claude(15, 75),
-  "claude-sonnet-5-5": claude(2, 10, 0.2),
+  "claude-sonnet-5-5": claude(2, 10, 0.1),
   "claude-sonnet-5": claude(2, 10),
   "claude-sonnet-4-6": claude(3, 15),
   "claude-sonnet-4-5": claude(3, 15),
@@ -68,11 +85,29 @@ export const MODEL_PRICES: Readonly<Record<string, Required<ModelPrice>>> = {
   "claude-haiku-5-5": claude(0.1, 0.5),
   "claude-haiku-4-5": claude(1, 5),
   "claude-3-5-haiku": claude(0.8, 4),
-  // OpenAI (Codex, Copilot), from OpenAI's API pricing page.
+  // OpenAI (developers.openai.com/api/docs/pricing), used by Codex and Copilot. gpt-5.6-sol's is a promotional price
+  // until 2026-11-30.
+  "gpt-6-astra": openai(10, 50, 1),
+  "gpt-6.1-sol": openai(2, 10, 0.1),
+  "gpt-6.1-terra": openai(1, 5, 0.05),
+  "gpt-6-sol": openai(2, 10, 0.2),
+  "gpt-6-luna": openai(0.1, 0.5, 0.01),
+  "gpt-5.6-sol": openai(4, 20, 0.4),
+  "gpt-5.6-terra": openai(2, 12, 0.2),
+  "gpt-5.6-luna": openai(0.2, 1.2, 0.02),
+  "gpt-5.5-pro": cachedInput(30, 180, 30),
+  "gpt-5.5": cachedInput(5, 30, 0.5),
+  "gpt-5.4-pro": cachedInput(30, 180, 30),
+  "gpt-5.4-mini": cachedInput(0.75, 4.5, 0.075),
+  "gpt-5.4-nano": cachedInput(0.2, 1.25, 0.02),
+  "gpt-5.4": cachedInput(2.5, 15, 0.25),
+  "gpt-5.3-codex": cachedInput(1.75, 14, 0.175),
+  "gpt-5.2-pro": cachedInput(21, 168, 21),
   "gpt-5.2": cachedInput(1.75, 14, 0.175),
   "gpt-5.1-codex-mini": cachedInput(0.25, 2, 0.025),
   "gpt-5.1": cachedInput(1.25, 10, 0.125),
   "gpt-5-codex": cachedInput(1.25, 10, 0.125),
+  "gpt-5-pro": cachedInput(15, 120, 15),
   "gpt-5-mini": cachedInput(0.25, 2, 0.025),
   "gpt-5-nano": cachedInput(0.05, 0.4, 0.005),
   "gpt-5": cachedInput(1.25, 10, 0.125),
@@ -81,9 +116,20 @@ export const MODEL_PRICES: Readonly<Record<string, Required<ModelPrice>>> = {
   "gpt-4o-mini": cachedInput(0.15, 0.6, 0.075),
   "gpt-4o": cachedInput(2.5, 10, 1.25),
   "o4-mini": cachedInput(1.1, 4.4, 0.275),
+  "o3-pro": cachedInput(20, 80, 20),
   o3: cachedInput(2, 8, 0.5),
-  // Google (Copilot), prompts up to 200K tokens.
+  // Google (aistudio.google.com/docs/pricing), used by Copilot; prompts up to 200K tokens. Gemini 4 doubles on
+  // 2026-12-01 and Gemini 3.6/3.8 Flash on 2027-01-01.
+  "gemini-4-carbon": cachedInput(2, 10, 0.1),
+  "gemini-4-argon": cachedInput(2, 10, 0.1),
+  "gemini-3.8-flash": cachedInput(0.75, 3.75, 0.075),
+  "gemini-3.6-flash": cachedInput(0.75, 3.75, 0.075),
+  "gemini-3.5-flash-lite": cachedInput(0.3, 2.5, 0.03),
+  "gemini-3.1-pro": cachedInput(2, 12, 0.2),
+  "gemini-3.1-flash-lite": cachedInput(0.25, 1.5, 0.025),
+  "gemini-3-flash": cachedInput(0.5, 3, 0.05),
   "gemini-2.5-pro": cachedInput(1.25, 10, 0.31),
+  "gemini-2.5-flash-lite": cachedInput(0.1, 0.4, 0.01),
   "gemini-2.5-flash": cachedInput(0.3, 2.5, 0.075),
 };
 

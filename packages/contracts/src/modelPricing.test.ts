@@ -20,11 +20,29 @@ describe("model prices", () => {
     expect(resolveModelPrice("gpt-5.1-codex")?.input).toBe(1.25);
     expect(resolveModelPrice("gpt-5.1-codex-mini")?.input).toBe(0.25);
     expect(resolveModelPrice("gpt-5.2-codex")?.output).toBe(14);
+    expect(resolveModelPrice("gpt-6-astra-law")?.input).toBe(10);
+    // A -pro model has its own, higher price, not its base model's.
+    expect(resolveModelPrice("gpt-5.5-pro")?.input).toBe(30);
+    expect(resolveModelPrice("gemini-3.1-pro-preview-customtools")?.input).toBe(2);
+  });
+
+  it("knows the current models of each provider, at their own cache-read rates", () => {
+    expect(resolveModelPrice("claude-fable-5-2")).toMatchObject({ input: 8, output: 40, cacheRead: 0.2 });
+    expect(resolveModelPrice("claude-sonnet-5-5")?.cacheRead).toBeCloseTo(0.1);
+    expect(resolveModelPrice("gpt-6.1-sol")).toMatchObject({ input: 2, output: 10, cacheRead: 0.1 });
+    expect(resolveModelPrice("gpt-6-astra")?.output).toBe(50);
+    expect(resolveModelPrice("gpt-5.6-terra")?.output).toBe(12);
+  });
+
+  it("prices OpenAI's cache writes at the 30-minute rate", () => {
+    expect(resolveModelPrice("gpt-6.1-sol")?.cacheWrite5m).toBeCloseTo(2.5);
+    expect(resolveModelPrice("gpt-5.2")?.cacheWrite5m).toBeCloseTo(1.75);
   });
 
   it("never prices a newer version as an older one", () => {
     expect(resolveModelPrice("claude-opus-4-9")).toBeNull();
-    expect(resolveModelPrice("gpt-5.5")).toBeNull();
+    expect(resolveModelPrice("gpt-5.7")).toBeNull();
+    expect(resolveModelPrice("gpt-6.2-sol")).toBeNull();
     expect(resolveModelPrice("gpt-50")).toBeNull();
   });
 
