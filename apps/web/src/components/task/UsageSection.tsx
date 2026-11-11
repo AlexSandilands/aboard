@@ -1,22 +1,13 @@
-import {
-  automationTitleOf,
-  totalTokens,
-  type TaskDetail,
-  type TaskLink,
-  type TaskUsageRow,
-  type TokenUsage,
-} from "@repo/contracts";
-import { ChevronRightIcon, ExternalLinkIcon, SquareTerminalIcon } from "lucide-react";
+import { automationTitleOf, totalTokens, type TaskDetail, type TaskUsageRow, type TokenUsage } from "@repo/contracts";
+import { ChevronRightIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { HarnessIcon, T3Icon } from "~/components/sessions/SessionParts";
 import { SERIES_COLORS } from "~/components/stats/chartParts";
-import { useSessionActions } from "~/components/sessions/useSessionActions";
-import { t3LinkTargets } from "~/lib/t3Links";
 import { cn } from "~/lib/utils";
-import { useAutopilotOverview, useBoard, useSettings } from "~/state/queries";
-import { linkProps, T3_UNDETECTED } from "./LinksSection";
-import { PANEL_ICON_CLASS, PanelControl, PanelSplitGroup, PanelSplitSeparator } from "./PanelControl";
+import { useAutopilotOverview } from "~/state/queries";
+import { PANEL_ICON_CLASS, PanelControl } from "./PanelControl";
+import { UsageSummary } from "./SectionSummaries";
 import { TaskSection } from "./TaskSection";
 import {
   formatTokens,
@@ -26,7 +17,7 @@ import {
   rowName,
   rowSource,
   tokenMix,
-  usageSummary,
+  usageSummaryParts,
   usageTotalDetail,
   formatCost,
 } from "./usage.logic";
@@ -39,8 +30,6 @@ const KIND_COLORS = [SERIES_COLORS.primary, SERIES_COLORS.success, SERIES_COLORS
 const COLUMNS =
   "grid grid-cols-[minmax(0,1fr)_3.25rem_3.75rem] @md:grid-cols-[minmax(0,1fr)_minmax(0,6.5rem)_3.25rem_3.75rem] items-center gap-2";
 const MODEL_COLUMN = "hidden @md:block";
-/** Where a row's open button sits (its separator and the w-8 button), so rows without one line up with the rest. */
-const ACTION_SPACE = <span aria-hidden className="w-[calc(2rem+1px)] shrink-0" />;
 
 /**
  * Tokens and API-equivalent cost of the task's sessions, T3 threads and board runs (docs/features/token-usage.md):
@@ -50,8 +39,10 @@ export function UsageSection({ task }: { task: TaskDetail }) {
   const usage = task.usage;
   const catalogue = useAutopilotOverview().data?.automations ?? [];
   const automationTitle = (key: string) => automationTitleOf(catalogue, key);
+  // Without a cost or tokens ("Not tracked", "None") the header's plain text says it.
+  const summary = usageSummaryParts(usage);
   return (
-    <TaskSection title="Usage" summary={usage ? <UsageSummaryText text={usageSummary(usage)} /> : null}>
+    <TaskSection title="Usage" summary={summary ? <UsageSummary parts={summary} /> : null}>
       {!usage ? (
         <p className="px-2.5 py-1 text-xs text-muted-foreground">No tokens read yet</p>
       ) : (
@@ -64,17 +55,14 @@ export function UsageSection({ task }: { task: TaskDetail }) {
           </div>
           <TokenMix tokens={usage.tokens} />
           <div className="@container flex flex-col">
-            <div className="flex pb-1" aria-hidden>
-              <div className={cn(COLUMNS, "flex-1 px-2.5 text-2xs font-medium text-muted-foreground")}>
-                <span>Source</span>
-                <span className={MODEL_COLUMN}>Model</span>
-                <span className="text-end">Tokens</span>
-                <span className="text-end">Cost</span>
-              </div>
-              {ACTION_SPACE}
+            <div className={cn(COLUMNS, "px-2.5 pb-1 text-2xs font-medium text-muted-foreground")} aria-hidden>
+              <span>Source</span>
+              <span className={MODEL_COLUMN}>Model</span>
+              <span className="text-end">Tokens</span>
+              <span className="text-end">Cost</span>
             </div>
             {usage.rows.map((row) => (
-              <UsageRow key={row.key} task={task} row={row} automationTitle={automationTitle} />
+              <UsageRow key={row.key} row={row} automationTitle={automationTitle} />
             ))}
           </div>
           <p className="px-2.5 text-2xs text-muted-foreground">
@@ -84,10 +72,6 @@ export function UsageSection({ task }: { task: TaskDetail }) {
       )}
     </TaskSection>
   );
-}
-
-function UsageSummaryText({ text }: { text: string }) {
-  return <span className="min-w-0 truncate text-xs text-muted-foreground tabular-nums">{text}</span>;
 }
 
 function TokenMix({ tokens }: { tokens: TokenUsage }) {
@@ -118,81 +102,60 @@ function RowIcon({ row }: { row: TaskUsageRow }) {
   return <HarnessIcon harness={row.harness} className="size-4 shrink-0" />;
 }
 
-function UsageRow({
-  task,
-  row,
-  automationTitle,
-}: {
-  task: TaskDetail;
-  row: TaskUsageRow;
-  automationTitle: (key: string) => string | null;
-}) {
+function UsageRow({ row, automationTitle }: { row: TaskUsageRow; automationTitle: (key: string) => string | null }) {
   const [open, setOpen] = useState(false);
-  const link = row.linkId ? task.links.find((l) => l.id === row.linkId) : undefined;
   const name = rowName(row, automationTitle);
   const tokens = totalTokens(row.tokens);
   return (
     <div className="flex flex-col">
-      <PanelSplitGroup>
-        <PanelControl
-          part={link ? "primary" : "row"}
-          // A row with no open button shrinks to leave its space, so its columns line up with the others'.
-          className={cn("h-auto py-1.5", !link && "w-auto flex-1 shrink")}
-          aria-expanded={open}
-          title={`${open ? "Hide" : "Show"} the token breakdown of ${name}`}
-          onClick={() => setOpen(!open)}
-        >
-          <span className={cn(COLUMNS, "w-full")}>
-            <span className="flex min-w-0 items-center gap-2">
-              <ChevronRightIcon
-                aria-hidden
-                className={cn("size-3 shrink-0 text-muted-foreground/70 transition-transform", open && "rotate-90")}
-              />
-              <RowIcon row={row} />
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate">{name}</span>
-                <span className="flex min-w-0 flex-wrap items-center gap-1 text-xs font-normal text-muted-foreground">
-                  <span className="truncate">{rowSource(row)}</span>
-                  {/* The model column, which says it otherwise, is hidden on a narrow panel. */}
-                  {row.untracked ? <span className="@md:hidden">· not tracked</span> : null}
-                  {row.sharedWith.length > 0 ? (
-                    <Chip tone="info">shared with {row.sharedWith.map((n) => `#${n}`).join(", ")}</Chip>
-                  ) : null}
-                  {row.costSource === "reported" ? <Chip tone="success">reported</Chip> : null}
-                </span>
+      <PanelControl
+        className="h-auto py-1.5"
+        aria-expanded={open}
+        title={`${open ? "Hide" : "Show"} the token breakdown of ${name}`}
+        onClick={() => setOpen(!open)}
+      >
+        <span className={cn(COLUMNS, "w-full")}>
+          <span className="flex min-w-0 items-center gap-2">
+            <ChevronRightIcon
+              aria-hidden
+              className={cn("size-3 shrink-0 text-muted-foreground/70 transition-transform", open && "rotate-90")}
+            />
+            <RowIcon row={row} />
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate">{name}</span>
+              <span className="flex min-w-0 flex-wrap items-center gap-1 text-xs font-normal text-muted-foreground">
+                <span className="truncate">{rowSource(row)}</span>
+                {/* The model column, which says it otherwise, is hidden on a narrow panel. */}
+                {row.untracked ? <span className="@md:hidden">· not tracked</span> : null}
+                {row.sharedWith.length > 0 ? (
+                  <Chip tone="info">shared with {row.sharedWith.map((n) => `#${n}`).join(", ")}</Chip>
+                ) : null}
+                {row.costSource === "reported" ? <Chip tone="success">reported</Chip> : null}
               </span>
             </span>
-            <span
-              className={cn(MODEL_COLUMN, "truncate text-xs font-normal text-muted-foreground")}
-              title={rowModel(row)}
-            >
-              {row.untracked ? "not tracked" : rowModel(row)}
-            </span>
-            <span className="text-end text-xs font-normal tabular-nums">
-              {row.untracked ? "—" : formatTokens(tokens)}
-              {row.tokens.requests ? (
-                <span className="block text-muted-foreground">{row.tokens.requests} req</span>
-              ) : null}
-            </span>
-            <span
-              className={cn(
-                "text-end text-xs tabular-nums",
-                row.costUsd === null ? "font-normal text-muted-foreground" : "font-medium",
-              )}
-            >
-              {rowCost(row)}
-            </span>
           </span>
-        </PanelControl>
-        {link ? (
-          <>
-            <PanelSplitSeparator />
-            <OpenSource task={task} link={link} />
-          </>
-        ) : (
-          ACTION_SPACE
-        )}
-      </PanelSplitGroup>
+          <span
+            className={cn(MODEL_COLUMN, "truncate text-xs font-normal text-muted-foreground")}
+            title={rowModel(row)}
+          >
+            {row.untracked ? "not tracked" : rowModel(row)}
+          </span>
+          <span className="text-end text-xs font-normal tabular-nums">
+            {row.untracked ? "—" : formatTokens(tokens)}
+            {row.tokens.requests ? (
+              <span className="block text-muted-foreground">{row.tokens.requests} req</span>
+            ) : null}
+          </span>
+          <span
+            className={cn(
+              "text-end text-xs tabular-nums",
+              row.costUsd === null ? "font-normal text-muted-foreground" : "font-medium",
+            )}
+          >
+            {rowCost(row)}
+          </span>
+        </span>
+      </PanelControl>
       {open ? <Breakdown row={row} /> : null}
     </div>
   );
@@ -209,38 +172,6 @@ function Chip({ tone, children }: { tone: "info" | "success"; children: ReactNod
     >
       {children}
     </span>
-  );
-}
-
-/** Opens the row's session in a terminal, or its thread in T3 Code: the same actions as in Sessions. */
-function OpenSource({ task, link }: { task: TaskDetail; link: TaskLink }) {
-  const { open, pending } = useSessionActions(task.id);
-  const settings = useSettings().data;
-  const t3 = useBoard().data?.integrations.t3 ?? T3_UNDETECTED;
-  if (link.kind === "t3_thread") {
-    const target = t3LinkTargets(link.ref, t3, settings).primary;
-    return (
-      <PanelControl
-        part="secondary"
-        aria-label={target.label}
-        title={target.label}
-        render={<a {...linkProps(target.href)} />}
-      >
-        <ExternalLinkIcon className={PANEL_ICON_CLASS} />
-      </PanelControl>
-    );
-  }
-  if (link.kind !== "agent_session") return null;
-  return (
-    <PanelControl
-      part="secondary"
-      aria-label="Open the session in a terminal"
-      title="Open the session in a terminal"
-      disabled={pending}
-      onClick={() => open(link)}
-    >
-      <SquareTerminalIcon className={PANEL_ICON_CLASS} />
-    </PanelControl>
   );
 }
 

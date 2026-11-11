@@ -67,9 +67,17 @@ export function percents(shares: readonly number[]): number[] {
   return floors;
 }
 
-/** The collapsed header's line: "~$5.03 · 2.79M tok · 72% of input cached". */
-export function usageSummary(usage: TaskUsage | null): string {
-  if (!usage || usage.rows.length === 0) return "None";
+/**
+ * The collapsed header's parts: the headline (the cost, or the tokens when nothing had a price) goes in a pill, the
+ * rest beside it: "~$5.03" + "2.79M tok · 72% of input cached". Null when there is nothing to show.
+ */
+export interface UsageSummaryParts {
+  headline: string;
+  rest: string[];
+}
+
+export function usageSummaryParts(usage: TaskUsage | null): UsageSummaryParts | null {
+  if (!usage || usage.rows.length === 0) return null;
   const parts: string[] = [];
   const cost = formatCost(usage.costUsd, usage.costSource);
   if (cost) parts.push(cost);
@@ -77,8 +85,15 @@ export function usageSummary(usage: TaskUsage | null): string {
   if (tokens > 0) parts.push(`${formatTokens(tokens)} tok`);
   const share = cacheReadShare(usage.tokens);
   if (share !== null && share >= 0.01) parts.push(`${Math.round(share * 100)}% of input cached`);
-  if (parts.length === 0) return usage.rows.some((r) => r.untracked) ? "Not tracked" : "None";
-  return parts.join(" · ");
+  const [headline, ...rest] = parts;
+  return headline ? { headline, rest } : null;
+}
+
+/** The collapsed header's line as text: "~$5.03 · 2.79M tok · 72% of input cached". */
+export function usageSummary(usage: TaskUsage | null): string {
+  const parts = usageSummaryParts(usage);
+  if (parts) return [parts.headline, ...parts.rest].join(" · ");
+  return usage?.rows.some((r) => r.untracked) ? "Not tracked" : "None";
 }
 
 /** The line under the total: tokens, premium requests and what has no price. */

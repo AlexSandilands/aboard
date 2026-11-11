@@ -15,6 +15,7 @@ import {
   type RelationChip,
 } from "./sections.logic";
 import { StepSegments } from "./StepVisuals";
+import type { UsageSummaryParts } from "./usage.logic";
 
 /**
  * The rich versions of a collapsed section's one-line summary (see `summarizeSection` for the text they stand in
@@ -178,5 +179,19 @@ function GroupLabel({ label, separated, children }: { label: string; separated: 
       <span className="text-2xs text-muted-foreground/80">{label}</span>
       {children}
     </span>
+  );
+}
+
+/** The cost (or the tokens, when nothing had a price) in a pill, then the tokens and cache share as text. */
+export function UsageSummary({ parts }: { parts: UsageSummaryParts }) {
+  return (
+    <>
+      <Badge variant="info" size="sm" className="tabular-nums">
+        {parts.headline}
+      </Badge>
+      {parts.rest.length > 0 ? (
+        <span className="min-w-0 truncate text-2xs text-muted-foreground tabular-nums">{parts.rest.join(" · ")}</span>
+      ) : null}
+    </>
   );
 }

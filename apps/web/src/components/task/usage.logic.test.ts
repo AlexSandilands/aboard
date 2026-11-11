@@ -10,6 +10,7 @@ import {
   rowSource,
   tokenMix,
   usageSummary,
+  usageSummaryParts,
   usageTotalDetail,
 } from "./usage.logic";
 
@@ -69,6 +70,14 @@ describe("usage formatting", () => {
     expect(usageSummary(usage({ rows: [row({ untracked: true })], tokens: EMPTY_TOKEN_USAGE, costUsd: null }))).toBe(
       "Not tracked",
     );
+  });
+
+  it("puts the cost in the collapsed header's pill, or the tokens when nothing had a price", () => {
+    expect(usageSummaryParts(usage())).toEqual({ headline: "~$5.03", rest: ["2.79M tok", "72% of input cached"] });
+    expect(usageSummaryParts(usage({ costUsd: null, costSource: "unknown" }))?.headline).toBe("2.79M tok");
+    expect(
+      usageSummaryParts(usage({ rows: [row({ untracked: true })], tokens: EMPTY_TOKEN_USAGE, costUsd: null })),
+    ).toBeNull();
   });
 
   it("says what the total leaves out", () => {
