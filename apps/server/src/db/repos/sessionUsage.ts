@@ -271,15 +271,15 @@ export function createSessionUsageRepo(sql: Sql) {
       const rows = sql.all<{ harness: string; session_id: string; task_id: string; via: string }>(
         `SELECT harness, session_id, task_id, via FROM (
            SELECT json_extract(l.ref_json, '$.harness') AS harness, lower(json_extract(l.ref_json, '$.sessionId')) AS session_id,
-                  l.task_id, 'session' AS via, l.created_at AS at, l.id AS link_id
+                  l.task_id, 'session' AS via, l.created_at AS at, l.rowid AS link_order
            FROM task_links l JOIN tasks t ON t.id = l.task_id
            WHERE l.kind = 'agent_session' AND t.deleted_at IS NULL
            UNION ALL
-           SELECT m.harness, m.session_id, l.task_id, 'thread', l.created_at, l.id
+           SELECT m.harness, m.session_id, l.task_id, 'thread', l.created_at, l.rowid
            FROM task_links l JOIN tasks t ON t.id = l.task_id
            JOIN session_usage_thread m ON m.thread_id = json_extract(l.ref_json, '$.threadId')
            WHERE l.kind = 't3_thread' AND t.deleted_at IS NULL
-         ) ORDER BY at, link_id`,
+         ) ORDER BY at, link_order`,
       );
       const owners = new Map<string, { taskId: string; viaThread: boolean }>();
       for (const r of rows) {

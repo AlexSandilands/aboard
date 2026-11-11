@@ -906,11 +906,12 @@ describe("token usage", () => {
   const tokens = (over: Partial<TokenUsage>): TokenUsage => ({ ...EMPTY_TOKEN_USAGE, ...over });
 
   it("counts each session once, under the task that linked it first, with board runs and unpriced tokens apart", async () => {
-    const { s, alpha, beta, task, stats, values, db } = setup();
+    const { s, alpha, beta, task, stats, values, db, clock } = setup();
     const a = task(alpha.id, "A");
     const b = task(beta.id, "B");
     const link = { agentSession: { harness: "claude-code" as const, sessionId: SESSION, cwd: "/w" } };
     s.links.add(a.id, link, "agent");
+    clock(at(14, 13));
     s.links.add(b.id, link, "agent");
     const usage = createRepos(db).sessionUsage;
     const row = { sourceFile: "f", purpose: null, taskId: null, reportedCostUsd: null, source: "transcript" as const };
