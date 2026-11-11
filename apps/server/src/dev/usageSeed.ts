@@ -135,7 +135,6 @@ export function seedUsage(s: Services, db: Db, opts: { workspaceRoot?: string } 
   const models: Record<string, string[]> = {
     "claude-code": ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"],
     codex: ["gpt-5.2-codex", "gpt-5.1"],
-    "copilot-cli": ["gpt-5.1", "claude-sonnet-4-6"],
   };
   const { sessions } = usage.linkedSources();
   const rows: UsageRow[] = [];
@@ -143,7 +142,8 @@ export function seedUsage(s: Services, db: Db, opts: { workspaceRoot?: string } 
     // The showcase's own sessions keep exactly the rows above.
     if (Number(session.sessionId.slice(-12)) < 1000 && session.sessionId.startsWith("00000000-0000-4000-9000"))
       continue;
-    if (session.harness === "t3") continue;
+    // No reader for Copilot CLI yet, so a real board never has its rows either (token-usage.md#copilot-cli).
+    if (session.harness === "t3" || session.harness === "copilot-cli") continue;
     const days = 1 + Math.floor(next() * 4);
     for (let i = 0; i < days; i++) {
       const pick = models[session.harness]!;

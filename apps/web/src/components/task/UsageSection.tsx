@@ -34,7 +34,13 @@ import {
 // One colour per kind of token, the stats page's series colours, so the bar reads in both themes.
 const KIND_COLORS = [SERIES_COLORS.primary, SERIES_COLORS.success, SERIES_COLORS.muted, SERIES_COLORS.warning];
 
-const COLUMNS = "grid grid-cols-[minmax(0,1fr)_minmax(0,6.5rem)_3.25rem_3.75rem] items-center gap-2";
+// Under 28rem (a phone, a narrow panel) the model column goes, so the source keeps its name; the row's breakdown
+// still names the model.
+const COLUMNS =
+  "grid grid-cols-[minmax(0,1fr)_3.25rem_3.75rem] @md:grid-cols-[minmax(0,1fr)_minmax(0,6.5rem)_3.25rem_3.75rem] items-center gap-2";
+const MODEL_COLUMN = "hidden @md:block";
+/** Where a row's open button sits (its separator and the w-8 button), so rows without one line up with the rest. */
+const ACTION_SPACE = <span aria-hidden className="w-[calc(2rem+1px)] shrink-0" />;
 
 /**
  * Tokens and API-equivalent cost of the task's sessions, T3 threads and board runs (docs/features/token-usage.md):
@@ -57,12 +63,15 @@ export function UsageSection({ task }: { task: TaskDetail }) {
             <span className="text-xs text-muted-foreground tabular-nums">{usageTotalDetail(usage)}</span>
           </div>
           <TokenMix tokens={usage.tokens} />
-          <div className="flex flex-col">
-            <div className={cn(COLUMNS, "px-2.5 pb-1 text-2xs font-medium text-muted-foreground")} aria-hidden>
-              <span>Source</span>
-              <span>Model</span>
-              <span className="text-end">Tokens</span>
-              <span className="text-end">Cost</span>
+          <div className="@container flex flex-col">
+            <div className="flex pb-1" aria-hidden>
+              <div className={cn(COLUMNS, "flex-1 px-2.5 text-2xs font-medium text-muted-foreground")}>
+                <span>Source</span>
+                <span className={MODEL_COLUMN}>Model</span>
+                <span className="text-end">Tokens</span>
+                <span className="text-end">Cost</span>
+              </div>
+              {ACTION_SPACE}
             </div>
             {usage.rows.map((row) => (
               <UsageRow key={row.key} task={task} row={row} automationTitle={automationTitle} />
@@ -127,7 +136,8 @@ function UsageRow({
       <PanelSplitGroup>
         <PanelControl
           part={link ? "primary" : "row"}
-          className="h-auto py-1.5"
+          // A row with no open button shrinks to leave its space, so its columns line up with the others'.
+          className={cn("h-auto py-1.5", !link && "w-auto flex-1 shrink")}
           aria-expanded={open}
           title={`${open ? "Hide" : "Show"} the token breakdown of ${name}`}
           onClick={() => setOpen(!open)}
@@ -143,6 +153,8 @@ function UsageRow({
                 <span className="truncate">{name}</span>
                 <span className="flex min-w-0 flex-wrap items-center gap-1 text-xs font-normal text-muted-foreground">
                   <span className="truncate">{rowSource(row)}</span>
+                  {/* The model column, which says it otherwise, is hidden on a narrow panel. */}
+                  {row.untracked ? <span className="@md:hidden">· not tracked</span> : null}
                   {row.sharedWith.length > 0 ? (
                     <Chip tone="info">shared with {row.sharedWith.map((n) => `#${n}`).join(", ")}</Chip>
                   ) : null}
@@ -150,7 +162,10 @@ function UsageRow({
                 </span>
               </span>
             </span>
-            <span className="truncate text-xs font-normal text-muted-foreground" title={rowModel(row)}>
+            <span
+              className={cn(MODEL_COLUMN, "truncate text-xs font-normal text-muted-foreground")}
+              title={rowModel(row)}
+            >
               {row.untracked ? "not tracked" : rowModel(row)}
             </span>
             <span className="text-end text-xs font-normal tabular-nums">
@@ -174,7 +189,9 @@ function UsageRow({
             <PanelSplitSeparator />
             <OpenSource task={task} link={link} />
           </>
-        ) : null}
+        ) : (
+          ACTION_SPACE
+        )}
       </PanelSplitGroup>
       {open ? <Breakdown row={row} /> : null}
     </div>
