@@ -33,6 +33,7 @@ import type { RunAgent } from "./headlessAgent.ts";
 import type { RunImport } from "./headlessImport.ts";
 import type { RunHeadless } from "./headlessReview.ts";
 import { createIssueImporter } from "./issueImport.ts";
+import { createModelPriceService } from "./modelPrices.ts";
 import { createProviders, type ProviderProbes } from "./providers.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
 import { createSessionLaunch } from "./sessionLaunch.ts";
@@ -56,6 +57,8 @@ export interface IntegrationDeps {
       instanceId: string;
       /** Where the backup setup offers to keep the backup clone: `<data dir>/backup`. */
       backupDefaultDir: string;
+      /** `<data dir>/model-prices.json`; null keeps the fetched price list in memory only (an in-memory board). */
+      modelPricesPath: string | null;
     };
   bus: EventBus;
   /** Late-bound: services are created after integrations (they read t3Status). */
@@ -68,6 +71,8 @@ export interface IntegrationOverrides {
   fetch?: FetchFn;
   /** GitHub's GraphQL API; separate from `fetch`, which reaches T3 Code. */
   githubFetch?: FetchFn;
+  /** Fetches LiteLLM's price list. The real `fetch` is passed here and nowhere else; tests pass a fake. */
+  modelPricesFetch?: FetchFn;
   openSocket?: OpenSocket;
   runHeadless?: RunHeadless;
   runImport?: RunImport;
@@ -264,6 +269,13 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.autopilotGit ? { runGit: overrides.autopilotGit } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const modelPrices = createModelPriceService({
+    cachePath: deps.config.modelPricesPath,
+    fetch: overrides.modelPricesFetch ?? ((input, init) => fetch(input, init)),
+    enabled: () => deps.services().settings.get().modelPriceFetch,
+    ...(overrides.now ? { now: overrides.now } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
   let started = false;
   const usageSweep = createUsageSweep(() => deps.services().usage, overrides.log ?? console);
 
@@ -273,6 +285,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     prHostHoldsTasks: (host) => hosts.holdsTasks(host),
     prAgentHints: (pr) => hosts.agentHints(pr),
     runTools,
+    modelPrices,
     start() {
       if (!deps.config.pollers || started) return;
       started = true;
@@ -285,6 +298,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       autopilot.start();
       worktrees.start();
       usageSweep.start();
+      modelPrices.start();
       providers.seedFromDetection().catch((error: unknown) => {
         (overrides.log ?? console).warn(`[providers] couldn't add the providers detection found: ${messageOf(error)}`);
       });
@@ -300,6 +314,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       autopilot.stop();
       worktrees.stop();
       usageSweep.stop();
+      modelPrices.stop();
     },
     t3ThreadUsage: (threadId) => t3.threadUsage(threadId),
     sessionTranscript: (taskId, input) => transcripts.read(taskId, input),

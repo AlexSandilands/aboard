@@ -1,5 +1,6 @@
 import { applyWhereWrites, type AutopilotMode, type WhereTarget } from "@repo/contracts";
 import type {
+  ModelPricesStatus,
   DeleteTasksResult,
   AddLinkResult,
   AgentModels,
@@ -507,6 +508,28 @@ export function useAskSettings() {
   return useMutation({
     mutationFn: (input: AskSettingsInput) =>
       api<AskSettingsResult>("/api/settings/ask", { method: "POST", body: input }),
+  });
+}
+
+/**
+ * Fetches LiteLLM's price list now (the server allows one a minute) and re-reads what the prices change: task usage and
+ * the stats.
+ */
+export function useRefreshModelPrices() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<ModelPricesStatus>("/api/model-prices/refresh", { method: "POST" }),
+    onSuccess: (status) => {
+      queryClient.setQueryData(queryKeys.modelPrices, status);
+      void queryClient.invalidateQueries({ queryKey: ["task"] });
+      void queryClient.invalidateQueries({ queryKey: ["stats"] });
+    },
+    onError: (error) =>
+      toastManager.add({
+        type: "error",
+        title: "Couldn't refresh model prices",
+        description: error instanceof Error ? error.message : String(error),
+      }),
   });
 }
 

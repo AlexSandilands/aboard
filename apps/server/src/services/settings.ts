@@ -66,6 +66,7 @@ const DEFAULTS: StoredSettings = {
   automationVariables: [],
   trashRetentionDays: DEFAULT_TRASH_RETENTION_DAYS,
   modelPriceOverrides: {},
+  modelPriceFetch: true,
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,
@@ -108,6 +109,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "automationVariables",
     "trashRetentionDays",
     "modelPriceOverrides",
+    "modelPriceFetch",
   ] satisfies Array<keyof StoredSettings>),
 ]);
 
@@ -383,6 +385,7 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.modelPriceOverrides !== undefined) {
           repos.settings.set("modelPriceOverrides", input.modelPriceOverrides);
         }
+        if (input.modelPriceFetch !== undefined) repos.settings.set("modelPriceFetch", input.modelPriceFetch);
         if (input.automationVariables !== undefined) {
           repos.settings.set("automationVariables", input.automationVariables);
           // Which projects a custom automation still needs a variable in shows on its row.

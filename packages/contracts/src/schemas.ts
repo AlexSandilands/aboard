@@ -971,6 +971,8 @@ export const AppSettings = z
     trashRetentionDays: TrashRetentionDays,
     /** The user's per-model prices, which win over the built-in table for usage estimates (modelPricing.ts). */
     modelPriceOverrides: ModelPriceOverrides,
+    /** Fetch model prices from LiteLLM once a day; off uses the overrides and the built-in table only. */
+    modelPriceFetch: z.boolean(),
   })
   .extend(BackupSettings.shape);
 
@@ -1014,6 +1016,7 @@ export const UpdateSettingsInput = z.object({
   trashRetentionDays: TrashRetentionDays.optional(),
   /** Replaces the whole set of price overrides. */
   modelPriceOverrides: ModelPriceOverrides.optional(),
+  modelPriceFetch: z.boolean().optional(),
   backupEnabled: z.boolean().optional(),
   backupDir: z.string().trim().nullable().optional(),
   backupRemote: z.string().trim().nullable().optional(),

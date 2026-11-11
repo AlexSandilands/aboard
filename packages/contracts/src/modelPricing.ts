@@ -2,8 +2,9 @@ import { z } from "zod";
 import type { TokenUsage } from "./usage.ts";
 
 // List prices per million tokens, for an API-equivalent estimate of what a session would cost at pay-as-you-go rates.
-// Keyed by model only, never by harness: Copilot or T3 Code running a known model is priced the same way. Nothing is
-// fetched; the user adds or corrects a model with the modelPriceOverrides setting. See docs/features/token-usage.md.
+// Keyed by model only, never by harness: Copilot or T3 Code running a known model is priced the same way. The server
+// fetches LiteLLM's price list (parseLiteLlmPrices); the table below is the offline fallback, and the user adds or
+// corrects a model with the modelPriceOverrides setting. See docs/features/token-usage.md.
 
 /** USD per million tokens. A cache rate left out of an override falls back to the input rate. */
 export const ModelPrice = z.object({
@@ -18,6 +19,35 @@ export type ModelPrice = z.infer<typeof ModelPrice>;
 /** The user's prices by model name, which win over the table and match the same way. */
 export const ModelPriceOverrides = z.record(z.string().trim().min(1), ModelPrice);
 export type ModelPriceOverrides = z.infer<typeof ModelPriceOverrides>;
+
+/** Where the prices in an estimate came from: LiteLLM's fetched list, or the built-in table below. */
+export const PriceSourceKind = z.enum(["litellm", "built_in"]);
+export type PriceSourceKind = z.infer<typeof PriceSourceKind>;
+
+/**
+ * The fetched list's state. fresh: fetched by this server run. cached: read from the copy on disk, or the last fetch
+ * failed and that copy is still used. unavailable: no list was ever fetched, so the built-in table is used. off: the
+ * user switched fetching off (modelPriceFetch).
+ */
+export const PriceFetchStatus = z.enum(["fresh", "cached", "unavailable", "off"]);
+export type PriceFetchStatus = z.infer<typeof PriceFetchStatus>;
+
+export const PriceSource = z.object({
+  source: PriceSourceKind,
+  /** The fetch time (ISO) for LiteLLM's list, the date MODEL_PRICES was checked (YYYY-MM-DD) for the built-in one. */
+  asOf: z.string(),
+  status: PriceFetchStatus,
+});
+export type PriceSource = z.infer<typeof PriceSource>;
+
+/** GET /api/model-prices: the source estimates use now, and how the last fetch went. */
+export const ModelPricesStatus = PriceSource.extend({
+  /** How many model names the fetched list prices; null when there is none. */
+  models: z.number().int().nonnegative().nullable(),
+  /** When the last fetch failed (ISO), if it did after the last success. */
+  lastFailedAt: z.string().nullable(),
+});
+export type ModelPricesStatus = z.infer<typeof ModelPricesStatus>;
 
 /** When the table below was last checked against the providers' pricing pages. */
 export const MODEL_PRICES_AS_OF = "2026-11-11";
@@ -157,26 +187,107 @@ function isVariantOf(key: string, name: string): boolean {
   return rest === "" || /^[-@:](\d{8}(?!\d)|[a-z])/.test(rest);
 }
 
-function longestPrefix<T>(table: Readonly<Record<string, T>>, key: string): T | null {
-  let best: { name: string; length: number } | null = null;
-  for (const name of Object.keys(table)) {
-    const candidate = normalizeModelName(name);
-    if (isVariantOf(key, candidate) && (best === null || candidate.length > best.length)) {
-      best = { name, length: candidate.length };
-    }
-  }
-  return best === null ? null : table[best.name]!;
+/** Prices by normalised model name, normalised once when the table is built rather than on every lookup. */
+export interface PriceTable {
+  readonly entries: ReadonlyArray<{ readonly key: string; readonly price: Required<ModelPrice> }>;
 }
 
-/** The prices for a model, the user's override first; null when neither knows it. */
+function toPriceTable(prices: Readonly<Record<string, Required<ModelPrice>>>): PriceTable {
+  return { entries: Object.entries(prices).map(([name, price]) => ({ key: normalizeModelName(name), price })) };
+}
+
+const BUILT_IN = toPriceTable(MODEL_PRICES);
+
+/** The entry with the longest name `key` is a variant of. */
+function longestMatch(table: PriceTable, key: string): { length: number; price: Required<ModelPrice> } | null {
+  let best: { length: number; price: Required<ModelPrice> } | null = null;
+  for (const entry of table.entries) {
+    if (isVariantOf(key, entry.key) && (best === null || entry.key.length > best.length)) {
+      best = { length: entry.key.length, price: entry.price };
+    }
+  }
+  return best;
+}
+
+/** The providers whose LiteLLM entries are their own list prices; Azure, Bedrock and resellers list other prices. */
+const FIRST_PARTY = new Set(["anthropic", "openai", "gemini"]);
+
+// Rounded to 12 significant digits, so 2e-7 reads back as 0.2 and not 0.19999999999999998.
+const perToken = (value: unknown): number | null =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Number((value * 1_000_000).toPrecision(12))
+    : null;
+
+const samePrice = (a: Required<ModelPrice>, b: Required<ModelPrice>) =>
+  a.input === b.input &&
+  a.output === b.output &&
+  a.cacheRead === b.cacheRead &&
+  a.cacheWrite5m === b.cacheWrite5m &&
+  a.cacheWrite1h === b.cacheWrite1h;
+
+/**
+ * LiteLLM's `model_prices_and_context_window.json` as a price table: first-party entries only, USD per token turned
+ * into per million. An entry without an input or output rate is dropped, so cost is never understated; a missing cache
+ * rate falls back to input. The 1-hour write takes Claude's `…_above_1hr` rate, else OpenAI's 12-hour one (Codex reports
+ * one write count, which goes to cacheWrite5m, so that one is rarely used). Two entries that name the same model at
+ * different prices drop it, and the built-in table prices it instead.
+ */
+export function parseLiteLlmPrices(document: unknown): PriceTable {
+  if (typeof document !== "object" || document === null || Array.isArray(document)) return { entries: [] };
+  const byKey = new Map<string, Required<ModelPrice> | null>();
+  for (const [name, raw] of Object.entries(document as Record<string, unknown>)) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const entry = raw as Record<string, unknown>;
+    if (typeof entry.litellm_provider !== "string" || !FIRST_PARTY.has(entry.litellm_provider)) continue;
+    const input = perToken(entry.input_cost_per_token);
+    const output = perToken(entry.output_cost_per_token);
+    if (input === null || output === null) continue;
+    const key = normalizeModelName(name);
+    if (!key) continue;
+    const cacheWrite5m = perToken(entry.cache_creation_input_token_cost) ?? input;
+    const price: Required<ModelPrice> = {
+      input,
+      output,
+      cacheRead: perToken(entry.cache_read_input_token_cost) ?? input,
+      cacheWrite5m,
+      cacheWrite1h:
+        perToken(entry.cache_creation_input_token_cost_above_1hr) ??
+        perToken(entry.cache_creation_input_token_cost_above_12hr) ??
+        cacheWrite5m,
+    };
+    if (!byKey.has(key)) byKey.set(key, price);
+    else {
+      const held = byKey.get(key);
+      if (held && !samePrice(held, price)) byKey.set(key, null);
+    }
+  }
+  const entries: Array<PriceTable["entries"][number]> = [];
+  for (const [key, price] of byKey) if (price) entries.push({ key, price });
+  return { entries };
+}
+
+/**
+ * The prices for a model; null when nothing knows it. The user's override wins outright. Otherwise the fetched list and
+ * the built-in table are both searched and the longer match wins, the fetched one on a tie, so a `-pro` model the
+ * fetched list lacks keeps its own built-in price instead of taking its base model's.
+ */
 export function resolveModelPrice(
   model: string | null,
   overrides: ModelPriceOverrides = {},
+  fetched: PriceTable | null = null,
 ): Required<ModelPrice> | null {
   if (!model) return null;
   const key = normalizeModelName(model);
   if (!key || UNPRICEABLE.has(key)) return null;
-  const override = longestPrefix(overrides, key);
+  let override: ModelPrice | null = null;
+  let overrideLength = -1;
+  for (const [name, price] of Object.entries(overrides)) {
+    const candidate = normalizeModelName(name);
+    if (isVariantOf(key, candidate) && candidate.length > overrideLength) {
+      override = price;
+      overrideLength = candidate.length;
+    }
+  }
   if (override) {
     return {
       input: override.input,
@@ -186,7 +297,10 @@ export function resolveModelPrice(
       cacheWrite1h: override.cacheWrite1h ?? override.cacheWrite5m ?? override.input,
     };
   }
-  return longestPrefix(MODEL_PRICES, key);
+  const fromFetched = fetched ? longestMatch(fetched, key) : null;
+  const fromBuiltIn = longestMatch(BUILT_IN, key);
+  if (fromFetched && (!fromBuiltIn || fromFetched.length >= fromBuiltIn.length)) return fromFetched.price;
+  return fromBuiltIn?.price ?? null;
 }
 
 /** Dollars at list prices, or null when the model has no price. Premium requests are never priced. */
@@ -194,8 +308,9 @@ export function estimateCostUsd(
   model: string | null,
   tokens: TokenUsage,
   overrides: ModelPriceOverrides = {},
+  fetched: PriceTable | null = null,
 ): number | null {
-  const price = resolveModelPrice(model, overrides);
+  const price = resolveModelPrice(model, overrides, fetched);
   if (!price) return null;
   return (
     (tokens.input * price.input +

@@ -38,7 +38,7 @@ and a click tries again.
 | **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), [Suggestions](#suggested-changes) |
 | **Agents**       | [Providers](#providers) (T3 Code, Claude Code, Codex and GitHub Copilot, once you add them: [connecting agents](connect-agents.md), [T3 Code](t3-code.md)), [Models](#models) (the Light, Standard and Deep tiers and custom models picked by a task label), Operations (the model each kind of run uses) |
 | **Autopilot**    | [Automations](autopilot.md#switching-automations-on) (status, Needs you, every automation and [your own](custom-automations.md) in one list), [Runs](autopilot.md#run-history), [Limits & safety](autopilot.md#limits) (caps, quiet hours, Preview everything, variables) |
-| **Integrations** | GitHub, Ticket systems, Terminal |
+| **Integrations** | GitHub, Ticket systems, Terminal, Model prices |
 | **Project**      | General (name, icon, folder), Planning skill, Review skill, Reviewer model, Automations, [Recurring tasks](recurring-tasks.md), Danger zone |
 
 - **Project → General → Choose icon → Image** lists the images already in the project's folder under **Found in

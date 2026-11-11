@@ -12,6 +12,7 @@ import { TaskSection } from "./TaskSection";
 import {
   formatTokens,
   percents,
+  priceSourceText,
   rowCost,
   rowModel,
   rowName,
@@ -66,7 +67,7 @@ export function UsageSection({ task }: { task: TaskDetail }) {
             ))}
           </div>
           <p className="px-2.5 text-2xs text-muted-foreground">
-            ~ API-equivalent estimate at list prices (as of {usage.pricesAsOf}); a plan may cost less.
+            ~ API-equivalent estimate at {priceSourceText(usage.prices)}; a plan may cost less.
           </p>
         </div>
       )}

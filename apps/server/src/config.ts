@@ -35,6 +35,8 @@ export interface Config {
   worktreesDir: string;
   /** Where pasted images are stored, one folder per task. */
   attachmentsDir: string;
+  /** The last LiteLLM price list fetched, with its fetch time (integrations/modelPrices.ts). Not backed up. */
+  modelPricesPath: string;
 }
 
 /** Where the user opens the board: this server when it serves the built web app, else the Vite dev server. */
@@ -68,6 +70,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     harnessHomes: harnessHomesFrom(env, userHome),
     worktreesDir: join(homeDir, "worktrees"),
     attachmentsDir: join(homeDir, "attachments"),
+    modelPricesPath: join(homeDir, "model-prices.json"),
     sessionDirs: {
       claudeDir: env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"),
       copilotDir: env.COPILOT_HOME || join(homedir(), ".copilot"),

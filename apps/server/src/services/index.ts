@@ -41,7 +41,7 @@ import { createSettingsService } from "./settings.ts";
 import { createSkillSyncService, type HarnessHomes } from "./skillSync.ts";
 import { createSocialService } from "./social.ts";
 import { createStatsService } from "./stats.ts";
-import { createUsageService, type UsageDirs } from "./usage.ts";
+import { createUsageService, type ModelPrices, type UsageDirs } from "./usage.ts";
 import type { T3ThreadUsage } from "../integrations/t3Usage.ts";
 import { createSuggestionsService } from "./suggestions.ts";
 import { createTemplatesService } from "./templates.ts";
@@ -77,6 +77,8 @@ export interface ServiceDeps {
   usageDirs?: UsageDirs;
   /** Reads a T3 thread's usage; null when T3 Code can't be asked. */
   fetchThreadUsage?: (threadId: string) => Promise<T3ThreadUsage | null>;
+  /** LiteLLM's fetched prices and where prices come from; the built-in table only when unset. */
+  modelPrices?: ModelPrices;
 }
 
 /** Builds the service layer over one database. */
@@ -96,6 +98,7 @@ export function createServices(deps: ServiceDeps): Services {
   const usage = createUsageService(core, {
     dirs: deps.usageDirs ?? { claudeDir: join(deps.userHome, ".claude"), codexHome: join(deps.userHome, ".codex") },
     ...(deps.fetchThreadUsage ? { fetchThread: deps.fetchThreadUsage } : {}),
+    ...(deps.modelPrices ? { modelPrices: deps.modelPrices } : {}),
   });
   const templates = createTemplatesService(core, { projects });
 

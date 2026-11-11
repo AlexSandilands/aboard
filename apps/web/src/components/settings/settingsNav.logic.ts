@@ -162,6 +162,7 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
       section("integrations.github", "GitHub", ["gh", "pull requests", "enterprise"]),
       section("integrations.tickets", "Ticket systems", ["jira", "linear", "issue keys", "presets"]),
       section("integrations.terminal", "Terminal", ["open in terminal", "windows terminal", "sessions"]),
+      section("integrations.model-prices", "Model prices", ["litellm", "cost", "pricing", "usage", "tokens"]),
     ],
   },
   {

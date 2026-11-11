@@ -60,25 +60,63 @@ across a restart, are counted there. It skips files whose size hasn't changed. A
 
 ### Cost
 
-Worked out when read, never stored: tokens × the price table in `packages/contracts/src/modelPricing.ts`, keyed by
-model name only (so Copilot or T3 running a known model is priced the same way). A name matches the longest key it
-starts with after lowercasing and dropping a bracketed suffix (`[1m]`) or a provider prefix; a date or a word may
-follow (`-20251001`, `-codex`) but not another version number, so an unknown newer model stays unpriced instead of
-taking an older one's price; a `-pro` model has its own key. Claude's 1-hour cache writes are priced at 2× input,
-5-minute ones at 1.25×. OpenAI's GPT-6 and GPT-5.6 models charge 1.25× input for a 30-minute cache write, which is the
-rate Codex's single cache-write count gets; older OpenAI models and Gemini bill writes as plain input.
+Worked out when read, never stored: tokens × a price per million tokens, keyed by model name only (so Copilot or T3
+running a known model is priced the same way). Prices come from, in order:
 
-The table holds the standard-tier list prices from Anthropic's, OpenAI's and Google's pricing pages on
-`MODEL_PRICES_AS_OF`; update the entries and that date together. Long-context rates (Haiku 5.5 past 100K-token
-prompts, OpenAI past 272K, Gemini 3.1 Pro past 200K) aren't modelled, since a transcript doesn't give a request's
-prompt size, so very long prompts are underestimated. Models a provider doesn't list (Codex's `codex-auto-review`)
-stay unpriced.
+1. The user's `modelPriceOverrides` setting (`PATCH /api/settings`; exported in backups). The settings page has no
+   field for it yet. An override wins outright.
+2. LiteLLM's price list, fetched once a day (below), unless the `modelPriceFetch` setting is off.
+3. The built-in table in `packages/contracts/src/modelPricing.ts` (`MODEL_PRICES`), the offline fallback: the
+   standard-tier list prices from Anthropic's, OpenAI's and Google's pricing pages on `MODEL_PRICES_AS_OF`. Update the
+   entries and that date together.
 
-A model's prices can be added or corrected with the `modelPriceOverrides` setting (`PATCH /api/settings`;
-exported in backups). The settings page has no field for it yet. A price
-change applies to past usage. A model with no price shows its tokens and "no price", never $0. The UI marks estimates
-with `~` and calls them API-equivalent: a subscription may cost less. A cost a run reported itself is shown as
-reported, without the `~`.
+Between the fetched list and the built-in table the longer matching name wins, the fetched one on a tie, so a `-pro`
+model the fetched list lacks keeps its own built-in price instead of taking its base model's.
+
+A name matches the longest key it starts with after lowercasing and dropping a bracketed suffix (`[1m]`) or a provider
+prefix; a date or a word may follow (`-20251001`, `-codex`) but not another version number, so an unknown newer model
+stays unpriced instead of taking an older one's price; a `-pro` model has its own key. Keys are normalised once per
+table, not on every lookup. Claude's 1-hour cache writes are priced at 2× input, 5-minute ones at 1.25×. OpenAI's GPT-6
+and GPT-5.6 models charge 1.25× input for a 30-minute cache write, which is the rate Codex's single cache-write count
+gets; older OpenAI models and Gemini bill writes as plain input.
+
+Long-context rates (Haiku 5.5 past 100K-token prompts, OpenAI past 272K, Gemini 3.1 Pro past 200K) aren't modelled,
+since a transcript doesn't give a request's prompt size, so very long prompts are underestimated. Models no source
+lists (Codex's `codex-auto-review`) stay unpriced.
+
+Past usage is repriced at the current prices whenever it's read: a price change, a new fetch or an override applies to
+old rows too. A model with no price shows its tokens and "no price", never $0. The UI marks estimates with `~` and
+calls them API-equivalent: a subscription may cost less. A cost a run reported itself is shown as reported, without
+the `~`. The panel's and the stats page's footnotes say where the prices came from (`TaskUsage.prices`,
+`StatsResponse.prices`: source, date and status).
+
+#### LiteLLM's price list
+
+`integrations/modelPrices.ts` fetches `model_prices_and_context_window.json` from BerriAI/litellm on
+raw.githubusercontent.com, falling back to the same file through `api.github.com` (`Accept:
+application/vnd.github.raw+json`), with a 10-second timeout. It checks hourly whether the list is a day old and
+fetches then, only while the pollers run; Settings › Integrations › Model prices has Refresh now
+(`POST /api/model-prices/refresh`), at most once a minute, and a failed fetch waits at least a minute before the next.
+Calls in flight are shared. `GET /api/model-prices` gives the status.
+
+- **What is read.** Only entries whose `litellm_provider` is `anthropic`, `openai` or `gemini`: their own list prices,
+  the ones the built-in table uses. Azure, Bedrock and reseller entries list the same models at other prices and are
+  ignored. LiteLLM gives USD per token, multiplied by 1e6.
+- **Mapping.** `input` and `output` from `input_cost_per_token` and `output_cost_per_token`; an entry missing either is
+  dropped, so cost is never understated. `cacheRead` from `cache_read_input_token_cost`, `cacheWrite5m` from
+  `cache_creation_input_token_cost`, each else the input rate. `cacheWrite1h` from
+  `cache_creation_input_token_cost_above_1hr` (Claude), else `…_above_12hr` (OpenAI), else `cacheWrite5m`.
+- **Conflicts.** Two first-party entries that normalise to the same name at different prices drop it, and the built-in
+  table prices it.
+- **Cache.** The last good raw document and its fetch time are kept at `<data dir>/model-prices.json`, written
+  atomically and re-parsed on start, so a restart or being offline still has prices and a parser fix applies without
+  a fetch. A response with no usable entries never replaces it. It isn't backed up: it can be fetched again.
+- **Status.** `fresh`: fetched by this server run. `cached`: read from disk, or the last fetch failed and the copy is
+  still used. `unavailable`: nothing was ever fetched, so the built-in table prices. `off`: `modelPriceFetch` is off,
+  so nothing is fetched and no fetched price is used.
+- **Tests and the sandbox.** The fetcher and clock are injected; only `integrations/index.ts` passes the real `fetch`,
+  and the test harness passes one that always fails. The sandbox seeds a small list with the current time
+  (`seedModelPrices`), and its pollers are off, so it never fetches unless Refresh now is pressed.
 
 ### Attribution
 
@@ -100,13 +138,19 @@ task-less run's.
 - **The transcript always wins over a run's reported cost.** The plan once kept a run's reported cost unless the
   transcript showed later use; reading the transcript is simpler and is never too low when a user carries on an
   Autopilot session by hand.
-- **No price fetch.** The table ships with the board and the user overrides it; nothing reaches the network.
+- **Prices are fetched from LiteLLM.** #152 shipped with a hand-kept table and no network access; it went stale within
+  a month (missing models, a cache-read rate twice the real one) and providers announce price changes ahead. #155
+  reversed that on purpose: LiteLLM's list is fetched daily, as T3 Code does, with the built-in table kept as the
+  offline fallback and a setting to turn the fetch off. Only first-party entries are read, unlike T3 Code's merging of
+  every provider's aliases, which would drop models a reseller lists without a cache rate.
 
 ## Code map
 
 | What                                         | Where                                                                                    |
 | -------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Types, price table, estimate                 | `packages/contracts/src/usage.ts`, `modelPricing.ts`                                     |
+| Types, price table, estimate, LiteLLM parser | `packages/contracts/src/usage.ts`, `modelPricing.ts`                                     |
+| Fetching LiteLLM's list, its cache, status   | `apps/server/src/integrations/modelPrices.ts`; routes in `http/routes/system.ts`         |
+| Settings row                                 | `apps/web/src/components/settings/ModelPricesSection.tsx`                                |
 | Tables                                       | `apps/server/src/db/migrations/050_session_usage.sql`, `db/repos/sessionUsage.ts`        |
 | Incremental file reading                     | `apps/server/src/integrations/usageFiles.ts`                                             |
 | Readers                                      | `integrations/claudeUsage.ts`, `codexUsage.ts`, `t3Usage.ts`, `runUsage.ts`              |
@@ -117,4 +161,4 @@ task-less run's.
 | `get_task` line                              | `apps/server/src/mcp/format.ts` (`usageLine`)                                            |
 | Panel section                                | `apps/web/src/components/task/UsageSection.tsx`, `usage.logic.ts`                        |
 | Stats section                                | `apps/web/src/components/stats/StatsPage.tsx` (Tokens & cost)                            |
-| Sandbox data                                 | `apps/server/src/dev/usageSeed.ts` (stats scenario)                                      |
+| Sandbox data                                 | `apps/server/src/dev/usageSeed.ts` (stats scenario; `seedModelPrices` for every seed)    |

@@ -22,6 +22,7 @@ import { SettingsSubsection } from "../settingsLayout";
 import { SuggestionsSection } from "../SuggestionsSection";
 import { isSettingsGroup, type SettingsGroupId } from "../settingsNav.logic";
 import { TemplatesSection } from "../TemplatesSection";
+import { ModelPricesSection } from "../ModelPricesSection";
 import { TerminalSection } from "../TerminalSection";
 import { TicketSystemsSection } from "../TicketSystemsSection";
 import { ProjectSettingsPage } from "./ProjectSettingsPage";
@@ -122,6 +123,9 @@ function IntegrationsContent() {
       </SettingsSubsection>
       <SettingsSubsection id="integrations.terminal">
         <WithSettings>{(settings) => <TerminalSection settings={settings} />}</WithSettings>
+      </SettingsSubsection>
+      <SettingsSubsection id="integrations.model-prices">
+        <WithSettings>{(settings) => <ModelPricesSection settings={settings} />}</WithSettings>
       </SettingsSubsection>
     </>
   );

@@ -4,6 +4,8 @@ import {
   estimateCostUsd,
   MODEL_PRICES_AS_OF,
   ModelPriceOverrides,
+  type PriceSource,
+  type PriceTable,
   totalTokens,
   type AgentHarness,
   type CostSource,
@@ -80,11 +82,21 @@ export interface UsageService {
   taskUsage(taskId: string): TaskUsage | null;
   /** Every row used on the local days `[fromDay, toDay)`, attributed and priced once for stats and board_activity. */
   attributed(fromDay: string, toDay: string): AttributedUsage[];
+  /** Where prices come from now: LiteLLM's fetched list or the built-in table. */
+  prices(): PriceSource;
   /** Cost of rows in the board's price table and the user's overrides; null when the model has no price. */
   rowCost(row: Pick<UsageRow, "model" | "tokens" | "reportedCostUsd" | "source">): number | null;
   /** Stops the deferred card refreshes (shutdown, tests). */
   stop(): void;
 }
+
+/** The fetched LiteLLM table pricing uses now (null: the built-in table only) and where prices come from. */
+export type ModelPrices = () => { table: PriceTable | null; source: PriceSource };
+
+const BUILT_IN_ONLY: ModelPrices = () => ({
+  table: null,
+  source: { source: "built_in", asOf: MODEL_PRICES_AS_OF, status: "unavailable" },
+});
 
 type StoredCursor = { guard: string; s: unknown };
 
@@ -97,8 +109,10 @@ export function createUsageService(
     dirs: UsageDirs;
     /** Fetches a T3 thread's usage; null when T3 Code can't be asked (not running, no token). */
     fetchThread?: (threadId: string) => Promise<T3ThreadUsage | null>;
+    modelPrices?: ModelPrices;
   },
 ): UsageService {
+  const modelPrices = deps.modelPrices ?? BUILT_IN_ONLY;
   const { repos } = core;
   const usage = repos.sessionUsage;
   const touchedAt = new Map<string, number>();
@@ -305,16 +319,23 @@ export function createUsageService(
   };
 
   const overrides = () => ModelPriceOverrides.safeParse(repos.settings.get("modelPriceOverrides") ?? {}).data ?? {};
+  /** One price lookup per read: the user's overrides and the fetched table, if any. */
+  type Pricer = (model: string | null, tokens: UsageRow["tokens"]) => number | null;
+  const pricer = (): Pricer => {
+    const own = overrides();
+    const { table } = modelPrices();
+    return (model, tokens) => estimateCostUsd(model, tokens, own, table);
+  };
 
   const rowCost: UsageService["rowCost"] = (row) =>
     row.source === "run_output" && row.reportedCostUsd !== null
       ? row.reportedCostUsd
-      : estimateCostUsd(row.model || null, row.tokens, overrides());
+      : pricer()(row.model || null, row.tokens);
 
   const attributed: UsageService["attributed"] = (fromDay, toDay) => {
     const owners = usage.owners();
     const automations = usage.runAutomations();
-    const prices = overrides();
+    const price = pricer();
     return usage.rowsBetween(fromDay, toDay).map((row) => {
       const owner = row.taskId
         ? { taskId: row.taskId, viaThread: false }
@@ -330,7 +351,7 @@ export function createUsageService(
         costUsd:
           row.source === "run_output" && row.reportedCostUsd !== null
             ? row.reportedCostUsd
-            : estimateCostUsd(row.model || null, t, prices),
+            : price(row.model || null, t),
         tokens: t.input + t.output + t.cacheRead + t.cacheWrite5m + t.cacheWrite1h,
       };
     });
@@ -341,8 +362,8 @@ export function createUsageService(
     base: Pick<TaskUsageRow, "key" | "kind" | "harness" | "sessionId" | "linkId" | "label" | "purpose" | "sharedWith">,
     rows: readonly UsageRow[],
     untracked: boolean,
+    price: Pricer,
   ): TaskUsageRow => {
-    const prices = overrides();
     const byModel = new Map<string, UsageModelLine>();
     let reported = 0;
     let anyReported = false;
@@ -358,7 +379,7 @@ export function createUsageService(
     }
     // Largest first, so the model column names the one that did most of the work.
     const models = [...byModel.values()]
-      .map((line) => ({ ...line, costUsd: estimateCostUsd(line.model, line.tokens, prices) }))
+      .map((line) => ({ ...line, costUsd: price(line.model, line.tokens) }))
       .sort((a, b) => totalTokens(b.tokens) - totalTokens(a.tokens));
     const tokens = models.reduce((sum, m) => addTokenUsage(sum, m.tokens), EMPTY_TOKEN_USAGE);
     const unpricedTokens = models.filter((m) => m.costUsd === null).reduce((n, m) => n + totalTokens(m.tokens), 0);
@@ -387,6 +408,9 @@ export function createUsageService(
     const task = repos.tasks.getAny(taskId);
     if (!task) return null;
     const links = repos.links.forTasks([taskId]).map(toLink);
+    const own = overrides();
+    const { table, source: prices } = modelPrices();
+    const price: Pricer = (model, tokens) => estimateCostUsd(model, tokens, own, table);
     const result: TaskUsageRow[] = [];
     const shown = new Set<string>();
     const others = (list: Array<{ id: string; number: number }>) =>
@@ -414,6 +438,7 @@ export function createUsageService(
           rows,
           // The board has no reader for Copilot CLI yet (token-usage.md), so the row says not tracked.
           rows.length === 0 && key.harness === "copilot-cli",
+          price,
         ),
       );
     }
@@ -437,6 +462,7 @@ export function createUsageService(
           },
           usage.rowsForSessions(keys),
           false,
+          price,
         ),
       );
     }
@@ -461,6 +487,7 @@ export function createUsageService(
           },
           rows,
           false,
+          price,
         ),
       );
     }
@@ -475,7 +502,7 @@ export function createUsageService(
       costUsd: priced.length === 0 ? null : priced.reduce((n, r) => n + r.costUsd!, 0),
       costSource,
       unpricedTokens: result.reduce((n, r) => n + r.unpricedTokens, 0),
-      pricesAsOf: MODEL_PRICES_AS_OF,
+      prices,
     };
   };
 
@@ -487,6 +514,7 @@ export function createUsageService(
     taskUsage,
     rowCost,
     attributed,
+    prices: () => modelPrices().source,
     stop() {
       if (timer) clearTimeout(timer);
       timer = null;

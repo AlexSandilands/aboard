@@ -109,7 +109,23 @@ export function registerSystemRoutes(app: Hono, { services, integrations }: AppC
   );
   app.patch(
     "/api/settings",
-    handle(async (c) => c.json(services.settings.update(await parseBody(c, UpdateSettingsInput)))),
+    handle(async (c) => {
+      const input = await parseBody(c, UpdateSettingsInput);
+      const settings = services.settings.update(input);
+      // Switching the price fetch back on fetches now if the list is a day old, not at the next hourly check.
+      if (input.modelPriceFetch === true) void integrations.modelPrices.refresh().catch(() => undefined);
+      return c.json(settings);
+    }),
+  );
+
+  // LiteLLM's model prices: where usage estimates' prices come from, and Refresh now (at most once a minute).
+  app.get(
+    "/api/model-prices",
+    handle((c) => c.json(integrations.modelPrices.status())),
+  );
+  app.post(
+    "/api/model-prices/refresh",
+    handle(async (c) => c.json(await integrations.modelPrices.refresh({ force: true }))),
   );
 
   app.post(
