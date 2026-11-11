@@ -13,6 +13,7 @@ import { persist } from "zustand/middleware";
 import type { PickResolution } from "~/components/task/CloseTaskDialog";
 import { togglePicked } from "~/components/board/boardSelection.logic";
 import { toggleCell, toggleColumn, type CollapseState } from "~/components/board/columnCollapse.logic";
+import { defaultColumnSort, type ColumnSort, type ColumnSorts } from "~/components/board/columnSort.logic";
 import {
   DEFAULT_COLLAPSE,
   DEFAULT_PINNED_LANE_HEIGHT,
@@ -52,10 +53,13 @@ interface BoardViewState extends CollapseState {
   showAutopilotTimer: boolean;
   /** Epic bands folded to their header, by epic id. */
   collapsedEpics: Record<string, true>;
+  /** Each column's card order; a column left out has its default (see columnSort.logic). */
+  columnSorts: ColumnSorts;
   setShowPriorityLane: (value: boolean) => void;
   setPinPriorityLane: (value: boolean) => void;
   setPinnedLaneHeight: (value: PinnedLaneHeight) => void;
   setShowAutopilotTimer: (value: boolean) => void;
+  setColumnSort: (status: TaskStatus, sort: ColumnSort) => void;
   /** `mixed`: some shown project differs from the column, so the header collapses them all. */
   toggleColumnCollapsed: (status: TaskStatus, mixed: boolean) => void;
   /** `rowId`: a project id for its loose cards, or an epic id for its band. */
@@ -73,11 +77,19 @@ export const useBoardView = create<BoardViewState>()(
       pinnedLaneHeight: DEFAULT_PINNED_LANE_HEIGHT,
       showAutopilotTimer: true,
       collapsedEpics: {},
+      columnSorts: {},
       ...DEFAULT_COLLAPSE,
       setShowPriorityLane: (showPriorityLane) => set({ showPriorityLane }),
       setPinPriorityLane: (pinPriorityLane) => set({ pinPriorityLane }),
       setPinnedLaneHeight: (pinnedLaneHeight) => set({ pinnedLaneHeight }),
       setShowAutopilotTimer: (showAutopilotTimer) => set({ showAutopilotTimer }),
+      setColumnSort: (status, sort) =>
+        set(({ columnSorts }) => {
+          // A column back on its default isn't stored, so a later change of default reaches it.
+          const next: Partial<Record<TaskStatus, ColumnSort>> = { ...columnSorts, [status]: sort };
+          if (sort === defaultColumnSort(status)) delete next[status];
+          return { columnSorts: next };
+        }),
       toggleColumnCollapsed: (status, mixed) => set((s) => toggleColumn(s, status, mixed)),
       toggleCellCollapsed: (rowId, status) => set((s) => toggleCell(s, rowId, status)),
       toggleEpicCollapsed: (epicId) =>
@@ -102,6 +114,7 @@ export const useBoardView = create<BoardViewState>()(
         pinnedLaneHeight,
         showAutopilotTimer,
         collapsedEpics,
+        columnSorts,
         collapsedColumns,
         cellOverrides,
       }) => ({
@@ -110,6 +123,7 @@ export const useBoardView = create<BoardViewState>()(
         pinnedLaneHeight,
         showAutopilotTimer,
         collapsedEpics,
+        columnSorts,
         collapsedColumns,
         cellOverrides,
       }),

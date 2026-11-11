@@ -12,6 +12,7 @@ import {
   matchesTaskOwnFilters,
   type TaskOwnFilters,
 } from "./boardFilters.logic";
+import { columnComparator, columnSortFor, priorityLaneComparator, type ColumnSorts } from "./columnSort.logic";
 
 export const STATUS_ORDER: ReadonlyArray<TaskStatus> = TASK_STATUSES.map((s) => s.value);
 /** A collapsed column shows only the first few cards of each lane until it is expanded. */
@@ -188,20 +189,12 @@ export function matchesTaskSearch(task: TaskSummary, rawQuery: string): boolean 
   return ticketKeys(task).some((key) => key.toLowerCase().includes(query));
 }
 
-function byPosition(a: TaskSummary, b: TaskSummary) {
-  return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
-}
-
-function byRecentStatusChange(a: TaskSummary, b: TaskSummary) {
-  return a.statusChangedAt < b.statusChangedAt ? 1 : a.statusChangedAt > b.statusChangedAt ? -1 : 0;
-}
-
 function emptyCells(): Record<TaskStatus, TaskSummary[]> {
   return { backlog: [], planned: [], in_progress: [], review: [], done: [] };
 }
 
-function sortCells(cells: Record<TaskStatus, TaskSummary[]>): Record<TaskStatus, TaskSummary[]> {
-  for (const status of STATUS_ORDER) cells[status].sort(status === "done" ? byRecentStatusChange : byPosition);
+function sortCells(cells: Record<TaskStatus, TaskSummary[]>, sorts: ColumnSorts): Record<TaskStatus, TaskSummary[]> {
+  for (const status of STATUS_ORDER) cells[status].sort(columnComparator(columnSortFor(sorts, status)));
   return cells;
 }
 
@@ -209,18 +202,21 @@ function sortCells(cells: Record<TaskStatus, TaskSummary[]>): Record<TaskStatus,
  * Groups the board into one lane per project (in project order). Each epic gets a band holding its children
  * in five cells, and the other cards fill the lane's own five cells. A Done epic gets no band: it joins the
  * lane's Done cell as one card (newest-first by when it finished) and its children go in `epicChildren`.
- * Cells are ordered by position, except Done which is newest-first. With a text, attention, PR or label filter active, a band keeps the children
+ * Each column is ordered by its sort in `sorts` (see columnSort.logic): by default by position, except Done which is
+ * newest-first by when cards finished. With a text, attention, PR or label filter active, a band keeps the children
  * that match (all of them when the epic itself matches), and lanes without a match are dropped so results
  * are easy to scan. `archived` tasks (Show archived) join their lanes; the snapshot's copy wins if a task
  * is in both.
  *
  * With `priorityLane`, the board's open priority tasks (not archived, not epics, not Done) leave their projects for a lane in
- * front of them, whatever project is scoped to. The card filters still apply to them.
+ * front of them, whatever project is scoped to. The card filters still apply to them. They stay grouped by project
+ * there, each project's cards in the column's sort.
  */
 export function buildLanes(
   board: BoardSnapshot,
   filters: BoardFilters,
   archived: ReadonlyArray<TaskSummary> = [],
+  sorts: ColumnSorts = {},
 ): Lane[] {
   const known = filters.projectIds.filter((id) => board.projects.some((p) => p.id === id));
   const scoped = known.length > 0 ? new Set(known) : null;
@@ -293,7 +289,7 @@ export function buildLanes(
     // With no matching children, an epic shows only when it matches the filters itself (or is the one filtered to).
     if (!cells && filtering && epicFilter !== epic.id && !(epicFilter === null && matches(epic) && epicOk(epic)))
       continue;
-    const resolved = sortCells(cells ?? emptyCells());
+    const resolved = sortCells(cells ?? emptyCells(), sorts);
     // A finished epic would stack above everything in Done, so it is one card there instead. Filtered to
     // (`?epic=`), it keeps its band: the filter is for looking at its tasks.
     if (epic.status === "done" && epicFilter !== epic.id) {
@@ -312,12 +308,9 @@ export function buildLanes(
 
   const lanes: Lane[] = [];
   if (priorityCount > 0) {
-    // Cards from different projects have no common order of their own: by project, then position.
     const rank = (task: TaskSummary) => projectOrder.get(task.projectId) ?? 0;
-    for (const status of STATUS_ORDER) {
-      const cells = priorityCells[status];
-      cells.sort(status === "done" ? byRecentStatusChange : (a, b) => rank(a) - rank(b) || byPosition(a, b));
-    }
+    for (const status of STATUS_ORDER)
+      priorityCells[status].sort(priorityLaneComparator(columnSortFor(sorts, status), rank));
     lanes.push({ priority: true, project: PRIORITY_PROJECT, bands: [], cells: priorityCells, epicChildren: {} });
   }
   for (const project of board.projects) {
@@ -328,7 +321,7 @@ export function buildLanes(
     lanes.push({
       project,
       bands,
-      cells: sortCells(cells ?? emptyCells()),
+      cells: sortCells(cells ?? emptyCells(), sorts),
       epicChildren: childrenByProject.get(project.id) ?? {},
     });
   }

@@ -725,3 +725,45 @@ describe("buildLanes: task filters", () => {
 });
 
 const STATUS_ALL = ["backlog", "planned", "in_progress", "review", "done"] as const;
+
+describe("buildLanes: column sorts", () => {
+  const sorts = { backlog: "created_desc" } as const;
+
+  it("keeps today's order with no sorts", () => {
+    const tasks = [
+      task("old", { position: "a1", createdAt: "2026-01-01" }),
+      task("new", { position: "a2", createdAt: "2026-01-05" }),
+    ];
+    expect(buildLanes(board(tasks), noFilters)[0]!.cells.backlog.map((t) => t.id)).toEqual(["old", "new"]);
+    expect(buildLanes(board(tasks), noFilters, [], {})[0]!.cells.backlog.map((t) => t.id)).toEqual(["old", "new"]);
+  });
+
+  it("sorts loose cells and epic bands by their column's sort, leaving other columns alone", () => {
+    const epic = task("e", { kind: "epic", number: 9 });
+    const parent = { id: "e", number: 9, title: "e" };
+    const tasks = [
+      epic,
+      task("old", { position: "a1", createdAt: "2026-01-01" }),
+      task("new", { position: "a2", createdAt: "2026-01-05" }),
+      task("band-old", { parent, position: "a1", createdAt: "2026-01-01" }),
+      task("band-new", { parent, position: "a2", createdAt: "2026-01-05" }),
+      task("p-old", { status: "planned", position: "a1", createdAt: "2026-01-01" }),
+      task("p-new", { status: "planned", position: "a2", createdAt: "2026-01-05" }),
+    ];
+    const [lane] = buildLanes(board(tasks), noFilters, [], sorts);
+    expect(lane!.cells.backlog.map((t) => t.id)).toEqual(["new", "old"]);
+    expect(lane!.bands[0]!.cells.backlog.map((t) => t.id)).toEqual(["band-new", "band-old"]);
+    expect(lane!.cells.planned.map((t) => t.id)).toEqual(["p-old", "p-new"]);
+  });
+
+  it("keeps the priority lane grouped by project, sorted within each", () => {
+    const tasks = [
+      task("q-new", { projectId: "q", priority: true, createdAt: "2026-01-09" }),
+      task("p-old", { projectId: "p", priority: true, position: "a1", createdAt: "2026-01-01" }),
+      task("p-new", { projectId: "p", priority: true, position: "a2", createdAt: "2026-01-05" }),
+    ];
+    const [lane] = buildLanes(board(tasks), { ...noFilters, priorityLane: true }, [], sorts);
+    expect(lane!.priority).toBe(true);
+    expect(lane!.cells.backlog.map((t) => t.id)).toEqual(["p-new", "p-old", "q-new"]);
+  });
+});

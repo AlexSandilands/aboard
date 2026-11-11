@@ -10,6 +10,11 @@ export interface PersistedBoardView extends CollapseState {
   pinPriorityLane?: boolean;
   /** Added without a bump: a stored view without it gets the default ("medium") when merged. */
   pinnedLaneHeight?: PinnedLaneHeight;
+  /**
+   * Added without a bump: a stored view without it gets the default ({}, every column in its default order) when
+   * merged. A stored sort that isn't known is ignored where it is read (columnSortFor).
+   */
+  columnSorts?: Partial<Record<string, string>>;
 }
 
 /** How much of the viewport the pinned priority lane may take once it is stuck, in viewport heights. */

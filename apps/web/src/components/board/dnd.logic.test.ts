@@ -13,6 +13,8 @@ import {
   previewMove,
   previewPlacement,
   readDragData,
+  sortedDrop,
+  sortedLandingIndex,
   type DropInput,
   type DropTask,
   type PlacementInput,
@@ -360,5 +362,43 @@ describe("containersAroundStuckLane", () => {
   it("offers everything without a stuck lane or a pointer (keyboard drags)", () => {
     expect(containersAroundStuckLane(containers, { x: 5, y: 45 }, null)).toEqual(containers);
     expect(containersAroundStuckLane(containers, null, lane)).toEqual(containers);
+  });
+});
+
+describe("sortedDrop", () => {
+  const move = { kind: "move", status: "backlog", afterId: "x" } as const;
+
+  it("turns a sorted column back to Manual on a reorder inside the card's own cell, keeping the neighbours", () => {
+    expect(sortedDrop(move, true, true)).toEqual({ result: move, resetToManual: true });
+  });
+
+  it("drops the neighbours of a card brought into a sorted column, which stays sorted", () => {
+    expect(sortedDrop({ ...move, clearPriority: true }, true, false)).toEqual({
+      result: { kind: "move", status: "backlog", clearPriority: true },
+      resetToManual: false,
+    });
+  });
+
+  it("leaves unsorted columns and anything but a move alone", () => {
+    expect(sortedDrop(move, false, true)).toEqual({ result: move, resetToManual: false });
+    expect(sortedDrop({ kind: "noop" }, true, true)).toEqual({ result: { kind: "noop" }, resetToManual: false });
+    expect(sortedDrop({ kind: "invalid" }, true, false)).toEqual({ result: { kind: "invalid" }, resetToManual: false });
+  });
+});
+
+describe("sortedLandingIndex", () => {
+  const card = (id: string, updatedAt: string) => ({ id, updatedAt, number: Number(id.slice(1)) }) as TaskSummary;
+  const cell = [card("t9", "2026-01-03"), card("t5", "2026-01-02"), card("t2", "2026-01-01")];
+  const byNumberDesc = (a: TaskSummary, b: TaskSummary) => b.number - a.number;
+  const byUpdated = (a: TaskSummary, b: TaskSummary) =>
+    a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0;
+
+  it("finds the card's place in the sort among the cell's other cards", () => {
+    expect(sortedLandingIndex(cell, card("t6", ""), "backlog", byNumberDesc, "2026-02-01")).toBe(1);
+    expect(sortedLandingIndex(cell, card("t1", ""), "backlog", byNumberDesc, "2026-02-01")).toBe(3);
+  });
+
+  it("counts the moved card as just updated", () => {
+    expect(sortedLandingIndex(cell, card("t1", "2025-01-01"), "backlog", byUpdated, "2026-02-01")).toBe(0);
   });
 });
