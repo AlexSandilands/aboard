@@ -5,56 +5,66 @@ import { restoreBoardScope } from "~/components/board/projectScopeRestore";
 import { useProjectIds } from "~/state/queries";
 import { useProjectScope } from "~/state/ui";
 import { useCloseTask, useProjectFilter, useSelectedTaskId } from "~/components/board/boardNavigation";
-import { SettingsSidebar, useSettingsBack } from "~/components/settings/SettingsShell";
-import { useInStats, useLeaveStats } from "~/components/stats/useOpenStats";
+import { useSettingsBack } from "~/components/settings/SettingsShell";
 import { useInSocial, useLeaveSocial } from "~/components/social/useSocialNavigation";
-import { AppSidebar } from "~/components/sidebar/AppSidebar";
 import { useSidebar } from "~/components/ui/sidebar";
+import { AppLayout } from "./AppLayout";
+import { closeAppWindow } from "./AppRouteModal";
 import { AppShell } from "./AppShell";
+import { isAppModalPath, showsBoard } from "./appModal.logic";
 
 /**
- * The layout route around the board and Settings. One `AppShell` stays mounted across both, so moving between them
- * keeps the live-update stream, the notification delivery and the sidebar's state; only the sidebar's contents and
- * what Esc does change.
+ * The layout route around every page. One `AppShell` stays mounted across them, and so does the board: Settings and
+ * Stats render in a floating window over it (`AppRouteModal`, inside their route components), so opening and closing
+ * one keeps the board's scroll, its open task panel and the live-update stream. The board behind is inert and reads
+ * its search from where it was left (`useBoardSearch`). Only the social feed is a page of its own.
  */
 export function AppFrame() {
   useRememberProjectScope();
-  const inSettings = useLocation({ select: (location) => location.pathname.startsWith("/settings") });
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const windowOpen = isAppModalPath(pathname);
   const taskId = useSelectedTaskId();
   const closeTask = useCloseTask();
   const projectFilter = useProjectFilter();
-  const inStats = useInStats();
   const settingsBack = useSettingsBack();
-  const leaveStats = useLeaveStats();
   const inSocial = useInSocial();
   const leaveSocial = useLeaveSocial();
   return (
     <AppShell
-      sidebar={inSettings ? <SettingsSidebar /> : <AppSidebar />}
-      sidebarLabel={inSettings ? "Settings" : "Projects"}
-      onBack={inSettings ? settingsBack : inStats ? leaveStats : inSocial ? leaveSocial : taskId ? closeTask : null}
-      // On the project settings page `?project=` is the project being configured, not the board's scope.
-      newTaskProjectId={inSettings || projectFilter.length !== 1 ? null : projectFilter[0]}
+      background={windowOpen}
+      onBack={
+        pathname.startsWith("/settings")
+          ? settingsBack
+          : windowOpen
+            ? closeAppWindow
+            : inSocial
+              ? leaveSocial
+              : taskId
+                ? closeTask
+                : null
+      }
+      newTaskProjectId={projectFilter.length === 1 ? projectFilter[0] : null}
     >
-      <CloseSheetOnSwitch inSettings={inSettings} />
+      <CloseSheetOnWindow windowOpen={windowOpen} />
+      {showsBoard(pathname) ? <AppLayout /> : null}
       <Outlet />
     </AppShell>
   );
 }
 
 /**
- * On a narrow window the sidebar is a sheet. A pick in it that switches between the board and Settings (a project's
- * gear, Back) would otherwise leave it open over the new page, since the shell outlives the switch. Only the switch
- * closes it: the sheet mounts its contents on opening, so closing on mount would shut it straight away.
+ * On a narrow window the sidebar is a sheet. A pick in it that opens a window (Settings, Stats, a project's gear)
+ * would otherwise leave the sheet open over it. Only the change closes it: the sheet mounts its contents on opening,
+ * so closing on mount would shut it straight away.
  */
-function CloseSheetOnSwitch({ inSettings }: { inSettings: boolean }) {
+function CloseSheetOnWindow({ windowOpen }: { windowOpen: boolean }) {
   const { setOpenMobile } = useSidebar();
-  const previous = useRef(inSettings);
+  const previous = useRef(windowOpen);
   useEffect(() => {
-    if (previous.current === inSettings) return;
-    previous.current = inSettings;
-    setOpenMobile(false);
-  }, [inSettings, setOpenMobile]);
+    if (previous.current === windowOpen) return;
+    previous.current = windowOpen;
+    if (windowOpen) setOpenMobile(false);
+  }, [windowOpen, setOpenMobile]);
   return null;
 }
 

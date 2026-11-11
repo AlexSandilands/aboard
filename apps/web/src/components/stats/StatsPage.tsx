@@ -10,7 +10,8 @@ import {
 } from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useMemo, type ReactNode } from "react";
-import { SidebarTrigger, useSidebar } from "~/components/ui/sidebar";
+import { APP_WINDOW_HEADER_CLASS, AppRouteModal, AppRouteModalClose } from "~/components/layout/AppRouteModal";
+import { useLeaveWindow } from "~/components/settings/settingsNavigation";
 import { ChevronDownIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuCheckboxItem, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
@@ -46,9 +47,9 @@ const EMPTY: StatsSeries = {
   previousTotal: null,
 };
 
-/** Route component for `/stats`: trends by week (by day for one week) over the board's history (docs/features/stats.md). */
+/** Route component for `/stats`: the Stats window over the board, with trends by week (by day for one week) over the board's history (docs/features/stats.md). */
 export function StatsPage() {
-  const { isMobile, open } = useSidebar();
+  const leave = useLeaveWindow();
   const navigate = useNavigate();
   const search = useSearch({ from: "/_app/stats" });
   const weeks = parseStatsPeriod(search.weeks);
@@ -79,61 +80,59 @@ export function StatsPage() {
     chosen.length === 0 ? "All projects" : chosen.length === 1 ? chosen[0]!.title : `${chosen.length} projects`;
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="drag-region flex h-[var(--workspace-topbar-height)] shrink-0 items-center gap-2 ps-(--workspace-gutter-start) pe-(--workspace-gutter-end) wco:pe-(--workspace-native-controls-inset)">
-        {isMobile || !open ? <SidebarTrigger variant="ghost-muted" size="icon-sm" aria-label="Toggle sidebar" /> : null}
-        <h1 className="truncate text-sm font-medium">
-          Stats
-          {chosen.length > 0 ? (
-            <span className="font-normal text-muted-foreground" title={chosen.map((p) => p.title).join(", ")}>
-              {" "}
-              · {scopeLabel}
-            </span>
-          ) : null}
-        </h1>
+    <AppRouteModal label="Stats" onClosed={leave}>
+      {/* On a phone the controls take a row of their own under the title and the close button. */}
+      <header className={cn(APP_WINDOW_HEADER_CLASS, "max-sm:h-auto max-sm:flex-wrap max-sm:py-2")}>
+        <h1 className="truncate text-sm font-medium max-sm:flex-1">Stats</h1>
+        <div className="ms-auto flex min-w-0 shrink-0 items-center gap-2 max-sm:order-3 max-sm:ms-0 max-sm:w-full">
+          <Menu>
+            <MenuTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="min-w-0 justify-between max-sm:flex-1 sm:w-44"
+                  aria-label="Projects"
+                />
+              }
+            >
+              <span className="truncate">{scopeLabel}</span>
+              <ChevronDownIcon />
+            </MenuTrigger>
+            <MenuPopup align="start">
+              <MenuItem onClick={() => setSearch({ project: undefined })}>All projects</MenuItem>
+              <MenuSeparator />
+              {projects.map((project) => (
+                <MenuCheckboxItem
+                  key={project.id}
+                  checked={projectIds.includes(project.id)}
+                  onCheckedChange={() => toggleProject(project.id)}
+                >
+                  {project.title}
+                </MenuCheckboxItem>
+              ))}
+            </MenuPopup>
+          </Menu>
+          <ToggleGroup
+            aria-label="Period"
+            value={[String(weeks)]}
+            onValueChange={(next) => {
+              const period = parseStatsPeriod(next[0]);
+              if (next[0] !== undefined) setSearch({ weeks: period });
+            }}
+          >
+            {STATS_PERIODS.map((period) => (
+              <Toggle key={period} value={String(period)} aria-label={`${period} ${period === 1 ? "week" : "weeks"}`}>
+                {period}w
+              </Toggle>
+            ))}
+          </ToggleGroup>
+          {stats.isFetching && stats.data ? <Spinner size="sm" tone="muted" aria-label="Refreshing" /> : null}
+        </div>
+        <AppRouteModalClose />
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-4xl space-y-6 px-4 pt-2 pb-24 sm:px-6">
-          <div className="flex flex-wrap items-center gap-3">
-            <Menu>
-              <MenuTrigger
-                render={
-                  <Button variant="outline" size="sm" className="sm:w-52 justify-between" aria-label="Projects" />
-                }
-              >
-                <span className="truncate">{scopeLabel}</span>
-                <ChevronDownIcon />
-              </MenuTrigger>
-              <MenuPopup align="start">
-                <MenuItem onClick={() => setSearch({ project: undefined })}>All projects</MenuItem>
-                <MenuSeparator />
-                {projects.map((project) => (
-                  <MenuCheckboxItem
-                    key={project.id}
-                    checked={projectIds.includes(project.id)}
-                    onCheckedChange={() => toggleProject(project.id)}
-                  >
-                    {project.title}
-                  </MenuCheckboxItem>
-                ))}
-              </MenuPopup>
-            </Menu>
-            <ToggleGroup
-              aria-label="Period"
-              value={[String(weeks)]}
-              onValueChange={(next) => {
-                const period = parseStatsPeriod(next[0]);
-                if (next[0] !== undefined) setSearch({ weeks: period });
-              }}
-            >
-              {STATS_PERIODS.map((period) => (
-                <Toggle key={period} value={String(period)} aria-label={`${period} ${period === 1 ? "week" : "weeks"}`}>
-                  {period}w
-                </Toggle>
-              ))}
-            </ToggleGroup>
-            {stats.isFetching && stats.data ? <Spinner size="sm" tone="muted" aria-label="Refreshing" /> : null}
-          </div>
+        <div className="mx-auto w-full max-w-4xl space-y-6 px-4 pt-4 pb-24 sm:px-6">
           {unknownProject ? (
             <p className="text-sm text-muted-foreground">
               A project in this selection isn't on the board any more.{" "}
@@ -165,7 +164,7 @@ export function StatsPage() {
           )}
         </div>
       </div>
-    </div>
+    </AppRouteModal>
   );
 }
 

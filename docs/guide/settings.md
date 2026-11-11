@@ -1,12 +1,16 @@
 # Settings
 
-Settings is a page, not a dialog. Open it with the gear at the bottom of the sidebar, **Ctrl/Cmd ,**, or
+Settings opens in a large window over the board. Each page has its own address, so the browser's Back and Forward
+and links to a setting work. Open it with the gear at the bottom of the sidebar, **Ctrl/Cmd ,**, or
 **Settings: …** in the command palette (type a section's name, such as "Settings: Review", to go straight to it).
 A project's gear in the sidebar, or right-clicking the project, opens that project's settings.
 
-While it is open, the sidebar lists every page with its sections beneath. Click a page to open it and a section
-to scroll to it; the section you are reading is highlighted. **Back** at the bottom, or **Esc**, returns to the
-board as you left it. On a narrow window the list is behind the menu button in the top bar.
+The left side of the window lists every page with its sections beneath. Click a page to open it and a section
+to scroll to it; the section you are reading is highlighted. The **×** at the top right, **Esc**, a click outside
+the window or **Ctrl/Cmd ,** again closes it and returns to the board as you left it. While an editor is open (a
+template, an automation, a recurring rule) a click outside and **Ctrl/Cmd ,** do nothing, so a half-filled form isn't
+lost by accident. On a narrow window the list
+is a strip of icons, one per page; its search button shows the full list.
 
 ## Finding a setting
 

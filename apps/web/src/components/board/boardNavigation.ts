@@ -1,6 +1,7 @@
 import { formatProjectScope, parseProjectScope, type BoardFilterParams } from "@repo/contracts";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useMatch, useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
+import { boardSearchAt } from "~/components/layout/appModal.logic";
 import { formatLabelFilter, parseLabelFilter } from "~/components/labels/labels.logic";
 import type { BoardSearch } from "~/router";
 import { useProjectIds } from "~/state/queries";
@@ -9,15 +10,31 @@ import { clearedParams, FILTER_PARAM_KEYS, filterParams, readFilters, type Filte
 
 /**
  * The board search a navigation to "/" builds on: the current one on the board, else the board as it was when
- * Settings opened, so opening a task from Settings doesn't carry the project page's `?project=` onto the board.
+ * a window opened, so opening a task from Settings doesn't carry the project page's `?project=` onto the board.
  */
 export function boardSearchFrom(prev: BoardSearch): BoardSearch {
-  return window.location.pathname === "/" ? prev : useSettingsNav.getState().boardReturn;
+  return boardSearchAt(window.location.pathname, prev, useSettingsNav.getState().boardReturn);
+}
+
+/**
+ * Reads the board's search. The board stays mounted behind the Settings and Stats windows, whose URLs carry their
+ * own search (`?project=` is the project being configured), so off the board this reads the search the board was
+ * left with (`boardReturn`). On the board it reads the board route's own match, whose search is the validated one
+ * (`BoardSearch`): the layout route these hooks are rendered under only has the raw values, where `?q=2024` is a
+ * number. `select` must return a primitive, as both sources compare by identity.
+ */
+function useBoardSearch<T extends string | number | boolean | null | undefined>(select: (search: BoardSearch) => T): T {
+  // Whether the board route is matched, not the location's path: the two change in different renders during a
+  // navigation, and the search below exists exactly while the match does.
+  const onBoard = useMatch({ from: "/_app/", shouldThrow: false, select: () => true }) === true;
+  const url = useSearch({ from: "/_app/", shouldThrow: false, select: (search): unknown => select(search) });
+  const kept = useSettingsNav((s) => (onBoard ? undefined : select(s.boardReturn)));
+  return (onBoard ? url : kept) as T;
 }
 
 /** `?task=` — the task open in the detail panel. */
 export function useSelectedTaskId(): string | null {
-  return useSearch({ strict: false, select: (search) => search.task ?? null });
+  return useBoardSearch((search) => search.task ?? null);
 }
 
 /**
@@ -25,14 +42,14 @@ export function useSelectedTaskId(): string | null {
  * don't exist (any more) are dropped once the board has loaded.
  */
 export function useProjectFilter(): ReadonlyArray<string> {
-  const raw = useSearch({ strict: false, select: (search) => search.project });
+  const raw = useBoardSearch((search) => search.project);
   const order = useProjectIds();
   return useMemo(() => parseProjectScope(raw, order), [raw, order]);
 }
 
 /** `?labels=`: the labels the board is filtered to (any of them). */
 export function useLabelFilter(): string[] {
-  const raw = useSearch({ strict: false, select: (search) => search.labels });
+  const raw = useBoardSearch((search) => search.labels);
   return useMemo(() => parseLabelFilter(raw), [raw]);
 }
 
@@ -84,7 +101,7 @@ export function useCloseTask() {
 
 /** `?epic=`: the epic the board is filtered to. */
 export function useEpicFilter(): string | null {
-  return useSearch({ strict: false, select: (search) => search.epic ?? null });
+  return useBoardSearch((search) => search.epic ?? null);
 }
 
 export function useSetEpicFilter() {
@@ -98,10 +115,7 @@ export function useSetEpicFilter() {
 
 /** The search's filter params (the project scope included), as one value that only changes when they do. */
 export function useBoardFilterParams(): BoardFilterParams {
-  const key = useSearch({
-    strict: false,
-    select: (search) => JSON.stringify(FILTER_PARAM_KEYS.map((name) => search[name])),
-  });
+  const key = useBoardSearch((search) => JSON.stringify(FILTER_PARAM_KEYS.map((name) => search[name])));
   return useMemo(() => {
     const values = JSON.parse(key) as unknown[];
     return Object.fromEntries(FILTER_PARAM_KEYS.map((name, i) => [name, values[i] ?? undefined]));

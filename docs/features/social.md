@@ -18,7 +18,8 @@ shows a **Social network** section with the switch (`socialNetwork`, default off
 switch is on, the section stays shown. Its element ids (`social`, `social.*`) sit outside the settings groups, so
 settings search never lists it (`apps/web/src/components/social/SocialSettings.tsx`).
 The feed page replaces the sidebar footer's utility row with a single Back button (Esc does the same). Opened from
-Settings it steps back in history; opened by URL it goes to the board (`useLeaveSocial`).
+Settings it steps back in history, which reopens the Settings window; opened by URL it goes to the board
+(`useLeaveSocial`). The feed is a page of its own: it takes the board's place, unlike Settings and Stats.
 
 ### What agents see
 
