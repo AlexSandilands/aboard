@@ -422,11 +422,20 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const counts = useMemo(() => columnCounts(shownLanes), [shownLanes]);
   const activeTask = activeId ? (tasksById.get(activeId) ?? null) : null;
   const activeRowId = activeTask ? (rows.get(activeTask.id) ?? null) : null;
+  const projectRank = useMemo(() => new Map(board.projects.map((p, index) => [p.id, index])), [board.projects]);
   /** Where a card brought into a sorted column lands in `cell`, or null when the column is in its default order. */
-  const sortedIndex = (status: TaskStatus, cell: ReadonlyArray<TaskSummary>, task: TaskSummary): number | null => {
-    if (!isSortedColumn(columnSorts, status)) return null;
-    const compare = columnComparator(columnSortFor(columnSorts, status));
-    return sortedLandingIndex(cell, task, status, compare, new Date().toISOString());
+  const sortedIndex = (
+    at: { rowId: string; status: TaskStatus },
+    cell: ReadonlyArray<TaskSummary>,
+    task: TaskSummary,
+  ): number | null => {
+    if (!isSortedColumn(columnSorts, at.status)) return null;
+    const sort = columnComparator(columnSortFor(columnSorts, at.status));
+    // The priority lane keeps its cards grouped by project, as buildLanes does.
+    const rank = (t: TaskSummary) => projectRank.get(t.projectId) ?? 0;
+    const compare =
+      at.rowId === PRIORITY_ROW_ID ? (a: TaskSummary, b: TaskSummary) => rank(a) - rank(b) || sort(a, b) : sort;
+    return sortedLandingIndex(cell, task, at.status, compare, new Date().toISOString());
   };
   /** A card as the drag logic sees it: in its row rather than just its project. */
   const inRow = (task: TaskSummary) => dropTask(task, rows.get(task.id) ?? task.projectId);
@@ -508,7 +517,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
         placeAfter,
       });
       // A sorted column has no slot to choose: the gap opens where the sort will put the card.
-      const landing = preview ? sortedIndex(target.status, cell, found) : null;
+      const landing = preview ? sortedIndex(target, cell, found) : null;
       const next = preview && landing !== null ? { ...preview, index: landing } : preview;
       return samePlacement(current, next) ? current : next;
     });
@@ -569,8 +578,10 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     }
     // Once the drag ends, a card that landed past a collapsed cell's preview (say, below its last shown
     // card) would vanish, so show the whole cell instead. Archived cards take preview slots too.
-    const before = renderedCell(lanes, target, task.id).cell;
-    const landing = resetToManual ? null : sortedIndex(target.status, before, found);
+    // Turned back to Manual, the cell shows by position, so that is the order the preview is counted in.
+    const shownBefore = renderedCell(lanes, target, task.id).cell;
+    const before = resetToManual ? [...shownBefore].sort(byPosition) : shownBefore;
+    const landing = resetToManual ? null : sortedIndex(target, before, found);
     const pastPreview =
       landing !== null
         ? landing >= COLUMN_PREVIEW_COUNT
