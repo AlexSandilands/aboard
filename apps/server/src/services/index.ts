@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   AUTOPILOT_RECURRING,
@@ -40,6 +41,8 @@ import { createSettingsService } from "./settings.ts";
 import { createSkillSyncService, type HarnessHomes } from "./skillSync.ts";
 import { createSocialService } from "./social.ts";
 import { createStatsService } from "./stats.ts";
+import { createUsageService, type UsageDirs } from "./usage.ts";
+import type { T3ThreadUsage } from "../integrations/t3Usage.ts";
 import { createSuggestionsService } from "./suggestions.ts";
 import { createTemplatesService } from "./templates.ts";
 import { createTasksService, syncEpicStatus } from "./tasks.ts";
@@ -70,6 +73,10 @@ export interface ServiceDeps {
   harnessHomes?: HarnessHomes;
   /** This board's id (instance.ts), which tasks moved away from it name; a fresh one when unset (tests). */
   instanceId?: string;
+  /** Where Claude Code and Codex keep their transcripts, for token usage; tests use temp folders. */
+  usageDirs?: UsageDirs;
+  /** Reads a T3 thread's usage; null when T3 Code can't be asked. */
+  fetchThreadUsage?: (threadId: string) => Promise<T3ThreadUsage | null>;
 }
 
 /** Builds the service layer over one database. */
@@ -86,6 +93,10 @@ export function createServices(deps: ServiceDeps): Services {
     onTasksDeleted: (ids) => ids.forEach((id) => attachments.removeFilesOf(id)),
   });
   const labels = createLabelsService(core);
+  const usage = createUsageService(core, {
+    dirs: deps.usageDirs ?? { claudeDir: join(deps.userHome, ".claude"), codexHome: join(deps.userHome, ".codex") },
+    ...(deps.fetchThreadUsage ? { fetchThread: deps.fetchThreadUsage } : {}),
+  });
   const templates = createTemplatesService(core, { projects });
 
   let plans: PlansModule | null = null;
@@ -104,6 +115,7 @@ export function createServices(deps: ServiceDeps): Services {
     templates,
     relations: () => relations!,
     attachments,
+    usage,
   });
   relations = createRelations(core, { resolveId: (ref) => tasks.service.resolveId(ref), record: tasks.record });
   imports = createImportsService(core, { tasks: () => tasks.service, settings });
@@ -223,8 +235,10 @@ export function createServices(deps: ServiceDeps): Services {
     skillSync: createSkillSyncService(core, { userHome: deps.userHome, harnessHomes: deps.harnessHomes }),
     activity: createActivityService(core, {
       automationTitle: (key) => automationTitleOf(automations(), key),
+      usage,
     }),
-    stats: createStatsService(core, { runGit: deps.runGit ?? defaultRunGit }),
+    stats: createStatsService(core, { runGit: deps.runGit ?? defaultRunGit, usage }),
+    usage,
     digests: createDigestsService(core, {
       notifications,
       automationTitle: (key) => automationTitleOf(automations(), key),

@@ -207,9 +207,9 @@ card with no previous place fades in. It is a board-level FLIP:
 
 ### Task panel sections
 
-The panel's sections are Labels, Sessions, Links, Relations, Automation, Local review, Autopilot, Plan, Details (description and plan context
+The panel's sections are Labels, Sessions, Usage, Links, Relations, Automation, Local review, Autopilot, Plan, Details (description and plan context
 together) and Activity. Each can be collapsed, reordered by dragging its handle, and hidden. A collapsed
-section shows a one-line summary in its header (`summarizeSection`): the label names, the number of threads and sessions (folded ones included) and any thread that needs you, the link count and
+section shows a one-line summary in its header (`summarizeSection`): the label names, the number of threads and sessions (folded ones included) and any thread that needs you, the cost, tokens and cache share, the link count and
 any link problem, the blockers and what the task blocks, the automation settings that aren't at their default, open findings, the Autopilot run that needs attention, plan progress and the current step, the first line of the description (or of the
 plan context), or the event count and how long ago the last one was.
 
@@ -222,6 +222,7 @@ toggles):
 | ------------ | ------------------------------------------------------------------------------------------------------------------ |
 | Labels       | Coloured label chips, 3 then `+N`                                                                                  |
 | Sessions     | The card's chips: T3 thread buttons and harness-icon buttons with a status dot and their menu, one per expanded row (sessions folded into a thread stay in its menu), 4 then `+N`         |
+| Usage        | The cost in a blue pill (the tokens when nothing had a price), then tokens and the cache share as text. "Not tracked" and "None" stay text |
 | Links        | PR chips coloured by state with a checks dot, 3 then `+N` for the rest. Without a PR the text stays                |
 | Relations    | `#N` chips, red for an open blocker, green once Done, outlined for what the task blocks; each opens its task       |
 | Automation   | Text only                                                                                                          |

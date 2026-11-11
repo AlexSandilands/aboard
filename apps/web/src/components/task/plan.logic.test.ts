@@ -83,6 +83,7 @@ function detail(phases: PlanPhase[]): TaskDetail {
     resolves: [],
     reviews: [],
     children: [],
+    usage: null,
   };
 }
 

@@ -127,6 +127,18 @@ export function createSettingsAsker(deps: { services: () => Services; runAgent?:
             }),
         );
         const outcome = driver.parse(stdout, ASK_OUTPUT_SCHEMA);
+        // An ask runs ephemeral, so its own output is the only record of what it used (token-usage.md).
+        deps.services().usage.recordRun({
+          harness: resolved.provider,
+          sessionId: null,
+          runId: `ask-${randomUUID()}`,
+          taskId: null,
+          purpose: "ask",
+          model: resolved.model,
+          usage: outcome.usage,
+          costUsd: outcome.costUsd,
+          at: new Date().toISOString(),
+        });
         if (!outcome.ok) {
           const why = (outcome.error ?? "unknown error").replace(/[.\s]+$/, "");
           // With no model set for its tier or custom model the CLI's default runs, which can outspend Ask's budget.

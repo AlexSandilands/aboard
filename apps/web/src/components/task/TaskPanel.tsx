@@ -37,6 +37,7 @@ import { PlanTimeline } from "./PlanTimeline";
 import { RelationsSection } from "./RelationsSection";
 import { ResolutionCallout } from "./ResolutionCallout";
 import { SessionsSection } from "./SessionsSection";
+import { UsageSection } from "./UsageSection";
 import { TaskActions } from "./TaskActions";
 import { ClosePanelButton, PANEL_TOP_BAR_CLASS, TaskPanelHeader } from "./TaskPanelHeader";
 import { TaskTitle } from "./TaskTitle";
@@ -301,6 +302,8 @@ function TaskPanelBody({
               return <LabelsSection task={task} />;
             case "sessions":
               return <SessionsSection task={task} />;
+            case "usage":
+              return <UsageSection task={task} />;
             case "links":
               return <LinksSection task={task} />;
             case "relations":

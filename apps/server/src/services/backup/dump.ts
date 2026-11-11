@@ -15,6 +15,9 @@ import { EXPORTED_SETTINGS } from "../settings.ts";
  */
 const EXCLUDED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   task_links: ["snapshot_json", "synced_at", "pr_changes_json"],
+  // Rewritten on every read of a session, even when nothing was added.
+  session_usage: ["updated_at"],
+  session_usage_cursor: ["updated_at"],
 };
 
 /** Per-task rows, each in a stable order that also reads naturally (plan order, round order). */
@@ -64,6 +67,21 @@ export function dumpBoard(db: Db): BoardDump {
     const applied = rowsOf(db, "applied_transfers", "SELECT * FROM applied_transfers ORDER BY applied_at, transfer_id");
     const tasks = rowsOf(db, "tasks", "SELECT * FROM tasks ORDER BY number");
     const events = rowsOf(db, "task_events", "SELECT * FROM task_events ORDER BY id");
+    const usage = rowsOf(
+      db,
+      "session_usage",
+      "SELECT * FROM session_usage ORDER BY harness, session_id, source_file, day, model",
+    );
+    const cursors = rowsOf(
+      db,
+      "session_usage_cursor",
+      "SELECT * FROM session_usage_cursor ORDER BY harness, session_id, source_file",
+    );
+    const threads = rowsOf(
+      db,
+      "session_usage_thread",
+      "SELECT * FROM session_usage_thread ORDER BY thread_id, harness, session_id",
+    );
 
     const bundles = new Map<string, TaskBundle>(
       tasks.map((task) => [
@@ -95,6 +113,9 @@ export function dumpBoard(db: Db): BoardDump {
       applied_transfers: applied.length,
       tasks: tasks.length,
       task_events: events.length,
+      session_usage: usage.length,
+      session_usage_cursor: cursors.length,
+      session_usage_thread: threads.length,
     };
     for (const table of TASK_BUNDLE_TABLES) {
       const rows = rowsOf(db, table, TASK_ROWS_SQL[table]);
@@ -124,6 +145,9 @@ export function dumpBoard(db: Db): BoardDump {
       applied_transfers: applied,
       tasks: [...bundles.values()],
       task_events: events,
+      session_usage: usage,
+      session_usage_cursor: cursors,
+      session_usage_thread: threads,
     };
   });
 }

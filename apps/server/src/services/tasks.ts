@@ -1,3 +1,4 @@
+import type { UsageService } from "./usage.ts";
 import {
   deriveEpicRollup,
   deriveEpicStatus,
@@ -139,6 +140,8 @@ export function createTasksService(
     templates: TemplatesService;
     relations: () => RelationsModule;
     attachments: AttachmentsService;
+    /** Tokens of the task's sessions for its detail; optional so tests that build tasks alone needn't. */
+    usage?: Pick<UsageService, "taskUsage">;
   },
 ): { service: TasksService; record: (id: string) => TaskRecord } {
   const { repos } = core;
@@ -261,7 +264,10 @@ export function createTasksService(
     }
     // Tasks it blocks, or that block it, drop the relation with it; their logs say what went.
     deps.relations().noteDeletionIn(task, actor, fx);
+    const usageLinks = repos.sessionUsage.linkedBy(task.id);
     repos.tasks.delete(task.id);
+    // Its run rows went with it (ON DELETE CASCADE); its sessions no other task links go too (token-usage.md).
+    repos.sessionUsage.deleteUnlinked(usageLinks);
     fx.taskDeleted(task.id);
     removed.push(task.id);
     return removed;
@@ -413,6 +419,7 @@ export function createTasksService(
           .resolvedBy([id])
           .flatMap((t) => (t.resolution ? [{ ...taskRef(t)!, resolution: t.resolution }] : [])),
         reviews,
+        usage: deps.usage?.taskUsage(id) ?? null,
       };
     },
 

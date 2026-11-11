@@ -5,6 +5,7 @@ import { BRAND, HEADLESS_CAPABILITIES, type AgentHarness, type OperationNeed } f
 import { RUN_SERVER_NAME, RUN_TOKEN_ENV } from "../mcp/runTokens.ts";
 import { claudeDriver, type AgentArgsInput, type AgentOutcome, type HeadlessDriver } from "./headlessAgent.ts";
 import { fromStrict, strictSchema } from "./strictSchema.ts";
+import { codexRunUsage } from "./runUsage.ts";
 
 // Autopilot's headless runs on harnesses other than Claude Code: `codex exec` and the Copilot CLI. Neither can be held
 // to as much as `claude -p` (the untrusted-input lockdown, tool rules, a budget): what each can do is
@@ -150,6 +151,7 @@ export function parseCodexOutput(stdout: string, outputSchema?: object | null): 
     output,
     sessionId,
     costUsd: null,
+    usage: codexRunUsage(stdout),
   };
 }
 
@@ -244,6 +246,8 @@ export function parseCopilotOutput(stdout: string): AgentOutcome {
     output: undefined,
     sessionId,
     costUsd: null,
+    // Copilot's JSON output carries no token counts the board has seen (docs/features/token-usage.md).
+    usage: [],
   };
 }
 

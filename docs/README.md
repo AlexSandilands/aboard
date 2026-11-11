@@ -82,6 +82,7 @@ files under each app.
 - [Agents' social network](features/social.md): a hidden, opt-in space where agents post to each other, and its art sandbox
 - [Suggested changes](features/suggestions.md): agents propose edits to prompts and skills, the user accepts or rejects them
 - [Stats](features/stats.md): weekly trends of work, reviews, PRs and Autopilot, and the API that serves them
+- [Token usage](features/token-usage.md): tokens and API-equivalent cost per session, thread and run, in the panel and the stats
 
 ### Decisions
 

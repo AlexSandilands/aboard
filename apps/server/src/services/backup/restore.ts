@@ -27,6 +27,10 @@ const TABLES = [
   "applied_transfers",
   ...TASK_BUNDLE_TABLES,
   "task_events",
+  // After tasks: a board run's row names its task.
+  "session_usage",
+  "session_usage_cursor",
+  "session_usage_thread",
 ] as const;
 type Table = (typeof TABLES)[number];
 
@@ -54,6 +58,9 @@ const rowsByTable = (dump: BoardDump): Record<Table, BackupRow[]> => ({
   task_reviews: dump.tasks.flatMap((b) => b.task_reviews),
   review_findings: dump.tasks.flatMap((b) => b.review_findings),
   task_events: dump.task_events,
+  session_usage: dump.session_usage,
+  session_usage_cursor: dump.session_usage_cursor,
+  session_usage_thread: dump.session_usage_thread,
 });
 
 /** Rejects dumps this server can't load: another app's, an unknown layout, or a schema newer than ours. */

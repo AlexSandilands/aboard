@@ -14,10 +14,12 @@ import {
   type TaskEvent,
 } from "@repo/contracts";
 import { notFound } from "../errors.ts";
+import { localDay } from "../integrations/usageFiles.ts";
 import { defaultBranchCommits, type DefaultBranchCommit } from "../integrations/commitLog.ts";
 import type { RunGit } from "../integrations/backup.ts";
 import { OPEN_STATUSES, stallKind, statusStays, wasRestarted } from "./activity.ts";
 import type { Core } from "./core.ts";
+import type { UsageService } from "./usage.ts";
 
 /**
  * Weekly trends over the board's history, read from the activity log, reviews, Autopilot runs and links, and from git
@@ -108,6 +110,9 @@ export function dayBoundaries(now: Date, count: number): Date[] {
 
 const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0);
 
+/** A date's local calendar day, YYYY-MM-DD, as usage rows store it. */
+const localDayOf = (d: Date): string => localDay(d.toISOString())!;
+
 function median(xs: readonly number[]): number | null {
   if (xs.length === 0) return null;
   const sorted = [...xs].sort((a, b) => a - b);
@@ -121,7 +126,10 @@ function reduce(aggregate: Aggregate, xs: readonly number[]): number | null {
   return median(xs);
 }
 
-export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsService {
+export function createStatsService(
+  core: Core,
+  deps: { runGit: RunGit; usage: Pick<UsageService, "attributed"> },
+): StatsService {
   const { repos } = core;
 
   // Keyed by project, folder and period start, so a moved folder or a new week reads again.
@@ -186,6 +194,20 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
       const count = (name: string, at: string) => add(name, "count", "sum", at);
       for (const name of COUNT_SERIES) series(name, "count", "sum");
       series("autopilot.cost_usd", "usd", "sum");
+      for (const name of [
+        "tokens.input",
+        "tokens.output",
+        "tokens.cache_read",
+        "tokens.cache_write",
+        "tokens.unpriced",
+      ]) {
+        series(name, "tokens", "sum");
+      }
+      series("cost_usd.estimated", "usd", "sum");
+      for (const harness of ["claude-code", "codex", "copilot-cli", "t3_thread"]) {
+        series(`cost_usd.harness.${harness}`, "usd", "sum");
+      }
+      series("cost_usd.autopilot", "usd", "sum");
       series("cycle_time.in_progress_to_done", "ms", "median");
       series("cycle_time.created_to_done", "ms", "median");
       series("review_rounds_per_task", "ratio", "mean");
@@ -415,12 +437,15 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
 
       // Breakdowns split the period by category rather than by week: what finished, and what ran sessions.
       const boundary = stamps[perPeriod]!;
-      const breakdown = (entries: { key: string | null; at: number }[]): StatsBreakdown => {
+      const breakdown = (
+        entries: { key: string | null; at: number; value?: number }[],
+        unit: StatsUnit = "count",
+      ): StatsBreakdown => {
         const rows = new Map<string | null, { total: number; previousTotal: number }>();
-        for (const { key, at } of entries) {
+        for (const { key, at, value = 1 } of entries) {
           const row = rows.get(key) ?? { total: 0, previousTotal: 0 };
-          if (at >= boundary) row.total += 1;
-          else row.previousTotal += 1;
+          if (at >= boundary) row.total += value;
+          else row.previousTotal += value;
           rows.set(key, row);
         }
         const items = [...rows].map(([key, r]) => ({ key, ...r }));
@@ -430,8 +455,75 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
             b.previousTotal - a.previousTotal ||
             (a.key === null ? 1 : b.key === null ? -1 : a.key.localeCompare(b.key)),
         );
-        return { unit: "count", items };
+        return { unit, items };
       };
+      // Tokens and their API-equivalent cost (token-usage.md), by the local day they were used. Each session counts
+      // once, under the task that linked it first; a board run under the task it was for; a task-less run only on the
+      // whole board.
+      const usageEntries: Record<string, { key: string | null; at: number; value: number }[]> = {
+        model: [],
+        harness: [],
+        purpose: [],
+        task: [],
+        label: [],
+        tier: [],
+      };
+      {
+        const dayAt = (day: string): number => {
+          const [y, m, d] = day.split("-").map(Number);
+          // Noon, so a day lands in its bucket whatever the clock change.
+          return new Date(y!, m! - 1, d, 12).getTime();
+        };
+        const firstDay = localDayOf(bounds[0]!);
+        const lastDay = localDayOf(new Date(bounds.at(-1)!.getTime() + 86_400_000));
+        const taskOf = new Map<string, { projectId: string; number: number; tier: string | null } | null>();
+        const ownerTask = (id: string) => {
+          if (!taskOf.has(id)) {
+            const t = repos.tasks.getAny(id);
+            taskOf.set(
+              id,
+              t ? { projectId: t.projectId, number: t.number, tier: t.suggestedModel?.tier ?? null } : null,
+            );
+          }
+          return taskOf.get(id)!;
+        };
+        const usedLabels = new Map<string, string[]>();
+        for (const { row, taskId, harness, purpose, autopilot, costUsd: cost, tokens } of deps.usage.attributed(
+          firstDay,
+          lastDay,
+        )) {
+          const task = taskId ? ownerTask(taskId) : null;
+          // A session no live task links any more, or a task-less run, only counts on the whole board.
+          if (chosenIds.size > 0 && !(task && inScope(task.projectId))) continue;
+          const at = dayAt(row.day);
+          const iso = new Date(at).toISOString();
+          const t = row.tokens;
+          add("tokens.input", "tokens", "sum", iso, t.input);
+          add("tokens.output", "tokens", "sum", iso, t.output);
+          add("tokens.cache_read", "tokens", "sum", iso, t.cacheRead);
+          add("tokens.cache_write", "tokens", "sum", iso, t.cacheWrite5m + t.cacheWrite1h);
+          if (cost === null) {
+            add("tokens.unpriced", "tokens", "sum", iso, tokens);
+            continue;
+          }
+          add("cost_usd.estimated", "usd", "sum", iso, cost);
+          if (autopilot) add("cost_usd.autopilot", "usd", "sum", iso, cost);
+          add(`cost_usd.harness.${harness}`, "usd", "sum", iso, cost);
+          usageEntries.model!.push({ key: row.model || null, at, value: cost });
+          usageEntries.harness!.push({ key: harness, at, value: cost });
+          if (purpose) usageEntries.purpose!.push({ key: purpose, at, value: cost });
+          if (task && taskId) {
+            usageEntries.task!.push({ key: String(task.number), at, value: cost });
+            usageEntries.tier!.push({ key: task.tier, at, value: cost });
+            if (!usedLabels.has(taskId)) {
+              usedLabels.set(taskId, repos.labels.forTasks([taskId]).get(taskId) ?? []);
+            }
+            const labels = usedLabels.get(taskId)!;
+            for (const key of labels.length ? labels : [null]) usageEntries.label!.push({ key, at, value: cost });
+          }
+        }
+      }
+
       const labelsOf = repos.labels.forTasks(finishedIds);
       const doneAt = (id: string): number => Date.parse(lastFinish.get(id)!.at);
       const breakdowns: Record<string, StatsBreakdown> = {
@@ -448,6 +540,12 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
             .filter((s) => inScope(s.projectId))
             .map((s) => ({ key: s.harness, at: Date.parse(s.at) })),
         ),
+        cost_by_model: breakdown(usageEntries.model!, "usd"),
+        cost_by_harness: breakdown(usageEntries.harness!, "usd"),
+        cost_by_purpose: breakdown(usageEntries.purpose!, "usd"),
+        cost_by_task: breakdown(usageEntries.task!, "usd"),
+        cost_by_label: breakdown(usageEntries.label!, "usd"),
+        cost_by_tier: breakdown(usageEntries.tier!, "usd"),
       };
       // Commits that reached each project's default branch, by when they landed. A project without a folder has no
       // history to read (said so for the ones asked for; on the whole board it is just not counted).

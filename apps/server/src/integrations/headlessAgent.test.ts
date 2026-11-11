@@ -316,6 +316,7 @@ describe("headless agent", () => {
       output: undefined,
       sessionId: SESSION,
       costUsd: 1.25,
+      usage: [],
     });
     const budget = JSON.stringify({ subtype: "error_max_budget_usd", is_error: true, total_cost_usd: 3.01 });
     expect(parseAgentOutput(budget, false)).toMatchObject({ ok: false, error: "error max budget usd", costUsd: 3.01 });

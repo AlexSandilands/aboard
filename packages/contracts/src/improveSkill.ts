@@ -33,7 +33,9 @@ the user decided:
 
 1. \`board_activity\` for the window. Look for patterns, not single events: the same review finding area across
    tasks, steps blocked or skipped for one reason, Autopilot runs failing alike, threads waiting on the same
-   question, many review rounds, notes where agents said what confused them.
+   question, many review rounds, notes where agents said what confused them. Its Spend section shows where tokens
+   went: a task or automation that cost far more than others like it is worth a look for the prompt that sent it
+   round in circles, read too much, or ran on a bigger model than the work needed.
 2. Pick at most five tasks that show a pattern most clearly and \`get_task\` them.
 3. Read a transcript (\`get_session_transcript\`) only when a task's notes and activity don't say why it went wrong,
    and only the pages that do. Look for the moment the agent acted on the text: an instruction it misread, followed

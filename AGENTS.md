@@ -92,6 +92,7 @@ and to this table.
 | Autopilot: automations, scopes, limits, runs, pause            | [docs/features/autopilot.md](docs/features/autopilot.md) and ADR 0008               |
 | Suggested changes to prompts and skills, accepting them        | [docs/features/suggestions.md](docs/features/suggestions.md)                        |
 | Stats: the weekly trends API, its series and their definitions | [docs/features/stats.md](docs/features/stats.md)                                    |
+| Token usage: readers, prices, the Usage section, cost series   | [docs/features/token-usage.md](docs/features/token-usage.md)                        |
 | What users can do, how to install, configure or connect agents | [docs/guide/](docs/guide/) (user-facing) and `README.md`                            |
 | UI styles and primitives                                       | [docs/reference/style.md](docs/reference/style.md)                                  |
 

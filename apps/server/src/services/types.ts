@@ -1,3 +1,4 @@
+import type { UsageService } from "./usage.ts";
 import type { RepoPrReviewsService } from "./repoPrReviews.ts";
 import type {
   AgentSessionSnapshot,
@@ -69,6 +70,7 @@ import type { SuggestionsService } from "./suggestions.ts";
  * Throws AppError (NOT_FOUND, PLAN_REQUIRED, VALIDATION, CONFLICT).
  */
 export interface Services {
+  usage: UsageService;
   projects: ProjectsService;
   tasks: TasksService;
   plans: PlansService;

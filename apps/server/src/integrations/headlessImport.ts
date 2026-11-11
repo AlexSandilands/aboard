@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { IMPORT_CHILDREN_MAX } from "../services/imports.ts";
 import { claudeOutput, parseClaudeOutput, runClaude } from "./claudeCli.ts";
+import type { RunModelUsage } from "./runUsage.ts";
 import type { RunAgent } from "./headlessAgent.ts";
 import { headlessDriverFor } from "./headlessDrivers.ts";
 import { runStructured } from "./structuredRun.ts";
@@ -96,6 +97,8 @@ export interface ImportOutcome {
    */
   epic?: { children: string[]; total: number };
   costUsd: number | null;
+  /** Tokens per model, from the run's own output (it keeps no session). */
+  usage?: RunModelUsage[];
 }
 
 export type RunImport = (job: ImportJob) => Promise<ImportOutcome>;
@@ -258,7 +261,7 @@ async function runInFolder(
   cwd: string,
   runAgent: RunAgent | undefined,
 ): Promise<ImportOutcome> {
-  const { output, costUsd } = await runStructured({
+  const { output, costUsd, usage } = await runStructured({
     driver,
     cli: job.cli,
     cwd,
@@ -280,7 +283,7 @@ async function runInFolder(
     what: "import",
     ...(runAgent ? { runAgent } : {}),
   });
-  return importOutcome(output, source.kind, costUsd, driver.label);
+  return { ...importOutcome(output, source.kind, costUsd, driver.label), usage };
 }
 
 /** The import runner on each provider; `runAgent` stands in for a CLI other than Claude Code's (tests). */
@@ -313,8 +316,8 @@ const runClaudeImport: RunImport = async (job) => {
   } finally {
     if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
-  const { output, costUsd } = parseClaudeOutput(stdout, ImportOutput, "import");
-  return importOutcome(output, job.source.kind, costUsd);
+  const { output, costUsd, usage } = parseClaudeOutput(stdout, ImportOutput, "import");
+  return { ...importOutcome(output, job.source.kind, costUsd), usage };
 };
 
 /** Runs one import on the job's provider. */

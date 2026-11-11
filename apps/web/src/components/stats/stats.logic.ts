@@ -1,3 +1,4 @@
+import { formatTokens } from "~/components/task/usage.logic";
 import {
   STATS_PERIODS,
   type StatsBreakdown,
@@ -87,6 +88,8 @@ export function formatStatsValue(value: number | null, unit: StatsUnit): string 
       return value < 10 ? String(Number(value.toFixed(2))) : String(Math.round(value));
     case "count":
       return Math.round(value).toLocaleString("en-US");
+    case "tokens":
+      return formatTokens(value);
   }
 }
 

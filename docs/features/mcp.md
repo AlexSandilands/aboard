@@ -123,7 +123,9 @@ text when both are present.
   return one line; `start_review` and `submit_review` return the review brief or result.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
   review round is waiting. It also lists the task's pasted **Images** with their absolute file paths, so an agent
-  can open a screenshot as a file ([attachments.md](attachments.md)).
+  can open a screenshot as a file ([attachments.md](attachments.md)). A **Usage** line after Progress gives the
+  task's tokens and API-equivalent cost, the share of input read from cache, sessions shared with other tasks and
+  tokens on models with no price ([token-usage.md](token-usage.md)).
 - `update_step` takes `images`, absolute paths of screenshots on the board's machine (up to 10): they are stored
   with the task and appended to the step's notes as image tokens, all or none
   ([attachments.md](attachments.md#how-it-works)). The result says how many were attached.
@@ -222,6 +224,10 @@ read-only text over a window `[since, until)`, for the improvement automation, a
 - **Latest note per task:** the last note anyone but Autopilot wrote on each task, newest first (usually its
   handover). Notes have no "needs the user" flag; what needs the user shows as a run's `needsAttention` or an
   attention reason on the task.
+- **Spend:** tokens and API-equivalent cost used on the window's local days, attributed as on the stats page (each
+  session once, under the task that linked it first): the total, unpriced tokens, cost by model, harness and
+  automation, what Autopilot's runs reported themselves, and the top tasks by cost
+  ([token-usage.md](token-usage.md)).
 
 Task refs (`#42`) let the agent open one with `get_task`.
 

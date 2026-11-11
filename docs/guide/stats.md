@@ -41,6 +41,11 @@ such as PRs merged or runs are shown neutrally, since more or fewer isn't good o
 - **Friction**: where agents got stuck or needed you: steps marked blocked or skipped, requests for your attention
   and Autopilot flags, tasks that stalled (quiet for too long, or waiting on input), and runs cut short because
   the board restarted. A blocked step is often an agent doing the right thing, so a rise isn't marked as bad.
+- **Tokens & cost**: what agents used on the board's tasks and runs: an estimated cost at API list prices (a
+  subscription may cost less), tokens, cost per finished task, Autopilot's own runs, and how much input was read
+  from cache. Charts split cost by harness and tokens by kind, then cost by model, harness, automation and task. A
+  session two tasks share counts once. Tokens on a model with no known price aren't in the cost.
+  A task's own usage is in its panel's **Usage** section.
 - **Breakdowns**: the whole period split by category, largest first, each with the previous period beside it:
   finished tasks by label (a task with several labels counts under each) and by suggested model tier, and
   sessions by what ran them (Claude Code, Copilot CLI or a T3 Code thread). Labels and tiers are as they are now.

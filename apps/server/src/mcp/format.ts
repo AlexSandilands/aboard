@@ -1,5 +1,7 @@
 import {
   AGENT_HARNESSES,
+  cacheReadShare,
+  totalTokens,
   SELF_LINK_FAILED,
   SELF_LINK_T3_REFUSED,
   selfLinkCall,
@@ -771,6 +773,37 @@ export function runsOnText(
   return model.source === "label" ? describeRunModel(model) : null;
 }
 
+const shortCount = (n: number) =>
+  n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n);
+
+/**
+ * One line on what the task's agents used (token-usage.md): the API-equivalent cost, tokens and the cache-read share,
+ * what ran them, the tasks a session is shared with, and what has no price. Null before any usage was read.
+ */
+export function usageLine(usage: TaskDetail["usage"]): string | null {
+  if (!usage || usage.rows.length === 0) return null;
+  const parts: string[] = [];
+  if (usage.costUsd !== null) {
+    const estimate = usage.costSource === "estimated";
+    parts.push(`${estimate ? "~" : ""}$${usage.costUsd.toFixed(2)}${estimate ? " API-equivalent" : ""}`);
+  }
+  const share = cacheReadShare(usage.tokens);
+  const cached = share === null ? "" : ` (${Math.round(share * 100)}% of input from cache)`;
+  parts.push(`${shortCount(totalTokens(usage.tokens))} tokens${cached}`);
+  const by = new Map<string, number>();
+  for (const row of usage.rows) {
+    const what =
+      row.kind === "run" ? "board runs" : row.harness === "t3" ? "T3 threads" : AGENT_HARNESSES[row.harness].label;
+    by.set(what, (by.get(what) ?? 0) + 1);
+  }
+  parts.push([...by].map(([what, n]) => `${what} ${n}`).join(", "));
+  const shared = [...new Set(usage.rows.flatMap((r) => r.sharedWith))];
+  if (shared.length) parts.push(`sessions shared with ${shared.map((n) => `#${n}`).join(", ")}`);
+  if (usage.unpricedTokens > 0) parts.push(`${shortCount(usage.unpricedTokens)} tokens on models with no price`);
+  if (usage.tokens.requests) parts.push(`${usage.tokens.requests} premium requests`);
+  return `Usage: ${parts.join(" · ")}`;
+}
+
 /** Full "where was I" rendering of a task. */
 export function renderTaskDetail(
   task: TaskDetail,
@@ -838,6 +871,8 @@ export function renderTaskDetail(
   }
   if (task.dueDate) lines.push(`Due: ${task.dueDate}`);
   if (task.progress.total > 0) lines.push(`Progress: ${task.progress.done}/${task.progress.total} steps`);
+  const usage = usageLine(task.usage);
+  if (usage) lines.push(usage);
   if (task.currentStep) {
     const c = task.currentStep;
     lines.push(`Current step: ${c.index} ${c.title} [${c.status}] (phase: ${c.phaseTitle})`);

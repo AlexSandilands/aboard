@@ -149,7 +149,8 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
         "What happened on the board over a period, in one read-only call: tasks finished (time in each status, " +
         "review rounds, steps blocked or skipped), review findings by severity and area, Autopilot runs per automation " +
         "with failures (including ones the board's restart cut short), retries and give-ups, stalls (quiet tasks, " +
-        "threads waiting for input) and the notes agents left. Each section is capped, with task numbers to drill " +
+        "threads waiting for input), the notes agents left, and spend (estimated token cost by task, model, harness and " +
+        "automation). Each section is capped, with task numbers to drill " +
         'into with get_task. Use it to look back ("how did this week go?", what keeps failing or stalling); ' +
         "board_overview and list_tasks show the board as it is now. Pass workspacePath or projectId to limit it to " +
         "one project.",

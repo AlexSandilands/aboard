@@ -1,3 +1,4 @@
+import type { RunModelUsage } from "./runUsage.ts";
 import {
   ACTOR_HEADER,
   BRAND,
@@ -283,6 +284,8 @@ export interface AgentOutcome {
   output: unknown;
   sessionId: string | null;
   costUsd: number | null;
+  /** Tokens by model, as the run's own output reports them; empty when it reports none. */
+  usage: RunModelUsage[];
 }
 
 /** Reads `--output-format json` stdout. A run that stopped (budget, turn limit) still reports what it cost. */
@@ -296,6 +299,7 @@ export function parseAgentOutput(stdout: string, wantsOutput: boolean): AgentOut
     output: out.structuredOutput,
     sessionId: out.sessionId,
     costUsd: out.costUsd,
+    usage: out.usage,
   };
 }
 

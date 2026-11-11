@@ -1,3 +1,5 @@
+import type { UsageService } from "../services/usage.ts";
+import { fetchThreadUsage, type T3ThreadUsage } from "./t3Usage.ts";
 import { randomUUID } from "node:crypto";
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -47,6 +49,8 @@ import type { Logger } from "./util.ts";
 
 export const DISCOVERY_INTERVAL_MS = 60_000;
 export const LIVE_INTERVAL_MS = 20_000;
+/** A working thread's usage is read at most this often; it is read again when the thread settles. */
+const USAGE_READ_MS = 60_000;
 const DISCOVERY_TIMEOUT_MS = 2_000;
 const SHELL_TIMEOUT_MS = 10_000;
 
@@ -421,6 +425,8 @@ export interface T3Services {
   projects: Pick<ProjectsService, "list" | "create" | "get">;
   tasks: Pick<TasksService, "summary">;
   attachments: Pick<AttachmentsService, "forLaunch" | "claimIds">;
+  /** Optional so tests that fake the services needn't; the board's own always has it. */
+  usage?: Pick<UsageService, "scanThread">;
 }
 
 export type ThreadLink = Extract<TaskLink, { kind: "t3_thread" }>;
@@ -491,6 +497,8 @@ export interface T3Integration {
   sendToThread(link: ThreadLink, text: string, commandId: string): Promise<void>;
   /** The thread's workspace from the live shell; null when T3 can't say. */
   threadWorkspace(link: ThreadLink): Promise<ThreadWorkspace | null>;
+  /** A thread's token usage from its projection; null when T3 isn't reachable or the board has no token. */
+  threadUsage(threadId: string): Promise<T3ThreadUsage | null>;
   /**
    * Asks T3 to prepare the workspace of a run whose preparation failed (a worktree fetch that collided, say) again, in
    * the same thread. `commandId` de-duplicates retries. T3 refuses a run that failed for any other reason.
@@ -598,6 +606,24 @@ export function createT3Integration(deps: {
   /** The live shell, recording live status. Null when unavailable. */
   const loadShell = async (): Promise<ShellSnapshot | null> => (await fetchLive()).shell;
 
+  /** Each linked thread's last status, to read its usage once more when it settles. */
+  const lastStatus = new Map<string, T3ThreadSnapshot["status"]>();
+  /** When each thread's usage was last read, so a working thread is read at most once a minute. */
+  const usageReadAt = new Map<string, number>();
+
+  /** Reads a linked thread's usage while it works and once when it settles (docs/features/token-usage.md). */
+  const readUsage = (threadId: string, status: T3ThreadSnapshot["status"]) => {
+    const before = lastStatus.get(threadId);
+    lastStatus.set(threadId, status);
+    const working = status === "working";
+    const settled = before === "working" && !working;
+    const now = Date.now();
+    if (!settled && !(working && now - (usageReadAt.get(threadId) ?? 0) >= USAGE_READ_MS)) return;
+    usageReadAt.set(threadId, now);
+    const usage = deps.services().usage;
+    usage?.scanThread(threadId).catch((error: unknown) => log.warn(`[t3] usage of ${threadId}: ${messageOf(error)}`));
+  };
+
   const applyShell = (shell: ShellSnapshot, links: ReadonlyArray<ThreadLink>) => {
     const threads = new Map<string, ShellThread>();
     for (const thread of [...shell.threads, ...(shell.archivedThreads ?? [])]) threads.set(thread.id, thread);
@@ -605,8 +631,18 @@ export function createT3Integration(deps: {
     for (const link of links) {
       if (link.ref.environmentId !== discovery.environmentId) continue;
       const thread = threads.get(link.ref.threadId);
-      if (thread) linksService.setSnapshot(link.id, mapThreadSnapshot(thread));
+      if (!thread) continue;
+      const snapshot = mapThreadSnapshot(thread);
+      linksService.setSnapshot(link.id, snapshot);
+      readUsage(link.ref.threadId, snapshot.status);
     }
+  };
+
+  const threadUsage = async (threadId: string): Promise<T3ThreadUsage | null> => {
+    await ensureDiscovered().catch(() => null);
+    const bearer = token();
+    if (!bearer || !discovery.detected || !discovery.origin) return null;
+    return fetchThreadUsage(discovery.origin, bearer, threadId, fetchFn);
   };
 
   const threadLinks = (): ThreadLink[] =>
@@ -1079,6 +1115,7 @@ export function createT3Integration(deps: {
     },
     discover,
     pollLive,
+    threadUsage,
     listProjects,
     launchOptions: async (taskId) => (await loadLaunchOptions({ taskId })).options,
     projectLaunchOptions: async (projectId) => (await loadLaunchOptions({ projectId })).options,

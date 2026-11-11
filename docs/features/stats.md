@@ -120,6 +120,12 @@ on a Monday, which is why it isn't used. Everything else is unchanged: the servi
 `dayBoundaries` in place of `weekBoundaries` and the per-bucket code doesn't know the difference. `open_tasks.*`
 are the levels at the end of each day.
 
+## Tokens & cost
+
+The `tokens.*`, `cost_usd.*` series and the `cost_by_*` breakdowns (unit `usd`) come from stored token usage, which
+is kept for the purpose: see [token-usage.md](token-usage.md) for where it comes from, how a session is attributed and
+how cost is estimated.
+
 ## The page
 
 `/stats` (`StatsPage` in `apps/web/src/components/stats/`) is a top-level route under the pathless `appRoute`, like

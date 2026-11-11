@@ -45,6 +45,7 @@ export const defaultSettings: AppSettings = {
   socialNetwork: false,
   automationVariables: [],
   trashRetentionDays: 30,
+  modelPriceOverrides: {},
   backupEnabled: false,
   backupDir: null,
   backupRemote: null,

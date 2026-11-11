@@ -1,3 +1,4 @@
+import type { RunModelUsage } from "./runUsage.ts";
 import type { z } from "zod";
 import { runHeadlessAgent, type AgentArgsInput, type HeadlessDriver, type RunAgent } from "./headlessAgent.ts";
 import { withDriverArgs } from "./headlessDrivers.ts";
@@ -26,6 +27,8 @@ export interface StructuredOutcome<T> {
   output: T;
   /** Null when the CLI reports none (every CLI but Claude Code's). */
   costUsd: number | null;
+  /** Tokens by model, as the run's output reports them. */
+  usage: RunModelUsage[];
 }
 
 /** Runs it and returns its checked output. Throws with the CLI's own message, under its name, when it has none. */
@@ -48,5 +51,5 @@ export async function runStructured<T>(job: StructuredRun<T>): Promise<Structure
   if (!outcome.ok) throw new Error(`${driver.label}'s ${job.what} failed: ${outcome.error ?? "unknown error"}`);
   const output = job.schema.safeParse(outcome.output);
   if (!output.success) throw new Error(`${driver.label}'s result didn't match the expected shape`);
-  return { output: output.data, costUsd: outcome.costUsd };
+  return { output: output.data, costUsd: outcome.costUsd, usage: outcome.usage };
 }

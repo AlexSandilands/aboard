@@ -1,3 +1,4 @@
+import type { T3ThreadUsage } from "./t3Usage.ts";
 import type {
   AgentModels,
   AskSettingsInput,
@@ -134,6 +135,8 @@ export interface Integrations {
   startSession(taskId: string, input: StartSessionInput, actor: string): Promise<StartSessionResult>;
   /** Starts a session that plans several of a project's tasks, in its checkout, and links it to each of them. */
   startPlanningSession(projectId: string, input: StartPlanningSessionInput, actor: string): Promise<StartSessionResult>;
+  /** A T3 thread's token usage from its projection; null when T3 isn't reachable or the board has no token. */
+  t3ThreadUsage(threadId: string): Promise<T3ThreadUsage | null>;
   /** The condensed transcript of a Claude Code session linked to a task (see SessionTranscriptReader). Throws AppError when there is none. */
   sessionTranscript(
     taskId: string,

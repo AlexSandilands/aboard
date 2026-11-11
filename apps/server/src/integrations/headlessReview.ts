@@ -1,3 +1,4 @@
+import type { RunModelUsage } from "./runUsage.ts";
 import {
   type AgentHarness,
   BUILTIN_REVIEW_SKILL_BODY,
@@ -136,12 +137,14 @@ export interface HeadlessReview {
   summary: string;
   findings: ReviewFindingInput[];
   costUsd: number | null;
+  /** Tokens by model, as the reviewer's output reports them; absent from fakes. */
+  usage?: RunModelUsage[];
 }
 
 /** Parses `--output-format json` stdout. Throws with the CLI's own message when it didn't produce findings. */
 export function parseHeadlessOutput(stdout: string): HeadlessReview {
-  const { output, costUsd } = parseClaudeOutput(stdout, ReviewOutput, "review");
-  return { summary: output.summary, findings: output.findings, costUsd };
+  const { output, costUsd, usage } = parseClaudeOutput(stdout, ReviewOutput, "review");
+  return { summary: output.summary, findings: output.findings, costUsd, usage };
 }
 
 export interface HeadlessJob {
@@ -175,7 +178,7 @@ export function createHeadlessReviewer(runAgent?: RunAgent): RunHeadless {
         : await runClaude({ cli, cwd, prompt, args, timeoutMs: RUN_TIMEOUT_MS });
       return parseHeadlessOutput(stdout);
     }
-    const { output, costUsd } = await runStructured({
+    const { output, costUsd, usage } = await runStructured({
       driver: headlessDriverFor(provider),
       cli,
       cwd,
@@ -196,7 +199,7 @@ export function createHeadlessReviewer(runAgent?: RunAgent): RunHeadless {
       what: "review",
       ...(runAgent ? { runAgent } : {}),
     });
-    return { summary: output.summary, findings: output.findings, costUsd };
+    return { summary: output.summary, findings: output.findings, costUsd, usage };
   };
 }
 

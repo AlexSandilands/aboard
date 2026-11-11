@@ -1,5 +1,6 @@
 import type { AskSettingsInput, AskSettingsResult } from "@repo/contracts";
 import { describe, expect, it, vi } from "vitest";
+import { createRepos } from "../db/repos/index.ts";
 import { createTestHarness } from "../test/harness.ts";
 import type { AgentJob, RunAgent } from "./headlessAgent.ts";
 import { askPrompt } from "./settingsAsk.ts";
@@ -47,6 +48,28 @@ const ask = async (h: ReturnType<typeof setup>, question = "How do I stop Autopi
 };
 
 describe("settings Ask", () => {
+  it("records the question's tokens and reported cost as a task-less board run", async () => {
+    const h = setup(() =>
+      Promise.resolve(
+        cliResult(
+          { settingId: null, answer: "Set quiet hours." },
+          { modelUsage: { "claude-haiku-5-5": { inputTokens: 300, outputTokens: 40 } } },
+        ),
+      ),
+    );
+    await ask(h);
+    const rows = createRepos(h.db).sessionUsage.rowsBetween("2000-01-01", "3000-01-01");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      source: "run_output",
+      taskId: null,
+      purpose: "ask",
+      model: "claude-haiku-5-5",
+      reportedCostUsd: 0.004,
+    });
+    expect(rows[0]!.tokens).toMatchObject({ input: 300, output: 40 });
+  });
+
   it("answers and names a setting from the list, with no tools and a small budget", async () => {
     const jobs: AgentJob[] = [];
     const h = setup((job) => {

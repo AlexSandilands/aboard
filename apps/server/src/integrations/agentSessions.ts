@@ -1,3 +1,4 @@
+import type { UsageService } from "../services/usage.ts";
 import { execFile } from "node:child_process";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -285,6 +286,8 @@ export interface AgentSessionServices {
   links: Pick<LinksService, "listByKind" | "setSnapshot" | "get" | "setWindow">;
   settings: Pick<SettingsService, "get">;
   autopilot: Pick<AutopilotService, "runForSession">;
+  /** Optional so tests that fake the services needn't; the board's own always has it. */
+  usage?: Pick<UsageService, "scanSession">;
 }
 
 /**
@@ -384,6 +387,14 @@ export function createAgentSessionsIntegration(deps: {
       if (!snapshot) continue;
       snapshots.set(key, snapshot);
       s.links.setSnapshot(link.id, snapshot);
+      // A live session's tokens are read as it works; the sweep (services/usage.ts) catches the rest.
+      if (isRunningSession(snapshot.status) || (run && runIsGoing(run))) {
+        try {
+          s.usage?.scanSession({ harness: link.ref.harness, sessionId: link.ref.sessionId, cwd: link.ref.cwd });
+        } catch {
+          // An unreadable transcript doesn't stop the status poll.
+        }
+      }
     }
     return snapshots;
   };
