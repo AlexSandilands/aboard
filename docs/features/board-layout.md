@@ -508,7 +508,8 @@ rule editor take `?project=`; without it the page shows the project the board wa
 - **The window.** `AppRouteModal` (`layout/AppRouteModal.tsx`, after T3 Code's) is a Base UI dialog the route
   component renders itself in: at most 80rem by 60rem, full screen below `sm`, over the dialog backdrop. Settings and
   Stats use it, and it is meant for other route windows too. The close button and a press on the backdrop close it
-  (a text selection that ends on the backdrop doesn't); it blurs the focused field first, so commit-on-blur fields
+  (a text selection that ends on the backdrop doesn't, and nor does any press while `backdropDismisses` is false,
+  which Settings sets on an editor sub-page so a stray press can't drop a half-filled form); it blurs the focused field first, so commit-on-blur fields
   save, animates out and then calls `onClosed`, which navigates to the board (`useLeaveWindow`). It fades and scales
   only while Panel animations is on (`data-panel-animations` on `<html>`, which has reduced motion resolved).
   While a window is open `AppShell` makes the sidebar and the main area `inert`, and a sidebar sheet left open by the
@@ -518,8 +519,9 @@ rule editor take `?project=`; without it the page shows the project the board wa
   a non-empty search box, a text field). In Settings it leaves an editor for its page and closes the window from a
   page (`useSettingsBack`); in Stats it closes the window. `closeAppWindow()` is what it calls.
 - **The board behind.** A window's URL carries its own search (`?project=` is the project being configured, or the
-  stats page's projects), so the board must not read it. `useBoardSearch` (`board/boardNavigation.ts`) reads the URL
-  on `/` and `useSettingsNav.boardReturn` anywhere else; `AppLayout` saves `boardReturn` while on `/`. Every board
+  stats page's projects), so the board must not read it. `useBoardSearch` (`board/boardNavigation.ts`) reads the board
+  route's own match on `/` (its validated search, not the layout route's raw one) and `useSettingsNav.boardReturn`
+  anywhere else; `AppLayout` saves `boardReturn` while on `/`. Every board
   hook (`useSelectedTaskId`, `useProjectFilter`, the filters) goes through it, so the board behind a window shows
   exactly what it showed, open panel included. When the app starts in a window (a reload, a link), `main.tsx` seeds
   `boardReturn` with the remembered project scope, and closing the window goes to the board with it.

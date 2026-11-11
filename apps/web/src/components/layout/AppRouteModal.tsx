@@ -32,10 +32,13 @@ export function closeAppWindow(): boolean {
 export function AppRouteModal({
   label,
   onClosed,
+  backdropDismisses = true,
   className,
   children,
 }: {
   label: string;
+  /** False while the window holds something unsaved (an editor's form): a stray press outside must not drop it. */
+  backdropDismisses?: boolean;
   /** Runs once the window has closed (after its animation): navigate away here. */
   onClosed: () => void;
   className?: string;
@@ -89,7 +92,7 @@ export function AppRouteModal({
             backdropPress.current = event.target === event.currentTarget;
           }}
           onClick={(event) => {
-            if (backdropPress.current && event.target === event.currentTarget) close();
+            if (backdropDismisses && backdropPress.current && event.target === event.currentTarget) close();
             backdropPress.current = false;
           }}
         >

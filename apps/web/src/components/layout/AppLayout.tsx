@@ -1,11 +1,10 @@
-import { useLocation, useSearch } from "@tanstack/react-router";
+import { useSearch } from "@tanstack/react-router";
 import { memo, useEffect, useEffectEvent, useState } from "react";
 import { Board } from "~/components/board/Board";
 import { useCloseTask, useSelectedTaskId } from "~/components/board/boardNavigation";
 import { TaskPanel } from "~/components/task/TaskPanel";
 import { boardTransitionRunning } from "~/lib/boardMotion";
 import { useMarkTaskNotificationsRead } from "~/state/mutations";
-import type { BoardSearch } from "~/router";
 import { useSettingsNav } from "~/state/ui";
 
 /** The app loaded on the board itself, so a panel on its first board mount is restored, not opened. */
@@ -34,12 +33,12 @@ export function AppLayout() {
   const taskId = useSelectedTaskId();
   const closeTask = useCloseTask();
   // Remembered while on the board: behind a window the board keeps showing this view (`useBoardSearch`), closing the
-  // window returns to it, and the project settings page starts on the scoped project.
-  const onBoard = useLocation({ select: (location) => location.pathname === "/" });
-  const search = useSearch({ strict: false }) as BoardSearch;
+  // window returns to it, and the project settings page starts on the scoped project. Read from the board route's
+  // match, for its validated search; undefined off the board.
+  const search = useSearch({ from: "/_app/", shouldThrow: false });
   useEffect(() => {
-    if (onBoard) useSettingsNav.getState().setBoardReturn(search);
-  }, [onBoard, search]);
+    if (search) useSettingsNav.getState().setBoardReturn(search);
+  }, [search]);
   // With panel animations on, the panel stays mounted on the task it closed on until it has slid out.
   const [shownId, setShownId] = useState(taskId);
   // Decided on the first render only: a panel there when the app loads appears in place, later opens slide.

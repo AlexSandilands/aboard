@@ -1,5 +1,5 @@
 import { formatProjectScope, parseProjectScope, type BoardFilterParams } from "@repo/contracts";
-import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
+import { useMatch, useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { boardSearchAt } from "~/components/layout/appModal.logic";
 import { formatLabelFilter, parseLabelFilter } from "~/components/labels/labels.logic";
@@ -19,11 +19,15 @@ export function boardSearchFrom(prev: BoardSearch): BoardSearch {
 /**
  * Reads the board's search. The board stays mounted behind the Settings and Stats windows, whose URLs carry their
  * own search (`?project=` is the project being configured), so off the board this reads the search the board was
- * left with (`boardReturn`). `select` must return a primitive, as both sources compare by identity.
+ * left with (`boardReturn`). On the board it reads the board route's own match, whose search is the validated one
+ * (`BoardSearch`): the layout route these hooks are rendered under only has the raw values, where `?q=2024` is a
+ * number. `select` must return a primitive, as both sources compare by identity.
  */
 function useBoardSearch<T extends string | number | boolean | null | undefined>(select: (search: BoardSearch) => T): T {
-  const onBoard = useLocation({ select: (location) => location.pathname === "/" });
-  const url = useSearch({ strict: false, select: (search) => (onBoard ? select(search as BoardSearch) : undefined) });
+  // Whether the board route is matched, not the location's path: the two change in different renders during a
+  // navigation, and the search below exists exactly while the match does.
+  const onBoard = useMatch({ from: "/_app/", shouldThrow: false, select: () => true }) === true;
+  const url = useSearch({ from: "/_app/", shouldThrow: false, select: (search): unknown => select(search) });
   const kept = useSettingsNav((s) => (onBoard ? undefined : select(s.boardReturn)));
   return (onBoard ? url : kept) as T;
 }

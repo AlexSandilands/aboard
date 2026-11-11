@@ -77,8 +77,9 @@ function useSettingsProjectParam(): string | undefined {
  */
 export function SettingsShell() {
   const leave = useLeaveWindow();
+  const { inEditor } = useSettingsLocation();
   return (
-    <AppRouteModal label="Settings" onClosed={leave}>
+    <AppRouteModal label="Settings" onClosed={leave} backdropDismisses={!inEditor}>
       <div className="relative flex min-h-0 flex-1">
         <SettingsRail />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
