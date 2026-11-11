@@ -266,3 +266,46 @@ export function containersAroundStuckLane<T extends RowData>(
   const onLane = onStuckLane(pointer, lane);
   return containers.filter((container) => keepsAroundStuckLane(container, onLane));
 }
+
+/** What a drop in a sorted column (see columnSort.logic) does instead of what computeDrop asked for. */
+export interface SortedDrop {
+  result: DropResult;
+  /** The card was reordered inside its own sorted cell: the column goes back to Manual so the order it made shows. */
+  resetToManual: boolean;
+}
+
+/**
+ * Adjusts a drop for a column in a sort other than its default. Its cards are in the sort's order, not by position,
+ * so the slot a card is dropped in says nothing about where it belongs among positions:
+ *
+ * - Reordered inside its own cell, the user wants that order, which only Manual can show. The column switches back to
+ *   Manual and the move keeps the neighbours it was dropped between.
+ * - Brought in from another column, it lands in its sorted place whatever slot it was dropped on, so the move drops
+ *   the neighbours and the server puts it at the end of the lane.
+ *
+ * `sameCell` is whether the card was in the target cell before the drag. Unsorted columns and anything but a move
+ * pass through.
+ */
+export function sortedDrop(result: DropResult, sorted: boolean, sameCell: boolean): SortedDrop {
+  if (!sorted || result.kind !== "move") return { result, resetToManual: false };
+  if (sameCell) return { result, resetToManual: true };
+  const { beforeId: _before, afterId: _after, ...rest } = result;
+  return { result: rest, resetToManual: false };
+}
+
+/**
+ * Where a card brought into a sorted cell shows once the move lands: its place in the sort among the cell's other
+ * cards. The server stamps the move's time on it, so it counts as just updated and just finished.
+ */
+export function sortedLandingIndex(
+  cell: ReadonlyArray<TaskSummary>,
+  task: TaskSummary,
+  status: TaskStatus,
+  compare: (a: TaskSummary, b: TaskSummary) => number,
+  now: string,
+): number {
+  const moved = { ...task, status, updatedAt: now, statusChangedAt: now };
+  const others = cell.filter((t) => t.id !== task.id);
+  const index = others.findIndex((other) => compare(moved, other) < 0);
+  return index < 0 ? others.length : index;
+}

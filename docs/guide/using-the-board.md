@@ -263,6 +263,12 @@ or for one project on that project's settings page.
 Collapse a column (Done starts collapsed) or just one project's cell, and collapse, reorder or hide the
 sections of the task panel. Your layout is saved per browser.
 
+Each column header has a sort button. Pick **Newest created** for Backlog and a new task shows at the top, even
+while the column is collapsed. The other orders are Oldest created, Recently updated, Needs a plan first, Number
+(either way) and Due date. **Manual** (Recently finished in Done) is the order you drag cards into. A column in any
+other order shows its sort button highlighted. Dragging a card within a sorted column puts that column back on
+Manual, with the card where you dropped it.
+
 ## Keyboard
 
 | Key          | Action               |

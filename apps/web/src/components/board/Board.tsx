@@ -21,9 +21,18 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { TASK_STATUSES, type BoardSnapshot, type Project, type TaskStatus, type TaskSummary } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronsDownUpIcon, ChevronsUpDownIcon, LayoutGridIcon, RefreshCwIcon } from "lucide-react";
+import { ArrowDownUpIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, LayoutGridIcon, RefreshCwIcon } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
+import {
+  Menu,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuTrigger,
+} from "~/components/ui/menu";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { Skeleton } from "~/components/ui/skeleton";
 import { toastManager } from "~/components/ui/toast";
@@ -52,7 +61,18 @@ import { BoardHeader } from "./BoardHeader";
 import { BOARD_GRID_CLASS_NAME, BoardLane } from "./BoardLane";
 import { PriorityLane } from "./PriorityLane";
 import { useBoardFilters, useOpenTask, useProjectFilter, useSelectedTaskId } from "./boardNavigation";
-import { dropAnimation, useBoardFlip } from "./cardMotion";
+import { dropAnimation, snapshotCardRects, useBoardFlip } from "./cardMotion";
+import {
+  byPosition,
+  COLUMN_SORT_LABELS,
+  columnComparator,
+  columnSortFor,
+  columnSortOptions,
+  isColumnSort,
+  isSortedColumn,
+  type ColumnSort,
+  type ColumnSorts,
+} from "./columnSort.logic";
 import {
   canDropIn,
   cellDroppableId,
@@ -67,6 +87,8 @@ import {
   previewPlacement,
   readDragData,
   samePlacement,
+  sortedDrop,
+  sortedLandingIndex,
   type DragPlacement,
   type OverCell,
 } from "./dnd.logic";
@@ -244,6 +266,56 @@ function describeOver(
   return sortable ? `Over ${column}, position ${sortable.index + 1} of ${sortable.items.length}.` : `Over ${column}.`;
 }
 
+/** The column header's sort menu. The icon is highlighted while the column is in an order other than its default. */
+function ColumnSortMenu({ status, label, sorts }: { status: TaskStatus; label: string; sorts: ColumnSorts }) {
+  const sort = columnSortFor(sorts, status);
+  const sorted = isSortedColumn(sorts, status);
+  const name = `Sort ${label}: ${COLUMN_SORT_LABELS[sort]}`;
+  const choose = (value: unknown) => {
+    if (!isColumnSort(value) || value === sort) return;
+    // The cards slide to their new places (useBoardFlip on the sorts).
+    snapshotCardRects();
+    useBoardView.getState().setColumnSort(status, value);
+  };
+  return (
+    <Menu>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <MenuTrigger
+              render={
+                <Button
+                  data-vt-move
+                  variant="ghost-muted"
+                  size="icon-xs"
+                  className={cn(sorted && "bg-primary/12 text-primary [:hover,[data-pressed]]:text-primary")}
+                  aria-label={name}
+                  data-column-sort={status}
+                />
+              }
+            />
+          }
+        >
+          <ArrowDownUpIcon />
+        </TooltipTrigger>
+        <TooltipPopup>{name}</TooltipPopup>
+      </Tooltip>
+      <MenuPopup align="end">
+        <MenuGroup>
+          <MenuGroupLabel>Sort {label}</MenuGroupLabel>
+          <MenuRadioGroup value={sort} onValueChange={choose}>
+            {columnSortOptions(status).map((option: ColumnSort) => (
+              <MenuRadioItem key={option} value={option} closeOnClick>
+                {COLUMN_SORT_LABELS[option]}
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuGroup>
+      </MenuPopup>
+    </Menu>
+  );
+}
+
 function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectFilter: ReadonlyArray<string> }) {
   useBoardFlip(board);
   const queryClient = useQueryClient();
@@ -256,6 +328,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const collapsedColumns = useBoardView((s) => s.collapsedColumns);
   const cellOverrides = useBoardView((s) => s.cellOverrides);
   const toggleColumnCollapsed = useBoardView((s) => s.toggleColumnCollapsed);
+  const columnSorts = useBoardView((s) => s.columnSorts);
+  // A sort change re-orders the cards without new board data, so it triggers the slide too.
+  useBoardFlip(columnSorts);
   // Deferred: opening or closing a task re-renders the whole board for the highlight alone, and an urgent render
   // would block the task panel's slide for its length; deferred, React renders it in slices between frames.
   const selectedTaskId = useDeferredValue(useSelectedTaskId());
@@ -281,8 +356,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
           taskFilters: filters,
         },
         archivedTasks,
+        columnSorts,
       ),
-    [board, projectFilter, filters, priorityLane, archivedTasks],
+    [board, projectFilter, filters, priorityLane, archivedTasks, columnSorts],
   );
   // Keep unchanged lanes referentially stable across rebuilds so memoized lanes skip rendering.
   const [stableLanes, setStableLanes] = useState({ built: builtLanes, lanes: builtLanes });
@@ -335,9 +411,10 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const [placement, setPlacement] = useState<DragPlacement | null>(null);
   // After a drop the placement holds the card's final slot until the optimistic move reaches the
   // lanes: Query notifies a tick after the write, and until then the card would flash back to its
-  // old slot, which is also where the drop animation would fly.
-  const [settlingFrom, setSettlingFrom] = useState<ReadonlyArray<Lane> | null>(null);
-  if (settlingFrom && settlingFrom !== lanes) {
+  // old slot, which is also where the drop animation would fly. It waits for the board data rather than the lanes:
+  // a reorder that turns a column's sort off rebuilds the lanes at once, before the move is in.
+  const [settlingFrom, setSettlingFrom] = useState<BoardSnapshot | null>(null);
+  if (settlingFrom && settlingFrom !== board) {
     setSettlingFrom(null);
     setPlacement(null);
   }
@@ -345,6 +422,12 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const counts = useMemo(() => columnCounts(shownLanes), [shownLanes]);
   const activeTask = activeId ? (tasksById.get(activeId) ?? null) : null;
   const activeRowId = activeTask ? (rows.get(activeTask.id) ?? null) : null;
+  /** Where a card brought into a sorted column lands in `cell`, or null when the column is in its default order. */
+  const sortedIndex = (status: TaskStatus, cell: ReadonlyArray<TaskSummary>, task: TaskSummary): number | null => {
+    if (!isSortedColumn(columnSorts, status)) return null;
+    const compare = columnComparator(columnSortFor(columnSorts, status));
+    return sortedLandingIndex(cell, task, status, compare, new Date().toISOString());
+  };
   /** A card as the drag logic sees it: in its row rather than just its project. */
   const inRow = (task: TaskSummary) => dropTask(task, rows.get(task.id) ?? task.projectId);
 
@@ -417,13 +500,16 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
       const placeAfter = activeRect
         ? activeRect.top + activeRect.height / 2 > over.rect.top + over.rect.height / 2
         : false;
-      const next = previewPlacement({
+      const preview = previewPlacement({
         task,
         target,
         cellTaskIds: cell.map((t) => t.id),
         overTaskId,
         placeAfter,
       });
+      // A sorted column has no slot to choose: the gap opens where the sort will put the card.
+      const landing = preview ? sortedIndex(target.status, cell, found) : null;
+      const next = preview && landing !== null ? { ...preview, index: landing } : preview;
       return samePlacement(current, next) ? current : next;
     });
   };
@@ -445,7 +531,12 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
     // Archived cards (Show archived) aren't siblings on the server, so they never anchor a drop.
     const cellTasks = shown.visible.filter((t) => !t.archivedAt);
     const overTaskId = cellTasks.some((t) => t.id === over.id) ? String(over.id) : null;
-    const result = computeDrop({ task, target, cellTaskIds: cellTasks.map((t) => t.id), overTaskId });
+    const sameCell = target.rowId === task.rowId && target.status === task.status;
+    const { result, resetToManual } = sortedDrop(
+      computeDrop({ task, target, cellTaskIds: cellTasks.map((t) => t.id), overTaskId }),
+      isSortedColumn(columnSorts, target.status),
+      sameCell,
+    );
     if (result.kind === "invalid") return;
     if (result.kind === "noop" && !result.clearPriority) return;
     // A card dropped on its own project leaves the priority lane. With a move, that waits until the move has landed,
@@ -467,22 +558,42 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
       return;
     }
     if (result.kind !== "move") return;
+    if (resetToManual) {
+      // The column shows positions again, the dropped card among them where it was let go.
+      useBoardView.getState().setColumnSort(target.status, "manual");
+      toastManager.add({
+        type: "info",
+        title: `${STATUS_LABEL[target.status]} is back to manual order`,
+        description: "Reordering cards by hand turns the column's sort off. Pick a sort again from its header.",
+      });
+    }
     // Once the drag ends, a card that landed past a collapsed cell's preview (say, below its last shown
     // card) would vanish, so show the whole cell instead. Archived cards take preview slots too.
-    const before = renderedCell(lanes, target, task.id).cell.map((t) => t.id);
-    if (shown.collapsed && landsPastPreview(result, task.id, before, COLUMN_PREVIEW_COUNT)) {
+    const before = renderedCell(lanes, target, task.id).cell;
+    const landing = resetToManual ? null : sortedIndex(target.status, before, found);
+    const pastPreview =
+      landing !== null
+        ? landing >= COLUMN_PREVIEW_COUNT
+        : landsPastPreview(
+            result,
+            task.id,
+            before.map((t) => t.id),
+            COLUMN_PREVIEW_COUNT,
+          );
+    if (shown.collapsed && pastPreview) {
       useBoardView.getState().toggleCellCollapsed(target.rowId, target.status);
     }
     // Leaving the priority lane, the card shows where it lands once the cache has it, which isn't this row.
     if (!result.clearPriority) {
-      setPlacement(
-        placementAfterDrop(
-          task,
-          shown.cell.map((t) => t.id),
-          result,
-        ),
+      // Back on Manual, the cell shows by position, so that is the order the card's neighbours are found in.
+      const order = resetToManual ? [...shown.cell].sort(byPosition) : shown.cell;
+      const after = placementAfterDrop(
+        task,
+        order.map((t) => t.id),
+        result,
       );
-      setSettlingFrom(lanes);
+      setPlacement(landing === null ? after : { ...after, index: landing });
+      setSettlingFrom(board);
     }
     moveTask.mutate(
       { id: task.id, status: result.status, beforeId: result.beforeId, afterId: result.afterId },
@@ -640,27 +751,30 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
                   >
                     {label}
                     <span className="tabular-nums text-muted-foreground/60">{counts[value]}</span>
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <Button
-                            data-vt-move
-                            variant="ghost-muted"
-                            size="icon-xs"
-                            className="relative ms-auto"
-                            aria-expanded={mixed ? undefined : !collapsed}
-                            aria-label={action}
-                            onClick={() => toggleColumnCollapsed(value, mixed)}
-                          />
-                        }
-                      >
-                        {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-                        {mixed ? (
-                          <span aria-hidden className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-primary" />
-                        ) : null}
-                      </TooltipTrigger>
-                      <TooltipPopup>{mixed ? `Some projects differ. ${action}` : action}</TooltipPopup>
-                    </Tooltip>
+                    <span className="ms-auto flex items-center gap-0.5">
+                      <ColumnSortMenu status={value} label={label} sorts={columnSorts} />
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              data-vt-move
+                              variant="ghost-muted"
+                              size="icon-xs"
+                              className="relative"
+                              aria-expanded={mixed ? undefined : !collapsed}
+                              aria-label={action}
+                              onClick={() => toggleColumnCollapsed(value, mixed)}
+                            />
+                          }
+                        >
+                          {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+                          {mixed ? (
+                            <span aria-hidden className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-primary" />
+                          ) : null}
+                        </TooltipTrigger>
+                        <TooltipPopup>{mixed ? `Some projects differ. ${action}` : action}</TooltipPopup>
+                      </Tooltip>
+                    </span>
                   </div>
                 );
               })}

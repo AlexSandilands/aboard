@@ -1,11 +1,11 @@
 # Board and panel layout
 
-Board tasks: #54 (columns), #56 (panel sections), #58 (thread links on cards), #118 (Sessions section), #22 (priority lane), #207 (pinning it).
+Board tasks: #54 (columns), #56 (panel sections), #58 (thread links on cards), #118 (Sessions section), #22 (priority lane), #207 (pinning it), #153 (sorting columns).
 The filters and saved views are in [saved-views.md](saved-views.md).
 
 A board with many projects and a long Done column gets tall, and the task panel gets crowded. This doc
 covers how the board and the panel decide what to show: collapsible columns, collapsible and reorderable
-panel sections, and which links a card shows. These are browser-only preferences: nothing here is stored
+panel sections, column sorts, and which links a card shows. These are browser-only preferences: nothing here is stored
 on the server (saved views, which are, are in [saved-views.md](saved-views.md)). It also covers the settings page, which takes the board's place.
 
 ## How it works
@@ -106,6 +106,46 @@ collapsed.
 
 State is `collapsedColumns` (per status) plus `cellOverrides` (keyed by `cellKey(projectId, status)`).
 An override equal to its column's setting is pruned, so any override present means the project differs.
+
+### Sorting columns
+
+Every column header has a sort menu beside its collapse toggle (`ColumnSortMenu` in `Board.tsx`). The orders are in
+`columnSort.logic.ts`:
+
+| Sort | Order |
+| --- | --- |
+| Manual | By position, the order cards are dragged into. The default for Backlog to Review; Done doesn't offer it. |
+| Recently finished | Newest first by when cards entered the column (`statusChangedAt`). Done's default and only Done's. |
+| Newest created, Oldest created | `createdAt` |
+| Recently updated | `updatedAt`, newest first |
+| Needs a plan first | Tasks with no plan steps first; epics and manual tasks need none, so they count as planned |
+| Number, high to low / low to high | `number` |
+| Due date | Soonest first; tasks without one last |
+
+Every sort but Manual and Recently finished breaks ties by newest created, then by position. The defaults are exactly
+the board's order before sorting existed.
+
+- **Everywhere in the column.** `buildLanes` applies the column's sort to loose cells, epic bands and a finished
+  epic's children. The priority lane stays grouped by project (in project order) and sorts within each.
+- **The collapsed preview follows it.** The first five cards are the first five in the sort, so Newest created in
+  Backlog keeps a new task in view while the column is collapsed. That was the request behind it (#153).
+- **Highlighted when not the default.** The sort button turns `secondary` and its tooltip and `aria-label` name the
+  sort ("Sort Backlog: Newest created").
+- **Changing it slides the cards** (`snapshotCardRects`, then a `useBoardFlip` keyed on the sorts, since no board
+  data changes).
+- **Sorting never writes positions.** The server's order stays the hand-made one, and Manual brings it back.
+
+Dragging (`sortedDrop` and `sortedLandingIndex` in `dnd.logic.ts`):
+
+- **From another column into a sorted one,** the card lands in its sorted place whatever slot it is dropped on. The
+  drag gap opens there, the move is sent with no neighbours (the server puts it at the end of the lane), and a
+  collapsed cell expands when that place is past the preview. The card counts as just updated and just moved.
+- **Within a sorted cell,** the user is choosing an order, which only Manual can show. The column switches to Manual,
+  the move keeps the neighbours it was dropped between, and a toast says the column is back to manual order. The
+  rest of the column returns to its hand-made order.
+
+The choice is per column, per browser: `columnSorts` in the `board-view` store, holding only columns off their
+default. It isn't in the URL or in saved views.
 
 ### Revealing a task
 
@@ -613,8 +653,9 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 `storageKey(...)`:
 
 - `board-view` holds the column collapse state, which epic bands are folded, the priority lane switch and its
-  pinning (`collapsedEpics`, `showPriorityLane`, `pinPriorityLane` and `pinnedLaneHeight`, added without a version bump:
-  a stored view without them takes the default, and a stored height that isn't a size reads as Medium). The filters aren't here: they are the board's URL params ([saved-views.md](saved-views.md)). It is at
+  pinning, and the column sorts (`collapsedEpics`, `showPriorityLane`, `pinPriorityLane`, `pinnedLaneHeight` and
+  `columnSorts`, added without a version bump: a stored view without them takes the default, a stored height that isn't
+  a size reads as Medium, and a stored sort a column doesn't offer reads as its default). The filters aren't here: they are the board's URL params ([saved-views.md](saved-views.md)). It is at
   version 2: `migrateBoardView` drops the filters older versions stored and version 0's per-lane `expandedDone`, which
   has no per-column equivalent, and renames version 1's `idea` collapse keys to `backlog`.
 - `appearance` holds the sidebar banner, `scrollToTask`, and the contrast, glass, panel animation and font prefs
@@ -643,6 +684,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | ------------------------------------------------------ | --------------------------------------------------------------- |
 | `apps/web/src/components/board/columnCollapse.logic.ts` | Column and cell collapse state, mixed state (tested)           |
 | `apps/web/src/components/board/board.logic.ts`         | `COLUMN_PREVIEW_COUNT`, `visibleCellTasks` (tested)              |
+| `apps/web/src/components/board/columnSort.logic.ts`    | Column sorts: the orders, their labels, defaults and comparators (tested) |
 | `apps/web/src/components/board/Board.tsx`, `BoardCell.tsx` | Column toggles in the sticky header, cell toggle rows |
 | `apps/web/src/components/board/cardMotion.ts`, `cardMotion.logic.ts` | Card motion: the drop animation and the board FLIP (diff tested) |
 | `apps/web/src/components/board/PriorityLane.tsx`, `dnd.logic.ts` | The priority lane, and the drop rules in and out of it (tested) |

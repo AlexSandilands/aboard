@@ -51,4 +51,19 @@ describe("board view persistence", () => {
     useBoardView.getState().setPinPriorityLane(false);
     expect(saved()?.state).toMatchObject({ pinPriorityLane: false, pinnedLaneHeight: "large" });
   });
+
+  it("gives a view saved before column sorts every column its default order", async () => {
+    const { useBoardView } = await loadStore({ showPriorityLane: true, collapsedColumns: {}, cellOverrides: {} });
+    expect(useBoardView.getState().columnSorts).toEqual({});
+  });
+
+  it("keeps stored column sorts, saves changes and forgets a column put back on its default", async () => {
+    const { useBoardView, saved } = await loadStore({ columnSorts: { backlog: "created_desc" } });
+    expect(useBoardView.getState().columnSorts).toEqual({ backlog: "created_desc" });
+    useBoardView.getState().setColumnSort("done", "updated");
+    expect(saved()?.state).toMatchObject({ columnSorts: { backlog: "created_desc", done: "updated" } });
+    useBoardView.getState().setColumnSort("backlog", "manual");
+    useBoardView.getState().setColumnSort("done", "finished");
+    expect(useBoardView.getState().columnSorts).toEqual({});
+  });
 });
