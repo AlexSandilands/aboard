@@ -486,6 +486,22 @@ export function createAutopilotRunner(deps: {
       // A run whose id came only in its final output (a fake, or a line the stream split oddly) is still linked.
       if (outcome.sessionId && !driver.capabilities.presetSessionId) found(outcome.sessionId);
       if (outcome.costUsd !== null) update({ costUsd: outcome.costUsd });
+      // A run whose session keeps a transcript is read from it; one that keeps none is stored from its own output.
+      try {
+        deps.services().usage.recordRun({
+          harness: driver.harness,
+          sessionId: outcome.sessionId ?? sessionId,
+          runId: request.run.id,
+          taskId: request.run.taskId ?? null,
+          purpose: request.run.automation,
+          model: typeof resolved.model === "string" ? resolved.model : null,
+          usage: outcome.usage,
+          costUsd: outcome.costUsd,
+          at: new Date().toISOString(),
+        });
+      } catch (error) {
+        log.warn(`[autopilot] couldn't record the usage of run ${request.run.id}: ${messageOf(error)}`);
+      }
       if (!outcome.ok) throw new Error(`${driver.label} stopped: ${outcome.error ?? "unknown error"}`);
       return { outcome, sessionId };
     } finally {

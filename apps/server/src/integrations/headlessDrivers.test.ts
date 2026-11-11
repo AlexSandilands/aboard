@@ -181,6 +181,13 @@ describe("the Codex driver", () => {
       output: undefined,
       sessionId: FIRST_ID,
       costUsd: null,
+      // Codex doesn't name the model in its output; the run's own model stands in when it is stored.
+      usage: [
+        {
+          model: null,
+          tokens: { input: 2681, output: 5, cacheRead: 12288, cacheWrite5m: 0, cacheWrite1h: 0 },
+        },
+      ],
     });
   });
 

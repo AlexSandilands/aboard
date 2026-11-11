@@ -101,6 +101,7 @@ describe("headless review", () => {
       summary: "One bug",
       findings: [{ severity: "major", title: "Off by one", file: "a.ts", line: 3 }],
       costUsd: null,
+      usage: [],
     });
     const job = jobs[0]!;
     expect(job).toMatchObject({ cli: "/opt/codex", command: "codex", label: "Codex", cwd: "/w" });
@@ -148,6 +149,7 @@ describe("headless review", () => {
       summary: "One bug",
       findings: [{ severity: "major", title: "Off by one", line: 3 }],
       costUsd: 0.42,
+      usage: [],
     });
     const budget = JSON.stringify({ type: "result", subtype: "error_max_budget_usd", is_error: true });
     expect(() => parseHeadlessOutput(budget)).toThrow("error max budget usd");

@@ -14,7 +14,7 @@ function setup() {
   const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
   const task = s.tasks.create({ projectId: project.id, title: "One", plan });
   const repo = createRepos(h.db).sessionUsage;
-  const row = (over: Partial<UsageRow> & { tokens?: Partial<TokenUsage> } = {}): UsageRow => ({
+  const row = (over: Partial<Omit<UsageRow, "tokens">> & { tokens?: Partial<TokenUsage> } = {}): UsageRow => ({
     harness: "claude-code",
     sessionId: SESSION,
     sourceFile: `${SESSION}.jsonl`,

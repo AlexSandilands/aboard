@@ -63,7 +63,7 @@ describe("claude CLI", () => {
   it("checks the structured output against the schema", () => {
     const schema = z.object({ title: z.string() });
     const ok = JSON.stringify({ is_error: false, total_cost_usd: 0.01, structured_output: { title: "x" } });
-    expect(parseClaudeOutput(ok, schema, "import")).toEqual({ output: { title: "x" }, costUsd: 0.01 });
+    expect(parseClaudeOutput(ok, schema, "import")).toEqual({ output: { title: "x" }, costUsd: 0.01, usage: [] });
     const wrong = JSON.stringify({ is_error: false, structured_output: { title: 3 } });
     expect(() => parseClaudeOutput(wrong, schema, "import")).toThrow("expected shape");
     const failed = JSON.stringify({ is_error: true, subtype: "error_max_turns" });

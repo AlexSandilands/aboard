@@ -218,6 +218,55 @@ export function createSessionUsageRepo(sql: Sql) {
         .all<DbRow>("SELECT * FROM session_usage WHERE day >= ? AND day < ? ORDER BY day", fromDay, toDay)
         .map(fromDb);
     },
+    /** Live tasks (not in the trash) that link the session, directly or through a T3 thread behind it. */
+    tasksForSession(key: SessionKey): Array<{ id: string; number: number }> {
+      return sql.all<{ id: string; number: number }>(
+        `SELECT DISTINCT t.id, t.number FROM task_links l JOIN tasks t ON t.id = l.task_id
+         WHERE t.deleted_at IS NULL AND (
+           (l.kind = 'agent_session' AND json_extract(l.ref_json, '$.harness') = ?
+              AND lower(json_extract(l.ref_json, '$.sessionId')) = ?)
+           OR (l.kind = 't3_thread' AND json_extract(l.ref_json, '$.threadId') IN (
+              SELECT thread_id FROM session_usage_thread WHERE harness = ? AND session_id = ?)))
+         ORDER BY t.number`,
+        key.harness,
+        key.sessionId,
+        key.harness,
+        key.sessionId,
+      );
+    },
+    /** Live tasks that link a T3 thread. */
+    tasksForThread(threadId: string): Array<{ id: string; number: number }> {
+      return sql.all<{ id: string; number: number }>(
+        `SELECT DISTINCT t.id, t.number FROM task_links l JOIN tasks t ON t.id = l.task_id
+         WHERE t.deleted_at IS NULL AND l.kind = 't3_thread' AND json_extract(l.ref_json, '$.threadId') = ?
+         ORDER BY t.number`,
+        threadId,
+      );
+    },
+    /** Every agent session and T3 thread a task links, archived tasks included, trashed ones not. */
+    linkedSources(): { sessions: Array<SessionKey & { cwd: string | null }>; threads: string[] } {
+      const sessions = sql
+        .all<{ harness: UsageHarness; session_id: string; cwd: string | null }>(
+          `SELECT json_extract(l.ref_json, '$.harness') AS harness, lower(json_extract(l.ref_json, '$.sessionId')) AS session_id,
+                  max(json_extract(l.ref_json, '$.cwd')) AS cwd
+           FROM task_links l JOIN tasks t ON t.id = l.task_id
+           WHERE l.kind = 'agent_session' AND t.deleted_at IS NULL GROUP BY 1, 2`,
+        )
+        .filter((r) => r.harness && r.session_id)
+        .map((r) => ({ harness: r.harness, sessionId: r.session_id, cwd: r.cwd }));
+      const threads = sql
+        .all<{ thread_id: string }>(
+          `SELECT DISTINCT json_extract(l.ref_json, '$.threadId') AS thread_id
+           FROM task_links l JOIN tasks t ON t.id = l.task_id
+           WHERE l.kind = 't3_thread' AND t.deleted_at IS NULL AND json_extract(l.ref_json, '$.threadId') IS NOT NULL`,
+        )
+        .map((r) => r.thread_id);
+      return { sessions, threads };
+    },
+    /** Whether the board has ever recorded the sessions behind a thread. */
+    hasThread(threadId: string): boolean {
+      return sql.get("SELECT 1 FROM session_usage_thread WHERE thread_id = ? LIMIT 1", threadId) !== undefined;
+    },
     /**
      * Deletes what no task links any more: the rows and cursors of sessions no remaining link reaches, and the
      * session lists of threads no task links. Run rows of a purged task go with it (ON DELETE CASCADE); task-less runs

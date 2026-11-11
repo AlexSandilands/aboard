@@ -55,6 +55,10 @@ export function createContext(
     instanceId,
     userHome: config.userHome,
     ...(config.harnessHomes ? { harnessHomes: config.harnessHomes } : {}),
+    usageDirs: {
+      claudeDir: config.sessionDirs.claudeDir,
+      codexHome: config.harnessHomes?.codex ?? join(config.userHome, ".codex"),
+    },
     prHostHoldsTasks: (host) => integrations.prHostHoldsTasks(host),
     ...(overrides.now ? { now: overrides.now } : {}),
     ...(overrides.automations ? { automations: overrides.automations } : {}),

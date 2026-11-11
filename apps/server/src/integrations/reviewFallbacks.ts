@@ -123,6 +123,18 @@ export function createReviewFallbacks(deps: {
           hasImages: images.length > 0,
         }),
       });
+      // The reviewer keeps no session, so its own output is the only record of what it used.
+      s.usage.recordRun({
+        harness: resolved.provider,
+        sessionId: null,
+        runId: `review-${task.id}-${round.round}`,
+        taskId: task.id,
+        purpose: "review",
+        model: resolved.model,
+        usage: result.usage ?? [],
+        costUsd: result.costUsd,
+        at: new Date().toISOString(),
+      });
       const cost = result.costUsd === null ? "" : ` (board review, $${result.costUsd.toFixed(2)})`;
       try {
         s.reviews.submit(

@@ -4,6 +4,7 @@ import { delimiter, isAbsolute, join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { z } from "zod";
 import { killTree, liveGroups, POSIX_GROUPS } from "./processTree.ts";
+import { claudeRunUsage, type RunModelUsage } from "./runUsage.ts";
 
 // Running Claude Code headless (`claude -p`): finding the executable, spawning it on every platform, and reading
 // its JSON result. Shared by the board's reviewer, the issue import and Autopilot's headless runs.
@@ -148,6 +149,8 @@ export interface ClaudeResult {
   sessionId: string | null;
   costUsd: number | null;
   structuredOutput: unknown;
+  /** Tokens by model, from the result's modelUsage (runUsage.ts). */
+  usage: RunModelUsage[];
 }
 
 /** Reads the result line (the last one: the CLI may print warnings first). Throws when there is none. */
@@ -168,6 +171,7 @@ export function readClaudeResult(stdout: string): ClaudeResult {
     sessionId: out.session_id ?? null,
     costUsd: out.total_cost_usd ?? null,
     structuredOutput: out.structured_output,
+    usage: claudeRunUsage(json),
   };
 }
 
@@ -197,14 +201,14 @@ export function parseClaudeOutput<T>(
   stdout: string,
   schema: z.ZodType<T>,
   what: string,
-): { output: T; costUsd: number | null } {
+): { output: T; costUsd: number | null; usage: RunModelUsage[] } {
   const out = readClaudeResult(stdout);
   if (out.isError || out.structuredOutput === undefined) {
     throw new Error(`Claude Code's ${what} failed: ${claudeFailure(out, what)}`);
   }
   const output = schema.safeParse(out.structuredOutput);
   if (!output.success) throw new Error("Claude Code's result didn't match the expected shape");
-  return { output: output.data, costUsd: out.costUsd };
+  return { output: output.data, costUsd: out.costUsd, usage: out.usage };
 }
 
 export interface ClaudeJob {
