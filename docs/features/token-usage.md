@@ -15,19 +15,21 @@ disk is read. Each stored row says where it came from (`source`):
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `transcript` | Claude Code: `<claudeDir>/projects/<folder>/<id>.jsonl` and `<id>/subagents/*.jsonl` (subagents count toward the session). Codex: `rollout-*-<id>.jsonl` in `$CODEX_HOME/sessions/YYYY/MM/DD/` or, once archived, `archived_sessions/`.                                                                            |
 | `t3_turn`    | A T3 Code thread's per-turn usage (`GET /api/orchestration/threads/:id`), for each provider thread behind it that has no transcript here: a remote T3, a cleaned-up file, or a driver the board has no reader for (OpenCode, ACP agents).                                                                                |
-| `run_output` | A headless run's own JSON output, for runs that keep no transcript: the board reviewer and Autopilot runs with no session file. Claude Code reports `modelUsage` and `total_cost_usd`; Codex reports usage on `turn.completed` and no cost.                                                                            |
+| `run_output` | A headless run's own JSON output, for runs that keep no transcript: the board reviewer, issue import, settings questions and Autopilot runs with no session file. Claude Code reports `modelUsage` and `total_cost_usd`; Codex reports usage on `turn.completed` and no cost.                                                                            |
 
 A session is counted from one source only. A transcript wins: reading one drops any run rows stored for the same
 session, and a run whose session has a transcript is read from the transcript instead of its output.
 
 A T3 thread resolves to the provider sessions behind it (`providerThreads[].nativeThreadRef`; a hand-off or fork adds
 more). Each is stored under `(harness, nativeId)`, the same key a self-linked agent session uses, so a thread whose agent
-also linked its own session is counted once. The thread's sessions are recorded in `session_usage_thread`.
+also linked its own session is counted once. The thread's sessions are recorded in `session_usage_thread`. A
+provider session whose transcript was read once stays on those rows after the file is cleaned up, instead of falling
+back to T3's turns and counting them twice.
 
 ### Copilot CLI
 
 Not read yet: the CLI isn't installed on the machine this was built on, so the shape of its session files couldn't be
-checked. A Copilot session shows "totals at end" in the panel and adds nothing. Its headless output returns no usage.
+checked. A Copilot session shows "not tracked" in the panel and adds nothing. Its headless output returns no usage.
 
 ### Parsing
 
@@ -74,7 +76,10 @@ reported, without the `~`.
 A task's panel shows every session and thread it links in full, marked "shared with #x" when another task links it
 too, plus its board runs. Stats count each session once, under the task that linked it first (directly or through a
 thread), like `agent_sessions_started`; a run counts under the task it was for, and a task-less run only on the whole
-board. Unlinking keeps the rows; purging a task deletes its run rows and the rows of sessions no other task links.
+board. A session an Autopilot run kept (`autopilot_runs.session_id`) also counts under that run's automation, for the
+Autopilot overhead and cost-by-automation figures. Unlinking keeps the rows; purging a task deletes its run rows and
+the rows of its own sessions and threads no other task links, never those of a session unlinked earlier or a
+task-less run's.
 
 ## Decisions
 
@@ -96,7 +101,8 @@ board. Unlinking keeps the rows; purging a task deletes its run rows and the row
 | Readers                                      | `integrations/claudeUsage.ts`, `codexUsage.ts`, `t3Usage.ts`, `runUsage.ts`              |
 | Scanning, run records, a task's usage        | `apps/server/src/services/usage.ts`                                                      |
 | Triggers                                     | `integrations/usageSweep.ts`, `agentSessions.ts` (poll), `t3.ts` (applyShell), `index.ts` (refreshLink) |
-| Stats series and breakdowns                  | `apps/server/src/services/stats.ts`                                                      |
+| Attribution and cost for stats and Spend     | `services/usage.ts` (`attributed`)                                                       |
+| Stats series and breakdowns                  | `apps/server/src/services/stats.ts`; `board_activity`'s Spend in `services/activity.ts`  |
 | `get_task` line                              | `apps/server/src/mcp/format.ts` (`usageLine`)                                            |
 | Panel section                                | `apps/web/src/components/task/UsageSection.tsx`, `usage.logic.ts`                        |
 | Stats section                                | `apps/web/src/components/stats/StatsPage.tsx` (Tokens & cost)                            |

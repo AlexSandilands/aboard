@@ -151,10 +151,10 @@ function UsageRow({
               </span>
             </span>
             <span className="truncate text-xs font-normal text-muted-foreground" title={rowModel(row)}>
-              {row.pending ? "totals at end" : rowModel(row)}
+              {row.untracked ? "not tracked" : rowModel(row)}
             </span>
             <span className="text-end text-xs font-normal tabular-nums">
-              {row.pending ? "—" : formatTokens(tokens)}
+              {row.untracked ? "—" : formatTokens(tokens)}
               {row.tokens.requests ? (
                 <span className="block text-muted-foreground">{row.tokens.requests} req</span>
               ) : null}

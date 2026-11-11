@@ -1,4 +1,5 @@
 import {
+  type AgentHarness,
   harnessCliSetting,
   IMPORT_TICKET_NEEDS,
   parseImportSource,
@@ -16,6 +17,7 @@ import {
   listConnectedMcpServers,
   runIssueImport,
   writeToolDenyRules,
+  type ImportOutcome,
   type IssueSource,
   type RunImport,
 } from "./headlessImport.ts";
@@ -138,6 +140,25 @@ export function createIssueImporter(deps: {
     );
   };
 
+  /** The import run keeps no session, so its own output is the only record of what it used (token-usage.md). */
+  const recordUsage = (
+    taskId: string,
+    run: { provider: AgentHarness; model: string | null },
+    outcome: Pick<ImportOutcome, "usage" | "costUsd">,
+  ) => {
+    deps.services().usage.recordRun({
+      harness: run.provider,
+      sessionId: null,
+      runId: `import-${taskId}`,
+      taskId,
+      purpose: "import",
+      model: run.model,
+      usage: outcome.usage ?? [],
+      costUsd: outcome.costUsd,
+      at: new Date().toISOString(),
+    });
+  };
+
   /**
    * Has the model turn a GitHub issue or milestone into a title, summary and labels. When it can't run (turned off, no
    * provider, a failure) the source's own title, body and labels stand, so the import still succeeds.
@@ -176,6 +197,7 @@ export function createIssueImporter(deps: {
         importTools: [],
         denyTools: [],
       });
+      recordUsage(record.taskId, resolved, outcome);
       return { title: outcome.title, description: outcome.description, labels: outcome.labels, ...epic };
     } catch (error) {
       log.warn(
@@ -248,6 +270,7 @@ export function createIssueImporter(deps: {
       importTools: system.importTools,
       denyTools: writeToolDenyRules(servers, system.importTools),
     });
+    recordUsage(record.taskId, resolved, outcome);
     return {
       title: outcome.title,
       description: outcome.description,

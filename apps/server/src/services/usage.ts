@@ -48,6 +48,20 @@ export interface RunUsageRecord {
   at: string;
 }
 
+/**
+ * One stored row as the stats count it (token-usage.md): the task it counts under (the session's first linking task,
+ * or the run's own task), the harness bucket (a T3 thread's sessions count as T3 threads), the automation it was for
+ * (a run's purpose, or the Autopilot run that owns its session) and its cost (null without a price).
+ */
+export interface AttributedUsage {
+  row: UsageRow;
+  taskId: string | null;
+  harness: string;
+  purpose: string | null;
+  costUsd: number | null;
+  tokens: number;
+}
+
 export interface UsageService {
   /** Reads what was appended to an agent session's files since the last read; true when anything was added. */
   scanSession(ref: { harness: AgentHarness; sessionId: string; cwd?: string | null }): boolean;
@@ -59,6 +73,8 @@ export interface UsageService {
   sweep(): Promise<void>;
   /** A task's usage: every session and thread it links, in full, and its board runs. Null when there is none. */
   taskUsage(taskId: string): TaskUsage | null;
+  /** Every row used on the local days `[fromDay, toDay)`, attributed and priced once for stats and board_activity. */
+  attributed(fromDay: string, toDay: string): AttributedUsage[];
   /** Cost of rows in the board's price table and the user's overrides; null when the model has no price. */
   rowCost(row: Pick<UsageRow, "model" | "tokens" | "reportedCostUsd" | "source">): number | null;
   /** Stops the deferred card refreshes (shutdown, tests). */
@@ -190,11 +206,17 @@ export function createUsageService(
     let added = false;
     const t3Key: SessionKey = { harness: "t3", sessionId: threadId };
     for (const provider of thread.providerThreads) {
-      const fromTranscript =
-        provider.harness && provider.nativeId ? readSession(provider.harness, provider.nativeId) : null;
-      if (provider.harness && provider.nativeId && fromTranscript !== null) {
+      const native =
+        provider.harness && provider.nativeId
+          ? { harness: provider.harness, sessionId: provider.nativeId.toLowerCase() }
+          : null;
+      const fromTranscript = native ? readSession(native.harness, provider.nativeId!) : null;
+      // A transcript read before stays the source once its file is gone (Claude Code's 30-day cleanup): falling back
+      // to T3's turns then would count the same turns twice.
+      const readBefore = native !== null && usage.cursorFiles(native).length > 0;
+      if (provider.harness && provider.nativeId && (fromTranscript !== null || readBefore)) {
         behind.push({ harness: provider.harness, sessionId: provider.nativeId });
-        added ||= fromTranscript;
+        added ||= fromTranscript ?? false;
         continue;
       }
       // No transcript here (a remote T3, a cleaned-up file) or no reader for its driver: T3's own turns.
@@ -277,11 +299,34 @@ export function createUsageService(
       ? row.reportedCostUsd
       : estimateCostUsd(row.model || null, row.tokens, overrides());
 
+  const attributed: UsageService["attributed"] = (fromDay, toDay) => {
+    const owners = usage.owners();
+    const automations = usage.runAutomations();
+    const prices = overrides();
+    return usage.rowsBetween(fromDay, toDay).map((row) => {
+      const owner = row.taskId
+        ? { taskId: row.taskId, viaThread: false }
+        : (owners.get(`${row.harness}:${row.sessionId}`) ?? null);
+      const t = row.tokens;
+      return {
+        row,
+        taskId: owner?.taskId ?? null,
+        harness: row.harness === "t3" || owner?.viaThread ? "t3_thread" : row.harness,
+        purpose: row.purpose ?? automations.get(row.sessionId) ?? null,
+        costUsd:
+          row.source === "run_output" && row.reportedCostUsd !== null
+            ? row.reportedCostUsd
+            : estimateCostUsd(row.model || null, t, prices),
+        tokens: t.input + t.output + t.cacheRead + t.cacheWrite5m + t.cacheWrite1h,
+      };
+    });
+  };
+
   /** One task-usage row from stored rows: per model, priced, with what it cost in total. */
   const buildRow = (
     base: Pick<TaskUsageRow, "key" | "kind" | "harness" | "sessionId" | "linkId" | "label" | "purpose" | "sharedWith">,
     rows: readonly UsageRow[],
-    waiting: boolean,
+    untracked: boolean,
   ): TaskUsageRow => {
     const prices = overrides();
     const byModel = new Map<string, UsageModelLine>();
@@ -319,7 +364,7 @@ export function createUsageService(
       costUsd,
       costSource,
       unpricedTokens: anyReported ? 0 : unpricedTokens,
-      pending: waiting,
+      untracked,
       lastDay: days.at(-1) ?? null,
     };
   };
@@ -427,6 +472,7 @@ export function createUsageService(
     sweep,
     taskUsage,
     rowCost,
+    attributed,
     stop() {
       if (timer) clearTimeout(timer);
       timer = null;

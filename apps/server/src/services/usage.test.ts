@@ -3,11 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { EMPTY_TOKEN_USAGE, type TokenUsage } from "@repo/contracts";
+import { openDatabase } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
 import { claudeProjectSlug } from "../integrations/claudeSessionTitle.ts";
 import type { T3ThreadUsage } from "../integrations/t3Usage.ts";
 import { localDay } from "../integrations/usageFiles.ts";
 import { createTestHarness } from "../test/harness.ts";
+import { restoreBoard } from "./backup/restore.ts";
 import { createCore } from "./core.ts";
 import { createUsageService } from "./usage.ts";
 
@@ -201,6 +203,109 @@ describe("usage service", () => {
     usage.stop();
   });
 
+  it("purges only the purged task's sessions: an unlinked session elsewhere and a task-less run keep their rows", () => {
+    const S3 = "909f26ed-ce2f-4449-b7eb-3bb01f89f268";
+    const { s, task, transcript, usage, linkSession, stored } = setup();
+    const a = task("A");
+    const b = task("B");
+    const link = linkSession(a.id, S1);
+    transcript(S1, message(S1, "m1", 5));
+    usage.scanSession({ harness: "claude-code", sessionId: S1 });
+    s.links.remove(link.id, "test");
+    linkSession(b.id, S2);
+    transcript(S2, message(S2, "m2", 5));
+    usage.scanSession({ harness: "claude-code", sessionId: S2 });
+    // A task-less Autopilot run that keeps a transcript.
+    transcript(S3, message(S3, "m3", 5));
+    usage.recordRun({
+      harness: "claude-code",
+      sessionId: S3,
+      runId: "improve-1",
+      taskId: null,
+      purpose: "improve",
+      model: null,
+      usage: [],
+      costUsd: 1,
+      at: AT,
+    });
+    expect(
+      stored()
+        .map((r) => r.sessionId)
+        .sort(),
+    ).toEqual([S1, S2, S3]);
+    s.tasks.delete([b.id], {}, "test");
+    s.tasks.purge([b.id], "test");
+    expect(
+      stored()
+        .map((r) => r.sessionId)
+        .sort(),
+    ).toEqual([S1, S3]);
+    usage.stop();
+  });
+
+  it("keeps a thread's session on its transcript rows once the file is cleaned up, never adding T3's turns too", async () => {
+    const thread: T3ThreadUsage = {
+      providerThreads: [{ id: "pt-1", driver: "claudeAgent", harness: "claude-code", nativeId: S1 }],
+      turns: new Map([
+        ["pt-1", [{ day: DAY, model: "claude-sonnet-5-5", tokens: { ...EMPTY_TOKEN_USAGE, input: 999 } }]],
+      ]),
+    };
+    const { task, transcript, usage, linkSession, linkThread, stored } = setup({ "thread-1": thread });
+    const a = task("A");
+    const path = transcript(S1, message(S1, "m1", 5));
+    linkThread(a.id, "thread-1");
+    linkSession(a.id, S1);
+    await usage.scanThread("thread-1");
+    const before = sum(stored());
+    rmSync(path);
+    await usage.scanThread("thread-1");
+    expect(stored().map((r) => r.source)).toEqual(["transcript"]);
+    expect(sum(stored())).toBe(before);
+    usage.stop();
+  });
+
+  it("puts a session an Autopilot run kept under that run's automation", () => {
+    const { s, task, transcript, usage, linkSession, repos } = setup();
+    const a = task("A");
+    linkSession(a.id, S1);
+    transcript(S1, message(S1, "m1", 5));
+    usage.scanSession({ harness: "claude-code", sessionId: S1 });
+    const run = s.autopilot.record({
+      automation: "start_planned",
+      candidate: { dedupeKey: "k", summary: "start it", projectId: a.projectId, taskId: a.id },
+      dryRun: false,
+    })!;
+    repos.autopilotRuns.update({ ...repos.autopilotRuns.get(run.id)!, sessionId: S1.toUpperCase() });
+    const [row] = usage.attributed("2000-01-01", "3000-01-01");
+    expect(row).toMatchObject({ taskId: a.id, harness: "claude-code", purpose: "start_planned" });
+    expect(row!.costUsd).toBeGreaterThan(0);
+    usage.stop();
+  });
+
+  it("adds nothing when a restored board reads the same transcript again", () => {
+    const { h, s, task, transcript, usage, linkSession, stored, folder } = setup();
+    const a = task("A");
+    linkSession(a.id, S1);
+    transcript(S1, message(S1, "m1", 5));
+    usage.scanSession({ harness: "claude-code", sessionId: S1 });
+    const dir = mkdtempSync(join(tmpdir(), "usage-restore-"));
+    roots.push(dir);
+    const dbPath = join(dir, "data.sqlite");
+    restoreBoard(dbPath, s.backup.dump());
+    const db = openDatabase(dbPath);
+    try {
+      const repos = createRepos(db);
+      const core = createCore({ db, repos, bus: h.bus, t3Status: () => h.integrations.t3Status() });
+      const restored = createUsageService(core, { dirs: { claudeDir: join(folder, "..", ".."), codexHome: dir } });
+      expect(restored.scanSession({ harness: "claude-code", sessionId: S1 })).toBe(false);
+      expect(repos.sessionUsage.rowsBetween("2000-01-01", "3000-01-01")).toEqual(stored());
+      restored.stop();
+    } finally {
+      db.close();
+    }
+    usage.stop();
+  });
+
   it("sweeps every linked session, archived tasks included", async () => {
     const { s, task, transcript, usage, linkSession, stored } = setup();
     const a = task("A");
@@ -235,7 +340,7 @@ describe("get_task's usage line", () => {
             costSource: "estimated",
             unpricedTokens: 0,
             sharedWith: [7],
-            pending: false,
+            untracked: false,
             lastDay: null,
           },
         ],

@@ -28,7 +28,7 @@ const row = (over: Partial<TaskUsageRow> = {}): TaskUsageRow => ({
   costSource: "estimated",
   unpricedTokens: 0,
   sharedWith: [],
-  pending: false,
+  untracked: false,
   lastDay: "2026-11-10",
   ...over,
 });
@@ -60,14 +60,14 @@ describe("usage formatting", () => {
     expect(formatCost(0.001, "estimated")).toBe("~<$0.01");
     expect(formatCost(null, "unknown")).toBeNull();
     expect(rowCost(row({ costUsd: null, costSource: "unknown" }))).toBe("no price");
-    expect(rowCost(row({ pending: true }))).toBe("—");
+    expect(rowCost(row({ untracked: true }))).toBe("—");
   });
 
   it("summarises a collapsed section as cost, tokens and the cache-read share", () => {
-    expect(usageSummary(usage())).toBe("~$5.03 · 2.79M tok · 72% cache reads");
+    expect(usageSummary(usage())).toBe("~$5.03 · 2.79M tok · 72% of input cached");
     expect(usageSummary(null)).toBe("None");
-    expect(usageSummary(usage({ rows: [row({ pending: true })], tokens: EMPTY_TOKEN_USAGE, costUsd: null }))).toBe(
-      "Waiting for totals",
+    expect(usageSummary(usage({ rows: [row({ untracked: true })], tokens: EMPTY_TOKEN_USAGE, costUsd: null }))).toBe(
+      "Not tracked",
     );
   });
 

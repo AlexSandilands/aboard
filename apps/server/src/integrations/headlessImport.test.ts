@@ -312,6 +312,7 @@ describe("finding MCP servers", () => {
       description: "It crashes.",
       labels: ["bug"],
       costUsd: null,
+      usage: [],
     });
     expect(jobs[0]!.command).toBe("codex");
     // Its own empty folder, not the shared temp folder, where anything could leave an AGENTS.md.

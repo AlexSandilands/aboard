@@ -106,10 +106,10 @@ export const TaskUsageRow = z.object({
   /** Other tasks that link the same session or thread, by number. */
   sharedWith: z.array(z.number().int()),
   /**
-   * No usage can be read yet although the session is linked: Copilot CLI writes its totals when a session ends. The
-   * panel says so instead of showing zeros.
+   * The board has no reader for the session's harness yet (Copilot CLI), so nothing is counted for it. The panel says
+   * "not tracked" instead of showing zeros.
    */
-  pending: z.boolean(),
+  untracked: z.boolean(),
   /** When the row last saw usage (a day, YYYY-MM-DD, local). */
   lastDay: z.string().nullable(),
 });

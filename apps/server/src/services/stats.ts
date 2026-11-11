@@ -1,6 +1,4 @@
 import {
-  estimateCostUsd,
-  ModelPriceOverrides,
   AUTOPILOT_FIX_PRS,
   AUTOPILOT_REVIEW_PRS,
   FIX_GAVE_UP_KEY_PREFIX,
@@ -16,10 +14,12 @@ import {
   type TaskEvent,
 } from "@repo/contracts";
 import { notFound } from "../errors.ts";
+import { localDay } from "../integrations/usageFiles.ts";
 import { defaultBranchCommits, type DefaultBranchCommit } from "../integrations/commitLog.ts";
 import type { RunGit } from "../integrations/backup.ts";
 import { OPEN_STATUSES, stallKind, statusStays, wasRestarted } from "./activity.ts";
 import type { Core } from "./core.ts";
+import type { UsageService } from "./usage.ts";
 
 /**
  * Weekly trends over the board's history, read from the activity log, reviews, Autopilot runs and links, and from git
@@ -111,8 +111,7 @@ export function dayBoundaries(now: Date, count: number): Date[] {
 const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0);
 
 /** A date's local calendar day, YYYY-MM-DD, as usage rows store it. */
-const localDayOf = (d: Date): string =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const localDayOf = (d: Date): string => localDay(d.toISOString())!;
 
 function median(xs: readonly number[]): number | null {
   if (xs.length === 0) return null;
@@ -127,7 +126,10 @@ function reduce(aggregate: Aggregate, xs: readonly number[]): number | null {
   return median(xs);
 }
 
-export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsService {
+export function createStatsService(
+  core: Core,
+  deps: { runGit: RunGit; usage: Pick<UsageService, "attributed"> },
+): StatsService {
   const { repos } = core;
 
   // Keyed by project, folder and period start, so a moved folder or a new week reads again.
@@ -467,8 +469,6 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
         tier: [],
       };
       {
-        const owners = repos.sessionUsage.owners();
-        const prices = ModelPriceOverrides.safeParse(repos.settings.get("modelPriceOverrides") ?? {}).data ?? {};
         const dayAt = (day: string): number => {
           const [y, m, d] = day.split("-").map(Number);
           // Noon, so a day lands in its bucket whatever the clock change.
@@ -488,11 +488,11 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
           return taskOf.get(id)!;
         };
         const usedLabels = new Map<string, string[]>();
-        for (const row of repos.sessionUsage.rowsBetween(firstDay, lastDay)) {
-          const owner = row.taskId
-            ? { taskId: row.taskId, viaThread: false }
-            : (owners.get(`${row.harness}:${row.sessionId}`) ?? null);
-          const task = owner ? ownerTask(owner.taskId) : null;
+        for (const { row, taskId, harness, purpose, costUsd: cost, tokens } of deps.usage.attributed(
+          firstDay,
+          lastDay,
+        )) {
+          const task = taskId ? ownerTask(taskId) : null;
           // A session no live task links any more, or a task-less run, only counts on the whole board.
           if (chosenIds.size > 0 && !(task && inScope(task.projectId))) continue;
           const at = dayAt(row.day);
@@ -502,29 +502,23 @@ export function createStatsService(core: Core, deps: { runGit: RunGit }): StatsS
           add("tokens.output", "tokens", "sum", iso, t.output);
           add("tokens.cache_read", "tokens", "sum", iso, t.cacheRead);
           add("tokens.cache_write", "tokens", "sum", iso, t.cacheWrite5m + t.cacheWrite1h);
-          const cost =
-            row.source === "run_output" && row.reportedCostUsd !== null
-              ? row.reportedCostUsd
-              : estimateCostUsd(row.model || null, t, prices);
-          const tokens = t.input + t.output + t.cacheRead + t.cacheWrite5m + t.cacheWrite1h;
           if (cost === null) {
             add("tokens.unpriced", "tokens", "sum", iso, tokens);
             continue;
           }
           add("cost_usd.estimated", "usd", "sum", iso, cost);
-          if (row.purpose) add("cost_usd.autopilot", "usd", "sum", iso, cost);
-          const harness = row.harness === "t3" || owner?.viaThread ? "t3_thread" : row.harness;
+          if (purpose) add("cost_usd.autopilot", "usd", "sum", iso, cost);
           add(`cost_usd.harness.${harness}`, "usd", "sum", iso, cost);
           usageEntries.model!.push({ key: row.model || null, at, value: cost });
           usageEntries.harness!.push({ key: harness, at, value: cost });
-          if (row.purpose) usageEntries.purpose!.push({ key: row.purpose, at, value: cost });
-          if (task && owner) {
+          if (purpose) usageEntries.purpose!.push({ key: purpose, at, value: cost });
+          if (task && taskId) {
             usageEntries.task!.push({ key: String(task.number), at, value: cost });
             usageEntries.tier!.push({ key: task.tier, at, value: cost });
-            if (!usedLabels.has(owner.taskId)) {
-              usedLabels.set(owner.taskId, repos.labels.forTasks([owner.taskId]).get(owner.taskId) ?? []);
+            if (!usedLabels.has(taskId)) {
+              usedLabels.set(taskId, repos.labels.forTasks([taskId]).get(taskId) ?? []);
             }
-            const labels = usedLabels.get(owner.taskId)!;
+            const labels = usedLabels.get(taskId)!;
             for (const key of labels.length ? labels : [null]) usageEntries.label!.push({ key, at, value: cost });
           }
         }

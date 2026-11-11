@@ -235,8 +235,9 @@ export function createServices(deps: ServiceDeps): Services {
     skillSync: createSkillSyncService(core, { userHome: deps.userHome, harnessHomes: deps.harnessHomes }),
     activity: createActivityService(core, {
       automationTitle: (key) => automationTitleOf(automations(), key),
+      usage,
     }),
-    stats: createStatsService(core, { runGit: deps.runGit ?? defaultRunGit }),
+    stats: createStatsService(core, { runGit: deps.runGit ?? defaultRunGit, usage }),
     usage,
     digests: createDigestsService(core, {
       notifications,

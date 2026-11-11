@@ -288,25 +288,70 @@ export function createSessionUsageRepo(sql: Sql) {
       }
       return owners;
     },
+    /** The automation each Autopilot run's session belongs to, keyed by session id (lowercase), latest run first. */
+    runAutomations(): Map<string, string> {
+      const rows = sql.all<{ session_id: string; automation: string }>(
+        `SELECT lower(session_id) AS session_id, automation FROM autopilot_runs
+         WHERE session_id IS NOT NULL AND session_id <> '' ORDER BY created_at DESC, rowid DESC`,
+      );
+      const map = new Map<string, string>();
+      for (const r of rows) if (!map.has(r.session_id)) map.set(r.session_id, r.automation);
+      return map;
+    },
     /** Whether the board has ever recorded the sessions behind a thread. */
     hasThread(threadId: string): boolean {
       return sql.get("SELECT 1 FROM session_usage_thread WHERE thread_id = ? LIMIT 1", threadId) !== undefined;
     },
-    /**
-     * Deletes what no task links any more: the rows and cursors of sessions no remaining link reaches, and the
-     * session lists of threads no task links. Run rows of a purged task go with it (ON DELETE CASCADE); task-less runs
-     * stay, as they never belonged to a task.
-     */
-    deleteUnlinked(): void {
-      sql.run(
-        `DELETE FROM session_usage_thread WHERE thread_id NOT IN (
-           SELECT json_extract(ref_json, '$.threadId') FROM task_links WHERE kind = 't3_thread' AND ref_json IS NOT NULL)`,
+    /** The sessions and threads a task links, with the sessions behind those threads: what its purge may delete. */
+    linkedBy(taskId: string): { sessions: SessionKey[]; threads: string[] } {
+      const threads = sql
+        .all<{ thread_id: string }>(
+          `SELECT DISTINCT json_extract(ref_json, '$.threadId') AS thread_id FROM task_links
+           WHERE task_id = ? AND kind = 't3_thread' AND json_extract(ref_json, '$.threadId') IS NOT NULL`,
+          taskId,
+        )
+        .map((r) => r.thread_id);
+      const sessions = sql.all<{ harness: string; session_id: string }>(
+        `SELECT json_extract(ref_json, '$.harness') AS harness, lower(json_extract(ref_json, '$.sessionId')) AS session_id
+           FROM task_links WHERE task_id = ? AND kind = 'agent_session'
+         UNION
+         SELECT m.harness, m.session_id FROM task_links l
+           JOIN session_usage_thread m ON m.thread_id = json_extract(l.ref_json, '$.threadId')
+           WHERE l.task_id = ? AND l.kind = 't3_thread'`,
+        taskId,
+        taskId,
       );
-      for (const table of ["session_usage", "session_usage_cursor"]) {
+      return {
+        sessions: sessions.map((r) => ({ harness: r.harness as UsageHarness, sessionId: r.session_id })),
+        threads,
+      };
+    },
+    /**
+     * Deletes the usage of a purged task's sessions and threads that no remaining link reaches. Only those: a session
+     * someone unlinked from a live task keeps its rows, and so does a task-less run's transcript. Run rows of the purged
+     * task went with it (ON DELETE CASCADE).
+     */
+    deleteUnlinked(linked: { sessions: readonly SessionKey[]; threads: readonly string[] }): void {
+      for (const threadId of linked.threads) {
         sql.run(
-          `DELETE FROM ${table} WHERE ${table === "session_usage" ? "source <> 'run_output' AND " : ""}
-             (harness, session_id) NOT IN (SELECT harness, session_id FROM (${LINKED_SESSIONS}))`,
+          `DELETE FROM session_usage_thread WHERE thread_id = ? AND thread_id NOT IN (
+             SELECT json_extract(ref_json, '$.threadId') FROM task_links WHERE kind = 't3_thread' AND ref_json IS NOT NULL)`,
+          threadId,
         );
+      }
+      for (const { harness, sessionId } of linked.sessions) {
+        const reached = sql.get(
+          `SELECT 1 FROM (${LINKED_SESSIONS}) WHERE harness = ? AND session_id = ? LIMIT 1`,
+          harness,
+          sessionId,
+        );
+        if (reached) continue;
+        sql.run(
+          "DELETE FROM session_usage WHERE harness = ? AND session_id = ? AND source <> 'run_output'",
+          harness,
+          sessionId,
+        );
+        sql.run("DELETE FROM session_usage_cursor WHERE harness = ? AND session_id = ?", harness, sessionId);
       }
     },
   };

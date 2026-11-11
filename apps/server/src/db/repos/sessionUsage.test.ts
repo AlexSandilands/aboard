@@ -63,18 +63,24 @@ describe("session usage repo", () => {
     expect(repo.cursorFiles(key)).toEqual(["f"]);
   });
 
-  it("drops sessions no task links, keeps linked ones and task-less runs, and run rows go with a purged task", () => {
+  it("drops a purged task's sessions no other task links, and keeps everything else", () => {
     const { s, repo, row, task, plan, project } = setup();
     s.links.add(task.id, { agentSession: { harness: "claude-code", sessionId: SESSION, cwd: "/w" } }, "test");
     s.links.add(task.id, { t3Thread: { environmentId: "env", threadId: "thread-1" } }, "test");
     repo.setThreadSessions("thread-1", [{ harness: "codex", sessionId: "codex-1" }]);
     repo.setThreadSessions("thread-gone", [{ harness: "codex", sessionId: "codex-2" }]);
     const doomed = s.tasks.create({ projectId: project.id, title: "Two", plan });
+    // The doomed task shares SESSION with the live one, and alone links OTHER and thread-gone.
+    s.links.add(doomed.id, { agentSession: { harness: "claude-code", sessionId: SESSION, cwd: "/w" } }, "test");
+    s.links.add(doomed.id, { agentSession: { harness: "claude-code", sessionId: OTHER, cwd: "/w" } }, "test");
+    s.links.add(doomed.id, { t3Thread: { environmentId: "env", threadId: "thread-gone" } }, "test");
     repo.add([
       row(),
       row({ sessionId: OTHER, sourceFile: `${OTHER}.jsonl` }),
       row({ harness: "codex", sessionId: "codex-1", sourceFile: "r.jsonl" }),
       row({ harness: "codex", sessionId: "codex-2", sourceFile: "r.jsonl" }),
+      // Nobody links it (unlinked, or a task-less run's transcript): not the purge's business.
+      row({ sessionId: "stray", sourceFile: "stray.jsonl" }),
       row({ sessionId: "run-1", sourceFile: "", source: "run_output", taskId: doomed.id, purpose: "review" }),
       row({ sessionId: "run-2", sourceFile: "", source: "run_output", purpose: "digest" }),
     ]);
@@ -84,7 +90,7 @@ describe("session usage repo", () => {
     s.tasks.purge([doomed.id], "test");
 
     const all = repo.rowsBetween("2000-01-01", "3000-01-01").map((r) => `${r.harness}:${r.sessionId}`);
-    expect(all.sort()).toEqual(["claude-code:" + SESSION, "claude-code:run-2", "codex:codex-1"]);
+    expect(all.sort()).toEqual(["claude-code:" + SESSION, "claude-code:run-2", "claude-code:stray", "codex:codex-1"]);
     expect(repo.cursor({ harness: "claude-code", sessionId: OTHER }, `${OTHER}.jsonl`)).toBeNull();
     expect(repo.threadSessions("thread-gone")).toEqual([]);
     expect(repo.threadSessions("thread-1")).toEqual([{ harness: "codex", sessionId: "codex-1" }]);

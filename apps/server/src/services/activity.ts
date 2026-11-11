@@ -3,8 +3,6 @@ import {
   AUTOPILOT_REVIEW_PRS,
   AUTOPILOT_UNSTICK,
   BOARD_RESTARTED_ERROR,
-  estimateCostUsd,
-  ModelPriceOverrides,
   UNSTICK_STALE_PREFIX,
   type AutopilotRun,
   type AutopilotRunStatus,
@@ -15,11 +13,11 @@ import {
   type TaskEvent,
   type TaskStatus,
 } from "@repo/contracts";
+import { localDay } from "../integrations/usageFiles.ts";
 import type { Core } from "./core.ts";
+import type { UsageService } from "./usage.ts";
 
-/** A date's local calendar day, YYYY-MM-DD, as usage rows store it. */
-const localDay = (d: Date): string =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const localDayOf = (d: Date): string => localDay(d.toISOString())!;
 
 /** The statuses a task waits in before Done, in column order. */
 export const OPEN_STATUSES = ["backlog", "planned", "in_progress", "review"] as const satisfies readonly TaskStatus[];
@@ -178,7 +176,10 @@ export interface ActivityService {
   between(from: Date, to: Date, projectId?: string): BoardActivity;
 }
 
-export function createActivityService(core: Core, deps: { automationTitle: (key: string) => string }): ActivityService {
+export function createActivityService(
+  core: Core,
+  deps: { automationTitle: (key: string) => string; usage: Pick<UsageService, "attributed"> },
+): ActivityService {
   const { repos } = core;
 
   return {
@@ -373,8 +374,6 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
       }
 
       // Spend, attributed as the stats page does it.
-      const prices = ModelPriceOverrides.safeParse(repos.settings.get("modelPriceOverrides") ?? {}).data ?? {};
-      const owners = repos.sessionUsage.owners();
       const spendOf = (map: Map<string, number>, key: string, cost: number) => map.set(key, (map.get(key) ?? 0) + cost);
       const [byTask, byModel, byHarness, byPurpose] = [
         new Map<string, number>(),
@@ -393,27 +392,21 @@ export function createActivityService(core: Core, deps: { automationTitle: (key:
         autopilotReportedUsd,
       };
       const nextDay = new Date(to.getFullYear(), to.getMonth(), to.getDate() + 1);
-      for (const row of repos.sessionUsage.rowsBetween(localDay(from), localDay(nextDay))) {
-        const owner = row.taskId
-          ? { taskId: row.taskId, viaThread: false }
-          : (owners.get(`${row.harness}:${row.sessionId}`) ?? null);
-        if (projectId && !(owner && inScope(owner.taskId))) continue;
-        const t = row.tokens;
-        const tokens = t.input + t.output + t.cacheRead + t.cacheWrite5m + t.cacheWrite1h;
+      for (const { row, taskId, harness, purpose, costUsd: cost, tokens } of deps.usage.attributed(
+        localDayOf(from),
+        localDayOf(nextDay),
+      )) {
+        if (projectId && !(taskId && inScope(taskId))) continue;
         spend.tokens += tokens;
-        const cost =
-          row.source === "run_output" && row.reportedCostUsd !== null
-            ? row.reportedCostUsd
-            : estimateCostUsd(row.model || null, t, prices);
         if (cost === null) {
           spend.unpricedTokens += tokens;
           continue;
         }
         spend.costUsd += cost;
         spendOf(byModel, row.model || "unknown model", cost);
-        spendOf(byHarness, row.harness === "t3" || owner?.viaThread ? "t3_thread" : row.harness, cost);
-        if (row.purpose) spendOf(byPurpose, row.purpose, cost);
-        if (owner && taskRef(owner.taskId)) spendOf(byTask, owner.taskId, cost);
+        spendOf(byHarness, harness, cost);
+        if (purpose) spendOf(byPurpose, purpose, cost);
+        if (taskId && taskRef(taskId)) spendOf(byTask, taskId, cost);
       }
       const ranked = (map: Map<string, number>): SpendItem[] =>
         [...map]

@@ -67,7 +67,7 @@ export function percents(shares: readonly number[]): number[] {
   return floors;
 }
 
-/** The collapsed header's line: "~$5.03 · 2.79M tok · 72% cache reads". */
+/** The collapsed header's line: "~$5.03 · 2.79M tok · 72% of input cached". */
 export function usageSummary(usage: TaskUsage | null): string {
   if (!usage || usage.rows.length === 0) return "None";
   const parts: string[] = [];
@@ -76,8 +76,8 @@ export function usageSummary(usage: TaskUsage | null): string {
   const tokens = totalTokens(usage.tokens);
   if (tokens > 0) parts.push(`${formatTokens(tokens)} tok`);
   const share = cacheReadShare(usage.tokens);
-  if (share !== null && share >= 0.01) parts.push(`${Math.round(share * 100)}% cache reads`);
-  if (parts.length === 0) return usage.rows.some((r) => r.pending) ? "Waiting for totals" : "None";
+  if (share !== null && share >= 0.01) parts.push(`${Math.round(share * 100)}% of input cached`);
+  if (parts.length === 0) return usage.rows.some((r) => r.untracked) ? "Not tracked" : "None";
   return parts.join(" · ");
 }
 
@@ -123,8 +123,8 @@ export function rowModel(row: TaskUsageRow): string {
   return named.length === 1 ? named[0]! : `${named[0]} +${named.length - 1}`;
 }
 
-/** The cost column: the cost, "no price" when no model had one, or nothing while totals are pending. */
+/** The cost column: the cost, "no price" when no model had one, or nothing for a session that isn't tracked. */
 export function rowCost(row: TaskUsageRow): string {
-  if (row.pending) return "—";
+  if (row.untracked) return "—";
   return formatCost(row.costUsd, row.costSource) ?? "no price";
 }
