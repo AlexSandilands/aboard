@@ -1,3 +1,4 @@
+import { createUsageSweep } from "./usageSweep.ts";
 import { randomUUID } from "node:crypto";
 import { epicBranchName, planningSessionLabel } from "@repo/contracts";
 import { createWorktreeCleanup } from "../autopilot/cleanup.ts";
@@ -264,6 +265,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.log ? { log: overrides.log } : {}),
   });
   let started = false;
+  const usageSweep = createUsageSweep(() => deps.services().usage, overrides.log ?? console);
 
   const integrations: Integrations = {
     t3Status: () => t3.status(),
@@ -282,6 +284,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       sessions.start();
       autopilot.start();
       worktrees.start();
+      usageSweep.start();
       providers.seedFromDetection().catch((error: unknown) => {
         (overrides.log ?? console).warn(`[providers] couldn't add the providers detection found: ${messageOf(error)}`);
       });
@@ -296,7 +299,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       sessions.stop();
       autopilot.stop();
       worktrees.stop();
+      usageSweep.stop();
     },
+    t3ThreadUsage: (threadId) => t3.threadUsage(threadId),
     sessionTranscript: (taskId, input) => transcripts.read(taskId, input),
     askSettings: (input) => settingsAsker.ask(input),
     startImport: (taskId) => importer.start(taskId),
@@ -305,6 +310,17 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     importT3Projects: (ids) => t3.importProjects(ids),
     async refreshLink(linkId) {
       const link = deps.services().links.get(linkId);
+      // A session or thread linked just now has its tokens read at once, not at the next sweep.
+      try {
+        if (link.kind === "agent_session") deps.services().usage.scanSession(link.ref);
+        if (link.kind === "t3_thread")
+          void deps
+            .services()
+            .usage.scanThread(link.ref.threadId)
+            .catch(() => false);
+      } catch (error) {
+        (overrides.log ?? console).warn(`[usage] ${linkId}: ${messageOf(error)}`);
+      }
       if (await poller.refresh(link)) return;
       if (await sessions.refresh(link)) return;
       await t3.refresh(link);

@@ -1,5 +1,4 @@
 import { addTokenUsage, type TokenUsage, type UsageHarness } from "@repo/contracts";
-import { ShellError, type FetchFn } from "./t3.ts";
 import { count, localDay, objectAt, tokens, type UsageBucket } from "./usageFiles.ts";
 
 // Token usage of a T3 Code thread (docs/features/token-usage.md). The thread's projection names the provider sessions
@@ -8,6 +7,9 @@ import { count, localDay, objectAt, tokens, type UsageBucket } from "./usageFile
 // newer than the protocol this was written against, and a field that isn't there counts as nothing.
 
 const THREAD_TIMEOUT_MS = 10_000;
+
+/** The same shape as t3.ts's FetchFn, kept here so the two files don't import each other. */
+type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
 
 /** T3's provider drivers whose sessions the board can read from their transcript. */
 const DRIVER_HARNESS: Readonly<Record<string, Exclude<UsageHarness, "t3">>> = {
@@ -126,8 +128,8 @@ export async function fetchThreadUsage(
       signal: AbortSignal.timeout(THREAD_TIMEOUT_MS),
     });
   } catch (error) {
-    throw new ShellError(`T3 Code unreachable: ${error instanceof Error ? error.message : String(error)}`, true);
+    throw new Error(`T3 Code unreachable: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
-  if (!response.ok) throw new ShellError(`T3 Code returned HTTP ${response.status} for thread ${threadId}`);
+  if (!response.ok) throw new Error(`T3 Code returned HTTP ${response.status} for thread ${threadId}`);
   return parseThreadUsage(await response.json().catch(() => null));
 }

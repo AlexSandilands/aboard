@@ -47,7 +47,7 @@ function setup(threads: Record<string, T3ThreadUsage> = {}) {
     return path;
   };
   const repos = createRepos(h.db);
-  const core = createCore({ db: h.db, repos, bus: h.bus, t3Status: () => s.board.get().integrations.t3 });
+  const core = createCore({ db: h.db, repos, bus: h.bus, t3Status: () => h.integrations.t3Status() });
   const usage = createUsageService(core, {
     dirs: { claudeDir, codexHome: join(claudeDir, "codex") },
     fetchThread: (id) => Promise.resolve(threads[id] ?? null),
