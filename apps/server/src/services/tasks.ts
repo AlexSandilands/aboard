@@ -262,6 +262,8 @@ export function createTasksService(
     // Tasks it blocks, or that block it, drop the relation with it; their logs say what went.
     deps.relations().noteDeletionIn(task, actor, fx);
     repos.tasks.delete(task.id);
+    // Its run rows went with it (ON DELETE CASCADE); sessions no other task links go too (token-usage.md).
+    repos.sessionUsage.deleteUnlinked();
     fx.taskDeleted(task.id);
     removed.push(task.id);
     return removed;

@@ -141,6 +141,14 @@ export const BoardDump = z.object({
   applied_transfers: z.array(BackupRow).default([]),
   tasks: z.array(TaskBundle),
   task_events: z.array(BackupRow),
+  /**
+   * Token usage read from agent sessions, with the cursors that say how far each file was read and the sessions behind
+   * T3 threads. Kept because the session files don't last; restored together so a later read doesn't count it again.
+   * Dumps taken before token tracking have none.
+   */
+  session_usage: z.array(BackupRow).default([]),
+  session_usage_cursor: z.array(BackupRow).default([]),
+  session_usage_thread: z.array(BackupRow).default([]),
 });
 export type BoardDump = z.infer<typeof BoardDump>;
 

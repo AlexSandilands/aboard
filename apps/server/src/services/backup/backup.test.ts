@@ -120,6 +120,14 @@ function seed() {
   // Automation variables: the board's are a setting, a project's a column.
   s.settings.update({ automationVariables: [{ name: "jira_key", value: "BRD" }] });
   s.projects.update(project.id, { variables: [{ name: "jira_key", value: "ALP" }] });
+  // Token usage and how far each file was read: kept, since the session files don't last.
+  h.db.exec(`INSERT INTO session_usage (harness, session_id, source_file, day, model, source, task_id, purpose, input,
+      output, cache_read, cache_write_5m, cache_write_1h, requests, reported_cost_usd, updated_at) VALUES
+    ('claude-code', 's-1', 's-1.jsonl', '2026-10-15', 'claude-opus-5-5', 'transcript', NULL, NULL, 10, 20, 300, 4, 5, NULL, NULL, '2026-10-16T00:00:00.000Z'),
+    ('claude-code', 'run-1', '', '2026-10-15', 'claude-sonnet-5-5', 'run_output', '${a.id}', 'review', 1, 2, 3, 0, 0, NULL, 0.12, '2026-10-16T00:00:00.000Z')`);
+  h.db.exec(`INSERT INTO session_usage_cursor (harness, session_id, source_file, offset, size, state_json, updated_at)
+    VALUES ('claude-code', 's-1', 's-1.jsonl', 900, 900, '{"last":"m1"}', '2026-10-16T00:00:00.000Z')`);
+  h.db.exec("INSERT INTO session_usage_thread (thread_id, harness, session_id) VALUES ('thread-1', 'codex', 'c-1')");
   // The pollers' cache, which must stay out of dumps.
   h.db.exec("UPDATE task_links SET snapshot_json = '{\"state\":\"open\"}', synced_at = '2026-10-16T00:00:00.000Z'");
   return { ...h, s, project, a, b, idea };
@@ -145,6 +153,9 @@ const PRIMARY_KEYS: Record<string, string> = {
   task_reviews: "id",
   review_findings: "id",
   task_events: "id",
+  session_usage: "harness, session_id, source_file, day, model",
+  session_usage_cursor: "harness, session_id, source_file",
+  session_usage_thread: "thread_id, harness, session_id",
 };
 
 /** Every table's rows as a restore should reproduce them: no link cache, only exported settings. */
@@ -153,6 +164,7 @@ function comparableTables(db: Db) {
     Object.entries(PRIMARY_KEYS).map(([table, pk]) => {
       let rows = db.prepare(`SELECT * FROM ${table} ORDER BY ${pk}`).all() as Array<Record<string, unknown>>;
       if (table === "task_links") rows = rows.map(({ snapshot_json: _s, synced_at: _t, ...r }) => r);
+      if (table.startsWith("session_usage")) rows = rows.map(({ updated_at: _u, ...r }) => r);
       if (table === "settings") rows = rows.filter((r) => EXPORTED_SETTINGS.has(String(r.key)));
       return [table, rows];
     }),
@@ -502,6 +514,9 @@ describe("restore", () => {
       task_relations: _rel,
       task_transfers: _tt,
       applied_transfers: _at2,
+      session_usage: _su,
+      session_usage_cursor: _suc,
+      session_usage_thread: _sut,
       ...counts
     } = dump.manifest.counts;
     const old: BoardDump = {
@@ -515,6 +530,9 @@ describe("restore", () => {
       suggestions: [],
       task_transfers: [],
       applied_transfers: [],
+      session_usage: [],
+      session_usage_cursor: [],
+      session_usage_thread: [],
       projects: dump.projects.map(
         ({ plan_skill_json: _ps, variables_json: _v, review_model_json: _rm, ...project }) => project,
       ),

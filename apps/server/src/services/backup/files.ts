@@ -39,6 +39,9 @@ const ROOT_FILES = {
   suggestions: "suggestions.json",
   task_transfers: "transfers.json",
   applied_transfers: "applied-transfers.json",
+  session_usage: "usage.json",
+  session_usage_cursor: "usage-cursors.json",
+  session_usage_thread: "usage-threads.json",
 } as const;
 /** What the backup run says about the machine beside its dump (MachineInfo); not part of the board's dump. */
 export const MACHINE_INFO_FILE = "machine.json";
@@ -97,6 +100,9 @@ export function dumpFiles(dump: BoardDump): Map<string, string> {
   add(ROOT_FILES.suggestions, rowsJson(dump.suggestions));
   add(ROOT_FILES.task_transfers, rowsJson(dump.task_transfers));
   add(ROOT_FILES.applied_transfers, rowsJson(dump.applied_transfers));
+  add(ROOT_FILES.session_usage, rowsJson(dump.session_usage));
+  add(ROOT_FILES.session_usage_cursor, rowsJson(dump.session_usage_cursor));
+  add(ROOT_FILES.session_usage_thread, rowsJson(dump.session_usage_thread));
   for (const bundle of dump.tasks) add(taskFilePath(bundle.task), taskJson(bundle));
   const months = new Map<string, BackupRow[]>();
   for (const event of dump.task_events) {
@@ -245,6 +251,12 @@ export function readDumpDir(dir: string): BoardDump {
     ...(existsSync(join(dir, ROOT_FILES.applied_transfers))
       ? { applied_transfers: root(ROOT_FILES.applied_transfers) }
       : {}),
+    // Absent before token tracking.
+    ...Object.fromEntries(
+      (["session_usage", "session_usage_cursor", "session_usage_thread"] as const)
+        .filter((table) => existsSync(join(dir, ROOT_FILES[table])))
+        .map((table) => [table, root(ROOT_FILES[table])]),
+    ),
     tasks: tasks.sort((a, b) => Number(a.task?.number) - Number(b.task?.number)),
     task_events: events.sort((a, b) => Number(a.id) - Number(b.id)),
   });
