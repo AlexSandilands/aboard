@@ -7,7 +7,9 @@ A project's gear in the sidebar, or right-clicking the project, opens that proje
 
 The left side of the window lists every page with its sections beneath. Click a page to open it and a section
 to scroll to it; the section you are reading is highlighted. The **×** at the top right, **Esc**, a click outside
-the window or **Ctrl/Cmd ,** again closes it and returns to the board as you left it. On a narrow window the list
+the window or **Ctrl/Cmd ,** again closes it and returns to the board as you left it. While an editor is open (a
+template, an automation, a recurring rule) a click outside and **Ctrl/Cmd ,** do nothing, so a half-filled form isn't
+lost by accident. On a narrow window the list
 is a strip of icons, one per page; its search button shows the full list.
 
 ## Finding a setting

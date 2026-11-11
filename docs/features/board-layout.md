@@ -642,7 +642,7 @@ Code's keybindings: a command, a key and a `when`, and when several match a key 
   `anyDialogOpen`). The Settings and Stats windows are dialogs in the DOM but not for these flags: `popupFocus`
   (`isInsidePopup`) skips `[data-app-modal]`, and `dialogOpen` only counts the app dialogs, so the pages inside take
   shortcuts as a page does. `settingsOpen` is the Settings window, `panelOpen` is the task panel on the board (false
-  while a window covers it), and `settings.open` in Settings closes the window. `panel.toggle` does nothing while a
+  while a window covers it), and `settings.open` in Settings closes the window (not from an editor sub-page). `panel.toggle` does nothing while a
   window is open. An unknown name is a parse error (`parseWhen`), so the server refuses it on save. The defaults are the old
   hard-coded behaviour, e.g. `n` is `!overlayOpen && !editableFocus && !popupFocus`.
 - **Overrides.** The setting `keybindings` holds only what the user changed, per command: `{ key?, when? }` (an empty

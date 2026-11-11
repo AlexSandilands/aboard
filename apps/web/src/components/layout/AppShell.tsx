@@ -7,6 +7,7 @@ import { UpdatePill } from "~/components/desktop/UpdatePill";
 import { useNotificationDelivery } from "~/components/notifications/useNotificationDelivery";
 import { AppDialogs } from "~/components/settings/AppDialogs";
 import { ThemeEditorHost } from "~/components/settings/ThemeEditorHost";
+import { isEditorPath } from "~/components/settings/settingsNav.logic";
 import { useOpenSettings } from "~/components/settings/settingsNavigation";
 import { AppSidebar } from "~/components/sidebar/AppSidebar";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail, useSidebar } from "~/components/ui/sidebar";
@@ -130,9 +131,9 @@ function GlobalKeybindings({
         palette.openPalette({ kind: "new-task", projectId: newTaskProjectId });
         return;
       case "settings.open":
-        // A toggle: in Settings it closes the window.
-        if (location.pathname.startsWith("/settings")) closeAppWindow();
-        else openSettings();
+        // A toggle: in Settings it closes the window, though not from an editor, whose form it would drop.
+        if (!location.pathname.startsWith("/settings")) openSettings();
+        else if (!isEditorPath(location.pathname)) closeAppWindow();
         return;
       case "back":
         onBack?.();
@@ -146,7 +147,8 @@ function GlobalKeybindings({
       case "panel.toggle":
         // The panel behind a window stays as it is.
         if (isAppModalPath(location.pathname)) return;
-        if (selectedTaskId) void closeTask();
+        // Off the board (the social feed) the selected task is the one the board was left on: reopen it.
+        if (selectedTaskId && location.pathname === "/") void closeTask();
         else if (lastTaskId.current) void openTask(lastTaskId.current, { reveal: false });
         return;
       case "task.delete": {
