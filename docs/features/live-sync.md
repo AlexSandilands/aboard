@@ -66,9 +66,8 @@ Edits the user should see at once are applied to the cache before the request:
   can't flash a later edit back. A failed write refetches the settings, which drops it and keeps the rest, and
   shows a toast.
 
-Apart from the card move and label colours, these are patched by the caller and refetch the query on
-error. Follow the same
-pattern for new edits that must feel instant.
+Apart from the card move, label colours and settings, these are patched by the caller and refetch the query
+on error. Follow the same pattern for new edits that must feel instant.
 
 Label edits send the whole list, so `useSetTaskLabels` puts every call for a task in one mutation
 `scope`: they reach the server in order, and an earlier list can't overwrite a later one. The Labels

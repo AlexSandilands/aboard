@@ -542,7 +542,7 @@ export function useUpdateProviders() {
     },
     [queryClient, save],
   );
-  return { ...update, mutate };
+  return { mutate, isPending: update.isPending };
 }
 
 // ── Autopilot ────────────────────────────────────────────────────────────

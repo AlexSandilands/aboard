@@ -19,6 +19,7 @@ import { Switch } from "~/components/ui/switch";
 import { api } from "~/lib/api";
 import { useUpdateProviders, useUpdateSettings } from "~/state/mutations";
 import { queryKeys } from "~/state/queries";
+import { withPendingSettingsWrites } from "~/state/settingsWrites";
 import { BlurInput } from "./BlurInput";
 import { patchProvider } from "./providers.logic";
 import { CommandSnippet, SettingsGroup, SettingsRow, StatusLine } from "./settingsLayout";
@@ -130,7 +131,7 @@ function T3Editor({ settings, t3: status }: ProviderEditorProps) {
     onSuccess: ({ settings: saved, t3 }) => {
       setToken("");
       test.reset();
-      queryClient.setQueryData(queryKeys.settings, saved);
+      queryClient.setQueryData(queryKeys.settings, withPendingSettingsWrites(queryClient, saved));
       settle(t3);
     },
   });

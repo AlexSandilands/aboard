@@ -89,13 +89,13 @@ export function useSettingsBack(): () => unknown {
   return () => leaveEditor(group, project);
 }
 
+const selectProviders = (settings: AppSettings) => settings.providers;
+
 /**
  * The settings list: each group's heading opens its page, and the sub-section links beneath scroll to that part
  * of it. The section in view is highlighted. A search box above it finds any setting and jumps to it. On narrow
  * windows this is the off-canvas sheet, which closes on a pick.
  */
-const selectProviders = (settings: AppSettings) => settings.providers;
-
 export function SettingsSidebar() {
   const { group: current, inEditor } = useSettingsLocation();
   const project = useSettingsProjectParam();
