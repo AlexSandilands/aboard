@@ -340,6 +340,12 @@ from; running tasks on another machine is #12.
 - **Applied transfers are dumped too.** Restoring a backup from before a move brings back the task and forgets the
   transfer, so the next run archives it again, as the board then expects.
 
+## Token usage
+
+`session_usage`, `session_usage_cursor` and `session_usage_thread` are history the board can't rebuild (session
+files don't last), so they are in the dump (`usage.json`, `usage-cursors.json`, `usage-threads.json`), always
+together: rows without their cursors would be read again and counted twice. See [token-usage.md](token-usage.md).
+
 ## Alternatives considered
 
 | Option                                      | Why not chosen                                                                         |

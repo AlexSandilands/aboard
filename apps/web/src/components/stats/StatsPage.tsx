@@ -668,7 +668,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
           {(seriesOf(data, "tokens.unpriced").total ?? 0) > 0 ? (
             <p className="mt-2 text-xs text-muted-foreground">
               {formatStatsValue(seriesOf(data, "tokens.unpriced").total, "tokens")} tokens were on models with no price,
-              so they aren't in the cost. Add their prices in Settings to count them.
+              so they aren't in the cost.
             </p>
           ) : null}
         </ChartCard>

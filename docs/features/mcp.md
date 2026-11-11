@@ -123,7 +123,9 @@ text when both are present.
   return one line; `start_review` and `submit_review` return the review brief or result.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
   review round is waiting. It also lists the task's pasted **Images** with their absolute file paths, so an agent
-  can open a screenshot as a file ([attachments.md](attachments.md)).
+  can open a screenshot as a file ([attachments.md](attachments.md)). A **Usage** line after Progress gives the
+  task's tokens and API-equivalent cost, the share of input read from cache, sessions shared with other tasks and
+  tokens on models with no price ([token-usage.md](token-usage.md)).
 - `update_step` takes `images`, absolute paths of screenshots on the board's machine (up to 10): they are stored
   with the task and appended to the step's notes as image tokens, all or none
   ([attachments.md](attachments.md#how-it-works)). The result says how many were attached.

@@ -380,6 +380,12 @@ threads included):
 | Detected but unpaired or unreachable | Linked unchecked; the response carries a `warning` (a toast in the panel, a `Warning:` line from `link`) |
 | Not detected | A bare ID is rejected (when creating a task, the task is still made and the result says it wasn't linked); a browser URL is just a URL |
 
+## Thread usage
+
+The board reads a linked thread's token usage with `GET /api/orchestration/threads/:threadId`, with the same token
+and protocol header as the shell call: the provider sessions behind it and each turn's usage. See
+[token-usage.md](token-usage.md).
+
 ## Decisions
 
 ### No branch switching in the current checkout

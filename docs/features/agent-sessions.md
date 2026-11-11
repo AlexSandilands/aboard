@@ -386,6 +386,9 @@ Sessions section ([board-layout](board-layout.md#the-sessions-section)); a chip'
 
 Copilot CLI support is unit-tested only.
 
+The tokens a linked session used are read from its transcript into the panel's Usage section and the stats page:
+see [token-usage.md](token-usage.md).
+
 ## Decisions
 
 - **Status from the harness's files, not from the agent.** The agent can't report that it has exited; the
