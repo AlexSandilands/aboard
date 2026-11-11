@@ -368,13 +368,13 @@ export function FoldedSettingsSection({
 }
 
 /** An inline link to another setting: a group, section or row id (see `useOpenSettings`). */
-export function SettingsLink({ to, project, children }: { to: string; project?: string; children: ReactNode }) {
+export function SettingsLink({ to, children }: { to: string; children: ReactNode }) {
   const openSettings = useOpenSettings();
   return (
     <button
       type="button"
       className="cursor-pointer rounded-sm text-foreground/80 underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-      onClick={() => openSettings(to, project ? { project } : {})}
+      onClick={() => openSettings(to)}
     >
       {children}
     </button>

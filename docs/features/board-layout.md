@@ -497,7 +497,8 @@ before the page (`models.tiers.custom*`, `tasks.review.model`, `tasks.new-tasks.
 are now (`MOVED_TARGETS`). The editors are sub-routes: `tasks/templates/<id>`, `autopilot/custom/<id>` and
 `project/recurring/<id>`, with `new` for one not saved yet. The rule editor's path stays under `project/` for old
 links, but its crumbs and the rail say Autopilot and leaving it returns to the Recurring tasks automation
-(`editorListSection("project")`).
+(`editorListSection("project")`). Its `?project=` is the rule's project, so the list stores the scope it was in as
+`settingsScope` in the history state and leaving the editor goes back to that scope.
 
 #### The project scope
 

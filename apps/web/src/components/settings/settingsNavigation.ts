@@ -90,7 +90,9 @@ export function useLeaveEditor() {
         router.history.back();
         return;
       }
-      openSettings(section);
+      // The rule editor's `?project=` is the rule's project, which needn't be the scope its list was in.
+      const scope = router.state.location.state.settingsScope;
+      openSettings(section, scope === undefined ? {} : { project: scope });
     },
     [router, openSettings],
   );

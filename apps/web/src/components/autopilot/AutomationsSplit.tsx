@@ -333,6 +333,7 @@ export function AutomationsSplit({
                       key={item.automation.key}
                       item={item}
                       project={project}
+                      paused={pausesFor(autoPaused, item.automation.key).some((p) => p.projectId === project.id)}
                       pending={pending}
                       selected={item.automation.key === selectedKey}
                       onSelect={() => select(item.automation.key)}
@@ -1022,12 +1023,15 @@ function useProjectHere(automation: AutopilotAutomation, project: Project) {
 function ProjectListRow({
   item,
   project,
+  paused,
   pending,
   selected,
   onSelect,
 }: {
   item: ListedAutomation;
   project: Project;
+  /** It paused itself in this project after failing, so On here isn't running until it is resumed. */
+  paused: boolean;
   pending: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -1048,6 +1052,9 @@ function ProjectListRow({
           "Loading..."
         ) : (
           <>
+            {paused && here.state !== "off" ? (
+              <span className="font-medium text-warning-foreground">Paused here · </span>
+            ) : null}
             <span className={cn(here.state === "preview" && "font-medium text-warning-foreground")}>
               {HERE_WORDS[here.state]}
             </span>
@@ -1114,7 +1121,7 @@ function ProjectHere({
         <SettingsRow
           scope="project"
           title="Own settings"
-          description={`${project.title} sets its own ${here.ownLabel}, which apply over the board's.`}
+          description={`${project.title} has its own values for ${here.ownLabel}; they apply over the board's.`}
           control={
             <Button
               size="xs"

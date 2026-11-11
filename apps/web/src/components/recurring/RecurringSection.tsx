@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { DetailSection } from "~/components/settings/agents/SplitCard";
-import { useRowScope } from "~/components/settings/SettingsScope";
+import { useRowScope, useScopeParam } from "~/components/settings/SettingsScope";
 import { SettingsNote, SettingsRow } from "~/components/settings/settingsLayout";
 import { FROM_SETTINGS_LIST } from "~/components/settings/settingsNavigation";
 import { ConfirmDialog } from "~/components/task/ConfirmDialog";
@@ -56,12 +56,14 @@ function IconAction({
  */
 export function ProjectRuleRows({ project, withAdd = false }: { project: Project; withAdd?: boolean }) {
   const navigate = useNavigate();
+  const scope = useScopeParam();
   const onEdit = (ruleId: string) =>
     void navigate({
       to: "/settings/project/recurring/$ruleId",
       params: { ruleId },
       search: { project: project.id },
-      state: FROM_SETTINGS_LIST,
+      // The editor's `?project=` is the rule's project; leaving it goes back to the scope the list was in.
+      state: { ...FROM_SETTINGS_LIST, settingsScope: scope ?? null },
     });
   const rules = useRecurringRules(project.id);
   const templates = useTemplates();
