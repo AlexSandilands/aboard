@@ -585,7 +585,8 @@ function AutomationDetail({
           ))}
         </div>
       ) : null}
-      {preview ? (
+      {/* Its Turn on is the board's; in project scope the project's own switch is in the section above. */}
+      {preview && !project ? (
         <PreviewNotice
           count={previewRuns}
           automation={automation.key}

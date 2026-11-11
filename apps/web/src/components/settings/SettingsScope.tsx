@@ -107,7 +107,7 @@ export function ScopedStretch({ scope, children }: { scope: RowScope; children: 
   );
   return (
     <ScopeContext.Provider value={value}>
-      {dimWhole ? <BoardWide>{children}</BoardWide> : children}
+      {dimWhole ? <BoardWide className="space-y-6">{children}</BoardWide> : children}
     </ScopeContext.Provider>
   );
 }
@@ -124,13 +124,14 @@ export function useRowInert(scope: RowScope): boolean {
  */
 export function BoardWide({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <Tooltip>
+    // A stretch can be tall, so the tooltip follows the pointer rather than sitting above the whole of it.
+    <Tooltip trackCursorAxis="both">
       <TooltipTrigger
-        render={<div data-board-wide="" className={cn("cursor-not-allowed", className)} />}
+        render={<div data-board-wide="" className="cursor-not-allowed" />}
         // The trigger is a plain wrapper: nothing in it can be reached, so it isn't a tab stop either.
         tabIndex={-1}
       >
-        <div inert className="pointer-events-none opacity-45 grayscale select-none">
+        <div inert className={cn("pointer-events-none opacity-45 grayscale select-none", className)}>
           {children}
         </div>
       </TooltipTrigger>
