@@ -228,7 +228,7 @@ const OPEN_STATUSES = [
 // What ran the sessions a cost came from, as the cost_usd.harness.* series key them.
 const COST_HARNESSES = [
   ["claude-code", "Claude Code", SERIES_COLORS.primary],
-  ["codex", "Codex", SERIES_COLORS.info],
+  ["codex", "Codex", SERIES_COLORS.muted],
   ["t3_thread", "T3 Code threads", SERIES_COLORS.success],
   ["copilot-cli", "Copilot CLI", SERIES_COLORS.warning],
 ] as const;

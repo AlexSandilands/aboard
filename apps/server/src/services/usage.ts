@@ -297,10 +297,10 @@ export function createUsageService(
         anyReported = true;
       }
     }
-    const models = [...byModel.values()].map((line) => ({
-      ...line,
-      costUsd: estimateCostUsd(line.model, line.tokens, prices),
-    }));
+    // Largest first, so the model column names the one that did most of the work.
+    const models = [...byModel.values()]
+      .map((line) => ({ ...line, costUsd: estimateCostUsd(line.model, line.tokens, prices) }))
+      .sort((a, b) => totalTokens(b.tokens) - totalTokens(a.tokens));
     const tokens = models.reduce((sum, m) => addTokenUsage(sum, m.tokens), EMPTY_TOKEN_USAGE);
     const unpricedTokens = models.filter((m) => m.costUsd === null).reduce((n, m) => n + totalTokens(m.tokens), 0);
     const estimated = models.filter((m) => m.costUsd !== null);

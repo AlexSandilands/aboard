@@ -48,6 +48,8 @@ describe("usage formatting", () => {
     expect(formatTokens(999)).toBe("999");
     expect(formatTokens(1_234)).toBe("1.2k");
     expect(formatTokens(54_000)).toBe("54k");
+    expect(formatTokens(310_000)).toBe("310k");
+    expect(formatTokens(2_500_000)).toBe("2.5M");
     expect(formatTokens(2_790_000)).toBe("2.79M");
     expect(formatTokens(23_000_000)).toBe("23M");
   });

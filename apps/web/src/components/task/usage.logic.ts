@@ -20,7 +20,11 @@ export function formatTokens(n: number): string {
   return String(Math.round(n));
 }
 
-const trim = (n: number, digits: number) => n.toFixed(digits).replace(/\.?0+$/, "");
+/** Fixed digits without trailing zeros after the point: 2.50 → "2.5", 310 → "310". */
+const trim = (n: number, digits: number) => {
+  const fixed = n.toFixed(digits);
+  return fixed.includes(".") ? fixed.replace(/\.?0+$/, "") : fixed;
+};
 
 /** "~$5.03" for an estimate, "$0.38" for a reported cost, null when nothing had a price. */
 export function formatCost(costUsd: number | null, source: CostSource): string | null {
@@ -107,7 +111,7 @@ export function harnessLabel(harness: UsageHarness): string {
 /** The row's name: its link's label, else something to tell it by. */
 export function rowName(row: TaskUsageRow, automationTitle: (key: string) => string | null = () => null): string {
   if (row.label) return row.label;
-  if (row.kind === "run") return automationTitle(row.purpose ?? "") ?? rowSource(row);
+  if (row.kind === "run") return PURPOSES[row.purpose ?? ""] ?? automationTitle(row.purpose ?? "") ?? rowSource(row);
   if (row.kind === "thread") return "T3 Code thread";
   return `${harnessLabel(row.harness)} session ${row.sessionId.slice(0, 8)}`;
 }
