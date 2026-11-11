@@ -177,6 +177,14 @@ describe("optimisticMove", () => {
     const reordered = optimisticMove(b, "b", { status: "planned", beforeId: "a" }).tasks.find((t) => t.id === "b");
     expect(reordered?.statusChangedAt).toBe(task("b", "planned", "a1").statusChangedAt);
   });
+  it("stamps updatedAt on every move, as the server does, so Recently updated puts the card where it stays", () => {
+    const was = task("c", "backlog", "a0").updatedAt;
+    const moved = optimisticMove(b, "c", { status: "planned" }).tasks.find((t) => t.id === "c");
+    expect(moved?.updatedAt).not.toBe(was);
+    expect(moved?.updatedAt).toBe(moved?.statusChangedAt);
+    const reordered = optimisticMove(b, "b", { status: "planned", beforeId: "a" }).tasks.find((t) => t.id === "b");
+    expect(reordered?.updatedAt).not.toBe(task("b", "planned", "a1").updatedAt);
+  });
 });
 
 describe("move rollback", () => {
@@ -196,6 +204,7 @@ describe("move rollback", () => {
     expect(rolled.tasks.find((t) => t.id === "a")).toMatchObject({
       status: "backlog",
       position: "a0",
+      updatedAt: original.updatedAt,
       title: "renamed",
     });
     expect(rolled.tasks.find((t) => t.id === "b")).toBe(updated.tasks.find((t) => t.id === "b"));

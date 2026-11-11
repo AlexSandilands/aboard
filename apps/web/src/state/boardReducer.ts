@@ -120,11 +120,21 @@ export function optimisticMove(
     ...board,
     tasks: board.tasks.map((t) => {
       if (t.id !== taskId) return t;
-      if (to.status === t.status) return { ...t, position };
+      // The server stamps every move as an update, so a column sorted by Recently updated puts the card where it
+      // will stay rather than jumping once the server's event lands.
+      const now = new Date().toISOString();
+      if (to.status === t.status) return { ...t, position, updatedAt: now };
       // Leaving its column reopens a closed task; the server clears the resolution the same way.
       // statusChangedAt puts it on top of Done, which is newest-first.
-      const statusChangedAt = new Date().toISOString();
-      return { ...t, status: to.status, position, statusChangedAt, resolution: null, resolvedBy: null };
+      return {
+        ...t,
+        status: to.status,
+        position,
+        updatedAt: now,
+        statusChangedAt: now,
+        resolution: null,
+        resolvedBy: null,
+      };
     }),
   };
 }
@@ -159,6 +169,8 @@ export function rollbackMove(board: BoardSnapshot, original: TaskSummary, moved:
   const task = board.tasks.find((t) => t.id === original.id);
   if (!task || task.status !== moved.status || task.position !== moved.position) return board;
   const { status, position, statusChangedAt, resolution, resolvedBy } = original;
-  const restored = { ...task, status, position, statusChangedAt, resolution, resolvedBy };
+  // updatedAt goes back too, unless an event has stamped a newer one since.
+  const updatedAt = task.updatedAt === moved.updatedAt ? original.updatedAt : task.updatedAt;
+  const restored = { ...task, status, position, updatedAt, statusChangedAt, resolution, resolvedBy };
   return { ...board, tasks: board.tasks.map((t) => (t === task ? restored : t)) };
 }
