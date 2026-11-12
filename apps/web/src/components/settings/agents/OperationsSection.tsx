@@ -24,8 +24,8 @@ import {
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { memo, useCallback } from "react";
 import { useUpdateProject, useUpdateSettings } from "~/state/mutations";
-import { useOperationSettings, useSettings } from "~/state/queries";
-import { useRowScope } from "../SettingsScope";
+import { useOperationSettings, useOverridingProjects, useSettings } from "~/state/queries";
+import { OverriddenInProjects } from "../SettingsScope";
 import { SettingsRow, SettingsSection, SettingsSubsection } from "../settingsLayout";
 import { CONTROL_PICKER } from "./SplitCard";
 
@@ -48,7 +48,7 @@ export const OperationsSection = memo(function OperationsSection({ blocked }: { 
     </SettingsSection>
   ));
   return (
-    <SettingsSubsection id="agents.operations" scope="project">
+    <SettingsSubsection id="agents.operations">
       {blocked ? (
         <div className="relative">
           <div
@@ -82,6 +82,8 @@ export const OperationsSection = memo(function OperationsSection({ blocked }: { 
   );
 });
 
+const NONE: never[] = [];
+
 function listOr(words: readonly string[]): string {
   return words.length < 2 ? (words[0] ?? "") : `${words.slice(0, -1).join(", ")} or ${words.at(-1)}`;
 }
@@ -91,16 +93,10 @@ function listOr(words: readonly string[]): string {
  * row, or any other setting, doesn't re-render it.
  */
 const OperationRow = memo(function OperationRow({ op, quiet }: { op: OperationId; quiet: boolean }) {
-  const { project } = useRowScope();
-  // A project picks its own reviewer (for the reviewer subagent and the board reviewer); every other operation's
-  // model is the board's.
-  if (op === "reviewer" && project) return <ProjectReviewerRow project={project} />;
-  return <BoardOperationRow op={op} quiet={quiet} />;
-});
-
-function BoardOperationRow({ op, quiet }: { op: OperationId; quiet: boolean }) {
   const settings = useOperationSettings(op);
   const { mutate } = useUpdateSettings();
+  const reviewOverrides = useOverridingProjects("reviewModel");
+  const overriding = op === "reviewer" ? reviewOverrides : NONE;
   const onChange = useCallback(
     (next: ModelChoice | null) => mutate({ operationModels: boardUpdate(op, next) }),
     [mutate, op],
@@ -108,6 +104,13 @@ function BoardOperationRow({ op, quiet }: { op: OperationId; quiet: boolean }) {
   if (!settings) return null;
   const { unset, inherit } = boardPickerRows(op, settings);
   const line = resolvesTo(op, {}, settings);
+  // A project can pick its own reviewer, for the reviewer subagent and the board reviewer, on the Projects page.
+  const overridden =
+    overriding.length > 0 ? (
+      <span className="block">
+        <OverriddenInProjects projects={overriding} target="project.overrides.reviewer" />
+      </span>
+    ) : null;
   return (
     <SettingsRow
       id={operationTarget(op)}
@@ -115,10 +118,13 @@ function BoardOperationRow({ op, quiet }: { op: OperationId; quiet: boolean }) {
       info={OPERATION_DESCRIPTIONS[op]}
       description={quiet ? OPERATION_DESCRIPTIONS[op] : undefined}
       status={
-        quiet ? null : line.ok ? (
+        quiet ? (
+          overridden
+        ) : line.ok ? (
           <span className="block">
             {line.text}
             {line.note ? <span className="block text-muted-foreground/80">{line.note}</span> : null}
+            {overridden}
           </span>
         ) : (
           // A single row that can't run (its provider lacks something it needs): said calmly, with a small marker.
@@ -142,10 +148,10 @@ function BoardOperationRow({ op, quiet }: { op: OperationId; quiet: boolean }) {
       }
     />
   );
-}
+});
 
-/** The Reviewer row in project scope: the project's own reviewer model, which its tasks use unless they pick one. */
-function ProjectReviewerRow({ project }: { project: Project }) {
+/** Projects › overrides: the project's own reviewer model, which its tasks use unless they pick one. */
+export function ProjectReviewerRow({ project }: { project: Project }) {
   const settings = useSettings().data;
   const updateProject = useUpdateProject();
   if (!settings) return null;
@@ -153,9 +159,8 @@ function ProjectReviewerRow({ project }: { project: Project }) {
   const line = (op: "reviewer" | "boardReviewer") => resolvesTo(op, ctx, settings).text.replace(/^Resolves to /, "");
   return (
     <SettingsRow
-      id={operationTarget("reviewer")}
-      scope="project"
-      title={OPERATIONS.reviewer.label}
+      id="project.overrides.reviewer"
+      title="Reviewer model"
       info={`${OPERATION_DESCRIPTIONS.reviewer} For this project it is also the board reviewer's model, which needs a provider that can return structured output. A task can still pick its own.`}
       override={
         project.reviewModel

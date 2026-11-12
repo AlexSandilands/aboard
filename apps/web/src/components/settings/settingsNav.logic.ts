@@ -169,10 +169,17 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
   },
   {
     id: "project",
-    label: "Project",
+    label: "Projects",
     sections: [
-      // Only the project itself: what a project sets for itself is on Tasks, Agents and Autopilot in its scope.
+      // The project picked at the top of the page: itself, and the few settings it sets over the board's.
       section("project.general", "General", ["name", "icon", "folder", "workspace"]),
+      section("project.overrides", "This project's overrides", [
+        "per project",
+        "override",
+        "planning skill",
+        "review skill",
+        "reviewer model",
+      ]),
       section("project.danger-zone", "Danger zone", ["archive", "delete"]),
     ],
   },
@@ -210,14 +217,14 @@ const MOVED_TARGETS: ReadonlyArray<[string, string]> = [
   ["models.tiers", "models.tiers.list"],
   ["tasks.review.model", "models.operations.reviewer"],
   ["tasks.new-tasks.import-model", "models.operations.issueImport"],
-  // The project page's overrides moved to the rows they override, edited in that project's scope.
-  ["project.review-skill.model", "agents.operations.reviewer"],
-  ["project.models.reviewer", "agents.operations.reviewer"],
-  ["project.models", "agents.operations.review"],
-  ["project.review-skill.skill", "tasks.review.skill"],
-  ["project.review-skill", "tasks.review"],
-  ["project.plan-skill.skill", "tasks.planning.skill"],
-  ["project.plan-skill", "tasks.planning"],
+  // The project page's old overrides sections, gathered in its overrides section.
+  ["project.review-skill.model", "project.overrides.reviewer"],
+  ["project.models.reviewer", "project.overrides.reviewer"],
+  ["project.models", "project.overrides"],
+  ["project.review-skill.skill", "project.overrides.review-skill"],
+  ["project.review-skill", "project.overrides"],
+  ["project.plan-skill.skill", "project.overrides.plan-skill"],
+  ["project.plan-skill", "project.overrides"],
   ["project.autopilot.variables.list", "autopilot.limits.variables.list"],
   ["project.autopilot.variables", "autopilot.limits.variables"],
   ["project.autopilot.automations", "autopilot.automations"],
@@ -304,12 +311,28 @@ function movedAutopilot(target: string): string {
 }
 
 /**
+ * The board rows a project overrides, by their id, and the project's own row on the Projects page. A link to one of
+ * them in a project's scope (`?project=`, from when each page had the project picker) means that project's row.
+ */
+const PROJECT_OVERRIDE_ROWS: ReadonlyArray<[string, string]> = [
+  ["tasks.planning.skill", "project.overrides.plan-skill"],
+  ["tasks.review.skill", "project.overrides.review-skill"],
+  ["agents.operations.reviewer", "project.overrides.reviewer"],
+];
+
+/**
  * A target from before it moved: a provider's from before providers had their own page
  * (`integrations.claude-code.cli-path`, a bookmark or an old link) and anything on the old Providers and Models pages
  * as it is now on Agents (`agents.providers.claude-code.cli-path`), and the model settings that moved to the Models
- * page. Any other target as it is.
+ * page. Any other target as it is. With a project, a board row it overrides is read as its row on the Projects page.
  */
-export function redirectSettingsTarget(target: string): string {
+export function redirectSettingsTarget(target: string, project?: string | null): string {
+  const moved = movedTarget(target);
+  if (!project) return moved;
+  return PROJECT_OVERRIDE_ROWS.find(([row]) => row === moved)?.[1] ?? moved;
+}
+
+function movedTarget(target: string): string {
   if (target.startsWith("autopilot.")) return movedAutopilot(target);
   for (const [old, moved] of MOVED_TARGETS) {
     if (old.endsWith(".") ? target.startsWith(old) : target === old) {
@@ -327,10 +350,14 @@ export function redirectSettingsTarget(target: string): string {
 /**
  * Where a settings target lives: a group (`"tasks"`), a section (`"tasks.review"`) or a row
  * (`"agents.providers.claude-code.cli-path"`). The group is the first segment; anything longer is the anchor to scroll
- * to. Null when the first segment isn't a group. An old target is read as the one it moved to.
+ * to. Null when the first segment isn't a group. An old target is read as the one it moved to, and with a project a
+ * board row it overrides as the project's row.
  */
-export function parseSettingsTarget(target: string): { group: SettingsGroupId; anchor: string | null } | null {
-  const current = redirectSettingsTarget(target);
+export function parseSettingsTarget(
+  target: string,
+  project?: string | null,
+): { group: SettingsGroupId; anchor: string | null } | null {
+  const current = redirectSettingsTarget(target, project);
   const group = current.split(".")[0];
   if (!isSettingsGroup(group)) return null;
   return { group, anchor: current === group ? null : current };

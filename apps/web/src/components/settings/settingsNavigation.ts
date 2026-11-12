@@ -16,9 +16,10 @@ import { scopeSearch } from "./settingsScope.logic";
 export const FROM_SETTINGS_LIST = { settingsEditorFromList: true } as const;
 
 /**
- * Opens Settings at a target: a group (`"autopilot"`), a section (`"project.recurring"`) or a row
- * (`"autopilot.limits.quiet-hours"`). `project` sets the scope (`?project=`; null is All projects), which otherwise
- * stays as it is, like T3's `retainSettingsScope`; a Providers target
+ * Opens Settings at a target: a group (`"autopilot"`), a section (`"project.overrides"`) or a row
+ * (`"autopilot.limits.quiet-hours"`). `project` picks the project (`?project=`; null is All projects): the one the
+ * Projects page shows, the one a board row it overrides opens on there, or the run history's filter. Without it the
+ * Projects page keeps the one it showed, like T3's `retainSettingsScope`; a Providers target
  * (`"agents.providers.codex.cli-path"`) picks the provider. The anchor goes in the URL hash
  * and is scrolled to once it renders, which the router can't do for content still loading. `highlight` flashes it
  * once it is in view.
@@ -28,12 +29,14 @@ export function useOpenSettings() {
   const router = useRouter();
   return useCallback(
     (target = "board", options: { project?: string | null; replace?: boolean; highlight?: boolean } = {}) => {
-      // Settings opened from the board starts in All projects unless told otherwise; inside it the scope carries over.
-      const current = router.state.location.pathname.startsWith("/settings")
-        ? (router.state.location.search as { project?: string }).project
-        : undefined;
+      const parsed = parseSettingsTarget(target, options.project) ?? { group: "board" as const, anchor: null };
+      // Only the Projects page has a project. Opened from the board it asks for one unless told which; inside
+      // Settings it stays on the one picked last.
+      const current =
+        parsed.group === "project" && router.state.location.pathname.startsWith("/settings")
+          ? (router.state.location.search as { project?: string }).project
+          : undefined;
       const scope = scopeSearch(options.project === undefined ? current : options.project);
-      const parsed = parseSettingsTarget(target) ?? { group: "board" as const, anchor: null };
       useSettingsNav.getState().requestScroll(parsed.anchor ?? parsed.group, options.highlight);
       // The Autopilot page's Runs and Limits tabs have paths of their own.
       if (parsed.group === "autopilot" && autopilotTabOf(parsed.anchor) !== "automations") {
@@ -90,9 +93,7 @@ export function useLeaveEditor() {
         router.history.back();
         return;
       }
-      // The rule editor's `?project=` is the rule's project, which needn't be the scope its list was in.
-      const scope = router.state.location.state.settingsScope;
-      openSettings(section, scope === undefined ? {} : { project: scope });
+      openSettings(section);
     },
     [router, openSettings],
   );

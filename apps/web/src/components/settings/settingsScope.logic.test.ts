@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   filterScopeOptions,
   isScopedGroup,
-  rowIsInert,
+  overridingProjects,
   scopeProject,
   scopeProjects,
   scopeSearch,
@@ -12,8 +12,11 @@ import {
 const project = (id: string, position: string, archivedAt: string | null = null) => ({ id, position, archivedAt });
 
 describe("isScopedGroup", () => {
-  it("is the pages with per-project settings", () => {
-    expect(["tasks", "agents", "autopilot", "project"].every((g) => isScopedGroup(g as never))).toBe(true);
+  it("is only the Projects page", () => {
+    expect(isScopedGroup("project")).toBe(true);
+    expect(isScopedGroup("tasks")).toBe(false);
+    expect(isScopedGroup("agents")).toBe(false);
+    expect(isScopedGroup("autopilot")).toBe(false);
     expect(isScopedGroup("board")).toBe(false);
     expect(isScopedGroup("keybindings")).toBe(false);
     expect(isScopedGroup("integrations")).toBe(false);
@@ -70,11 +73,16 @@ describe("scopeSearch", () => {
   });
 });
 
-describe("rowIsInert", () => {
-  it("dims only board-wide rows, and only in project scope", () => {
-    expect(rowIsInert("board", true)).toBe(true);
-    expect(rowIsInert("project", true)).toBe(false);
-    expect(rowIsInert("any", true)).toBe(false);
-    expect(rowIsInert("board", false)).toBe(false);
+describe("overridingProjects", () => {
+  it("lists the live projects that set their own value, in sidebar order", () => {
+    const projects = [
+      { ...project("c", "3"), planSkill: { source: "builtin" } },
+      { ...project("a", "1"), planSkill: { source: "builtin" }, reviewModel: null },
+      { ...project("b", "2"), planSkill: null },
+      { ...project("x", "0", "2026-01-01T00:00:00.000Z"), planSkill: { source: "builtin" } },
+    ];
+    expect(overridingProjects(projects, "planSkill").map((p) => p.id)).toEqual(["a", "c"]);
+    expect(overridingProjects(projects, "reviewModel")).toEqual([]);
+    expect(overridingProjects(undefined, "reviewSkill")).toEqual([]);
   });
 });

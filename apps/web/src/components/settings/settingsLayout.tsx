@@ -11,9 +11,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { Badge } from "~/components/ui/badge";
 import { useSettingsNav } from "~/state/ui";
-import { BoardWide, ScopedStretch, useRowInert } from "./SettingsScope";
 import { useOpenSettings } from "./settingsNavigation";
-import type { RowScope } from "./settingsScope.logic";
 
 /** Shared settings card surface, with separators between rows. */
 export function SettingsGroup({ className, ...props }: ComponentPropsWithoutRef<"div">) {
@@ -30,22 +28,12 @@ export function SettingsGroup({ className, ...props }: ComponentPropsWithoutRef<
 
 /**
  * One entry of the settings list: the anchor its link scrolls to and scroll-spy watches. `id` is the section's
- * stable id from `SETTINGS_GROUPS`. Holds one or more `SettingsSection`s. `scope` says what it holds when a project is
- * chosen in the scope sentence: `board` (the default) is dimmed whole, `project` has rows a project can set (its
- * board-wide rows are dimmed one by one), `any` is never dimmed.
+ * stable id from `SETTINGS_GROUPS`. Holds one or more `SettingsSection`s.
  */
-export function SettingsSubsection({
-  id,
-  scope = "board",
-  children,
-}: {
-  id: string;
-  scope?: RowScope;
-  children: ReactNode;
-}) {
+export function SettingsSubsection({ id, children }: { id: string; children: ReactNode }) {
   return (
     <div id={id} data-settings-section={id} className="scroll-mt-4 space-y-6">
-      <ScopedStretch scope={scope}>{children}</ScopedStretch>
+      {children}
     </div>
   );
 }
@@ -171,7 +159,6 @@ export function SettingsRow({
   status,
   control,
   resetAction,
-  scope = "board",
   override,
   children,
   className,
@@ -187,17 +174,11 @@ export function SettingsRow({
   control?: ReactNode;
   /** A SettingResetButton beside the title, shown while the setting differs from its default. */
   resetAction?: ReactNode;
-  /**
-   * `project` for a row a project can set for itself, `any` for one that isn't a setting. A `board` row (the default)
-   * is dimmed and inert while a project is chosen in the scope sentence.
-   */
-  scope?: RowScope;
-  /** In project scope, a project's own value: marked, with a reset back to the board's. */
+  /** On the Projects page, a project's own value: marked, with a reset back to the board's. */
   override?: { onReset: () => void; label: string } | null;
   children?: ReactNode;
 }) {
-  const inert = useRowInert(scope);
-  const row = (
+  return (
     <div
       {...rowProps}
       data-slot="settings-row"
@@ -216,7 +197,7 @@ export function SettingsRow({
         )}
       >
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex min-h-5 items-center gap-1.5">
+          <div className="flex min-h-5 flex-wrap items-center gap-x-1.5 gap-y-1">
             <h3 className="text-sm font-medium text-foreground">{title}</h3>
             {info ? (
               <InfoHover label={infoLabel ?? (typeof title === "string" ? `More about ${title}` : "More info")}>
@@ -243,7 +224,6 @@ export function SettingsRow({
       {children}
     </div>
   );
-  return inert ? <BoardWide>{row}</BoardWide> : row;
 }
 
 /** "Overridden for this project" beside a row's title, with a reset back to the board's value. */

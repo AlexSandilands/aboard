@@ -19,8 +19,6 @@ import type { ConfigUpdate } from "./AutomationRows";
 import { formatCost, runStatusLabel, runStatusVariant, withConfigValue } from "./autopilot.logic";
 import { dayLabel, spendText, weekBars } from "./health.logic";
 import { RunHistoryLink } from "./RunHistoryLink";
-import { useScopeParam } from "~/components/settings/SettingsScope";
-import { scopeSearch } from "~/components/settings/settingsScope.logic";
 
 /** This week: runs, failures and spend, a bar a day, and the latest runs. */
 export function WeekSection({ automation }: { automation: string }) {
@@ -119,7 +117,6 @@ export interface HintTarget {
 export function useApplyHint() {
   const updateTask = useUpdateTask();
   const navigate = useNavigate();
-  const scope = scopeSearch(useScopeParam());
   const dismiss = useDismissHint();
   /** Applied: the hint has done its job, and comes back only if its situation does. */
   const applied = (hint: AutopilotHint) => {
@@ -144,7 +141,7 @@ export function useApplyHint() {
         dismiss.mutate(hint.id);
         return;
       case "open_limits":
-        void navigate({ to: "/settings/autopilot/limits", search: scope });
+        void navigate({ to: "/settings/autopilot/limits" });
         return;
     }
   };

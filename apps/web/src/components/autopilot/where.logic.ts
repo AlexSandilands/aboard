@@ -72,7 +72,7 @@ export const scopeToggle = (input: WhereInput, scope: PopoverScope, on: boolean)
 
 /**
  * The settings a project sets for itself on an automation ("Budget, Skill"), or null when it sets none. They apply
- * over the board's, and the project page is where they show and are cleared. A key the automation no longer has is
+ * over the board's, and the automation's detail lists them, with a way to clear them. A key the automation no longer has is
  * listed by its name.
  */
 export function ownSettingsLabel(

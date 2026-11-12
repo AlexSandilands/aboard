@@ -2,8 +2,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { HistoryIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { FROM_SETTINGS_LIST } from "~/components/settings/settingsNavigation";
-import { useScopeParam } from "~/components/settings/SettingsScope";
-import { scopeSearch } from "~/components/settings/settingsScope.logic";
 
 /**
  * Opens the run history page of an automation (`AUTOPILOT_ALL_RUNS` for every automation's), filtered to `project`
@@ -25,7 +23,6 @@ export function RunHistoryLink({
   size?: "xs" | "sm" | "compact";
 }) {
   const navigate = useNavigate();
-  const scope = useScopeParam();
   return (
     <Button
       size={size}
@@ -34,8 +31,7 @@ export function RunHistoryLink({
         void navigate({
           to: "/settings/autopilot/runs/$automation",
           params: { automation },
-          // From Settings the history follows the scope: its project filter is the same `?project=`.
-          search: scopeSearch(project ?? (fromSettings ? scope : undefined)),
+          search: project ? { project } : {},
           state: fromSettings ? FROM_SETTINGS_LIST : undefined,
         })
       }

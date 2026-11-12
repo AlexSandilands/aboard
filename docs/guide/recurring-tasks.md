@@ -7,8 +7,8 @@ board creates the task, and you or an agent do the work.
 ## Setting one up
 
 Open **Settings → Autopilot** and pick **Recurring tasks**: every project's rules are listed there, each project with
-its own **New rule**. Choose a project in **Applying settings for** at the top (or open Settings from the project's gear
-in the sidebar) to see only its rules, with the examples below them. There is no switch for Recurring tasks as a whole:
+its own **New rule**. Pick a project in the menu above the rules to see only its rules, with the examples below
+them. There is no switch for Recurring tasks as a whole:
 a rule that is on runs.
 
 1. **New rule**, or **Add** one of the examples (dependency bumps, security audit, docs drift check, stale

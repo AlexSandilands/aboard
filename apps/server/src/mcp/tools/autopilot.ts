@@ -186,7 +186,7 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
         if (missing.length > 0) {
           lines.push(
             "Variables it reads that have no value, so it skips those projects until the user sets them (Settings → " +
-              "Autopilot → Limits & safety → Variables, board-wide or with that project chosen at the top):",
+              "Autopilot → Limits & safety → Variables, board-wide or for that project):",
             ...missing,
           );
         }

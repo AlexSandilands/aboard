@@ -60,11 +60,12 @@ export const boardRoute = createRoute({
 });
 
 /**
- * `?project=` on every settings page: the scope chosen in "Applying settings for", kept as you move around Settings.
- * None is All projects.
+ * `?project=` on every settings route: the project the Projects page shows (none is All projects, which asks for
+ * one), the run history's project filter, and on an old link from when every page had the picker, the project whose
+ * row it meant.
  */
 const SettingsProjectSearch = z.object({ project: z.string().min(1).optional().catch(undefined) });
-/** The settings pages' search: the scope, the provider the Providers page edits, or the automation Autopilot shows. */
+/** The settings pages' search: the project, the provider the Providers page edits, or the automation Autopilot shows. */
 const SettingsGroupSearch = SettingsProjectSearch.extend({
   provider: z.string().optional(),
   automation: z.string().optional(),
@@ -76,7 +77,7 @@ const SettingsGroupSearch = SettingsProjectSearch.extend({
  */
 function movedSettingsRedirect(moved: string, search: { provider?: string; project?: string }) {
   const group = moved.split(".")[0]!;
-  // The scope goes along: an old link into a project's settings lands on the new row in that project's scope.
+  // The project goes along: an old link into a project's settings lands on its row on the Projects page.
   const scope = search.project ? { project: search.project } : {};
   if (group === "autopilot" && autopilotTabOf(moved) === "limits") {
     return redirect({ to: "/settings/autopilot/limits", search: scope, hash: moved, replace: true });
@@ -125,19 +126,19 @@ export const settingsGroupRoute = createRoute({
   validateSearch: (search) => SettingsGroupSearch.parse(search),
   beforeLoad: ({ params, location }) => {
     const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
+    const project = (location.search as { project?: string }).project;
     if (!isSettingsGroup(params.group)) {
       // The old Providers and Models pages are sections of Agents now; anything else goes to the first page.
-      const moved = redirectSettingsTarget(hash || params.group);
+      const moved = redirectSettingsTarget(hash || params.group, project);
       const group = moved.split(".")[0]!;
       if (!isSettingsGroup(group))
         throw redirect({ to: "/settings/$group", params: { group: "board" }, replace: true });
       throw movedSettingsRedirect(moved, location.search);
     }
     // An old link into Integrations (`#integrations.claude-code.cli-path`) or the old Autopilot page goes to where
-    // that setting is now.
-    const moved = hash ? redirectSettingsTarget(hash) : hash;
-    if (moved !== hash)
-      throw movedSettingsRedirect(moved, { project: (location.search as { project?: string }).project });
+    // that setting is now, and one to a row a project overrides, in that project's scope, to the Projects page.
+    const moved = hash ? redirectSettingsTarget(hash, project) : hash;
+    if (moved !== hash) throw movedSettingsRedirect(moved, { project });
   },
   component: SettingsGroupPage,
 });
@@ -255,11 +256,6 @@ declare module "@tanstack/react-router" {
   interface HistoryState {
     /** Set when a settings editor sub-page was opened from its list (see `useLeaveEditor`). */
     settingsEditorFromList?: boolean;
-    /**
-     * The settings scope the editor was opened from, when the editor's own `?project=` names something else (the
-     * rule editor's is the rule's project). Leaving the editor goes back to it; null is All projects.
-     */
-    settingsScope?: string | null;
     /** Set when the social feed was opened from Settings (see `useLeaveSocial`). */
     socialFromSettings?: boolean;
   }

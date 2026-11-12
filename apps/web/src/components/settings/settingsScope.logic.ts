@@ -1,9 +1,10 @@
-// The project scope of the settings pages: "Applying settings for [All projects ▾]" at the top of the pages that have
-// something per project, kept in the URL as `?project=` (after T3 Code's settings scope, MIT, see NOTICE).
+// The project picker of the settings pages: "Showing [All projects ▾]" at the top of the Projects page, kept in the
+// URL as `?project=` (after T3 Code's settings scope, MIT, see NOTICE), and the same picker inside a section that lists
+// one project's things (Autopilot's variables and recurring tasks).
 import type { SettingsGroupId } from "./settingsNav.logic";
 
-/** The pages that show the scope sentence: the ones with settings a project can set for itself. */
-export const SCOPED_GROUPS: ReadonlySet<SettingsGroupId> = new Set(["tasks", "agents", "autopilot", "project"]);
+/** The pages that show the scope sentence: only Projects, which holds what a project sets for itself. */
+export const SCOPED_GROUPS: ReadonlySet<SettingsGroupId> = new Set(["project"]);
 
 export const isScopedGroup = (group: SettingsGroupId | null | undefined): boolean =>
   group != null && SCOPED_GROUPS.has(group);
@@ -43,16 +44,14 @@ export function filterScopeOptions<O extends { label: string }>(options: Readonl
 /** The search to keep on a settings navigation so the scope survives it (T3's `retainSettingsScope`). */
 export const scopeSearch = (project: string | null | undefined): { project?: string } => (project ? { project } : {});
 
-/**
- * How a settings row behaves in the scope it is shown in. A row is `board` (one value for every project), `project`
- * (a project can set its own) or `any` (not a setting: a list, an action). In project scope a board row is dimmed and
- * inert, so the page doesn't jump when the scope changes; in All projects scope every row is live.
- */
-export type RowScope = "board" | "project" | "any";
+/** The project settings a project can set over the board's, as the Projects page's overrides list them. */
+export type ProjectOverrideField = "planSkill" | "reviewSkill" | "reviewModel";
 
-export function rowIsInert(row: RowScope, projectScope: boolean): boolean {
-  return projectScope && row === "board";
+/** The live projects that set their own value for a field, in sidebar order: a board row's "Overridden in N projects". */
+export function overridingProjects<
+  P extends { id: string; position: string; archivedAt?: string | null } & Partial<
+    Record<ProjectOverrideField, unknown>
+  >,
+>(projects: ReadonlyArray<P> | undefined, field: ProjectOverrideField): P[] {
+  return scopeProjects(projects).filter((p) => p[field] != null);
 }
-
-/** The tooltip on a dimmed board-wide row. */
-export const BOARD_WIDE_HINT = "Applies to every project. Choose All projects above to change it.";

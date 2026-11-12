@@ -18,7 +18,6 @@ import { SettingsLink } from "../settingsLayout";
 import { editorListSection, type SettingsGroupId } from "../settingsNav.logic";
 import { FROM_SETTINGS_LIST, useLeaveEditor } from "../settingsNavigation";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
-import { scopeSearch } from "../settingsScope.logic";
 
 /** Where the rule editor returns to: the Recurring tasks automation, showing the project's rules. */
 const RECURRING_LIST = editorListSection("project");
@@ -168,7 +167,7 @@ export function CustomAutomationImportPage() {
           void navigate({
             to: "/settings/autopilot/custom/$customId",
             params: { customId },
-            search: (prev) => scopeSearch(prev.project),
+            search: {},
             replace: true,
             state: FROM_SETTINGS_LIST,
           })

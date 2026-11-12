@@ -34,7 +34,7 @@ import { cn } from "~/lib/utils";
 import { useSettingsSelect } from "~/state/queries";
 import { useSuggestions } from "~/state/suggestions";
 import { useSettingsNav } from "~/state/ui";
-import { SettingsScopeProvider, SettingsScopeSentence, useSettingsScope } from "./SettingsScope";
+import { SettingsScopeSentence } from "./SettingsScope";
 import { SettingsSearch } from "./SettingsSearch";
 import type { SettingsIndexEntry } from "./settingsIndex.logic";
 import {
@@ -474,13 +474,12 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
   );
 }
 
-/** A page with per-project settings: the scope sentence, then the page in the chosen scope. */
+/** The Projects page: the scope sentence that picks the project, then the page for it. */
 function ScopedPage({ children }: { children: ReactNode }) {
-  const { project } = useSettingsScope();
   return (
     <>
       <SettingsScopeSentence />
-      <SettingsScopeProvider project={project}>{children}</SettingsScopeProvider>
+      {children}
     </>
   );
 }

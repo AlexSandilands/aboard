@@ -10,8 +10,6 @@ import { useDeleteTemplate, useDuplicateTemplate } from "~/state/mutations";
 import { useBoard, useTemplates } from "~/state/queries";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { FROM_SETTINGS_LIST } from "./settingsNavigation";
-import { useScopeParam } from "~/components/settings/SettingsScope";
-import { scopeSearch } from "~/components/settings/settingsScope.logic";
 
 function IconAction({
   label,
@@ -46,12 +44,10 @@ function IconAction({
 /** Templates for new tasks: Bug, Spike and Feature to start with, and any the user adds. Edited on a sub-page. */
 export function TemplatesSection() {
   const navigate = useNavigate();
-  const scope = scopeSearch(useScopeParam());
   const onEdit = (templateId: string) =>
     void navigate({
       to: "/settings/tasks/templates/$templateId",
       params: { templateId },
-      search: scope,
       state: FROM_SETTINGS_LIST,
     });
   const templates = useTemplates();
