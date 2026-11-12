@@ -37,7 +37,11 @@ export function TaskSection({
       className={cn("group/section px-2 pt-2", expanded ? "pb-2.5" : "pb-2", separated && "border-t border-border/65")}
     >
       {frame?.dragHandle}
-      <div className={cn("flex min-h-8 min-w-0 items-center justify-between gap-2 px-1.5", expanded && "mb-1")}>
+      {/* Wraps only when the actions alone are wider than the row (the task window's narrow rail): they then take a
+          line of their own and wrap within it, rather than pushing the column sideways over the title. */}
+      <div
+        className={cn("flex min-h-8 min-w-0 flex-wrap items-center justify-between gap-2 px-1.5", expanded && "mb-1")}
+      >
         {frame ? (
           <>
             <h3 className={cn("flex", rich ? "shrink-0" : "min-w-0 flex-1")}>
@@ -99,7 +103,9 @@ export function TaskSection({
             {title}
           </h3>
         )}
-        {actions && expanded ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
+        {actions && expanded ? (
+          <div className="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-1">{actions}</div>
+        ) : null}
       </div>
       {expanded ? children : null}
     </section>
