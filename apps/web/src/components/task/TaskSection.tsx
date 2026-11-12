@@ -37,10 +37,11 @@ export function TaskSection({
       className={cn("group/section px-2 pt-2", expanded ? "pb-2.5" : "pb-2", separated && "border-t border-border/65")}
     >
       {frame?.dragHandle}
-      {/* Wraps only when the actions alone are wider than the row (the task window's narrow rail): they then take a
-          line of their own and wrap within it, rather than pushing the column sideways over the title. */}
+      {/* Expanded, it wraps only when the actions alone are wider than the row (the task window's narrow rail): they
+          then take a line of their own and wrap within it, rather than pushing the column sideways over the title.
+          Collapsed, it never wraps: the rich summary shrinks and clips beside the title instead. */}
       <div
-        className={cn("flex min-h-8 min-w-0 flex-wrap items-center justify-between gap-2 px-1.5", expanded && "mb-1")}
+        className={cn("flex min-h-8 min-w-0 items-center justify-between gap-2 px-1.5", expanded && "mb-1 flex-wrap")}
       >
         {frame ? (
           <>

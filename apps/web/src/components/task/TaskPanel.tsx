@@ -406,8 +406,9 @@ function TaskPanelBody({
               aria-label="Properties"
               className={cn("border-s border-border/65", COLUMN_SCROLLBAR_CLASS)}
             >
-              {/* The header's bottom line already tops the rail, so its first section drops its own hairline. */}
-              <div className="flex min-w-0 flex-col pb-10 [&>*:first-child>section]:border-t-0">
+              {/* The header's bottom line already tops the rail, so what comes first (a section, or the hidden
+                  sections note when every rail section is hidden) drops its own hairline. */}
+              <div className="flex min-w-0 flex-col pb-10 [&>*:first-child]:border-t-0 [&>*:first-child>section]:border-t-0">
                 <ManagedSections task={task} column="rail" exclude={exclude} render={render} />
               </div>
             </ScrollArea>
