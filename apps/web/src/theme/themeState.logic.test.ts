@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import defaultThemePaint from "./defaultThemePaint.json";
 import { applyThemePalette } from "./applyTheme";
 import { GROVE_THEME, OCEAN_THEME, T3_CODE_LIGHT_THEME_COLORS, type ThemeDefinition } from "./palettes";
 import {
@@ -70,6 +71,16 @@ describe("parsing saved choices", () => {
     expect(parseThemeHalves(JSON.stringify({ light: "paper", dark: "paper" }), custom)).toEqual({ light: "paper" });
     expect(parseThemeHalves("not json", custom)).toEqual({});
     expect(parseThemeHalves(JSON.stringify(["grove"]), custom)).toEqual({});
+  });
+});
+
+describe("defaultThemePaint.json", () => {
+  // The build writes this into index.html for a new browser's first paint. When a palette changes, regenerate it as
+  // JSON.stringify(snapshot, null, 2) of the snapshot below.
+  it("is the default theme's paint snapshot", () => {
+    const snapshot = buildPaintSnapshot({ mode: "dark", themeId: DEFAULT_THEME_ID, halves: {} }, []);
+    expect(defaultThemePaint).toEqual(snapshot);
+    expect(snapshot.dark.id).toBe(DEFAULT_THEME_ID);
   });
 });
 

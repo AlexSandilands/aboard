@@ -50,7 +50,9 @@ theme, the retired `t3-chat`) as the default, Red Sun. Before the board had its 
 T3 Code, so on load `initTheme` runs `migrateThemeSelection` once, before it writes this load's paint snapshot: a
 browser with no `theme-id` but a `theme-paint` snapshot has used the board before and keeps T3 Code (`t3-code` is
 written); one with neither is new and gets the default written down, so its own first snapshot isn't read as an old
-user's next time. `t3-chat` and `t3-code` stay reserved ids.
+user's next time. `t3-chat` and `t3-code` stay reserved ids. A custom theme saved before `red-sun`, `tide`, `bridge`
+and `t3-code` were reserved (one named "Tide", say) is no longer read: it stays in storage but isn't shown, and a
+selection naming it gets the built-in of that id. Re-iding such themes on load is a possible follow-up.
 
 Saved custom themes live in `themes` (a list in T3 Code's stored shape, parsed leniently) and are shown as cards
 after the built-ins; themes sharing a `collection` (an Open VSX extension) share one card. See
@@ -136,7 +138,8 @@ Instead `useTheme` saves a **paint snapshot** (`theme-paint`) every time it appl
 mode can ask for, the appearance actually shown, the theme id, its variables already named, and its canvas.
 The boot script reads the mode, picks the entry for the wanted appearance and paints it before first paint. A new
 browser has no snapshot, so the build writes the default theme's snapshot into the script (`%DEFAULT_THEME_PAINT%`,
-from `buildPaintSnapshot` in `vite.config.ts`), used only when there is neither a snapshot nor a `theme-id`.
+a checked-in copy of `buildPaintSnapshot`'s result in `theme/defaultThemePaint.json`, kept current by a test, so the
+Vite config loads no app code), used only when there is neither a snapshot nor a `theme-id`.
 The appearance prefs get the same treatment through `appearance-paint` (below). Vite fills the keys in with a
 `%STORAGE_KEY(name)%` placeholder (`brandHtml` in `apps/web/vite.config.ts`).
 

@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 import { BRAND, brandEnv, storageKey } from "../../packages/contracts/src/brand.ts";
-import { buildPaintSnapshot, DEFAULT_THEME_ID } from "./src/theme/themeState.logic.ts";
+import defaultThemePaintSnapshot from "./src/theme/defaultThemePaint.json" with { type: "json" };
 
 const serverPort = Number(process.env[brandEnv("PORT")] ?? 4317);
 const target = `http://127.0.0.1:${serverPort}`;
@@ -12,12 +12,10 @@ const target = `http://127.0.0.1:${serverPort}`;
 const webPort = Number(process.env[brandEnv("WEB_PORT")] ?? 5317);
 
 /**
- * The default theme's paint snapshot, for the boot script to paint a new browser with before the app loads. The mode
- * doesn't matter: the snapshot has an entry for each appearance.
+ * The default theme's paint snapshot, for the boot script to paint a new browser with before the app loads. It is a
+ * checked-in copy (themeState.logic.test.ts keeps it equal to buildPaintSnapshot's) so the config loads no app code.
  */
-const defaultThemePaint = JSON.stringify(
-  buildPaintSnapshot({ mode: "dark", themeId: DEFAULT_THEME_ID, halves: {} }, []),
-);
+const defaultThemePaint = JSON.stringify(defaultThemePaintSnapshot);
 
 /**
  * Fills placeholders in index.html: `%BRAND_NAME%`, `%STORAGE_KEY(name)%` for `storageKey("name")` and
