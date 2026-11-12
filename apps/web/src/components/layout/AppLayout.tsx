@@ -10,6 +10,7 @@ import {
 import { TaskPanel } from "~/components/task/TaskPanel";
 import { TaskWindow } from "~/components/task/TaskWindow";
 import { boardTransitionRunning } from "~/lib/boardMotion";
+import { taskHomeIsPanel } from "~/lib/windowZoom";
 import { useMarkTaskNotificationsRead } from "~/state/mutations";
 import { useSettingsNav } from "~/state/ui";
 
@@ -74,7 +75,8 @@ export function AppLayout() {
     <>
       <MarkNotificationsRead taskId={taskId} />
       <MemoBoard />
-      {panelId ? (
+      {/* A task opened onto a board with no panel open gets none behind its window: it closes back onto its card. */}
+      {panelId && !(inWindow && taskId && !taskHomeIsPanel(taskId)) ? (
         <TaskPanel
           taskId={panelId}
           inWindow={inWindow}

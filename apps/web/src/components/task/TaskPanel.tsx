@@ -111,6 +111,7 @@ export function TaskPanel({
           Pinned to the right edge, so it slides on its own transform while the aside's width opens the board up. */}
       <div
         ref={contentsRef}
+        data-panel-contents=""
         className="@container absolute inset-y-0 right-0 flex min-h-0 max-w-[70vw] flex-col border-l border-border bg-background"
         style={{ width: `var(${RESIZABLE_WIDTH_PROPERTY})`, minWidth: MIN_WIDTH }}
       >
@@ -189,7 +190,10 @@ function ResizeHandle({ handlers }: { handlers: ResizableWidthHandlers }) {
 /** What the docked panel shows behind the task window, which has the task. */
 function InWindowPlaceholder() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+    <div
+      data-in-window-placeholder=""
+      className="flex flex-1 flex-col items-center justify-center gap-2 text-xs text-muted-foreground"
+    >
       <Maximize2Icon className="size-4" />
       Open in a window
     </div>
@@ -302,13 +306,16 @@ export function TaskPanelContent({
 /** The task window's width from which the sections split into two columns: about 56rem. */
 const TWO_COLUMNS_FROM = 896;
 
-/** Whether the element is at least `px` wide, following its resizes. */
+/**
+ * Whether the element is at least `px` wide, following its resizes. Its layout width, not its box on screen: the task
+ * window mounts transformed onto its card or the docked panel (`lib/windowZoom.ts`), and a transform fires no resize.
+ */
 function useWiderThan(ref: RefObject<HTMLElement | null>, px: number, enabled: boolean): boolean {
   const [wide, setWide] = useState(false);
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element || !enabled) return;
-    const update = () => setWide(element.getBoundingClientRect().width >= px);
+    const update = () => setWide(element.offsetWidth >= px);
     update();
     const observer = new ResizeObserver(update);
     observer.observe(element);

@@ -90,6 +90,40 @@ export function transformCss(transform: ZoomTransform): string {
 }
 
 /**
+ * Docking and undocking: the window moves onto the panel and is cropped to its box, at its real size. Scaled instead,
+ * it lands squashed to the panel's narrow, tall shape, a frame of stretched text before the panel takes over.
+ */
+export interface CropTransform {
+  /** How far the window's top-left corner moves to sit on the source's, in px. */
+  dx: number;
+  dy: number;
+  /** How much of the window's right and bottom is cut off, so what shows is the source's size. */
+  right: number;
+  bottom: number;
+}
+
+/** The move and crop that put the window at rest, `target`, onto `source` at its own size; null with no box. */
+export function cropTransform(source: ZoomRect, target: ZoomRect): CropTransform | null {
+  if (target.width <= 0 || target.height <= 0 || source.width <= 0 || source.height <= 0) return null;
+  return {
+    dx: source.left - target.left,
+    dy: source.top - target.top,
+    // A source larger than the window on a side (the panel is often taller) crops nothing there.
+    right: Math.max(0, target.width - source.width),
+    bottom: Math.max(0, target.height - source.height),
+  };
+}
+
+/**
+ * The crop's clip path. `outset` grows the clip past the window's box on every side, so at rest it doesn't cut off
+ * the window's shadow (a clip can only animate to another inset(), not to none).
+ */
+export function cropClipCss(crop: Pick<CropTransform, "right" | "bottom">, radius: number, outset = 0): string {
+  const edge = (value: number) => `${round(value - outset)}px`;
+  return `inset(${edge(0)} ${edge(crop.right)} ${edge(crop.bottom)} ${edge(0)} round ${round(radius)}px)`;
+}
+
+/**
  * The window's border radius while it sits on its source, so its corners look like the source's (`radius` px): the
  * transform scales the corners with everything else, so the radius is divided by the scale on each axis.
  */
@@ -109,4 +143,36 @@ export function turnDurationMs(durationMs: number, progress: number): number {
 function round(value: number, digits = 2): number {
   const factor = 10 ** digits;
   return Math.round(value * factor) / factor;
+}
+
+/**
+ * Where a task in the window goes back to when it is left without docking or closing it explicitly (Esc, the
+ * backdrop): the docked panel (`panel`), or the board, where the window closes onto the card. Null is no record.
+ */
+export interface TaskHome {
+  taskId: string;
+  panel: boolean;
+}
+
+/** The home recorded as the window of `taskId` opens: the panel when the window grows out of it. */
+export function homeOnWindowOpen(taskId: string, source: ZoomSource): TaskHome {
+  return { taskId, panel: source === "panel" };
+}
+
+/** The home after `taskId` is opened: one opened inside the window (a #N link) inherits the window's. */
+export function homeOnTaskOpened(home: TaskHome | null, taskId: string, inWindow: boolean): TaskHome | null {
+  return home && inWindow ? { taskId, panel: home.panel } : home;
+}
+
+/** Whether `taskId`'s window goes back to the docked panel; a task with no record (a restored URL) does. */
+export function homeIsPanel(home: TaskHome | null, taskId: string): boolean {
+  return home?.taskId === taskId ? home.panel : true;
+}
+
+/**
+ * Whether leaving the window closes the task rather than docking it: `leaving` is what an explicit way out said
+ * (the × closes, the dock button and `f` dock), null (Esc, the backdrop) goes home.
+ */
+export function leaveCloses(leaving: "close" | "dock" | null, homePanel: boolean): boolean {
+  return leaving ? leaving === "close" : !homePanel;
 }

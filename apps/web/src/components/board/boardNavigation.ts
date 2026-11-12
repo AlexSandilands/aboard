@@ -4,7 +4,7 @@ import { useCallback, useMemo } from "react";
 import { boardSearchAt } from "~/components/layout/appModal.logic";
 import { formatLabelFilter, parseLabelFilter } from "~/components/labels/labels.logic";
 import type { BoardSearch } from "~/router";
-import { noteWindowSource } from "~/lib/windowZoom";
+import { noteTaskOpened, noteWindowSource } from "~/lib/windowZoom";
 import type { ZoomSource } from "~/lib/windowZoom.logic";
 import { useProjectIds } from "~/state/queries";
 import { useReveal, useSettingsNav } from "~/state/ui";
@@ -93,6 +93,7 @@ export function useOpenTask() {
   const navigate = useNavigate();
   return useCallback(
     (taskId: string, options?: { reveal?: boolean; expanded?: boolean; from?: ZoomSource }) => {
+      noteTaskOpened(taskId);
       if (options?.expanded) noteWindowSource(taskId, options.from);
       const opened = navigate({
         to: "/",
