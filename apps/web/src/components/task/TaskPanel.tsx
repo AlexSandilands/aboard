@@ -276,19 +276,17 @@ export function TaskPanelContent({
         onOpenPlanEditor={openPlanEditor}
       />
       <div className="min-h-0 flex-1">
-        <ScrollArea scrollFade>
-          <PanelTaskLinksProvider>
-            <TaskPanelBody
-              task={task}
-              layout={layout}
-              projects={projects}
-              onOpenEditor={openEditor}
-              titleActions={
-                <TaskActions task={task} projects={projects} onClose={onClose} onOpenPlanEditor={openPlanEditor} />
-              }
-            />
-          </PanelTaskLinksProvider>
-        </ScrollArea>
+        <PanelTaskLinksProvider>
+          <TaskPanelBody
+            task={task}
+            layout={layout}
+            projects={projects}
+            onOpenEditor={openEditor}
+            titleActions={
+              <TaskActions task={task} projects={projects} onClose={onClose} onOpenPlanEditor={openPlanEditor} />
+            }
+          />
+        </PanelTaskLinksProvider>
       </div>
       <PlanEditor
         task={task}
@@ -320,24 +318,10 @@ function useWiderThan(ref: RefObject<HTMLElement | null>, px: number, enabled: b
 }
 
 /**
- * Whether the rail fits the window's scroll area, so it can stay in view while the main column scrolls. A taller one
- * scrolls with the page: stuck, its lower sections would be out of reach until the main column ran out.
+ * Each column's scrollbar starts right at the header's bottom line, meeting the rail's border, instead of the usual
+ * inset at the top.
  */
-function useRailFits(railRef: RefObject<HTMLElement | null>, enabled: boolean): boolean {
-  const [fits, setFits] = useState(false);
-  useLayoutEffect(() => {
-    const rail = railRef.current;
-    const viewport = rail?.closest("[data-slot=scroll-area-viewport]");
-    if (!rail || !viewport || !enabled) return;
-    const update = () => setFits(rail.offsetHeight <= viewport.clientHeight);
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(rail);
-    observer.observe(viewport);
-    return () => observer.disconnect();
-  }, [railRef, enabled]);
-  return enabled && fits;
-}
+const COLUMN_SCROLLBAR_CLASS = "[&>[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:mt-0";
 
 function TaskPanelBody({
   task,
@@ -357,11 +341,9 @@ function TaskPanelBody({
   const boardEpicFilter = useEpicFilter();
   const rootRef = useRef<HTMLDivElement>(null);
   const inWindow = layout === "window";
-  // Layout A: the story in a main column and the properties in a sticky rail beside it. Narrower, one column in the
-  // panel's saved order, as the docked panel has it.
+  // Layout A: the story in a main column and the properties in a rail beside it, each scrolling on its own so the rail
+  // is always in view. Narrower, one column in the panel's saved order, as the docked panel has it.
   const twoColumns = useWiderThan(rootRef, TWO_COLUMNS_FROM, inWindow);
-  const railRef = useRef<HTMLDivElement>(null);
-  const railSticks = useRailFits(railRef, twoColumns);
   const exclude = task.kind === "epic" ? EPIC_HIDDEN_SECTIONS : undefined;
   const render = (id: SectionId) => {
     switch (id) {
@@ -407,37 +389,37 @@ function TaskPanelBody({
   );
   return (
     <TaskLayoutContext value={layout}>
-      <div
-        ref={rootRef}
-        data-task-layout={layout}
-        className={cn(
-          "flex flex-col pb-10",
-          twoColumns && "grid grid-cols-[minmax(0,1fr)_21rem] items-start pb-0",
-          inWindow && !twoColumns && "sm:px-2",
-        )}
-      >
+      <div ref={rootRef} data-task-layout={layout} className="size-full">
         {twoColumns ? (
-          <>
-            <div className="flex min-w-0 flex-col px-2 pb-10">
-              {top}
-              <ManagedSections task={task} column="main" exclude={exclude} render={render} />
-            </div>
-            {/* The border runs the column's full height; the sections inside stay in view while they fit. */}
-            <div
+          <div className="grid size-full grid-cols-[minmax(0,1fr)_21rem] grid-rows-[minmax(0,1fr)]">
+            <ScrollArea scrollFade className={COLUMN_SCROLLBAR_CLASS}>
+              <div className="flex min-w-0 flex-col px-2 pb-10">
+                {top}
+                <ManagedSections task={task} column="main" exclude={exclude} render={render} />
+              </div>
+            </ScrollArea>
+            {/* The border sits on the scroll area, outside its fade, so it runs unbroken from the header down. */}
+            <ScrollArea
+              scrollFade
+              radius="none"
               role="complementary"
               aria-label="Properties"
-              className="min-w-0 self-stretch border-s border-border/65"
+              className={cn("border-s border-border/65", COLUMN_SCROLLBAR_CLASS)}
             >
-              <div ref={railRef} className={cn("flex flex-col pt-2 pb-10", railSticks && "sticky top-0")}>
+              {/* The header's bottom line already tops the rail, so what comes first (a section, or the hidden
+                  sections note when every rail section is hidden) drops its own hairline. */}
+              <div className="flex min-w-0 flex-col pb-10 [&>*:first-child]:border-t-0 [&>*:first-child>section]:border-t-0">
                 <ManagedSections task={task} column="rail" exclude={exclude} render={render} />
               </div>
-            </div>
-          </>
+            </ScrollArea>
+          </div>
         ) : (
-          <>
-            {top}
-            <ManagedSections task={task} exclude={exclude} render={render} />
-          </>
+          <ScrollArea scrollFade>
+            <div className={cn("flex flex-col pb-10", inWindow && "sm:px-2")}>
+              {top}
+              <ManagedSections task={task} exclude={exclude} render={render} />
+            </div>
+          </ScrollArea>
         )}
       </div>
     </TaskLayoutContext>

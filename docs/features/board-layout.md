@@ -359,8 +359,11 @@ task drops it (`withClosedTask`).
   21rem properties rail. Which column a section sits in is fixed (`SECTION_COLUMNS` in `sections.logic.ts`: Plan,
   Details and Activity in the main column, the rest in the rail); the saved order, hidden and collapsed choices apply
   within each column, each column is its own drag list, and the **Customize sections** popover lists the two columns.
-  The rail stays in view while the main column scrolls, as long as it fits the window (`useRailFits`); a taller one
-  scrolls with the page. Narrower, it is one column in the panel's saved order, and full screen on phones.
+  The two columns are side-by-side scroll areas, so the rail's top is always in view and a tall rail scrolls on its
+  own under the pointer, like the main column. The rail's border sits on its scroll area, outside the scroll fade, and
+  both columns' scrollbars start at the header's bottom line (`COLUMN_SCROLLBAR_CLASS`), so nothing leaves a gap
+  there; the rail's first section drops its own top hairline, which the header's line replaces. A section header whose
+  actions are wider than the rail (Local review's) puts them on a line of their own, wrapped (`TaskSection`). Narrower, it is one column in the panel's saved order, one scroll area, and full screen on phones.
 - **Reading size.** Parts that read larger ask `useTaskLayout()` (`task/taskLayout.ts`). The description and plan
   context render `Markdown size="md"` (15px, a 72ch measure, a real heading scale, roomier code and tables:
   `.markdown-md` in `index.css`) with pasted images in place ([attachments](attachments.md)), and their editors open
