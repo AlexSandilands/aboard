@@ -158,12 +158,15 @@ export function zoomIn(popup: HTMLElement, source: () => ZoomTarget | null) {
 
 /**
  * Shrinks the window's popup into what `destination` returns and holds it there until the dialog unmounts it; Base UI
- * waits for the popup's animations before it reports the window closed, so whoever navigates still waits. False, doing
- * nothing, when the zoom is off or there is nowhere to go: the window then fades out as usual. A zoom in still running
- * (Esc as the window opens) turns around from where it is.
+ * waits for the popup's animations before it reports the window closed, so whoever navigates still waits. With the
+ * zoom off or nowhere to go it starts nothing, and the window fades out as usual. A zoom in still running (Esc as the
+ * window opens) turns around from where it is.
  */
-export function zoomOut(popup: HTMLElement, destination: () => ZoomTarget | null): boolean {
-  if (leaving.has(popup)) return true;
+export function zoomOut(popup: HTMLElement, destination: () => ZoomTarget | null) {
+  // Whichever way the window goes, it is going: a second close, or a zoom in still waiting for a board transition,
+  // starts nothing on it.
+  if (leaving.has(popup)) return;
+  leaving.add(popup);
   const duration = zoomDuration();
   const running = popup.getAnimations().filter((animation) => animation.id === ZOOM_ID);
   const target = duration > 0 ? destination() : null;
@@ -171,21 +174,18 @@ export function zoomOut(popup: HTMLElement, destination: () => ZoomTarget | null
   if (!target || !frames) {
     // The fade takes over from where the window rests.
     for (const animation of running) animation.finish();
-    return false;
+    return;
   }
-  leaving.add(popup);
+  // Read before the running zoom is cancelled: the style is live, and without the zoom it is the window at rest.
   const style = getComputedStyle(popup);
-  const from: Keyframe = {
-    transform: style.transform,
-    borderRadius: style.borderTopLeftRadius,
-    opacity: style.opacity,
-    scale: "1",
-  };
+  const opacity = style.opacity;
+  const from: Keyframe = { transform: style.transform, borderRadius: style.borderTopLeftRadius, opacity, scale: "1" };
   const progress = running[0]?.effect?.getComputedTiming().progress ?? 1;
   for (const animation of running) animation.cancel();
-  popup.animate(
-    target.fade ? [from, { opacity: style.opacity, offset: FADE_OUT_START }, frames.source] : [from, frames.source],
-    { duration: turnDurationMs(duration, progress), easing: ZOOM_EASING, fill: "forwards", id: ZOOM_ID },
-  );
-  return true;
+  popup.animate(target.fade ? [from, { opacity, offset: FADE_OUT_START }, frames.source] : [from, frames.source], {
+    duration: turnDurationMs(duration, progress),
+    easing: ZOOM_EASING,
+    fill: "forwards",
+    id: ZOOM_ID,
+  });
 }
