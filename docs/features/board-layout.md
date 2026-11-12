@@ -1,6 +1,6 @@
 # Board and panel layout
 
-Board tasks: #54 (columns), #56 (panel sections), #58 (thread links on cards), #118 (Sessions section), #22 (priority lane), #207 (pinning it), #153 (sorting columns), #149 (the task window).
+Board tasks: #54 (columns), #56 (panel sections), #58 (thread links on cards), #118 (Sessions section), #22 (priority lane), #207 (pinning it), #153 (sorting columns), #149 (the task window), #160 (choosing a section's window column).
 The filters and saved views are in [saved-views.md](saved-views.md).
 
 A board with many projects and a long Done column gets tall, and the task panel gets crowded. This doc
@@ -360,15 +360,27 @@ task drops it (`withClosedTask`).
   until that window closes.
 - **Layout.** From a window width of 56rem (`TWO_COLUMNS_FROM` in `TaskPanel.tsx`, measured with a ResizeObserver) the
   body is two columns: the title, callouts and where-it's-up-to (or an epic's tasks) then the main sections, and a
-  21rem properties rail. Which column a section sits in is fixed (`SECTION_COLUMNS` in `sections.logic.ts`: Plan,
-  Details and Activity in the main column, the rest in the rail); the saved order, hidden and collapsed choices apply
-  within each column, each column is its own drag list, and the **Customize sections** popover lists the two columns.
+  21rem properties rail. `SECTION_COLUMNS` in `sections.logic.ts` is each section's default column (Plan, Details and
+  Activity in the main column, the rest in the rail); the user can move any section to the other column, saved in the
+  section layout's `columns`, which holds only the sections off their default (`sectionColumn`,
+  `moveSectionToColumn`; unknown ids and values, and choices equal to the default, are dropped on read, and Reset
+  clears them). The saved order, hidden and collapsed choices apply within each column, and each column is its own
+  drag list in the window. The **Customize sections** popover lists the two columns as one drag area: a row dragged
+  into the other list moves there as it crosses (at the row under the pointer, or into an empty list, which shows
+  "Drag a section here"), and each row's **Move to side column / Move to main column** button sends it to the end of
+  the other one, for the keyboard. With no shown section in one of the columns (every section moved, or the rest
+  hidden), the window is one column instead of leaving an empty strip.
   The two columns are side-by-side scroll areas, so the rail's top is always in view and a tall rail scrolls on its
   own under the pointer, like the main column. The rail's border sits on its scroll area, outside the scroll fade, and
   both columns' scrollbars start at the header's bottom line (`COLUMN_SCROLLBAR_CLASS`), so nothing leaves a gap
   there; the rail's first section drops its own top hairline, which the header's line replaces. A section header whose
   actions are wider than the rail (Local review's) puts them on a line of their own, wrapped (`TaskSection`). Narrower, it is one column in the panel's saved order, one scroll area, and full screen on phones.
-- **Reading size.** Parts that read larger ask `useTaskLayout()` (`task/taskLayout.ts`). The description and plan
+- **Either column.** The layout context (`useTaskLayout()` in `task/taskLayout.ts`) also says which column a part is
+  in. A section in the rail reads at panel size (`useReadsLarge()` is false there): small Markdown, thumbnails. A
+  section whose default is the rail stops at 34rem in the main column (`SectionFrame.capped`), so a row's ends (a
+  session's status, the Add buttons) don't drift across the window; one column on a wide window counts as the main
+  column.
+- **Reading size.** Parts that read larger ask `useReadsLarge()`: in the window, outside the rail. The description and plan
   context render `Markdown size="md"` (15px, a 72ch measure, a real heading scale, roomier code and tables:
   `.markdown-md` in `index.css`) with pasted images in place ([attachments](attachments.md)), and their editors open
   taller (`MarkdownInput tall`). Step notes are body size at an 80ch measure, with larger screenshot thumbnails.

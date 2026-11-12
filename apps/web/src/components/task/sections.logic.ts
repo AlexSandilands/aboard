@@ -40,11 +40,14 @@ export const SECTION_TITLES: Record<SectionId, string> = {
 };
 
 /**
- * Which column of the task window a section sits in, from about 56rem wide: the task's story (Plan, Details,
- * Activity) in the main column, its properties in the rail beside it. Fixed: the saved order, hidden and collapsed
- * choices apply within each column. Narrower, and in the docked panel, the sections are one column in saved order.
+ * Which column of the task window a section sits in, from about 56rem wide: by default the task's story (Plan,
+ * Details, Activity) in the main column, its properties in the rail beside it. The user can move any section to the
+ * other column (SectionLayout.columns); the saved order, hidden and collapsed choices apply within each column.
+ * Narrower, and in the docked panel, the sections are one column in saved order.
  */
 export type SectionColumn = "main" | "rail";
+
+const isSectionColumn = (value: unknown): value is SectionColumn => value === "main" || value === "rail";
 
 export const SECTION_COLUMNS: Record<SectionId, SectionColumn> = {
   labels: "rail",
@@ -61,22 +64,33 @@ export const SECTION_COLUMNS: Record<SectionId, SectionColumn> = {
 
 export const SECTION_COLUMN_TITLES: Record<SectionColumn, string> = { main: "Main column", rail: "Side column" };
 
-/** The sections of `ids` in a column, in their order; every section without a column. */
-export function sectionsInColumn(ids: ReadonlyArray<SectionId>, column: SectionColumn | undefined): SectionId[] {
-  return column ? ids.filter((id) => SECTION_COLUMNS[id] === column) : [...ids];
-}
-
 export interface SectionLayout {
   order: SectionId[];
   hidden: SectionId[];
   /** Explicit choices only; a missing id follows collapsedByDefault. */
   collapsed: Partial<Record<SectionId, boolean>>;
+  /** The task window column of each section the user moved; a missing id sits in its SECTION_COLUMNS default. */
+  columns: Partial<Record<SectionId, SectionColumn>>;
+}
+
+/** The column a section sits in: the user's choice, else its default. */
+export function sectionColumn(columns: SectionLayout["columns"], id: SectionId): SectionColumn {
+  return columns[id] ?? SECTION_COLUMNS[id];
+}
+
+/** The sections of `ids` in a column, in their order; every section without a column. */
+export function sectionsInColumn(
+  ids: ReadonlyArray<SectionId>,
+  column: SectionColumn | undefined,
+  columns: SectionLayout["columns"] = {},
+): SectionId[] {
+  return column ? ids.filter((id) => sectionColumn(columns, id) === column) : [...ids];
 }
 
 /** Sections added after others existed sit before the one they were split from in a saved order, not at the end. */
 const SECTION_ANCHORS: Partial<Record<SectionId, SectionId>> = { sessions: "links", usage: "links" };
 
-const isSectionId = (value: unknown): value is SectionId => SECTION_IDS.includes(value as SectionId);
+export const isSectionId = (value: unknown): value is SectionId => SECTION_IDS.includes(value as SectionId);
 
 /**
  * Re-validates stored values: unknown ids and duplicates are dropped, sections added since are appended (or placed
@@ -87,6 +101,7 @@ export function normalizeSectionLayout(stored: {
   order?: unknown;
   hidden?: unknown;
   collapsed?: unknown;
+  columns?: unknown;
 }): SectionLayout {
   const known = (value: unknown) => (Array.isArray(value) ? [...new Set(value.filter(isSectionId))] : []);
   const order = known(stored.order);
@@ -108,10 +123,18 @@ export function normalizeSectionLayout(stored: {
   if (beforeSessions && typeof collapsed.links === "boolean" && collapsed.sessions === undefined) {
     collapsed.sessions = collapsed.links;
   }
+  const columns: SectionLayout["columns"] = {};
+  if (stored.columns && typeof stored.columns === "object") {
+    for (const [id, value] of Object.entries(stored.columns)) {
+      // A choice that matches the default is dropped, so a later change to the default still reaches it.
+      if (isSectionId(id) && isSectionColumn(value) && value !== SECTION_COLUMNS[id]) columns[id] = value;
+    }
+  }
   return {
     order,
     hidden: SECTION_IDS.filter((id) => hidden.includes(id)),
     collapsed,
+    columns,
   };
 }
 
@@ -124,6 +147,46 @@ export function moveSection(order: ReadonlyArray<SectionId>, id: SectionId, over
   next.splice(from, 1);
   next.splice(to, 0, id);
   return next;
+}
+
+/**
+ * Whether the task window splits into two columns: only when each has a section to show (not hidden, not left out for
+ * this task). Otherwise one column, rather than an empty strip beside the other.
+ */
+export function splitsIntoColumns(
+  layout: Pick<SectionLayout, "order" | "hidden" | "columns">,
+  exclude: ReadonlyArray<SectionId> = [],
+): boolean {
+  const showsIn = (column: SectionColumn) =>
+    sectionsInColumn(layout.order, column, layout.columns).some(
+      (id) => !layout.hidden.includes(id) && !exclude.includes(id),
+    );
+  return showsIn("main") && showsIn("rail");
+}
+
+/**
+ * Puts `id` in `column`: where `overId` sits when given (a drop on a row of that column), else after the column's last
+ * section (or where it is, when the column is empty). Only choices that differ from the default are kept.
+ */
+export function moveSectionToColumn(
+  layout: Pick<SectionLayout, "order" | "columns">,
+  id: SectionId,
+  column: SectionColumn,
+  overId?: SectionId,
+): Pick<SectionLayout, "order" | "columns"> {
+  const columns = { ...layout.columns };
+  if (column === SECTION_COLUMNS[id]) delete columns[id];
+  else columns[id] = column;
+  const order = layout.order.filter((section) => section !== id);
+  const at = overId && overId !== id ? order.indexOf(overId) : -1;
+  if (at >= 0) {
+    order.splice(at, 0, id);
+  } else {
+    const last = sectionsInColumn(order, column, columns).at(-1);
+    if (last) order.splice(order.indexOf(last) + 1, 0, id);
+    else order.splice(Math.max(0, layout.order.indexOf(id)), 0, id);
+  }
+  return { order, columns };
 }
 
 export type SectionTask = Pick<

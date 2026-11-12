@@ -6,6 +6,9 @@ import { AttentionIcon } from "~/components/board/attention";
 import { cn } from "~/lib/utils";
 import { useSectionFrame } from "./ManagedSections";
 
+/** How wide a side-column section grows in the main column: about the docked panel's default width. */
+const SECTION_CAP_CLASS = "max-w-[34rem]";
+
 /**
  * A titled detail-panel section, separated from the one above by a hairline. Inside ManagedSections
  * the title toggles it open and closed; collapsed, the header shows a one-line summary in place of
@@ -31,6 +34,7 @@ export function TaskSection({
   const expanded = frame?.expanded ?? true;
   const rich = !expanded && frame && summary ? summary : null;
   const attention = frame?.attention ?? null;
+  const capped = frame?.capped ?? false;
   return (
     <section
       aria-labelledby={headingId}
@@ -41,7 +45,11 @@ export function TaskSection({
           then take a line of their own and wrap within it, rather than pushing the column sideways over the title.
           Collapsed, it never wraps: the rich summary shrinks and clips beside the title instead. */}
       <div
-        className={cn("flex min-h-8 min-w-0 items-center justify-between gap-2 px-1.5", expanded && "mb-1 flex-wrap")}
+        className={cn(
+          "flex min-h-8 min-w-0 items-center justify-between gap-2 px-1.5",
+          expanded && "mb-1 flex-wrap",
+          capped && SECTION_CAP_CLASS,
+        )}
       >
         {frame ? (
           <>
@@ -108,7 +116,7 @@ export function TaskSection({
           <div className="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-1">{actions}</div>
         ) : null}
       </div>
-      {expanded ? children : null}
+      {expanded ? capped ? <div className={SECTION_CAP_CLASS}>{children}</div> : children : null}
     </section>
   );
 }
