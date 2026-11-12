@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  homeIsPanel,
+  homeOnTaskOpened,
+  homeOnWindowOpen,
+  leaveCloses,
+  cropClipCss,
+  cropTransform,
   freshSource,
   radiusCss,
   transformCss,
@@ -85,5 +91,60 @@ describe("turnDurationMs", () => {
   it("is the share already covered when turning around, but never a jump", () => {
     expect(turnDurationMs(300, 0.7)).toBe(210);
     expect(turnDurationMs(300, 0.05)).toBe(120);
+  });
+});
+
+describe("cropTransform", () => {
+  const window = rect(200, 100, 1200, 800);
+
+  it("moves the window's corner onto the panel's and crops it to the panel's size, unscaled", () => {
+    expect(cropTransform(rect(1100, 40, 480, 760), window)).toEqual({ dx: 900, dy: -60, right: 720, bottom: 40 });
+  });
+
+  it("crops nothing on a side where the panel is larger than the window", () => {
+    expect(cropTransform(rect(1100, 0, 480, 1000), window)).toMatchObject({ right: 720, bottom: 0 });
+  });
+
+  it("gives none without a box", () => {
+    expect(cropTransform(rect(0, 0, 0, 0), window)).toBeNull();
+  });
+});
+
+describe("cropClipCss", () => {
+  it("insets the right and bottom, and grows past the box by the outset at rest", () => {
+    expect(cropClipCss({ right: 720, bottom: 40 }, 0)).toBe("inset(0px 720px 40px 0px round 0px)");
+    expect(cropClipCss({ right: 0, bottom: 0 }, 16, 64)).toBe("inset(-64px -64px -64px -64px round 16px)");
+  });
+});
+
+describe("the task window's home", () => {
+  it("is the panel when the window grows out of it, the board when it grows out of the card", () => {
+    expect(homeOnWindowOpen("a", "panel")).toEqual({ taskId: "a", panel: true });
+    expect(homeOnWindowOpen("a", "card")).toEqual({ taskId: "a", panel: false });
+  });
+
+  it("is inherited by a task opened inside the window, and left alone by one opened elsewhere", () => {
+    const board = homeOnWindowOpen("a", "card");
+    expect(homeOnTaskOpened(board, "b", true)).toEqual({ taskId: "b", panel: false });
+    expect(homeOnTaskOpened(board, "b", false)).toBe(board);
+    expect(homeOnTaskOpened(null, "b", true)).toBeNull();
+  });
+
+  it("is the panel for a task with no record, such as a URL restored on load", () => {
+    expect(homeIsPanel(null, "a")).toBe(true);
+    expect(homeIsPanel(homeOnWindowOpen("b", "card"), "a")).toBe(true);
+    expect(homeIsPanel(homeOnWindowOpen("a", "card"), "a")).toBe(false);
+  });
+});
+
+describe("leaveCloses", () => {
+  it("follows an explicit way out whatever the home", () => {
+    expect(leaveCloses("close", true)).toBe(true);
+    expect(leaveCloses("dock", false)).toBe(false);
+  });
+
+  it("goes home otherwise: docks to the panel, closes onto the board", () => {
+    expect(leaveCloses(null, true)).toBe(false);
+    expect(leaveCloses(null, false)).toBe(true);
   });
 });

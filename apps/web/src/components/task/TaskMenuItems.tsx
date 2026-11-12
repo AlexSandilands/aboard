@@ -25,8 +25,8 @@ import {
 } from "lucide-react";
 import type { ReactNode, SyntheticEvent } from "react";
 
+import { dockTaskWindow } from "./taskWindowExit";
 import { useJumpToTask, useOpenTask, useSelectedTaskId, useTaskExpanded } from "~/components/board/boardNavigation";
-import { closeAppWindow } from "~/components/layout/AppRouteModal";
 import { useShortcutLabel } from "~/components/layout/useKeybindings";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { draftFromTask } from "~/components/templates/templates.logic";
@@ -274,7 +274,7 @@ function WindowMenuItem({ task }: { task: TaskSummary }) {
   return (
     <MenuItem
       onClick={() => {
-        if (inWindow) closeAppWindow();
+        if (inWindow) dockTaskWindow();
         else void openTask(task.id, { expanded: true, reveal: false });
       }}
     >
