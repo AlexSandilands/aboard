@@ -31,8 +31,8 @@ const openTaskOf = (services: Services, rule: RecurringRule): TaskSummary | null
 
 /**
  * Makes a task from a template on a schedule, per project, with no agent: weekly dependency bumps, an audit, a
- * docs check. The rules are in `autopilot_recurring` (edited in Settings → Autopilot → Recurring tasks, or the
- * project's settings); a rule that is enabled runs, as the automation has no switch of its own.
+ * docs check. The rules are in `autopilot_recurring` (edited in Settings → Autopilot → Recurring tasks, every
+ * project's or, with one chosen at the top, that project's); a rule that is enabled runs, as the automation has no switch of its own.
  *
  * Each slot has its own dedupe key. A rule that was due while the board was off gets one task for the latest slot,
  * not one per missed slot. A slot that finds the rule's last task still open is skipped (and logged), so a chore

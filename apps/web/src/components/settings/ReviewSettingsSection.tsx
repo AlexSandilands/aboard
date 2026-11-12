@@ -1,11 +1,12 @@
-import type { AppSettings, ReviewSkillRef } from "@repo/contracts";
+import { reviewSkillName, type AppSettings, type ReviewSkillRef } from "@repo/contracts";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { skillKey, skillOptions, type SkillOption } from "~/components/review/review.logic";
-import { useUpdateSettings } from "~/state/mutations";
+import { useUpdateProject, useUpdateSettings } from "~/state/mutations";
 import { useSkills } from "~/state/queries";
 import { HeadlessReviewerRows } from "./HeadlessReviewerRows";
 import { OperationModelLink } from "./OperationModelLink";
+import { useRowScope } from "./SettingsScope";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 
 const ROUND_LIMITS = [1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: `${n} round${n === 1 ? "" : "s"}` }));
@@ -49,14 +50,37 @@ export function ReviewSkillSelect({
   );
 }
 
-/** Global local review settings. */
+/**
+ * Local review settings. In project scope only the skill is the project's own (one of its folder's skills, or the
+ * user's); the rest are board-wide.
+ */
 export function ReviewSettingsSection({ settings }: { settings: AppSettings }) {
   const updateSettings = useUpdateSettings();
-  // The global skill can't come from one project's folder; projects override it in their own settings.
-  const skills = useSkills(null).data ?? [];
-  const options = skillOptions(
-    skills.filter((s) => s.source === "global"),
-    settings.reviewSkill,
+  const updateProject = useUpdateProject();
+  const { project } = useRowScope();
+  // The board's skill can't come from one project's folder, so All projects lists only the user's.
+  const skills = useSkills(project?.id ?? null).data ?? [];
+  const skillControl = project ? (
+    <ReviewSkillSelect
+      ariaLabel={`Review skill for ${project.title}`}
+      options={skillOptions(skills, project.reviewSkill, {
+        inheritLabel: `Board's (${reviewSkillName(settings.reviewSkill)})`,
+      })}
+      value={project.reviewSkill}
+      onChange={(reviewSkill) => updateProject.mutate({ id: project.id, reviewSkill })}
+    />
+  ) : (
+    <ReviewSkillSelect
+      ariaLabel="Review skill"
+      options={skillOptions(
+        skills.filter((s) => s.source === "global"),
+        settings.reviewSkill,
+      )}
+      value={settings.reviewSkill}
+      onChange={(skill) => {
+        if (skill) updateSettings.mutate({ reviewSkill: skill });
+      }}
+    />
   );
   return (
     <SettingsSection id="tasks.review.settings" title="Local review">
@@ -75,19 +99,27 @@ export function ReviewSettingsSection({ settings }: { settings: AppSettings }) {
       />
       <SettingsRow
         id="tasks.review.skill"
+        scope="project"
         title="Review skill"
-        description="What the reviewer follows."
-        info="Skills installed for Claude Code, Copilot or Codex are listed. A project can pick one of its own on its settings page."
-        control={
-          <ReviewSkillSelect
-            ariaLabel="Review skill"
-            options={options}
-            value={settings.reviewSkill}
-            onChange={(skill) => {
-              if (skill) updateSettings.mutate({ reviewSkill: skill });
-            }}
-          />
+        description={
+          project && !project.workspaceRoot
+            ? "Set the project's workspace folder to pick one of its own skills."
+            : "What the reviewer follows."
         }
+        info={
+          project
+            ? "The project's own skills (in its .claude/skills, .github/skills or .agents/skills folders) are listed first."
+            : "Skills installed for Claude Code, Copilot or Codex are listed. Choose a project above to give it one of its own."
+        }
+        override={
+          project?.reviewSkill
+            ? {
+                label: "review skill",
+                onReset: () => updateProject.mutate({ id: project.id, reviewSkill: null }),
+              }
+            : null
+        }
+        control={skillControl}
       />
       <SettingsRow
         id="tasks.review.rounds"

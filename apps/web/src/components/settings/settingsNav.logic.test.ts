@@ -9,7 +9,6 @@ import {
   parseSettingsTarget,
   providerOfTarget,
   redirectSettingsTarget,
-  resolveSettingsProject,
   sectionOf,
   SETTINGS_GROUPS,
   settingsCrumbs,
@@ -125,14 +124,16 @@ describe("editorListSection", () => {
   it("returns each editor to the section listing what it edits", () => {
     expect(editorListSection("tasks")).toBe("tasks.new-tasks");
     expect(editorListSection("autopilot")).toBe("autopilot.automations");
-    expect(editorListSection("project")).toBe("project.recurring");
+    // The rule editor's path is under project/, but the rules are listed in the Recurring tasks automation.
+    expect(editorListSection("project")).toBe("autopilot.automations.recurring");
     expect(editorListSection("board")).toBe("board");
   });
 
   it("names sections that exist", () => {
-    for (const group of ["tasks", "autopilot", "project"] as const) {
+    for (const group of ["tasks", "autopilot"] as const) {
       expect(sectionOf(editorListSection(group))?.id).toBe(editorListSection(group));
     }
+    expect(sectionOf(editorListSection("project"))?.id).toBe("autopilot.automations");
   });
 });
 
@@ -160,18 +161,6 @@ describe("activeSectionId", () => {
 
   it("is null without sections", () => {
     expect(activeSectionId([], { atBottom: false })).toBeNull();
-  });
-});
-
-describe("resolveSettingsProject", () => {
-  const projects = [{ id: "p1" }, { id: "p2" }, { id: "p3" }];
-
-  it("prefers the requested project, then the board's, then the first", () => {
-    expect(resolveSettingsProject(projects, "p3", "p2")?.id).toBe("p3");
-    expect(resolveSettingsProject(projects, undefined, "p2")?.id).toBe("p2");
-    expect(resolveSettingsProject(projects, "gone", "p2")?.id).toBe("p2");
-    expect(resolveSettingsProject(projects, "gone", "gone too")?.id).toBe("p1");
-    expect(resolveSettingsProject([], "p1", null)).toBeNull();
   });
 });
 
@@ -209,10 +198,25 @@ describe("settingsPaletteEntries", () => {
     expect(redirectSettingsTarget("tasks.review.model")).toBe("agents.operations.reviewer");
     expect(redirectSettingsTarget("tasks.new-tasks.import-model")).toBe("agents.operations.issueImport");
     expect(parseSettingsTarget("project.review-skill.model")).toEqual({
-      group: "project",
-      anchor: "project.models.reviewer",
+      group: "agents",
+      anchor: "agents.operations.reviewer",
     });
     expect(redirectSettingsTarget("tasks.review.rounds")).toBe("tasks.review.rounds");
+  });
+
+  it("sends the project page's overrides to the rows they override", () => {
+    expect(redirectSettingsTarget("project.plan-skill.skill")).toBe("tasks.planning.skill");
+    expect(redirectSettingsTarget("project.plan-skill")).toBe("tasks.planning");
+    expect(redirectSettingsTarget("project.review-skill.skill")).toBe("tasks.review.skill");
+    expect(redirectSettingsTarget("project.models.reviewer")).toBe("agents.operations.reviewer");
+    expect(redirectSettingsTarget("project.models")).toBe("agents.operations.review");
+    expect(redirectSettingsTarget("project.autopilot.automations")).toBe("autopilot.automations");
+    expect(redirectSettingsTarget("project.autopilot.variables.list")).toBe("autopilot.limits.variables.list");
+    expect(redirectSettingsTarget("project.recurring")).toBe("autopilot.automations.recurring");
+    expect(redirectSettingsTarget("project.recurring.rules")).toBe("autopilot.automations.recurring");
+    // What stays on the project page doesn't move.
+    expect(redirectSettingsTarget("project.general.name")).toBe("project.general.name");
+    expect(redirectSettingsTarget("project.danger-zone")).toBe("project.danger-zone");
   });
 
   it("finds the Models section by the old names for its settings", () => {

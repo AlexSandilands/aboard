@@ -2,7 +2,7 @@
 // SettingsBreadcrumb.tsx), MIT — see NOTICE.
 import type { AppSettings } from "@repo/contracts";
 import { desktopBridge } from "~/lib/desktopBridge";
-import { Outlet, useLocation, useSearch } from "@tanstack/react-router";
+import { Outlet, useLocation } from "@tanstack/react-router";
 import {
   BlocksIcon,
   BotIcon,
@@ -34,6 +34,7 @@ import { cn } from "~/lib/utils";
 import { useSettingsSelect } from "~/state/queries";
 import { useSuggestions } from "~/state/suggestions";
 import { useSettingsNav } from "~/state/ui";
+import { SettingsScopeProvider, SettingsScopeSentence, useSettingsScope } from "./SettingsScope";
 import { SettingsSearch } from "./SettingsSearch";
 import type { SettingsIndexEntry } from "./settingsIndex.logic";
 import {
@@ -47,6 +48,7 @@ import {
   visibleSections,
 } from "./settingsNav.logic";
 import { useLeaveEditor, useLeaveWindow, useOpenSettings } from "./settingsNavigation";
+import { isScopedGroup } from "./settingsScope.logic";
 
 const GROUP_ICONS: Record<SettingsGroupId, LucideIcon> = {
   board: SquareKanbanIcon,
@@ -64,11 +66,6 @@ function useSettingsLocation(): { group: SettingsGroupId | null; inEditor: boole
   const parts = pathname.split("/").filter(Boolean);
   const group = parts[1];
   return { group: isSettingsGroup(group) ? group : null, inEditor: isEditorPath(pathname) };
-}
-
-/** The `?project=` of the project page and its rule editor. */
-function useSettingsProjectParam(): string | undefined {
-  return useSearch({ strict: false, select: (search) => search.project });
 }
 
 /**
@@ -93,10 +90,9 @@ export function SettingsShell() {
 /** What Esc does in Settings: leave an editor for its page, and close the window from a page. */
 export function useSettingsBack(): () => unknown {
   const { group, inEditor } = useSettingsLocation();
-  const project = useSettingsProjectParam();
   const leaveEditor = useLeaveEditor();
   if (!inEditor || !group) return closeAppWindow;
-  return () => leaveEditor(group, project);
+  return () => leaveEditor(group);
 }
 
 const selectProviders = (settings: AppSettings) => settings.providers;
@@ -108,8 +104,9 @@ const selectProviders = (settings: AppSettings) => settings.providers;
  * list, until a pick or its close button.
  */
 function SettingsRail() {
-  const { group: current, inEditor } = useSettingsLocation();
-  const project = useSettingsProjectParam();
+  const { group: path, inEditor } = useSettingsLocation();
+  // The rule editor keeps its old path under project/, but recurring rules belong to Autopilot now.
+  const current = path === "project" && inEditor ? "autopilot" : path;
   const active = useSettingsNav((s) => s.activeSection);
   const openSettings = useOpenSettings();
   const [expanded, setExpanded] = useState(false);
@@ -128,17 +125,13 @@ function SettingsRail() {
     // Highlight the pick right away rather than wait for the scroll to reach it.
     if (target !== group) useSettingsNav.getState().setActiveSection(target);
     // Moving within a page replaces the entry, so Back doesn't step through every section visited.
-    openSettings(target, {
-      project: group === "project" ? project : undefined,
-      replace: group === current && !inEditor,
-    });
+    openSettings(target, { replace: group === current && !inEditor });
   };
 
   const openResult = (entry: SettingsIndexEntry) => {
     setExpanded(false);
     useSettingsNav.getState().setActiveSection(entry.sectionId);
     openSettings(entry.id, {
-      project: entry.group === "project" ? project : undefined,
       replace: entry.group === current && !inEditor,
       // A sub-section is a whole stretch of the page: scrolling to it says enough.
       highlight: entry.kind !== "section",
@@ -222,7 +215,6 @@ export function SettingsTopBar({
   actions?: ReactNode;
 }) {
   const openSettings = useOpenSettings();
-  const project = useSettingsProjectParam();
   const crumbs = settingsCrumbs(group, editor);
   return (
     <header className={APP_WINDOW_HEADER_CLASS}>
@@ -247,7 +239,7 @@ export function SettingsTopBar({
                     <button
                       type="button"
                       className="cursor-pointer rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                      onClick={() => openSettings(group, { project })}
+                      onClick={() => openSettings(group)}
                     >
                       {crumb}
                     </button>
@@ -365,6 +357,7 @@ const SCROLL_REQUEST_TTL_MS = 3000;
  * with nothing requested it honours the URL hash, so a reload lands where it was.
  */
 export function SettingsScroller({ children, className }: { children: ReactNode; className?: string }) {
+  const { group, inEditor } = useSettingsLocation();
   const ref = useRef<HTMLDivElement>(null);
   const target = useSettingsNav((s) => s.scrollTarget);
   // When this page opened. A request made before then is the page being opened at a target, while its sections are
@@ -474,7 +467,20 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
     // Opaque, with the grain scrolling along (bg-local), so Chromium scrolls it on the compositor, as the board's
     // scroller does. Over the main area's background it repainted the whole screen on every scroll frame.
     <div ref={ref} className={cn("min-h-0 flex-1 overflow-y-auto bg-background surface-grain bg-local", className)}>
-      <div className="mx-auto w-full max-w-4xl space-y-8 px-4 pt-2 pb-24 sm:px-6">{children}</div>
+      <div className="mx-auto w-full max-w-4xl space-y-8 px-4 pt-2 pb-24 sm:px-6">
+        {isScopedGroup(group) && !inEditor ? <ScopedPage>{children}</ScopedPage> : children}
+      </div>
     </div>
+  );
+}
+
+/** A page with per-project settings: the scope sentence, then the page in the chosen scope. */
+function ScopedPage({ children }: { children: ReactNode }) {
+  const { project } = useSettingsScope();
+  return (
+    <>
+      <SettingsScopeSentence />
+      <SettingsScopeProvider project={project}>{children}</SettingsScopeProvider>
+    </>
   );
 }

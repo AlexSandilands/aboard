@@ -9,8 +9,11 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "~/components/ui/in
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
+import { Badge } from "~/components/ui/badge";
 import { useSettingsNav } from "~/state/ui";
+import { BoardWide, ScopedStretch, useRowInert } from "./SettingsScope";
 import { useOpenSettings } from "./settingsNavigation";
+import type { RowScope } from "./settingsScope.logic";
 
 /** Shared settings card surface, with separators between rows. */
 export function SettingsGroup({ className, ...props }: ComponentPropsWithoutRef<"div">) {
@@ -27,12 +30,22 @@ export function SettingsGroup({ className, ...props }: ComponentPropsWithoutRef<
 
 /**
  * One entry of the settings list: the anchor its link scrolls to and scroll-spy watches. `id` is the section's
- * stable id from `SETTINGS_GROUPS`. Holds one or more `SettingsSection`s.
+ * stable id from `SETTINGS_GROUPS`. Holds one or more `SettingsSection`s. `scope` says what it holds when a project is
+ * chosen in the scope sentence: `board` (the default) is dimmed whole, `project` has rows a project can set (its
+ * board-wide rows are dimmed one by one), `any` is never dimmed.
  */
-export function SettingsSubsection({ id, children }: { id: string; children: ReactNode }) {
+export function SettingsSubsection({
+  id,
+  scope = "board",
+  children,
+}: {
+  id: string;
+  scope?: RowScope;
+  children: ReactNode;
+}) {
   return (
     <div id={id} data-settings-section={id} className="scroll-mt-4 space-y-6">
-      {children}
+      <ScopedStretch scope={scope}>{children}</ScopedStretch>
     </div>
   );
 }
@@ -158,6 +171,8 @@ export function SettingsRow({
   status,
   control,
   resetAction,
+  scope = "board",
+  override,
   children,
   className,
   ...rowProps
@@ -172,9 +187,17 @@ export function SettingsRow({
   control?: ReactNode;
   /** A SettingResetButton beside the title, shown while the setting differs from its default. */
   resetAction?: ReactNode;
+  /**
+   * `project` for a row a project can set for itself, `any` for one that isn't a setting. A `board` row (the default)
+   * is dimmed and inert while a project is chosen in the scope sentence.
+   */
+  scope?: RowScope;
+  /** In project scope, a project's own value: marked, with a reset back to the board's. */
+  override?: { onReset: () => void; label: string } | null;
   children?: ReactNode;
 }) {
-  return (
+  const inert = useRowInert(scope);
+  const row = (
     <div
       {...rowProps}
       data-slot="settings-row"
@@ -203,6 +226,7 @@ export function SettingsRow({
             {resetAction ? (
               <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center">{resetAction}</span>
             ) : null}
+            {override ? <OverrideMarker {...override} /> : null}
           </div>
           {description ? (
             <p className="max-w-xl text-xs leading-normal text-muted-foreground/80">{description}</p>
@@ -218,6 +242,21 @@ export function SettingsRow({
       </div>
       {children}
     </div>
+  );
+  return inert ? <BoardWide>{row}</BoardWide> : row;
+}
+
+/** "Overridden for this project" beside a row's title, with a reset back to the board's value. */
+function OverrideMarker({ onReset, label }: { onReset: () => void; label: string }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-0.5">
+      <Badge variant="info" size="sm" className="truncate">
+        Overridden for this project
+      </Badge>
+      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center">
+        <SettingResetButton label={label} to="the board's" onClick={onReset} />
+      </span>
+    </span>
   );
 }
 
@@ -329,13 +368,13 @@ export function FoldedSettingsSection({
 }
 
 /** An inline link to another setting: a group, section or row id (see `useOpenSettings`). */
-export function SettingsLink({ to, project, children }: { to: string; project?: string; children: ReactNode }) {
+export function SettingsLink({ to, children }: { to: string; children: ReactNode }) {
   const openSettings = useOpenSettings();
   return (
     <button
       type="button"
       className="cursor-pointer rounded-sm text-foreground/80 underline underline-offset-2 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-      onClick={() => openSettings(to, project ? { project } : {})}
+      onClick={() => openSettings(to)}
     >
       {children}
     </button>

@@ -29,6 +29,7 @@ import {
   StatusDot,
 } from "~/components/settings/settingsLayout";
 import { FROM_SETTINGS_LIST, useOpenSettings } from "~/components/settings/settingsNavigation";
+import { ScopedStretch } from "~/components/settings/SettingsScope";
 import { SettingsScroller, SettingsTopBar } from "~/components/settings/SettingsShell";
 import { Button } from "~/components/ui/button";
 import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
@@ -45,6 +46,8 @@ import { QuickSetup, type QuickSetupState } from "./QuickSetup";
 import { AutomationsSplit, customOf, type ListedAutomation } from "./AutomationsSplit";
 import { HINT_ICONS, useApplyHint, type HintTarget } from "./HealthSections";
 import { pausedForRun } from "./health.logic";
+import { useScopeParam } from "~/components/settings/SettingsScope";
+import { scopeSearch } from "~/components/settings/settingsScope.logic";
 
 type Tab = "automations" | "runs" | "limits";
 
@@ -57,12 +60,17 @@ const TABS: ReadonlyArray<{ value: Tab; label: string }> = [
 /** The tab bar above each of the three tabs. */
 export function AutopilotTabs({ current }: { current: Tab }) {
   const navigate = useNavigate();
+  const scope = scopeSearch(useScopeParam());
   const go = (tab: Tab) => {
     if (tab === current) return;
-    if (tab === "automations") void navigate({ to: "/settings/$group", params: { group: "autopilot" } });
+    if (tab === "automations") void navigate({ to: "/settings/$group", params: { group: "autopilot" }, search: scope });
     else if (tab === "runs") {
-      void navigate({ to: "/settings/autopilot/runs/$automation", params: { automation: AUTOPILOT_ALL_RUNS } });
-    } else void navigate({ to: "/settings/autopilot/limits" });
+      void navigate({
+        to: "/settings/autopilot/runs/$automation",
+        params: { automation: AUTOPILOT_ALL_RUNS },
+        search: scope,
+      });
+    } else void navigate({ to: "/settings/autopilot/limits", search: scope });
   };
   return (
     <nav aria-label="Autopilot" className="flex gap-1 border-b border-border/60 px-1 sm:px-4">
@@ -94,7 +102,10 @@ export function AutopilotTabPage({ tab, children }: { tab: Exclude<Tab, "automat
       <SettingsScroller>
         <div className="space-y-6">
           <AutopilotTabs current={tab} />
-          <SettingsSubsection id={`autopilot.${tab}`}>{children}</SettingsSubsection>
+          {/* Limits has the project's variables; the run history filters by the scope's project. */}
+          <SettingsSubsection id={`autopilot.${tab}`} scope={tab === "limits" ? "project" : "any"}>
+            {children}
+          </SettingsSubsection>
         </div>
       </SettingsScroller>
     </>
@@ -113,6 +124,7 @@ export function AutopilotLimitsPage() {
 /** The Automations tab, the Autopilot group page's content: the status strip, Needs you, and the list. */
 export function AutopilotAutomationsTab() {
   const navigate = useNavigate();
+  const scope = scopeSearch(useScopeParam());
   const overview = useAutopilotOverview();
   const { message, items, pending = false, rejected = 0 } = useBoardAutomations();
   const customs = useCustomAutomations().data;
@@ -139,16 +151,21 @@ export function AutopilotAutomationsTab() {
   return (
     <div className="space-y-6">
       <AutopilotTabs current="automations" />
-      <SettingsSubsection id="autopilot.automations">
+      <SettingsSubsection id="autopilot.automations" scope="project">
         {overview.data && !message ? (
           <>
-            <StatusStrip overview={overview.data} anyOn={listed.some((i) => !isOffEverywhere(i.reach))} />
-            {nothingOn ? (
-              // The empty state: nothing is on, so the first thing to offer is switching a sensible set on.
-              <SettingsGroup className="px-3 py-3 sm:px-4">
-                <QuickSetup state={quickSetup} title="Start with Quick setup" />
-              </SettingsGroup>
-            ) : null}
+            {/* Pausing and Quick setup act on the whole board. */}
+            <ScopedStretch scope="board">
+              <div className="space-y-6">
+                <StatusStrip overview={overview.data} anyOn={listed.some((i) => !isOffEverywhere(i.reach))} />
+                {nothingOn ? (
+                  // The empty state: nothing is on, so the first thing to offer is switching a sensible set on.
+                  <SettingsGroup className="px-3 py-3 sm:px-4">
+                    <QuickSetup state={quickSetup} title="Start with Quick setup" />
+                  </SettingsGroup>
+                ) : null}
+              </div>
+            </ScopedStretch>
             <NeedsYou
               overview={overview.data}
               onSelect={(key) => selectAutomation(key)}
@@ -176,9 +193,11 @@ export function AutopilotAutomationsTab() {
       void navigate({
         to: "/settings/autopilot/custom/$customId",
         params: { customId: custom.id },
+        search: scope,
         state: FROM_SETTINGS_LIST,
       });
-    } else void navigate({ to: "/settings/$group", params: { group: "autopilot" }, search: { automation: key } });
+    } else
+      void navigate({ to: "/settings/$group", params: { group: "autopilot" }, search: { ...scope, automation: key } });
   }
 }
 
@@ -249,6 +268,7 @@ function NeedsYou({
   const resume = useResumeAutoPause();
   const hint = useApplyHint();
   const navigate = useNavigate();
+  const scope = scopeSearch(useScopeParam());
   const { needsYou: needs, autoPaused, hints } = overview;
   const titleOf = (key: string) => automationTitleOf(overview.automations, key);
   const count = needs.length + autoPaused.length + hints.length;
@@ -261,6 +281,7 @@ function NeedsYou({
     >
       {autoPaused.map((pause) => (
         <SettingsRow
+          scope="any"
           key={`paused:${pause.automation}:${pause.projectId}`}
           title={
             <NeedTitle icon={<PauseCircleIcon className="text-warning" />}>
@@ -290,6 +311,7 @@ function NeedsYou({
           case "failed_run":
             return (
               <SettingsRow
+                scope="any"
                 key={`run:${need.run.id}`}
                 title={
                   <NeedTitle icon={<XCircleIcon className="text-destructive" />}>
@@ -325,6 +347,7 @@ function NeedsYou({
           case "draft":
             return (
               <SettingsRow
+                scope="any"
                 key={`draft:${need.draftId}`}
                 title={
                   <NeedTitle icon={<FilePenLineIcon className="text-info" />}>
@@ -344,7 +367,7 @@ function NeedsYou({
                       onClick={() =>
                         void navigate({
                           to: "/settings/autopilot/custom/import",
-                          search: { draft: need.draftId },
+                          search: { ...scope, draft: need.draftId },
                           state: FROM_SETTINGS_LIST,
                         })
                       }
@@ -366,6 +389,7 @@ function NeedsYou({
           case "pr_approval":
             return (
               <SettingsRow
+                scope="any"
                 key={`pr:${need.url}`}
                 title={
                   <NeedTitle icon={<GitPullRequestIcon className="text-info" />}>
@@ -389,6 +413,7 @@ function NeedsYou({
           case "setup":
             return (
               <SettingsRow
+                scope="any"
                 key={`setup:${need.automation}`}
                 title={
                   <NeedTitle icon={<AlertTriangleIcon className="text-warning" />}>
@@ -407,6 +432,7 @@ function NeedsYou({
       })}
       {hints.map((h) => (
         <SettingsRow
+          scope="any"
           key={`hint:${h.id}`}
           title={
             <NeedTitle icon={HINT_ICONS[h.tone]}>
