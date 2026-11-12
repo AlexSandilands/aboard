@@ -47,7 +47,8 @@ ruleset is on ([GitHub setup](github-setup.md#the-release-tags-ruleset)), so the
 off first.
 
 The check only looks at the tag's form: it doesn't know the last release, so nothing stops a version lower than
-it. The installed apps and pacman would ignore such a release, and the pacman job leaves its repo alone.
+it. The installed apps and pacman would ignore such a release, and the pacman job leaves its repo alone, but
+the AUR job has no such check and would set the AUR package to it.
 
 Tags up to `v2026.11.13` are from the earlier scheme, the release's date
 ([Switching from date versions](#switching-from-date-versions)).
@@ -147,6 +148,9 @@ Releases up to `v2026.11.13` were named for their date. Every date version sorts
   downgrade and installs it; after that `pacman -Syu` works as before.
 - **An app installed from a date release isn't offered the semver ones.** Its updater compares versions the same
   way. Install the newer release by hand once (the installer, AppImage or package from the release page).
+- **Don't rebuild a date release with the workflow.** Its version is higher than any semver one, so the pacman
+  job's "won't go back a version" check lets it through: the date package would replace the current one in the
+  pacman repo, and in the AUR.
 - **GitHub's "Latest" badge** can go by version too. When publishing the first semver release, check **Set as
   the latest release** is ticked: the update feed is read from the latest release.
 
