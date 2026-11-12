@@ -604,14 +604,14 @@
     }
   }
 
-  /* The board's own themes (theme/aboardPalettes.ts) give the night art their own skies: Red Sun's sun setting
+  /* The board's own themes (theme/aboardPalettes.ts) give the night art their own skies: Firefly's sun setting
      through a crimson glow, Tide's dusk harbour and Bridge's midnight navy under a brass moon. In dark mode
      only the sky goes a step deeper. */
-  html[data-theme-id="red-sun"] {
+  html[data-theme-id="firefly"] {
     --stage-night-top: oklch(0.16 0.01 230);
     --stage-night-mid: oklch(0.24 0.08 25);
     --stage-night-bottom: oklch(0.36 0.14 30);
-    --stage-night-highlight: oklch(0.74 0.17 55);
+    --stage-night-highlight: oklch(0.74 0.17 42);
     --stage-night-secondary: oklch(0.3 0.1 25);
     --stage-night-tertiary: oklch(0.42 0.15 32);
     --stage-night-line: oklch(0.94 0.02 85);

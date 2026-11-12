@@ -2,9 +2,9 @@
 // the board and T3 Code look the same side by side, and a T3 Code theme file means the same thing here. Only the
 // mobile and publishing ids are left out; the board has neither. The board's own themes are in aboardPalettes.ts and
 // come first; T3 Chat's palette is kept (theme files fill missing roles from it) but isn't offered as a card.
-import { BRIDGE_THEME, RED_SUN_THEME, TIDE_THEME } from "./aboardPalettes";
+import { BRIDGE_THEME, FIREFLY_THEME, TIDE_THEME } from "./aboardPalettes";
 
-export const BUILT_IN_THEME_IDS = ["red-sun", "tide", "bridge", "grove", "ocean", "ember", "iris"] as const;
+export const BUILT_IN_THEME_IDS = ["bridge", "firefly", "tide", "grove", "ocean", "ember", "iris"] as const;
 
 /** T3 Code's own look, the board's CSS tokens. `null` in code; saved under this id, which T3 Code reserves too. */
 export const T3_CODE_THEME_ID = "t3-code";
@@ -911,7 +911,7 @@ export const IRIS_THEME: ThemeDefinition = {
 };
 
 /** The board's own themes, shown first. */
-export const BOARD_THEMES: ReadonlyArray<ThemeDefinition> = [RED_SUN_THEME, TIDE_THEME, BRIDGE_THEME];
+export const BOARD_THEMES: ReadonlyArray<ThemeDefinition> = [BRIDGE_THEME, FIREFLY_THEME, TIDE_THEME];
 /** T3 Code's themes, shown after the T3 Code card. */
 export const T3_THEMES: ReadonlyArray<ThemeDefinition> = [GROVE_THEME, OCEAN_THEME, EMBER_THEME, IRIS_THEME];
 export const BUILT_IN_THEMES: ReadonlyArray<ThemeDefinition> = [...BOARD_THEMES, ...T3_THEMES];

@@ -161,7 +161,7 @@ side by side. All of it is
 kept in this browser, not on the server: another browser (or the desktop app) has its own.
 
 - **Colors & themes.** Pick **System** (follow your computer), **Light** or **Dark**, then a theme. The board's own
-  come first: **Aboard** (the default), **Tide** and **Bridge**. Then **T3 Code**, **Grove**, **Ocean**, **Ember** and
+  come first: **Aboard** (the default), **Firefly** and **Tide**. Then **T3 Code**, **Grove**, **Ocean**, **Ember** and
   **Iris**, the same palettes as T3 Code, if you want the board to match it. If you used the board before it had its
   own themes and never picked one, you stay on T3 Code; if you had T3 Chat, which is gone, you're moved to Aboard.
   Click a card to

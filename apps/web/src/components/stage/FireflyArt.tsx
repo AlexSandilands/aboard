@@ -32,7 +32,7 @@ const SPARKLES: ReadonlyArray<readonly [number, number, number]> = [
 
 /**
  * A cartoon firefly crossing a navy night sky, its dotted flight loop trailing behind. Still art: the bug sits right
- * of the wordmark and ends by x 225, so it stays whole at the narrowest sidebar; the stars tile across a wider one.
+ * of the wordmark, high enough that the sidebar's fade leaves its tail lit, and ends by x 245, so it stays whole at the narrowest sidebar; the stars tile across a wider one.
  */
 export function FireflyArt() {
   const ids = useArtIds(["sky", "stars", "halo"] as const);
@@ -68,7 +68,7 @@ export function FireflyArt() {
       <rect width="100%" height="96" fill={`url(#${ids.stars})`} />
       {/* The flight loop: it starts low under the wordmark and curls once before reaching the tail. */}
       <path
-        d="M82 74c22 6 40-2 46-14s-8-20-14-10 6 22 28 20 34-14 42-20"
+        d="M102 58c22 6 40-2 46-14s-8-20-14-10 6 22 28 20 34-14 42-20"
         stroke={GLOW}
         strokeWidth="1.3"
         strokeDasharray="1.2 4"
@@ -77,7 +77,7 @@ export function FireflyArt() {
       />
 
       {/* Drawn facing right around (0, 0): glowing tail, body, wings, then the head with its big eye. */}
-      <g transform="translate(200 46) rotate(-14) scale(1.25)">
+      <g transform="translate(220 30) rotate(-14) scale(1.25)">
         <circle cx="-13" cy="3" r="13" fill={`url(#${ids.halo})`} />
         <ellipse cx="-12" cy="3" rx="7.5" ry="6" fill={GLOW} />
         <ellipse cx="-13.5" cy="1.5" rx="3" ry="2" fill="#fff" fillOpacity="0.7" />

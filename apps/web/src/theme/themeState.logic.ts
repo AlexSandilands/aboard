@@ -30,7 +30,7 @@ export interface ThemeSelection {
 export const DEFAULT_THEME_MODE: ThemeMode = "dark";
 
 /** The theme a browser starts on, and what a saved id that names no theme falls back to: the board's own. */
-export const DEFAULT_THEME_ID = "red-sun";
+export const DEFAULT_THEME_ID = "bridge";
 
 export function isThemeMode(value: unknown): value is ThemeMode {
   return value === "light" || value === "dark" || value === "system";

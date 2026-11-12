@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BRAND } from "@repo/contracts";
 import { isThemeColor, parseThemeRgbColor, themeContrastRatio } from "./color";
-import { BRIDGE_THEME, RED_SUN_THEME, TIDE_THEME } from "./aboardPalettes";
+import { BRIDGE_THEME, FIREFLY_THEME, TIDE_THEME } from "./aboardPalettes";
 import {
   BOARD_THEMES,
   BUILT_IN_THEMES,
@@ -39,13 +39,13 @@ const PAIRS: ReadonlyArray<[ThemeColorRole, ThemeColorRole, number]> = [
 
 describe("the board's own themes", () => {
   it("come first among the built-ins, in card order", () => {
-    expect(BOARD_THEMES).toEqual([RED_SUN_THEME, TIDE_THEME, BRIDGE_THEME]);
+    expect(BOARD_THEMES).toEqual([BRIDGE_THEME, FIREFLY_THEME, TIDE_THEME]);
     expect(BUILT_IN_THEMES.slice(0, 3)).toEqual(BOARD_THEMES);
     expect(BUILT_IN_THEMES.some((theme) => theme.id === "t3-chat")).toBe(false);
   });
 
   it("show the default under the product's name, with neutral ids", () => {
-    expect(RED_SUN_THEME.label).toBe(BRAND.name);
+    expect(BRIDGE_THEME.label).toBe(BRAND.name);
     for (const theme of BOARD_THEMES) {
       expect(theme.id).not.toContain(BRAND.id);
       expect(RESERVED_THEME_IDS.has(theme.id)).toBe(true);

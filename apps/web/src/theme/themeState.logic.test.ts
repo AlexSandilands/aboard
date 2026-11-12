@@ -45,7 +45,7 @@ describe("parsing saved choices", () => {
   });
 
   it("falls back to the default for a missing id, a removed theme and the retired T3 Chat", () => {
-    expect(DEFAULT_THEME_ID).toBe("red-sun");
+    expect(DEFAULT_THEME_ID).toBe("bridge");
     expect(parseThemeId(null, custom)).toBe(DEFAULT_THEME_ID);
     expect(parseThemeId("gone", custom)).toBe(DEFAULT_THEME_ID);
     expect(parseThemeId("t3-chat", custom)).toBe(DEFAULT_THEME_ID);

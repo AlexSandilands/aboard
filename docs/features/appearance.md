@@ -4,7 +4,7 @@ Board tasks: #173 and #179 (custom themes) (epic #178). Verified against T3 Code
 
 Settings → Board → Appearance holds the same look-and-feel options as T3 Code's Appearance page, and T3 Code's
 themes, so the board and T3 Code can look the same side by side. You pick an appearance mode (System, Light, Dark)
-and a theme: the board's own Aboard (the default; Red Sun in code), Tide or Bridge, or T3 Code, Grove, Ocean, Ember or
+and a theme: the board's own Aboard (the default; Bridge in code), Firefly or Tide, or T3 Code, Grove, Ocean, Ember or
 Iris, for both appearances or just one. Below that are sliders
 for contrast, glass opacity and panel animations, and the interface and monospace fonts. You can also create,
 edit, export and import themes, from files, VS Code themes or Open VSX. Everything is kept in the browser; the server
@@ -18,8 +18,8 @@ A theme is T3 Code's model, unchanged: an id, a label, a base `appearance` with 
 `surface`, `text`, `accent`, `sidebar`, `messageAction`, …), and optional `variants` for the other appearance.
 The built-ins come in two groups, shown in this order with the T3 Code card between them:
 
-- **The board's own** (`BOARD_THEMES`, `theme/aboardPalettes.ts`): Red Sun (labelled with the product name,
-  `BRAND.name`, and the default), Tide and Bridge. They are original, not T3 Code's: each was derived with
+- **The board's own** (`BOARD_THEMES`, `theme/aboardPalettes.ts`): Bridge (labelled with the product name,
+  `BRAND.name`, and the default), Firefly and Tide. They are original, not T3 Code's: each was derived with
   `createVividThemeColors` from a canvas and an accent (neutral surfaces from a canvas-hued seed, so the accent's hue
   doesn't tint every surface), then its canvas, cards, text, borders, controls and sidebar were set by hand to the
   design mockup and committed as literal colours. Error and warning stay T3 Code's, so red still means failing. The
@@ -46,11 +46,11 @@ one appearance forces that appearance unless a half covers the one the mode asks
 logic in `theme/themeState.logic.ts`.
 
 **Who gets which theme.** `parseThemeId` reads `t3-code` as T3 Code and anything that names no theme (a removed custom
-theme, the retired `t3-chat`) as the default, Red Sun. Before the board had its own themes a missing `theme-id` meant
+theme, the retired `t3-chat`) as the default, Bridge. Before the board had its own themes a missing `theme-id` meant
 T3 Code, so on load `initTheme` runs `migrateThemeSelection` once, before it writes this load's paint snapshot: a
 browser with no `theme-id` but a `theme-paint` snapshot has used the board before and keeps T3 Code (`t3-code` is
 written); one with neither is new and gets the default written down, so its own first snapshot isn't read as an old
-user's next time. `t3-chat` and `t3-code` stay reserved ids. A custom theme saved before `red-sun`, `tide`, `bridge`
+user's next time. `t3-chat` and `t3-code` stay reserved ids. A custom theme saved before `bridge`, `firefly`, `tide`
 and `t3-code` were reserved (one named "Tide", say) is no longer read: it stays in storage but isn't shown, and a
 selection naming it gets the built-in of that id. Re-iding such themes on load is a possible follow-up.
 
@@ -120,8 +120,8 @@ the same inside `[data-app-sidebar]`, which sets its own palette. Success, info,
 stay fixed. Terminal, composer, search-match and toolbar roles are kept in the data but nothing maps them.
 
 Each built-in also tints the sidebar banner's night art (`--stage-night-*`): T3 Code's themes with the values
-copied from T3 Code, the board's own with skies of their own (Red Sun's sun setting through a crimson glow, Tide's
-dusk harbour, Bridge's midnight navy under a brass moon), a step deeper in dark mode. T3 Chat's night art, pink
+copied from T3 Code, the board's own with skies of their own (Bridge's midnight navy under a brass moon, Firefly's
+sun setting through a crimson glow, Tide's dusk harbour), a step deeper in dark mode. T3 Chat's night art, pink
 sidebar divider and finer grain tile went with its card.
 
 The sidebar banners themselves are in `components/stage/` (`STAGE_BANNERS`). **Firefly** (`FireflyArt.tsx`) is the
@@ -396,7 +396,7 @@ times slower.
 | File                                                        | What it does                                                         |
 | ----------------------------------------------------------- | -------------------------------------------------------------------- |
 | `apps/web/src/theme/palettes.ts`                            | Roles, types, T3 Code's colours and themes, the built-in order, role → variable |
-| `apps/web/src/theme/aboardPalettes.ts`                      | The board's own themes: Red Sun (the default), Tide, Bridge          |
+| `apps/web/src/theme/aboardPalettes.ts`                      | The board's own themes: Bridge (the default), Firefly, Tide          |
 | `apps/web/src/theme/themeFile.ts`                           | T3 Code's theme file: parse, serialize, stored themes               |
 | `apps/web/src/theme/color.ts`, `derive.ts`                  | Colour parsing and contrast; deriving palettes and colour families   |
 | `apps/web/src/theme/themeLibrary.logic.ts`                  | Install, update, remove, replace a collection in the saved list      |

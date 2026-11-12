@@ -104,7 +104,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "board.appearance.theme",
     "Colors & themes",
-    `Follow the system or pick light or dark, and pick a theme: ${BRAND.name}, Tide, Bridge, T3 Code, Grove, Ocean, Ember or Iris, for both appearances or one.`,
+    `Follow the system or pick light or dark, and pick a theme: ${BRAND.name}, Firefly, Tide, T3 Code, Grove, Ocean, Ember or Iris, for both appearances or one.`,
     [
       "dark mode",
       "light mode",
@@ -112,8 +112,8 @@ const WRITTEN: ReadonlyArray<Draft> = [
       "color",
       "palette",
       "theme",
+      "firefly",
       "tide",
-      "bridge",
       "t3 code",
       "grove",
       "ocean",
