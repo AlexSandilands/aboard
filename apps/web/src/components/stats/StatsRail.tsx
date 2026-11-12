@@ -70,7 +70,7 @@ export function StatsRail({
   // icon rail, or on a section's tiles) its section.
   const listRef = useRef<HTMLUListElement>(null);
   useEffect(() => {
-    const lit = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[aria-current="location"]') ?? []).filter(
+    const lit = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-here]") ?? []).filter(
       (element) => element.offsetParent !== null,
     );
     lit.at(-1)?.scrollIntoView({ block: "nearest" });
@@ -116,7 +116,9 @@ export function StatsRail({
                     <SidebarMenuButton
                       disabled={!charted}
                       isActive={here && active === section.id}
-                      aria-current={here ? "location" : undefined}
+                      // Only the item being read is current; `data-here` also marks the section around a lit card.
+                      aria-current={here && active === section.id ? "location" : undefined}
+                      data-here={here || undefined}
                       title={section.label}
                       // In the icon rail the cards are hidden, so the section's icon stays lit wherever it is scrolled.
                       className={cn(here && !expanded && "max-md:bg-sidebar-row-active max-md:text-sidebar-foreground")}
@@ -136,6 +138,7 @@ export function StatsRail({
                               className="w-full text-sidebar-muted-foreground data-[active=true]:text-sidebar-foreground"
                               isActive={active === card.id}
                               aria-current={active === card.id ? "location" : undefined}
+                              data-here={active === card.id || undefined}
                               onClick={() => jump(card.id)}
                             >
                               <span>{card.label}</span>

@@ -38,7 +38,14 @@ import {
   valuesOrZero,
 } from "./stats.logic";
 import { SortedBars } from "./SortedBars";
-import { hasStatsCharts, statsSection, statsSectionOf, type StatsCardId, type StatsSectionId } from "./statsNav.logic";
+import {
+  hasStatsCharts,
+  statsSection,
+  statsSectionOf,
+  type StatsCardId,
+  visibleStatsCards,
+  type StatsSectionId,
+} from "./statsNav.logic";
 import { StatsRail } from "./StatsRail";
 import { TrendLine } from "./TrendLine";
 import { WeeklyBars } from "./WeeklyBars";
@@ -244,11 +251,12 @@ function StatsBody({
       hashDone.current = true;
       return;
     }
+    // A card this response doesn't draw (Runs by automation when none ran) goes straight to its section.
+    const target = visibleStatsCards(section, data).some((card) => card.id === id) ? id : section.id;
     let tries = 0;
     let frame = 0;
     const attempt = () => {
-      const last = ++tries >= HASH_TRIES;
-      if (scrollToTarget(id, false) || (last && scrollToTarget(section.id, false)) || last) {
+      if (scrollToTarget(target, false) || ++tries >= HASH_TRIES) {
         hashDone.current = true;
         return;
       }
