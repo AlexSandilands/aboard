@@ -126,3 +126,60 @@ export function visibleStatsCards(
     (card) => card.id !== "stats.autopilot.by-automation" || runsByAutomation(data.series).length > 0,
   );
 }
+
+/** A section or card as the rail's search lists it: its label, with where it sits on the page beneath. */
+export interface StatsSearchEntry {
+  id: StatsSectionId | StatsCardId;
+  kind: "section" | "card";
+  label: string;
+  /** "Section" for a section; a card's section. */
+  location: string;
+}
+
+const normalize = (text: string) => text.toLowerCase().replace(/\s+/g, " ").trim();
+
+/** Where a word sits in a label: the whole label, its start, the start of one of its words, or anywhere in it. */
+function labelRank(label: string, word: string): number | null {
+  if (label === word) return 0;
+  if (label.startsWith(word)) return 1;
+  if (label.includes(` ${word}`) || label.includes(`-${word}`)) return 2;
+  return label.includes(word) ? 3 : null;
+}
+
+/**
+ * The sections and drawn cards matching `query`, best first; ties keep page order. Every word typed has to match the
+ * label or, a weaker match, the section a card is in, so "cost" finds Estimated cost above Tokens by kind. An entry
+ * ranks by its worst-matching word. An empty query, or a response with no charts, matches nothing.
+ */
+export function searchStatsNav(
+  data: Pick<StatsResponse, "series"> | null | undefined,
+  query: string,
+): StatsSearchEntry[] {
+  const words = normalize(query).split(" ").filter(Boolean);
+  if (words.length === 0 || !hasStatsCharts(data)) return [];
+  const entries: StatsSearchEntry[] = STATS_SECTIONS.flatMap((section) => [
+    { id: section.id, kind: "section" as const, label: section.label, location: "Section" },
+    ...visibleStatsCards(section, data).map((card) => ({
+      id: card.id,
+      kind: "card" as const,
+      label: card.label,
+      location: section.label,
+    })),
+  ]);
+  const matches: { entry: StatsSearchEntry; rank: number; order: number }[] = [];
+  entries.forEach((entry, order) => {
+    const label = normalize(entry.label);
+    // A section's own location says nothing about it, so it matches on its label alone.
+    const location = entry.kind === "section" ? "" : normalize(entry.location);
+    let rank = 0;
+    for (const word of words) {
+      const wordMatch = labelRank(label, word) ?? (location.includes(word) ? 4 : null);
+      if (wordMatch === null) return;
+      rank = Math.max(rank, wordMatch);
+    }
+    if (words.length > 1) rank = Math.min(rank, labelRank(label, words.join(" ")) ?? rank);
+    matches.push({ entry, rank, order });
+  });
+  matches.sort((a, b) => a.rank - b.rank || a.order - b.order);
+  return matches.map((match) => match.entry);
+}

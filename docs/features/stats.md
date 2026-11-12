@@ -161,7 +161,8 @@ something that happened.
 
 ### The rail
 
-A rail at the window's left (`StatsRail`, built like the Settings rail) lists the sections, each with an icon, and the
+A rail down the window's full height at its left (`StatsRail`, built like the Settings rail, with the header beside it
+above the page as in Settings) lists the sections, each with an icon, and the
 chart cards it draws beneath it. Picking one scrolls the page to it (smoothly unless reduced motion is on) and sets the
 URL hash to its id with `replace`, keeping `?project=` and `?weeks=`; ids read `stats.flow` for a section and
 `stats.flow.open-tasks` for a card. A link or reload with a hash lands there once the charts have rendered (up to
@@ -171,9 +172,14 @@ sections and cards (`data-stats-nav`) and lights the one being read: a section w
 card. A pick is lit at once and the spy waits until the scroll comes to rest. The rail keeps the lit item in view.
 
 The rail lists exactly the cards drawn (`visibleStatsCards`): Runs by automation only when some automation ran. While
-the stats load, on an error, or when nothing happened, it lists only the sections, disabled. Below `md` it is a rail
-of the sections' icons with a Contents button that expands the full list over the page until a pick or the button
-again; the icon rail keeps its room meanwhile, so the page isn't laid out again underneath. The rail and the page are
+the stats load, on an error, or when nothing happened, it lists only the sections, disabled.
+
+A search box tops the rail, as in Settings (`StatsSearch`, without Settings' Ask row): typing lists the sections and
+drawn cards whose label matches, or whose section does (`searchStatsNav`), with the section beneath each; arrows move,
+Enter jumps, Esc clears the box and then leaves it, and `/` or Ctrl/Cmd+F focuses it. It is disabled with the list.
+
+Below `md` the rail is the sections' icons with a search button that expands the box and the full list over the page
+until a pick or its close button, as in Settings; the icon rail keeps its room meanwhile, so the page isn't laid out again underneath. The rail, the header and the page are
 `StatsBody`, a child of the window, so the scroll area exists when the spy's effect runs.
 
 ### Charts
@@ -240,7 +246,8 @@ runs; PRs, sessions and reviews aren't backdated, so those charts stay flat).
 | `apps/server/src/services/stats.test.ts`, `http/stats.routes.test.ts` | Week boundaries, scoping, totals; query validation |
 | `apps/web/src/components/stats/StatsPage.tsx` | The route component: pickers, `StatsBody` (rail, scroll area, jumps, the hash) and the sections |
 | `apps/web/src/components/stats/StatsRail.tsx` | The rail: sections with icons, their cards, the icon rail below `md` |
-| `apps/web/src/components/stats/statsNav.logic.ts` | `STATS_SECTIONS` (section and card ids, rail labels), `visibleStatsCards`, `statsSectionOf` (tested) |
+| `apps/web/src/components/stats/StatsSearch.tsx` | The rail's search box and its results |
+| `apps/web/src/components/stats/statsNav.logic.ts` | `STATS_SECTIONS` (section and card ids, rail labels), `visibleStatsCards`, `statsSectionOf`, `searchStatsNav` (tested) |
 | `apps/web/src/hooks/useScrollSpy.ts`, `scrollSpy.logic.ts` | The scroll-spy shared with Settings, `afterScroll` (the logic is tested) |
 | `apps/web/src/components/stats/{WeeklyBars,TrendLine,KpiTile,chartParts}.tsx` | The SVG charts and what they share |
 | `apps/web/src/components/stats/SortedBars.tsx` | The sorted horizontal bars for a breakdown |

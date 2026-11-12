@@ -104,57 +104,66 @@ export function StatsPage() {
 
   return (
     <AppRouteModal label="Stats" onClosed={leave}>
-      {/* On a phone the controls take a row of their own under the title and the close button. */}
-      <header className={cn(APP_WINDOW_HEADER_CLASS, "max-sm:h-auto max-sm:flex-wrap max-sm:py-2")}>
-        <h1 className="truncate text-sm font-medium max-sm:flex-1">Stats</h1>
-        <div className="ms-auto flex min-w-0 shrink-0 items-center gap-2 max-sm:order-3 max-sm:ms-0 max-sm:w-full">
-          <Menu>
-            <MenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="min-w-0 justify-between max-sm:flex-1 sm:w-44"
-                  aria-label="Projects"
-                />
-              }
-            >
-              <span className="truncate">{scopeLabel}</span>
-              <ChevronDownIcon />
-            </MenuTrigger>
-            <MenuPopup align="start">
-              <MenuItem onClick={() => setSearch({ project: undefined })}>All projects</MenuItem>
-              <MenuSeparator />
-              {projects.map((project) => (
-                <MenuCheckboxItem
-                  key={project.id}
-                  checked={projectIds.includes(project.id)}
-                  onCheckedChange={() => toggleProject(project.id)}
+      <StatsBody
+        data={stats.data}
+        onJumped={setHash}
+        header={
+          // On a phone the controls take a row of their own under the title and the close button.
+          <header className={cn(APP_WINDOW_HEADER_CLASS, "max-sm:h-auto max-sm:flex-wrap max-sm:py-2")}>
+            <h1 className="truncate text-sm font-medium max-sm:flex-1">Stats</h1>
+            <div className="ms-auto flex min-w-0 shrink-0 items-center gap-2 max-sm:order-3 max-sm:ms-0 max-sm:w-full">
+              <Menu>
+                <MenuTrigger
+                  render={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-w-0 justify-between max-sm:flex-1 sm:w-44"
+                      aria-label="Projects"
+                    />
+                  }
                 >
-                  {project.title}
-                </MenuCheckboxItem>
-              ))}
-            </MenuPopup>
-          </Menu>
-          <ToggleGroup
-            aria-label="Period"
-            value={[String(weeks)]}
-            onValueChange={(next) => {
-              const period = parseStatsPeriod(next[0]);
-              if (next[0] !== undefined) setSearch({ weeks: period });
-            }}
-          >
-            {STATS_PERIODS.map((period) => (
-              <Toggle key={period} value={String(period)} aria-label={`${period} ${period === 1 ? "week" : "weeks"}`}>
-                {period}w
-              </Toggle>
-            ))}
-          </ToggleGroup>
-          {stats.isFetching && stats.data ? <Spinner size="sm" tone="muted" aria-label="Refreshing" /> : null}
-        </div>
-        <AppRouteModalClose />
-      </header>
-      <StatsBody data={stats.data} onJumped={setHash}>
+                  <span className="truncate">{scopeLabel}</span>
+                  <ChevronDownIcon />
+                </MenuTrigger>
+                <MenuPopup align="start">
+                  <MenuItem onClick={() => setSearch({ project: undefined })}>All projects</MenuItem>
+                  <MenuSeparator />
+                  {projects.map((project) => (
+                    <MenuCheckboxItem
+                      key={project.id}
+                      checked={projectIds.includes(project.id)}
+                      onCheckedChange={() => toggleProject(project.id)}
+                    >
+                      {project.title}
+                    </MenuCheckboxItem>
+                  ))}
+                </MenuPopup>
+              </Menu>
+              <ToggleGroup
+                aria-label="Period"
+                value={[String(weeks)]}
+                onValueChange={(next) => {
+                  const period = parseStatsPeriod(next[0]);
+                  if (next[0] !== undefined) setSearch({ weeks: period });
+                }}
+              >
+                {STATS_PERIODS.map((period) => (
+                  <Toggle
+                    key={period}
+                    value={String(period)}
+                    aria-label={`${period} ${period === 1 ? "week" : "weeks"}`}
+                  >
+                    {period}w
+                  </Toggle>
+                ))}
+              </ToggleGroup>
+              {stats.isFetching && stats.data ? <Spinner size="sm" tone="muted" aria-label="Refreshing" /> : null}
+            </div>
+            <AppRouteModalClose />
+          </header>
+        }
+      >
         {unknownProject ? (
           <p className="text-sm text-muted-foreground">
             A project in this selection isn't on the board any more.{" "}
@@ -190,16 +199,19 @@ export function StatsPage() {
 }
 
 /**
- * The window's body: the rail, and the page's scroll area beside it. It runs scroll-spy over the page's sections and
+ * The window's body: the rail down the window's left, as in Settings, and beside it the header above the page's
+ * scroll area. It runs scroll-spy over the page's sections and
  * cards for the rail's highlight, scrolls to a pick, and on first load to the URL hash. (It is its own component so
  * the scroll area exists when its effects run: the window renders its content after the route component.)
  */
 function StatsBody({
   data,
   onJumped,
+  header,
   children,
 }: {
   data: StatsResponse | undefined;
+  header: ReactNode;
   /** After a pick has scrolled the page, with the section or card's id. */
   onJumped: (id: string) => void;
   children: ReactNode;
@@ -270,8 +282,11 @@ function StatsBody({
   return (
     <div className="relative flex min-h-0 flex-1">
       <StatsRail data={data} active={active} onJump={jump} />
-      <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-4xl space-y-6 px-4 pt-4 pb-24 sm:px-6">{children}</div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {header}
+        <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-4xl space-y-6 px-4 pt-4 pb-24 sm:px-6">{children}</div>
+        </div>
       </div>
     </div>
   );

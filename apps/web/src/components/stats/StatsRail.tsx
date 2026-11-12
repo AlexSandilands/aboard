@@ -5,8 +5,6 @@ import {
   GitMergeIcon,
   GitPullRequestIcon,
   type LucideIcon,
-  PanelLeftCloseIcon,
-  PanelLeftOpenIcon,
   TerminalIcon,
   TimerIcon,
   TrendingUpIcon,
@@ -17,7 +15,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   SidebarContent,
   SidebarGroup,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -33,6 +30,7 @@ import {
   statsSectionOf,
   visibleStatsCards,
 } from "./statsNav.logic";
+import { StatsSearch } from "./StatsSearch";
 
 const SECTION_ICONS: Record<StatsSectionId, LucideIcon> = {
   "stats.throughput": TrendingUpIcon,
@@ -49,8 +47,9 @@ const SECTION_ICONS: Record<StatsSectionId, LucideIcon> = {
 /**
  * The Stats page's contents, in a rail at the window's left: each section, with the chart cards it draws beneath it.
  * A pick scrolls the page to it, and the part being read is highlighted. While the stats load, or when nothing
- * happened, only the sections are listed, and they lead nowhere. Below `md` it is a rail of the sections' icons, which
- * its top button expands over the page with the full list, until a pick or the button again.
+ * happened, only the sections are listed, and they lead nowhere. A search box above it finds a section or card and
+ * jumps to it (`StatsSearch`). Below `md` it is a rail of the sections' icons, and searching expands it over the page
+ * with the full list, until a pick or the search's close button, as in Settings.
  */
 export function StatsRail({
   data,
@@ -93,66 +92,59 @@ export function StatsRail({
           expanded && "max-md:absolute max-md:inset-y-0 max-md:start-0 max-md:z-10",
         )}
       >
-        <SidebarHeader className="pb-0 md:hidden">
-          <SidebarMenuButton
-            aria-label={expanded ? "Hide the list" : "Show the list"}
-            aria-expanded={expanded}
-            title={expanded ? "Hide the list" : "Show the list"}
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? <PanelLeftCloseIcon /> : <PanelLeftOpenIcon />}
-            <span className={cn("truncate", !expanded && "sr-only")}>Contents</span>
-          </SidebarMenuButton>
-        </SidebarHeader>
-        <SidebarContent className="overflow-x-hidden">
-          <SidebarGroup>
-            <SidebarMenu ref={listRef}>
-              {STATS_SECTIONS.map((section) => {
-                const Icon = SECTION_ICONS[section.id];
-                const here = section.id === activeSection;
-                const cards = visibleStatsCards(section, data);
-                return (
-                  <SidebarMenuItem key={section.id}>
-                    <SidebarMenuButton
-                      disabled={!charted}
-                      isActive={here && active === section.id}
-                      // Only the item being read is current; `data-here` also marks the section around a lit card.
-                      aria-current={here && active === section.id ? "location" : undefined}
-                      data-here={here || undefined}
-                      title={section.label}
-                      // In the icon rail the cards are hidden, so the section's icon stays lit wherever it is scrolled.
-                      className={cn(here && !expanded && "max-md:bg-sidebar-row-active max-md:text-sidebar-foreground")}
-                      onClick={() => jump(section.id)}
-                    >
-                      <Icon />
-                      <span className={cn("truncate", !expanded && "max-md:sr-only")}>{section.label}</span>
-                    </SidebarMenuButton>
-                    {cards.length > 0 ? (
-                      <SidebarMenuSub className={cn("mt-0.5 mb-1.5", !expanded && "max-md:hidden")}>
-                        {cards.map((card) => (
-                          <SidebarMenuSubItem key={card.id}>
-                            <SidebarMenuSubButton
-                              // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- the label is the children useRender merges in
-                              render={<button type="button" />}
-                              size="sm"
-                              className="w-full text-sidebar-muted-foreground data-[active=true]:text-sidebar-foreground"
-                              isActive={active === card.id}
-                              aria-current={active === card.id ? "location" : undefined}
-                              data-here={active === card.id || undefined}
-                              onClick={() => jump(card.id)}
-                            >
-                              <span>{card.label}</span>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        ))}
-                      </SidebarMenuSub>
-                    ) : null}
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroup>
-        </SidebarContent>
+        <StatsSearch data={data} disabled={!charted} onJump={onJump} expanded={expanded} onExpandedChange={setExpanded}>
+          <SidebarContent className="overflow-x-hidden">
+            <SidebarGroup>
+              <SidebarMenu ref={listRef}>
+                {STATS_SECTIONS.map((section) => {
+                  const Icon = SECTION_ICONS[section.id];
+                  const here = section.id === activeSection;
+                  const cards = visibleStatsCards(section, data);
+                  return (
+                    <SidebarMenuItem key={section.id}>
+                      <SidebarMenuButton
+                        disabled={!charted}
+                        isActive={here && active === section.id}
+                        // Only the item being read is current; `data-here` also marks the section around a lit card.
+                        aria-current={here && active === section.id ? "location" : undefined}
+                        data-here={here || undefined}
+                        title={section.label}
+                        // In the icon rail the cards are hidden, so the section's icon stays lit wherever it is scrolled.
+                        className={cn(
+                          here && !expanded && "max-md:bg-sidebar-row-active max-md:text-sidebar-foreground",
+                        )}
+                        onClick={() => jump(section.id)}
+                      >
+                        <Icon />
+                        <span className={cn("truncate", !expanded && "max-md:sr-only")}>{section.label}</span>
+                      </SidebarMenuButton>
+                      {cards.length > 0 ? (
+                        <SidebarMenuSub className={cn("mt-0.5 mb-1.5", !expanded && "max-md:hidden")}>
+                          {cards.map((card) => (
+                            <SidebarMenuSubItem key={card.id}>
+                              <SidebarMenuSubButton
+                                // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- the label is the children useRender merges in
+                                render={<button type="button" />}
+                                size="sm"
+                                className="w-full text-sidebar-muted-foreground data-[active=true]:text-sidebar-foreground"
+                                isActive={active === card.id}
+                                aria-current={active === card.id ? "location" : undefined}
+                                data-here={active === card.id || undefined}
+                                onClick={() => jump(card.id)}
+                              >
+                                <span>{card.label}</span>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      ) : null}
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroup>
+          </SidebarContent>
+        </StatsSearch>
       </nav>
     </div>
   );
