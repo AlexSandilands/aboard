@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  activeSectionId,
   automationOfTarget,
   autopilotTabOf,
   editorListSection,
@@ -134,33 +133,6 @@ describe("editorListSection", () => {
       expect(sectionOf(editorListSection(group))?.id).toBe(editorListSection(group));
     }
     expect(sectionOf(editorListSection("project"))?.id).toBe("autopilot.automations");
-  });
-});
-
-describe("activeSectionId", () => {
-  const sections = [
-    { id: "a", top: 0 },
-    { id: "b", top: 400 },
-    { id: "c", top: 900 },
-  ];
-
-  it("picks the last section whose top has reached the threshold", () => {
-    expect(activeSectionId(sections, { atBottom: false, threshold: 96 })).toBe("a");
-    const scrolled = sections.map((s) => ({ ...s, top: s.top - 350 }));
-    expect(activeSectionId(scrolled, { atBottom: false, threshold: 96 })).toBe("b");
-  });
-
-  it("falls back to the first before any has reached it", () => {
-    const below = sections.map((s) => ({ ...s, top: s.top + 200 }));
-    expect(activeSectionId(below, { atBottom: false })).toBe("a");
-  });
-
-  it("picks the last at the bottom, even when it is too short to reach the threshold", () => {
-    expect(activeSectionId(sections, { atBottom: true })).toBe("c");
-  });
-
-  it("is null without sections", () => {
-    expect(activeSectionId([], { atBottom: false })).toBeNull();
   });
 });
 

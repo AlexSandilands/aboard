@@ -704,9 +704,10 @@ redirect.
   providers list and `GET /api/providers` (Claude Code added, on, and its CLI found; not whether it is signed in, which
   shows as the run's error); when it can't, the row is disabled with the reason and **Set up Claude Code**, which
   opens `providers.claude-code.cli-path`. Copilot as a second engine isn't built.
-- **Scroll-spy.** `SettingsScroller` reads the tops of the `SettingsSubsection` anchors on scroll and resize, and
-  `activeSectionId` picks the last whose top has passed a line near the top (the last one when scrolled to the
-  bottom). The list highlights that section.
+- **Scroll-spy.** `SettingsScroller` runs `useScrollSpy` (`apps/web/src/hooks/useScrollSpy.ts`, shared with the
+  Stats rail, see [stats.md](stats.md#the-rail)) over the `SettingsSubsection` anchors (`data-settings-section`): on
+  scroll and resize it reads their tops, and `activeSectionId` (`scrollSpy.logic.ts`) picks the last whose top has
+  passed a line near the top (the last one when scrolled to the bottom). The list highlights that section.
 - **Ways in.** The sidebar gear, Ctrl/Cmd+, (`settings.open`), the palette's "Settings: <group or section>"
   entries (sections only once a query is typed), a project's gear or right-click (project page), and the Autopilot
   popover (its settings cog).
@@ -860,7 +861,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `packages/contracts/src/keybindings.ts`               | The shortcut registry, `when` parser and evaluator, overrides schema, conflicts (tested) |
 | `apps/web/src/components/layout/keyboard.logic.ts`, `useKeybindings.ts` | Matching key events, recording and formatting shortcuts (tested), the resolved bindings hook |
 | `apps/web/src/components/settings/KeybindingsSection.tsx`, `keybindings.logic.ts` | Settings → Keybindings: the page, grouping, search and the override edits (tested) |
-| `apps/web/src/components/settings/settingsNav.logic.ts` | Settings groups and section ids, targets, scroll-spy, the project shown (tested) |
+| `apps/web/src/components/settings/settingsNav.logic.ts` | Settings groups and section ids, targets, the project shown (tested) |
 | `apps/web/src/components/settings/SettingsShell.tsx`    | The `/settings` route: the window, its rail (the settings list), header and `SettingsScroller` |
 | `apps/web/src/components/settings/SettingsSearch.tsx`, `settingsIndex.logic.ts`, `settingsSearch.logic.ts` | Settings search: the box and results, the index of every setting, matching and ranking (tested) |
 | `apps/web/src/components/settings/SettingsAskRow.tsx`, `apps/server/src/integrations/settingsAsk.ts` | The settings Ask: its row in the results, and the endpoint that asks Claude Code (server tested) |

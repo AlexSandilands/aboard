@@ -147,14 +147,42 @@ passes the bucket kind to the charts through `BucketKindContext`, and the tiles 
 and refetches when the window regains focus and when the period or projects change (a new query key). While a new key
 loads, the previous charts stay up, dimmed. A selection that names a project that no longer exists (404) offers "Show all projects".
 
-The sections (Throughput, Cycle time, Flow, PRs, commits and reviews, PR flow, Autopilot, Sessions, Friction, Breakdowns) are built in `StatsPage.tsx` from the series
-above, with labels and colours written there. A later metric adds a section, or a chart in one, by reading its series by
+The sections, in page order, are Throughput (with the period's finished tasks by label and by suggested model tier),
+Tokens & cost, Cycle time, Flow, PRs, commits and reviews, PR flow, Sessions (with sessions by harness), Autopilot and
+Friction. Their ids, titles and chart cards are listed once in `STATS_SECTIONS` (`statsNav.logic.ts`); the charts are
+built in `StatsPage.tsx` from the series above, with labels and colours written there, and each section and card takes
+its id from that list (typed, so a card the list doesn't know fails the typecheck). A later metric adds a section, or a chart in one, by reading its series by
 name. The headline tile compares `total` with `previousTotal` (`changeVsPrevious`); only series where a direction is
 plainly better (tasks finished, cycle time, time in a status, PR time to merge, review rounds, findings, retries, fix
 attempts, Autopilot giving up) colour the change. A series missing from
 the response (a per-automation one that didn't run) reads as quiet. When every series is zero in both periods the page
 says nothing happened instead of drawing empty charts; `open_tasks.*` doesn't count, since tasks sitting open aren't
 something that happened.
+
+### The rail
+
+A rail down the window's full height at its left (`StatsRail`, built like the Settings rail, with the header beside it
+above the page as in Settings) lists the sections, each with an icon, and the
+chart cards it draws beneath it. Picking one scrolls the page to it (smoothly unless reduced motion is on) and sets the
+URL hash to its id with `replace`, keeping `?project=` and `?weeks=`; ids read `stats.flow` for a section and
+`stats.flow.open-tasks` for a card. A link or reload with a hash lands there once the charts have rendered (up to
+about two seconds); a hash that names nothing on the page is ignored, and a card not drawn this time falls back to its
+section. Scroll-spy (the shared `useScrollSpy`, see [board-layout.md](board-layout.md#the-settings-page)) runs over the
+sections and cards (`data-stats-nav`) and lights the one being read: a section while its tiles are in view, then each
+card. A pick is lit at once and the spy waits until the scroll comes to rest. The rail keeps the lit item in view.
+
+The rail lists exactly the cards drawn (`visibleStatsCards`): Runs by automation only when some automation ran. While
+the stats load, on an error, or when nothing happened, it lists only the sections, disabled.
+
+A search box tops the rail, as in Settings (`StatsSearch`, without Settings' Ask row): typing lists the sections and
+drawn cards whose label matches, or whose section does (`searchStatsNav`), with the section beneath each; arrows move,
+Enter jumps, Esc clears the box and then leaves it, and `/` or Ctrl/Cmd+F focuses it. It is disabled with the list.
+
+Below `md` the rail is the sections' icons with a search button that expands the box and the full list over the page
+until a pick or its close button, as in Settings; the icon rail keeps its room meanwhile, so the page isn't laid out again underneath. The rail, the header and the page are
+`StatsBody`, a child of the window, so the scroll area exists when the spy's effect runs.
+
+### Charts
 
 The charts are hand-rolled SVG with no dependency:
 
@@ -216,7 +244,11 @@ runs; PRs, sessions and reviews aren't backdated, so those charts stay flat).
 | `apps/server/src/services/activity.ts` | `statusStays`, shared with the activity report; `stallKind`, `wasRestarted`: the stall and restart definitions the friction series share with `board_activity` |
 | `apps/server/src/http/routes/system.ts` | `GET /api/stats` |
 | `apps/server/src/services/stats.test.ts`, `http/stats.routes.test.ts` | Week boundaries, scoping, totals; query validation |
-| `apps/web/src/components/stats/StatsPage.tsx` | The route component: pickers and the sections |
+| `apps/web/src/components/stats/StatsPage.tsx` | The route component: pickers, `StatsBody` (rail, scroll area, jumps, the hash) and the sections |
+| `apps/web/src/components/stats/StatsRail.tsx` | The rail: sections with icons, their cards, the icon rail below `md` |
+| `apps/web/src/components/stats/StatsSearch.tsx` | The rail's search box and its results |
+| `apps/web/src/components/stats/statsNav.logic.ts` | `STATS_SECTIONS` (section and card ids, rail labels), `visibleStatsCards`, `statsSectionOf`, `searchStatsNav` (tested) |
+| `apps/web/src/hooks/useScrollSpy.ts`, `scrollSpy.logic.ts` | The scroll-spy shared with Settings, `afterScroll` (the logic is tested) |
 | `apps/web/src/components/stats/{WeeklyBars,TrendLine,KpiTile,chartParts}.tsx` | The SVG charts and what they share |
 | `apps/web/src/components/stats/SortedBars.tsx` | The sorted horizontal bars for a breakdown |
 | `apps/web/src/components/stats/stats.logic.ts` | Scales, formatting, change against the previous period, run grouping |

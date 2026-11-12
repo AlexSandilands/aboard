@@ -9,9 +9,10 @@ import {
   type StatsSeries,
 } from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { APP_WINDOW_HEADER_CLASS, AppRouteModal, AppRouteModalClose } from "~/components/layout/AppRouteModal";
 import { useLeaveWindow } from "~/components/settings/settingsNavigation";
+import { afterScroll, useScrollSpy } from "~/hooks/useScrollSpy";
 import { ChevronDownIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuCheckboxItem, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
@@ -37,8 +38,20 @@ import {
   valuesOrZero,
 } from "./stats.logic";
 import { SortedBars } from "./SortedBars";
+import {
+  hasStatsCharts,
+  statsSection,
+  statsSectionOf,
+  type StatsCardId,
+  visibleStatsCards,
+  type StatsSectionId,
+} from "./statsNav.logic";
+import { StatsRail } from "./StatsRail";
 import { TrendLine } from "./TrendLine";
 import { WeeklyBars } from "./WeeklyBars";
+
+/** Frames (about 60 a second) to wait for a URL hash's target to render. */
+const HASH_TRIES = 120;
 
 const EMPTY: StatsSeries = {
   unit: "count",
@@ -76,95 +89,206 @@ export function StatsPage() {
     const next = projectIds.includes(id) ? projectIds.filter((p) => p !== id) : [...projectIds, id];
     setSearch({ project: formatProjectScope(next, allIds) });
   };
+  // The hash makes the link land here again; replacing it keeps Back from stepping through every pick.
+  const setHash = (id: string) =>
+    void navigate({
+      to: "/stats",
+      search: { weeks, project: search.project ?? undefined },
+      hash: id,
+      hashScrollIntoView: false,
+      replace: true,
+    });
+
   const scopeLabel =
     chosen.length === 0 ? "All projects" : chosen.length === 1 ? chosen[0]!.title : `${chosen.length} projects`;
 
   return (
     <AppRouteModal label="Stats" onClosed={leave}>
-      {/* On a phone the controls take a row of their own under the title and the close button. */}
-      <header className={cn(APP_WINDOW_HEADER_CLASS, "max-sm:h-auto max-sm:flex-wrap max-sm:py-2")}>
-        <h1 className="truncate text-sm font-medium max-sm:flex-1">Stats</h1>
-        <div className="ms-auto flex min-w-0 shrink-0 items-center gap-2 max-sm:order-3 max-sm:ms-0 max-sm:w-full">
-          <Menu>
-            <MenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="min-w-0 justify-between max-sm:flex-1 sm:w-44"
-                  aria-label="Projects"
-                />
-              }
-            >
-              <span className="truncate">{scopeLabel}</span>
-              <ChevronDownIcon />
-            </MenuTrigger>
-            <MenuPopup align="start">
-              <MenuItem onClick={() => setSearch({ project: undefined })}>All projects</MenuItem>
-              <MenuSeparator />
-              {projects.map((project) => (
-                <MenuCheckboxItem
-                  key={project.id}
-                  checked={projectIds.includes(project.id)}
-                  onCheckedChange={() => toggleProject(project.id)}
+      <StatsBody
+        data={stats.data}
+        onJumped={setHash}
+        header={
+          // On a phone the controls take a row of their own under the title and the close button.
+          <header className={cn(APP_WINDOW_HEADER_CLASS, "max-sm:h-auto max-sm:flex-wrap max-sm:py-2")}>
+            <h1 className="truncate text-sm font-medium max-sm:flex-1">Stats</h1>
+            <div className="ms-auto flex min-w-0 shrink-0 items-center gap-2 max-sm:order-3 max-sm:ms-0 max-sm:w-full">
+              <Menu>
+                <MenuTrigger
+                  render={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-w-0 justify-between max-sm:flex-1 sm:w-44"
+                      aria-label="Projects"
+                    />
+                  }
                 >
-                  {project.title}
-                </MenuCheckboxItem>
-              ))}
-            </MenuPopup>
-          </Menu>
-          <ToggleGroup
-            aria-label="Period"
-            value={[String(weeks)]}
-            onValueChange={(next) => {
-              const period = parseStatsPeriod(next[0]);
-              if (next[0] !== undefined) setSearch({ weeks: period });
-            }}
-          >
-            {STATS_PERIODS.map((period) => (
-              <Toggle key={period} value={String(period)} aria-label={`${period} ${period === 1 ? "week" : "weeks"}`}>
-                {period}w
-              </Toggle>
-            ))}
-          </ToggleGroup>
-          {stats.isFetching && stats.data ? <Spinner size="sm" tone="muted" aria-label="Refreshing" /> : null}
-        </div>
-        <AppRouteModalClose />
-      </header>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-4xl space-y-6 px-4 pt-4 pb-24 sm:px-6">
-          {unknownProject ? (
-            <p className="text-sm text-muted-foreground">
-              A project in this selection isn't on the board any more.{" "}
-              <button
-                type="button"
-                className="rounded-sm underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                onClick={() => setSearch({ project: undefined })}
+                  <span className="truncate">{scopeLabel}</span>
+                  <ChevronDownIcon />
+                </MenuTrigger>
+                <MenuPopup align="start">
+                  <MenuItem onClick={() => setSearch({ project: undefined })}>All projects</MenuItem>
+                  <MenuSeparator />
+                  {projects.map((project) => (
+                    <MenuCheckboxItem
+                      key={project.id}
+                      checked={projectIds.includes(project.id)}
+                      onCheckedChange={() => toggleProject(project.id)}
+                    >
+                      {project.title}
+                    </MenuCheckboxItem>
+                  ))}
+                </MenuPopup>
+              </Menu>
+              <ToggleGroup
+                aria-label="Period"
+                value={[String(weeks)]}
+                onValueChange={(next) => {
+                  const period = parseStatsPeriod(next[0]);
+                  if (next[0] !== undefined) setSearch({ weeks: period });
+                }}
               >
-                Show all projects
-              </button>
-            </p>
-          ) : stats.data ? (
-            <div
-              aria-busy={stats.isPlaceholderData}
-              // The sections' own gaps are small; this is the room between one section and the chart above it.
-              className={cn(
-                "space-y-10",
-                stats.isPlaceholderData && "opacity-60 transition-opacity motion-reduce:transition-none",
-              )}
-            >
-              <BucketKindContext value={stats.data.bucket}>
-                <StatsSections data={stats.data} />
-              </BucketKindContext>
+                {STATS_PERIODS.map((period) => (
+                  <Toggle
+                    key={period}
+                    value={String(period)}
+                    aria-label={`${period} ${period === 1 ? "week" : "weeks"}`}
+                  >
+                    {period}w
+                  </Toggle>
+                ))}
+              </ToggleGroup>
+              {stats.isFetching && stats.data ? <Spinner size="sm" tone="muted" aria-label="Refreshing" /> : null}
             </div>
-          ) : stats.isError ? (
-            <p className="text-sm text-destructive">Couldn't load the stats.</p>
-          ) : (
-            <Spinner />
-          )}
+            <AppRouteModalClose />
+          </header>
+        }
+      >
+        {unknownProject ? (
+          <p className="text-sm text-muted-foreground">
+            A project in this selection isn't on the board any more.{" "}
+            <button
+              type="button"
+              className="rounded-sm underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setSearch({ project: undefined })}
+            >
+              Show all projects
+            </button>
+          </p>
+        ) : stats.data ? (
+          <div
+            aria-busy={stats.isPlaceholderData}
+            // The sections' own gaps are small; this is the room between one section and the chart above it.
+            className={cn(
+              "space-y-10",
+              stats.isPlaceholderData && "opacity-60 transition-opacity motion-reduce:transition-none",
+            )}
+          >
+            <BucketKindContext value={stats.data.bucket}>
+              <StatsSections data={stats.data} />
+            </BucketKindContext>
+          </div>
+        ) : stats.isError ? (
+          <p className="text-sm text-destructive">Couldn't load the stats.</p>
+        ) : (
+          <Spinner />
+        )}
+      </StatsBody>
+    </AppRouteModal>
+  );
+}
+
+/**
+ * The window's body: the rail down the window's left, as in Settings, and beside it the header above the page's
+ * scroll area. It runs scroll-spy over the page's sections and
+ * cards for the rail's highlight, scrolls to a pick, and on first load to the URL hash. (It is its own component so
+ * the scroll area exists when its effects run: the window renders its content after the route component.)
+ */
+function StatsBody({
+  data,
+  onJumped,
+  header,
+  children,
+}: {
+  data: StatsResponse | undefined;
+  header: ReactNode;
+  /** After a pick has scrolled the page, with the section or card's id. */
+  onJumped: (id: string) => void;
+  children: ReactNode;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState<string | null>(null);
+  // While a jump travels, the spy would light each section it passes: the pick stays lit until the scroll comes to rest.
+  const jumping = useRef<(() => void) | null>(null);
+  useScrollSpy(scrollRef, "data-stats-nav", (id) => {
+    if (!jumping.current) setActive(id);
+  });
+  useEffect(() => () => jumping.current?.(), []);
+
+  /** Scrolls the page to a section or card and lights it in the rail. False when it isn't on the page. */
+  const scrollToTarget = (id: string, smooth: boolean): boolean => {
+    const area = scrollRef.current;
+    const element = document.getElementById(id);
+    if (!area || !element || !area.contains(element)) return false;
+    setActive(id);
+    jumping.current?.();
+    const cancel = afterScroll(area, () => {
+      jumping.current = null;
+    });
+    jumping.current = () => {
+      cancel();
+      jumping.current = null;
+    };
+    // Only the page scrolls: scrollIntoView would also scroll the window's frame around it.
+    const margin = Number.parseFloat(getComputedStyle(element).scrollMarginTop) || 0;
+    const top = element.getBoundingClientRect().top - area.getBoundingClientRect().top + area.scrollTop - margin;
+    area.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
+    return true;
+  };
+
+  const jump = (id: string) => {
+    if (scrollToTarget(id, !window.matchMedia("(prefers-reduced-motion: reduce)").matches)) onJumped(id);
+  };
+
+  // A link or reload with a hash lands on its section or card once the charts have rendered (they render with the
+  // data, so a few frames is plenty; the wait covers a slow first paint). A hash that names nothing on the page is
+  // left alone, and a card that isn't drawn this time falls back to its section.
+  const charted = hasStatsCharts(data);
+  const hashDone = useRef(false);
+  useEffect(() => {
+    if (hashDone.current || !charted) return;
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    const section = statsSectionOf(id);
+    if (!section) {
+      hashDone.current = true;
+      return;
+    }
+    // A card this response doesn't draw (Runs by automation when none ran) goes straight to its section.
+    const target = visibleStatsCards(section, data).some((card) => card.id === id) ? id : section.id;
+    let tries = 0;
+    let frame = 0;
+    const attempt = () => {
+      if (scrollToTarget(target, false) || ++tries >= HASH_TRIES) {
+        hashDone.current = true;
+        return;
+      }
+      frame = requestAnimationFrame(attempt);
+    };
+    attempt();
+    return () => cancelAnimationFrame(frame);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- runs once the charts first render; scrollToTarget only reads refs
+  }, [charted]);
+
+  return (
+    <div className="relative flex min-h-0 flex-1">
+      <StatsRail data={data} active={active} onJump={jump} />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {header}
+        <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-4xl space-y-6 px-4 pt-4 pb-24 sm:px-6">{children}</div>
         </div>
       </div>
-    </AppRouteModal>
+    </div>
   );
 }
 
@@ -327,12 +451,15 @@ function StatsSections({ data }: { data: StatsResponse }) {
 
   return (
     <>
-      <StatsSection title="Throughput" description={`Tasks created and finished each ${per}. Epics aren't counted.`}>
+      <StatsSection
+        id="stats.throughput"
+        description={`Tasks created and finished each ${per}, and the period's finished tasks by label and suggested model tier, largest first. Epics aren't counted, and a task with several labels counts under each.`}
+      >
         <Tiles>
           {kpi("Tasks finished", "tasks_completed", "up")}
           {kpi("Tasks created", "tasks_created")}
         </Tiles>
-        <ChartCard title={`Created and finished per ${per}`}>
+        <ChartCard id="stats.throughput.created-finished" title={`Created and finished per ${per}`}>
           <WeeklyBars
             buckets={data.buckets}
             integer
@@ -344,280 +471,24 @@ function StatsSections({ data }: { data: StatsResponse }) {
             ]}
           />
         </ChartCard>
-      </StatsSection>
-
-      <StatsSection
-        title="Cycle time"
-        description={`Median time to finish the tasks that finished each ${per}. A gap is a ${per} where nothing finished.`}
-      >
-        <Tiles>
-          {kpi("In progress to done", "cycle_time.in_progress_to_done", "down")}
-          {kpi("Created to done", "cycle_time.created_to_done", "down")}
-        </Tiles>
-        <ChartCard title={`Median cycle time per ${per}`}>
-          <TrendLine
-            buckets={data.buckets}
-            format={(value) => formatStatsValue(value, "ms")}
-            label={`Median cycle time per ${per}`}
-            durations
-            series={[
-              chartSeries(data, "cycle_time.created_to_done", "Created to done", SERIES_COLORS.muted),
-              chartSeries(data, "cycle_time.in_progress_to_done", "In progress to done", SERIES_COLORS.primary),
-            ]}
+        <ChartCard id="stats.throughput.by-label" title="Finished tasks by label">
+          <Breakdown
+            rows={breakdownRows(data.breakdowns.completed_by_label, (key) => key, "No label")}
+            label="Finished tasks by label"
+            previousLabel={previousLabel}
+          />
+        </ChartCard>
+        <ChartCard id="stats.throughput.by-tier" title="Finished tasks by suggested model tier">
+          <Breakdown
+            rows={breakdownRows(data.breakdowns.completed_by_tier, capitalize, "No tier suggested")}
+            label="Finished tasks by suggested model tier"
+            previousLabel={previousLabel}
           />
         </ChartCard>
       </StatsSection>
 
       <StatsSection
-        title="Flow"
-        description={`Where work waits: how long tasks sat in each status before moving on, by the ${per} the stay ended, and how many were open at each ${per}'s end.`}
-      >
-        <Tiles>
-          {kpi("Time in Planned", "time_in_status.planned.median", "down")}
-          {kpi("Time in progress", "time_in_status.in_progress.median", "down")}
-          {kpi("Time in review", "time_in_status.review.median", "down")}
-          {kpi(
-            "Open tasks now",
-            "open_tasks.planned",
-            undefined,
-            sumTotals(
-              data,
-              OPEN_STATUSES.map(([status]) => `open_tasks.${status}`),
-            ),
-          )}
-        </Tiles>
-        <ChartCard title="Median time in each status">
-          <TrendLine
-            buckets={data.buckets}
-            format={(value) => formatStatsValue(value, "ms")}
-            label={`Median time tasks spent in each status, per ${per}`}
-            durations
-            series={OPEN_STATUSES.map(([status, label, color]) =>
-              chartSeries(data, `time_in_status.${status}.median`, label, color),
-            )}
-          />
-        </ChartCard>
-        <ChartCard title="Average time in each status">
-          <TrendLine
-            buckets={data.buckets}
-            format={(value) => formatStatsValue(value, "ms")}
-            label={`Average time tasks spent in each status, per ${per}`}
-            durations
-            series={OPEN_STATUSES.map(([status, label, color]) =>
-              chartSeries(data, `time_in_status.${status}.average`, label, color),
-            )}
-          />
-        </ChartCard>
-        <ChartCard title={`Open tasks at each ${per}'s end`}>
-          <WeeklyBars
-            buckets={data.buckets}
-            mode="stacked"
-            integer
-            format={count}
-            label={`Open tasks at the end of each ${per}, by status`}
-            series={OPEN_STATUSES.map(([status, label, color]) =>
-              chartSeries(data, `open_tasks.${status}`, label, color, { zeros: true }),
-            )}
-          />
-        </ChartCard>
-      </StatsSection>
-
-      <StatsSection
-        title="PRs, commits and reviews"
-        description="Pull requests the board saw merge, commits that landed on each project's default branch, and how often local reviews looped."
-      >
-        <Tiles>
-          {kpi("PRs merged", "prs_merged")}
-          {kpi("Commits", "commits")}
-          {kpi("Review rounds per task", "review_rounds_per_task", "down")}
-          {kpi("Review findings", "review_findings.blocking", "down", sumTotals(data, findingNames))}
-        </Tiles>
-        <ChartCard title={`PRs merged per ${per}`}>
-          <WeeklyBars
-            buckets={data.buckets}
-            integer
-            format={count}
-            label={`PRs merged per ${per}`}
-            series={[chartSeries(data, "prs_merged", "PRs merged", SERIES_COLORS.primary, { zeros: true })]}
-          />
-        </ChartCard>
-        <ChartCard title={`Commits per ${per}`}>
-          <WeeklyBars
-            buckets={data.buckets}
-            integer
-            format={count}
-            label={`Commits on the default branch per ${per}`}
-            series={[chartSeries(data, "commits", "Commits", SERIES_COLORS.primary, { zeros: true })]}
-          />
-          {data.notes.map((note) => (
-            <p key={note} className="mt-2 text-xs text-muted-foreground">
-              {note}
-            </p>
-          ))}
-        </ChartCard>
-        <ChartCard title="Review rounds per finished task">
-          <TrendLine
-            buckets={data.buckets}
-            format={(value) => formatStatsValue(value, "ratio")}
-            label={`Average review rounds per finished task, per ${per}`}
-            series={[chartSeries(data, "review_rounds_per_task", "Rounds per task", SERIES_COLORS.primary)]}
-          />
-        </ChartCard>
-        <ChartCard title="Review findings by severity">
-          <WeeklyBars
-            buckets={data.buckets}
-            mode="stacked"
-            integer
-            format={count}
-            label={`Review findings raised per ${per}, by severity`}
-            series={FINDING_SEVERITIES.map(([severity, label, color]) =>
-              chartSeries(data, `review_findings.${severity}`, label, color, {
-                zeros: true,
-              }),
-            )}
-          />
-        </ChartCard>
-      </StatsSection>
-
-      <StatsSection
-        title="PR flow"
-        description={`How merged PRs got there, by the ${per} the board saw them merge: how long they were open, and how much Autopilot had to review and fix.`}
-      >
-        <Tiles>
-          {kpi("Open to merged", "pr_open_to_merged", "down")}
-          {kpi("Autopilot reviews per PR", "autopilot.pr_review_rounds_per_pr", "down")}
-          {kpi("Fix attempts per PR", "autopilot.fix_attempts_per_pr", "down")}
-          {kpi("Autopilot gave up", "autopilot.gave_up", "down")}
-        </Tiles>
-        <ChartCard title="Median time from PR open to merged">
-          <TrendLine
-            buckets={data.buckets}
-            format={(value) => formatStatsValue(value, "ms")}
-            label={`Median time from a PR being linked to its merge, per ${per}`}
-            durations
-            series={[chartSeries(data, "pr_open_to_merged", "Open to merged", SERIES_COLORS.primary)]}
-          />
-        </ChartCard>
-        <ChartCard title="Autopilot rounds per merged PR">
-          <TrendLine
-            buckets={data.buckets}
-            format={(value) => formatStatsValue(value, "ratio")}
-            label={`Average Autopilot review rounds and fix attempts per merged PR, per ${per}`}
-            series={[
-              chartSeries(data, "autopilot.pr_review_rounds_per_pr", "Review rounds", SERIES_COLORS.info),
-              chartSeries(data, "autopilot.fix_attempts_per_pr", "Fix attempts", SERIES_COLORS.warning),
-            ]}
-          />
-        </ChartCard>
-        <ChartCard title="Autopilot gave up">
-          <WeeklyBars
-            buckets={data.buckets}
-            mode="stacked"
-            integer
-            format={count}
-            label={`Times Autopilot gave up on a PR per ${per}, by automation`}
-            series={GAVE_UP.map(([automation, label, color]) =>
-              chartSeries(data, `autopilot.gave_up.${automation}`, label, color, { zeros: true }),
-            )}
-          />
-        </ChartCard>
-      </StatsSection>
-
-      <StatsSection title="Autopilot" description={`Runs by the ${per} they finished, and what they cost.`}>
-        <Tiles>
-          {kpi("Runs", "autopilot.runs")}
-          {kpi("Retries after a failure", "autopilot.retries", "down")}
-          {kpi("Cost", "autopilot.cost_usd")}
-        </Tiles>
-        <ChartCard title="Runs by outcome">
-          <WeeklyBars
-            buckets={data.buckets}
-            mode="stacked"
-            integer
-            format={count}
-            label={`Autopilot runs per ${per}, by outcome`}
-            series={statusSeries}
-          />
-        </ChartCard>
-        {automations.length > 0 ? <AutomationTable rows={automations} /> : null}
-        <ChartCard title={`Cost per ${per}`}>
-          <WeeklyBars
-            buckets={data.buckets}
-            format={(value) => formatStatsValue(value, "usd")}
-            label={`Autopilot cost per ${per}`}
-            series={[chartSeries(data, "autopilot.cost_usd", "Cost", SERIES_COLORS.primary, { zeros: true })]}
-          />
-        </ChartCard>
-      </StatsSection>
-
-      <StatsSection title="Sessions" description={`Agent sessions, by the ${per} they were first linked to a task.`}>
-        <Tiles>{kpi("Sessions started", "agent_sessions_started")}</Tiles>
-        <ChartCard title={`Sessions started per ${per}`}>
-          <WeeklyBars
-            buckets={data.buckets}
-            integer
-            format={count}
-            label={`Agent sessions started per ${per}`}
-            series={[chartSeries(data, "agent_sessions_started", "Sessions", SERIES_COLORS.primary, { zeros: true })]}
-          />
-        </ChartCard>
-      </StatsSection>
-
-      <StatsSection
-        title="Friction"
-        description={`Where agents got stuck or needed you, by the ${per} it happened. None of these is a failure on its own.`}
-      >
-        <Tiles>
-          {kpi("Steps blocked", "friction.steps_blocked")}
-          {kpi("Steps skipped", "friction.steps_skipped")}
-          {kpi("Attention requests", "friction.attention_requests")}
-          {kpi("Autopilot flags", "friction.autopilot_flags")}
-          {kpi("Stalls", "friction.stalls.stale", undefined, sumTotals(data, STALL_NAMES))}
-          {kpi("Runs cut short by a restart", "friction.runs_restarted")}
-        </Tiles>
-        <ChartCard title="Blocked and skipped steps">
-          <WeeklyBars
-            buckets={data.buckets}
-            integer
-            format={count}
-            label={`Steps marked blocked or skipped per ${per}`}
-            series={[
-              chartSeries(data, "friction.steps_blocked", "Blocked", SERIES_COLORS.warning, { zeros: true }),
-              chartSeries(data, "friction.steps_skipped", "Skipped", SERIES_COLORS.muted, { zeros: true }),
-            ]}
-          />
-        </ChartCard>
-        <ChartCard title="Asks for attention">
-          <WeeklyBars
-            buckets={data.buckets}
-            integer
-            format={count}
-            label={`Attention requests and Autopilot flags per ${per}`}
-            series={[
-              chartSeries(data, "friction.attention_requests", "Agent requests", SERIES_COLORS.info, { zeros: true }),
-              chartSeries(data, "friction.autopilot_flags", "Autopilot flags", SERIES_COLORS.warning, {
-                zeros: true,
-              }),
-            ]}
-          />
-        </ChartCard>
-        <ChartCard title="Stalls and restarts">
-          <WeeklyBars
-            buckets={data.buckets}
-            integer
-            format={count}
-            label={`Stalled tasks and runs cut short by a restart, per ${per}`}
-            series={[
-              chartSeries(data, "friction.stalls.stale", "Quiet too long", SERIES_COLORS.warning, { zeros: true }),
-              chartSeries(data, "friction.stalls.waiting", "Waiting on input", SERIES_COLORS.info, { zeros: true }),
-              chartSeries(data, "friction.runs_restarted", "Runs cut short", SERIES_COLORS.error, { zeros: true }),
-            ]}
-          />
-        </ChartCard>
-      </StatsSection>
-
-      <StatsSection
-        title="Tokens & cost"
+        id="stats.tokens"
         description={`What agents used on this board's tasks and runs, by the ${per} they used it. Cost is an API-equivalent estimate at ${priceSourceText(data.prices)}; a session shared by tasks counts once, under the one that linked it first.`}
       >
         <Tiles>
@@ -644,7 +515,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
             previousLabel={previousLabel}
           />
         </Tiles>
-        <ChartCard title={`Estimated cost per ${per}, by harness`}>
+        <ChartCard id="stats.tokens.cost" title={`Estimated cost per ${per}, by harness`}>
           <WeeklyBars
             buckets={data.buckets}
             mode="stacked"
@@ -655,7 +526,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
             )}
           />
         </ChartCard>
-        <ChartCard title={`Tokens per ${per}, by kind`}>
+        <ChartCard id="stats.tokens.by-kind" title={`Tokens per ${per}, by kind`}>
           <WeeklyBars
             buckets={data.buckets}
             mode="stacked"
@@ -672,7 +543,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
             </p>
           ) : null}
         </ChartCard>
-        <ChartCard title="Cost by model">
+        <ChartCard id="stats.tokens.cost-by-model" title="Cost by model">
           <Breakdown
             rows={breakdownRows(data.breakdowns.cost_by_model, (key) => key, "Unknown model")}
             label="Estimated cost by model"
@@ -680,7 +551,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
             format={usd}
           />
         </ChartCard>
-        <ChartCard title="Cost by harness">
+        <ChartCard id="stats.tokens.cost-by-harness" title="Cost by harness">
           <Breakdown
             rows={breakdownRows(data.breakdowns.cost_by_harness, sessionSource, "Unknown")}
             label="Estimated cost by what ran the sessions"
@@ -688,7 +559,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
             format={usd}
           />
         </ChartCard>
-        <ChartCard title="Cost of the board's runs">
+        <ChartCard id="stats.tokens.board-runs" title="Cost of the board's runs">
           <Breakdown
             rows={breakdownRows(data.breakdowns.cost_by_purpose, purposeLabel, "Other")}
             label="Cost of Autopilot's automations and the board's own runs (review, import, Settings questions)"
@@ -696,7 +567,7 @@ function StatsSections({ data }: { data: StatsResponse }) {
             format={usd}
           />
         </ChartCard>
-        <ChartCard title="Top tasks by cost">
+        <ChartCard id="stats.tokens.top-tasks" title="Top tasks by cost">
           <Breakdown
             rows={breakdownRows(data.breakdowns.cost_by_task, taskLabel, "No task")}
             label="The tasks that cost the most"
@@ -707,28 +578,281 @@ function StatsSections({ data }: { data: StatsResponse }) {
       </StatsSection>
 
       <StatsSection
-        title="Breakdowns"
-        description="The whole period split by category, largest first. A task with several labels counts under each."
+        id="stats.cycle-time"
+        description={`Median time to finish the tasks that finished each ${per}. A gap is a ${per} where nothing finished.`}
       >
-        <ChartCard title="Finished tasks by label">
-          <Breakdown
-            rows={breakdownRows(data.breakdowns.completed_by_label, (key) => key, "No label")}
-            label="Finished tasks by label"
-            previousLabel={previousLabel}
+        <Tiles>
+          {kpi("In progress to done", "cycle_time.in_progress_to_done", "down")}
+          {kpi("Created to done", "cycle_time.created_to_done", "down")}
+        </Tiles>
+        <ChartCard id="stats.cycle-time.median" title={`Median cycle time per ${per}`}>
+          <TrendLine
+            buckets={data.buckets}
+            format={(value) => formatStatsValue(value, "ms")}
+            label={`Median cycle time per ${per}`}
+            durations
+            series={[
+              chartSeries(data, "cycle_time.created_to_done", "Created to done", SERIES_COLORS.muted),
+              chartSeries(data, "cycle_time.in_progress_to_done", "In progress to done", SERIES_COLORS.primary),
+            ]}
           />
         </ChartCard>
-        <ChartCard title="Finished tasks by suggested model tier">
-          <Breakdown
-            rows={breakdownRows(data.breakdowns.completed_by_tier, capitalize, "No tier suggested")}
-            label="Finished tasks by suggested model tier"
-            previousLabel={previousLabel}
+      </StatsSection>
+
+      <StatsSection
+        id="stats.flow"
+        description={`Where work waits: how long tasks sat in each status before moving on, by the ${per} the stay ended, and how many were open at each ${per}'s end.`}
+      >
+        <Tiles>
+          {kpi("Time in Planned", "time_in_status.planned.median", "down")}
+          {kpi("Time in progress", "time_in_status.in_progress.median", "down")}
+          {kpi("Time in review", "time_in_status.review.median", "down")}
+          {kpi(
+            "Open tasks now",
+            "open_tasks.planned",
+            undefined,
+            sumTotals(
+              data,
+              OPEN_STATUSES.map(([status]) => `open_tasks.${status}`),
+            ),
+          )}
+        </Tiles>
+        <ChartCard id="stats.flow.median-time" title="Median time in each status">
+          <TrendLine
+            buckets={data.buckets}
+            format={(value) => formatStatsValue(value, "ms")}
+            label={`Median time tasks spent in each status, per ${per}`}
+            durations
+            series={OPEN_STATUSES.map(([status, label, color]) =>
+              chartSeries(data, `time_in_status.${status}.median`, label, color),
+            )}
           />
         </ChartCard>
-        <ChartCard title="Sessions by harness">
+        <ChartCard id="stats.flow.average-time" title="Average time in each status">
+          <TrendLine
+            buckets={data.buckets}
+            format={(value) => formatStatsValue(value, "ms")}
+            label={`Average time tasks spent in each status, per ${per}`}
+            durations
+            series={OPEN_STATUSES.map(([status, label, color]) =>
+              chartSeries(data, `time_in_status.${status}.average`, label, color),
+            )}
+          />
+        </ChartCard>
+        <ChartCard id="stats.flow.open-tasks" title={`Open tasks at each ${per}'s end`}>
+          <WeeklyBars
+            buckets={data.buckets}
+            mode="stacked"
+            integer
+            format={count}
+            label={`Open tasks at the end of each ${per}, by status`}
+            series={OPEN_STATUSES.map(([status, label, color]) =>
+              chartSeries(data, `open_tasks.${status}`, label, color, { zeros: true }),
+            )}
+          />
+        </ChartCard>
+      </StatsSection>
+
+      <StatsSection
+        id="stats.prs"
+        description="Pull requests the board saw merge, commits that landed on each project's default branch, and how often local reviews looped."
+      >
+        <Tiles>
+          {kpi("PRs merged", "prs_merged")}
+          {kpi("Commits", "commits")}
+          {kpi("Review rounds per task", "review_rounds_per_task", "down")}
+          {kpi("Review findings", "review_findings.blocking", "down", sumTotals(data, findingNames))}
+        </Tiles>
+        <ChartCard id="stats.prs.merged" title={`PRs merged per ${per}`}>
+          <WeeklyBars
+            buckets={data.buckets}
+            integer
+            format={count}
+            label={`PRs merged per ${per}`}
+            series={[chartSeries(data, "prs_merged", "PRs merged", SERIES_COLORS.primary, { zeros: true })]}
+          />
+        </ChartCard>
+        <ChartCard id="stats.prs.commits" title={`Commits per ${per}`}>
+          <WeeklyBars
+            buckets={data.buckets}
+            integer
+            format={count}
+            label={`Commits on the default branch per ${per}`}
+            series={[chartSeries(data, "commits", "Commits", SERIES_COLORS.primary, { zeros: true })]}
+          />
+          {data.notes.map((note) => (
+            <p key={note} className="mt-2 text-xs text-muted-foreground">
+              {note}
+            </p>
+          ))}
+        </ChartCard>
+        <ChartCard id="stats.prs.review-rounds" title="Review rounds per finished task">
+          <TrendLine
+            buckets={data.buckets}
+            format={(value) => formatStatsValue(value, "ratio")}
+            label={`Average review rounds per finished task, per ${per}`}
+            series={[chartSeries(data, "review_rounds_per_task", "Rounds per task", SERIES_COLORS.primary)]}
+          />
+        </ChartCard>
+        <ChartCard id="stats.prs.findings" title="Review findings by severity">
+          <WeeklyBars
+            buckets={data.buckets}
+            mode="stacked"
+            integer
+            format={count}
+            label={`Review findings raised per ${per}, by severity`}
+            series={FINDING_SEVERITIES.map(([severity, label, color]) =>
+              chartSeries(data, `review_findings.${severity}`, label, color, {
+                zeros: true,
+              }),
+            )}
+          />
+        </ChartCard>
+      </StatsSection>
+
+      <StatsSection
+        id="stats.pr-flow"
+        description={`How merged PRs got there, by the ${per} the board saw them merge: how long they were open, and how much Autopilot had to review and fix.`}
+      >
+        <Tiles>
+          {kpi("Open to merged", "pr_open_to_merged", "down")}
+          {kpi("Autopilot reviews per PR", "autopilot.pr_review_rounds_per_pr", "down")}
+          {kpi("Fix attempts per PR", "autopilot.fix_attempts_per_pr", "down")}
+          {kpi("Autopilot gave up", "autopilot.gave_up", "down")}
+        </Tiles>
+        <ChartCard id="stats.pr-flow.open-to-merged" title="Median time from PR open to merged">
+          <TrendLine
+            buckets={data.buckets}
+            format={(value) => formatStatsValue(value, "ms")}
+            label={`Median time from a PR being linked to its merge, per ${per}`}
+            durations
+            series={[chartSeries(data, "pr_open_to_merged", "Open to merged", SERIES_COLORS.primary)]}
+          />
+        </ChartCard>
+        <ChartCard id="stats.pr-flow.autopilot-rounds" title="Autopilot rounds per merged PR">
+          <TrendLine
+            buckets={data.buckets}
+            format={(value) => formatStatsValue(value, "ratio")}
+            label={`Average Autopilot review rounds and fix attempts per merged PR, per ${per}`}
+            series={[
+              chartSeries(data, "autopilot.pr_review_rounds_per_pr", "Review rounds", SERIES_COLORS.info),
+              chartSeries(data, "autopilot.fix_attempts_per_pr", "Fix attempts", SERIES_COLORS.warning),
+            ]}
+          />
+        </ChartCard>
+        <ChartCard id="stats.pr-flow.gave-up" title="Autopilot gave up">
+          <WeeklyBars
+            buckets={data.buckets}
+            mode="stacked"
+            integer
+            format={count}
+            label={`Times Autopilot gave up on a PR per ${per}, by automation`}
+            series={GAVE_UP.map(([automation, label, color]) =>
+              chartSeries(data, `autopilot.gave_up.${automation}`, label, color, { zeros: true }),
+            )}
+          />
+        </ChartCard>
+      </StatsSection>
+
+      <StatsSection
+        id="stats.sessions"
+        description={`Agent sessions, by the ${per} they were first linked to a task, and what ran them over the whole period.`}
+      >
+        <Tiles>{kpi("Sessions started", "agent_sessions_started")}</Tiles>
+        <ChartCard id="stats.sessions.started" title={`Sessions started per ${per}`}>
+          <WeeklyBars
+            buckets={data.buckets}
+            integer
+            format={count}
+            label={`Agent sessions started per ${per}`}
+            series={[chartSeries(data, "agent_sessions_started", "Sessions", SERIES_COLORS.primary, { zeros: true })]}
+          />
+        </ChartCard>
+        <ChartCard id="stats.sessions.by-harness" title="Sessions by harness">
           <Breakdown
             rows={breakdownRows(data.breakdowns.sessions_by_harness, sessionSource, "Unknown")}
             label="Agent sessions and T3 Code threads by what ran them"
             previousLabel={previousLabel}
+          />
+        </ChartCard>
+      </StatsSection>
+
+      <StatsSection id="stats.autopilot" description={`Runs by the ${per} they finished, and what they cost.`}>
+        <Tiles>
+          {kpi("Runs", "autopilot.runs")}
+          {kpi("Retries after a failure", "autopilot.retries", "down")}
+          {kpi("Cost", "autopilot.cost_usd")}
+        </Tiles>
+        <ChartCard id="stats.autopilot.outcomes" title="Runs by outcome">
+          <WeeklyBars
+            buckets={data.buckets}
+            mode="stacked"
+            integer
+            format={count}
+            label={`Autopilot runs per ${per}, by outcome`}
+            series={statusSeries}
+          />
+        </ChartCard>
+        {automations.length > 0 ? <AutomationTable rows={automations} /> : null}
+        <ChartCard id="stats.autopilot.cost" title={`Cost per ${per}`}>
+          <WeeklyBars
+            buckets={data.buckets}
+            format={(value) => formatStatsValue(value, "usd")}
+            label={`Autopilot cost per ${per}`}
+            series={[chartSeries(data, "autopilot.cost_usd", "Cost", SERIES_COLORS.primary, { zeros: true })]}
+          />
+        </ChartCard>
+      </StatsSection>
+
+      <StatsSection
+        id="stats.friction"
+        description={`Where agents got stuck or needed you, by the ${per} it happened. None of these is a failure on its own.`}
+      >
+        <Tiles>
+          {kpi("Steps blocked", "friction.steps_blocked")}
+          {kpi("Steps skipped", "friction.steps_skipped")}
+          {kpi("Attention requests", "friction.attention_requests")}
+          {kpi("Autopilot flags", "friction.autopilot_flags")}
+          {kpi("Stalls", "friction.stalls.stale", undefined, sumTotals(data, STALL_NAMES))}
+          {kpi("Runs cut short by a restart", "friction.runs_restarted")}
+        </Tiles>
+        <ChartCard id="stats.friction.steps" title="Blocked and skipped steps">
+          <WeeklyBars
+            buckets={data.buckets}
+            integer
+            format={count}
+            label={`Steps marked blocked or skipped per ${per}`}
+            series={[
+              chartSeries(data, "friction.steps_blocked", "Blocked", SERIES_COLORS.warning, { zeros: true }),
+              chartSeries(data, "friction.steps_skipped", "Skipped", SERIES_COLORS.muted, { zeros: true }),
+            ]}
+          />
+        </ChartCard>
+        <ChartCard id="stats.friction.attention" title="Asks for attention">
+          <WeeklyBars
+            buckets={data.buckets}
+            integer
+            format={count}
+            label={`Attention requests and Autopilot flags per ${per}`}
+            series={[
+              chartSeries(data, "friction.attention_requests", "Agent requests", SERIES_COLORS.info, { zeros: true }),
+              chartSeries(data, "friction.autopilot_flags", "Autopilot flags", SERIES_COLORS.warning, {
+                zeros: true,
+              }),
+            ]}
+          />
+        </ChartCard>
+        <ChartCard id="stats.friction.stalls" title="Stalls and restarts">
+          <WeeklyBars
+            buckets={data.buckets}
+            integer
+            format={count}
+            label={`Stalled tasks and runs cut short by a restart, per ${per}`}
+            series={[
+              chartSeries(data, "friction.stalls.stale", "Quiet too long", SERIES_COLORS.warning, { zeros: true }),
+              chartSeries(data, "friction.stalls.waiting", "Waiting on input", SERIES_COLORS.info, { zeros: true }),
+              chartSeries(data, "friction.runs_restarted", "Runs cut short", SERIES_COLORS.error, { zeros: true }),
+            ]}
           />
         </ChartCard>
       </StatsSection>
@@ -760,11 +884,14 @@ function Breakdown({
   );
 }
 
-function StatsSection({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+/** A section of the page, titled as the rail lists it. Its id is the anchor a rail jump or the URL hash scrolls to. */
+function StatsSection({ id, description, children }: { id: StatsSectionId; description: string; children: ReactNode }) {
   return (
-    <section className="space-y-3">
+    <section id={id} data-stats-nav={id} aria-labelledby={`${id}-title`} className={cn("space-y-3", JUMP_TARGET_CLASS)}>
       <div>
-        <h2 className="text-base font-semibold">{title}</h2>
+        <h2 id={`${id}-title`} className="text-base font-semibold">
+          {statsSection(id).label}
+        </h2>
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
       {children}
@@ -772,13 +899,17 @@ function StatsSection({ title, description, children }: { title: string; descrip
   );
 }
 
+const CARD_CLASS = "rounded-xl border border-border/60 bg-card/40 p-4";
+// A jump lands a little below the scroll area's top edge rather than flush against it.
+const JUMP_TARGET_CLASS = "scroll-mt-4";
+
 function Tiles({ children }: { children: ReactNode }) {
   return <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{children}</div>;
 }
 
-function ChartCard({ title, children }: { title: string; children: ReactNode }) {
+function ChartCard({ id, title, children }: { id: StatsCardId; title: string; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-card/40 p-4">
+    <div id={id} data-stats-nav={id} className={cn(CARD_CLASS, JUMP_TARGET_CLASS)}>
       <h3 className="mb-2 text-sm font-medium">{title}</h3>
       {children}
     </div>
@@ -788,7 +919,11 @@ function ChartCard({ title, children }: { title: string; children: ReactNode }) 
 function AutomationTable({ rows }: { rows: ReturnType<typeof runsByAutomation> }) {
   const catalogue = useAutopilotOverview().data?.automations ?? [];
   return (
-    <div className="overflow-x-auto rounded-xl border border-border/60 bg-card/40 p-4">
+    <div
+      id="stats.autopilot.by-automation"
+      data-stats-nav="stats.autopilot.by-automation"
+      className={cn(CARD_CLASS, JUMP_TARGET_CLASS, "overflow-x-auto")}
+    >
       <h3 className="mb-2 text-sm font-medium">Runs by automation</h3>
       <table className="w-full text-xs">
         <thead className="text-muted-foreground">
