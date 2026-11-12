@@ -63,7 +63,7 @@ and a click tries again.
 
 The **Projects** page starts with **Settings for [All projects ▾]**: pick a project there to see and change it. With
 All projects chosen it asks you to pick one. A project's gear or right-click in the sidebar opens it with that project
-already chosen, and it stays chosen while you move around Settings. With more than six projects the menu has a search
+already chosen. With more than six projects the menu has a search
 box. For the project it shows:
 
 - **General**: its name, icon, folder and linked T3 project.

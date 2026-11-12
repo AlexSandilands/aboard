@@ -30,10 +30,10 @@ export function useOpenSettings() {
   return useCallback(
     (target = "board", options: { project?: string | null; replace?: boolean; highlight?: boolean } = {}) => {
       const parsed = parseSettingsTarget(target, options.project) ?? { group: "board" as const, anchor: null };
-      // Only the Projects page has a project. Opened from the board it asks for one unless told which; inside
-      // Settings it stays on the one picked last.
+      // Only the Projects page has a project. Opened from elsewhere it asks for one unless told which; a move within
+      // it keeps the one it shows. (The run history's `?project=` is its own filter, not this.)
       const current =
-        parsed.group === "project" && router.state.location.pathname.startsWith("/settings")
+        parsed.group === "project" && router.state.location.pathname.startsWith("/settings/project")
           ? (router.state.location.search as { project?: string }).project
           : undefined;
       const scope = scopeSearch(options.project === undefined ? current : options.project);

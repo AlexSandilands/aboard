@@ -1,4 +1,4 @@
-// The project picker of the settings pages: "Showing [All projects ▾]" at the top of the Projects page, kept in the
+// The project picker of the settings pages: "Settings for [All projects ▾]" at the top of the Projects page, kept in the
 // URL as `?project=` (after T3 Code's settings scope, MIT, see NOTICE), and the same picker inside a section that lists
 // one project's things (Autopilot's variables and recurring tasks).
 import type { SettingsGroupId } from "./settingsNav.logic";

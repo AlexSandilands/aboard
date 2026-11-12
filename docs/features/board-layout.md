@@ -558,7 +558,7 @@ after T3 Code's (`SettingsScope.tsx`, ported from its `SettingsScopeSentence.tsx
 has no environments): **Settings for [All projects ▾]** at its top (`SCOPED_GROUPS` in `settingsScope.logic.ts`;
 `SettingsScroller` renders it there, not on editors). The picker (`ProjectPicker`) is a menu up to six projects and a
 combobox with a search box past that. The scope is `?project=`, which `settingsRoute` validates for every settings
-route: `useOpenSettings` keeps the current one only when the target is on the Projects page (`project: null` is All
+route: `useOpenSettings` keeps the current one only for a move within the Projects page (`project: null` is All
 projects), opening from the board starts in All projects unless a project is passed (a project's gear or
 right-click in the sidebar). An unknown or archived id reads as All projects (`scopeProject`). The board behind the
 window reads its own search from `boardReturn`, so the settings `?project=` never reaches it. The run history's
