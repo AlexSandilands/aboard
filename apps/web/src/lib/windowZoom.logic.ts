@@ -144,3 +144,35 @@ function round(value: number, digits = 2): number {
   const factor = 10 ** digits;
   return Math.round(value * factor) / factor;
 }
+
+/**
+ * Where a task in the window goes back to when it is left without docking or closing it explicitly (Esc, the
+ * backdrop): the docked panel (`panel`), or the board, where the window closes onto the card. Null is no record.
+ */
+export interface TaskHome {
+  taskId: string;
+  panel: boolean;
+}
+
+/** The home recorded as the window of `taskId` opens: the panel when the window grows out of it. */
+export function homeOnWindowOpen(taskId: string, source: ZoomSource): TaskHome {
+  return { taskId, panel: source === "panel" };
+}
+
+/** The home after `taskId` is opened: one opened inside the window (a #N link) inherits the window's. */
+export function homeOnTaskOpened(home: TaskHome | null, taskId: string, inWindow: boolean): TaskHome | null {
+  return home && inWindow ? { taskId, panel: home.panel } : home;
+}
+
+/** Whether `taskId`'s window goes back to the docked panel; a task with no record (a restored URL) does. */
+export function homeIsPanel(home: TaskHome | null, taskId: string): boolean {
+  return home?.taskId === taskId ? home.panel : true;
+}
+
+/**
+ * Whether leaving the window closes the task rather than docking it: `leaving` is what an explicit way out said
+ * (the × closes, the dock button and `f` dock), null (Esc, the backdrop) goes home.
+ */
+export function leaveCloses(leaving: "close" | "dock" | null, homePanel: boolean): boolean {
+  return leaving ? leaving === "close" : !homePanel;
+}

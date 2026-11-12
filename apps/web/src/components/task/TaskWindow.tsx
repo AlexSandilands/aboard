@@ -1,42 +1,8 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
-import { AppRouteModal, closeAppWindow } from "~/components/layout/AppRouteModal";
-import {
-  cardZoomTarget,
-  noteTaskDocked,
-  panelZoomTarget,
-  takeWindowSource,
-  taskHomeIsPanel,
-  type WindowZoom,
-} from "~/lib/windowZoom";
+import { AppRouteModal } from "~/components/layout/AppRouteModal";
+import { cardZoomTarget, noteTaskDocked, panelZoomTarget, takeWindowSource, type WindowZoom } from "~/lib/windowZoom";
 import { TaskPanelContent } from "./TaskPanel";
-
-/**
- * How the window is being left when that was said explicitly: `close` by `closeTaskWindow`, `dock` by
- * `dockTaskWindow`. Null (Esc, the backdrop) goes back where the task came from: the docked panel, or the board.
- */
-let leaving: "close" | "dock" | null = null;
-
-/**
- * Closes the open task from the task window, after the window has animated out: its Close button, a delete, and
- * `panel.toggle`. False when no window is open.
- */
-export function closeTaskWindow(): boolean {
-  leaving = "close";
-  if (closeAppWindow()) return true;
-  leaving = null;
-  return false;
-}
-
-/** Docks the open task from the task window, after the window has animated out: its Dock button and `panel.expand`. */
-export function dockTaskWindow(): boolean {
-  leaving = "dock";
-  if (closeAppWindow()) return true;
-  leaving = null;
-  return false;
-}
-
-/** Whether leaving the window now closes the task rather than docking it. */
-const leaveCloses = (taskId: string) => (leaving ? leaving === "close" : !taskHomeIsPanel(taskId));
+import { closeTaskWindow, dockTaskWindow, resetTaskWindowLeave, taskWindowLeaveCloses } from "./taskWindowExit";
 
 /**
  * The open task in a large window over the board (`?expanded=true`), on the same shell as the Settings and Stats
@@ -64,7 +30,7 @@ export function TaskWindow({
   // blur, and commit-on-blur editors would lose what was typed: blur it while it is still in the page.
   useLayoutEffect(() => {
     const contents = contentsRef.current;
-    leaving = null;
+    resetTaskWindowLeave();
     return () => {
       const focused = document.activeElement;
       if (focused instanceof HTMLElement && contents?.contains(focused)) focused.blur();
@@ -74,7 +40,7 @@ export function TaskWindow({
     () => ({
       // No recorded source is a window restored, which fades.
       enter: () => takeWindowSource(taskId),
-      exit: () => (leaveCloses(taskId) ? cardZoomTarget(taskId) : panelZoomTarget()),
+      exit: () => (taskWindowLeaveCloses(taskId) ? cardZoomTarget(taskId) : panelZoomTarget()),
     }),
     [taskId],
   );
@@ -83,8 +49,8 @@ export function TaskWindow({
       label="Task details"
       zoom={zoom}
       onClosed={() => {
-        const close = leaveCloses(taskId);
-        leaving = null;
+        const close = taskWindowLeaveCloses(taskId);
+        resetTaskWindowLeave();
         if (close) onClosedTask();
         else {
           noteTaskDocked(taskId);

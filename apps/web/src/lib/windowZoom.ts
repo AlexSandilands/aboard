@@ -1,4 +1,8 @@
 import {
+  homeIsPanel,
+  homeOnTaskOpened,
+  homeOnWindowOpen,
+  type TaskHome,
   cropClipCss,
   cropTransform,
   freshSource,
@@ -57,7 +61,7 @@ let pendingPanelRect: ZoomRect | null = null;
  * the card. A window opened with no panel open gets none behind it either (`AppLayout`). Recorded with the window's
  * source (`noteWindowSource`): a double-click counts the panel as it was before its first click.
  */
-let home: { taskId: string; panel: boolean } | null = null;
+let home: TaskHome | null = null;
 
 /** The task open now, from the URL: a way in that acts on whichever task is open names none. */
 const openTaskId = () => new URLSearchParams(window.location.search).get("task");
@@ -67,7 +71,7 @@ const openTaskId = () => new URLSearchParams(window.location.search).get("task")
  * and inherits the window's home.
  */
 export function noteTaskOpened(taskId: string) {
-  if (home && document.querySelector("[data-task-window]") !== null) home = { taskId, panel: home.panel };
+  home = homeOnTaskOpened(home, taskId, document.querySelector("[data-task-window]") !== null);
 }
 
 /** Docking the window makes the panel the task's home. */
@@ -77,7 +81,7 @@ export function noteTaskDocked(taskId: string) {
 
 /** Whether `taskId`'s window goes back to the docked panel; a task with no record (a restored URL) does. */
 export function taskHomeIsPanel(taskId: string): boolean {
-  return home?.taskId === taskId ? home.panel : true;
+  return homeIsPanel(home, taskId);
 }
 
 /** The docked panel, when it is open (not sliding out). */
@@ -98,7 +102,7 @@ export function taskPanelOpen(): boolean {
 export function noteWindowSource(taskId: string | null, source?: ZoomSource) {
   pending = { taskId, source: source ?? (taskPanelOpen() ? "panel" : "card"), at: performance.now() };
   const id = taskId ?? openTaskId();
-  if (id) home = { taskId: id, panel: pending.source === "panel" };
+  if (id) home = homeOnWindowOpen(id, pending.source);
   pendingPanelRect = pending.source === "panel" ? (panelZoomTarget()?.rect ?? null) : null;
 }
 
@@ -255,8 +259,6 @@ export function zoomOut(popup: HTMLElement, destination: () => ZoomTarget | null
   const style = getComputedStyle(popup);
   const opacity = style.opacity;
   const from: Keyframe = { transform: style.transform, borderRadius: style.borderTopLeftRadius, opacity, scale: "1" };
-  // A crop starts from the clip the window has now, or from none at rest (only another inset() animates to an inset()).
-  if (frames.source.clipPath) from.clipPath = style.clipPath === "none" ? frames.rest.clipPath : style.clipPath;
   const progress = running[0]?.effect?.getComputedTiming().progress ?? 1;
   for (const animation of running) animation.cancel();
   popup.animate(target.fade ? [from, { opacity, offset: FADE_OUT_START }, frames.source] : [from, frames.source], {
@@ -329,7 +331,10 @@ function dockGhost(
   const ghost = popup.cloneNode(true) as HTMLElement;
   // A copy for the eye only: no ids twice in the page, nothing to focus or announce, none of the dialog's hooks.
   for (const element of [ghost, ...ghost.querySelectorAll("[id]")]) element.removeAttribute("id");
-  for (const name of ["data-app-modal", "data-task-window", "data-starting-style", "data-ending-style", "role"])
+  // `data-task-window` is on the popup's child: left on the copy, a task opened while it docks would count as opened
+  // inside the window.
+  for (const element of ghost.querySelectorAll("[data-task-window]")) element.removeAttribute("data-task-window");
+  for (const name of ["data-app-modal", "data-starting-style", "data-ending-style", "role"])
     ghost.removeAttribute(name);
   ghost.setAttribute("aria-hidden", "true");
   ghost.inert = true;

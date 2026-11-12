@@ -843,7 +843,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/board/cardLinks.logic.ts`     | Which links a card shows (tested)                                |
 | `apps/web/src/components/board/CardContextMenu.tsx`, `BulkMenuItems.tsx`, `bulkActions.ts`, `bulkMenu.logic.ts` | The card menu, its bulk variant, the bulk mutations and which cards each item fits (`bulkMenu.logic.ts` is tested) |
 | `apps/web/src/components/task/TaskMenuItems.tsx`, `TaskMenuDialogs.tsx` | The items shared by the panel's More menu and the card menu, and their dialogs |
-| `apps/web/src/components/task/TaskWindow.tsx`, `taskLayout.ts`, `board/taskWindow.logic.ts` (tested) | The task window, the layout context its parts read, and its URL state |
+| `apps/web/src/components/task/TaskWindow.tsx`, `taskWindowExit.ts`, `taskLayout.ts`, `board/taskWindow.logic.ts` (tested) | The task window, how it is left (dock or close), the layout context its parts read, and its URL state |
 | `apps/web/src/components/markdown/CodeBlock.tsx`, `codeHighlight.ts`, `codeBlock.logic.ts` (tested) | Highlighted fenced code blocks |
 | `apps/web/src/components/board/reveal.logic.ts`, `revealCard.ts` | Revealing a task: the steps and scroll target (tested), the scroll and flash |
 | `apps/web/src/components/autopilot/autopilot.logic.ts` | Pill state, Inherit labels, config and limit parsing, run labels (tested) |

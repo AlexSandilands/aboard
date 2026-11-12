@@ -20,7 +20,7 @@ import { AppSidebar } from "~/components/sidebar/AppSidebar";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail, useSidebar } from "~/components/ui/sidebar";
 import { queryKeys, useBoardEvents } from "~/state/queries";
 import { anyDialogOpen, type DeletableTask, useDialogs, usePalette } from "~/state/ui";
-import { closeTaskWindow, dockTaskWindow } from "~/components/task/TaskWindow";
+import { closeTaskWindow, dockTaskWindow } from "~/components/task/taskWindowExit";
 import { closeAppWindow } from "./AppRouteModal";
 import { isAppModalPath } from "./appModal.logic";
 import { IS_MAC, isEditableTarget, isInsidePopup, isRecordingShortcut } from "./keyboard";
