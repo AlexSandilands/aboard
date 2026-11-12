@@ -11,6 +11,7 @@ import { Input } from "~/components/ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Slider } from "~/components/ui/slider";
 import { Switch } from "~/components/ui/switch";
+import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { cn } from "~/lib/utils";
 import { DEFAULT_PINNED_LANE_HEIGHT, PINNED_LANE_HEIGHTS, type PinnedLaneHeight } from "~/state/boardView.logic";
 import { useAppearance, useBoardView } from "~/state/ui";
@@ -48,6 +49,7 @@ export function AppearanceSection() {
       <SettingsSection title="Motion">
         <PanelAnimationsRow />
         <SnapshotMotionRow />
+        <WindowZoomRow />
       </SettingsSection>
       <SettingsSection title="Typography">
         <FontRow
@@ -279,6 +281,35 @@ function SnapshotMotionRow() {
           checked={snapshot}
           onCheckedChange={(on) => setPrefs({ boardMotion: on ? "snapshot" : "reflow" })}
           aria-label="Smooth board motion"
+        />
+      }
+    />
+  );
+}
+
+function WindowZoomRow() {
+  const zoom = useAppearance((s) => s.windowZoom);
+  const animationsOff = useAppearance((s) => s.panelAnimationMs === 0);
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const setPrefs = useAppearance((s) => s.setPrefs);
+  // The zoom follows Panel animations: with those off there is nothing for the switch to turn on.
+  const off = reducedMotion
+    ? "Off while your system asks for reduced motion."
+    : animationsOff
+      ? "Off while Panel animations is at 0 ms."
+      : null;
+  return (
+    <SettingsRow
+      id="board.appearance.window-zoom"
+      title="Zoom windows from their source"
+      description="Grow the task window out of the task's card, or out of the side panel when that is open, and shrink it back when it docks or closes. It takes twice the Panel animations time. Off, the window fades in place."
+      status={off}
+      control={
+        <Switch
+          checked={zoom && off === null}
+          disabled={off !== null}
+          onCheckedChange={(on) => setPrefs({ windowZoom: on })}
+          aria-label="Zoom windows from their source"
         />
       }
     />

@@ -346,6 +346,10 @@ task drops it (`withClosedTask`).
   on the backdrop and the browser's Back dock the task again; a second Esc closes it. The window's **×**, a delete and
   `panel.toggle` close the task (`closeTaskWindow`). Docking and closing play the window's out-animation first, then navigate. `j` (`task.reveal`) docks and jumps
   to the card.
+- **Zoom.** The window grows out of the docked panel when that is open, otherwise out of the task's card, and shrinks
+  back into the panel when it docks or onto the card when the task closes; with the card off screen it fades. It is
+  the **Zoom windows from their source** setting ([appearance.md](appearance.md#window-zoom)). A task opened straight
+  into the window starts no board transition: the board is at its new width at once, under the window.
 - **One live panel.** `TaskPanelContent` renders in the window or in the docked aside, never both: it runs things
   once per task (`useTaskView`'s PR ping, the plan editor request). The aside stays mounted at its width with a
   placeholder, so the board doesn't reflow, and doesn't slide when the window opens or docks; a task opened straight

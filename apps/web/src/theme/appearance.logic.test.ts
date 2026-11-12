@@ -46,6 +46,12 @@ describe("normalizeAppearancePrefs", () => {
     expect(normalizeAppearancePrefs({}).boardMotion).toBe("snapshot");
     expect(normalizeAppearancePrefs({ boardMotion: "teleport" }).boardMotion).toBe("snapshot");
   });
+
+  it("keeps a saved window zoom and falls back to on", () => {
+    expect(normalizeAppearancePrefs({ windowZoom: false }).windowZoom).toBe(false);
+    expect(normalizeAppearancePrefs({}).windowZoom).toBe(true);
+    expect(normalizeAppearancePrefs({ windowZoom: "no" }).windowZoom).toBe(true);
+  });
 });
 
 describe("cssFontFamilies", () => {
@@ -67,7 +73,7 @@ describe("appearancePaint", () => {
   it("leaves the stylesheet's defaults alone for default prefs", () => {
     expect(appearancePaint(DEFAULT_APPEARANCE_PREFS, false)).toEqual({
       style: { "--panel-animation-duration": "150ms", "--slide-duration": "450ms" },
-      data: { "panel-animations": "true", "board-motion": "snapshot" },
+      data: { "panel-animations": "true", "board-motion": "snapshot", "window-zoom": "true" },
     });
   });
 
@@ -100,9 +106,12 @@ describe("appearancePaint", () => {
   it("animates panels only with a duration and without reduced motion", () => {
     expect(appearancePaint(prefs({ panelAnimationMs: 200 }), false)).toMatchObject({
       style: { "--panel-animation-duration": "200ms", "--slide-duration": "600ms" },
-      data: { "panel-animations": "true", "board-motion": "snapshot" },
+      data: { "panel-animations": "true", "board-motion": "snapshot", "window-zoom": "true" },
     });
     expect(appearancePaint(prefs({ panelAnimationMs: 200 }), true).data["panel-animations"]).toBe("false");
+    // The zoom's own switch is written as chosen; panel-animations is what turns it off with the slider.
+    expect(appearancePaint(prefs({ windowZoom: false }), false).data["window-zoom"]).toBe("false");
+    expect(appearancePaint(prefs({ panelAnimationMs: 0 }), false).data["window-zoom"]).toBe("true");
   });
 
   it("only sets properties the runtime knows to clear", () => {

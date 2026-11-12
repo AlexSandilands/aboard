@@ -12,4 +12,10 @@ describe("panelTransitionType", () => {
     expect(panelTransitionType(undefined, undefined)).toBeNull();
     expect(panelTransitionType("", "")).toBeNull();
   });
+
+  it("leaves a task opened straight into the window alone, but not one closed from it", () => {
+    expect(panelTransitionType(undefined, "t1", true)).toBeNull();
+    expect(panelTransitionType(undefined, "t1", undefined)).toBe("panel-open");
+    expect(panelTransitionType("t1", undefined, undefined)).toBe("panel-close");
+  });
 });

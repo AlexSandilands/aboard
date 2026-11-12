@@ -271,6 +271,10 @@ document size: real headings, pasted images in place, and highlighted code.
 The window's **×** closes the task. Some Linux desktops take Alt+click for moving windows; double-click and `F` work
 there.
 
+The window grows out of the side panel when that is open and out of the task's card otherwise, and shrinks back the
+same way. To have it fade in place instead, turn off **Zoom windows from their source** in Settings → Board →
+Appearance.
+
 ## Your layout
 
 Collapse a column (Done starts collapsed) or just one project's cell, and collapse, reorder or hide the

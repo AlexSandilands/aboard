@@ -183,6 +183,9 @@ kept in this browser, not on the server: another browser (or the desktop app) ha
   over to make room; a slide takes three times the value. The preview beside it replays when clicked. The default is
   150 ms; 0 ms turns them off, and they stay off when your system asks for reduced
   motion.
+- **Zoom windows from their source** makes the [task window](using-the-board.md#the-task-window) grow out of the
+  task's card, or out of the side panel when that is open, and shrink back when it docks or closes. It takes twice the
+  Panel animations value and is off whenever those are. Turn it off to have the window fade in place.
 - **Interface font** and its size (12–20 px) change the text everywhere; the size scales the whole board. **Monospace
   font** is for code, ids and shortcuts and only takes monospaced fonts. Type a font installed on your computer and
   press Enter; a name the browser can't find is marked and not used. Leave it empty for the system font.
