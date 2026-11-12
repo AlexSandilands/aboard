@@ -21,7 +21,7 @@ import { boardTransitionRunning } from "~/lib/boardMotion";
 import { slideDuration, slideOffset, slidesOn, startSlide } from "~/lib/slide";
 import { useBoard, useTaskDetail } from "~/state/queries";
 import { useTaskView } from "~/state/taskView";
-import { usePanel } from "~/state/ui";
+import { usePanel, useSectionLayout } from "~/state/ui";
 import { cn } from "~/lib/utils";
 import { AutopilotSection } from "~/components/autopilot/AutopilotSection";
 import { LabelsSection } from "~/components/labels/LabelsSection";
@@ -46,7 +46,7 @@ import { usePlanActions } from "./usePlanActions";
 import { WhereItsUpTo } from "./WhereItsUpTo";
 import { EpicChildren } from "./EpicChildren";
 import { useEpicFilter, useSetEpicFilter } from "~/components/board/boardNavigation";
-import type { SectionId, TaskPanelLayout } from "./sections.logic";
+import { splitsIntoColumns, type SectionId, type TaskPanelLayout } from "./sections.logic";
 import { TaskLayoutContext } from "./taskLayout";
 
 const MIN_WIDTH = 380;
@@ -343,8 +343,11 @@ function TaskPanelBody({
   const inWindow = layout === "window";
   // Layout A: the story in a main column and the properties in a rail beside it, each scrolling on its own so the rail
   // is always in view. Narrower, one column in the panel's saved order, as the docked panel has it.
-  const twoColumns = useWiderThan(rootRef, TWO_COLUMNS_FROM, inWindow);
+  const wide = useWiderThan(rootRef, TWO_COLUMNS_FROM, inWindow);
   const exclude = task.kind === "epic" ? EPIC_HIDDEN_SECTIONS : undefined;
+  const sections = useSectionLayout();
+  // With every shown section in one column, one column rather than an empty strip beside it.
+  const twoColumns = wide && splitsIntoColumns(sections, exclude);
   const render = (id: SectionId) => {
     switch (id) {
       case "labels":
@@ -388,14 +391,16 @@ function TaskPanelBody({
     </>
   );
   return (
-    <TaskLayoutContext value={layout}>
+    <TaskLayoutContext value={{ layout }}>
       <div ref={rootRef} data-task-layout={layout} className="size-full">
         {twoColumns ? (
           <div className="grid size-full grid-cols-[minmax(0,1fr)_21rem] grid-rows-[minmax(0,1fr)]">
             <ScrollArea scrollFade className={COLUMN_SCROLLBAR_CLASS}>
               <div className="flex min-w-0 flex-col px-2 pb-10">
                 {top}
-                <ManagedSections task={task} column="main" exclude={exclude} render={render} />
+                <TaskLayoutContext value={{ layout, column: "main" }}>
+                  <ManagedSections task={task} column="main" exclude={exclude} render={render} />
+                </TaskLayoutContext>
               </div>
             </ScrollArea>
             {/* The border sits on the scroll area, outside its fade, so it runs unbroken from the header down. */}
@@ -409,7 +414,9 @@ function TaskPanelBody({
               {/* The header's bottom line already tops the rail, so what comes first (a section, or the hidden
                   sections note when every rail section is hidden) drops its own hairline. */}
               <div className="flex min-w-0 flex-col pb-10 [&>*:first-child]:border-t-0 [&>*:first-child>section]:border-t-0">
-                <ManagedSections task={task} column="rail" exclude={exclude} render={render} />
+                <TaskLayoutContext value={{ layout, column: "rail" }}>
+                  <ManagedSections task={task} column="rail" exclude={exclude} render={render} />
+                </TaskLayoutContext>
               </div>
             </ScrollArea>
           </div>
@@ -417,7 +424,10 @@ function TaskPanelBody({
           <ScrollArea scrollFade>
             <div className={cn("flex flex-col pb-10", inWindow && "sm:px-2")}>
               {top}
-              <ManagedSections task={task} exclude={exclude} render={render} />
+              {/* Wide, with every section in one column, it is the main column: side sections keep their width. */}
+              <TaskLayoutContext value={{ layout, column: wide ? "main" : undefined }}>
+                <ManagedSections task={task} exclude={exclude} render={render} />
+              </TaskLayoutContext>
             </div>
           </ScrollArea>
         )}

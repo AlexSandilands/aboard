@@ -20,7 +20,7 @@ import { useSettings } from "~/state/queries";
 import { dueDateLabel, dueStateClassName, dueStateOf, dueStateText } from "./dueDate.logic";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { TaskSection } from "./TaskSection";
-import { useTaskLayout } from "./taskLayout";
+import { useReadsLarge } from "./taskLayout";
 
 /** The task's prose: what and why (description), then how (plan context). */
 export function DetailsSection({ task }: { task: TaskDetail }) {
@@ -167,8 +167,9 @@ function MarkdownField({
 }) {
   const [editing, setEditing] = useState(false);
   const taskLinks = usePanelTaskLinks();
-  // The task window reads it as a document: larger type, and pasted images in place rather than thumbnails below.
-  const inWindow = useTaskLayout() === "window";
+  // The task window reads it as a document (larger type, pasted images in place rather than thumbnails below),
+  // except in its narrow side column.
+  const large = useReadsLarge();
   const text = value?.trim() ? value : null;
   return (
     <div className="px-1.5">
@@ -190,7 +191,7 @@ function MarkdownField({
         <MarkdownEditor
           taskId={taskId}
           ariaLabel={title}
-          tall={inWindow}
+          tall={large}
           value={text ?? ""}
           placeholder={placeholder}
           onSave={(next) => {
@@ -201,10 +202,10 @@ function MarkdownField({
         />
       ) : text ? (
         <>
-          <Markdown taskLinks={taskLinks} size={inWindow ? "md" : "sm"}>
+          <Markdown taskLinks={taskLinks} size={large ? "md" : "sm"}>
             {text}
           </Markdown>
-          {inWindow ? null : <AttachmentThumbs text={text} />}
+          {large ? null : <AttachmentThumbs text={text} />}
         </>
       ) : (
         <button
