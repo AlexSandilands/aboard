@@ -19,7 +19,7 @@ everything (say, Opus), pick it for **Reviewer subagent** under **Settings → A
 model, or any provider's model with its effort. **Board reviewer** beside it is the board's own reviewer, which runs
 on the Standard tier unless you pick another; it needs a provider that can return a structured verdict, so the picker
 greys out the ones that can't. **Settings → Tasks → Review** shows what both come down to, with a link. A project can
-choose its own reviewer for both (**Settings → Agents → Operations → Reviewer**, with the project chosen at the top), and a task in the **Automation** section of its
+choose its own reviewer for both (**Settings → Projects → This project's overrides**), and a task in the **Automation** section of its
 panel (shown while auto-review is on for it). Agents can set the task's with `update_task`, when you ask them to. If no agent runs the review, the board nudges the task's T3
 Code thread, and can run the review itself with Claude Code headless.
 

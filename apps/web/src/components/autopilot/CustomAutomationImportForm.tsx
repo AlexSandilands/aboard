@@ -490,7 +490,7 @@ export function CustomAutomationImportForm({
             {needs.length > 0 ? (
               <Section
                 title="Variables it reads"
-                hint="Set their values under Limits & safety → Variables, board-wide or with a project chosen at the top."
+                hint="Set their values under Limits & safety → Variables, board-wide or for one project."
               >
                 <VariableNeedsList needs={needs} />
               </Section>

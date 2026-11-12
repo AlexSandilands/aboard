@@ -3,7 +3,7 @@
 import type { Project } from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { CheckIcon, ChevronDownIcon, LayersIcon } from "lucide-react";
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { Button } from "~/components/ui/button";
 import {
@@ -17,6 +17,7 @@ import {
 } from "~/components/ui/combobox";
 import {
   Menu,
+  MenuItem,
   MenuPopup,
   MenuRadioGroup,
   MenuRadioItem,
@@ -24,18 +25,9 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "~/components/ui/menu";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { cn } from "~/lib/utils";
 import { useBoard } from "~/state/queries";
-import {
-  BOARD_WIDE_HINT,
-  filterScopeOptions,
-  rowIsInert,
-  type RowScope,
-  scopeProject,
-  scopeProjects,
-  usesScopeSearch,
-} from "./settingsScope.logic";
+import { useOpenSettings } from "./settingsNavigation";
+import { filterScopeOptions, scopeProject, scopeProjects, usesScopeSearch } from "./settingsScope.logic";
 
 /** The `?project=` the settings URL carries, as asked for (it may name a project that is gone). */
 export function useScopeParam(): string | undefined {
@@ -70,86 +62,50 @@ export function useSettingsScope(): {
   return { project, projects, setScope };
 }
 
-interface ScopeState {
-  /** The project being edited, or null for All projects (and on pages that show no sentence). */
-  project: Project | null;
-  /** Whether board-wide rows inside are dimmed one by one. */
-  dimRows: boolean;
-  /** Whether a stretch around is dimmed already, so nothing inside dims twice. */
-  dimmed: boolean;
-}
-
-const ScopeContext = createContext<ScopeState>({ project: null, dimRows: false, dimmed: false });
-
-/** The scope the rows below are shown in. */
-export const useRowScope = (): ScopeState => useContext(ScopeContext);
-
-/** Puts a page in the scope chosen in its sentence. */
-export function SettingsScopeProvider({ project, children }: { project: Project | null; children: ReactNode }) {
-  const value = useMemo(() => ({ project, dimRows: false, dimmed: false }), [project]);
-  return <ScopeContext.Provider value={value}>{children}</ScopeContext.Provider>;
-}
-
-/**
- * A stretch of the page in the scope: `project` holds rows a project can set (each board row in it is dimmed on its
- * own), `board` is board-wide as a whole (dimmed and inert in project scope), `any` is never dimmed.
- */
-export function ScopedStretch({ scope, children }: { scope: RowScope; children: ReactNode }) {
-  const outer = useRowScope();
-  const dimWhole = scope === "board" && outer.project !== null && !outer.dimmed;
-  const value = useMemo(
-    () => ({
-      project: outer.project,
-      dimRows: scope === "project" && !outer.dimmed,
-      dimmed: outer.dimmed || dimWhole,
-    }),
-    [outer.project, outer.dimmed, scope, dimWhole],
-  );
-  return (
-    <ScopeContext.Provider value={value}>
-      {dimWhole ? <BoardWide className="space-y-6">{children}</BoardWide> : children}
-    </ScopeContext.Provider>
-  );
-}
-
-/** Whether a row with this scope is dimmed where it is shown. */
-export function useRowInert(scope: RowScope): boolean {
-  const { project, dimRows } = useRowScope();
-  return dimRows && rowIsInert(scope, project !== null);
-}
-
-/**
- * Board-wide settings in project scope: dimmed and inert, not hidden, so the page keeps its shape when the scope
- * changes. A tooltip says why (T3's way).
- */
-export function BoardWide({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    // A stretch can be tall, so the tooltip follows the pointer rather than sitting above the whole of it.
-    <Tooltip trackCursorAxis="both">
-      <TooltipTrigger
-        render={<div data-board-wide="" className="cursor-not-allowed" />}
-        // The trigger is a plain wrapper: nothing in it can be reached, so it isn't a tab stop either.
-        tabIndex={-1}
-      >
-        <div inert className={cn("pointer-events-none opacity-45 grayscale select-none", className)}>
-          {children}
-        </div>
-      </TooltipTrigger>
-      <TooltipPopup side="top" className="max-w-64">
-        {BOARD_WIDE_HINT}
-      </TooltipPopup>
-    </Tooltip>
-  );
-}
-
-/** "Applying settings for [All projects ▾]": the scope sentence at the top of a page with per-project settings. */
+/** "Settings for [All projects ▾]": the scope sentence at the top of the Projects page, which picks the project shown. */
 export function SettingsScopeSentence() {
   const { project, projects, setScope } = useSettingsScope();
   return (
     <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 px-3 text-sm text-muted-foreground sm:px-4">
-      <span className="shrink-0">Applying settings for</span>
-      <ProjectScopeMenu project={project} projects={projects} onChange={setScope} />
+      <span className="shrink-0">Settings for</span>
+      <ProjectPicker project={project} projects={projects} onChange={setScope} />
     </p>
+  );
+}
+
+/**
+ * "Overridden in N projects" on a board-wide row some projects set for themselves: a link to that project's
+ * overrides on the Projects page, or with several a menu of them.
+ */
+export function OverriddenInProjects({ projects, target }: { projects: ReadonlyArray<Project>; target: string }) {
+  const openSettings = useOpenSettings();
+  const open = (project: Project) => openSettings(target, { project: project.id });
+  const label = `Overridden in ${projects.length === 1 ? "1 project" : `${projects.length} projects`}`;
+  const className =
+    "inline-flex items-center gap-1 rounded-sm text-xs text-info-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
+  if (projects.length === 1) {
+    const only = projects[0]!;
+    return (
+      <button type="button" className={className} onClick={() => open(only)}>
+        {label}: {only.title}
+      </button>
+    );
+  }
+  return (
+    <Menu>
+      <MenuTrigger className={className}>
+        {label}
+        <ChevronDownIcon aria-hidden className="size-3" />
+      </MenuTrigger>
+      <MenuPopup align="start">
+        {projects.map((p) => (
+          <MenuItem key={p.id} onClick={() => open(p)}>
+            <ProjectFavicon title={p.title} icon={p.icon} className="size-3.5 shrink-0" />
+            <span className="min-w-0 truncate">{p.title}</span>
+          </MenuItem>
+        ))}
+      </MenuPopup>
+    </Menu>
   );
 }
 
@@ -170,29 +126,36 @@ function OptionIcon({ project }: { project: Project | null }) {
   );
 }
 
-/** The project picker: a menu up to six projects, a searchable combobox past that. */
-function ProjectScopeMenu({
+/**
+ * The project picker: a menu up to six projects, a searchable combobox past that. Its first choice, null, is All
+ * projects unless `allLabel` names it otherwise (the board's own values, say).
+ */
+export function ProjectPicker({
   project,
   projects,
   onChange,
+  allLabel = "All projects",
+  ariaLabel = "Project",
 }: {
   project: Project | null;
   projects: ReadonlyArray<Project>;
   onChange: (projectId: string | null) => void;
+  allLabel?: string;
+  ariaLabel?: string;
 }) {
   const [query, setQuery] = useState("");
   const searchable = usesScopeSearch(projects.length);
   const value = project?.id ?? ALL;
-  const label = project?.title ?? "All projects";
+  const label = project?.title ?? allLabel;
   const choices: ScopeOption[] = [
-    { value: ALL, label: "All projects", project: null },
+    { value: ALL, label: allLabel, project: null },
     ...projects.map((p) => ({ value: p.id, label: p.title, project: p })),
   ];
   const pick = (next: string) => onChange(next === ALL ? null : next);
   const Trigger = searchable ? ComboboxTrigger : MenuTrigger;
   const trigger = (
     <Trigger
-      aria-label={`Project scope: ${label}`}
+      aria-label={`${ariaLabel}: ${label}`}
       render={<Button variant="outline" size="sm" />}
       className="min-w-0 max-w-72"
     >

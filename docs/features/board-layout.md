@@ -399,7 +399,7 @@ kept live by `autopilot.changed`) and none of them shown while the catalogue has
   switch the way the widget's exceptions do (`scopeToggle`: an override only when the board gives something else, so
   turning it back leaves no row; there is no faded state or ↺). An automation in [Preview](autopilot.md#preview) here
   is on, with an amber **Preview** badge by its name. The rows read the same cached switches
-  (`useAutopilotModes`, one request for every scope) and save with `useApplyWhere`, so the popover, the project page
+  (`useAutopilotModes`, one request for every scope) and save with `useApplyWhere`, so the popover
   and the widget never disagree. An automation that can't be turned on (`blocked`, an empty required tool slot)
   shows a ⚠ with the reason as its tooltip and its switch can only be turned off. An automation with no switch
   (`alwaysOn`: Recurring tasks, whose rules have their own) isn't listed. Paused is a one-line `Alert` with a **Resume** button
@@ -556,42 +556,46 @@ before the page (`models.tiers.custom*`, `tasks.review.model`, `tasks.new-tasks.
 are now (`MOVED_TARGETS`). The editors are sub-routes: `tasks/templates/<id>`, `autopilot/custom/<id>` and
 `project/recurring/<id>`, with `new` for one not saved yet. The rule editor's path stays under `project/` for old
 links, but its crumbs and the rail say Autopilot and leaving it returns to the Recurring tasks automation
-(`editorListSection("project")`). Its `?project=` is the rule's project, so the list stores the scope it was in as
-`settingsScope` in the history state and leaving the editor goes back to that scope.
+(`editorListSection("project")`). Its `?project=` is the rule's project.
 
 #### The project scope
 
-Settings has one scope, after T3 Code's (`SettingsScope.tsx`, ported from its `SettingsScopeSentence.tsx`; only the
-project axis, the board has no environments): **Applying settings for [All projects ▾]** at the top of Tasks, Agents,
-Autopilot and Project (`SCOPED_GROUPS` in `settingsScope.logic.ts`; `SettingsScroller` renders it on those pages, not
-on editors). It is a menu up to six projects and a combobox with a search box past that. The scope is `?project=` on
-every settings route (`settingsRoute` validates it for all its children): `useOpenSettings` keeps the current one
-inside Settings unless told otherwise (`project: null` is All projects), opening from the board starts in All projects
-unless a project is passed (a project's gear or right-click in the sidebar, the lane pill popover's gear), and the
-pages' own navigations spread `scopeSearch(useScopeParam())`. An unknown or archived id reads as All projects
-(`scopeProject`). The board behind the window reads its own search from `boardReturn`, so the settings `?project=`
-never reaches it. Run history's project filter is the same param, so the Runs tab follows the scope.
+Only the **Projects** page (group id `project`, kept so `/settings/project…` links still work) has a project scope,
+after T3 Code's (`SettingsScope.tsx`, ported from its `SettingsScopeSentence.tsx`; only the project axis, the board
+has no environments): **Settings for [All projects ▾]** at its top (`SCOPED_GROUPS` in `settingsScope.logic.ts`;
+`SettingsScroller` renders it there, not on editors). The picker (`ProjectPicker`) is a menu up to six projects and a
+combobox with a search box past that. The scope is `?project=`, which `settingsRoute` validates for every settings
+route: `useOpenSettings` keeps the current one only for a move within the Projects page (`project: null` is All
+projects), opening from the board starts in All projects unless a project is passed (a project's gear or
+right-click in the sidebar). An unknown or archived id reads as All projects (`scopeProject`). The board behind the
+window reads its own search from `boardReturn`, so the settings `?project=` never reaches it. The run history's
+**Project** filter is the runs route's own `?project=`: nothing carries it to or from other pages.
 
-What a page does in project scope is declared, not hidden: `SettingsSubsection` and `SettingsRow` take `scope`
-(`board`, the default, `project` or `any`). A `board` sub-section is dimmed and inert as a whole (`BoardWide`, with a
-tooltip saying it applies to every project), a `project` one dims only its `board` rows one by one, and `any` is never
-dimmed (Needs you, the run history, the project page). A row that edits the project's own value takes `override`
-while one is set: an **Overridden for this project** badge with a reset to the board's. The rows that do:
+The page shows the scope's project, or a prompt to pick one in All projects: General (name, icon, folder, T3 link),
+**This project's overrides** (`project.overrides`) and Danger zone. Archiving or deleting it sets the scope back to All
+projects. The overrides are the project fields that beat the board's, each row with an **Overridden for this
+project** badge and a reset to the board's while one is set (`override` on `SettingsRow`):
 
-| Row | Project field |
-| --- | --- |
-| Tasks › Planning skill (`tasks.planning.skill`) | `planSkill`, the project's folder skills listed first |
-| Tasks › Review skill (`tasks.review.skill`) | `reviewSkill` |
-| Agents › Operations › Reviewer (`agents.operations.reviewer`) | `reviewModel`, both reviewers' resolves-to lines |
-| Autopilot › Automations (each row, and **In <project>** in the detail) | the project's mode, through `scopeToggle`; **Clear own settings** |
-| Autopilot › Limits & safety › Variables (`autopilot.limits.variables.list`) | `variables`, the board's shown as inherited |
-| Autopilot › Automations › Recurring tasks | that project's rules and the example rules |
+| Row | Project field | The board's row |
+| --- | --- | --- |
+| Planning skill (`project.overrides.plan-skill`) | `planSkill`, the project's folder skills listed first | Tasks › Planning skill |
+| Review skill (`project.overrides.review-skill`) | `reviewSkill` | Tasks › Review skill |
+| Reviewer model (`project.overrides.reviewer`) | `reviewModel`, both reviewers' resolves-to lines | Agents › Operations › Reviewer |
 
-The Project page itself is only the project: General (name, icon, folder, T3 link) and Danger zone for the scope's
-project, or a prompt to pick one in All projects. Archiving or deleting it sets the scope back to All projects. The
-page's old sections (`project.plan-skill`, `project.review-skill`, `project.models`, `project.autopilot`,
-`project.recurring` and their rows) redirect to the rows above (`MOVED_TARGETS`), and the router keeps `?project=` on
-every redirect, so an old link lands on the row in that project's scope.
+Every other page shows only the board's values. A board row some projects override has an **Overridden in N
+projects** line (`OverriddenInProjects`, fed by `useOverridingProjects(field)`, a board `select` so it re-renders only
+when that list changes): with one project a link to its row on the Projects page, with several a menu of them. On
+Autopilot, what a project sets for itself has its own picker inside the section, in local state rather than the URL
+(an old link's `?project=` only picks its first value):
+Limits & safety › Variables (`variables`, the board's shown as inherited) and the Recurring tasks detail (that
+project's rules and the example rules). Where an automation runs per project is its Where it runs table.
+
+Old targets still land: the Project page's sections from before #151 (`project.plan-skill`, `project.review-skill`,
+`project.models` and their rows) redirect to `project.overrides…` (`MOVED_TARGETS`), and `project.autopilot…` and
+`project.recurring…` to Autopilot. A link from when Tasks, Agents and Autopilot had the scope, to one of the three
+board rows above with `?project=`, goes to that project's row on the Projects page (`redirectSettingsTarget(target,
+project)`, applied by the route's `beforeLoad` and `useOpenSettings`), and the router keeps `?project=` on every
+redirect.
 
 - **Shell.** Every page sits under one pathless layout route (`_app`, `AppFrame`) that renders a single `AppShell`:
   the resizable projects sidebar (an off-canvas sheet on narrow windows), the palette, the app dialogs, live sync and

@@ -3,7 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { DetailSection } from "~/components/settings/agents/SplitCard";
-import { useRowScope, useScopeParam } from "~/components/settings/SettingsScope";
+import { ProjectPicker, useScopeParam } from "~/components/settings/SettingsScope";
+import { scopeProject, scopeProjects } from "~/components/settings/settingsScope.logic";
 import { SettingsNote, SettingsRow } from "~/components/settings/settingsLayout";
 import { FROM_SETTINGS_LIST } from "~/components/settings/settingsNavigation";
 import { ConfirmDialog } from "~/components/task/ConfirmDialog";
@@ -56,14 +57,13 @@ function IconAction({
  */
 export function ProjectRuleRows({ project, withAdd = false }: { project: Project; withAdd?: boolean }) {
   const navigate = useNavigate();
-  const scope = useScopeParam();
   const onEdit = (ruleId: string) =>
     void navigate({
       to: "/settings/project/recurring/$ruleId",
       params: { ruleId },
+      // The editor's `?project=` is the rule's project.
       search: { project: project.id },
-      // The editor's `?project=` is the rule's project; leaving it goes back to the scope the list was in.
-      state: { ...FROM_SETTINGS_LIST, settingsScope: scope ?? null },
+      state: FROM_SETTINGS_LIST,
     });
   const rules = useRecurringRules(project.id);
   const templates = useTemplates();
@@ -84,7 +84,6 @@ export function ProjectRuleRows({ project, withAdd = false }: { project: Project
     <>
       {list.length === 0 ? (
         <SettingsRow
-          scope="project"
           title={rules.error ? "Couldn't load the rules" : "No recurring tasks"}
           description={
             rules.error
@@ -100,7 +99,6 @@ export function ProjectRuleRows({ project, withAdd = false }: { project: Project
           return (
             <SettingsRow
               key={rule.id}
-              scope="project"
               title={
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate">{rule.name}</span>
@@ -147,7 +145,6 @@ export function ProjectRuleRows({ project, withAdd = false }: { project: Project
       )}
       {withAdd ? (
         <SettingsRow
-          scope="project"
           title="Add a rule"
           description={`Makes a task in ${project.title} from a template on a schedule.`}
           control={
@@ -172,31 +169,37 @@ export function ProjectRuleRows({ project, withAdd = false }: { project: Project
 
 /**
  * The recurring rules, the Recurring tasks detail in Settings → Autopilot: every project's, a group each with its own
- * New rule, or with a project chosen in the scope sentence only that project's, with example rules to start from.
- * The automation has no switch; each rule has its own.
+ * New rule, or with a project picked in the section's own picker only that project's, with example rules to start
+ * from. The automation has no switch; each rule has its own.
  */
 export function RecurringRulesByProject() {
-  const { project } = useRowScope();
-  const projects = useBoard().data?.projects.filter((p) => p.archivedAt === null);
-  if (project) {
-    return (
-      <>
-        <DetailSection title={project.title}>
-          <ProjectRuleRows project={project} withAdd />
-        </DetailSection>
-        <RuleExamples project={project} />
-      </>
-    );
-  }
-  if (!projects) return <SettingsNote>Loading projects...</SettingsNote>;
+  const board = useBoard().data;
+  const projects = scopeProjects(board?.projects);
+  // Not kept in the URL: the picker only narrows the list. An old link's `?project=` picks the first one.
+  const linked = useScopeParam();
+  const [picked, setPicked] = useState<string | null>(() => linked ?? null);
+  const project = scopeProject(projects, picked);
+  if (!board) return <SettingsNote>Loading projects...</SettingsNote>;
   if (projects.length === 0) return <SettingsNote>Add a project to give it recurring rules.</SettingsNote>;
   return (
     <>
-      {projects.map((p) => (
-        <DetailSection key={p.id} title={p.title}>
-          <ProjectRuleRows project={p} withAdd />
-        </DetailSection>
-      ))}
+      <div className="px-3 sm:px-4">
+        <ProjectPicker project={project} projects={projects} onChange={setPicked} ariaLabel="Recurring tasks in" />
+      </div>
+      {project ? (
+        <>
+          <DetailSection title={project.title}>
+            <ProjectRuleRows project={project} withAdd />
+          </DetailSection>
+          <RuleExamples project={project} />
+        </>
+      ) : (
+        projects.map((p) => (
+          <DetailSection key={p.id} title={p.title}>
+            <ProjectRuleRows project={p} withAdd />
+          </DetailSection>
+        ))
+      )}
     </>
   );
 }
@@ -212,7 +215,6 @@ function RuleExamples({ project }: { project: Project }) {
       {suggestions.map((suggestion) => (
         <SettingsRow
           key={suggestion.id}
-          scope="project"
           title={suggestion.name}
           description={`${suggestion.summary}.`}
           control={
