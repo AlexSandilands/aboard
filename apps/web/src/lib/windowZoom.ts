@@ -364,13 +364,26 @@ function dockGhost(
   const moveMs = turnDurationMs(duration, progress);
   const revealMs = Math.round(duration * REVEAL_SCALE);
   let done = false;
+  let moved = false;
   const finish = () => {
     if (done) return;
     done = true;
     window.clearTimeout(timeout);
+    observer.disconnect();
     ghost.remove();
     revealPanel(revealMs);
   };
+  // The panel gets the task only after the dialog's own closing transition: a short zoom (Panel animations at 50 ms
+  // or less, or one turned around early) is over before that, and would uncover the placeholder. So the reveal waits
+  // for both the move and the hand-over.
+  const handedOver = () => {
+    const contents = document.querySelector("[data-panel-contents]");
+    return contents !== null && contents.querySelector("[data-in-window-placeholder]") === null;
+  };
+  const observer = new MutationObserver(() => {
+    if (moved && handedOver()) finish();
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
   const timeout = window.setTimeout(finish, 3 * (moveMs + revealMs) + GHOST_GRACE_MS);
   for (const child of ghost.children) {
     child.animate([{ opacity: 1 }, { opacity: 0, offset: GHOST_FADE_END }, { opacity: 0 }], {
@@ -392,5 +405,8 @@ function dockGhost(
       easing: ZOOM_EASING,
       fill: "forwards",
     })
-    .finished.then(finish, finish);
+    .finished.then(() => {
+      moved = true;
+      return handedOver() ? finish() : undefined;
+    }, finish);
 }

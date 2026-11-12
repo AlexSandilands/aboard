@@ -290,7 +290,9 @@ Only the task window: Settings and Stats have no source and keep the fade. The c
   goes at once, so the task docks under the copy. The copy's contents fade out over the first 60% of its move, and its
   border and shadow over the first 25% (its grey edge would otherwise cut through the panel as it lands), so it
   lands on the panel as an empty surface; the panel's contents stay hidden meanwhile (`data-task-docking` on `<html>`,
-  `index.css`), then the copy goes and they fade in from the top down, all at once (`revealPanel`: a sliding
+  `index.css`), then, once the copy has landed and the panel has the task (it does only after the dialog's own closing transition,
+  so a short zoom waits for it rather than uncovering the placeholder), the copy goes and they fade in from the top
+  down, all at once (`revealPanel`: a sliding
   `mask-image` gradient on `[data-panel-contents]` over 1.2× the zoom, the aside taking its colour so the board
   doesn't show through). A timer undoes the copy and the hiding if the animations never end. The clip at rest reaches past the window by its shadow's size, since a clip only
   animates to another `inset()`. The keyframes name `opacity` and `scale` at both ends, so the fade's own

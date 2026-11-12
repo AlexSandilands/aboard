@@ -190,7 +190,10 @@ function ResizeHandle({ handlers }: { handlers: ResizableWidthHandlers }) {
 /** What the docked panel shows behind the task window, which has the task. */
 function InWindowPlaceholder() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+    <div
+      data-in-window-placeholder=""
+      className="flex flex-1 flex-col items-center justify-center gap-2 text-xs text-muted-foreground"
+    >
       <Maximize2Icon className="size-4" />
       Open in a window
     </div>
