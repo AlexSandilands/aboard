@@ -24,6 +24,8 @@
           var wanted =
             mode === "system" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : mode;
           var paint = stored("%STORAGE_KEY(theme-paint)%");
+          // A new browser has no snapshot and no theme yet: paint the default theme, filled in by the build.
+          if (!paint && localStorage.getItem("%STORAGE_KEY(theme-id)%") === null) paint = %DEFAULT_THEME_PAINT%;
           var entry = paint && paint[wanted];
           var appearance =
             entry && (entry.appearance === "light" || entry.appearance === "dark") ? entry.appearance : wanted;

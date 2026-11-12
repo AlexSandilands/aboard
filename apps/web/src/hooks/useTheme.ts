@@ -18,8 +18,10 @@ import {
 } from "~/theme/themeLibrary.logic";
 import {
   buildPaintSnapshot,
+  DEFAULT_THEME_ID,
   DEFAULT_THEME_MODE,
   isThemeMode,
+  migrateThemeSelection,
   parseThemeHalves,
   parseThemeId,
   resolveActiveTheme,
@@ -27,6 +29,7 @@ import {
   resolveThemeAppearance,
   selectThemeHalf,
   selectWholeTheme,
+  serializeThemeId,
   type ThemeHalves,
   type ThemeMode,
   type ThemeSelection,
@@ -82,7 +85,7 @@ function readSelection(custom: ReadonlyArray<ThemeDefinition>): ThemeSelection {
 
 function writeSelection(selection: ThemeSelection) {
   write(MODE_KEY, selection.mode);
-  write(THEME_ID_KEY, selection.themeId);
+  write(THEME_ID_KEY, serializeThemeId(selection.themeId));
   const { light, dark } = selection.halves;
   write(HALVES_KEY, light || dark ? JSON.stringify(selection.halves) : null);
 }
@@ -103,7 +106,7 @@ export interface ThemeSnapshot {
 const SERVER_SNAPSHOT: ThemeSnapshot = {
   theme: DEFAULT_THEME_MODE,
   resolvedTheme: "dark",
-  themeId: null,
+  themeId: DEFAULT_THEME_ID,
   themeHalves: {},
   customThemes: [],
 };
@@ -176,6 +179,9 @@ function applyCurrent(suppressTransitions: boolean) {
  * (a theme changed shape in an update), and the shell hasn't heard the theme yet.
  */
 export function initTheme() {
+  // Before applyCurrent writes this load's own paint snapshot, which the migration reads.
+  const migrated = migrateThemeSelection(read(THEME_ID_KEY), read(THEME_PAINT_KEY));
+  if (migrated !== null) write(THEME_ID_KEY, migrated);
   applyCurrent(false);
   // Registered once here, not per subscriber: each re-apply writes storage and messages the shell, and the theme has
   // to follow the OS and other tabs even when no component using the hook is mounted.

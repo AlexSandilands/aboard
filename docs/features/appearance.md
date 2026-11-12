@@ -2,9 +2,10 @@
 
 Board tasks: #173 and #179 (custom themes) (epic #178). Verified against T3 Code at commit `812b7006f8` (October 2026).
 
-Settings → Board → Appearance holds the same look-and-feel options as T3 Code's Appearance page, so the board
-and T3 Code look the same side by side. You pick an appearance mode (System, Light, Dark) and a theme: T3 Code
-(the default), T3 Chat, Grove, Ocean, Ember or Iris, for both appearances or just one. Below that are sliders
+Settings → Board → Appearance holds the same look-and-feel options as T3 Code's Appearance page, and T3 Code's
+themes, so the board and T3 Code can look the same side by side. You pick an appearance mode (System, Light, Dark)
+and a theme: the board's own Aboard (the default; Red Sun in code), Tide or Bridge, or T3 Code, Grove, Ocean, Ember or
+Iris, for both appearances or just one. Below that are sliders
 for contrast, glass opacity and panel animations, and the interface and monospace fonts. You can also create,
 edit, export and import themes, from files, VS Code themes or Open VSX. Everything is kept in the browser; the server
 never sees it.
@@ -15,16 +16,27 @@ never sees it.
 
 A theme is T3 Code's model, unchanged: an id, a label, a base `appearance` with 61 colour roles (`canvas`,
 `surface`, `text`, `accent`, `sidebar`, `messageAction`, …), and optional `variants` for the other appearance.
-The five built-ins in `apps/web/src/theme/palettes.ts` are copied verbatim from T3 Code's
-`packages/shared/src/themePalettes.ts`. **T3 Code** isn't a theme object: it is the board's own CSS tokens,
-which were already T3 Code's, so choosing it applies nothing.
+The built-ins come in two groups, shown in this order with the T3 Code card between them:
+
+- **The board's own** (`BOARD_THEMES`, `theme/aboardPalettes.ts`): Red Sun (labelled with the product name,
+  `BRAND.name`, and the default), Tide and Bridge. They are original, not T3 Code's: each was derived with
+  `createVividThemeColors` from a canvas and an accent (neutral surfaces from a canvas-hued seed, so the accent's hue
+  doesn't tint every surface), then its canvas, cards, text, borders, controls and sidebar were set by hand to the
+  design mockup and committed as literal colours. Error and warning stay T3 Code's, so red still means failing. The
+  ids are neutral, so the product name can move to another palette by changing one label.
+- **T3 Code's** (`T3_THEMES`, `theme/palettes.ts`): Grove, Ocean, Ember and Iris, copied verbatim from T3 Code's
+  `packages/shared/src/themePalettes.ts`. T3 Chat's palette is kept there too but isn't offered: T3 Code's theme
+  files fill missing roles from it (below).
+
+**T3 Code** isn't a theme object: it is the board's own CSS tokens, which were already T3 Code's, so choosing it
+applies nothing. In code it is `null`; it is saved as `t3-code`, because a missing id now means the default.
 
 The user's choice is three things:
 
 | Choice     | Storage key (`storageKey()`) | Meaning                                                                       |
 | ---------- | ---------------------------- | ----------------------------------------------------------------------------- |
 | Mode       | `theme`                      | `light`, `dark` or `system` (the key the old toggle used, so saves carry over) |
-| Base theme | `theme-id`                   | The theme for both appearances; absent is T3 Code                             |
+| Base theme | `theme-id`                   | The theme for both appearances; `t3-code` is T3 Code; absent or unknown is the default |
 | Halves     | `theme-halves`               | `{ light?, dark? }`: a theme for one appearance, overriding the base          |
 
 Clicking a card sets the base and clears the halves. Clicking one orb on a card sets only that half. Picking
@@ -32,6 +44,13 @@ T3 Code's orb while a themed base is set turns the base into an explicit half on
 keeps its theme and this side falls back to T3 Code (T3 Code's `assignHalf`). A theme with colours for only
 one appearance forces that appearance unless a half covers the one the mode asks for. All of this is pure
 logic in `theme/themeState.logic.ts`.
+
+**Who gets which theme.** `parseThemeId` reads `t3-code` as T3 Code and anything that names no theme (a removed custom
+theme, the retired `t3-chat`) as the default, Red Sun. Before the board had its own themes a missing `theme-id` meant
+T3 Code, so on load `initTheme` runs `migrateThemeSelection` once, before it writes this load's paint snapshot: a
+browser with no `theme-id` but a `theme-paint` snapshot has used the board before and keeps T3 Code (`t3-code` is
+written); one with neither is new and gets the default written down, so its own first snapshot isn't read as an old
+user's next time. `t3-chat` and `t3-code` stay reserved ids.
 
 Saved custom themes live in `themes` (a list in T3 Code's stored shape, parsed leniently) and are shown as cards
 after the built-ins; themes sharing a `collection` (an Open VSX extension) share one card. See
@@ -98,8 +117,15 @@ controls), focus → `--ring`, and error, warning and update roles onto their st
 the same inside `[data-app-sidebar]`, which sets its own palette. Success, info, label, epic and PR colours
 stay fixed. Terminal, composer, search-match and toolbar roles are kept in the data but nothing maps them.
 
-Each built-in also tints the sidebar banner's night art (`--stage-night-*`), and T3 Chat gets its finer grain
-tile, both copied from T3 Code.
+Each built-in also tints the sidebar banner's night art (`--stage-night-*`): T3 Code's themes with the values
+copied from T3 Code, the board's own with skies of their own (Red Sun's sun setting through a crimson glow, Tide's
+dusk harbour, Bridge's midnight navy under a brass moon), a step deeper in dark mode. T3 Chat's night art, pink
+sidebar divider and finer grain tile went with its card.
+
+The sidebar banners themselves are in `components/stage/` (`STAGE_BANNERS`). **Firefly** (`FireflyArt.tsx`) is the
+board's own: a cartoon firefly with a glowing tail crossing a navy starry sky, its dotted flight loop behind it. It is
+still art with fixed colours (it doesn't follow the theme), the bug ends by x 225 so it stays whole at the narrowest
+sidebar, and the stars are a 300-unit tile so a wider sidebar shows more sky. It is in the daily rotation.
 
 Storage events on any of the keys re-apply, so other tabs follow. The OS appearance is watched for System.
 
@@ -108,7 +134,9 @@ Storage events on any of the keys re-apply, so other tabs follow. The OS appeara
 The palettes live in the JS bundle, so the boot script in `apps/web/index.html` can't resolve a theme itself.
 Instead `useTheme` saves a **paint snapshot** (`theme-paint`) every time it applies: for each appearance the
 mode can ask for, the appearance actually shown, the theme id, its variables already named, and its canvas.
-The boot script reads the mode, picks the entry for the wanted appearance and paints it before first paint.
+The boot script reads the mode, picks the entry for the wanted appearance and paints it before first paint. A new
+browser has no snapshot, so the build writes the default theme's snapshot into the script (`%DEFAULT_THEME_PAINT%`,
+from `buildPaintSnapshot` in `vite.config.ts`), used only when there is neither a snapshot nor a `theme-id`.
 The appearance prefs get the same treatment through `appearance-paint` (below). Vite fills the keys in with a
 `%STORAGE_KEY(name)%` placeholder (`brandHtml` in `apps/web/vite.config.ts`).
 
@@ -364,7 +392,8 @@ times slower.
 
 | File                                                        | What it does                                                         |
 | ----------------------------------------------------------- | -------------------------------------------------------------------- |
-| `apps/web/src/theme/palettes.ts`                            | Roles, types, T3 Code's colours, the five built-ins, role → variable |
+| `apps/web/src/theme/palettes.ts`                            | Roles, types, T3 Code's colours and themes, the built-in order, role → variable |
+| `apps/web/src/theme/aboardPalettes.ts`                      | The board's own themes: Red Sun (the default), Tide, Bridge          |
 | `apps/web/src/theme/themeFile.ts`                           | T3 Code's theme file: parse, serialize, stored themes               |
 | `apps/web/src/theme/color.ts`, `derive.ts`                  | Colour parsing and contrast; deriving palettes and colour families   |
 | `apps/web/src/theme/themeLibrary.logic.ts`                  | Install, update, remove, replace a collection in the saved list      |

@@ -5,6 +5,7 @@ import { BlackArt } from "./stage/BlackArt";
 import { CardsArt } from "./stage/CardsArt";
 import { CircuitArt } from "./stage/CircuitArt";
 import { DuskArt } from "./stage/DuskArt";
+import { FireflyArt } from "./stage/FireflyArt";
 import { HexArt, HexMonoArt } from "./stage/HexArt";
 import { NightlyArt } from "./stage/NightlyArt";
 import { type StageBannerId, resolveStageBanner } from "./stage/stageBanner.logic";
@@ -17,6 +18,7 @@ const STAGE_ART: Record<StageBannerId, ComponentType | null> = {
   cards: CardsArt,
   hex: HexArt,
   "hex-mono": HexMonoArt,
+  firefly: FireflyArt,
   black: BlackArt,
   none: null,
 };

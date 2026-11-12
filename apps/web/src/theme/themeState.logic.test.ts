@@ -3,6 +3,8 @@ import { applyThemePalette } from "./applyTheme";
 import { GROVE_THEME, OCEAN_THEME, T3_CODE_LIGHT_THEME_COLORS, type ThemeDefinition } from "./palettes";
 import {
   buildPaintSnapshot,
+  DEFAULT_THEME_ID,
+  migrateThemeSelection,
   parseThemeHalves,
   parseThemeId,
   resolveActiveTheme,
@@ -10,6 +12,7 @@ import {
   resolveThemeAppearance,
   selectThemeHalf,
   selectWholeTheme,
+  serializeThemeId,
   themeOwners,
   type ThemeSelection,
 } from "./themeState.logic";
@@ -30,11 +33,33 @@ const selection = (over: Partial<ThemeSelection> = {}): ThemeSelection => ({
 });
 
 describe("parsing saved choices", () => {
-  it("drops ids that name no theme", () => {
+  it("keeps ids that name a theme", () => {
     expect(parseThemeId("grove", custom)).toBe("grove");
     expect(parseThemeId("paper", custom)).toBe("paper");
-    expect(parseThemeId("gone", custom)).toBeNull();
-    expect(parseThemeId(null, custom)).toBeNull();
+    expect(parseThemeId("tide", custom)).toBe("tide");
+  });
+
+  it("reads t3-code as T3 Code", () => {
+    expect(parseThemeId("t3-code", custom)).toBeNull();
+  });
+
+  it("falls back to the default for a missing id, a removed theme and the retired T3 Chat", () => {
+    expect(DEFAULT_THEME_ID).toBe("red-sun");
+    expect(parseThemeId(null, custom)).toBe(DEFAULT_THEME_ID);
+    expect(parseThemeId("gone", custom)).toBe(DEFAULT_THEME_ID);
+    expect(parseThemeId("t3-chat", custom)).toBe(DEFAULT_THEME_ID);
+    expect(parseThemeId("", custom)).toBe(DEFAULT_THEME_ID);
+  });
+
+  it("saves T3 Code as t3-code, so it round-trips", () => {
+    expect(serializeThemeId(null)).toBe("t3-code");
+    expect(parseThemeId(serializeThemeId(null), custom)).toBeNull();
+    expect(parseThemeId(serializeThemeId("grove"), custom)).toBe("grove");
+    expect(parseThemeId(serializeThemeId(DEFAULT_THEME_ID), custom)).toBe(DEFAULT_THEME_ID);
+  });
+
+  it("drops halves naming a retired or removed theme", () => {
+    expect(parseThemeHalves(JSON.stringify({ light: "t3-chat", dark: "gone" }), custom)).toEqual({});
   });
 
   it("keeps only halves whose theme covers that appearance", () => {
@@ -45,6 +70,29 @@ describe("parsing saved choices", () => {
     expect(parseThemeHalves(JSON.stringify({ light: "paper", dark: "paper" }), custom)).toEqual({ light: "paper" });
     expect(parseThemeHalves("not json", custom)).toEqual({});
     expect(parseThemeHalves(JSON.stringify(["grove"]), custom)).toEqual({});
+  });
+});
+
+describe("migrateThemeSelection", () => {
+  const paint = JSON.stringify({ light: {}, dark: {} });
+
+  it("keeps T3 Code for a browser that painted before but never picked a theme", () => {
+    expect(migrateThemeSelection(null, paint)).toBe("t3-code");
+  });
+
+  it("writes the default down for a new browser", () => {
+    expect(migrateThemeSelection(null, null)).toBe(DEFAULT_THEME_ID);
+  });
+
+  it("leaves a saved choice alone", () => {
+    expect(migrateThemeSelection("grove", paint)).toBeNull();
+    expect(migrateThemeSelection("t3-code", null)).toBeNull();
+    expect(migrateThemeSelection("t3-chat", paint)).toBeNull();
+  });
+
+  it("runs once: what it writes is a saved choice", () => {
+    const written = migrateThemeSelection(null, null);
+    expect(migrateThemeSelection(written, paint)).toBeNull();
   });
 });
 
@@ -103,7 +151,7 @@ describe("selecting themes", () => {
     expect(themeOwners(next, custom)).toEqual({ light: "grove", dark: "grove" });
   });
 
-  it("clicking T3 Code's card resets to the default", () => {
+  it("clicking T3 Code's card picks T3 Code for both appearances", () => {
     expect(selectWholeTheme(selection({ themeId: "grove", halves: { dark: "iris" } }), null, custom)).toMatchObject({
       themeId: null,
       halves: {},
@@ -118,6 +166,12 @@ describe("selecting themes", () => {
   it("clicking an orb sets only that half", () => {
     const next = selectThemeHalf(selection({ themeId: "grove" }), "dark", "iris", custom);
     expect(themeOwners(next, custom)).toEqual({ light: "grove", dark: "iris" });
+  });
+
+  it("T3 Code's orb over the default theme keeps the other half", () => {
+    const next = selectThemeHalf(selection({ themeId: DEFAULT_THEME_ID }), "dark", null, custom);
+    expect(themeOwners(next, custom)).toEqual({ light: DEFAULT_THEME_ID, dark: null });
+    expect(serializeThemeId(next.themeId)).toBe("t3-code");
   });
 
   it("T3 Code's orb over a themed base keeps the other half", () => {
