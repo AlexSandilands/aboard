@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { DetailSection } from "~/components/settings/agents/SplitCard";
-import { ProjectPicker } from "~/components/settings/SettingsScope";
+import { ProjectPicker, useScopeParam } from "~/components/settings/SettingsScope";
 import { scopeProject, scopeProjects } from "~/components/settings/settingsScope.logic";
 import { SettingsNote, SettingsRow } from "~/components/settings/settingsLayout";
 import { FROM_SETTINGS_LIST } from "~/components/settings/settingsNavigation";
@@ -175,8 +175,9 @@ export function ProjectRuleRows({ project, withAdd = false }: { project: Project
 export function RecurringRulesByProject() {
   const board = useBoard().data;
   const projects = scopeProjects(board?.projects);
-  // Not kept in the URL: the picker only narrows the list.
-  const [picked, setPicked] = useState<string | null>(null);
+  // Not kept in the URL: the picker only narrows the list. An old link's `?project=` picks the first one.
+  const linked = useScopeParam();
+  const [picked, setPicked] = useState<string | null>(() => linked ?? null);
   const project = scopeProject(projects, picked);
   if (!board) return <SettingsNote>Loading projects...</SettingsNote>;
   if (projects.length === 0) return <SettingsNote>Add a project to give it recurring rules.</SettingsNote>;

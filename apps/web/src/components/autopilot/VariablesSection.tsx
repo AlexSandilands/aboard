@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ProjectPicker } from "~/components/settings/SettingsScope";
+import { ProjectPicker, useScopeParam } from "~/components/settings/SettingsScope";
 import { scopeProject, scopeProjects } from "~/components/settings/settingsScope.logic";
 import { SettingsNote, SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
 import { useUpdateProject, useUpdateSettings } from "~/state/mutations";
@@ -18,8 +18,10 @@ export function VariablesSection() {
   const update = useUpdateSettings();
   const updateProject = useUpdateProject();
   const projects = scopeProjects(useBoard().data?.projects);
-  // Not kept in the URL: the picker only chooses which list the section edits.
-  const [picked, setPicked] = useState<string | null>(null);
+  // Not kept in the URL: the picker only chooses which list the section edits. An old link's `?project=` (from when
+  // the page had a scope) picks the first one.
+  const linked = useScopeParam();
+  const [picked, setPicked] = useState<string | null>(() => linked ?? null);
   const project = scopeProject(projects, picked);
   const variables = settings.data?.automationVariables ?? [];
   return (

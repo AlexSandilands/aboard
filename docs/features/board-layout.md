@@ -578,7 +578,8 @@ project** badge and a reset to the board's while one is set (`override` on `Sett
 Every other page shows only the board's values. A board row some projects override has an **Overridden in N
 projects** line (`OverriddenInProjects`, fed by `useOverridingProjects(field)`, a board `select` so it re-renders only
 when that list changes): with one project a link to its row on the Projects page, with several a menu of them. On
-Autopilot, what a project sets for itself has its own picker inside the section, in local state rather than the URL:
+Autopilot, what a project sets for itself has its own picker inside the section, in local state rather than the URL
+(an old link's `?project=` only picks its first value):
 Limits & safety › Variables (`variables`, the board's shown as inherited) and the Recurring tasks detail (that
 project's rules and the example rules). Where an automation runs per project is its Where it runs table.
 
