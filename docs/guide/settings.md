@@ -156,11 +156,15 @@ you are (**Settings / Tasks / Template: Bug**), and **Esc** or **Cancel** goes b
 
 ## Appearance
 
-The look matches T3 Code's Appearance page, so the board and T3 Code can look the same side by side. All of it is
+The options match T3 Code's Appearance page, and its themes are here too, so the board and T3 Code can look the same
+side by side. All of it is
 kept in this browser, not on the server: another browser (or the desktop app) has its own.
 
-- **Colors & themes.** Pick **System** (follow your computer), **Light** or **Dark**, then a theme: **T3 Code** (the
-  default), **T3 Chat**, **Grove**, **Ocean**, **Ember** or **Iris**, the same palettes as T3 Code. Click a card to
+- **Colors & themes.** Pick **System** (follow your computer), **Light** or **Dark**, then a theme. The board's own
+  come first: **Aboard** (the default), **Firefly** and **Tide**. Then **T3 Code**, **Grove**, **Ocean**, **Ember** and
+  **Iris**, the same palettes as T3 Code, if you want the board to match it. If you used the board before it had its
+  own themes and never picked one, you stay on T3 Code; if you had T3 Chat, which is gone, you're moved to Aboard.
+  Click a card to
   use the theme for both light and dark; click one of its two circles to use it for that appearance only (a sun or
   moon badge marks which circle is in use), so you can have, say, Grove in light and Iris in dark. Label, epic and PR
   colours stay the same in every theme.
@@ -177,6 +181,8 @@ kept in this browser, not on the server: another browser (or the desktop app) ha
   extension's variants on one card. You can also drop or choose theme files (several at once), or paste a theme's
   JSON. Files exported from T3 Code or the board import as they are, and VS Code colour themes are converted. If a
   theme is already installed you choose **Update existing** or **Keep both**.
+- **Sidebar banner** picks the art behind the name in the top-left corner, or **Rotate daily** for a different one
+  each day. **Firefly**, a firefly crossing a starry night sky, is one of them.
 - **Contrast** (50–200 %) fades text and borders below 100 % and strengthens them above it.
 - **Glass opacity** (40–100 %) sets how see-through menus, dialogs and popovers are; 100 % makes them solid.
 - **Panel animations** (0–400 ms) sets how fast the sidebar and the task panel slide in and out, with the board moving

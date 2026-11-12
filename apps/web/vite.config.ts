@@ -4,13 +4,23 @@ import react from "@vitejs/plugin-react";
 import type { Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 import { BRAND, brandEnv, storageKey } from "../../packages/contracts/src/brand.ts";
+import defaultThemePaintSnapshot from "./src/theme/defaultThemePaint.json" with { type: "json" };
 
 const serverPort = Number(process.env[brandEnv("PORT")] ?? 4317);
 const target = `http://127.0.0.1:${serverPort}`;
 // The server's Origin guard reads the same variable, so Vite on another port can still write.
 const webPort = Number(process.env[brandEnv("WEB_PORT")] ?? 5317);
 
-/** Fills brand placeholders in index.html: `%BRAND_NAME%` and `%STORAGE_KEY(name)%` for `storageKey("name")`. */
+/**
+ * The default theme's paint snapshot, for the boot script to paint a new browser with before the app loads. It is a
+ * checked-in copy (themeState.logic.test.ts keeps it equal to buildPaintSnapshot's) so the config loads no app code.
+ */
+const defaultThemePaint = JSON.stringify(defaultThemePaintSnapshot);
+
+/**
+ * Fills placeholders in index.html: `%BRAND_NAME%`, `%STORAGE_KEY(name)%` for `storageKey("name")` and
+ * `%DEFAULT_THEME_PAINT%`.
+ */
 function brandHtml(): Plugin {
   return {
     name: "brand-html",
@@ -19,6 +29,7 @@ function brandHtml(): Plugin {
       handler: (html) =>
         html
           .replaceAll("%BRAND_NAME%", BRAND.name)
+          .replaceAll("%DEFAULT_THEME_PAINT%", defaultThemePaint)
           .replace(/%STORAGE_KEY\(([a-z-]+)\)%/g, (_match, name: string) => storageKey(name)),
     },
   };

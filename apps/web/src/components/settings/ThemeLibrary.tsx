@@ -26,7 +26,7 @@ import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { customThemeLibrary, useTheme } from "~/hooks/useTheme";
 import { cn } from "~/lib/utils";
-import { BUILT_IN_THEMES, getThemeModes, type ThemeAppearance, type ThemeDefinition } from "~/theme/palettes";
+import { BOARD_THEMES, getThemeModes, T3_THEMES, type ThemeAppearance, type ThemeDefinition } from "~/theme/palettes";
 import { serializeThemeFile } from "~/theme/themeFile";
 import { findTheme, themeOwners, type ThemeMode } from "~/theme/themeState.logic";
 import { collectionVariantLabels, groupCustomThemes } from "./themeCards.logic";
@@ -116,6 +116,16 @@ export function ThemeLibrary() {
       });
     }
   };
+  const builtInCard = (definition: ThemeDefinition) => (
+    <ThemeCard
+      key={definition.id}
+      theme={getThemeCardDefinition(definition)}
+      activeModes={pickedModesFor(definition.id)}
+      onUse={() => setThemeId(definition.id)}
+      onUseMode={pickHalf(definition.id)}
+      onDuplicate={() => duplicate(definition.id, definition.label)}
+    />
+  );
   const removingCollection = (removal?.collection.length ?? 0) > 1;
   const removalLabel = removal?.theme.collection?.label ?? removal?.theme.label;
 
@@ -178,6 +188,7 @@ export function ThemeLibrary() {
         className="grid w-full gap-2"
         style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 16rem), 1fr))" }}
       >
+        {BOARD_THEMES.map(builtInCard)}
         {STANDARD_THEME_CARDS.map((card) => (
           <ThemeCard
             key={card.id}
@@ -188,16 +199,7 @@ export function ThemeLibrary() {
             onDuplicate={() => duplicate(null, card.label)}
           />
         ))}
-        {BUILT_IN_THEMES.map((definition) => (
-          <ThemeCard
-            key={definition.id}
-            theme={getThemeCardDefinition(definition)}
-            activeModes={pickedModesFor(definition.id)}
-            onUse={() => setThemeId(definition.id)}
-            onUseMode={pickHalf(definition.id)}
-            onDuplicate={() => duplicate(definition.id, definition.label)}
-          />
-        ))}
+        {T3_THEMES.map(builtInCard)}
         {groupCustomThemes(customThemes).map(([key, themes]) => (
           <CustomThemeCollectionCard
             key={key}

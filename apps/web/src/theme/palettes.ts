@@ -1,8 +1,13 @@
 // Copied from T3 Code (packages/shared/src/themePalettes.ts), MIT — see NOTICE. The palettes are kept verbatim so
 // the board and T3 Code look the same side by side, and a T3 Code theme file means the same thing here. Only the
-// mobile and publishing ids are left out; the board has neither.
+// mobile and publishing ids are left out; the board has neither. The board's own themes are in aboardPalettes.ts and
+// come first; T3 Chat's palette is kept (theme files fill missing roles from it) but isn't offered as a card.
+import { BRIDGE_THEME, FIREFLY_THEME, TIDE_THEME } from "./aboardPalettes";
 
-export const BUILT_IN_THEME_IDS = ["t3-chat", "grove", "ocean", "ember", "iris"] as const;
+export const BUILT_IN_THEME_IDS = ["bridge", "firefly", "tide", "grove", "ocean", "ember", "iris"] as const;
+
+/** T3 Code's own look, the board's CSS tokens. `null` in code; saved under this id, which T3 Code reserves too. */
+export const T3_CODE_THEME_ID = "t3-code";
 
 /**
  * Ids a theme may not take: the appearance keywords, every built-in, and the legacy aliases T3 Code's older saves
@@ -13,6 +18,8 @@ export const RESERVED_THEME_IDS: ReadonlySet<string> = new Set([
   "light",
   "dark",
   ...BUILT_IN_THEME_IDS,
+  T3_CODE_THEME_ID,
+  "t3-chat",
   "t3-chat-dark",
   "t3-grove",
   "t3-ocean",
@@ -903,13 +910,11 @@ export const IRIS_THEME: ThemeDefinition = {
   sidebarArtwork: true,
 };
 
-export const BUILT_IN_THEMES: ReadonlyArray<ThemeDefinition> = [
-  T3_CHAT_THEME,
-  GROVE_THEME,
-  OCEAN_THEME,
-  EMBER_THEME,
-  IRIS_THEME,
-];
+/** The board's own themes, shown first. */
+export const BOARD_THEMES: ReadonlyArray<ThemeDefinition> = [BRIDGE_THEME, FIREFLY_THEME, TIDE_THEME];
+/** T3 Code's themes, shown after the T3 Code card. */
+export const T3_THEMES: ReadonlyArray<ThemeDefinition> = [GROVE_THEME, OCEAN_THEME, EMBER_THEME, IRIS_THEME];
+export const BUILT_IN_THEMES: ReadonlyArray<ThemeDefinition> = [...BOARD_THEMES, ...T3_THEMES];
 
 export function getThemeColorsForAppearance(theme: ThemeDefinition, appearance: ThemeAppearance): ThemeColors | null {
   if (theme.appearance === appearance) return theme.colors;

@@ -492,30 +492,10 @@
     --stage-mono-ink: #fff;
   }
 
-  /* Each built-in theme gives the sidebar banner art its own material (from T3 Code): rose
-     vellum, forest drafting paper, marine cyanotype, copper, and violet ink.
+  /* Each of T3 Code's themes gives the sidebar banner art its own material (from T3 Code): forest
+     drafting paper, marine cyanotype, copper, and violet ink.
      These colors stay deliberately deep at the top edge so the white stage
      wordmark and controls retain contrast in both appearance modes. */
-  html[data-theme-id="t3-chat"] {
-    --stage-art-top: oklch(0.760675 0.141361 348.019);
-    --stage-art-mid: oklch(0.588093 0.188832 353.138);
-    --stage-art-bottom: oklch(0.383959 0.135096 348.656);
-    --stage-art-highlight: oklch(0.949689 0.034241 339.171);
-    --stage-art-secondary: oklch(0.763402 0.163836 352.525);
-    --stage-art-tertiary: oklch(0.70819 0.180285 311.949);
-    --stage-art-line: oklch(0.952158 0.034194 336.179);
-
-    @variant dark {
-      --stage-art-top: oklch(0.540689 0.143665 347.587);
-      --stage-art-mid: oklch(0.396586 0.126592 347.6);
-      --stage-art-bottom: oklch(0.249959 0.079694 340.523);
-      --stage-art-highlight: oklch(0.921297 0.051708 343.229);
-      --stage-art-secondary: oklch(0.667398 0.165674 352.549);
-      --stage-art-tertiary: oklch(0.609315 0.163722 306.315);
-      --stage-art-line: oklch(0.945349 0.036045 341.433);
-    }
-  }
-
   html[data-theme-id="grove"] {
     --stage-art-top: oklch(0.751465 0.112731 157.313);
     --stage-art-mid: oklch(0.567105 0.11099 158.859);
@@ -624,7 +604,67 @@
     }
   }
 
-  :is(html[data-theme-id="t3-chat"], html[data-theme-id="ocean"], html[data-theme-id="iris"]) {
+  /* The board's own themes (theme/aboardPalettes.ts) give the night art their own skies: Firefly's sun setting
+     through a crimson glow, Tide's dusk harbour and Bridge's midnight navy under a brass moon. In dark mode
+     only the sky goes a step deeper. */
+  html[data-theme-id="firefly"] {
+    --stage-night-top: oklch(0.16 0.01 230);
+    --stage-night-mid: oklch(0.24 0.08 25);
+    --stage-night-bottom: oklch(0.36 0.14 30);
+    --stage-night-highlight: oklch(0.74 0.17 42);
+    --stage-night-secondary: oklch(0.3 0.1 25);
+    --stage-night-tertiary: oklch(0.42 0.15 32);
+    --stage-night-line: oklch(0.94 0.02 85);
+    --stage-night-glow-highlight: oklch(0.48 0.18 28);
+    --stage-night-glow-secondary: oklch(0.3 0.1 25);
+    --stage-night-sparkle: oklch(0.94 0.02 85);
+
+    @variant dark {
+      --stage-night-top: oklch(0.136 0.009 230);
+      --stage-night-mid: oklch(0.204 0.068 25);
+      --stage-night-bottom: oklch(0.306 0.119 30);
+    }
+  }
+
+  html[data-theme-id="tide"] {
+    --stage-night-top: oklch(0.32 0.06 230);
+    --stage-night-mid: oklch(0.26 0.055 220);
+    --stage-night-bottom: oklch(0.21 0.04 210);
+    --stage-night-highlight: oklch(0.9 0.06 190);
+    --stage-night-secondary: oklch(0.45 0.08 205);
+    --stage-night-tertiary: oklch(0.5 0.07 180);
+    --stage-night-line: oklch(0.94 0.03 200);
+    --stage-night-glow-highlight: oklch(0.62 0.1 200);
+    --stage-night-glow-secondary: oklch(0.45 0.08 205);
+    --stage-night-sparkle: oklch(0.94 0.03 200);
+
+    @variant dark {
+      --stage-night-top: oklch(0.272 0.051 230);
+      --stage-night-mid: oklch(0.221 0.047 220);
+      --stage-night-bottom: oklch(0.178 0.034 210);
+    }
+  }
+
+  html[data-theme-id="bridge"] {
+    --stage-night-top: oklch(0.27 0.07 260);
+    --stage-night-mid: oklch(0.22 0.055 258);
+    --stage-night-bottom: oklch(0.18 0.035 255);
+    --stage-night-highlight: oklch(0.86 0.1 85);
+    --stage-night-secondary: oklch(0.38 0.08 255);
+    --stage-night-tertiary: oklch(0.45 0.06 230);
+    --stage-night-line: oklch(0.95 0.02 85);
+    --stage-night-glow-highlight: oklch(0.72 0.12 80);
+    --stage-night-glow-secondary: oklch(0.38 0.08 255);
+    --stage-night-sparkle: oklch(0.95 0.02 85);
+
+    @variant dark {
+      --stage-night-top: oklch(0.23 0.06 260);
+      --stage-night-mid: oklch(0.187 0.047 258);
+      --stage-night-bottom: oklch(0.153 0.03 255);
+    }
+  }
+
+  :is(html[data-theme-id="ocean"], html[data-theme-id="iris"]) {
     --stage-night-top: color-mix(in oklch, var(--stage-art-top) 38%, var(--stage-night-base-top));
     --stage-night-mid: color-mix(in oklch, var(--stage-art-mid) 38%, var(--stage-night-base-mid));
     --stage-night-bottom: color-mix(in oklch, var(--stage-art-bottom) 38%, var(--stage-night-base-bottom));
@@ -635,7 +675,6 @@
   }
 
   :is(
-    html[data-theme-id="t3-chat"],
     html[data-theme-id="grove"],
     html[data-theme-id="ocean"],
     html[data-theme-id="ember"],
@@ -1118,13 +1157,6 @@ html[data-theme-id] [data-app-sidebar] {
   }
 }
 
-/* T3 Chat's panel divider is deliberately pink. */
-html[data-theme-id="t3-chat"] [data-app-sidebar] {
-  @variant dark {
-    border-color: var(--contrast-sidebar-border);
-  }
-}
-
 /* The Contrast setting, from T3 Code: below 100% text and borders fade toward their surface; above
    it they move toward black or white (borders a quarter as fast). Recomputed wherever a subtree
    sets its own palette. Tailwind's colour utilities read these (see @theme inline). */
@@ -1341,12 +1373,6 @@ html[data-theme-id="t3-chat"] [data-app-sidebar] {
   [data-label-panning] {
     animation: label-pan var(--label-pan-duration) ease-in-out infinite;
   }
-}
-
-/* T3 Chat's texture: a 128px tile at T3 Chat's strength (2.745%), as in T3 Code. */
-html[data-theme-id="t3-chat"] {
-  --surface-grain: image-set(url("./assets/grain/grain-t3-chat.png") 1x, url("./assets/grain/grain-t3-chat@2x.png") 2x);
-  --surface-grain-size: 128px 128px;
 }
 
 body {

@@ -4,6 +4,7 @@ import {
   BUILT_IN_THEMES,
   getThemeColorsForAppearance,
   getThemeModes,
+  T3_CODE_THEME_ID,
   type ThemeAppearance,
   type ThemeColorRole,
   type ThemeColors,
@@ -17,8 +18,8 @@ export type ThemeMode = ThemeAppearance | "system";
 export type ThemeHalves = Readonly<{ light?: string; dark?: string }>;
 
 /**
- * Everything the user chose, as saved. `themeId` null is the default T3 Code theme, which is the board's own CSS
- * tokens, so nothing is applied for it.
+ * Everything the user chose. `themeId` null is the T3 Code theme, which is the board's own CSS tokens, so nothing is
+ * applied for it; it is saved as `t3-code`, because a missing id means the default theme.
  */
 export interface ThemeSelection {
   mode: ThemeMode;
@@ -27,6 +28,9 @@ export interface ThemeSelection {
 }
 
 export const DEFAULT_THEME_MODE: ThemeMode = "dark";
+
+/** The theme a browser starts on, and what a saved id that names no theme falls back to: the board's own. */
+export const DEFAULT_THEME_ID = "bridge";
 
 export function isThemeMode(value: unknown): value is ThemeMode {
   return value === "light" || value === "dark" || value === "system";
@@ -40,9 +44,28 @@ export function findTheme(
   return BUILT_IN_THEMES.find((t) => t.id === id) ?? custom.find((t) => t.id === id) ?? null;
 }
 
-/** A saved base theme id, or null when it names no theme we have (a removed custom theme falls back to T3 Code). */
+/**
+ * The saved base theme: `t3-code` is T3 Code (null); a missing id, or one that names no theme we have (a removed custom
+ * theme, the retired T3 Chat), is the default.
+ */
 export function parseThemeId(raw: string | null, custom: ReadonlyArray<ThemeDefinition>): string | null {
-  return findTheme(raw, custom)?.id ?? null;
+  if (raw === T3_CODE_THEME_ID) return null;
+  return findTheme(raw, custom)?.id ?? DEFAULT_THEME_ID;
+}
+
+/** The base theme as saved: always a key, so T3 Code isn't read back as the default. */
+export function serializeThemeId(themeId: string | null): string {
+  return themeId ?? T3_CODE_THEME_ID;
+}
+
+/**
+ * The base theme id to save on load, or null to leave storage alone. Before the board had its own themes a missing id
+ * meant T3 Code, so a browser that has painted the board before (it has a paint snapshot) but never picked a theme
+ * keeps T3 Code; a new browser gets the default written down, so its own first snapshot isn't mistaken for that later.
+ */
+export function migrateThemeSelection(rawThemeId: string | null, rawPaint: string | null): string | null {
+  if (rawThemeId !== null) return null;
+  return rawPaint !== null ? T3_CODE_THEME_ID : DEFAULT_THEME_ID;
 }
 
 /** Keeps only the halves that name a theme with colours for that appearance. */

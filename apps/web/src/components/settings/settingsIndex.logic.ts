@@ -104,8 +104,22 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "board.appearance.theme",
     "Colors & themes",
-    "Follow the system or pick light or dark, and pick a theme: T3 Code, T3 Chat, Grove, Ocean, Ember or Iris, for both appearances or one.",
-    ["dark mode", "light mode", "colour", "color", "palette", "theme", "t3 chat", "grove", "ocean", "ember", "iris"],
+    `Follow the system or pick light or dark, and pick a theme: ${BRAND.name}, Firefly, Tide, T3 Code, Grove, Ocean, Ember or Iris, for both appearances or one.`,
+    [
+      "dark mode",
+      "light mode",
+      "colour",
+      "color",
+      "palette",
+      "theme",
+      "firefly",
+      "tide",
+      "t3 code",
+      "grove",
+      "ocean",
+      "ember",
+      "iris",
+    ],
   ),
   draft(
     "board.appearance.contrast",
@@ -153,6 +167,7 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "image",
     "logo",
     "header",
+    "firefly",
   ]),
   draft(
     "board.appearance.priority-lane",

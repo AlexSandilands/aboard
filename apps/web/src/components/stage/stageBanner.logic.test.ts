@@ -18,6 +18,7 @@ describe("isStageBannerChoice", () => {
 describe("resolveStageBanner", () => {
   it("returns a fixed choice as is", () => {
     expect(resolveStageBanner("dusk")).toBe("dusk");
+    expect(resolveStageBanner("firefly")).toBe("firefly");
   });
 
   it("falls back to the default for unknown stored values", () => {
@@ -36,6 +37,7 @@ describe("resolveStageBanner", () => {
     const rotating = STAGE_BANNERS.filter((banner) => banner.rotates).map((banner) => banner.id);
     const seen = new Set(rotating.map((_, offset) => resolveStageBanner("rotate", new Date(2026, 9, 14 + offset, 12))));
     expect([...seen].toSorted()).toEqual(rotating.toSorted());
+    expect(seen.has("firefly")).toBe(true);
     expect(seen.has("none")).toBe(false);
     expect(seen.has("black")).toBe(false);
   });
