@@ -1,4 +1,6 @@
 import {
+  cropClipCss,
+  cropTransform,
   freshSource,
   type PendingSource,
   radiusCss,
@@ -46,6 +48,37 @@ function zoomDuration(): number {
 }
 
 let pending: PendingSource | null = null;
+/** The docked panel's box when the way in was recorded: the panel may be gone by the time the window mounts. */
+let pendingPanelRect: ZoomRect | null = null;
+
+/**
+ * Where the open task goes back to when its window is left without docking or closing it explicitly (Esc, the
+ * backdrop): the docked panel when it was open as the window opened, otherwise the board, where the window closes onto
+ * the card. A window opened with no panel open gets none behind it either (`AppLayout`). Recorded with the window's
+ * source (`noteWindowSource`): a double-click counts the panel as it was before its first click.
+ */
+let home: { taskId: string; panel: boolean } | null = null;
+
+/** The task open now, from the URL: a way in that acts on whichever task is open names none. */
+const openTaskId = () => new URLSearchParams(window.location.search).get("task");
+
+/**
+ * Called by every way a task is opened, before it navigates: a task opened inside the window (a #N link) stays in it
+ * and inherits the window's home.
+ */
+export function noteTaskOpened(taskId: string) {
+  if (home && document.querySelector("[data-task-window]") !== null) home = { taskId, panel: home.panel };
+}
+
+/** Docking the window makes the panel the task's home. */
+export function noteTaskDocked(taskId: string) {
+  home = { taskId, panel: true };
+}
+
+/** Whether `taskId`'s window goes back to the docked panel; a task with no record (a restored URL) does. */
+export function taskHomeIsPanel(taskId: string): boolean {
+  return home?.taskId === taskId ? home.panel : true;
+}
 
 /** The docked panel, when it is open (not sliding out). */
 function dockedPanel(): HTMLElement | null {
@@ -64,13 +97,26 @@ export function taskPanelOpen(): boolean {
  */
 export function noteWindowSource(taskId: string | null, source?: ZoomSource) {
   pending = { taskId, source: source ?? (taskPanelOpen() ? "panel" : "card"), at: performance.now() };
+  const id = taskId ?? openTaskId();
+  if (id) home = { taskId: id, panel: pending.source === "panel" };
+  pendingPanelRect = pending.source === "panel" ? (panelZoomTarget()?.rect ?? null) : null;
 }
 
-/** The source recorded for the window of `taskId` that mounts now, taken so that a later mount doesn't reuse it. */
-export function takeWindowSource(taskId: string): ZoomSource | null {
+/**
+ * What the window of `taskId` that mounts now grows out of, taken so that a later mount doesn't reuse it: the panel as
+ * it was when the way in was recorded (its task may not keep it behind the window), else the card; null fades.
+ */
+export function takeWindowSource(taskId: string): ZoomTarget | null {
   const source = freshSource(pending, taskId, performance.now());
+  const panelRect = pendingPanelRect;
   pending = null;
-  return source;
+  pendingPanelRect = null;
+  if (source === "panel") {
+    if (panelRect) return { rect: panelRect, radius: 0, fade: false };
+    // A panel that went meanwhile leaves the card.
+    return panelZoomTarget() ?? cardZoomTarget(taskId);
+  }
+  return source === "card" ? cardZoomTarget(taskId) : null;
 }
 
 /** The docked panel as a zoom target, or null when it isn't open. */
@@ -105,8 +151,33 @@ function restRect(popup: HTMLElement): ZoomRect {
   return { left: popup.offsetLeft, top: popup.offsetTop, width: popup.offsetWidth, height: popup.offsetHeight };
 }
 
+/** How far the clip reaches past the window at rest, to keep its shadow (`shadow-2xl`) while a crop runs. */
+const SHADOW_OUTSET = 64;
+
 function zoomKeyframes(popup: HTMLElement, target: ZoomTarget): { source: Keyframe; rest: Keyframe } | null {
-  const transform = zoomTransform(target.rect, restRect(popup));
+  const rest = restRect(popup);
+  // The panel is about the window's height and a third of its width: the window moves and crops onto it instead of
+  // scaling, so it lands at the size the panel shows it. The card is small and the window fades over it, so it scales.
+  if (!target.fade) {
+    const crop = cropTransform(target.rect, rest);
+    if (!crop) return null;
+    const radius = Number.parseFloat(getComputedStyle(popup).borderTopLeftRadius) || 0;
+    return {
+      source: {
+        transform: `translate(${crop.dx}px, ${crop.dy}px)`,
+        clipPath: cropClipCss(crop, target.radius),
+        opacity: 1,
+        scale: "1",
+      },
+      rest: {
+        transform: "none",
+        clipPath: cropClipCss({ right: 0, bottom: 0 }, radius, SHADOW_OUTSET),
+        opacity: 1,
+        scale: "1",
+      },
+    };
+  }
+  const transform = zoomTransform(target.rect, rest);
   if (!transform) return null;
   return {
     // `scale` and `opacity` are named at both ends so the fade's own transition (data-starting-style and
@@ -176,10 +247,16 @@ export function zoomOut(popup: HTMLElement, destination: () => ZoomTarget | null
     for (const animation of running) animation.finish();
     return;
   }
+  if (!target.fade) {
+    dockGhost(popup, frames, running, duration);
+    return;
+  }
   // Read before the running zoom is cancelled: the style is live, and without the zoom it is the window at rest.
   const style = getComputedStyle(popup);
   const opacity = style.opacity;
   const from: Keyframe = { transform: style.transform, borderRadius: style.borderTopLeftRadius, opacity, scale: "1" };
+  // A crop starts from the clip the window has now, or from none at rest (only another inset() animates to an inset()).
+  if (frames.source.clipPath) from.clipPath = style.clipPath === "none" ? frames.rest.clipPath : style.clipPath;
   const progress = running[0]?.effect?.getComputedTiming().progress ?? 1;
   for (const animation of running) animation.cancel();
   popup.animate(target.fade ? [from, { opacity, offset: FADE_OUT_START }, frames.source] : [from, frames.source], {
@@ -188,4 +265,127 @@ export function zoomOut(popup: HTMLElement, destination: () => ZoomTarget | null
     fill: "forwards",
     id: ZOOM_ID,
   });
+}
+
+/*
+ * Docking: the panel can only show the task once the window has gone (one live panel), so a window landing on it
+ * would be swapped for the panel's own layout in one frame, and its contents be seen settling. Instead the window
+ * hands over to an inert copy of itself and goes at once, so the task docks under the copy. The copy's contents fade
+ * to nothing as it moves onto the panel, an empty surface by the time it lands; the panel keeps its contents hidden
+ * meanwhile (`data-task-docking` on <html>, index.css), then they fade in from the top down, all at once.
+ */
+
+/** The copy's contents are gone by this share of its move. */
+const GHOST_FADE_END = 0.6;
+/**
+ * The copy's border and shadow are gone by this share of its move: landing on the panel, the window's grey edge would
+ * draw a line through it for a moment.
+ */
+const GHOST_EDGE_END = 0.25;
+/** The panel's contents fade in, from the top down, over this share of the zoom's duration. */
+const REVEAL_SCALE = 1.2;
+/** The copy and the hiding are undone this long after the animations should have ended, whatever happens to them. */
+const GHOST_GRACE_MS = 2000;
+
+/**
+ * Fades the docked panel's contents in from the top down: a mask three times their height, opaque over its top third
+ * and transparent over its bottom third, slid down so the soft middle passes from the top edge to the bottom one. The
+ * mask is on the contents' box (its surface too, as the contents are several elements), so the aside behind it takes
+ * the surface's colour meanwhile and the board doesn't show through.
+ */
+function revealPanel(duration: number) {
+  const contents = document.querySelector<HTMLElement>("[data-panel-contents]");
+  const aside = contents?.closest<HTMLElement>("[data-task-panel]");
+  delete document.documentElement.dataset.taskDocking;
+  if (!contents || !aside) return;
+  aside.style.backgroundColor = getComputedStyle(contents).backgroundColor;
+  Object.assign(contents.style, {
+    maskImage: "linear-gradient(to bottom, black 33.34%, transparent 66.66%)",
+    maskSize: "100% 300%",
+    maskRepeat: "no-repeat",
+  });
+  const clear = () => {
+    for (const property of ["mask-image", "mask-size", "mask-repeat"]) contents.style.removeProperty(property);
+    aside.style.removeProperty("background-color");
+  };
+  contents
+    .animate([{ maskPosition: "0 100%" }, { maskPosition: "0 0%" }], { duration, easing: "ease-out" })
+    .finished.then(clear, clear);
+}
+
+function dockGhost(
+  popup: HTMLElement,
+  frames: { source: Keyframe; rest: Keyframe },
+  running: Animation[],
+  duration: number,
+) {
+  const style = getComputedStyle(popup);
+  const from: Keyframe = {
+    transform: style.transform,
+    clipPath: style.clipPath === "none" ? frames.rest.clipPath : style.clipPath,
+  };
+  const progress = running[0]?.effect?.getComputedTiming().progress ?? 1;
+  const rest = restRect(popup);
+  const ghost = popup.cloneNode(true) as HTMLElement;
+  // A copy for the eye only: no ids twice in the page, nothing to focus or announce, none of the dialog's hooks.
+  for (const element of [ghost, ...ghost.querySelectorAll("[id]")]) element.removeAttribute("id");
+  for (const name of ["data-app-modal", "data-task-window", "data-starting-style", "data-ending-style", "role"])
+    ghost.removeAttribute(name);
+  ghost.setAttribute("aria-hidden", "true");
+  ghost.inert = true;
+  Object.assign(ghost.style, {
+    position: "fixed",
+    left: `${rest.left}px`,
+    top: `${rest.top}px`,
+    width: `${rest.width}px`,
+    height: `${rest.height}px`,
+    maxWidth: "none",
+    maxHeight: "none",
+    margin: "0",
+    zIndex: "60",
+    pointerEvents: "none",
+    transition: "none",
+  });
+  document.documentElement.dataset.taskDocking = "";
+  document.body.append(ghost);
+  // The copy starts scrolled to the top; give it the window's scroll positions.
+  const viewports = popup.querySelectorAll<HTMLElement>("[data-slot=scroll-area-viewport]");
+  ghost.querySelectorAll<HTMLElement>("[data-slot=scroll-area-viewport]").forEach((viewport, i) => {
+    viewport.scrollTop = viewports[i]?.scrollTop ?? 0;
+  });
+  for (const animation of running) animation.cancel();
+  // The window itself goes now: hidden at once, so the dialog closes and the task docks under the copy.
+  popup.animate([{ opacity: 0 }, { opacity: 0 }], { duration: 1, fill: "forwards", id: ZOOM_ID });
+  const moveMs = turnDurationMs(duration, progress);
+  const revealMs = Math.round(duration * REVEAL_SCALE);
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    window.clearTimeout(timeout);
+    ghost.remove();
+    revealPanel(revealMs);
+  };
+  const timeout = window.setTimeout(finish, 3 * (moveMs + revealMs) + GHOST_GRACE_MS);
+  for (const child of ghost.children) {
+    child.animate([{ opacity: 1 }, { opacity: 0, offset: GHOST_FADE_END }, { opacity: 0 }], {
+      duration: moveMs,
+      fill: "forwards",
+    });
+  }
+  ghost.animate(
+    [
+      { borderColor: style.borderTopColor, boxShadow: style.boxShadow },
+      { borderColor: "transparent", boxShadow: "none", offset: GHOST_EDGE_END },
+      { borderColor: "transparent", boxShadow: "none" },
+    ],
+    { duration: moveMs, fill: "forwards" },
+  );
+  ghost
+    .animate([from, { transform: frames.source.transform, clipPath: frames.source.clipPath }], {
+      duration: moveMs,
+      easing: ZOOM_EASING,
+      fill: "forwards",
+    })
+    .finished.then(finish, finish);
 }

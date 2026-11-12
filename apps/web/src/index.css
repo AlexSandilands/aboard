@@ -1843,3 +1843,9 @@ code {
   max-width: 24rem;
   overflow-wrap: anywhere;
 }
+
+/* Docking the task window (lib/windowZoom.ts, dockGhost): the panel's contents stay hidden under the window's copy
+   until it lands, then fade in from the top down. */
+html[data-task-docking] [data-panel-contents] > * {
+  opacity: 0;
+}

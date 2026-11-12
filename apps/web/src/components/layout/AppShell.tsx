@@ -20,7 +20,7 @@ import { AppSidebar } from "~/components/sidebar/AppSidebar";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail, useSidebar } from "~/components/ui/sidebar";
 import { queryKeys, useBoardEvents } from "~/state/queries";
 import { anyDialogOpen, type DeletableTask, useDialogs, usePalette } from "~/state/ui";
-import { closeTaskWindow } from "~/components/task/TaskWindow";
+import { closeTaskWindow, dockTaskWindow } from "~/components/task/TaskWindow";
 import { closeAppWindow } from "./AppRouteModal";
 import { isAppModalPath } from "./appModal.logic";
 import { IS_MAC, isEditableTarget, isInsidePopup, isRecordingShortcut } from "./keyboard";
@@ -168,7 +168,7 @@ function GlobalKeybindings({
         return;
       case "panel.expand":
         // The window animates out before the task docks (see TaskWindow).
-        if (expanded) closeAppWindow();
+        if (expanded) dockTaskWindow();
         else void setExpanded(true);
         return;
       case "task.delete": {

@@ -273,14 +273,27 @@ Only the task window: Settings and Stats have no source and keep the fade. The c
   the record when it mounts. A double-click's first click opens the panel, so `Board` remembers whether the panel was
   open before it and passes `from: "card"` when it wasn't. A window that is restored (on load, or coming back from
   behind Settings) has no record and fades in.
-- **Leaving.** Docking (Esc, the dock button, `f`, the backdrop) shrinks the window into the aside. Closing the task
+- **Leaving.** Docking (the dock button, `f`, and Esc or the backdrop when the task came from the panel) moves the
+  window onto the aside (below). Without an aside behind it (the task came from the board) it fades. Closing the task
   (**×**, `panel.toggle`, a delete) shrinks it onto the card when at least half of the card is on screen
   (`visibleSource`); scrolled away, collapsed or filtered out, the window fades as before.
 - **Technique.** A FLIP on the dialog's popup: it is laid out at rest and animated with the Web Animations API from a
-  `translate` and `scale` that put it on the source (`zoomTransform`), with the border radius divided by the scale so
-  the corners look like the source's. Only `transform`, `opacity` and the radius animate. From a card the window fades
-  in over the first quarter of the distance and, going back, fades out over the last 15%; over the panel it stays
-  solid, covering the placeholder. The keyframes name `opacity` and `scale` at both ends, so the fade's own
+  transform that puts it on the source. From a card that is a `translate` and `scale` (`zoomTransform`), with the
+  border radius divided by the scale so the corners look like the source's; the window fades in over the first quarter
+  of the distance and, going back, fades out over the last 15%, so the squash of a small card never shows. Over the
+  panel it doesn't scale: the panel is about the window's height and a third of its width, so a scaled window landed
+  as a frame of stretched text. It moves its top-left corner onto the panel's and is cropped to the panel's size with a
+  `clip-path: inset()` (`cropTransform`, `cropClipCss`), so it lands at the size the panel shows it, and it stays
+  solid. Going there, the panel can only show the task once the window has gone (one live panel), so a window landing
+  on it would swap for the panel's own layout in a frame and its contents be seen settling. So docking hands over to
+  an inert copy (`dockGhost`: ids, roles and the dialog's attributes stripped, scroll positions copied) and the window
+  goes at once, so the task docks under the copy. The copy's contents fade out over the first 60% of its move, and its
+  border and shadow over the first 25% (its grey edge would otherwise cut through the panel as it lands), so it
+  lands on the panel as an empty surface; the panel's contents stay hidden meanwhile (`data-task-docking` on `<html>`,
+  `index.css`), then the copy goes and they fade in from the top down, all at once (`revealPanel`: a sliding
+  `mask-image` gradient on `[data-panel-contents]` over 1.2× the zoom, the aside taking its colour so the board
+  doesn't show through). A timer undoes the copy and the hiding if the animations never end. The clip at rest reaches past the window by its shadow's size, since a clip only
+  animates to another `inset()`. The keyframes name `opacity` and `scale` at both ends, so the fade's own
   `data-starting-style` and `data-ending-style` transition doesn't show through.
 - **Speed and curve.** Twice Panel animations (`zoomDurationMs`: 150 ms gives 300 ms), on `ZOOM_EASING`, the slide's
   `cubic-bezier(0.2, 0.9, 0.25, 1)`, both ways. Chosen from frames in headless Chromium at 100, 150 and 300 ms; nobody

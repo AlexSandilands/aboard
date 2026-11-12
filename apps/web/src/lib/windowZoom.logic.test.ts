@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  cropClipCss,
+  cropTransform,
   freshSource,
   radiusCss,
   transformCss,
@@ -85,5 +87,28 @@ describe("turnDurationMs", () => {
   it("is the share already covered when turning around, but never a jump", () => {
     expect(turnDurationMs(300, 0.7)).toBe(210);
     expect(turnDurationMs(300, 0.05)).toBe(120);
+  });
+});
+
+describe("cropTransform", () => {
+  const window = rect(200, 100, 1200, 800);
+
+  it("moves the window's corner onto the panel's and crops it to the panel's size, unscaled", () => {
+    expect(cropTransform(rect(1100, 40, 480, 760), window)).toEqual({ dx: 900, dy: -60, right: 720, bottom: 40 });
+  });
+
+  it("crops nothing on a side where the panel is larger than the window", () => {
+    expect(cropTransform(rect(1100, 0, 480, 1000), window)).toMatchObject({ right: 720, bottom: 0 });
+  });
+
+  it("gives none without a box", () => {
+    expect(cropTransform(rect(0, 0, 0, 0), window)).toBeNull();
+  });
+});
+
+describe("cropClipCss", () => {
+  it("insets the right and bottom, and grows past the box by the outset at rest", () => {
+    expect(cropClipCss({ right: 720, bottom: 40 }, 0)).toBe("inset(0px 720px 40px 0px round 0px)");
+    expect(cropClipCss({ right: 0, bottom: 0 }, 16, 64)).toBe("inset(-64px -64px -64px -64px round 16px)");
   });
 });

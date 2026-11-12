@@ -342,14 +342,22 @@ task drops it (`withClosedTask`).
   (`useDoubleClickOutsideCards`) catches it there. Alt+click opens the window in one step; an Alt or repeated press
   starts no drag and selects no text (`isWindowPress`). Shift is left alone: holding it shows the full dependency
   chains. Some Linux window managers take Alt+click; double-click, the menu and `f` cover them.
-- **Closing.** Esc (the `back` shortcut: `AppFrame` closes the window before the task), the dock button, `f`, a press
-  on the backdrop and the browser's Back dock the task again; a second Esc closes it. The window's **×**, a delete and
-  `panel.toggle` close the task (`closeTaskWindow`). Docking and closing play the window's out-animation first, then navigate. `j` (`task.reveal`) docks and jumps
+- **Closing.** The dock button, `f` (`dockTaskWindow`) and the browser's Back dock the task again. Esc (the `back`
+  shortcut: `AppFrame` closes the window before the task) and a press on the backdrop go back to how the board was
+  when the window opened (`taskHomeIsPanel` in `lib/windowZoom.ts`, recorded with the window's source in
+  `noteWindowSource`): with the docked panel open (a click then `f`, the expand button, Open in window from a card
+  while a panel shows) the task docks, and a second Esc closes it; with no panel open (Alt+click, a double-click,
+  whose first click counts as before it, Open in window on a bare board) the window closes onto the card, and the task
+  has no panel behind its window either (`AppLayout`), so the board is at full width under it. A `#N` link followed
+  in the window inherits its record (`noteTaskOpened`); docking makes the panel the task's home, and a URL restored
+  on load has no record and docks. The window's **×**, a delete and `panel.toggle` close the task (`closeTaskWindow`). Docking and closing play the window's out-animation first, then navigate. `j` (`task.reveal`) docks and jumps
   to the card.
 - **Zoom.** The window grows out of the docked panel when that is open, otherwise out of the task's card, and shrinks
   back into the panel when it docks or onto the card when the task closes; with the card off screen it fades. It is
   the **Zoom windows from their source** setting ([appearance.md](appearance.md#window-zoom)). A task opened straight
   into the window starts no board transition: the board is at its new width at once, under the window.
+  The two-column switch measures the window's layout width (`offsetWidth`), not its box on screen: the window mounts
+  transformed onto its source, and a transform fires no resize, so the box would keep it one column.
 - **One live panel.** `TaskPanelContent` renders in the window or in the docked aside, never both: it runs things
   once per task (`useTaskView`'s PR ping, the plan editor request). The aside stays mounted at its width with a
   placeholder, so the board doesn't reflow, and doesn't slide when the window opens or docks; a task opened straight

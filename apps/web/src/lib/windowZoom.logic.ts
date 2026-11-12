@@ -90,6 +90,40 @@ export function transformCss(transform: ZoomTransform): string {
 }
 
 /**
+ * Docking and undocking: the window moves onto the panel and is cropped to its box, at its real size. Scaled instead,
+ * it lands squashed to the panel's narrow, tall shape, a frame of stretched text before the panel takes over.
+ */
+export interface CropTransform {
+  /** How far the window's top-left corner moves to sit on the source's, in px. */
+  dx: number;
+  dy: number;
+  /** How much of the window's right and bottom is cut off, so what shows is the source's size. */
+  right: number;
+  bottom: number;
+}
+
+/** The move and crop that put the window at rest, `target`, onto `source` at its own size; null with no box. */
+export function cropTransform(source: ZoomRect, target: ZoomRect): CropTransform | null {
+  if (target.width <= 0 || target.height <= 0 || source.width <= 0 || source.height <= 0) return null;
+  return {
+    dx: source.left - target.left,
+    dy: source.top - target.top,
+    // A source larger than the window on a side (the panel is often taller) crops nothing there.
+    right: Math.max(0, target.width - source.width),
+    bottom: Math.max(0, target.height - source.height),
+  };
+}
+
+/**
+ * The crop's clip path. `outset` grows the clip past the window's box on every side, so at rest it doesn't cut off
+ * the window's shadow (a clip can only animate to another inset(), not to none).
+ */
+export function cropClipCss(crop: Pick<CropTransform, "right" | "bottom">, radius: number, outset = 0): string {
+  const edge = (value: number) => `${round(value - outset)}px`;
+  return `inset(${edge(0)} ${edge(crop.right)} ${edge(crop.bottom)} ${edge(0)} round ${round(radius)}px)`;
+}
+
+/**
  * The window's border radius while it sits on its source, so its corners look like the source's (`radius` px): the
  * transform scales the corners with everything else, so the radius is divided by the scale on each axis.
  */

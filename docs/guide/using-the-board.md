@@ -271,7 +271,7 @@ To choose what goes in the wide column and what goes beside it, open **Customize
 and drag a section from one list to the other, or use the arrow button on its row. A section beside the main column
 reads at panel size. Move every section to one side and the window shows a single column. **Reset** puts them back.
 
-`Esc`, the dock button, `F` or a click outside the window docks the task back in the side panel; `Esc` again closes it.
+The dock button or `F` docks the task in the side panel. `Esc` or a click outside the window puts things back as they were when you opened it: if the side panel was open, the task docks there (`Esc` again closes it); if no panel was open, the window closes back onto its card.
 The window's **×** closes the task. Some Linux desktops take Alt+click for moving windows; double-click and `F` work
 there.
 
@@ -298,7 +298,7 @@ Manual, with the card where you dropped it.
 | `Ctrl/Cmd ,` | [Settings](settings.md) |
 | `N`          | New task             |
 | `J`          | Jump to the open task's card on the board |
-| `Esc`        | Dock the task window, close the task panel, or close Settings or Stats |
+| `Esc`        | Leave the task window (back to the panel or the board), close the task panel, or close Settings or Stats |
 | `F`          | Open the task in a window, or dock it again |
 | `Ctrl/Cmd B` | Show or hide the sidebar |
 | `Ctrl/Cmd Alt B` | Close the task panel, or reopen the last task |
