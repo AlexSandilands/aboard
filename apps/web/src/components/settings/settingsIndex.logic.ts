@@ -323,8 +323,8 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "tasks.planning.skill",
     "Planning skill",
-    "What a session started with Plan tasks… follows to plan the picked tasks with you. A project can pick one of its own.",
-    ["plan tasks", "bulk planning", "planner", "prompt", "skill", "project", "per project", "override"],
+    "What a session started with Plan tasks… follows to plan the picked tasks with you. A project can pick one of its own under Projects.",
+    ["plan tasks", "bulk planning", "planner", "prompt", "skill"],
   ),
   // Tasks › Review
   draft(
@@ -336,8 +336,8 @@ const WRITTEN: ReadonlyArray<Draft> = [
   draft(
     "tasks.review.skill",
     "Review skill",
-    "What the reviewer follows. Skills installed for Claude Code, Copilot or Codex are listed. A project can pick one of its own.",
-    ["local review", "reviewer", "prompt", "skill", "project", "per project", "override"],
+    "What the reviewer follows. Skills installed for Claude Code, Copilot or Codex are listed. A project can pick one of its own under Projects.",
+    ["local review", "reviewer", "prompt", "skill"],
   ),
   draft(
     "tasks.review.rounds",
@@ -651,6 +651,24 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "link",
   ]),
   draft(
+    "project.overrides.plan-skill",
+    "Project's planning skill",
+    "The skill a Plan tasks… session in this project follows instead of the board's: one of its folder's, or yours.",
+    ["plan tasks", "planner", "skill", "per project", "override"],
+  ),
+  draft(
+    "project.overrides.review-skill",
+    "Project's review skill",
+    "The skill the reviewer of this project's tasks follows instead of the board's: one of its folder's, or yours.",
+    ["local review", "reviewer", "skill", "per project", "override"],
+  ),
+  draft(
+    "project.overrides.reviewer",
+    "Project's reviewer model",
+    "The model that reviews this project's tasks, for the reviewer subagent and the board reviewer, instead of the board's.",
+    ["model", "reviewer", "board reviewer", "per project", "override"],
+  ),
+  draft(
     "project.danger-zone.archive",
     "Archive project",
     "Hides the lane and its tasks. Restore it any time from Board settings.",
@@ -735,8 +753,7 @@ function generated(): Draft[] {
           "effort",
           "resolves to",
           group.title.toLowerCase(),
-          // A project can pick its own reviewer, in project scope.
-          ...(op === "reviewer" ? ["project", "per project", "override", "board reviewer"] : []),
+          ...(op === "reviewer" ? ["board reviewer"] : []),
         ]),
       ),
     ),

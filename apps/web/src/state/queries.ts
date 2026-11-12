@@ -45,6 +45,7 @@ import { followupEpicBranch } from "~/components/handoff/handoff.logic";
 import { deliverNotification } from "~/components/notifications/delivery";
 import { withCreated } from "~/components/notifications/notifications.logic";
 import { agentClisOf, withT3Status } from "~/components/settings/providers.logic";
+import { overridingProjects, type ProjectOverrideField } from "~/components/settings/settingsScope.logic";
 import { ApiError, api, eventsUrl } from "~/lib/api";
 import { snapshotCardRects } from "~/components/board/cardMotion";
 import { applyBoardEvent, eventMovesCards } from "./boardReducer";
@@ -221,6 +222,14 @@ const boardQuery = {
 /** The board's project ids in lane order; re-renders only when they change. */
 export function useProjectIds(): ReadonlyArray<string> | undefined {
   return useQuery({ ...boardQuery, select: (board) => board.projects.map((p) => p.id) }).data;
+}
+
+const NO_PROJECTS: never[] = [];
+
+/** The live projects that set their own value for a field over the board's; re-renders only when they change. */
+export function useOverridingProjects(field: ProjectOverrideField): ReadonlyArray<BoardSnapshot["projects"][number]> {
+  const select = useCallback((board: BoardSnapshot) => overridingProjects(board.projects, field), [field]);
+  return useQuery({ ...boardQuery, select }).data ?? NO_PROJECTS;
 }
 
 /** Pause and the runs in flight, from the board snapshot; re-renders only when they change. */

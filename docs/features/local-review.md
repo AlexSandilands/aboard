@@ -80,7 +80,7 @@ The reviewer subagent and the board reviewer are two operations (`reviewer`, `bo
 [Autopilot's Models](autopilot.md#models)), each with a `ModelChoice` (a tier, a custom model, a model typed for one
 provider, or inherit). The nearest level wins: the task (Automation → Reviewer in the task panel, or
 `update_task(reviewModel)`: a tier, a custom model's id, `provider:model`, or `null` to inherit), then the project
-(Settings → Agents → Operations → Reviewer in the project's scope, `agents.operations.reviewer`), then the board (`operationModels.reviewer` and
+(Settings → Projects → This project's overrides, `project.overrides.reviewer`), then the board (`operationModels.reviewer` and
 `.boardReviewer`, each its own row under Settings → Agents → Operations; Tasks → Review shows what they resolve to
 with a link there), then the operation's default. The task and
 project overrides apply to both reviewers.
@@ -104,7 +104,7 @@ The reviewer follows a skill:
   is included in the brief, so it works from the packaged app with nothing installed.
   `skills/aboard-review/SKILL.md` is the same text as an installable skill; a test keeps the two identical.
 - **Any SKILL.md on disk.** The settings list skills from `~/.claude/skills`, `~/.copilot/skills`,
-  `~/.codex/skills` and `~/.agents/skills`. A project can pick one of its own (Tasks › Review in its scope), from its
+  `~/.codex/skills` and `~/.agents/skills`. A project can pick one of its own (Projects › This project's overrides), from its
   `.claude/skills`, `.github/skills` or `.agents/skills` folder. The brief then names the skill and its
   absolute path, so a harness that doesn't have it installed can still read it.
 

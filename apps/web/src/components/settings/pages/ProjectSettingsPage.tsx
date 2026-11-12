@@ -16,10 +16,20 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/
 import { Input } from "~/components/ui/input";
 import { toastManager } from "~/components/ui/toast";
 import { useDeleteProject, useUpdateProject } from "~/state/mutations";
-import { useBoard } from "~/state/queries";
+import { useBoard, useSettings } from "~/state/queries";
+import { ProjectReviewerRow } from "../agents/OperationsSection";
 import { FolderPicker } from "../FolderPicker";
+import { ProjectPlanSkillRow } from "../PlanSkillSection";
+import { ProjectReviewSkillRow } from "../ReviewSettingsSection";
 import { useSettingsScope } from "../SettingsScope";
-import { SettingsGroup, SettingsLink, SettingsRow, SettingsSection, SettingsSubsection } from "../settingsLayout";
+import {
+  SettingsGroup,
+  SettingsLink,
+  SettingsNote,
+  SettingsRow,
+  SettingsSection,
+  SettingsSubsection,
+} from "../settingsLayout";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
 import { useUnarchiveProject } from "../useArchivedProjects";
 
@@ -31,9 +41,8 @@ const ProjectIconPickerDialog = lazy(() =>
 );
 
 /**
- * Settings → Project: the project chosen in the scope sentence, itself (name, icon, folder) and its danger zone. Its
- * other settings are where the board's are, on Tasks, Agents and Autopilot in the same scope. With All projects
- * chosen it asks for one.
+ * Settings → Projects: the project chosen in the scope sentence, itself (name, icon, folder), the settings it sets over
+ * the board's, and its danger zone. With All projects chosen it asks for one.
  */
 export function ProjectSettingsPage() {
   const board = useBoard();
@@ -59,8 +68,8 @@ export function ProjectSettingsPage() {
                 </EmptyMedia>
                 <EmptyTitle>Choose a project</EmptyTitle>
                 <EmptyDescription>
-                  Pick one in &ldquo;Applying settings for&rdquo; above to rename it, change its icon or folder, or
-                  archive it. Archived projects are under{" "}
+                  Pick one in &ldquo;Settings for&rdquo; above to rename it, change its icon or folder, give it skills
+                  or a reviewer of its own, or archive it. Archived projects are under{" "}
                   <SettingsLink to="board.data.archived-projects">Board › Data</SettingsLink>.
                 </EmptyDescription>
               </EmptyHeader>
@@ -85,6 +94,7 @@ function ProjectSections({ project }: { project: Project }) {
   const [browsing, setBrowsing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const board = useBoard();
+  const settings = useSettings().data;
   const taskCount = board.data?.tasks.filter((t) => t.projectId === project.id).length ?? 0;
   // After archiving or deleting, the scope goes back to All projects.
   const clearProject = () => setScope(null);
@@ -117,7 +127,7 @@ function ProjectSections({ project }: { project: Project }) {
 
   return (
     <>
-      <SettingsSubsection id="project.general" scope="any">
+      <SettingsSubsection id="project.general">
         <SettingsSection id="project.general.settings" title="General">
           <SettingsRow
             id="project.general.name"
@@ -218,7 +228,20 @@ function ProjectSections({ project }: { project: Project }) {
           />
         </SettingsSection>
       </SettingsSubsection>
-      <SettingsSubsection id="project.danger-zone" scope="any">
+      <SettingsSubsection id="project.overrides">
+        <SettingsSection id="project.overrides.settings" title="This project's overrides">
+          {settings ? (
+            <>
+              <ProjectPlanSkillRow project={project} settings={settings} />
+              <ProjectReviewSkillRow project={project} settings={settings} />
+              <ProjectReviewerRow project={project} />
+            </>
+          ) : (
+            <SettingsNote>Loading settings...</SettingsNote>
+          )}
+        </SettingsSection>
+      </SettingsSubsection>
+      <SettingsSubsection id="project.danger-zone">
         <SettingsSection id="project.danger-zone.settings" title="Danger zone">
           <SettingsRow
             id="project.danger-zone.archive"

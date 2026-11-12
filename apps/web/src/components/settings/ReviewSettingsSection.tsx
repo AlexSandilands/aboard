@@ -1,12 +1,12 @@
-import { reviewSkillName, type AppSettings, type ReviewSkillRef } from "@repo/contracts";
+import { reviewSkillName, type AppSettings, type Project, type ReviewSkillRef } from "@repo/contracts";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { skillKey, skillOptions, type SkillOption } from "~/components/review/review.logic";
 import { useUpdateProject, useUpdateSettings } from "~/state/mutations";
-import { useSkills } from "~/state/queries";
+import { useOverridingProjects, useSkills } from "~/state/queries";
 import { HeadlessReviewerRows } from "./HeadlessReviewerRows";
 import { OperationModelLink } from "./OperationModelLink";
-import { useRowScope } from "./SettingsScope";
+import { OverriddenInProjects } from "./SettingsScope";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 
 const ROUND_LIMITS = [1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: `${n} round${n === 1 ? "" : "s"}` }));
@@ -50,26 +50,13 @@ export function ReviewSkillSelect({
   );
 }
 
-/**
- * Local review settings. In project scope only the skill is the project's own (one of its folder's skills, or the
- * user's); the rest are board-wide.
- */
+/** Local review settings, board-wide. A project can pick its own review skill under Projects. */
 export function ReviewSettingsSection({ settings }: { settings: AppSettings }) {
   const updateSettings = useUpdateSettings();
-  const updateProject = useUpdateProject();
-  const { project } = useRowScope();
-  // The board's skill can't come from one project's folder, so All projects lists only the user's.
-  const skills = useSkills(project?.id ?? null).data ?? [];
-  const skillControl = project ? (
-    <ReviewSkillSelect
-      ariaLabel={`Review skill for ${project.title}`}
-      options={skillOptions(skills, project.reviewSkill, {
-        inheritLabel: `Board's (${reviewSkillName(settings.reviewSkill)})`,
-      })}
-      value={project.reviewSkill}
-      onChange={(reviewSkill) => updateProject.mutate({ id: project.id, reviewSkill })}
-    />
-  ) : (
+  // The board's skill can't come from one project's folder, so only the user's are listed.
+  const skills = useSkills(null).data ?? [];
+  const overriding = useOverridingProjects("reviewSkill");
+  const skillControl = (
     <ReviewSkillSelect
       ariaLabel="Review skill"
       options={skillOptions(
@@ -99,25 +86,13 @@ export function ReviewSettingsSection({ settings }: { settings: AppSettings }) {
       />
       <SettingsRow
         id="tasks.review.skill"
-        scope="project"
         title="Review skill"
-        description={
-          project && !project.workspaceRoot
-            ? "Set the project's workspace folder to pick one of its own skills."
-            : "What the reviewer follows."
-        }
-        info={
-          project
-            ? "The project's own skills (in its .claude/skills, .github/skills or .agents/skills folders) are listed first."
-            : "Skills installed for Claude Code, Copilot or Codex are listed. Choose a project above to give it one of its own."
-        }
-        override={
-          project?.reviewSkill
-            ? {
-                label: "review skill",
-                onReset: () => updateProject.mutate({ id: project.id, reviewSkill: null }),
-              }
-            : null
+        description="What the reviewer follows."
+        info="Skills installed for Claude Code, Copilot or Codex are listed. A project can pick one of its own under Projects."
+        status={
+          overriding.length > 0 ? (
+            <OverriddenInProjects projects={overriding} target="project.overrides.review-skill" />
+          ) : null
         }
         control={skillControl}
       />
@@ -149,5 +124,38 @@ export function ReviewSettingsSection({ settings }: { settings: AppSettings }) {
       <OperationModelLink ops={["reviewer", "boardReviewer"]} settings={settings} />
       <HeadlessReviewerRows settings={settings} />
     </SettingsSection>
+  );
+}
+
+/** Projects › overrides: the project's review skill, one of its folder's or the user's, which beats the board's. */
+export function ProjectReviewSkillRow({ project, settings }: { project: Project; settings: AppSettings }) {
+  const updateProject = useUpdateProject();
+  const skills = useSkills(project.id).data ?? [];
+  return (
+    <SettingsRow
+      id="project.overrides.review-skill"
+      title="Review skill"
+      description={
+        project.workspaceRoot
+          ? "What the reviewer of this project's tasks follows."
+          : "Set the project's workspace folder to pick one of its own skills."
+      }
+      info="The project's own skills (in its .claude/skills, .github/skills or .agents/skills folders) are listed first."
+      override={
+        project.reviewSkill
+          ? { label: "review skill", onReset: () => updateProject.mutate({ id: project.id, reviewSkill: null }) }
+          : null
+      }
+      control={
+        <ReviewSkillSelect
+          ariaLabel={`Review skill for ${project.title}`}
+          options={skillOptions(skills, project.reviewSkill, {
+            inheritLabel: `Board's (${reviewSkillName(settings.reviewSkill)})`,
+          })}
+          value={project.reviewSkill}
+          onChange={(reviewSkill) => updateProject.mutate({ id: project.id, reviewSkill })}
+        />
+      }
+    />
   );
 }

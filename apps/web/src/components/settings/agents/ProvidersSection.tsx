@@ -35,8 +35,6 @@ import {
 } from "../providers.logic";
 import { SettingsGroup, SettingsSectionHeader, SettingsSubsection, StatusDot } from "../settingsLayout";
 import { DetailBody, DetailHeader, SplitCard, SplitList, SplitListAction, SplitListItem } from "./SplitCard";
-import { useScopeParam } from "~/components/settings/SettingsScope";
-import { scopeSearch } from "~/components/settings/settingsScope.logic";
 
 export function ProvidersSection({ settings }: { settings: ProviderEditorSettings }) {
   const providers = useProviders();
@@ -44,7 +42,6 @@ export function ProvidersSection({ settings }: { settings: ProviderEditorSetting
   const t3 = useIntegrationsStatus().data?.t3;
   const updateProviders = useUpdateProviders();
   const navigate = useNavigate();
-  const scope = scopeSearch(useScopeParam());
   const requested = useSearch({ strict: false, select: (search) => search.provider });
   const [adding, setAdding] = useState(false);
   const [confirm, setConfirm] = useState<{ id: ProviderId; action: "disable" | "remove" } | null>(null);
@@ -53,12 +50,7 @@ export function ProvidersSection({ settings }: { settings: ProviderEditorSetting
   const selected = selectedProvider(added, requested);
   const statusOf = (id: ProviderId) => providers.data?.providers.find((p) => p.id === id);
   const select = (id: ProviderId) =>
-    void navigate({
-      to: "/settings/$group",
-      params: { group: "agents" },
-      search: { ...scope, provider: id },
-      replace: true,
-    });
+    void navigate({ to: "/settings/$group", params: { group: "agents" }, search: { provider: id }, replace: true });
   // Each change is applied to the latest list, edits not yet saved included (useUpdateProviders), not to this render's.
   const save = (change: (current: AppSettings["providers"]) => AppSettings["providers"]) =>
     updateProviders.mutate(change);

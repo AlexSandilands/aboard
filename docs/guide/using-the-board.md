@@ -256,7 +256,7 @@ ones one at a time, and saves each plan with its suggested model and labels. The
 task, and runs in the project's own folder since planning writes no code.
 
 The agent follows the built-in planning skill. To use one of your own, pick it under **Settings → Tasks → Planning**,
-or for one project by choosing it in **Applying settings for** at the top of that page.
+or for one project under **Settings → Projects → This project's overrides**.
 
 ## The task window
 

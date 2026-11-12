@@ -481,8 +481,8 @@ effectively off, and dropped its settings rows.
   changes, so slots from before that aren't caught up. The same goes for Pause all: when it is lifted,
   `AutopilotService` calls `onEnabled` for every project and the rules restart from now (`recurring.restart`). Only
   downtime of the board itself catches up.
-- Rules are managed in the Recurring tasks detail in Settings → Autopilot (`components/recurring/`); in a project's
-  scope it lists that project's rules and offers example rules: adding one creates a template for the project (reusing one of the same name) and the rule. The
+- Rules are managed in the Recurring tasks detail in Settings → Autopilot (`components/recurring/`); with a project
+  picked in its own menu (local state, not the URL) it lists that project's rules and offers example rules: adding one creates a template for the project (reusing one of the same name) and the rule. The
   Recurring tasks row in Settings → Autopilot has no switch (`alwaysOn` hides it, and `scopeAutomations` leaves it out
   of the lane and epic popovers); its detail lists every project's rules (`RecurringRulesByProject`), each with its
   switch, next run, last task and a **New rule** for that project (`ProjectRuleRows`). The rule editor keeps its
@@ -1307,7 +1307,7 @@ most 50 per list; `automationVariables.ts` in contracts).
 
 - **Where they live.** The board's are the `automationVariables` setting (`PATCH /api/settings`, edited under **Settings →
   Autopilot → Limits & safety → Variables**); a project's overrides are `projects.variables_json` (migration 036,
-  `PATCH /api/projects/:id` with `variables`, edited under the project's Automations section). `effectiveVariables` lays
+  `PATCH /api/projects/:id` with `variables`, edited in the same section with the project picked in its menu). `effectiveVariables` lays
   the project's over the board's. Both writes publish `autopilot.changed`, since a row's "Needs" line depends on them.
 - **How they are read.** A prompt reads `{{vars.<name>}}`; a command, script or check reads `<PREFIX>_VAR_<NAME>`
   (`variableEnvName`) or stdin's `vars`. Like inputs they are filled in once and never read again for placeholders, and
@@ -2088,12 +2088,10 @@ tab's path. Orchestrate's **Countdown on lanes** (`showAutopilotTimer`, a per-br
 The fields are a form generated from the automation's `fields`: a switch, number, text, 24-hour time or select per
 field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is stored as a
 `ReviewSkillRef`, and an unset one is the built-in skill, labelled with the field's `builtinLabel` when it has one,
-such as the digest's own skill). The board's fields are edited in the detail, as above. With a project chosen in the
-settings scope sentence (`?project=`, see [board-layout.md](board-layout.md#the-settings-page)), each list row is
-`ProjectListRow`: **On here**, **Preview here** or **Off here** and a switch that writes `scopeToggle` for that project
-through `useApplyWhere`, the same writes as the lane's popover. The detail gains an **In <project>** section with the
-same switch. A project no longer has a form for its own config: a value already stored for a project still applies
-over the board's, so that section says the project sets its own and has **Clear own settings** (it saves the scope's config as empty, which the
+such as the digest's own skill). The board's fields are edited in the detail, as above; where an automation runs in
+each project is its **Where it runs** table. A project has no form for its own config: a value already stored for a
+project still applies over the board's, so the detail lists such projects under **Projects' own settings**
+(`ProjectsOwnSettings`), each with **Clear own settings** (it saves the scope's config as empty, which the
 server turns into removing the row when the mode is Inherit); nothing in the UI sets one. The lane and epic popovers are the widget's compact form (`WhereRow`, see
 [board-layout.md](board-layout.md#autopilot-on-the-board)). Config set at a scope is sent whole (the server replaces
 it), so editing one key sends the scope's other keys with it; the reset button beside a field's title (shown only
@@ -2208,7 +2206,7 @@ while the key is set at that scope) removes the key so it inherits.
 | `apps/server/src/autopilot/digestBuilder.ts`, `digestConfig.ts` | The plain digest's Markdown, and the automation's config |
 | `apps/server/src/services/digests.ts`, `db/repos/autopilotDigests.ts` | Collecting the period's activity, storing digests, the inbox notification |
 | `packages/contracts/src/digest.ts` | `Digest`, `dueDigestSlot` |
-| `apps/web/src/components/recurring/` | The rule rows (shared by the project page and Settings → Autopilot), editor and examples |
+| `apps/web/src/components/recurring/` | The rule rows in Settings → Autopilot (with their project picker), editor and examples |
 | `apps/server/src/http/routes/autopilot.ts` | The REST routes |
 | `packages/contracts/src/autopilotRunHistory.ts` | The run history's filter, query and page, and the delete's input, result and kept reasons |
 | `apps/server/src/db/migrations/034_autopilot_runs_automation_index.sql` | The index the history page's filter and paging read |

@@ -181,7 +181,7 @@ describe("settingsPaletteEntries", () => {
       "Settings: Agents",
       "Settings: Autopilot",
       "Settings: Integrations",
-      "Settings: Project",
+      "Settings: Projects",
     ]);
     const review = entries.find((e) => e.target === "tasks.review");
     expect(review).toMatchObject({ title: "Settings: Review", isGroup: false });
@@ -198,18 +198,18 @@ describe("settingsPaletteEntries", () => {
     expect(redirectSettingsTarget("tasks.review.model")).toBe("agents.operations.reviewer");
     expect(redirectSettingsTarget("tasks.new-tasks.import-model")).toBe("agents.operations.issueImport");
     expect(parseSettingsTarget("project.review-skill.model")).toEqual({
-      group: "agents",
-      anchor: "agents.operations.reviewer",
+      group: "project",
+      anchor: "project.overrides.reviewer",
     });
     expect(redirectSettingsTarget("tasks.review.rounds")).toBe("tasks.review.rounds");
   });
 
-  it("sends the project page's overrides to the rows they override", () => {
-    expect(redirectSettingsTarget("project.plan-skill.skill")).toBe("tasks.planning.skill");
-    expect(redirectSettingsTarget("project.plan-skill")).toBe("tasks.planning");
-    expect(redirectSettingsTarget("project.review-skill.skill")).toBe("tasks.review.skill");
-    expect(redirectSettingsTarget("project.models.reviewer")).toBe("agents.operations.reviewer");
-    expect(redirectSettingsTarget("project.models")).toBe("agents.operations.review");
+  it("sends the project page's old sections to its overrides", () => {
+    expect(redirectSettingsTarget("project.plan-skill.skill")).toBe("project.overrides.plan-skill");
+    expect(redirectSettingsTarget("project.plan-skill")).toBe("project.overrides");
+    expect(redirectSettingsTarget("project.review-skill.skill")).toBe("project.overrides.review-skill");
+    expect(redirectSettingsTarget("project.models.reviewer")).toBe("project.overrides.reviewer");
+    expect(redirectSettingsTarget("project.models")).toBe("project.overrides");
     expect(redirectSettingsTarget("project.autopilot.automations")).toBe("autopilot.automations");
     expect(redirectSettingsTarget("project.autopilot.variables.list")).toBe("autopilot.limits.variables.list");
     expect(redirectSettingsTarget("project.recurring")).toBe("autopilot.automations.recurring");
@@ -217,6 +217,22 @@ describe("settingsPaletteEntries", () => {
     // What stays on the project page doesn't move.
     expect(redirectSettingsTarget("project.general.name")).toBe("project.general.name");
     expect(redirectSettingsTarget("project.danger-zone")).toBe("project.danger-zone");
+  });
+
+  it("sends a board row a project overrides, in that project's scope, to the project's row", () => {
+    expect(redirectSettingsTarget("tasks.planning.skill", "p1")).toBe("project.overrides.plan-skill");
+    expect(redirectSettingsTarget("tasks.review.skill", "p1")).toBe("project.overrides.review-skill");
+    expect(redirectSettingsTarget("agents.operations.reviewer", "p1")).toBe("project.overrides.reviewer");
+    // Through an older move too.
+    expect(redirectSettingsTarget("tasks.review.model", "p1")).toBe("project.overrides.reviewer");
+    expect(parseSettingsTarget("tasks.planning.skill", "p1")).toEqual({
+      group: "project",
+      anchor: "project.overrides.plan-skill",
+    });
+    // Without a project they are the board's rows, and other rows stay where they are.
+    expect(redirectSettingsTarget("tasks.planning.skill")).toBe("tasks.planning.skill");
+    expect(redirectSettingsTarget("tasks.review.rounds", "p1")).toBe("tasks.review.rounds");
+    expect(redirectSettingsTarget("autopilot.limits.variables.list", "p1")).toBe("autopilot.limits.variables.list");
   });
 
   it("finds the Models section by the old names for its settings", () => {

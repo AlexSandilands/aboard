@@ -83,10 +83,9 @@ everywhere (clearing those projects' own On) or only for the board. Click a row 
   The longer explanation of a setting is behind the ⓘ by its name.
 
 The switch on each row turns the automation on or off for the board (there's nothing above the board to inherit from, so an
-automation you haven't switched on is off). Choose a project in **Applying settings for** at the top and the list shows
-each automation **On here**, **Preview here** or **Off here** in that project; its switch then turns it on or off there
-only, as the lane's pill does, and the automation's detail offers **Clear own settings** when the project sets some of
-them for itself. On a phone the list and an automation take turns: tap a row, and **All
+automation you haven't switched on is off). Where it runs in each project is set in the automation's detail, under
+**Where it runs**, or in the lane's pill. When a project sets some of an automation's settings for itself, the detail
+lists it under **Projects' own settings** with **Clear own settings**. On a phone the list and an automation take turns: tap a row, and **All
 automations** takes you back.
 
 **Recurring tasks** has no switch, in the list or in a lane's pill: each of its rules has its own, and its detail lists every
@@ -388,7 +387,7 @@ against the agent limits below.
 
 Orchestrate is in **Settings → Autopilot** like the others, under Ship work: its switch, **Every** and **Extra
 instructions**, and **All runs**, which opens its [run history](#run-history). What is per project is set in the
-lane's popover, or on this page with the project chosen at the top; its next check and **Run now** are in the lane's
+lane's popover, or under **Where it runs** in its detail; its next check and **Run now** are in the lane's
 popover (below).
 
 Orchestrate sits at the top of the lane's Autopilot popover, in a card of its own. It shows when the next check
