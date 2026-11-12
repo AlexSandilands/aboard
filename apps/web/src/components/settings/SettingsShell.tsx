@@ -30,6 +30,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "~/components/ui/sidebar";
+import { afterScroll, useScrollSpy } from "~/hooks/useScrollSpy";
 import { cn } from "~/lib/utils";
 import { useSettingsSelect } from "~/state/queries";
 import { useSuggestions } from "~/state/suggestions";
@@ -38,7 +39,6 @@ import { SettingsScopeSentence } from "./SettingsScope";
 import { SettingsSearch } from "./SettingsSearch";
 import type { SettingsIndexEntry } from "./settingsIndex.logic";
 import {
-  activeSectionId,
   isEditorPath,
   isSettingsGroup,
   sectionOf,
@@ -314,25 +314,6 @@ function flashElement(element: HTMLElement) {
   );
 }
 
-/** Runs `fn` once a smooth scroll in `area` has come to rest, or after a moment where `scrollend` isn't fired. */
-function afterScroll(area: HTMLElement, fn: () => void): () => void {
-  let done = false;
-  const run = () => {
-    if (done) return;
-    done = true;
-    clearTimeout(timer);
-    area.removeEventListener("scrollend", run);
-    fn();
-  };
-  const timer = setTimeout(run, 900);
-  area.addEventListener("scrollend", run);
-  return () => {
-    done = true;
-    clearTimeout(timer);
-    area.removeEventListener("scrollend", run);
-  };
-}
-
 /**
  * The element for a target id, or when it isn't rendered (a row that only shows in some states: the issue import's
  * model with import off) the nearest one that is, by dropping trailing `.segment`s: the card, then the sub-section.
@@ -367,35 +348,7 @@ export function SettingsScroller({ children, className }: { children: ReactNode;
   // Whether the URL hash (a reload, or a link from outside) has been brought into view.
   const hashDone = useRef(false);
 
-  useEffect(() => {
-    const area = ref.current;
-    if (!area) return;
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      const top = area.getBoundingClientRect().top;
-      const sections = Array.from(area.querySelectorAll<HTMLElement>("[data-settings-section]"), (element) => ({
-        id: element.dataset.settingsSection ?? "",
-        top: element.getBoundingClientRect().top - top,
-      }));
-      const atBottom = area.scrollTop > 0 && area.scrollTop + area.clientHeight >= area.scrollHeight - 2;
-      useSettingsNav.getState().setActiveSection(activeSectionId(sections, { atBottom }));
-    };
-    const schedule = () => {
-      if (!frame) frame = requestAnimationFrame(update);
-    };
-    area.addEventListener("scroll", schedule, { passive: true });
-    // Sections grow as their data loads, which moves the ones below without a scroll event.
-    const observer = new ResizeObserver(schedule);
-    if (area.firstElementChild) observer.observe(area.firstElementChild);
-    schedule();
-    return () => {
-      area.removeEventListener("scroll", schedule);
-      observer.disconnect();
-      cancelAnimationFrame(frame);
-      useSettingsNav.getState().setActiveSection(null);
-    };
-  }, []);
+  useScrollSpy(ref, "data-settings-section", (id) => useSettingsNav.getState().setActiveSection(id));
 
   useEffect(() => {
     const area = ref.current;
