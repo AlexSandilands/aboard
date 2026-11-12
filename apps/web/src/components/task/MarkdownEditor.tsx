@@ -20,6 +20,7 @@ export function MarkdownEditor({
   onCancel,
   placeholder,
   ariaLabel,
+  tall = false,
 }: {
   taskId: string;
   value: string;
@@ -27,6 +28,8 @@ export function MarkdownEditor({
   onCancel: () => void;
   placeholder?: string;
   ariaLabel: string;
+  /** A taller box, for the description and plan context in the task window. */
+  tall?: boolean;
 }) {
   const [draft, setDraft] = useState(value);
   // The draft as of now, for the async inserts and saves that would otherwise see an older render's.
@@ -57,6 +60,7 @@ export function MarkdownEditor({
       <MarkdownInput
         input={markdown.input}
         autoFocus
+        tall={tall}
         ariaLabel={ariaLabel}
         placeholder={placeholder}
         onFocus={() => {

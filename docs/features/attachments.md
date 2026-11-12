@@ -12,7 +12,9 @@ stored on the board and written into the text as a pill; agents get its file pat
 - **In the text:** a token, `![name](attachment:<id>)`. The editor ([rich-editor.md](rich-editor.md)) shows it as
   the same small pill with the name as rendered text does. Thumbnails of the images the text refers to sit under
   rendered text, and under the editor only when it falls back to a plain textarea (which shows the token). A click
-  on either opens the image in a preview dialog.
+  on either opens the image in a preview dialog. In the task window ([board-layout](board-layout.md#the-task-window))
+  the description and plan context show each image in place instead, at most the column's width
+  (`InlineAttachment`, falling back to the pill if it fails to load), and step screenshots get larger thumbnails.
 - **While it uploads:** the rich editor shows an "Uploading image…" pill (a node that writes no Markdown), swapped
   for the attachment pill when the upload is done. The swap stays out of the undo history, so one undo takes the
   image out. The textarea shows an `[uploading image N…]` placeholder instead. A failed upload removes either.
@@ -91,6 +93,6 @@ A row whose ids aren't ids is never turned into a path. See [backup.md](backup.m
 | `apps/server/src/db/migrations/024_task_attachments.sql` | The table                                                 |
 | `apps/server/src/services/backup/files.ts`           | Copying images into and out of a backup folder                |
 | `apps/web/src/lib/attachments.ts`, `.logic.ts`       | Shrinking before upload                                       |
-| `apps/web/src/components/attachments/`               | Paste hook, pill, thumbnails, preview dialog                  |
+| `apps/web/src/components/attachments/`               | Paste hook, pill, thumbnails, inline image, preview dialog    |
 | `apps/web/src/components/handoff/LaunchImages.tsx`   | The launch dialogs' images (`launchImages.logic.ts`)          |
 | `apps/web/src/components/editor/`                    | The editor's attachment and upload nodes                      |

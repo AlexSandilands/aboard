@@ -7,6 +7,30 @@ import { planTaskProblem, type TaskSummary } from "@repo/contracts";
 /** Whether a click toggles the card instead of opening it: Ctrl, or ⌘ on a Mac. */
 export const isPickClick = (event: { ctrlKey: boolean; metaKey: boolean }): boolean => event.ctrlKey || event.metaKey;
 
+/**
+ * How a click opens a card (and an epic's header, its card or a task row in it), when it isn't a pick:
+ * - `open`: a plain click (or Enter, whose click has no count) opens the docked panel at once.
+ * - `window`: Alt+click opens the task window in one step. Not Shift: holding Shift shows the full dependency chains.
+ * - `expand`: the second click of a double-click expands the task the first click opened. The board narrows as the
+ *   panel slides in, so that click can land on another card: it must not open that one.
+ * - `none`: a third click and beyond.
+ * Read from the click's count (`detail`), not a `dblclick`, so single clicks get no added delay.
+ */
+export type CardOpen = "open" | "window" | "expand" | "none";
+
+export function cardClickOpens(event?: { altKey: boolean; detail: number }): CardOpen {
+  if (!event) return "open";
+  if (event.altKey) return event.detail > 1 ? "none" : "window";
+  if (event.detail === 2) return "expand";
+  return event.detail > 2 ? "none" : "open";
+}
+
+/**
+ * Whether a press should keep the browser's default away: the second press of a double-click (and more) would select
+ * the card's text, and an Alt press opens the window rather than starting a drag.
+ */
+export const isWindowPress = (event: { altKey: boolean; detail: number }): boolean => event.altKey || event.detail > 1;
+
 /** Whether a planning session can take the task: the cards the lane's planning button and the picker count. */
 export const isPlannable = (task: TaskSummary): boolean => planTaskProblem(task) === null;
 

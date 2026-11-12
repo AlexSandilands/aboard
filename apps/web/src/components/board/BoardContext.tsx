@@ -6,8 +6,11 @@ import { createContext, use, type RefObject } from "react";
  * cards only re-render when their own task object or selection changes.
  */
 export interface BoardContextValue {
-  /** Opens the panel for a card the pointer is on, so the board stays where it is. */
-  openTask: (taskId: string) => void;
+  /**
+   * Opens the panel for a card the pointer is on, so the board stays where it is. Given the click, an Alt+click opens
+   * the task window and a double-click's second click expands the task the first opened (see `cardClickOpens`).
+   */
+  openTask: (taskId: string, click?: { altKey: boolean; detail: number }) => void;
   /** Opens the panel and scrolls the board to the task's card, for a link on a card that leads to another task. */
   revealTask: (taskId: string) => void;
   /** Opens the panel on the task with its plan editor open, for a card menu's Write plan. */

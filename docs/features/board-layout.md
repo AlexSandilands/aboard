@@ -1,6 +1,6 @@
 # Board and panel layout
 
-Board tasks: #54 (columns), #56 (panel sections), #58 (thread links on cards), #118 (Sessions section), #22 (priority lane), #207 (pinning it), #153 (sorting columns).
+Board tasks: #54 (columns), #56 (panel sections), #58 (thread links on cards), #118 (Sessions section), #22 (priority lane), #207 (pinning it), #153 (sorting columns), #149 (the task window).
 The filters and saved views are in [saved-views.md](saved-views.md).
 
 A board with many projects and a long Done column gets tall, and the task panel gets crowded. This doc
@@ -322,6 +322,57 @@ and the list ends with **Add link**; pasting a T3 thread there still works, and 
 
 Row labels in Links and Sessions (`PanelLabel`) are one line with an ellipsis. They clip on x (`overflow-x-clip`) instead of using `truncate`, whose `overflow: hidden` would turn the `overflow-y-visible` that keeps trimmed text from being cut into a scroll container. While a truncated label is hovered it pans to show its end, pauses, and jumps back (`label-pan` in `index.css`, distance from `labelPan` in `labelPan.logic.ts`); it stays still under `prefers-reduced-motion`.
 
+### The task window
+
+The open task can be shown in a large window over the board instead of the docked panel (`TaskWindow`, on the same
+`AppRouteModal` shell as the Settings and Stats windows; it isn't tied to a route). The state is the URL:
+`?task=<id>&expanded=true` on the board route (`BoardSearch.expanded`, not a filter param, so saved views don't hold
+it). It isn't a preference: a task opened normally is docked, and a `#N` link followed inside the window stays in the
+window (`withOpenTask` in `board/taskWindow.logic.ts`: an `expanded` left out keeps what the open task had). Closing the
+task drops it (`withClosedTask`).
+
+- **Ways in.** Double-click a card, Alt+click a card, **Open in window** in the shared task menu (the card's right-click
+  menu and the panel's More menu, epics included; in the window's own menu it reads **Dock to the side**), the expand
+  button at the end of the panel's top bar, and `panel.expand` (default `f`), a toggle for the open task. Nothing is
+  added to the card. The two pointer gestures sit beside the Ctrl/⌘ pick in `boardSelection.logic.ts`
+  (`cardClickOpens`): a plain click opens the docked panel at once, as before, and the second click of a double-click
+  (`event.detail === 2`, no `dblclick`, so single clicks wait for nothing) expands the task the *first* click opened
+  (Board remembers it by id), whichever card is under the pointer by then. While the board narrows for the panel its
+  View Transition snapshot takes that second click, which lands on `<html>`; a window listener in `Board`
+  (`useDoubleClickOutsideCards`) catches it there. Alt+click opens the window in one step; an Alt or repeated press
+  starts no drag and selects no text (`isWindowPress`). Shift is left alone: holding it shows the full dependency
+  chains. Some Linux window managers take Alt+click; double-click, the menu and `f` cover them.
+- **Closing.** Esc (the `back` shortcut: `AppFrame` closes the window before the task), the dock button, `f`, a press
+  on the backdrop and the browser's Back dock the task again; a second Esc closes it. The window's **×**, a delete and
+  `panel.toggle` close the task (`closeTaskWindow`). Docking and closing play the window's out-animation first, then navigate. `j` (`task.reveal`) docks and jumps
+  to the card.
+- **One live panel.** `TaskPanelContent` renders in the window or in the docked aside, never both: it runs things
+  once per task (`useTaskView`'s PR ping, the plan editor request). The aside stays mounted at its width with a
+  placeholder, so the board doesn't reflow, and doesn't slide when the window opens or docks; a task opened straight
+  into the window gets its aside in place, and one closed from the window doesn't slide a placeholder out. Moving
+  between them remounts the contents, so the body starts again at the top; a field being edited is blurred first
+  (and so saved) even when the window goes without closing, as on the browser's Back. Behind the
+  Settings or Stats window the task window steps aside (one window at a time) and its contents go back to the aside
+  until that window closes.
+- **Layout.** From a window width of 56rem (`TWO_COLUMNS_FROM` in `TaskPanel.tsx`, measured with a ResizeObserver) the
+  body is two columns: the title, callouts and where-it's-up-to (or an epic's tasks) then the main sections, and a
+  21rem properties rail. Which column a section sits in is fixed (`SECTION_COLUMNS` in `sections.logic.ts`: Plan,
+  Details and Activity in the main column, the rest in the rail); the saved order, hidden and collapsed choices apply
+  within each column, each column is its own drag list, and the **Customize sections** popover lists the two columns.
+  The rail stays in view while the main column scrolls, as long as it fits the window (`useRailFits`); a taller one
+  scrolls with the page. Narrower, it is one column in the panel's saved order, and full screen on phones.
+- **Reading size.** Parts that read larger ask `useTaskLayout()` (`task/taskLayout.ts`). The description and plan
+  context render `Markdown size="md"` (15px, a 72ch measure, a real heading scale, roomier code and tables:
+  `.markdown-md` in `index.css`) with pasted images in place ([attachments](attachments.md)), and their editors open
+  taller (`MarkdownInput tall`). Step notes are body size at an 80ch measure, with larger screenshot thumbnails.
+
+Fenced code blocks are syntax-highlighted wherever `Markdown` renders them, the docked panel included (`CodeBlock`):
+`codeBlock.logic.ts` maps the fence's language to a parser, and `codeHighlight.ts`, loaded on first use, parses with
+the CodeMirror languages the script editor already ships (JavaScript/TypeScript/JSX, JSON, Python, and legacy modes for
+shell, PowerShell, YAML, TOML, SQL, CSS, Go, Rust, diff, C-likes and Dockerfile) and maps highlight tags to `.tok-*`
+classes, coloured from theme tokens like the script editor. A block shows plain until the highlighter has loaded, and
+stays plain for any other language.
+
 ### Autopilot on the board
 
 Four things on the board show Autopilot, all from `BoardSnapshot.autopilot` (pause and the runs in flight,
@@ -409,7 +460,8 @@ inactive threads are dimmed.
 Right-click, the Menu key or Shift+F10 on a card (or an epic's header, in its band or as a finished epic's card) opens its menu: **Move to**
 (the statuses, through `useSetTaskStatus`, so the plan gate still opens the plan editor; not offered for an epic, whose
 status follows its tasks), the **Turn Autopilot / auto-merge / auto-review on / off** items (`AutomationMenuItems`;
-see below), then the panel's More menu without **Jump to card** (the card is in view; a click opens it). The two share their items (`TaskMenuItems` in `components/task`),
+see below), then the panel's More menu without **Jump to card** (the card is in view; a click opens it), which starts
+with **Open in window** ([the task window](#the-task-window)). The two share their items (`TaskMenuItems` in `components/task`),
 which take a `TaskSummary`, since a card has no more; **Save as template…** fetches the task's detail when picked
 (`fetchTaskDetail`). Pin toggles are the panel's only. `CardContextMenu` wraps the card in a `ContextMenu`
 (`components/ui/context-menu.tsx`, Base UI) whose trigger draws no box (`display: contents`) and whose items mount only
@@ -662,7 +714,7 @@ over a virtualised list (`LegendList` inside a Base UI `Combobox`), and an effor
 ### Keyboard shortcuts
 
 The app-wide shortcuts are a registry in `packages/contracts/src/keybindings.ts`: each command (`palette.open`,
-`idea.new`, `settings.open`, `back`, `task.reveal`, `sidebar.toggle`, `panel.toggle`, `task.delete`) has a title, a group, a default key and a default `when`. Shaped like T3
+`idea.new`, `settings.open`, `back`, `task.reveal`, `sidebar.toggle`, `panel.toggle`, `panel.expand`, `task.delete`) has a title, a group, a default key and a default `when`. Shaped like T3
 Code's keybindings: a command, a key and a `when`, and when several match a key event the later one wins.
 
 - **Keys.** `mod+k`, `shift+n`, `escape`: lowercase modifiers (`mod` is Cmd on macOS and Ctrl elsewhere, plus
@@ -678,7 +730,7 @@ Code's keybindings: a command, a key and a `when`, and when several match a key 
   (`isInsidePopup`) skips `[data-app-modal]`, and `dialogOpen` only counts the app dialogs, so the pages inside take
   shortcuts as a page does. `settingsOpen` is the Settings window, `panelOpen` is the task panel on the board (false
   while a window covers it), and `settings.open` in Settings closes the window (not from an editor sub-page). `panel.toggle` does nothing while a
-  window is open. An unknown name is a parse error (`parseWhen`), so the server refuses it on save. The defaults are the old
+  window is open. `panelOpen` stays true in the task window (it is on the board), so `j`, `f` and Delete work there. An unknown name is a parse error (`parseWhen`), so the server refuses it on save. The defaults are the old
   hard-coded behaviour, e.g. `n` is `!overlayOpen && !editableFocus && !popupFocus`.
 - **Overrides.** The setting `keybindings` holds only what the user changed, per command: `{ key?, when? }` (an empty
   `when` means always). A command left out always follows the current default, so a default added or changed later
@@ -760,6 +812,8 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/board/cardLinks.logic.ts`     | Which links a card shows (tested)                                |
 | `apps/web/src/components/board/CardContextMenu.tsx`, `BulkMenuItems.tsx`, `bulkActions.ts`, `bulkMenu.logic.ts` | The card menu, its bulk variant, the bulk mutations and which cards each item fits (`bulkMenu.logic.ts` is tested) |
 | `apps/web/src/components/task/TaskMenuItems.tsx`, `TaskMenuDialogs.tsx` | The items shared by the panel's More menu and the card menu, and their dialogs |
+| `apps/web/src/components/task/TaskWindow.tsx`, `taskLayout.ts`, `board/taskWindow.logic.ts` (tested) | The task window, the layout context its parts read, and its URL state |
+| `apps/web/src/components/markdown/CodeBlock.tsx`, `codeHighlight.ts`, `codeBlock.logic.ts` (tested) | Highlighted fenced code blocks |
 | `apps/web/src/components/board/reveal.logic.ts`, `revealCard.ts` | Revealing a task: the steps and scroll target (tested), the scroll and flash |
 | `apps/web/src/components/autopilot/autopilot.logic.ts` | Pill state, Inherit labels, config and limit parsing, run labels (tested) |
 | `apps/web/src/components/autopilot/AutopilotPill.tsx`, `AutopilotEpicButton.tsx`, `ScopePopover.tsx`, `PauseAllButton.tsx`, `AutopilotBadge.tsx`, `AutopilotSection.tsx` | The lane pill, the epic button, their shared popover, header pause, card badge, panel section |

@@ -10,8 +10,10 @@ import {
   normalizeSectionLayout,
   relationChipGroups,
   SECTION_ATTENTION,
+  SECTION_COLUMNS,
   SECTION_IDS,
   sectionAttention,
+  sectionsInColumn,
   summarizeSection,
   type SectionTask,
   withCollapseChoice,
@@ -466,5 +468,38 @@ describe("linkSummaryChips", () => {
 
   it("has nothing to show without a PR", () => {
     expect(linkSummaryChips([jira("a")])).toEqual({ prs: [], rest: 1 });
+  });
+});
+
+describe("section columns", () => {
+  it("puts the story in the main column and the properties in the rail", () => {
+    expect(sectionsInColumn(SECTION_IDS, "main")).toEqual(["plan", "details", "activity"]);
+    expect(sectionsInColumn(SECTION_IDS, "rail")).toEqual([
+      "labels",
+      "sessions",
+      "usage",
+      "links",
+      "relations",
+      "autopilot",
+      "review",
+    ]);
+  });
+
+  it("keeps the saved order within each column, and every section without one", () => {
+    const order = ["activity", "labels", "plan", "links", "details"] as const;
+    expect(sectionsInColumn(order, "main")).toEqual(["activity", "plan", "details"]);
+    expect(sectionsInColumn(order, "rail")).toEqual(["labels", "links"]);
+    expect(sectionsInColumn(order, undefined)).toEqual([...order]);
+  });
+
+  it("gives every section a column", () => {
+    for (const id of SECTION_IDS) expect(["main", "rail"]).toContain(SECTION_COLUMNS[id]);
+  });
+
+  it("reorders within a column when a drop moves a section over one of its own column", () => {
+    const order = normalizeSectionLayout({}).order;
+    const moved = moveSection(order, "activity", "plan");
+    expect(sectionsInColumn(moved, "main")).toEqual(["activity", "plan", "details"]);
+    expect(sectionsInColumn(moved, "rail")).toEqual(sectionsInColumn(order, "rail"));
   });
 });

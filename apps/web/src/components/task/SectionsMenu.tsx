@@ -12,17 +12,25 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { useSectionLayout, useTaskPanelPrefs } from "~/state/ui";
 import { useSortableSensors } from "./ManagedSections";
-import { SECTION_TITLES, type SectionId } from "./sections.logic";
+import {
+  SECTION_COLUMN_TITLES,
+  SECTION_TITLES,
+  sectionsInColumn,
+  type SectionColumn,
+  type SectionId,
+  type TaskPanelLayout,
+} from "./sections.logic";
 
 const modifiers = [restrictToVerticalAxis, restrictToParentElement];
 
-/** Top-bar popover to reorder, show and hide the panel's sections, and collapse or expand them all. */
-export function SectionsMenu() {
-  const layout = useSectionLayout();
+/**
+ * Top-bar popover to reorder, show and hide the panel's sections, and collapse or expand them all. In the task
+ * window it lists them by column, where they sit there; the order within each column is the panel's too.
+ */
+export function SectionsMenu({ layout = "panel" }: { layout?: TaskPanelLayout }) {
   const move = useTaskPanelPrefs((s) => s.moveSection);
   const setAllCollapsed = useTaskPanelPrefs((s) => s.setAllSectionsCollapsed);
   const reset = useTaskPanelPrefs((s) => s.resetSections);
-  const sensors = useSortableSensors();
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (over && active.id !== over.id) move(active.id as SectionId, over.id as SectionId);
@@ -40,16 +48,9 @@ export function SectionsMenu() {
       </Tooltip>
       <PopoverPopup align="end" width="sm" padding="compact">
         <div className="flex flex-col gap-2">
-          <p className="px-1 text-2xs font-medium text-muted-foreground">Sections</p>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={modifiers} onDragEnd={onDragEnd}>
-            <SortableContext items={layout.order} strategy={verticalListSortingStrategy}>
-              <ul className="flex flex-col gap-0.5">
-                {layout.order.map((id) => (
-                  <SectionRow key={id} id={id} hidden={layout.hidden.includes(id)} />
-                ))}
-              </ul>
-            </SortableContext>
-          </DndContext>
+          {(layout === "window" ? (["main", "rail"] as const) : [undefined]).map((column) => (
+            <SectionList key={column ?? "all"} column={column} onDragEnd={onDragEnd} />
+          ))}
           <div className="flex flex-wrap items-center gap-1 border-t border-border/65 pt-2">
             <Button variant="ghost" size="xs" onClick={() => setAllCollapsed(true)}>
               <ChevronsDownUpIcon />
@@ -73,6 +74,35 @@ export function SectionsMenu() {
         </div>
       </PopoverPopup>
     </Popover>
+  );
+}
+
+/** One sortable list of rows: every section, or one window column's. */
+function SectionList({
+  column,
+  onDragEnd,
+}: {
+  column: SectionColumn | undefined;
+  onDragEnd: (event: DragEndEvent) => void;
+}) {
+  const layout = useSectionLayout();
+  const sensors = useSortableSensors();
+  const ids = sectionsInColumn(layout.order, column);
+  return (
+    <>
+      <p className="px-1 text-2xs font-medium text-muted-foreground">
+        {column ? SECTION_COLUMN_TITLES[column] : "Sections"}
+      </p>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={modifiers} onDragEnd={onDragEnd}>
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          <ul className="flex flex-col gap-0.5">
+            {ids.map((id) => (
+              <SectionRow key={id} id={id} hidden={layout.hidden.includes(id)} />
+            ))}
+          </ul>
+        </SortableContext>
+      </DndContext>
+    </>
   );
 }
 

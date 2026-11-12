@@ -1,6 +1,6 @@
 import { describeEpicRollup } from "@repo/contracts";
 import { ChevronRightIcon, GroupIcon } from "lucide-react";
-import { memo, type CSSProperties } from "react";
+import { memo, type CSSProperties, type MouseEvent } from "react";
 import { AutopilotEpicButton } from "~/components/autopilot/AutopilotEpicButton";
 import { EpicBranchBadge } from "~/components/task/EpicDelivery";
 import { Button } from "~/components/ui/button";
@@ -8,6 +8,7 @@ import { cn } from "~/lib/utils";
 import { useBoardView } from "~/state/ui";
 import { laneHasCollapsibleCell, STATUS_ORDER, type EpicBand as Band } from "./board.logic";
 import { BoardCell } from "./BoardCell";
+import { isWindowPress } from "./boardSelection.logic";
 import { CardContextMenu } from "./CardContextMenu";
 import { useBoardContext } from "./BoardContext";
 import type { OverCell } from "./dnd.logic";
@@ -80,7 +81,10 @@ export const EpicBand = memo(function EpicBand({
       <ChevronRightIcon className={cn("size-3.5 transition-transform", !collapsed && "rotate-90")} />
     </Button>
   );
-  const titleProps = { "aria-current": selected || undefined, onClick: () => openTask(epic.id) };
+  const titleProps = {
+    "aria-current": selected || undefined,
+    onClick: (event: MouseEvent) => openTask(epic.id, event),
+  };
   const title = (
     <>
       <GroupIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
@@ -126,9 +130,12 @@ export const EpicBand = memo(function EpicBand({
             collapsed && "rounded-b-xl",
             narrow ? "flex-col gap-0.5 py-1" : "h-8 items-center gap-1.5",
           )}
+          onMouseDown={(event) => {
+            if (isWindowPress(event)) event.preventDefault();
+          }}
           onClick={(event) => {
             if (opensFromHeader(event.target as Partial<HeaderClickTarget> | null, event.currentTarget)) {
-              openTask(epic.id);
+              openTask(epic.id, event);
             }
           }}
         >

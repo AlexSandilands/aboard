@@ -6,6 +6,7 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { useBoardContext } from "./BoardContext";
+import { isWindowPress } from "./boardSelection.logic";
 import { CardContextMenu } from "./CardContextMenu";
 import { EpicActions } from "./EpicActions";
 import { EpicRollupBar } from "./EpicRollupBar";
@@ -83,7 +84,10 @@ export const EpicCard = memo(function EpicCard({
             className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-current={selected || undefined}
             title={describeEpicRollup(rollup)}
-            onClick={() => openTask(epic.id)}
+            onMouseDown={(event) => {
+              if (isWindowPress(event)) event.preventDefault();
+            }}
+            onClick={(event) => openTask(epic.id, event)}
           >
             <span className="flex min-w-0 items-center gap-1.5">
               <GroupIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
@@ -121,7 +125,10 @@ export const EpicCard = memo(function EpicCard({
                   task.archivedAt && "opacity-60",
                 )}
                 aria-current={task.id === selectedTaskId || undefined}
-                onClick={() => openTask(task.id)}
+                onMouseDown={(event) => {
+                  if (isWindowPress(event)) event.preventDefault();
+                }}
+                onClick={(event) => openTask(task.id, event)}
               >
                 <span className="shrink-0 tabular-nums text-muted-foreground">#{task.number}</span>
                 <span className="min-w-0 truncate text-foreground/90">{task.title}</span>

@@ -7,6 +7,9 @@ import { usageSummary } from "./usage.logic";
 
 type PrLink = Extract<PlainLink, { kind: "pr" }>;
 
+/** Where the task's details show: the docked side panel, or the task window over the board. */
+export type TaskPanelLayout = "panel" | "window";
+
 /** Detail-panel sections the user can collapse, reorder and hide, in default order. */
 export const SECTION_IDS = [
   "labels",
@@ -35,6 +38,33 @@ export const SECTION_TITLES: Record<SectionId, string> = {
   details: "Details",
   activity: "Activity",
 };
+
+/**
+ * Which column of the task window a section sits in, from about 56rem wide: the task's story (Plan, Details,
+ * Activity) in the main column, its properties in the rail beside it. Fixed: the saved order, hidden and collapsed
+ * choices apply within each column. Narrower, and in the docked panel, the sections are one column in saved order.
+ */
+export type SectionColumn = "main" | "rail";
+
+export const SECTION_COLUMNS: Record<SectionId, SectionColumn> = {
+  labels: "rail",
+  sessions: "rail",
+  usage: "rail",
+  links: "rail",
+  relations: "rail",
+  autopilot: "rail",
+  review: "rail",
+  plan: "main",
+  details: "main",
+  activity: "main",
+};
+
+export const SECTION_COLUMN_TITLES: Record<SectionColumn, string> = { main: "Main column", rail: "Side column" };
+
+/** The sections of `ids` in a column, in their order; every section without a column. */
+export function sectionsInColumn(ids: ReadonlyArray<SectionId>, column: SectionColumn | undefined): SectionId[] {
+  return column ? ids.filter((id) => SECTION_COLUMNS[id] === column) : [...ids];
+}
 
 export interface SectionLayout {
   order: SectionId[];

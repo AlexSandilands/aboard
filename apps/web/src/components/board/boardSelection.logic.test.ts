@@ -1,6 +1,14 @@
 import type { TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { isPlannable, isPickClick, pickedAmong, plannableTasks, togglePicked } from "./boardSelection.logic";
+import {
+  cardClickOpens,
+  isPlannable,
+  isPickClick,
+  isWindowPress,
+  pickedAmong,
+  plannableTasks,
+  togglePicked,
+} from "./boardSelection.logic";
 
 const task = (over: Partial<TaskSummary>): TaskSummary =>
   ({
@@ -54,5 +62,32 @@ describe("picking cards to plan", () => {
     const picked = togglePicked(togglePicked(togglePicked([], "t-2"), "t-3"), "t-4");
     expect(picked).toEqual(["t-2", "t-3", "t-4"]);
     expect(pickedAmong(picked, plannableTasks(tasks, "p-1"))).toEqual(["t-2"]);
+  });
+});
+
+describe("opening a card", () => {
+  const click = (detail: number, altKey = false) => ({ detail, altKey });
+
+  it("opens the panel on a single click or Enter, with no delay to wait for a second", () => {
+    expect(cardClickOpens(click(1))).toBe("open");
+    expect(cardClickOpens(click(0))).toBe("open");
+    expect(cardClickOpens()).toBe("open");
+  });
+
+  it("expands on the second click of a double-click", () => {
+    expect(cardClickOpens(click(2))).toBe("expand");
+    expect(cardClickOpens(click(3))).toBe("none");
+  });
+
+  it("opens the window in one step on Alt+click", () => {
+    expect(cardClickOpens(click(1, true))).toBe("window");
+    expect(cardClickOpens(click(0, true))).toBe("window");
+    expect(cardClickOpens(click(2, true))).toBe("none");
+  });
+
+  it("keeps text selection and drags away from double and Alt presses only", () => {
+    expect(isWindowPress(click(1))).toBe(false);
+    expect(isWindowPress(click(2))).toBe(true);
+    expect(isWindowPress(click(1, true))).toBe(true);
   });
 });
