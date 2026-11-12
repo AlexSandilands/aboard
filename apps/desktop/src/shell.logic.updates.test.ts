@@ -21,22 +21,26 @@ const env: UpdateEnvironment = {
   sandbox: false,
   platform: "win32",
   appImage: undefined,
-  version: "2026.11.6",
+  version: "1.4.2",
 };
 
 describe("versions", () => {
-  it("compares dates numerically, not as text", () => {
-    expect(isNewerVersion("2026.11.10", "2026.11.6")).toBe(true);
-    expect(isNewerVersion("2026.11.6", "2026.11.10")).toBe(false);
-    expect(isNewerVersion("2027.1.1", "2026.12.31")).toBe(true);
-    expect(isNewerVersion("2026.11.6", "2026.11.6")).toBe(false);
+  it("compares each part numerically, not as text", () => {
+    expect(isNewerVersion("1.10.0", "1.9.0")).toBe(true);
+    expect(isNewerVersion("1.9.0", "1.10.0")).toBe(false);
+    expect(isNewerVersion("2.0.0", "1.99.99")).toBe(true);
+    expect(isNewerVersion("1.4.3", "1.4.2")).toBe(true);
+    expect(isNewerVersion("1.4.2", "1.4.2")).toBe(false);
   });
 
   it("never offers anything to, or from, a non-release version", () => {
-    expect(isNewerVersion("2026.11.10", "0.1.0")).toBe(false);
-    expect(isNewerVersion("1.0.0", "2026.11.6")).toBe(false);
-    expect(isReleaseVersion("0.1.0")).toBe(false);
-    expect(isReleaseVersion("2026.1.5")).toBe(true);
+    expect(isNewerVersion("1.4.2", "0.0.0")).toBe(false);
+    expect(isNewerVersion("1.4.2-rc.1", "1.4.1")).toBe(false);
+    expect(isNewerVersion("1.4", "1.3.0")).toBe(false);
+    expect(isReleaseVersion("0.0.0")).toBe(false);
+    expect(isReleaseVersion("01.4.2")).toBe(false);
+    expect(isReleaseVersion("0.1.0")).toBe(true);
+    expect(isReleaseVersion("1.4.2")).toBe(true);
   });
 });
 
@@ -54,7 +58,7 @@ describe("updateMode", () => {
   it("is off in dev, the sandbox, source builds and elsewhere, saying why", () => {
     expect(updateMode({ ...env, packaged: false })).toEqual({ mode: "disabled", reason: "dev builds" });
     expect(updateMode({ ...env, packaged: false, sandbox: true })).toEqual({ mode: "disabled", reason: "the sandbox" });
-    expect(updateMode({ ...env, version: "0.1.0" })).toEqual({ mode: "disabled", reason: "builds from source" });
+    expect(updateMode({ ...env, version: "0.0.0" })).toEqual({ mode: "disabled", reason: "builds from source" });
     expect(updateMode({ ...env, platform: "darwin" })).toEqual({ mode: "disabled", reason: "this platform" });
   });
 });
@@ -69,35 +73,35 @@ describe("noticeVia", () => {
 });
 
 describe("reduceUpdate", () => {
-  const self = initialUpdateState({ mode: "self-update", reason: null }, "2026.11.6", true, null);
-  const notice = initialUpdateState({ mode: "notice-only", reason: null }, "2026.11.6", true, "pacman");
+  const self = initialUpdateState({ mode: "self-update", reason: null }, "1.4.2", true, null);
+  const notice = initialUpdateState({ mode: "notice-only", reason: null }, "1.4.2", true, "pacman");
 
   it("goes check, download, ready", () => {
     let s = reduceUpdate(self, { type: "checking" });
     expect(s.status).toBe("checking");
-    s = reduceUpdate(s, { type: "found", version: "2026.11.10", at: 5 });
-    expect(s).toMatchObject({ status: "downloading", version: "2026.11.10", percent: 0, checkedAt: 5 });
+    s = reduceUpdate(s, { type: "found", version: "1.5.0", at: 5 });
+    expect(s).toMatchObject({ status: "downloading", version: "1.5.0", percent: 0, checkedAt: 5 });
     s = reduceUpdate(s, { type: "progress", percent: 42.7 });
     expect(s.percent).toBe(42);
-    s = reduceUpdate(s, { type: "downloaded", version: "2026.11.10" });
+    s = reduceUpdate(s, { type: "downloaded", version: "1.5.0" });
     expect(s).toMatchObject({ status: "ready", percent: null });
   });
 
   it("marks a notice-only find as available, and keeps it through a failed check", () => {
-    let s = reduceUpdate(notice, { type: "found", version: "2026.11.10", at: 1 });
-    expect(s).toMatchObject({ status: "available", version: "2026.11.10", noticeVia: "pacman" });
+    let s = reduceUpdate(notice, { type: "found", version: "1.5.0", at: 1 });
+    expect(s).toMatchObject({ status: "available", version: "1.5.0", noticeVia: "pacman" });
     // The hourly re-check: checking, then failing, keeps the version on show.
     s = reduceUpdate(s, { type: "checking" });
-    expect(s).toMatchObject({ status: "available", version: "2026.11.10" });
+    expect(s).toMatchObject({ status: "available", version: "1.5.0" });
     s = reduceUpdate(s, { type: "error", message: "offline", at: 2 });
-    expect(s).toMatchObject({ status: "available", version: "2026.11.10" });
+    expect(s).toMatchObject({ status: "available", version: "1.5.0" });
     // A newer one replaces it.
-    s = reduceUpdate(s, { type: "found", version: "2026.11.12", at: 3 });
-    expect(s.version).toBe("2026.11.12");
+    s = reduceUpdate(s, { type: "found", version: "1.6.0", at: 3 });
+    expect(s.version).toBe("1.6.0");
   });
 
   it("keeps a ready update through later checks and errors", () => {
-    const ready = reduceUpdate(self, { type: "downloaded", version: "2026.11.10" });
+    const ready = reduceUpdate(self, { type: "downloaded", version: "1.5.0" });
     expect(reduceUpdate(ready, { type: "checking" })).toBe(ready);
     expect(reduceUpdate(ready, { type: "up-to-date", at: 1 })).toBe(ready);
     expect(reduceUpdate(ready, { type: "error", message: "x", at: 1 })).toBe(ready);
@@ -110,7 +114,7 @@ describe("reduceUpdate", () => {
   });
 
   it("goes back to ready with the error when an install fails", () => {
-    const ready = reduceUpdate(self, { type: "downloaded", version: "2026.11.10" });
+    const ready = reduceUpdate(self, { type: "downloaded", version: "1.5.0" });
     const installing = reduceUpdate(ready, { type: "installing" });
     expect(installing.status).toBe("installing");
     expect(reduceUpdate(installing, { type: "install-failed", message: "denied" })).toMatchObject({
@@ -149,49 +153,47 @@ describe("feed and release URLs", () => {
   const repo = { owner: "acme", repo: "board" };
 
   it("reads the version from a feed", () => {
-    expect(feedVersion("version: 2026.11.10\nfiles:\n  - url: a\n")).toBe("2026.11.10");
-    expect(feedVersion("version: '2026.11.10'\n")).toBe("2026.11.10");
+    expect(feedVersion("version: 1.5.0\nfiles:\n  - url: a\n")).toBe("1.5.0");
+    expect(feedVersion("version: '1.5.0'\n")).toBe("1.5.0");
     expect(feedVersion("files: []\n")).toBeNull();
   });
 
   it("points at the release, or the list", () => {
-    expect(releaseNotesUrl(repo, "2026.11.10")).toBe("https://github.com/acme/board/releases/tag/v2026.11.10");
+    expect(releaseNotesUrl(repo, "1.5.0")).toBe("https://github.com/acme/board/releases/tag/v1.5.0");
     expect(releaseNotesUrl(repo, null)).toBe("https://github.com/acme/board/releases");
     expect(latestFeedUrl(repo)).toBe("https://github.com/acme/board/releases/latest/download/latest-linux.yml");
   });
 });
 
 describe("updateMenuItem and updateNotification", () => {
-  const base = initialUpdateState({ mode: "self-update", reason: null }, "2026.11.6", true, null);
+  const base = initialUpdateState({ mode: "self-update", reason: null }, "1.4.2", true, null);
 
   it("follows the state", () => {
     expect(updateMenuItem(base)).toEqual({ label: "Check for updates", icon: "search", action: "check" });
     expect(updateMenuItem({ ...base, status: "checking" }).action).toBeNull();
-    expect(updateMenuItem({ ...base, status: "downloading", version: "2026.11.10", percent: 42 }).label).toBe(
-      "Downloading v2026.11.10… 42%",
+    expect(updateMenuItem({ ...base, status: "downloading", version: "1.5.0", percent: 42 }).label).toBe(
+      "Downloading v1.5.0… 42%",
     );
-    expect(updateMenuItem({ ...base, status: "ready", version: "2026.11.10" })).toEqual({
-      label: "Restart to update to v2026.11.10",
+    expect(updateMenuItem({ ...base, status: "ready", version: "1.5.0" })).toEqual({
+      label: "Restart to update to v1.5.0",
       icon: "rocket",
       action: "install",
     });
-    expect(updateMenuItem({ ...base, status: "available", version: "2026.11.10" }).action).toBe("notes");
+    expect(updateMenuItem({ ...base, status: "available", version: "1.5.0" }).action).toBe("notes");
     expect(updateMenuItem({ ...base, status: "error" }).action).toBe("check");
   });
 
   it("is off, saying why, when updates are", () => {
-    const off = initialUpdateState({ mode: "disabled", reason: "dev builds" }, "0.1.0", true, null);
+    const off = initialUpdateState({ mode: "disabled", reason: "dev builds" }, "0.0.0", true, null);
     expect(updateMenuItem(off)).toEqual({ label: "Updates off in dev builds", icon: "search", action: null });
   });
 
   it("notifies only for ready and available", () => {
     expect(updateNotification(base)).toBeNull();
-    expect(updateNotification({ ...base, status: "ready", version: "2026.11.10" })?.title).toMatch(
-      /v2026\.11\.10 is ready/,
+    expect(updateNotification({ ...base, status: "ready", version: "1.5.0" })?.title).toMatch(/v1\.5\.0 is ready/);
+    expect(updateNotification({ ...base, status: "available", version: "1.5.0", noticeVia: "pacman" })?.body).toMatch(
+      /pacman -Syu/,
     );
-    expect(
-      updateNotification({ ...base, status: "available", version: "2026.11.10", noticeVia: "pacman" })?.body,
-    ).toMatch(/pacman -Syu/);
   });
 });
 

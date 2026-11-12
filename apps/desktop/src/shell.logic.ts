@@ -130,17 +130,25 @@ export function linuxAutostartEntry(name: string, exe: string, args: readonly st
   ].join("\n");
 }
 
-/** Release versions are dates (`2026.11.6`, see scripts/release-version.ts); anything else is a build from source. */
-const RELEASE_VERSION = /^(\d{4})\.(\d{1,2})\.(\d{1,2})$/;
+/**
+ * Release versions are semver (`1.4.2`, see scripts/release-version.ts). The committed `0.0.0` is a build from source,
+ * and so is anything else.
+ */
+const RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
+function releaseParts(version: string): number[] | null {
+  const parts = RELEASE_VERSION.exec(version)?.slice(1).map(Number);
+  return parts?.some((part) => part > 0) ? parts : null;
+}
 
 export function isReleaseVersion(version: string): boolean {
-  return RELEASE_VERSION.test(version);
+  return releaseParts(version) !== null;
 }
 
 /** Whether `candidate` is a later release than `current`. Anything that isn't a release version never is. */
 export function isNewerVersion(candidate: string, current: string): boolean {
-  const a = RELEASE_VERSION.exec(candidate)?.slice(1).map(Number);
-  const b = RELEASE_VERSION.exec(current)?.slice(1).map(Number);
+  const a = releaseParts(candidate);
+  const b = releaseParts(current);
   if (!a || !b) return false;
   for (let i = 0; i < 3; i++) {
     if (a[i] !== b[i]) return a[i]! > b[i]!;

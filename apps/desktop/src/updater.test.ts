@@ -33,8 +33,8 @@ vi.mock("electron-updater", () => ({ default: { NsisUpdater: FakeEngine, AppImag
 const { Updater } = await import("./updater.ts");
 
 const repo = { owner: "acme", repo: "board" };
-const selfUpdate = initialUpdateState({ mode: "self-update", reason: null }, "2026.11.6", true, null);
-const noticeOnly = initialUpdateState({ mode: "notice-only", reason: null }, "2026.11.6", true, "download");
+const selfUpdate = initialUpdateState({ mode: "self-update", reason: null }, "1.4.2", true, null);
+const noticeOnly = initialUpdateState({ mode: "notice-only", reason: null }, "1.4.2", true, "download");
 
 function make(initial: DesktopUpdateState, fetch: typeof globalThis.fetch = vi.fn<typeof globalThis.fetch>()) {
   const changes: DesktopUpdateState[] = [];
@@ -70,11 +70,11 @@ describe("Updater, self-update", () => {
     const { updater } = make(selfUpdate);
     const engine = FakeEngine.last!;
     engine.emit("checking-for-update");
-    engine.emit("update-available", { version: "2026.11.10" });
+    engine.emit("update-available", { version: "1.5.0" });
     engine.emit("download-progress", { percent: 55.5 });
     expect(updater.state).toMatchObject({ status: "downloading", percent: 55 });
-    engine.emit("update-downloaded", { version: "2026.11.10" });
-    expect(updater.state).toMatchObject({ status: "ready", version: "2026.11.10" });
+    engine.emit("update-downloaded", { version: "1.5.0" });
+    expect(updater.state).toMatchObject({ status: "ready", version: "1.5.0" });
   });
 
   it("reports a missing feed quietly", () => {
@@ -104,9 +104,9 @@ describe("Updater, self-update", () => {
 
   it("doesn't check again once an update is downloading or ready", () => {
     const { updater } = make(selfUpdate);
-    FakeEngine.last!.emit("update-available", { version: "2026.11.10" });
+    FakeEngine.last!.emit("update-available", { version: "1.5.0" });
     updater.check();
-    FakeEngine.last!.emit("update-downloaded", { version: "2026.11.10" });
+    FakeEngine.last!.emit("update-downloaded", { version: "1.5.0" });
     updater.check();
     expect(FakeEngine.last!.checks).toBe(0);
   });
@@ -114,7 +114,7 @@ describe("Updater, self-update", () => {
   describe("install", () => {
     function ready() {
       const made = make(selfUpdate);
-      FakeEngine.last!.emit("update-downloaded", { version: "2026.11.10" });
+      FakeEngine.last!.emit("update-downloaded", { version: "1.5.0" });
       return made;
     }
 
@@ -165,7 +165,7 @@ describe("Updater, notice-only", () => {
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
   it("builds no engine and reports a newer version from the feed", async () => {
-    const fetch = feed("version: 2026.11.10\nfiles: []\n");
+    const fetch = feed("version: 1.5.0\nfiles: []\n");
     const { updater } = make(noticeOnly, fetch);
     expect(FakeEngine.last).toBeNull();
     updater.check();
@@ -174,18 +174,18 @@ describe("Updater, notice-only", () => {
       "https://github.com/acme/board/releases/latest/download/latest-linux.yml",
       expect.anything(),
     );
-    expect(updater.state).toMatchObject({ status: "available", version: "2026.11.10" });
+    expect(updater.state).toMatchObject({ status: "available", version: "1.5.0" });
   });
 
   it("is up to date when the feed has the running version", async () => {
-    const { updater } = make(noticeOnly, feed("version: 2026.11.6\n"));
+    const { updater } = make(noticeOnly, feed("version: 1.4.2\n"));
     updater.check();
     await settle();
     expect(updater.state.status).toBe("up-to-date");
   });
 
   it("reads the feed app-update.yml names", async () => {
-    const fetch = feed("version: 2026.11.6\n");
+    const fetch = feed("version: 1.4.2\n");
     const updater = new Updater({
       initial: noticeOnly,
       repo,
@@ -214,7 +214,7 @@ describe("Updater, notice-only", () => {
   });
 
   it("runs one check at a time", async () => {
-    const fetch = feed("version: 2026.11.6\n");
+    const fetch = feed("version: 1.4.2\n");
     const { updater } = make(noticeOnly, fetch);
     updater.check();
     updater.check();
@@ -228,7 +228,7 @@ describe("Updater, disabled", () => {
     vi.useFakeTimers();
     const fetch = vi.fn<typeof globalThis.fetch>();
     const { updater } = make(
-      initialUpdateState({ mode: "disabled", reason: "dev builds" }, "0.1.0", true, null),
+      initialUpdateState({ mode: "disabled", reason: "dev builds" }, "0.0.0", true, null),
       fetch,
     );
     updater.start();

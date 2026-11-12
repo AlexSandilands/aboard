@@ -1,7 +1,7 @@
 {
   "name": "aboard",
   "displayName": "Aboard",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "private": true,
   "description": "A local kanban board where agents log ideas, write plans, report progress and review their own work over MCP, and Autopilot picks up planned tasks and carries them through to a pull request.",
   "homepage": "https://github.com/AlexSandilands/aboard",
@@ -21,7 +21,7 @@
     "backup": "pnpm --filter @repo/server backup",
     "desktop:build": "pnpm build && pnpm --filter @repo/server bundle && pnpm --filter @repo/desktop build",
     "desktop:package": "pnpm desktop:build && pnpm --filter @repo/desktop package",
-    "test": "pnpm -r --no-bail --workspace-concurrency=1 test",
+    "test": "pnpm -r --no-bail --workspace-concurrency=1 test && vitest run --dir scripts",
     "typecheck": "pnpm -r typecheck && tsc -p scripts",
     "lint": "oxlint --deny-warnings",
     "lint:fix": "oxlint --fix",
