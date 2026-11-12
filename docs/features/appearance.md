@@ -133,6 +133,7 @@ These are prefs in the `useAppearance` store (`state/ui.ts`, persisted under `ap
 | Glass opacity    | 40–100 %    | 80 %    | `--glass-opacity`; at 100 % also `--glass-blur: 0px`                                              |
 | Panel animations | 0–400 ms    | 150 ms  | `--panel-animation-duration`, `--slide-duration` and `data-panel-animations` (`false` under reduced motion) |
 | Smooth board motion | on / off | on    | `data-board-motion`: `snapshot` or `reflow` ([Snapshot motion](#snapshot-motion))                  |
+| Zoom windows from their source | on / off | on | `data-window-zoom`: the task window grows out of its card or the panel ([Window zoom](#window-zoom)) |
 | Interface font   | name; 12–20 px | system, 16 px | `--font-sans`; the size is the root font size, so every rem scales                         |
 | Monospace font   | name        | system  | `--font-mono`                                                                                     |
 
@@ -260,6 +261,40 @@ Once the animations exist:
   panel's and sidebar's groups sit above the board's, since a closing panel is only in the old state, which the
   browser stacks underneath.
 
+### Window zoom
+
+**Zoom windows from their source** (`windowZoom`, on by default; board task #158) makes the
+[task window](board-layout.md#the-task-window) grow out of where it was opened from and shrink back when it leaves.
+Only the task window: Settings and Stats have no source and keep the fade. The code is `lib/windowZoom.ts` and
+`windowZoom.logic.ts`; `AppRouteModal` takes it as its `zoom` prop.
+
+- **Source.** The docked panel's `<aside>` when the panel is open, otherwise the task's card. Every way in goes through
+  `useOpenTask` or `useSetTaskExpanded`, which record it just before navigating (`noteWindowSource`); `TaskWindow` takes
+  the record when it mounts. A double-click's first click opens the panel, so `Board` remembers whether the panel was
+  open before it and passes `from: "card"` when it wasn't. A window that is restored (on load, or coming back from
+  behind Settings) has no record and fades in.
+- **Leaving.** Docking (Esc, the dock button, `f`, the backdrop) shrinks the window into the aside. Closing the task
+  (**×**, `panel.toggle`, a delete) shrinks it onto the card when at least half of the card is on screen
+  (`visibleSource`); scrolled away, collapsed or filtered out, the window fades as before.
+- **Technique.** A FLIP on the dialog's popup: it is laid out at rest and animated with the Web Animations API from a
+  `translate` and `scale` that put it on the source (`zoomTransform`), with the border radius divided by the scale so
+  the corners look like the source's. Only `transform`, `opacity` and the radius animate. From a card the window fades
+  in over the first quarter of the distance and, going back, fades out over the last 15%; over the panel it stays
+  solid, covering the placeholder. The keyframes name `opacity` and `scale` at both ends, so the fade's own
+  `data-starting-style` and `data-ending-style` transition doesn't show through.
+- **Speed and curve.** Twice Panel animations (`zoomDurationMs`: 150 ms gives 300 ms), on `ZOOM_EASING`, the slide's
+  `cubic-bezier(0.2, 0.9, 0.25, 1)`, both ways. Chosen from frames in headless Chromium at 100, 150 and 300 ms; nobody
+  has judged it by eye on a real screen yet.
+- **Waiting.** The exit starts before the dialog closes; Base UI waits for the popup's animations before it reports the
+  window closed, so the navigation that docks or closes still comes after. An exit over a running entrance (Esc as the
+  window opens) starts from the transform the window has and runs for the share already covered, at least 40%.
+- **Board transitions.** A View Transition shows snapshots, and the window is in none, so it would be unseen until the
+  transition ended. A task opened straight into the window therefore starts no `panel-open` transition
+  (`panelTransitionType`): its panel appears in place and the board is at its new width at once. Under a double-click
+  the first click has started one; the zoom waits for it and measures the card where it ended up.
+- **Off** when the switch is off, with Panel animations at 0 and under reduced motion (`data-panel-animations`): the
+  window then fades and scales in place. The switch is disabled with a note in the last two cases.
+
 ### Grain
 
 The board, sidebar and column headers carry T3 Code's grain: a faint noise tile in each surface's own background
@@ -328,6 +363,7 @@ times slower.
 | `apps/web/src/hooks/useTheme.ts`                            | The theme store: storage, apply, tabs, OS changes, the shell         |
 | `apps/web/src/theme/appearance.logic.ts`, `appearance.ts`   | Contrast, glass, animation and font prefs and applying them          |
 | `apps/web/src/lib/slide.ts`, `slide.logic.ts`               | The sidebar and task panel slide: `startSlide`, its curve and maths  |
+| `apps/web/src/lib/windowZoom.ts`, `windowZoom.logic.ts`     | The task window's zoom: its source, the FLIP and its maths           |
 | `apps/web/src/theme/fonts.ts`                               | Whether a font family is installed / monospaced                      |
 | `apps/web/src/theme/themePreview.ts`                        | How a card's orbs are drawn                                          |
 | `apps/web/src/components/settings/AppearanceSection.tsx`    | The Appearance settings                                              |

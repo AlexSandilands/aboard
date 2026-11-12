@@ -48,6 +48,7 @@ import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { finishSlides } from "~/lib/slide";
 import { cn } from "~/lib/utils";
+import { taskPanelOpen } from "~/lib/windowZoom";
 import { isPlanRequired, useMoveTask, useUpdateProject, useUpdateTask } from "~/state/mutations";
 import { queryKeys, useArchivedTasks, useBoard, useSettings } from "~/state/queries";
 import { anyDialogOpen, useBoardPick, useBoardView, useDialogs, usePalette, usePanel, useReveal } from "~/state/ui";
@@ -160,6 +161,19 @@ const measuring = { droppable: { strategy: MeasuringStrategy.Always } };
 const autoScroll = { threshold: { x: 0.12, y: 0.15 }, acceleration: 6 };
 
 /** The main board: header, sticky column headers and one swimlane per project. */
+/** The task a plain click on a card opened, and whether the docked panel was already open then. */
+interface LastClicked {
+  id: string;
+  at: number;
+  panelWasOpen: boolean;
+}
+
+/**
+ * What the window of a double-click grows out of: its first click opened the panel, so the panel only counts when it
+ * was open before that. Otherwise the window comes out of the card that was clicked.
+ */
+const doubleClickSource = (last: LastClicked | null) => (last && !last.panelWasOpen ? "card" : undefined);
+
 /** How soon after a card's click a second one still counts as its double-click, landing off the card. */
 const DOUBLE_CLICK_MS = 600;
 
@@ -169,14 +183,14 @@ const DOUBLE_CLICK_MS = 600;
  * first click opened. A second click on a card is the card's own (`cardClickOpens`).
  */
 function useDoubleClickOutsideCards(
-  lastClickedRef: RefObject<{ id: string; at: number } | null>,
-  expand: (taskId: string) => void,
+  lastClickedRef: RefObject<LastClicked | null>,
+  expand: (last: LastClicked) => void,
 ) {
   const onClick = useEffectEvent((event: MouseEvent) => {
     const last = lastClickedRef.current;
     if (event.detail !== 2 || event.altKey || !last || performance.now() - last.at > DOUBLE_CLICK_MS) return;
     if (event.target instanceof Element && event.target !== document.documentElement) return;
-    expand(last.id);
+    expand(last);
   });
   useEffect(() => {
     const listener = (event: MouseEvent) => onClick(event);
@@ -375,8 +389,11 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const selectedTaskId = useDeferredValue(useSelectedTaskId());
   const openTask = useOpenTask();
   // The task the last plain click opened, which the second click of a double-click expands.
-  const lastClickedRef = useRef<{ id: string; at: number } | null>(null);
-  useDoubleClickOutsideCards(lastClickedRef, (id) => void openTask(id, { reveal: false, expanded: true }));
+  const lastClickedRef = useRef<LastClicked | null>(null);
+  useDoubleClickOutsideCards(
+    lastClickedRef,
+    (last) => void openTask(last.id, { reveal: false, expanded: true, from: doubleClickSource(last) }),
+  );
   const settings = useSettings().data;
   const moveTask = useMoveTask();
   const updateProject = useUpdateProject();
@@ -429,14 +446,18 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
       openTask: (id, click) => {
         switch (cardClickOpens(click)) {
           case "open":
-            lastClickedRef.current = { id, at: performance.now() };
+            lastClickedRef.current = { id, at: performance.now(), panelWasOpen: taskPanelOpen() };
             return void openTask(id, { reveal: false, expanded: false });
           case "window":
             return void openTask(id, { reveal: false, expanded: true });
           case "expand":
             // The task the first click opened, by id: its navigation may not have landed yet, and the card under
             // this click may be another one, moved there as the board narrowed.
-            return void openTask(lastClickedRef.current?.id ?? id, { reveal: false, expanded: true });
+            return void openTask(lastClickedRef.current?.id ?? id, {
+              reveal: false,
+              expanded: true,
+              from: doubleClickSource(lastClickedRef.current),
+            });
           case "none":
             return;
         }

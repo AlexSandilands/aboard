@@ -240,6 +240,7 @@ export const router = createRouter({
       const type = panelTransitionType(
         (fromLocation.search as { task?: unknown }).task,
         (toLocation.search as { task?: unknown }).task,
+        (toLocation.search as { expanded?: unknown }).expanded,
       );
       if (!type) return false;
       prepareBoardTransition("panel");

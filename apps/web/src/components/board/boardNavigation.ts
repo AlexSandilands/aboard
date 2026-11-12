@@ -4,6 +4,8 @@ import { useCallback, useMemo } from "react";
 import { boardSearchAt } from "~/components/layout/appModal.logic";
 import { formatLabelFilter, parseLabelFilter } from "~/components/labels/labels.logic";
 import type { BoardSearch } from "~/router";
+import { noteWindowSource } from "~/lib/windowZoom";
+import type { ZoomSource } from "~/lib/windowZoom.logic";
 import { useProjectIds } from "~/state/queries";
 import { useReveal, useSettingsNav } from "~/state/ui";
 import { isTaskWindowSearch, withClosedTask, withExpanded, withOpenTask } from "./taskWindow.logic";
@@ -47,7 +49,11 @@ export function useTaskExpanded(): boolean {
 export function useSetTaskExpanded() {
   const navigate = useNavigate();
   return useCallback(
-    (expanded: boolean) => navigate({ to: "/", search: (prev) => withExpanded(boardSearchFrom(prev), expanded) }),
+    (expanded: boolean) => {
+      // The expand button and its shortcut: the window grows out of the panel the task is docked in.
+      if (expanded) noteWindowSource(null);
+      return navigate({ to: "/", search: (prev) => withExpanded(boardSearchFrom(prev), expanded) });
+    },
     [navigate],
   );
 }
@@ -80,12 +86,14 @@ export function useSetLabelFilter() {
 /**
  * Opens a task in the panel and scrolls the board to its card (when the setting is on). A click on the card itself
  * passes `reveal: false`: the card is already under the pointer. `expanded` true opens it in the task window, false
- * docked; left out, it opens the way the open task is shown (see `withOpenTask`).
+ * docked; left out, it opens the way the open task is shown (see `withOpenTask`). The window grows out of the docked
+ * panel when that is open and out of the task's card otherwise; `from` says which when the caller knows better.
  */
 export function useOpenTask() {
   const navigate = useNavigate();
   return useCallback(
-    (taskId: string, options?: { reveal?: boolean; expanded?: boolean }) => {
+    (taskId: string, options?: { reveal?: boolean; expanded?: boolean; from?: ZoomSource }) => {
+      if (options?.expanded) noteWindowSource(taskId, options.from);
       const opened = navigate({
         to: "/",
         search: (prev) => withOpenTask(boardSearchFrom(prev), taskId, options?.expanded),

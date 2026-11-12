@@ -132,6 +132,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     ["motion", "smooth", "frame rate", "refresh rate", "performance", "lag", "jank", "view transition"],
   ),
   draft(
+    "board.appearance.window-zoom",
+    "Zoom windows from their source",
+    "Grow the task window out of the task's card or the side panel, and shrink it back when it closes. Off, it fades in place.",
+    ["motion", "animation", "zoom", "task window", "expand", "grow", "shrink", "fade"],
+  ),
+  draft(
     "board.appearance.interface-font",
     "Interface font",
     "The font and size for everything outside code. The size scales the whole board.",

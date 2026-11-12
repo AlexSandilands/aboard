@@ -26,6 +26,11 @@ export interface AppearancePrefs {
    * `reflow` lays it out again every frame.
    */
   boardMotion: BoardMotion;
+  /**
+   * Zoom windows from their source: the task window grows out of the task's card or the docked panel and shrinks back
+   * into it. Off, it fades in place. It follows Panel animations, so it is off with those too.
+   */
+  windowZoom: boolean;
   /** A font family list as typed; empty is the default stack. */
   fontSans: string;
   fontMono: string;
@@ -37,6 +42,7 @@ export const DEFAULT_APPEARANCE_PREFS: AppearancePrefs = {
   glassOpacity: GLASS_OPACITY.default,
   panelAnimationMs: PANEL_ANIMATION_MS.default,
   boardMotion: "snapshot",
+  windowZoom: true,
   fontSans: "",
   fontMono: "",
   fontSize: INTERFACE_FONT_SIZE.default,
@@ -60,6 +66,7 @@ export function normalizeAppearancePrefs(value: Partial<Record<keyof AppearanceP
     glassOpacity: clampSetting(value.glassOpacity, GLASS_OPACITY),
     panelAnimationMs: clampSetting(value.panelAnimationMs, PANEL_ANIMATION_MS),
     boardMotion: BOARD_MOTIONS.find((motion) => motion === value.boardMotion) ?? DEFAULT_APPEARANCE_PREFS.boardMotion,
+    windowZoom: typeof value.windowZoom === "boolean" ? value.windowZoom : DEFAULT_APPEARANCE_PREFS.windowZoom,
     fontSans: typeof value.fontSans === "string" ? value.fontSans.slice(0, 200) : "",
     fontMono: typeof value.fontMono === "string" ? value.fontMono.slice(0, 200) : "",
     fontSize: clampSetting(value.fontSize, INTERFACE_FONT_SIZE),
@@ -117,6 +124,8 @@ export function appearancePaint(prefs: AppearancePrefs, reducedMotion: boolean):
     data: {
       "panel-animations": animate ? "true" : "false",
       "board-motion": prefs.boardMotion,
+      // The setting as chosen: whoever zooms also checks panel-animations (lib/windowZoom.ts).
+      "window-zoom": prefs.windowZoom ? "true" : "false",
     },
   };
 }

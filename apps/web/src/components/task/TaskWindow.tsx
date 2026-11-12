@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { AppRouteModal, closeAppWindow } from "~/components/layout/AppRouteModal";
+import { cardZoomTarget, panelZoomTarget, takeWindowSource, type WindowZoom } from "~/lib/windowZoom";
 import { TaskPanelContent } from "./TaskPanel";
 
 /** Set by `closeTaskWindow`, so the window's closing ends with the task closed rather than docked. */
@@ -21,6 +22,11 @@ export function closeTaskWindow(): boolean {
  * windows. Its Dock button, Esc, a press on the backdrop and the `panel.expand` shortcut dock the task again once the
  * window has animated out (`onDocked`); its Close button closes the task. The docked panel stays behind it at its
  * width, with a placeholder (see `TaskPanel`).
+ *
+ * The window grows out of where it was opened from, the docked panel or the task's card (recorded by the way in:
+ * `noteWindowSource`), and shrinks into the panel when it docks or onto the card when the task closes
+ * (`lib/windowZoom.ts`). Restored rather than opened (on load, from behind Settings), or with the card off screen, it
+ * fades.
  */
 export function TaskWindow({
   taskId,
@@ -42,9 +48,22 @@ export function TaskWindow({
       if (focused instanceof HTMLElement && contents?.contains(focused)) focused.blur();
     };
   }, []);
+  const zoom = useMemo<WindowZoom>(
+    () => ({
+      enter: () => {
+        const source = takeWindowSource(taskId);
+        // A panel that went meanwhile leaves the card; no recorded source is a window restored, which fades.
+        if (source === "panel") return panelZoomTarget() ?? cardZoomTarget(taskId);
+        return source === "card" ? cardZoomTarget(taskId) : null;
+      },
+      exit: () => (closesTask ? cardZoomTarget(taskId) : panelZoomTarget()),
+    }),
+    [taskId],
+  );
   return (
     <AppRouteModal
       label="Task details"
+      zoom={zoom}
       onClosed={() => {
         const close = closesTask;
         closesTask = false;
