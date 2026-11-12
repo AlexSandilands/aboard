@@ -12,6 +12,8 @@ import {
   LinkIcon,
   ListTodoIcon,
   LocateFixedIcon,
+  Maximize2Icon,
+  Minimize2Icon,
   PinIcon,
   PlusIcon,
   RotateCcwIcon,
@@ -23,7 +25,8 @@ import {
 } from "lucide-react";
 import type { ReactNode, SyntheticEvent } from "react";
 
-import { useJumpToTask } from "~/components/board/boardNavigation";
+import { useJumpToTask, useOpenTask, useSelectedTaskId, useTaskExpanded } from "~/components/board/boardNavigation";
+import { closeAppWindow } from "~/components/layout/AppRouteModal";
 import { useShortcutLabel } from "~/components/layout/useKeybindings";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
 import { draftFromTask } from "~/components/templates/templates.logic";
@@ -151,6 +154,7 @@ export function TaskMenuItems({
   return (
     <>
       {leading}
+      <WindowMenuItem task={task} />
       {item("jump")}
       {item("plan")}
       <MenuSub>
@@ -255,6 +259,30 @@ export function TaskMenuItems({
         {deleteShortcut ? <MenuShortcut>{deleteShortcut}</MenuShortcut> : null}
       </MenuItem>
     </>
+  );
+}
+
+/**
+ * Open in window: the task (opened, if it isn't) in the task window. In the window's own menu it docks the task again.
+ */
+function WindowMenuItem({ task }: { task: TaskSummary }) {
+  const openTask = useOpenTask();
+  const expanded = useTaskExpanded();
+  const selectedTaskId = useSelectedTaskId();
+  const inWindow = expanded && selectedTaskId === task.id;
+  const shortcut = useShortcutLabel("panel.expand");
+  return (
+    <MenuItem
+      onClick={() => {
+        if (inWindow) closeAppWindow();
+        else void openTask(task.id, { expanded: true, reveal: false });
+      }}
+    >
+      {inWindow ? <Minimize2Icon /> : <Maximize2Icon />}
+      {inWindow ? "Dock to the side" : "Open in window"}
+      {/* The key acts on the open task, so another card's menu doesn't show it. */}
+      {shortcut && selectedTaskId === task.id ? <MenuShortcut>{shortcut}</MenuShortcut> : null}
+    </MenuItem>
   );
 }
 

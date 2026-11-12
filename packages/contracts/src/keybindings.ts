@@ -11,6 +11,7 @@ export const KeybindingCommand = z.enum([
   "task.reveal",
   "sidebar.toggle",
   "panel.toggle",
+  "panel.expand",
   "task.delete",
 ]);
 export type KeybindingCommand = z.infer<typeof KeybindingCommand>;
@@ -90,6 +91,13 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingCommand, KeybindingDef> = {
     key: "mod+alt+b",
     when: "!overlayOpen && !editableFocus && !settingsOpen",
     immediate: true,
+  },
+  // A toggle: from the docked panel it opens the task window, from the window it docks the task again.
+  "panel.expand": {
+    title: "Open the task in a window, or dock it again",
+    group: "Layout",
+    key: "f",
+    when: `panelOpen && !settingsOpen && !dialogOpen && ${NO_FOCUS_CLAIM}`,
   },
 };
 

@@ -24,6 +24,7 @@ import { AttachmentThumbs } from "~/components/attachments/AttachmentThumbs";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { cycleStepStatus, railSegmentTone, STEP_STATUS_LABELS, type RailTone } from "./plan.logic";
 import { STEP_TITLE_TONE, StepStatusGlyph } from "./StepVisuals";
+import { useTaskLayout } from "./taskLayout";
 import type { PlanActions } from "./usePlanActions";
 
 const RAIL_TONE: Record<RailTone, string> = {
@@ -65,6 +66,7 @@ export function PlanStepRow({
   const [editingNotes, setEditingNotes] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const taskLinks = usePanelTaskLinks();
+  const inWindow = useTaskLayout() === "window";
   const hasNotes = !!step.notes?.trim();
 
   const setStatus = (status: StepStatus) => {
@@ -182,10 +184,15 @@ export function PlanStepRow({
                 <div className="flex flex-col items-start gap-1">
                   {hasNotes ? (
                     <>
-                      <Markdown size="xs" taskLinks={taskLinks}>
+                      {/* The task window gives notes body-size text at a reading measure, and screenshots room. */}
+                      <Markdown
+                        size={inWindow ? "sm" : "xs"}
+                        className={inWindow ? "max-w-[80ch]" : undefined}
+                        taskLinks={taskLinks}
+                      >
                         {step.notes!}
                       </Markdown>
-                      <AttachmentThumbs text={step.notes} />
+                      <AttachmentThumbs text={step.notes} large={inWindow} />
                     </>
                   ) : (
                     <span className="text-xs text-muted-foreground/70">No notes yet.</span>

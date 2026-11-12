@@ -22,7 +22,16 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { TASK_STATUSES, type BoardSnapshot, type Project, type TaskStatus, type TaskSummary } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowDownUpIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, LayoutGridIcon, RefreshCwIcon } from "lucide-react";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type RefObject,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "~/components/ui/button";
 import {
   Menu,
@@ -61,6 +70,7 @@ import { BoardHeader } from "./BoardHeader";
 import { BOARD_GRID_CLASS_NAME, BoardLane } from "./BoardLane";
 import { PriorityLane } from "./PriorityLane";
 import { useBoardFilters, useOpenTask, useProjectFilter, useSelectedTaskId } from "./boardNavigation";
+import { cardClickOpens } from "./boardSelection.logic";
 import { dropAnimation, snapshotCardRects, useBoardFlip } from "./cardMotion";
 import {
   byPosition,
@@ -150,6 +160,31 @@ const measuring = { droppable: { strategy: MeasuringStrategy.Always } };
 const autoScroll = { threshold: { x: 0.12, y: 0.15 }, acceleration: 6 };
 
 /** The main board: header, sticky column headers and one swimlane per project. */
+/** How soon after a card's click a second one still counts as its double-click, landing off the card. */
+const DOUBLE_CLICK_MS = 600;
+
+/**
+ * The second click of a double-click on a card, when it lands off every card: while the board narrows for the panel,
+ * the View Transition puts its snapshot over the page and the click goes to the root. It still expands the task the
+ * first click opened. A second click on a card is the card's own (`cardClickOpens`).
+ */
+function useDoubleClickOutsideCards(
+  lastClickedRef: RefObject<{ id: string; at: number } | null>,
+  expand: (taskId: string) => void,
+) {
+  const onClick = useEffectEvent((event: MouseEvent) => {
+    const last = lastClickedRef.current;
+    if (event.detail !== 2 || event.altKey || !last || performance.now() - last.at > DOUBLE_CLICK_MS) return;
+    if (event.target instanceof Element && event.target !== document.documentElement) return;
+    expand(last.id);
+  });
+  useEffect(() => {
+    const listener = (event: MouseEvent) => onClick(event);
+    window.addEventListener("click", listener);
+    return () => window.removeEventListener("click", listener);
+  }, []);
+}
+
 export function Board() {
   const boardQuery = useBoard();
   const projectFilter = useProjectFilter();
@@ -339,6 +374,9 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   // would block the task panel's slide for its length; deferred, React renders it in slices between frames.
   const selectedTaskId = useDeferredValue(useSelectedTaskId());
   const openTask = useOpenTask();
+  // The task the last plain click opened, which the second click of a double-click expands.
+  const lastClickedRef = useRef<{ id: string; at: number } | null>(null);
+  useDoubleClickOutsideCards(lastClickedRef, (id) => void openTask(id, { reveal: false, expanded: true }));
   const settings = useSettings().data;
   const moveTask = useMoveTask();
   const updateProject = useUpdateProject();
@@ -388,7 +426,21 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const contentRef = useRef<HTMLDivElement>(null);
   const context = useMemo<BoardContextValue>(
     () => ({
-      openTask: (id) => void openTask(id, { reveal: false }),
+      openTask: (id, click) => {
+        switch (cardClickOpens(click)) {
+          case "open":
+            lastClickedRef.current = { id, at: performance.now() };
+            return void openTask(id, { reveal: false, expanded: false });
+          case "window":
+            return void openTask(id, { reveal: false, expanded: true });
+          case "expand":
+            // The task the first click opened, by id: its navigation may not have landed yet, and the card under
+            // this click may be another one, moved there as the board narrowed.
+            return void openTask(lastClickedRef.current?.id ?? id, { reveal: false, expanded: true });
+          case "none":
+            return;
+        }
+      },
       revealTask: (id) => void openTask(id),
       openPlanEditor: (id) => void openTask(id, { reveal: false }).then(() => usePanel.getState().requestPlanEditor()),
       suppressClickRef,

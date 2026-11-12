@@ -19,7 +19,7 @@ import { cn } from "~/lib/utils";
 import { AttentionIcon } from "./attention";
 import { ATTENTION_LABELS, PRIORITY_ROW_ID, ticketKeys, topAttention } from "./board.logic";
 import { useBoardContext } from "./BoardContext";
-import { isPickClick } from "./boardSelection.logic";
+import { isPickClick, isWindowPress } from "./boardSelection.logic";
 import { CardContextMenu } from "./CardContextMenu";
 import { blockedLabel } from "./dependencies.logic";
 import { CardLinks, chipClassName, hasCardLinks, linkHandlers, PrStatusChip } from "./CardLinks";
@@ -360,14 +360,14 @@ export const SortableTaskCard = memo(function SortableTaskCard({
   );
   const picked = useBoardPick((s) => s.picked.includes(task.id));
 
-  const open = () => {
+  const open = (click?: { altKey: boolean; detail: number }) => {
     if (suppressClickRef.current) return;
     useBoardPick.getState().clearPicked();
-    openTask(task.id);
+    openTask(task.id, click);
   };
 
   const onClick = (event: MouseEvent<HTMLDivElement>) => {
-    if (!isPickClick(event)) return open();
+    if (!isPickClick(event)) return open(event);
     event.preventDefault();
     useBoardPick.getState().togglePicked(task.id);
   };
@@ -379,9 +379,9 @@ export const SortableTaskCard = memo(function SortableTaskCard({
         style={{ transform: CSS.Translate.toString(transform), transition }}
         {...attributes}
         {...listeners}
-        // A Ctrl/⌘-press picks the card, so it never starts a drag.
+        // A Ctrl/⌘-press picks the card and an Alt-press opens its window, so neither starts a drag.
         onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
-          if (isPickClick(event)) return;
+          if (isPickClick(event) || event.altKey) return;
           listeners?.onPointerDown?.(event);
           prefetchDetail(task.id);
         }}
@@ -402,6 +402,10 @@ export const SortableTaskCard = memo(function SortableTaskCard({
           picked && "bg-primary/8 ring-2 ring-primary/70 ring-inset",
         )}
         onClick={onClick}
+        // A double-click would select the card's text.
+        onMouseDown={(event) => {
+          if (isWindowPress(event)) event.preventDefault();
+        }}
         onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
           listeners?.onKeyDown?.(event);
           if (event.defaultPrevented || event.key !== "Enter" || event.target !== event.currentTarget) return;

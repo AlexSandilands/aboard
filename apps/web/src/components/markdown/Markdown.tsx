@@ -4,7 +4,9 @@ import ReactMarkdown, { defaultUrlTransform, type Components, type ExtraProps, t
 import remarkGfm from "remark-gfm";
 
 import { AttachmentPill } from "~/components/attachments/AttachmentPill";
+import { InlineAttachment } from "~/components/attachments/InlineAttachment";
 import { cn } from "~/lib/utils";
+import { CodeBlock } from "./CodeBlock";
 import { remarkTaskRefs, taskRefNumber } from "./taskRefs.logic";
 
 type Plugins = NonNullable<Options["remarkPlugins"]>;
@@ -42,11 +44,18 @@ function MarkdownLink({ node: _node, children, href, ...props }: ComponentProps<
   );
 }
 
-/** A pasted image (`![name](attachment:id)`) is a pill in the text; its thumbnail is shown below the text. */
+// Whether pasted images show in place (the document size) or as pills with thumbnails below the text.
+const InlineImagesContext = createContext(false);
+
+/**
+ * A pasted image (`![name](attachment:id)`): a pill in the text, its thumbnail shown below the text (AttachmentThumbs).
+ * At the document size it shows in place at the column's width instead.
+ */
 function MarkdownImage({ node: _node, src, alt, ...props }: ComponentProps<"img"> & ExtraProps) {
+  const inline = useContext(InlineImagesContext);
   const id = attachmentIdOf(typeof src === "string" ? src : undefined);
   if (!id) return <img src={src} alt={alt} {...props} />;
-  return <AttachmentPill id={id} name={alt || "image"} />;
+  return inline ? <InlineAttachment id={id} name={alt || "image"} /> : <AttachmentPill id={id} name={alt || "image"} />;
 }
 
 /** react-markdown drops URLs with a scheme it doesn't know, and `attachment:` is how a pasted image is written. */
@@ -55,6 +64,7 @@ const urlTransform = (url: string): string => (attachmentIdOf(url) ? url : defau
 const components: Components = {
   a: MarkdownLink,
   img: MarkdownImage,
+  pre: CodeBlock,
   table: ({ node: _node, ...props }) => (
     <div className="markdown-table-container">
       <table {...props} />
@@ -62,7 +72,10 @@ const components: Components = {
   ),
 };
 
-/** GitHub-flavoured markdown in the `.markdown` prose style. Links open in a new tab. */
+/**
+ * GitHub-flavoured markdown in the `.markdown` prose style. Links open in a new tab; fenced code blocks are
+ * syntax-highlighted (CodeBlock).
+ */
 export const Markdown = memo(function Markdown({
   children,
   size = "sm",
@@ -71,8 +84,11 @@ export const Markdown = memo(function Markdown({
   images = true,
 }: {
   children: string;
-  /** "sm" for panel body text, "xs" for notes and quotes. */
-  size?: "sm" | "xs";
+  /**
+   * "sm" for panel body text, "xs" for notes and quotes, "md" for a document in the task window: larger type at a
+   * reading measure, a real heading scale, and pasted images in place at the column's width.
+   */
+  size?: "md" | "sm" | "xs";
   /** Layout only. */
   className?: string;
   taskLinks?: TaskLinks;
@@ -87,20 +103,26 @@ export const Markdown = memo(function Markdown({
     <div
       className={cn(
         "markdown min-w-0 wrap-anywhere text-foreground/85",
-        size === "sm" ? "text-[13px] leading-relaxed" : "text-xs leading-relaxed",
+        size === "md"
+          ? "markdown-md max-w-[72ch] text-[15px] leading-[1.65]"
+          : size === "sm"
+            ? "text-[13px] leading-relaxed"
+            : "text-xs leading-relaxed",
         className,
       )}
     >
-      <TaskLinksContext value={taskLinks ?? null}>
-        <ReactMarkdown
-          remarkPlugins={plugins}
-          components={components}
-          urlTransform={urlTransform}
-          {...(images ? {} : { disallowedElements: ["img"], unwrapDisallowed: true })}
-        >
-          {children}
-        </ReactMarkdown>
-      </TaskLinksContext>
+      <InlineImagesContext value={size === "md"}>
+        <TaskLinksContext value={taskLinks ?? null}>
+          <ReactMarkdown
+            remarkPlugins={plugins}
+            components={components}
+            urlTransform={urlTransform}
+            {...(images ? {} : { disallowedElements: ["img"], unwrapDisallowed: true })}
+          >
+            {children}
+          </ReactMarkdown>
+        </TaskLinksContext>
+      </InlineImagesContext>
     </div>
   );
 });

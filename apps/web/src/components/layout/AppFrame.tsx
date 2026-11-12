@@ -4,7 +4,7 @@ import { scopeToRemember } from "~/components/board/projectScope.logic";
 import { restoreBoardScope } from "~/components/board/projectScopeRestore";
 import { useProjectIds } from "~/state/queries";
 import { useProjectScope } from "~/state/ui";
-import { useCloseTask, useProjectFilter, useSelectedTaskId } from "~/components/board/boardNavigation";
+import { useCloseTask, useProjectFilter, useSelectedTaskId, useTaskExpanded } from "~/components/board/boardNavigation";
 import { useSettingsBack } from "~/components/settings/SettingsShell";
 import { useInSocial, useLeaveSocial } from "~/components/social/useSocialNavigation";
 import { useSidebar } from "~/components/ui/sidebar";
@@ -25,6 +25,7 @@ export function AppFrame() {
   const windowOpen = isAppModalPath(pathname);
   const taskId = useSelectedTaskId();
   const closeTask = useCloseTask();
+  const taskExpanded = useTaskExpanded();
   const projectFilter = useProjectFilter();
   const settingsBack = useSettingsBack();
   const inSocial = useInSocial();
@@ -40,7 +41,10 @@ export function AppFrame() {
             : inSocial
               ? leaveSocial
               : taskId
-                ? closeTask
+                ? // The task window docks first; a second Esc closes the task.
+                  taskExpanded
+                  ? closeAppWindow
+                  : closeTask
                 : null
       }
       newTaskProjectId={projectFilter.length === 1 ? projectFilter[0] : null}

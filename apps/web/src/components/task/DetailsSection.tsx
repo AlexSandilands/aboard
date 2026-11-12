@@ -20,6 +20,7 @@ import { useSettings } from "~/state/queries";
 import { dueDateLabel, dueStateClassName, dueStateOf, dueStateText } from "./dueDate.logic";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { TaskSection } from "./TaskSection";
+import { useTaskLayout } from "./taskLayout";
 
 /** The task's prose: what and why (description), then how (plan context). */
 export function DetailsSection({ task }: { task: TaskDetail }) {
@@ -166,6 +167,8 @@ function MarkdownField({
 }) {
   const [editing, setEditing] = useState(false);
   const taskLinks = usePanelTaskLinks();
+  // The task window reads it as a document: larger type, and pasted images in place rather than thumbnails below.
+  const inWindow = useTaskLayout() === "window";
   const text = value?.trim() ? value : null;
   return (
     <div className="px-1.5">
@@ -187,6 +190,7 @@ function MarkdownField({
         <MarkdownEditor
           taskId={taskId}
           ariaLabel={title}
+          tall={inWindow}
           value={text ?? ""}
           placeholder={placeholder}
           onSave={(next) => {
@@ -197,8 +201,10 @@ function MarkdownField({
         />
       ) : text ? (
         <>
-          <Markdown taskLinks={taskLinks}>{text}</Markdown>
-          <AttachmentThumbs text={text} />
+          <Markdown taskLinks={taskLinks} size={inWindow ? "md" : "sm"}>
+            {text}
+          </Markdown>
+          {inWindow ? null : <AttachmentThumbs text={text} />}
         </>
       ) : (
         <button

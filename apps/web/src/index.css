@@ -1599,6 +1599,101 @@ code {
   background: transparent !important;
 }
 
+/* Syntax colours for fenced code blocks (components/markdown/CodeBlock.tsx), from the app's tokens so they follow the
+   theme, light and dark, and the Contrast setting. The same palette as the script editor. */
+.markdown .tok-keyword {
+  color: var(--update-foreground);
+}
+
+.markdown .tok-string {
+  color: var(--success-foreground);
+}
+
+.markdown .tok-number {
+  color: var(--warning-foreground);
+}
+
+.markdown .tok-comment {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+.markdown .tok-function,
+.markdown .tok-type {
+  color: var(--info-foreground);
+}
+
+.markdown .tok-property {
+  color: var(--foreground);
+}
+
+.markdown .tok-invalid {
+  color: var(--error-foreground);
+}
+
+/* The document size (Markdown size="md"), for the task window: a real heading scale and roomier code and tables. The
+   reading measure and the base size are on the element (Markdown.tsx). */
+.markdown.markdown-md h1,
+.markdown.markdown-md h2,
+.markdown.markdown-md h3 {
+  margin: 1.6rem 0 0.6rem;
+  color: var(--foreground);
+  line-height: 1.25;
+}
+
+.markdown.markdown-md h1 {
+  font-size: 1.6rem;
+}
+
+.markdown.markdown-md h2 {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  padding-bottom: 0.3rem;
+  font-size: 1.3rem;
+}
+
+.markdown.markdown-md h3 {
+  font-size: 1.1rem;
+}
+
+.markdown.markdown-md h4,
+.markdown.markdown-md h5,
+.markdown.markdown-md h6 {
+  margin-top: 1.25rem;
+  font-size: 1rem;
+}
+
+.markdown.markdown-md p,
+.markdown.markdown-md ul,
+.markdown.markdown-md ol,
+.markdown.markdown-md blockquote,
+.markdown.markdown-md pre,
+.markdown.markdown-md .markdown-table-container {
+  margin: 0.85rem 0;
+}
+
+.markdown.markdown-md li + li {
+  margin-top: 0.35rem;
+}
+
+.markdown.markdown-md :not(pre) > code {
+  font-size: 0.85em;
+}
+
+.markdown.markdown-md pre {
+  padding: 1rem 1.15rem;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.markdown.markdown-md table {
+  font-size: 0.8125rem;
+}
+
+.markdown.markdown-md th,
+.markdown.markdown-md td {
+  padding: 0.55rem 0.9rem;
+}
+
 /* The rich Markdown editor (components/editor). Each line of the Markdown is a block, so blocks sit
    without the prose margins, and blank lines in the text are the spacing. */
 .rich-markdown {
