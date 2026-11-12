@@ -16,6 +16,7 @@ import {
   sectionAttention,
   sectionColumn,
   sectionsInColumn,
+  splitsIntoColumns,
   summarizeSection,
   type SectionTask,
   withCollapseChoice,
@@ -573,5 +574,21 @@ describe("section columns", () => {
     const back = moveSectionToColumn(layout, "activity", "main");
     expect(sectionsInColumn(back.order, "main", back.columns)).toEqual(["activity"]);
     expect(back.order).toHaveLength(SECTION_IDS.length);
+  });
+
+  it("splits into two columns only while each has a shown section", () => {
+    const layout = normalizeSectionLayout({});
+    expect(splitsIntoColumns(layout)).toBe(true);
+    const railHidden = { ...layout, hidden: sectionsInColumn(layout.order, "rail") };
+    expect(splitsIntoColumns(railHidden)).toBe(false);
+    const allInRail = normalizeSectionLayout({ columns: { plan: "rail", details: "rail", activity: "rail" } });
+    expect(splitsIntoColumns(allInRail)).toBe(false);
+    // An epic leaves Plan out: Plan alone in the rail leaves nothing to show there.
+    const planAlone = normalizeSectionLayout({
+      columns: Object.fromEntries(sectionsInColumn(SECTION_IDS, "rail").map((id) => [id, "main"])),
+    });
+    const withPlan = { ...planAlone, columns: { ...planAlone.columns, plan: "rail" as const } };
+    expect(splitsIntoColumns(withPlan)).toBe(true);
+    expect(splitsIntoColumns(withPlan, ["plan", "review"])).toBe(false);
   });
 });

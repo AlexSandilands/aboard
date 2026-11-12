@@ -90,7 +90,7 @@ export function sectionsInColumn(
 /** Sections added after others existed sit before the one they were split from in a saved order, not at the end. */
 const SECTION_ANCHORS: Partial<Record<SectionId, SectionId>> = { sessions: "links", usage: "links" };
 
-const isSectionId = (value: unknown): value is SectionId => SECTION_IDS.includes(value as SectionId);
+export const isSectionId = (value: unknown): value is SectionId => SECTION_IDS.includes(value as SectionId);
 
 /**
  * Re-validates stored values: unknown ids and duplicates are dropped, sections added since are appended (or placed
@@ -147,6 +147,21 @@ export function moveSection(order: ReadonlyArray<SectionId>, id: SectionId, over
   next.splice(from, 1);
   next.splice(to, 0, id);
   return next;
+}
+
+/**
+ * Whether the task window splits into two columns: only when each has a section to show (not hidden, not left out for
+ * this task). Otherwise one column, rather than an empty strip beside the other.
+ */
+export function splitsIntoColumns(
+  layout: Pick<SectionLayout, "order" | "hidden" | "columns">,
+  exclude: ReadonlyArray<SectionId> = [],
+): boolean {
+  const showsIn = (column: SectionColumn) =>
+    sectionsInColumn(layout.order, column, layout.columns).some(
+      (id) => !layout.hidden.includes(id) && !exclude.includes(id),
+    );
+  return showsIn("main") && showsIn("rail");
 }
 
 /**

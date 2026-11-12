@@ -46,7 +46,7 @@ import { usePlanActions } from "./usePlanActions";
 import { WhereItsUpTo } from "./WhereItsUpTo";
 import { EpicChildren } from "./EpicChildren";
 import { useEpicFilter, useSetEpicFilter } from "~/components/board/boardNavigation";
-import { sectionsInColumn, type SectionColumn, type SectionId, type TaskPanelLayout } from "./sections.logic";
+import { splitsIntoColumns, type SectionId, type TaskPanelLayout } from "./sections.logic";
 import { TaskLayoutContext } from "./taskLayout";
 
 const MIN_WIDTH = 380;
@@ -346,12 +346,8 @@ function TaskPanelBody({
   const wide = useWiderThan(rootRef, TWO_COLUMNS_FROM, inWindow);
   const exclude = task.kind === "epic" ? EPIC_HIDDEN_SECTIONS : undefined;
   const sections = useSectionLayout();
-  const showsIn = (column: SectionColumn) =>
-    sectionsInColumn(sections.order, column, sections.columns).some(
-      (id) => !sections.hidden.includes(id) && !exclude?.includes(id),
-    );
-  // With every shown section in one column there is nothing to put beside it: one column, rather than an empty strip.
-  const twoColumns = wide && showsIn("main") && showsIn("rail");
+  // With every shown section in one column, one column rather than an empty strip beside it.
+  const twoColumns = wide && splitsIntoColumns(sections, exclude);
   const render = (id: SectionId) => {
     switch (id) {
       case "labels":

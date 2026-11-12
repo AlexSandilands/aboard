@@ -32,7 +32,7 @@ import { useSectionLayout, useTaskPanelPrefs } from "~/state/ui";
 import { useSortableSensors } from "./ManagedSections";
 import {
   SECTION_COLUMN_TITLES,
-  SECTION_IDS,
+  isSectionId,
   SECTION_TITLES,
   sectionColumn,
   sectionsInColumn,
@@ -49,7 +49,6 @@ const OTHER_COLUMN: Record<SectionColumn, SectionColumn> = { main: "rail", rail:
 const listDropId = (column: SectionColumn) => `list:${column}`;
 const listColumn = (id: unknown): SectionColumn | null =>
   id === listDropId("main") ? "main" : id === listDropId("rail") ? "rail" : null;
-const isSectionId = (id: unknown): id is SectionId => SECTION_IDS.includes(id as SectionId);
 
 /**
  * The row under the pointer, else the list it is over (an empty one, or the space below its rows), else the closest

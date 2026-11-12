@@ -6,6 +6,9 @@ import { AttentionIcon } from "~/components/board/attention";
 import { cn } from "~/lib/utils";
 import { useSectionFrame } from "./ManagedSections";
 
+/** How wide a side-column section grows in the main column: about the docked panel's default width. */
+const SECTION_CAP_CLASS = "max-w-[34rem]";
+
 /**
  * A titled detail-panel section, separated from the one above by a hairline. Inside ManagedSections
  * the title toggles it open and closed; collapsed, the header shows a one-line summary in place of
@@ -13,9 +16,6 @@ import { useSectionFrame } from "./ManagedSections";
  * it sits beside the toggle rather than inside it, so its controls work on their own, and the plain
  * string stays on the toggle for screen readers and as the fallback when `summary` is empty.
  */
-/** How wide a side-column section grows in the main column: about the docked panel's default width. */
-const SECTION_CAP_CLASS = "max-w-[34rem]";
-
 export function TaskSection({
   title,
   actions,
