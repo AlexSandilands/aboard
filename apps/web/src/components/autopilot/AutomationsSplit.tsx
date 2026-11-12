@@ -26,6 +26,8 @@ import {
   type AutopilotField,
   type AutopilotScopeEntry,
   type CustomAutomation,
+  type Project,
+  type WhereState,
 } from "@repo/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
@@ -83,7 +85,9 @@ import { inheritDetail } from "~/components/models/choicePicker.logic";
 import { operationTarget } from "~/components/models/operations.logic";
 import { useDeleteCustomAutomation, useExportCustomAutomation } from "~/state/customAutomations";
 import { useAutopilotOverview } from "~/state/queries";
-import { useSettings } from "~/state/queries";
+import { useAutopilotScope, useSettings } from "~/state/queries";
+import { useSetAutopilotScope } from "~/state/mutations";
+import { useRowScope } from "~/components/settings/SettingsScope";
 import { AutomationField, type AutomationItem, type ConfigUpdate } from "./AutomationRows";
 import {
   advancedChangedCount,
@@ -125,7 +129,10 @@ import { ModeSwitch } from "./ModeSwitch";
 import { RecurringRulesByProject } from "~/components/recurring/RecurringSection";
 import { RunHistoryLink } from "./RunHistoryLink";
 import { useWhere } from "./useWhere";
+import { ownSettingsLabel, scopeState, scopeToggle } from "./where.logic";
 import { WhereItRuns } from "./WhereItRuns";
+import { useScopeParam } from "~/components/settings/SettingsScope";
+import { scopeSearch } from "~/components/settings/settingsScope.logic";
 
 const BUILTIN_ICONS: Record<string, LucideIcon> = {
   [AUTOPILOT_START_PLANNED]: PlayIcon,
@@ -291,8 +298,11 @@ export function AutomationsSplit({
   rejected: number;
 }) {
   const navigate = useNavigate();
+  const scope = scopeSearch(useScopeParam());
   const requested = useSearch({ strict: false, select: (search) => search.automation });
   const [adding, setAdding] = useState(false);
+  // With a project chosen in the scope sentence, each switch is that project's.
+  const { project } = useRowScope();
   const autoPaused = useAutopilotOverview().data?.autoPaused ?? [];
   const groups = groupAutomations(items);
   const ordered = groups.flatMap((g) => g.items);
@@ -305,7 +315,7 @@ export function AutomationsSplit({
     void navigate({
       to: "/settings/$group",
       params: { group: "autopilot" },
-      search: automation ? { automation } : {},
+      search: { ...scope, ...(automation ? { automation } : {}) },
       replace: true,
     });
 
@@ -317,16 +327,28 @@ export function AutomationsSplit({
           <SplitList label="Automations">
             {groups.map((group) => (
               <SplitListGroup key={group.group} label={group.label}>
-                {group.items.map((item) => (
-                  <ListRow
-                    key={item.automation.key}
-                    item={item}
-                    paused={pausedText(pausesFor(autoPaused, item.automation.key))}
-                    pending={pending}
-                    selected={item.automation.key === selectedKey}
-                    onSelect={() => select(item.automation.key)}
-                  />
-                ))}
+                {group.items.map((item) =>
+                  project ? (
+                    <ProjectListRow
+                      key={item.automation.key}
+                      item={item}
+                      project={project}
+                      paused={pausesFor(autoPaused, item.automation.key).some((p) => p.projectId === project.id)}
+                      pending={pending}
+                      selected={item.automation.key === selectedKey}
+                      onSelect={() => select(item.automation.key)}
+                    />
+                  ) : (
+                    <ListRow
+                      key={item.automation.key}
+                      item={item}
+                      paused={pausedText(pausesFor(autoPaused, item.automation.key))}
+                      pending={pending}
+                      selected={item.automation.key === selectedKey}
+                      onSelect={() => select(item.automation.key)}
+                    />
+                  ),
+                )}
               </SplitListGroup>
             ))}
             <div className="flex items-center gap-1 pe-2 sm:pe-3">
@@ -468,7 +490,9 @@ function AutomationDetail({
 }) {
   const { automation, entry, reach, custom, lastRun, previewRuns, onConfig } = item;
   const board = useBoardMode(item);
+  const { project } = useRowScope();
   const navigate = useNavigate();
+  const scope = scopeSearch(useScopeParam());
   // A field drawn in another's row (`inRowOf`), or set in the Where it runs table, gets no row of its own.
   const { essential, advanced } = splitFieldsByTier(automation.fields.filter((f) => !f.inRowOf && !f.inWhereTable));
   const overview = useAutopilotOverview().data;
@@ -483,7 +507,12 @@ function AutomationDetail({
   const mixed = !switchless && switchState(reach) === "mixed";
   const checkScript = hasCheckScript(custom);
   const editCustom = (id: string) =>
-    void navigate({ to: "/settings/autopilot/custom/$customId", params: { customId: id }, state: FROM_SETTINGS_LIST });
+    void navigate({
+      to: "/settings/autopilot/custom/$customId",
+      params: { customId: id },
+      search: scope,
+      state: FROM_SETTINGS_LIST,
+    });
   const field = (f: (typeof automation.fields)[number]) => (
     <AutomationField
       key={f.key}
@@ -520,7 +549,8 @@ function AutomationDetail({
         }
         actions={
           <>
-            {switchless ? null : (
+            {/* In project scope the switch is the project's, in its own section below. */}
+            {switchless || project ? null : (
               <Button
                 size="xs"
                 variant="ghost-muted"
@@ -540,6 +570,7 @@ function AutomationDetail({
           </>
         }
       />
+      {project && !switchless ? <ProjectHere automation={automation} project={project} pending={pending} /> : null}
       {automation.blocked || automation.needs ? (
         <div className="space-y-2 px-3 sm:px-4">
           {automation.blocked ? <BlockedWarning reason={automation.blocked} /> : null}
@@ -555,7 +586,8 @@ function AutomationDetail({
           ))}
         </div>
       ) : null}
-      {preview ? (
+      {/* Its Turn on is the board's; in project scope the project's own switch is in the section above. */}
+      {preview && !project ? (
         <PreviewNotice
           count={previewRuns}
           automation={automation.key}
@@ -951,4 +983,158 @@ function CustomActions({ custom }: { custom: CustomAutomation }) {
 export function customOf(customs: readonly CustomAutomation[] | undefined, key: string): CustomAutomation | null {
   const id = customAutomationId(key);
   return id ? (customs?.find((c) => c.id === id) ?? null) : null;
+}
+
+const HERE_WORDS: Record<WhereState, string> = { on: "On here", preview: "Preview here", off: "Off here" };
+const HERE_TONES: Record<WhereState, "success" | "warning" | "muted"> = {
+  on: "success",
+  preview: "warning",
+  off: "muted",
+};
+
+/**
+ * What an automation does in one project and how to change it there: its state there, the switch that sets the
+ * project's exception (the lane pill's popover writes the same, through `scopeToggle`), and the settings the project
+ * sets for itself, which apply over the board's.
+ */
+function useProjectHere(automation: AutopilotAutomation, project: Project) {
+  const { input, apply } = useWhere(automation);
+  const scope = { kind: "project", id: project.id } as const;
+  const state = input ? scopeState(input, scope) : null;
+  const own = useAutopilotScope(project.id).data?.find((e) => e.automation === automation.key)?.config ?? {};
+  const ownLabel = ownSettingsLabel(automation, own);
+  const reset = useSetAutopilotScope(project.id);
+  return {
+    state,
+    ownLabel,
+    ready: input !== null,
+    busy: apply.isPending,
+    toggle: (on: boolean) => {
+      if (!input) return;
+      const writes = scopeToggle(input, scope, on);
+      if (writes.length > 0) apply.mutate(writes);
+    },
+    clearOwn: () => reset.mutate({ automation: automation.key, config: () => ({}) }),
+    clearing: reset.isPending,
+  };
+}
+
+/** A list row in project scope: the automation's state in that project, and its switch there. */
+function ProjectListRow({
+  item,
+  project,
+  paused,
+  pending,
+  selected,
+  onSelect,
+}: {
+  item: ListedAutomation;
+  project: Project;
+  /** It paused itself in this project after failing, so On here isn't running until it is resumed. */
+  paused: boolean;
+  pending: boolean;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const { automation } = item;
+  const here = useProjectHere(automation, project);
+  const switchless = automation.alwaysOn;
+  const on = here.state !== null && here.state !== "off";
+  return (
+    <SplitListItem
+      id={`autopilot.automations.${automation.key}`}
+      icon={<AutomationIcon automation={automation} />}
+      title={automation.title}
+      subtitle={
+        switchless ? (
+          "Each rule has its own switch"
+        ) : here.state === null ? (
+          "Loading..."
+        ) : (
+          <>
+            {paused && here.state !== "off" ? (
+              <span className="font-medium text-warning-foreground">Paused here · </span>
+            ) : null}
+            <span className={cn(here.state === "preview" && "font-medium text-warning-foreground")}>
+              {HERE_WORDS[here.state]}
+            </span>
+            {here.ownLabel ? " · Own settings" : null}
+          </>
+        )
+      }
+      dimmed={!switchless && here.state === "off"}
+      selected={selected}
+      onSelect={onSelect}
+      trailing={
+        switchless ? null : (
+          <Switch
+            size="sm"
+            aria-label={`${automation.title} in ${project.title}`}
+            checked={on}
+            disabled={pending || here.busy || !here.ready || (!on && Boolean(automation.blocked))}
+            title={!on && automation.blocked ? automation.blocked : undefined}
+            onCheckedChange={here.toggle}
+          />
+        )
+      }
+    />
+  );
+}
+
+/** The detail's section for the project chosen in the scope sentence: its state there, and its own settings. */
+function ProjectHere({
+  automation,
+  project,
+  pending,
+}: {
+  automation: AutopilotAutomation;
+  project: Project;
+  pending: boolean;
+}) {
+  const here = useProjectHere(automation, project);
+  const on = here.state !== null && here.state !== "off";
+  return (
+    <DetailSection title={`In ${project.title}`}>
+      <SettingsRow
+        id={`autopilot.automations.${automation.key}.here`}
+        scope="project"
+        title={here.state === null ? "Loading..." : HERE_WORDS[here.state]}
+        description="Switching it here makes an exception for this project; the board's setting stays as it is."
+        status={
+          here.state === null ? null : (
+            <span className="flex items-center gap-1.5">
+              <StatusDot tone={HERE_TONES[here.state]} label={HERE_WORDS[here.state]} />
+              {here.state === "preview" ? "Records what it would do, without acting." : null}
+            </span>
+          )
+        }
+        control={
+          <Switch
+            aria-label={`${automation.title} in ${project.title}`}
+            checked={on}
+            disabled={pending || here.busy || !here.ready || (!on && Boolean(automation.blocked))}
+            onCheckedChange={here.toggle}
+          />
+        }
+      />
+      {here.ownLabel ? (
+        <SettingsRow
+          scope="project"
+          title="Own settings"
+          description={`${project.title} has its own values for ${here.ownLabel}; they apply over the board's.`}
+          control={
+            <Button
+              size="xs"
+              variant="outline"
+              aria-label={`Clear ${automation.title}'s own settings for ${project.title}`}
+              disabled={here.clearing}
+              onClick={here.clearOwn}
+            >
+              Clear own settings
+            </Button>
+          }
+        />
+      ) : null}
+    </DetailSection>
+  );
 }

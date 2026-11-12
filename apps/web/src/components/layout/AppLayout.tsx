@@ -33,7 +33,7 @@ export function AppLayout() {
   const taskId = useSelectedTaskId();
   const closeTask = useCloseTask();
   // Remembered while on the board: behind a window the board keeps showing this view (`useBoardSearch`), closing the
-  // window returns to it, and the project settings page starts on the scoped project. Read from the board route's
+  // window returns to it. Read from the board route's
   // match, for its validated search; undefined off the board.
   const search = useSearch({ from: "/_app/", shouldThrow: false });
   useEffect(() => {

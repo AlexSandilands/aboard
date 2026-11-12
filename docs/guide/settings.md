@@ -3,7 +3,8 @@
 Settings opens in a large window over the board. Each page has its own address, so the browser's Back and Forward
 and links to a setting work. Open it with the gear at the bottom of the sidebar, **Ctrl/Cmd ,**, or
 **Settings: …** in the command palette (type a section's name, such as "Settings: Review", to go straight to it).
-A project's gear in the sidebar, or right-clicking the project, opens that project's settings.
+A project's gear in the sidebar, or right-clicking the project, opens Settings for that project (see
+[Settings for one project](#settings-for-one-project)).
 
 The left side of the window lists every page with its sections beneath. Click a page to open it and a section
 to scroll to it; the section you are reading is highlighted. The **×** at the top right, **Esc**, a click outside
@@ -43,7 +44,7 @@ and a click tries again.
 | **Agents**       | [Providers](#providers) (T3 Code, Claude Code, Codex and GitHub Copilot, once you add them: [connecting agents](connect-agents.md), [T3 Code](t3-code.md)), [Models](#models) (the Light, Standard and Deep tiers and custom models picked by a task label), Operations (the model each kind of run uses) |
 | **Autopilot**    | [Automations](autopilot.md#switching-automations-on) (status, Needs you, every automation and [your own](custom-automations.md) in one list), [Runs](autopilot.md#run-history), [Limits & safety](autopilot.md#limits) (caps, quiet hours, Preview everything, variables) |
 | **Integrations** | GitHub, Ticket systems, Terminal, Model prices |
-| **Project**      | General (name, icon, folder), Planning skill, Review skill, Reviewer model, Automations, [Recurring tasks](recurring-tasks.md), Danger zone |
+| **Project**      | General (name, icon, folder), Danger zone, for the project chosen at the top |
 
 - **Project → General → Choose icon → Image** lists the images already in the project's folder under **Found in
   project**: PNG, JPEG, WebP, GIF, SVG and ICO files under 2 MB, up to 60, with names like `favicon` and `logo` first,
@@ -57,7 +58,30 @@ and a click tries again.
   the copy commands.
 - On the Autopilot page each automation is a row with its switch; clicking it shows what it does, its Off / Preview /
   On mode and its settings. Only a project's or epic's switch has Inherit.
-- The Project page has a picker at the top. It starts on the project the board was showing, else the first one.
+
+## Settings for one project
+
+Tasks, Agents, Autopilot and Project start with **Applying settings for [All projects ▾]**. Pick a project there to
+see the page as that project has it and change what a project can set for itself. The choice stays as you move
+between pages (it is part of the address), and a project's gear or right-click in the sidebar opens Settings with
+that project already chosen. With more than six projects the menu has a search box.
+
+With a project chosen:
+
+- **Tasks › Planning skill** and **Tasks › Review skill** pick the project's own skill. Its folder's skills are listed
+  first; **Board's** goes back to the board's skill.
+- **Agents › Operations › Reviewer** picks the project's reviewer model, for the reviewer subagent and the board
+  reviewer. A task can still pick its own in its panel.
+- **Autopilot › Automations** shows whether each automation is on, in Preview or off in that project, and its switch
+  turns it on or off there only, as the lane's Autopilot pill does. An automation's detail says what the project does
+  and, when the project sets some of the automation's settings for itself, offers **Clear own settings**. The
+  Recurring tasks automation lists only that project's rules, with example rules to add.
+- **Autopilot › Limits & safety › Variables** edits the project's variables, with the board's shown beneath.
+- **Project** shows the project's name, icon, folder and Danger zone. With All projects chosen it asks you to pick one.
+
+A setting the project has changed is marked **Overridden for this project**, with a button that puts it back to the
+board's. Everything else on those pages applies to every project, so it is dimmed and can't be changed until you choose
+All projects again; hover it to see why.
 
 ## Updating the desktop app
 
@@ -94,7 +118,8 @@ with its description or the models it runs; pick one to edit it on the right. **
   PR review and fixes), Autopilot (task runs, Orchestrate, the digest, custom automations) and Board tools (new
   sessions, issue import, Ask). **Default** keeps the built-in choice. Under each row is what it resolves to right now,
   on which provider and why, or why nothing can run it. Until a Claude Code, Codex or Copilot CLI provider is added and
-  switched on, nothing here can run, so the rows are greyed out under one note saying so. A project and a task can still pick their own reviewer, and
+  switched on, nothing here can run, so the rows are greyed out under one note saying so. A project (chosen at the top)
+  and a task can still pick their own reviewer, and
   each automation its own Model.
 
 ## Providers

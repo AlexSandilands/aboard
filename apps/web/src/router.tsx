@@ -56,12 +56,12 @@ export const boardRoute = createRoute({
   component: () => null,
 });
 
-/** `?project=` on the project settings page and its rule editor: the project shown. */
-const SettingsProjectSearch = z.object({ project: z.string().optional() });
 /**
- * The settings pages' search: the project page's project, the provider the Providers page edits, or the automation
- * the Autopilot page shows.
+ * `?project=` on every settings page: the scope chosen in "Applying settings for", kept as you move around Settings.
+ * None is All projects.
  */
+const SettingsProjectSearch = z.object({ project: z.string().min(1).optional().catch(undefined) });
+/** The settings pages' search: the scope, the provider the Providers page edits, or the automation Autopilot shows. */
 const SettingsGroupSearch = SettingsProjectSearch.extend({
   provider: z.string().optional(),
   automation: z.string().optional(),
@@ -71,25 +71,28 @@ const SettingsGroupSearch = SettingsProjectSearch.extend({
  * Where an old settings link goes once its target has moved: the Autopilot page's Runs and Limits tabs have paths of
  * their own; anything else is a group page with the target as its hash, and the provider or automation it selects.
  */
-function movedSettingsRedirect(moved: string, provider?: string) {
+function movedSettingsRedirect(moved: string, search: { provider?: string; project?: string }) {
   const group = moved.split(".")[0]!;
+  // The scope goes along: an old link into a project's settings lands on the new row in that project's scope.
+  const scope = search.project ? { project: search.project } : {};
   if (group === "autopilot" && autopilotTabOf(moved) === "limits") {
-    return redirect({ to: "/settings/autopilot/limits", hash: moved, replace: true });
+    return redirect({ to: "/settings/autopilot/limits", search: scope, hash: moved, replace: true });
   }
   if (group === "autopilot" && autopilotTabOf(moved) === "runs") {
     return redirect({
       to: "/settings/autopilot/runs/$automation",
       params: { automation: AUTOPILOT_ALL_RUNS },
+      search: scope,
       hash: moved,
       replace: true,
     });
   }
-  const selected = provider ?? providerOfTarget(moved);
+  const selected = search.provider ?? providerOfTarget(moved);
   const automation = automationOfTarget(moved);
   return redirect({
     to: "/settings/$group",
     params: { group },
-    search: selected ? { provider: selected } : automation ? { automation } : {},
+    search: { ...scope, ...(selected ? { provider: selected } : automation ? { automation } : {}) },
     hash: moved,
     replace: true,
   });
@@ -101,6 +104,7 @@ const ImportSearch = z.object({ draft: z.string().optional(), recipe: z.string()
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/settings",
+  validateSearch: (search) => SettingsProjectSearch.parse(search),
   component: SettingsShell,
 });
 
@@ -124,12 +128,13 @@ export const settingsGroupRoute = createRoute({
       const group = moved.split(".")[0]!;
       if (!isSettingsGroup(group))
         throw redirect({ to: "/settings/$group", params: { group: "board" }, replace: true });
-      throw movedSettingsRedirect(moved, (location.search as { provider?: string }).provider);
+      throw movedSettingsRedirect(moved, location.search);
     }
     // An old link into Integrations (`#integrations.claude-code.cli-path`) or the old Autopilot page goes to where
     // that setting is now.
     const moved = hash ? redirectSettingsTarget(hash) : hash;
-    if (moved !== hash) throw movedSettingsRedirect(moved);
+    if (moved !== hash)
+      throw movedSettingsRedirect(moved, { project: (location.search as { project?: string }).project });
   },
   component: SettingsGroupPage,
 });
@@ -247,6 +252,11 @@ declare module "@tanstack/react-router" {
   interface HistoryState {
     /** Set when a settings editor sub-page was opened from its list (see `useLeaveEditor`). */
     settingsEditorFromList?: boolean;
+    /**
+     * The settings scope the editor was opened from, when the editor's own `?project=` names something else (the
+     * rule editor's is the rule's project). Leaving the editor goes back to it; null is All projects.
+     */
+    settingsScope?: string | null;
     /** Set when the social feed was opened from Settings (see `useLeaveSocial`). */
     socialFromSettings?: boolean;
   }

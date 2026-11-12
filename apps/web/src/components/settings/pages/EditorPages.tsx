@@ -15,9 +15,13 @@ import { useBoard, useTemplates } from "~/state/queries";
 import { useRecurringRules } from "~/state/recurring";
 import { EditorPage } from "../EditorFrame";
 import { SettingsLink } from "../settingsLayout";
-import type { SettingsGroupId } from "../settingsNav.logic";
+import { editorListSection, type SettingsGroupId } from "../settingsNav.logic";
 import { FROM_SETTINGS_LIST, useLeaveEditor } from "../settingsNavigation";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
+import { scopeSearch } from "../settingsScope.logic";
+
+/** Where the rule editor returns to: the Recurring tasks automation, showing the project's rules. */
+const RECURRING_LIST = editorListSection("project");
 
 /** "new" in an editor's URL stands for one not saved yet. */
 const NEW = "new";
@@ -35,22 +39,14 @@ function EditorShell({ group, label, children }: { group: SettingsGroupId; label
 }
 
 /** Shown in place of a form while its data loads, or when what it would edit is gone. */
-function EditorMessage({
-  children,
-  back,
-}: {
-  children: ReactNode;
-  back?: { to: string; label: string; project?: string };
-}) {
+function EditorMessage({ children, back }: { children: ReactNode; back?: { to: string; label: string } }) {
   return (
     <p className="px-3 text-sm text-muted-foreground sm:px-4">
       {children}
       {back ? (
         <>
           {" "}
-          <SettingsLink to={back.to} project={back.project}>
-            {back.label}
-          </SettingsLink>
+          <SettingsLink to={back.to}>{back.label}</SettingsLink>
         </>
       ) : null}
     </p>
@@ -172,6 +168,7 @@ export function CustomAutomationImportPage() {
           void navigate({
             to: "/settings/autopilot/custom/$customId",
             params: { customId },
+            search: (prev) => scopeSearch(prev.project),
             replace: true,
             state: FROM_SETTINGS_LIST,
           })
@@ -197,8 +194,8 @@ export function RuleEditorPage() {
           ? board.error.message
           : "Loading project...";
     return (
-      <EditorShell group="project" label="Recurring task">
-        <EditorMessage back={{ to: "project.recurring", label: "Back to recurring tasks" }}>{message}</EditorMessage>
+      <EditorShell group="autopilot" label="Recurring task">
+        <EditorMessage back={{ to: RECURRING_LIST, label: "Back to recurring tasks" }}>{message}</EditorMessage>
       </EditorShell>
     );
   }
@@ -208,11 +205,11 @@ export function RuleEditorPage() {
 function RuleEditor({ projectId, ruleId }: { projectId: string; ruleId: string }) {
   const rules = useRecurringRules(projectId);
   const leaveEditor = useLeaveEditor();
-  const back = () => leaveEditor("project", projectId);
+  const back = () => leaveEditor("project");
   const isNew = ruleId === NEW;
   const rule = isNew ? null : rules.data?.find((r) => r.id === ruleId);
   return (
-    <EditorShell group="project" label={isNew ? "New recurring task" : `Recurring task: ${rule?.name ?? "…"}`}>
+    <EditorShell group="autopilot" label={isNew ? "New recurring task" : `Recurring task: ${rule?.name ?? "…"}`}>
       {isNew || rule ? (
         <RuleEditorForm
           projectId={projectId}
@@ -222,7 +219,7 @@ function RuleEditor({ projectId, ruleId }: { projectId: string; ruleId: string }
           onDone={back}
         />
       ) : rules.data || rules.error ? (
-        <EditorMessage back={{ to: "project.recurring", label: "Back to recurring tasks", project: projectId }}>
+        <EditorMessage back={{ to: RECURRING_LIST, label: "Back to recurring tasks" }}>
           {rules.error ? rules.error.message : "This rule no longer exists."}
         </EditorMessage>
       ) : (

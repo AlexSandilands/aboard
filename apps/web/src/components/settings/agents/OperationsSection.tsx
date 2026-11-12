@@ -1,9 +1,17 @@
 // Settings → Agents → Operations: the model each operation runs on, with the picker in the same field look as the
 // rest of the page. While no provider can run anything the rows are dimmed behind one notice instead of a warning on
 // each.
-import { AgentHarness, OPERATIONS, PROVIDERS, type ModelChoice, type OperationId } from "@repo/contracts";
+import {
+  AgentHarness,
+  OPERATIONS,
+  overrideValue,
+  PROVIDERS,
+  type ModelChoice,
+  type OperationId,
+  type Project,
+} from "@repo/contracts";
 import { CircleAlertIcon, TerminalIcon } from "lucide-react";
-import { resolvesTo } from "~/components/models/choicePicker.logic";
+import { inheritDetail, resolvesTo } from "~/components/models/choicePicker.logic";
 import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
 import {
   boardPickerRows,
@@ -15,8 +23,9 @@ import {
 } from "~/components/models/operations.logic";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { memo, useCallback } from "react";
-import { useUpdateSettings } from "~/state/mutations";
-import { useOperationSettings } from "~/state/queries";
+import { useUpdateProject, useUpdateSettings } from "~/state/mutations";
+import { useOperationSettings, useSettings } from "~/state/queries";
+import { useRowScope } from "../SettingsScope";
 import { SettingsRow, SettingsSection, SettingsSubsection } from "../settingsLayout";
 import { CONTROL_PICKER } from "./SplitCard";
 
@@ -39,7 +48,7 @@ export const OperationsSection = memo(function OperationsSection({ blocked }: { 
     </SettingsSection>
   ));
   return (
-    <SettingsSubsection id="agents.operations">
+    <SettingsSubsection id="agents.operations" scope="project">
       {blocked ? (
         <div className="relative">
           <div
@@ -82,6 +91,14 @@ function listOr(words: readonly string[]): string {
  * row, or any other setting, doesn't re-render it.
  */
 const OperationRow = memo(function OperationRow({ op, quiet }: { op: OperationId; quiet: boolean }) {
+  const { project } = useRowScope();
+  // A project picks its own reviewer (for the reviewer subagent and the board reviewer); every other operation's
+  // model is the board's.
+  if (op === "reviewer" && project) return <ProjectReviewerRow project={project} />;
+  return <BoardOperationRow op={op} quiet={quiet} />;
+});
+
+function BoardOperationRow({ op, quiet }: { op: OperationId; quiet: boolean }) {
   const settings = useOperationSettings(op);
   const { mutate } = useUpdateSettings();
   const onChange = useCallback(
@@ -125,4 +142,43 @@ const OperationRow = memo(function OperationRow({ op, quiet }: { op: OperationId
       }
     />
   );
-});
+}
+
+/** The Reviewer row in project scope: the project's own reviewer model, which its tasks use unless they pick one. */
+function ProjectReviewerRow({ project }: { project: Project }) {
+  const settings = useSettings().data;
+  const updateProject = useUpdateProject();
+  if (!settings) return null;
+  const ctx = { projectOverride: project.reviewModel };
+  const line = (op: "reviewer" | "boardReviewer") => resolvesTo(op, ctx, settings).text.replace(/^Resolves to /, "");
+  return (
+    <SettingsRow
+      id={operationTarget("reviewer")}
+      scope="project"
+      title={OPERATIONS.reviewer.label}
+      info={`${OPERATION_DESCRIPTIONS.reviewer} For this project it is also the board reviewer's model, which needs a provider that can return structured output. A task can still pick its own.`}
+      override={
+        project.reviewModel
+          ? { label: "reviewer model", onReset: () => updateProject.mutate({ id: project.id, reviewModel: null }) }
+          : null
+      }
+      status={
+        <>
+          <span className="block">Reviewer subagent: {line("reviewer")}</span>
+          <span className="block">Board reviewer: {line("boardReviewer")}</span>
+        </>
+      }
+      control={
+        <ModelChoicePicker
+          op="reviewer"
+          value={project.reviewModel}
+          inherit={{ label: "Board's setting", detail: inheritDetail("reviewer", {}, settings) }}
+          ariaLabel={`Reviewer model for ${project.title}`}
+          size="sm"
+          className={CONTROL_PICKER}
+          onChange={(next) => updateProject.mutate({ id: project.id, reviewModel: overrideValue(next) })}
+        />
+      }
+    />
+  );
+}

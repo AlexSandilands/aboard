@@ -1,11 +1,8 @@
-import { parseProjectScope, type Project } from "@repo/contracts";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import type { Project } from "@repo/contracts";
+import { FolderIcon } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
-import { ProjectAutopilotSection } from "~/components/autopilot/AutopilotSettingsSection";
-import { ProjectVariablesSection } from "~/components/autopilot/VariablesSection";
 import { withTrailingSeparator } from "~/components/command/palette.logic";
 import { ProjectFavicon } from "~/components/project/ProjectFavicon";
-import { RecurringSection } from "~/components/recurring/RecurringSection";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -15,18 +12,14 @@ import {
   DialogPopup,
   DialogTitle,
 } from "~/components/ui/dialog";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { Input } from "~/components/ui/input";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { toastManager } from "~/components/ui/toast";
 import { useDeleteProject, useUpdateProject } from "~/state/mutations";
 import { useBoard } from "~/state/queries";
-import { useSettingsNav } from "~/state/ui";
 import { FolderPicker } from "../FolderPicker";
-import { ProjectPlanSkillSection } from "../PlanSkillSection";
-import { ProjectReviewSection } from "../ProjectReviewSection";
-import { ProjectModelsSection } from "../ProjectModelsSection";
-import { SettingsLink, SettingsRow, SettingsSection, SettingsSubsection } from "../settingsLayout";
-import { resolveSettingsProject } from "../settingsNav.logic";
+import { useSettingsScope } from "../SettingsScope";
+import { SettingsGroup, SettingsLink, SettingsRow, SettingsSection, SettingsSubsection } from "../settingsLayout";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
 import { useUnarchiveProject } from "../useArchivedProjects";
 
@@ -38,25 +31,13 @@ const ProjectIconPickerDialog = lazy(() =>
 );
 
 /**
- * Settings → Project: a picker for the project (`?project=`, else the board's scope when Settings opened, else the
- * first), then that project's settings.
+ * Settings → Project: the project chosen in the scope sentence, itself (name, icon, folder) and its danger zone. Its
+ * other settings are where the board's are, on Tasks, Agents and Autopilot in the same scope. With All projects
+ * chosen it asks for one.
  */
 export function ProjectSettingsPage() {
   const board = useBoard();
-  const requested = useSearch({ strict: false, select: (search) => search.project });
-  const boardScope = useSettingsNav((s) => s.boardReturn.project);
-  // A scope of several projects names no single one to show.
-  const scoped = parseProjectScope(boardScope);
-  const fromBoard = scoped.length === 1 ? scoped[0] : null;
-  // In sidebar order, so the picker reads like the project list.
-  const projects = [...(board.data?.projects ?? [])].sort((a, b) =>
-    a.position < b.position ? -1 : a.position > b.position ? 1 : 0,
-  );
-  const project = resolveSettingsProject(projects, requested, fromBoard);
-  const navigate = useNavigate();
-  const pick = (id: string) =>
-    void navigate({ to: "/settings/$group", params: { group: "project" }, search: { project: id }, replace: true });
-
+  const { project, projects } = useSettingsScope();
   return (
     <>
       <SettingsTopBar group="project" />
@@ -65,59 +46,32 @@ export function ProjectSettingsPage() {
           <p className="px-3 text-sm text-muted-foreground sm:px-4">
             {board.error ? board.error.message : "Loading projects..."}
           </p>
-        ) : !project ? (
+        ) : projects.length === 0 ? (
           <p className="px-3 text-sm text-muted-foreground sm:px-4">
             No projects yet. Add one from the board&apos;s sidebar or the command palette.
           </p>
+        ) : !project ? (
+          <SettingsGroup>
+            <Empty size="compact" className="min-h-0 gap-3 py-8">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <FolderIcon />
+                </EmptyMedia>
+                <EmptyTitle>Choose a project</EmptyTitle>
+                <EmptyDescription>
+                  Pick one in &ldquo;Applying settings for&rdquo; above to rename it, change its icon or folder, or
+                  archive it. Archived projects are under{" "}
+                  <SettingsLink to="board.data.archived-projects">Board › Data</SettingsLink>.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </SettingsGroup>
         ) : (
-          <>
-            <ProjectPicker projects={projects} project={project} onPick={pick} />
-            {/* Keyed so per-project drafts (the name field, the folder browser) start fresh on a switch. */}
-            <ProjectSections key={project.id} project={project} />
-          </>
+          // Keyed so per-project drafts (the name field, the folder browser) start fresh on a switch.
+          <ProjectSections key={project.id} project={project} />
         )}
       </SettingsScroller>
     </>
-  );
-}
-
-function ProjectPicker({
-  projects,
-  project,
-  onPick,
-}: {
-  projects: ReadonlyArray<Project>;
-  project: Project;
-  onPick: (id: string) => void;
-}) {
-  // Archived projects aren't in the board snapshot; they are restored from Board › Data.
-  return (
-    <div className="flex items-center gap-3 px-3 sm:px-4">
-      <Select
-        items={projects.map((p) => ({ value: p.id, label: p.title }))}
-        value={project.id}
-        onValueChange={(value) => {
-          if (typeof value === "string") onPick(value);
-        }}
-      >
-        <SelectTrigger className="w-full sm:w-72" aria-label="Project">
-          <span className="flex min-w-0 items-center gap-2">
-            <ProjectFavicon title={project.title} icon={project.icon} className="size-4" />
-            <SelectValue />
-          </span>
-        </SelectTrigger>
-        <SelectPopup alignItemWithTrigger={false}>
-          {projects.map((p) => (
-            <SelectItem key={p.id} value={p.id}>
-              <span className="flex min-w-0 items-center gap-2">
-                <ProjectFavicon title={p.title} icon={p.icon} className="size-4" />
-                <span className="truncate">{p.title}</span>
-              </span>
-            </SelectItem>
-          ))}
-        </SelectPopup>
-      </Select>
-    </div>
   );
 }
 
@@ -125,16 +79,15 @@ function ProjectSections({ project }: { project: Project }) {
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
   const unarchive = useUnarchiveProject();
-  const navigate = useNavigate();
+  const { setScope } = useSettingsScope();
   const [title, setTitle] = useState(project.title);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const board = useBoard();
   const taskCount = board.data?.tasks.filter((t) => t.projectId === project.id).length ?? 0;
-  // After archiving or deleting, the page moves on to another project.
-  const clearProject = () =>
-    void navigate({ to: "/settings/$group", params: { group: "project" }, search: {}, replace: true });
+  // After archiving or deleting, the scope goes back to All projects.
+  const clearProject = () => setScope(null);
 
   function saveTitle() {
     const next = title.trim();
@@ -164,7 +117,7 @@ function ProjectSections({ project }: { project: Project }) {
 
   return (
     <>
-      <SettingsSubsection id="project.general">
+      <SettingsSubsection id="project.general" scope="any">
         <SettingsSection id="project.general.settings" title="General">
           <SettingsRow
             id="project.general.name"
@@ -265,23 +218,7 @@ function ProjectSections({ project }: { project: Project }) {
           />
         </SettingsSection>
       </SettingsSubsection>
-      <SettingsSubsection id="project.plan-skill">
-        <ProjectPlanSkillSection project={project} />
-      </SettingsSubsection>
-      <SettingsSubsection id="project.review-skill">
-        <ProjectReviewSection project={project} />
-      </SettingsSubsection>
-      <SettingsSubsection id="project.models">
-        <ProjectModelsSection project={project} />
-      </SettingsSubsection>
-      <SettingsSubsection id="project.autopilot">
-        <ProjectAutopilotSection projectId={project.id} />
-        <ProjectVariablesSection project={project} />
-      </SettingsSubsection>
-      <SettingsSubsection id="project.recurring">
-        <RecurringSection project={project} />
-      </SettingsSubsection>
-      <SettingsSubsection id="project.danger-zone">
+      <SettingsSubsection id="project.danger-zone" scope="any">
         <SettingsSection id="project.danger-zone.settings" title="Danger zone">
           <SettingsRow
             id="project.danger-zone.archive"

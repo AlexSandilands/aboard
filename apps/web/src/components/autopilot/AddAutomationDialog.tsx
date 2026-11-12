@@ -10,6 +10,8 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { QuickSetup, type QuickSetupState } from "./QuickSetup";
+import { useScopeParam } from "~/components/settings/SettingsScope";
+import { scopeSearch } from "~/components/settings/settingsScope.logic";
 
 export function AddAutomationDialog({
   open,
@@ -21,6 +23,7 @@ export function AddAutomationDialog({
   quickSetup: QuickSetupState;
 }) {
   const navigate = useNavigate();
+  const scope = scopeSearch(useScopeParam());
   const [choosing, setChoosing] = useState(false);
   const go = (to: () => void) => {
     onOpenChange(false);
@@ -94,7 +97,7 @@ export function AddAutomationDialog({
                       () =>
                         void navigate({
                           to: "/settings/autopilot/custom/import",
-                          search: { recipe: recipe.id },
+                          search: { ...scope, recipe: recipe.id },
                           state: FROM_SETTINGS_LIST,
                         }),
                     )
@@ -113,7 +116,14 @@ export function AddAutomationDialog({
             <Button
               variant="outline"
               onClick={() =>
-                go(() => void navigate({ to: "/settings/autopilot/custom/import", state: FROM_SETTINGS_LIST }))
+                go(
+                  () =>
+                    void navigate({
+                      to: "/settings/autopilot/custom/import",
+                      search: scope,
+                      state: FROM_SETTINGS_LIST,
+                    }),
+                )
               }
             >
               <FileUpIcon />
@@ -126,6 +136,7 @@ export function AddAutomationDialog({
                     void navigate({
                       to: "/settings/autopilot/custom/$customId",
                       params: { customId: "new" },
+                      search: scope,
                       state: FROM_SETTINGS_LIST,
                     }),
                 )

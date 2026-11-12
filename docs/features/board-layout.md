@@ -492,12 +492,47 @@ route's `beforeLoad`): `integrations.<provider>…` and `providers.…` go to `a
 `models.custom…` and `models.operations…` to their place on Agents (`MOVED_TO_AGENTS`).
 
 The reviewer and issue-import models live only under Operations: their
-old rows in Tasks show one line of what they resolve to with a **Change** link (`OperationModelLink`). A project's
-reviewer model is its own section (`project.models.reviewer`). Targets from before the page (`models.tiers.custom*`,
-`tasks.review.model`, `tasks.new-tasks.import-model`, `project.review-skill.model`) redirect to where they are now
-(`MOVED_TARGETS`). The editors are sub-routes: `tasks/templates/<id>`,
-`autopilot/custom/<id>` and `project/recurring/<id>`, with `new` for one not saved yet. The project page and the
-rule editor take `?project=`; without it the page shows the project the board was scoped to, else the first.
+old rows in Tasks show one line of what they resolve to with a **Change** link (`OperationModelLink`). Targets from
+before the page (`models.tiers.custom*`, `tasks.review.model`, `tasks.new-tasks.import-model`) redirect to where they
+are now (`MOVED_TARGETS`). The editors are sub-routes: `tasks/templates/<id>`, `autopilot/custom/<id>` and
+`project/recurring/<id>`, with `new` for one not saved yet. The rule editor's path stays under `project/` for old
+links, but its crumbs and the rail say Autopilot and leaving it returns to the Recurring tasks automation
+(`editorListSection("project")`). Its `?project=` is the rule's project, so the list stores the scope it was in as
+`settingsScope` in the history state and leaving the editor goes back to that scope.
+
+#### The project scope
+
+Settings has one scope, after T3 Code's (`SettingsScope.tsx`, ported from its `SettingsScopeSentence.tsx`; only the
+project axis, the board has no environments): **Applying settings for [All projects ▾]** at the top of Tasks, Agents,
+Autopilot and Project (`SCOPED_GROUPS` in `settingsScope.logic.ts`; `SettingsScroller` renders it on those pages, not
+on editors). It is a menu up to six projects and a combobox with a search box past that. The scope is `?project=` on
+every settings route (`settingsRoute` validates it for all its children): `useOpenSettings` keeps the current one
+inside Settings unless told otherwise (`project: null` is All projects), opening from the board starts in All projects
+unless a project is passed (a project's gear or right-click in the sidebar, the lane pill popover's gear), and the
+pages' own navigations spread `scopeSearch(useScopeParam())`. An unknown or archived id reads as All projects
+(`scopeProject`). The board behind the window reads its own search from `boardReturn`, so the settings `?project=`
+never reaches it. Run history's project filter is the same param, so the Runs tab follows the scope.
+
+What a page does in project scope is declared, not hidden: `SettingsSubsection` and `SettingsRow` take `scope`
+(`board`, the default, `project` or `any`). A `board` sub-section is dimmed and inert as a whole (`BoardWide`, with a
+tooltip saying it applies to every project), a `project` one dims only its `board` rows one by one, and `any` is never
+dimmed (Needs you, the run history, the project page). A row that edits the project's own value takes `override`
+while one is set: an **Overridden for this project** badge with a reset to the board's. The rows that do:
+
+| Row | Project field |
+| --- | --- |
+| Tasks › Planning skill (`tasks.planning.skill`) | `planSkill`, the project's folder skills listed first |
+| Tasks › Review skill (`tasks.review.skill`) | `reviewSkill` |
+| Agents › Operations › Reviewer (`agents.operations.reviewer`) | `reviewModel`, both reviewers' resolves-to lines |
+| Autopilot › Automations (each row, and **In <project>** in the detail) | the project's mode, through `scopeToggle`; **Clear own settings** |
+| Autopilot › Limits & safety › Variables (`autopilot.limits.variables.list`) | `variables`, the board's shown as inherited |
+| Autopilot › Automations › Recurring tasks | that project's rules and the example rules |
+
+The Project page itself is only the project: General (name, icon, folder, T3 link) and Danger zone for the scope's
+project, or a prompt to pick one in All projects. Archiving or deleting it sets the scope back to All projects. The
+page's old sections (`project.plan-skill`, `project.review-skill`, `project.models`, `project.autopilot`,
+`project.recurring` and their rows) redirect to the rows above (`MOVED_TARGETS`), and the router keeps `?project=` on
+every redirect, so an old link lands on the row in that project's scope.
 
 - **Shell.** Every page sits under one pathless layout route (`_app`, `AppFrame`) that renders a single `AppShell`:
   the resizable projects sidebar (an off-canvas sheet on narrow windows), the palette, the app dialogs, live sync and

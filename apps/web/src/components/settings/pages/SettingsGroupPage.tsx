@@ -92,10 +92,10 @@ function TasksContent() {
         <TemplatesSection />
         <WithSettings>{(settings) => <IssueImportSection settings={settings} />}</WithSettings>
       </SettingsSubsection>
-      <SettingsSubsection id="tasks.planning">
+      <SettingsSubsection id="tasks.planning" scope="project">
         <WithSettings>{(settings) => <PlanSkillSection settings={settings} />}</WithSettings>
       </SettingsSubsection>
-      <SettingsSubsection id="tasks.review">
+      <SettingsSubsection id="tasks.review" scope="project">
         <WithSettings>{(settings) => <ReviewSettingsSection settings={settings} />}</WithSettings>
       </SettingsSubsection>
       <SettingsSubsection id="tasks.suggestions">

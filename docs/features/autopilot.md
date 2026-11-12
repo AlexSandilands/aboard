@@ -481,11 +481,12 @@ effectively off, and dropped its settings rows.
   changes, so slots from before that aren't caught up. The same goes for Pause all: when it is lifted,
   `AutopilotService` calls `onEnabled` for every project and the rules restart from now (`recurring.restart`). Only
   downtime of the board itself catches up.
-- Rules are managed in the project's settings (**Recurring tasks**, `components/recurring/`), which also offers
-  example rules: adding one creates a template for the project (reusing one of the same name) and the rule. The
+- Rules are managed in the Recurring tasks detail in Settings → Autopilot (`components/recurring/`); in a project's
+  scope it lists that project's rules and offers example rules: adding one creates a template for the project (reusing one of the same name) and the rule. The
   Recurring tasks row in Settings → Autopilot has no switch (`alwaysOn` hides it, and `scopeAutomations` leaves it out
   of the lane and epic popovers); its detail lists every project's rules (`RecurringRulesByProject`), each with its
-  switch, next run, last task and a **New rule** for that project, sharing `ProjectRuleRows` with the project's page.
+  switch, next run, last task and a **New rule** for that project (`ProjectRuleRows`). The rule editor keeps its
+  path (`/settings/project/recurring/$ruleId?project=`) and returns to that detail.
 
 #### Recurring rules API
 
@@ -2087,11 +2088,12 @@ tab's path. Orchestrate's **Countdown on lanes** (`showAutopilotTimer`, a per-br
 The fields are a form generated from the automation's `fields`: a switch, number, text, 24-hour time or select per
 field, and for `skill` the review skill picker (built-in skill plus skills found on disk; a skill is stored as a
 `ReviewSkillRef`, and an unset one is the built-in skill, labelled with the field's `builtinLabel` when it has one,
-such as the digest's own skill). The board's fields are edited in the detail, as above. A project's settings page (Settings → Project → Automations,
-`ProjectAutopilotSection`) is read only: each automation with the sentence saying where it runs, **On here** or
-**Off here**, and a **Change** button that opens that automation's detail (`autopilot.automations.<key>`). A project
-no longer has a form for its own config: a value already stored for a project still applies over the board's, so its
-row says "This project sets its own: …" and has **Clear own settings** (it saves the scope's config as empty, which the
+such as the digest's own skill). The board's fields are edited in the detail, as above. With a project chosen in the
+settings scope sentence (`?project=`, see [board-layout.md](board-layout.md#the-settings-page)), each list row is
+`ProjectListRow`: **On here**, **Preview here** or **Off here** and a switch that writes `scopeToggle` for that project
+through `useApplyWhere`, the same writes as the lane's popover. The detail gains an **In <project>** section with the
+same switch. A project no longer has a form for its own config: a value already stored for a project still applies
+over the board's, so that section says the project sets its own and has **Clear own settings** (it saves the scope's config as empty, which the
 server turns into removing the row when the mode is Inherit); nothing in the UI sets one. The lane and epic popovers are the widget's compact form (`WhereRow`, see
 [board-layout.md](board-layout.md#autopilot-on-the-board)). Config set at a scope is sent whole (the server replaces
 it), so editing one key sends the scope's other keys with it; the reset button beside a field's title (shown only
