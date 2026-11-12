@@ -1,11 +1,12 @@
 // Adapted from T3 Code (apps/web/src/components/AppRouteModal.tsx), MIT — see NOTICE.
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { XIcon } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { DialogBackdrop } from "~/components/ui/dialog";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
+import { type WindowZoom, zoomIn, zoomOut } from "~/lib/windowZoom";
 
 /** Closes the window that is open, set while one is mounted. */
 let closeOpenWindow: (() => void) | null = null;
@@ -25,6 +26,9 @@ export function closeAppWindow(): boolean {
  * a press on the backdrop or `closeAppWindow()` closes it, and `onClosed` then leaves the route. Full screen below
  * `sm`.
  *
+ * It fades and scales in place, unless `zoom` gives it somewhere to grow out of and shrink back into (the task
+ * window: `lib/windowZoom.ts`).
+ *
  * Escape is not the dialog's: the `back` shortcut closes the window (`AppFrame`), so it can be rebound and yields to
  * whatever nearer the focus claims the key, as it does everywhere else. Keyboard guards that skip dialogs exempt
  * `[data-app-modal]`, because the pages inside own their shortcuts.
@@ -33,6 +37,7 @@ export function AppRouteModal({
   label,
   onClosed,
   backdropDismisses = true,
+  zoom,
   className,
   children,
 }: {
@@ -41,6 +46,8 @@ export function AppRouteModal({
   backdropDismisses?: boolean;
   /** Runs once the window has closed (after its animation): navigate away here. */
   onClosed: () => void;
+  /** Where the window grows out of and shrinks back into. Each is asked as its animation starts; null fades. */
+  zoom?: WindowZoom;
   className?: string;
   children: ReactNode;
 }) {
@@ -50,11 +57,22 @@ export function AppRouteModal({
   // Focus the surface, not its first control: no stray focus ring, no phone keyboard.
   // On close, leave focus alone; returning it to the opener paints a focus ring.
   const popupRef = useRef<HTMLDivElement>(null);
+  // As the popup attaches, before its first paint: the zoom starts it on its source. Once per popup, however often
+  // the ref is attached again (`zoomIn`).
+  const attachPopup = useCallback(
+    (popup: HTMLDivElement | null) => {
+      popupRef.current = popup;
+      if (popup && zoom) zoomIn(popup, zoom.enter);
+    },
+    [zoom],
+  );
 
   const close = () => {
     // Closing unmounts a focused field without a blur, so commit-on-blur rows would drop what was typed.
     const focused = document.activeElement;
     if (focused instanceof HTMLElement && popupRef.current?.contains(focused)) focused.blur();
+    // Started before the dialog closes: Base UI waits for the popup's animations before `onOpenChangeComplete`.
+    if (zoom && popupRef.current) zoomOut(popupRef.current, zoom.exit);
     setOpen(false);
   };
 
@@ -97,7 +115,7 @@ export function AppRouteModal({
           }}
         >
           <DialogPrimitive.Popup
-            ref={popupRef}
+            ref={attachPopup}
             initialFocus={popupRef}
             finalFocus={false}
             aria-label={label}
