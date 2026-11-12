@@ -7,12 +7,14 @@ import {
   limitItems,
   linkSummaryChips,
   moveSection,
+  moveSectionToColumn,
   normalizeSectionLayout,
   relationChipGroups,
   SECTION_ATTENTION,
   SECTION_COLUMNS,
   SECTION_IDS,
   sectionAttention,
+  sectionColumn,
   sectionsInColumn,
   summarizeSection,
   type SectionTask,
@@ -70,7 +72,7 @@ const summary = (state: TaskReviewSummary["state"]): TaskReviewSummary => ({
 
 describe("normalizeSectionLayout", () => {
   it("defaults everything when nothing is stored", () => {
-    expect(normalizeSectionLayout({})).toEqual({ order: [...SECTION_IDS], hidden: [], collapsed: {} });
+    expect(normalizeSectionLayout({})).toEqual({ order: [...SECTION_IDS], hidden: [], collapsed: {}, columns: {} });
   });
 
   it("drops unknown and duplicate ids and appends missing sections", () => {
@@ -501,5 +503,75 @@ describe("section columns", () => {
     const moved = moveSection(order, "activity", "plan");
     expect(sectionsInColumn(moved, "main")).toEqual(["activity", "plan", "details"]);
     expect(sectionsInColumn(moved, "rail")).toEqual(sectionsInColumn(order, "rail"));
+  });
+});
+
+describe("section columns", () => {
+  it("keeps a moved section's column and drops unknown ids, values and choices that match the default", () => {
+    const layout = normalizeSectionLayout({
+      columns: { plan: "rail", usage: "main", labels: "rail", nope: "main", links: "side", details: 3 },
+    });
+    expect(layout.columns).toEqual({ plan: "rail", usage: "main" });
+  });
+
+  it("loads a layout saved before columns existed with every section in its default column", () => {
+    expect(normalizeSectionLayout({ order: ["plan", "labels"] }).columns).toEqual({});
+    expect(normalizeSectionLayout({ columns: "rail" }).columns).toEqual({});
+  });
+
+  it("reads the saved column, falling back to the default", () => {
+    const columns = { plan: "rail", usage: "main" } as const;
+    expect(sectionColumn(columns, "plan")).toBe("rail");
+    expect(sectionColumn(columns, "details")).toBe("main");
+    expect(sectionsInColumn(SECTION_IDS, "main", columns)).toEqual(["usage", "details", "activity"]);
+    expect(sectionsInColumn(SECTION_IDS, "rail", columns)).toEqual([
+      "labels",
+      "sessions",
+      "links",
+      "relations",
+      "autopilot",
+      "review",
+      "plan",
+    ]);
+  });
+
+  it("drops a section on a row of the other column at that row's place", () => {
+    const layout = normalizeSectionLayout({});
+    const moved = moveSectionToColumn(layout, "details", "rail", "links");
+    expect(moved.columns).toEqual({ details: "rail" });
+    expect(sectionsInColumn(moved.order, "rail", moved.columns)).toEqual([
+      "labels",
+      "sessions",
+      "usage",
+      "details",
+      "links",
+      "relations",
+      "autopilot",
+      "review",
+    ]);
+    expect(sectionsInColumn(moved.order, "main", moved.columns)).toEqual(["plan", "activity"]);
+  });
+
+  it("puts a section moved without a drop target after the column's last section", () => {
+    const layout = normalizeSectionLayout({});
+    const moved = moveSectionToColumn(layout, "usage", "main");
+    expect(moved.columns).toEqual({ usage: "main" });
+    expect(sectionsInColumn(moved.order, "main", moved.columns)).toEqual(["plan", "details", "activity", "usage"]);
+  });
+
+  it("forgets the choice when a section goes back to its default column", () => {
+    const layout = normalizeSectionLayout({ columns: { usage: "main" } });
+    expect(moveSectionToColumn(layout, "usage", "rail").columns).toEqual({});
+  });
+
+  it("can empty a column and fill it again", () => {
+    const layout = normalizeSectionLayout({});
+    for (const id of ["plan", "details", "activity"] as const) {
+      Object.assign(layout, moveSectionToColumn(layout, id, "rail"));
+    }
+    expect(sectionsInColumn(layout.order, "main", layout.columns)).toEqual([]);
+    const back = moveSectionToColumn(layout, "activity", "main");
+    expect(sectionsInColumn(back.order, "main", back.columns)).toEqual(["activity"]);
+    expect(back.order).toHaveLength(SECTION_IDS.length);
   });
 });

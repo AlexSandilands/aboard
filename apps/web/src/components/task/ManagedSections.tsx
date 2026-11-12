@@ -30,9 +30,11 @@ import {
   sectionAttention,
   sectionsInColumn,
   summarizeSection,
+  SECTION_COLUMNS,
   type SectionColumn,
   type SectionId,
 } from "./sections.logic";
+import { useTaskLayout } from "./taskLayout";
 
 const modifiers = [restrictToVerticalAxis];
 
@@ -45,6 +47,11 @@ export interface SectionFrame {
   /** The task's warning for this section, set only while it is collapsed (open, the content shows it). */
   attention: AttentionReason | null;
   dragHandle: ReactNode;
+  /**
+   * A side-column section moved to the task window's main column: its rows are made for a panel's width, so its
+   * header and content stop at about that width instead of spreading a row's ends across the window.
+   */
+  capped: boolean;
 }
 
 const SectionFrameContext = createContext<SectionFrame | null>(null);
@@ -90,9 +97,9 @@ export function ManagedSections({
   const showAll = useTaskPanelPrefs((s) => s.showAllSections);
   const sensors = useSortableSensors();
   const [dragging, setDragging] = useState<SectionId | null>(null);
-  const order = sectionsInColumn(layout.order, column);
+  const order = sectionsInColumn(layout.order, column, layout.columns);
   const visible = order.filter((id) => !layout.hidden.includes(id) && !exclude?.includes(id));
-  const hiddenCount = sectionsInColumn(layout.hidden, column).length;
+  const hiddenCount = sectionsInColumn(layout.hidden, column, layout.columns).length;
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     setDragging(null);
@@ -147,6 +154,7 @@ function ManagedSection({ id, task, children }: { id: SectionId; task: TaskDetai
     id,
   });
   const globalReview = useSettings().data?.autoReview ?? false;
+  const capped = useTaskLayout().column === "main" && SECTION_COLUMNS[id] === "rail";
   const summary = expanded ? "" : summarizeSection(id, task, undefined, globalReview);
   const attention = expanded ? null : sectionAttention(id, task);
   const frame = useMemo<SectionFrame>(
@@ -168,8 +176,9 @@ function ManagedSection({ id, task, children }: { id: SectionId; task: TaskDetai
           <GripVerticalIcon className="size-3" />
         </button>
       ),
+      capped,
     }),
-    [id, expanded, byDefault, summary, attention, setCollapsed, setActivatorNodeRef, attributes, listeners],
+    [id, expanded, byDefault, summary, attention, capped, setCollapsed, setActivatorNodeRef, attributes, listeners],
   );
   return (
     <div

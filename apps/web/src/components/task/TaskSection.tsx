@@ -13,6 +13,9 @@ import { useSectionFrame } from "./ManagedSections";
  * it sits beside the toggle rather than inside it, so its controls work on their own, and the plain
  * string stays on the toggle for screen readers and as the fallback when `summary` is empty.
  */
+/** How wide a side-column section grows in the main column: about the docked panel's default width. */
+const SECTION_CAP_CLASS = "max-w-[34rem]";
+
 export function TaskSection({
   title,
   actions,
@@ -31,6 +34,7 @@ export function TaskSection({
   const expanded = frame?.expanded ?? true;
   const rich = !expanded && frame && summary ? summary : null;
   const attention = frame?.attention ?? null;
+  const capped = frame?.capped ?? false;
   return (
     <section
       aria-labelledby={headingId}
@@ -41,7 +45,11 @@ export function TaskSection({
           then take a line of their own and wrap within it, rather than pushing the column sideways over the title.
           Collapsed, it never wraps: the rich summary shrinks and clips beside the title instead. */}
       <div
-        className={cn("flex min-h-8 min-w-0 items-center justify-between gap-2 px-1.5", expanded && "mb-1 flex-wrap")}
+        className={cn(
+          "flex min-h-8 min-w-0 items-center justify-between gap-2 px-1.5",
+          expanded && "mb-1 flex-wrap",
+          capped && SECTION_CAP_CLASS,
+        )}
       >
         {frame ? (
           <>
@@ -108,7 +116,7 @@ export function TaskSection({
           <div className="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-1">{actions}</div>
         ) : null}
       </div>
-      {expanded ? children : null}
+      {expanded ? capped ? <div className={SECTION_CAP_CLASS}>{children}</div> : children : null}
     </section>
   );
 }

@@ -27,8 +27,10 @@ import {
 } from "~/components/stage/stageBanner.logic";
 import {
   moveSection,
+  moveSectionToColumn,
   normalizeSectionLayout,
   SECTION_IDS,
+  type SectionColumn,
   type SectionId,
   type SectionLayout,
   withCollapseChoice,
@@ -229,12 +231,14 @@ interface TaskPanelPrefsState {
   /** More-menu actions pinned beside the title. Stored values are re-validated by normalizePins. */
   pinnedActions: PinnableAction[];
   togglePinnedAction: (id: PinnableAction) => void;
-  /** Section order, hidden sections and collapse choices. Read through useSectionLayout, which re-validates them. */
+  /** Section order, hidden sections, collapse choices and window columns. Read through useSectionLayout, which re-validates them. */
   sections: Partial<SectionLayout>;
   /** Choosing the section's default clears the saved choice, so the smart default applies again. */
   setSectionCollapsed: (id: SectionId, collapsed: boolean, byDefault: boolean) => void;
   setAllSectionsCollapsed: (collapsed: boolean) => void;
   moveSection: (id: SectionId, overId: SectionId) => void;
+  /** Puts a section in the task window's other column, at `overId`'s place or after the column's last section. */
+  moveSectionToColumn: (id: SectionId, column: SectionColumn, overId?: SectionId) => void;
   setSectionHidden: (id: SectionId, hidden: boolean) => void;
   showAllSections: () => void;
   resetSections: () => void;
@@ -257,6 +261,7 @@ export const useTaskPanelPrefs = create<TaskPanelPrefsState>()(
         setAllSectionsCollapsed: (collapsed) =>
           updateSections(() => ({ collapsed: Object.fromEntries(SECTION_IDS.map((id) => [id, collapsed])) })),
         moveSection: (id, overId) => updateSections((l) => ({ order: moveSection(l.order, id, overId) })),
+        moveSectionToColumn: (id, column, overId) => updateSections((l) => moveSectionToColumn(l, id, column, overId)),
         setSectionHidden: (id, hidden) =>
           updateSections((l) => ({ hidden: hidden ? [...l.hidden, id] : l.hidden.filter((h) => h !== id) })),
         showAllSections: () => updateSections(() => ({ hidden: [] })),

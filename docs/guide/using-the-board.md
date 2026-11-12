@@ -267,6 +267,10 @@ with the plan, details and activity in a wide column and the labels, sessions, l
 beside them (one column when the window is narrow, full screen on a phone). The description and plan context read at
 document size: real headings, pasted images in place, and highlighted code.
 
+To choose what goes in the wide column and what goes beside it, open **Customize sections** in the window's top bar
+and drag a section from one list to the other, or use the arrow button on its row. A section beside the main column
+reads at panel size. Move every section to one side and the window shows a single column. **Reset** puts them back.
+
 `Esc`, the dock button, `F` or a click outside the window docks the task back in the side panel; `Esc` again closes it.
 The window's **×** closes the task. Some Linux desktops take Alt+click for moving windows; double-click and `F` work
 there.
