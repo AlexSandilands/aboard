@@ -54,7 +54,11 @@ const highlighter = tagHighlighter([
 export async function highlightCode(code: string, language: CodeLanguage): Promise<CodeRange[]> {
   let parser = loaded.get(language);
   if (!parser) {
-    parser = LANGUAGES[language]();
+    // A load that fails (offline, a chunk gone after an update) is forgotten, so the next block tries again.
+    parser = LANGUAGES[language]().catch((error: unknown) => {
+      loaded.delete(language);
+      throw error;
+    });
     loaded.set(language, parser);
   }
   const tree = (await parser).parser.parse(code);

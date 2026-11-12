@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type KeybindingCommand, type TaskDetail } from "@repo/contracts";
+import { TASK_STATUSES, type TaskDetail } from "@repo/contracts";
 import type { ReactNode } from "react";
 import { ArchiveIcon, Maximize2Icon, Minimize2Icon, XIcon } from "lucide-react";
 
@@ -37,7 +37,7 @@ export const PANEL_TOP_BAR_CLASS =
 export const WINDOW_TOP_BAR_CLASS =
   "flex h-12 shrink-0 items-center gap-2 border-b border-border ps-4 pe-2 max-sm:wco:pe-(--workspace-native-controls-inset)";
 
-/** An icon button in the top bar with a tooltip naming it and its shortcut. */
+/** An icon button in the top bar with a tooltip naming it and, when it has one, its key. */
 function TopBarButton({
   label,
   shortcut,
@@ -45,11 +45,10 @@ function TopBarButton({
   children,
 }: {
   label: string;
-  shortcut?: KeybindingCommand;
+  shortcut?: string | null;
   onClick: () => void;
   children: ReactNode;
 }) {
-  const key = useShortcutLabel(shortcut ?? "back");
   return (
     <Tooltip>
       <TooltipTrigger render={<Button variant="ghost" size="icon-sm" aria-label={label} onClick={onClick} />}>
@@ -58,7 +57,7 @@ function TopBarButton({
       <TooltipPopup side="bottom">
         <span className="flex items-center gap-2">
           {label}
-          {shortcut && key ? <Kbd>{key}</Kbd> : null}
+          {shortcut ? <Kbd>{shortcut}</Kbd> : null}
         </span>
       </TooltipPopup>
     </Tooltip>
@@ -111,6 +110,7 @@ export function TaskPanelHeader({
   const { mutate: updateTask } = useUpdateTask();
   const setExpanded = useSetTaskExpanded();
   const inWindow = layout === "window";
+  const expandShortcut = useShortcutLabel("panel.expand");
   const setStatus = useSetTaskStatus(task, onOpenPlanEditor);
   const resolution = resolutionLabel(task);
   const fetching = importPendingLabel(task);
@@ -182,7 +182,7 @@ export function TaskPanelHeader({
         <SectionsMenu layout={layout} />
         {inWindow ? (
           <>
-            <TopBarButton label="Dock to the side" shortcut="panel.expand" onClick={() => onDock?.()}>
+            <TopBarButton label="Dock to the side" shortcut={expandShortcut} onClick={() => onDock?.()}>
               <Minimize2Icon />
             </TopBarButton>
             <TopBarButton label="Close task" onClick={onClose}>
@@ -190,7 +190,7 @@ export function TaskPanelHeader({
             </TopBarButton>
           </>
         ) : (
-          <TopBarButton label="Open in window" shortcut="panel.expand" onClick={() => void setExpanded(true)}>
+          <TopBarButton label="Open in window" shortcut={expandShortcut} onClick={() => void setExpanded(true)}>
             <Maximize2Icon />
           </TopBarButton>
         )}

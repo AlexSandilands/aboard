@@ -20,6 +20,7 @@ import { AppSidebar } from "~/components/sidebar/AppSidebar";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail, useSidebar } from "~/components/ui/sidebar";
 import { queryKeys, useBoardEvents } from "~/state/queries";
 import { anyDialogOpen, type DeletableTask, useDialogs, usePalette } from "~/state/ui";
+import { closeTaskWindow } from "~/components/task/TaskWindow";
 import { closeAppWindow } from "./AppRouteModal";
 import { isAppModalPath } from "./appModal.logic";
 import { IS_MAC, isEditableTarget, isInsidePopup, isRecordingShortcut } from "./keyboard";
@@ -159,9 +160,11 @@ function GlobalKeybindings({
       case "panel.toggle":
         // The panel behind a window stays as it is.
         if (isAppModalPath(location.pathname)) return;
-        // Off the board (the social feed) the selected task is the one the board was left on: reopen it.
-        if (selectedTaskId && location.pathname === "/") void closeTask();
-        else if (lastTaskId.current) void openTask(lastTaskId.current, { reveal: false });
+        // Off the board (the social feed) the selected task is the one the board was left on: reopen it. From the task
+        // window it closes the task once the window has animated out.
+        if (selectedTaskId && location.pathname === "/") {
+          if (!(expanded && closeTaskWindow())) void closeTask();
+        } else if (lastTaskId.current) void openTask(lastTaskId.current, { reveal: false });
         return;
       case "panel.expand":
         // The window animates out before the task docks (see TaskWindow).
@@ -173,7 +176,12 @@ function GlobalKeybindings({
         const task = deletable(cardId ?? selectedTaskId ?? "");
         if (!task) return;
         // The panel closes once it is confirmed, as the menu's Delete… does; a card's panel stays put.
-        const onDeleted = task.id === selectedTaskId ? () => void closeTask() : undefined;
+        const onDeleted =
+          task.id === selectedTaskId
+            ? () => {
+                if (!(expanded && closeTaskWindow())) void closeTask();
+              }
+            : undefined;
         useDialogs.getState().openDeleteTask([pickDeletable(task)], onDeleted);
         return;
       }

@@ -343,13 +343,15 @@ task drops it (`withClosedTask`).
   starts no drag and selects no text (`isWindowPress`). Shift is left alone: holding it shows the full dependency
   chains. Some Linux window managers take Alt+click; double-click, the menu and `f` cover them.
 - **Closing.** Esc (the `back` shortcut: `AppFrame` closes the window before the task), the dock button, `f`, a press
-  on the backdrop and the browser's Back dock the task again; a second Esc closes it. The window's **×** closes the
-  task. Docking and closing play the window's out-animation first, then navigate. `j` (`task.reveal`) docks and jumps
+  on the backdrop and the browser's Back dock the task again; a second Esc closes it. The window's **×**, a delete and
+  `panel.toggle` close the task (`closeTaskWindow`). Docking and closing play the window's out-animation first, then navigate. `j` (`task.reveal`) docks and jumps
   to the card.
 - **One live panel.** `TaskPanelContent` renders in the window or in the docked aside, never both: it runs things
   once per task (`useTaskView`'s PR ping, the plan editor request). The aside stays mounted at its width with a
   placeholder, so the board doesn't reflow, and doesn't slide when the window opens or docks; a task opened straight
-  into the window gets its aside in place, and one closed from the window doesn't slide a placeholder out. Behind the
+  into the window gets its aside in place, and one closed from the window doesn't slide a placeholder out. Moving
+  between them remounts the contents, so the body starts again at the top; a field being edited is blurred first
+  (and so saved) even when the window goes without closing, as on the browser's Back. Behind the
   Settings or Stats window the task window steps aside (one window at a time) and its contents go back to the aside
   until that window closes.
 - **Layout.** From a window width of 56rem (`TWO_COLUMNS_FROM` in `TaskPanel.tsx`, measured with a ResizeObserver) the
