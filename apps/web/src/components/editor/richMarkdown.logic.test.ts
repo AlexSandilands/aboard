@@ -45,6 +45,7 @@ describe("round trip", () => {
     ["tasks", "- [ ] todo\n- [x] done\n  - [ ] nested"],
     ["headings", "# One\n## Two\n###### Six\n#hashtag\n# "],
     ["quotes", "> quoted\n> more\n>tight"],
+    ["GitHub alerts", "> [!NOTE]\n> Read this.\n\n> [!warning]\n> **Careful** with #42"],
     ["a closed fence", "```ts\nconst a = 1;\n\n**not bold**\n```\nafter"],
     ["an unclosed fence", "```\ncode to the end"],
     ["a tilde fence", "~~~\n```\n~~~"],

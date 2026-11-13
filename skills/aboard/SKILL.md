@@ -187,6 +187,28 @@ Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
 10. **Hand over.** Before ending a session, `add_note` with what you did, what's left, gotchas and the
     exact next action. The next agent starts from `get_task`.
 
+## Writing descriptions and context
+
+The board renders task descriptions, plan `context` and notes as GitHub-flavoured Markdown, and the task window
+gives them room. Where a description or context has more than a few lines, some structure helps the user scan it:
+
+- `##` headings for sections (Why, Scope, Approach, Open questions).
+- Lists and `- [ ]` task lists.
+- Tables, for comparisons or a list of findings. Cells wrap, so prose in a cell is fine.
+- Fenced code blocks with a language, for commands, paths and snippets.
+- GitHub alerts, for the one thing a reader must not miss:
+
+  ```markdown
+  > [!WARNING]
+  > The migration rewrites every row; back up first.
+  ```
+
+  The types are `NOTE`, `TIP`, `IMPORTANT`, `WARNING` and `CAUTION`; the marker goes alone on the first line.
+
+- `#N` links to task N, and footnotes (`[^1]`).
+
+Use only what suits the task. A one-line backlog item stays one line.
+
 ## Epics
 
 An epic groups the tasks of a large feature (say "One-page checkout") in one project. On the board it is a

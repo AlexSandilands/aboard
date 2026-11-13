@@ -68,6 +68,44 @@ function steps(phase: string, titles: string[], done = false): PlanInput {
   return { phases: [{ title: phase, steps: titles.map((title) => ({ title, status: done ? "done" : "todo" })) }] };
 }
 
+/** A description using the Markdown the board renders: headings, alerts, a narrow and a wide table. */
+const MARKDOWN_SHOWCASE = `## Why
+
+The checkout pages use three different voices, and two of the error messages blame the customer.
+
+> [!NOTE]
+> Only the copy changes here; layout and flow stay as they are.
+
+## Pages
+
+| Page | Owner |
+| --- | --- |
+| Cart | Web |
+| Payment | Billing |
+
+## Findings
+
+| Area | File | What happens now | Proposed fix | Size | Risk |
+| --- | --- | --- | --- | --- | --- |
+| Card errors | \`checkout/payment/CardForm.tsx\` | A declined card says "You entered an invalid card" even when the bank declined it | Say the bank declined it and suggest another card | Small | Low |
+| Address form | \`checkout/address/AddressFields.tsx\` | Postcode errors appear only after submitting the whole form | Validate the postcode on blur with the same message | Small | Low |
+| Order summary | \`checkout/summary/Totals.tsx\` | "Est. tax" is never explained | Add a short tooltip on how tax is estimated | Tiny | None |
+
+> [!TIP]
+> The style guide's voice section covers most of these.
+
+> [!IMPORTANT]
+> Legal signs off on the refund wording.
+
+> [!WARNING]
+> Translations are frozen until the 20th.
+
+> [!CAUTION]
+> Don't change the payment button's label: the A/B test reads it.
+
+> A plain quote stays a quote.
+`;
+
 const basic: Scenario = (s, opts) => {
   const shop = s.projects.create({
     title: "Web shop",
@@ -88,6 +126,11 @@ const basic: Scenario = (s, opts) => {
     AGENT,
   );
   const edgeCache = addTask(s, shop.id, { title: "Cache product images at the edge", status: "planned" });
+  addTask(s, shop.id, {
+    title: "Audit the checkout copy",
+    status: "planned",
+    description: MARKDOWN_SHOWCASE,
+  });
   const estimates = addTask(s, shop.id, {
     title: "Show delivery estimates on the product page",
     status: "planned",

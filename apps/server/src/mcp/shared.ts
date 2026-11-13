@@ -493,6 +493,10 @@ export function planFromArgs(args: {
   };
 }
 
+/** Added to the description and plan context fields, the long texts the task window shows (skill: Writing descriptions). */
+export const RICH_MARKDOWN_HINT =
+  "Headings, tables and > [!NOTE] alerts render; use them where the text is long enough to need them.";
+
 export const planInputFields = {
   phases: planPhasesField.optional(),
   markdown: z
@@ -501,7 +505,10 @@ export const planInputFields = {
     .describe(
       "Alternative to phases: a markdown plan. '## Heading' = phase, '- [ ] item' = step ([x] done, [~] in progress, [!] blocked, [-] skipped); nested lines become step notes.",
     ),
-  context: z.string().optional().describe("Markdown: approach, key decisions, constraints. Shown above the plan."),
+  context: z
+    .string()
+    .optional()
+    .describe(`Markdown: approach, key decisions, constraints. Shown above the plan. ${RICH_MARKDOWN_HINT}`),
   suggestedModel: suggestedModelField.optional(),
 };
 

@@ -40,6 +40,7 @@ import {
   projectRef,
   requireProjectRef,
   requireWritingProject,
+  RICH_MARKDOWN_HINT,
   run,
   t3ThreadField,
   taskField,
@@ -236,7 +237,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor,
           .min(1)
           .optional()
           .describe("Short imperative title. Optional when the template has a title pattern."),
-        description: z.string().optional().describe("Markdown: what and why."),
+        description: z.string().optional().describe(`Markdown: what and why. ${RICH_MARKDOWN_HINT}`),
         ...projectFields,
         general: generalField,
         epic: epicField.optional(),
@@ -475,8 +476,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor,
       inputSchema: {
         task: taskField,
         title: z.string().min(1).optional(),
-        description: z.string().optional().describe("Replaces the description (markdown)."),
-        planContext: z.string().optional().describe("Replaces the plan context (markdown)."),
+        description: z.string().optional().describe(`Replaces the description (Markdown). ${RICH_MARKDOWN_HINT}`),
+        planContext: z.string().optional().describe(`Replaces the plan context (Markdown). ${RICH_MARKDOWN_HINT}`),
         moveToProjectId: z
           .string()
           .optional()
