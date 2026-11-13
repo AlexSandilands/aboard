@@ -73,6 +73,8 @@ commitlint checks every commit in the PR, not only its title.
 - `.github/workflows/commitlint.yml` lints the PR's commits and its title: the `commitlint` check. The title is
   what lands on `main`. It's a workflow of its own so that editing a PR's title re-runs it (the `edited` event)
   without re-running CI.
+- `.github/workflows/arch-install.yml` tests the Arch install script when it changes: the `arch-install` check,
+  which isn't required ([releases](releases.md#the-install-script)).
 - Every action is pinned to a commit hash, with its version in a comment, so a moved tag can't change what runs.
 - `.github/dependabot.yml` opens monthly updates for npm and the actions, minor and patch grouped into one PR per
   ecosystem, with `chore(deps):` and `ci(deps):` titles. `commitlint.config.js` skips Dependabot's commits, whose

@@ -91,12 +91,15 @@ files are what pacman fetches from a `Server`:
 | `aboard.db`, `aboard.files`          | The repo database, listing only the newest package |
 | `aboard-<version>-1-x86_64.pkg.tar.zst` | The package                                 |
 | `*.sig`                              | A detached signature for each of the above     |
+| `install-arch.sh`                    | The script users run to add the repo ([below](#the-install-script)) |
 
 The `pacman` job runs in an `archlinux:base-devel` container. `.github/scripts/pacman-repo.sh` writes the
 `PKGBUILD` (`scripts/arch-package.ts`, package name `aboard`), builds it with makepkg from the downloaded
-tarball, signs the package and a fresh database with `repo-add --sign`, and checks every signature. The job then
-creates the `pacman` release if it doesn't exist, uploads the package before the database that lists it, and
-deletes the previous version's files.
+tarball, signs the package and a fresh database with `repo-add --sign`, checks every signature, and copies
+`packaging/install-arch.sh` in beside them. The job then creates the `pacman` release if it doesn't exist, uploads
+the package before the database that lists it, then the install script, and deletes every asset the script's out
+folder doesn't hold: the previous version's files. A file the release should serve therefore has to be put in that
+folder by `pacman-repo.sh`, or the next release deletes it.
 
 Everything is signed with a key that exists only for this repo, held in the `PACMAN_GPG_PRIVATE_KEY` secret of
 the `release` environment, which only `main` and `v*` tags can deploy to
@@ -115,6 +118,44 @@ docker run --rm -v "$PWD":/src:ro -v /tmp/repo:/out -e PACMAN_GPG_PRIVATE_KEY="$
 ```
 
 Any throwaway key works (`gpg --quick-generate-key test ed25519 sign never`).
+
+### The install script
+
+`packaging/install-arch.sh` is what the README tells Arch users to run: download it from the `pacman` release, then
+`sudo bash install-arch.sh`. It takes no arguments and reads no environment variables. In order:
+
+1. Checks it is root and that `pacman`, `pacman-key`, `pacman-conf`, `curl` and `gpg` exist.
+2. Checks the repo config before changing anything, and stops if `/etc/pacman.conf` has a `[aboard]` section, if a
+   file it includes defines one, or if `/etc/pacman.d/aboard.conf` exists with other content. A second section of
+   the same name would be merged with ours, its `SigLevel` and servers included, so the script doesn't guess: it
+   says how to switch and that the existing setup keeps working.
+3. Downloads `packaging/pacman-signing-key.asc` from `main` and reads it in a throwaway keyring. Unless the file
+   holds exactly one key with the fingerprint pinned in the script, it stops with nothing changed.
+4. `pacman-key --init`, `--add` and `--lsign-key`.
+5. Writes `/etc/pacman.d/aboard.conf` (`SigLevel = Required DatabaseRequired`) and appends
+   `Include = /etc/pacman.d/aboard.conf` to `/etc/pacman.conf`, unless the line is already there.
+6. `pacman -Syu --needed aboard`, with pacman's prompts.
+
+A second run finds its own file and `Include` line and changes nothing.
+
+The script is a file users download by itself, so the repo name, the GitHub URL and the fingerprint are written
+into it. `scripts/install-arch.test.ts` holds the first two to `package.json`, and the container test holds the
+fingerprint to the key file. After replacing the signing key, change `key_fingerprint` in the script and the
+fingerprints in the README in the same PR.
+
+It reaches the `pacman` release only when a release is published, from that release's tag: a change to it on `main`
+isn't served until the next release.
+
+To test it, run the container test from the repo root. It runs the refusals, then installs the package the
+published repo serves and runs the script a second time:
+
+```sh
+docker run --rm -v "$PWD":/src:ro -w /src archlinux:base-devel .github/scripts/install-arch-test.sh
+```
+
+`.github/workflows/arch-install.yml` runs that and shellcheck on a PR that touches `packaging/` or
+`.github/scripts/`, and by hand (**Actions → Arch install → Run workflow**) to check a release. It isn't a required
+check: it installs from the live repo, so it can fail for reasons a PR didn't cause.
 
 ### The AUR package
 
@@ -176,6 +217,18 @@ above every semver version (`2026.11.13` > `1.0.0`), so nothing moves from one t
   only the newest version, so there's no downgrading through pacman.
 - **A signed repo.** pacman expects signatures, and a key only CI holds means a compromised GitHub session
   alone can't ship a package. The cost is one `pacman-key` step per machine.
+- **An install script that pins the key's fingerprint.** Comparing a fingerprint by eye is the step people skip,
+  so the script does it. The script itself isn't signed: someone who could replace the release's files could
+  replace it too, which would reach new installs that run it, not machines that already trust the key. The README
+  keeps the manual steps for anyone who would sooner not run a script as root.
+- **The script served from the `pacman` release, not from `main`.** What users run is what was released, at a URL
+  next to the repo it sets up.
+- **The repo in its own file, `/etc/pacman.d/aboard.conf`.** The script then adds one line to `pacman.conf` and
+  never edits what's there, and removing the repo is deleting a file and that line.
+- **`DatabaseRequired` in the script's config.** `repo-add --sign` already signs the database, so pacman can
+  insist on it; without it pacman accepts an unsigned database.
+- **The script stops at an existing `[aboard]` section.** Removing lines from a user's `pacman.conf` is theirs to
+  do. The hand-made setup keeps updating, so stopping costs them nothing.
 - **Packages with their own Electron.** They run exactly the Electron that CI built and tested, and install in
   seconds. Arch's `electron` packages move to new versions on their own schedule.
 - **The AUR's .SRCINFO written in Node, not by makepkg.** The AUR job then needs no Arch container, and it's
@@ -202,6 +255,7 @@ above every semver version (`2026.11.13` > `1.0.0`), so nothing moves from one t
 | A nightly channel beside the releases             | Solves a different problem; a same-day fix needs a second release, not a second channel               |
 | Semver with a pacman `epoch=1`                    | Lets pacman upgrade from the date versions by itself, but the epoch stays in the package for good; not worth it with one known install |
 | The pacman repo on GitHub Pages                   | Pages serves a branch, so every package would stay in the git history                                 |
+| Versioned snapshots and a bootstrap repo in the install script, as OpenAI's has | They guard against a CDN serving half of a release; the job uploads the package before the database that lists it, so there's no such window |
 | An unsigned pacman repo (`SigLevel = Never`)      | No key to manage, but pacman would install whatever is at the URL                                     |
 | An Arch package built from source                 | Every install would download the dependencies and build the web app; slow, and not what CI tested     |
 
@@ -212,6 +266,10 @@ above every semver version (`2026.11.13` > `1.0.0`), so nothing moves from one t
 | `.github/workflows/release.yml`      | Packages on Windows and Linux, uploads to the release, updates pacman and the AUR |
 | `.github/scripts/pacman-repo.sh`     | Builds and signs the pacman repo's package and database                          |
 | `packaging/pacman-signing-key.asc`   | The public key the repo is signed with                                           |
+| `packaging/install-arch.sh`          | What Arch users run: trusts the key, adds the repo, installs the package         |
+| `.github/scripts/install-arch-test.sh` | Runs the install script in a throwaway Arch container                          |
+| `.github/workflows/arch-install.yml` | Shellcheck and the container test, when those scripts change                     |
+| `scripts/install-arch.test.ts`       | Holds the script's repo name and URLs to `package.json`                          |
 | `scripts/release-version.ts`         | Checks the tag and stamps the version into `package.json`                        |
 | `scripts/arch-package.ts`            | Writes the Arch `PKGBUILD` and `.SRCINFO`, for either package name               |
 | `apps/desktop/scripts/package.ts`    | electron-builder config and the targets for each OS                              |

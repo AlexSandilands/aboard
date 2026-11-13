@@ -1,0 +1,36 @@
+name: Arch install
+
+# Checks packaging/install-arch.sh, the script Arch users run to add the pacman repo: shellcheck, then the script
+# itself in an Arch container, installing the package the `pacman` release serves at that moment. It downloads the
+# package and what it depends on, so it only runs when the script or its test changes; run it by hand to check a
+# release. Not a required check. How the repo works: docs/features/releases.md.
+
+on:
+  pull_request:
+    paths:
+      - packaging/**
+      - .github/scripts/**
+      - .github/workflows/arch-install.yml
+  push:
+    branches: [main]
+    paths:
+      - packaging/**
+      - .github/scripts/**
+      - .github/workflows/arch-install.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  arch-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: shellcheck packaging/*.sh .github/scripts/*.sh
+      - name: Run the installer in an Arch container
+        run: docker run --rm -v "$PWD":/src:ro -w /src archlinux:base-devel .github/scripts/install-arch-test.sh
