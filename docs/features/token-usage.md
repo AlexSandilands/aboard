@@ -22,7 +22,8 @@ session, and a run whose session has a transcript is read from the transcript in
 
 A T3 thread resolves to the provider sessions behind it (`providerThreads[].nativeThreadRef`; a hand-off or fork adds
 more). Each is stored under `(harness, nativeId)`, the same key a self-linked agent session uses, so a thread whose agent
-also linked its own session is counted once. The thread's sessions are recorded in `session_usage_thread`. A
+also linked its own session is counted once, and shown once, as the thread (Attribution). The thread's sessions are
+recorded in `session_usage_thread`. A
 provider session whose transcript was read once stays on those rows after the file is cleaned up, instead of falling
 back to T3's turns and counting them twice.
 
@@ -121,8 +122,23 @@ Calls in flight are shared. `GET /api/model-prices` gives the status.
 ### Attribution
 
 A task's panel shows every session and thread it links in full, marked "shared with #x" when another task links it
-too, plus its board runs. Stats count each session once, under the task that linked it first (directly or through a
-thread), like `agent_sessions_started`; a run counts under the task it was for, and a task-less run only on the whole
+too (directly, or a session behind the thread), plus its board runs. Rows follow link order, then board runs.
+
+An agent running in T3 Code links its thread and also its own Claude Code session (`selfLinkHosts`), and both resolve
+to the same stored rows. The panel picks the thread: a session behind a T3 thread the task links is folded into that
+thread's row (T3 icon, harness `t3`), wherever its own link sits in the order; only a session no linked thread covers
+gets a row of its own. The session link stays (Open in terminal, resume, live status); only the usage row moves. The
+thread row is named by the label the agent gave its session ("Planning #169") when exactly one session behind it has
+one, with the thread's own title kept in `threadTitle` and shown as "Thread: …" when the row is expanded; otherwise by
+the thread's title. Expanded, a thread row's model lines name the provider behind it ("Claude Code · claude-opus-5-5"),
+one line per provider and model, so a thread that switched providers shows each; tokens counted from T3's own turns
+(`t3_turn`) have no provider to name. A session behind two linked threads goes to the first. Until the thread has been read
+(`session_usage_thread` is empty while T3 Code isn't running), the session shows as its own Claude Code row and moves
+under the thread once the read lands.
+
+Stats count each session once, under the task that linked it first (directly or through a thread), like
+`agent_sessions_started`. Its harness bucket is "T3 threads" when any live task links a thread it ran behind, whichever
+link came first, so Stats and the panel agree; past weeks re-bucket on read. A run counts under the task it was for, and a task-less run only on the whole
 board. A session an Autopilot run kept (`autopilot_runs.session_id`) also counts under that run's automation. "Autopilot
 overhead" counts only automations; the board's own runs (`review`, `import`, `ask`) show beside them in the cost by
 run, never in Autopilot's figure. An import that fails after spending tokens records nothing: its output is lost

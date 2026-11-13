@@ -44,7 +44,8 @@ such as PRs merged or runs are shown neutrally, since more or fewer isn't good o
 - **Tokens & cost**: what agents used on the board's tasks and runs: an estimated cost at API list prices (a
   subscription may cost less), tokens, cost per finished task, Autopilot's own runs, and how much input was read
   from cache. Charts split cost by harness and tokens by kind, then cost by model, harness, automation and task. A
-  session two tasks share counts once. Tokens on a model with no known price aren't in the cost. Prices come from
+  session two tasks share counts once, and one that ran in a T3 Code thread counts as T3 Code even when its agent
+  also linked its own session. Tokens on a model with no known price aren't in the cost. Prices come from
   LiteLLM's list, fetched daily, or the board's built-in ones; the section says which, and past usage is priced at
   today's prices.
   A task's own usage is in its panel's **Usage** section.

@@ -265,7 +265,8 @@ export function createSessionUsageRepo(sql: Sql) {
     },
     /**
      * The task each session counts under on the stats page: the live task that linked it first, directly or through a
-     * T3 thread behind it (the same rule as agent_sessions_started), and whether that first link was the thread.
+     * T3 thread behind it (the same rule as agent_sessions_started), and whether any live task links a T3 thread it ran
+     * behind. An agent in T3 often links its own session before or beside its thread; it still ran in T3.
      */
     owners(): Map<string, { taskId: string; viaThread: boolean }> {
       const rows = sql.all<{ harness: string; session_id: string; task_id: string; via: string }>(
@@ -284,7 +285,9 @@ export function createSessionUsageRepo(sql: Sql) {
       const owners = new Map<string, { taskId: string; viaThread: boolean }>();
       for (const r of rows) {
         const key = `${r.harness}:${r.session_id}`;
-        if (!owners.has(key)) owners.set(key, { taskId: r.task_id, viaThread: r.via === "thread" });
+        const owner = owners.get(key);
+        if (!owner) owners.set(key, { taskId: r.task_id, viaThread: r.via === "thread" });
+        else if (r.via === "thread") owner.viaThread = true;
       }
       return owners;
     },

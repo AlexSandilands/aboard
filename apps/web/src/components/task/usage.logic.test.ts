@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatCost,
   formatTokens,
+  modelProvider,
   percents,
   rowCost,
   rowModel,
@@ -22,9 +23,12 @@ const row = (over: Partial<TaskUsageRow> = {}): TaskUsageRow => ({
   sessionId: "709f26ed-ce2f-4449-b7eb-3bb01f89f268",
   linkId: "l1",
   label: null,
+  threadTitle: null,
   source: "transcript",
   purpose: null,
-  models: [{ model: "claude-opus-5-5", tokens: { ...EMPTY_TOKEN_USAGE, input: 10 }, costUsd: 1 }],
+  models: [
+    { harness: "claude-code", model: "claude-opus-5-5", tokens: { ...EMPTY_TOKEN_USAGE, input: 10 }, costUsd: 1 },
+  ],
   tokens: { ...EMPTY_TOKEN_USAGE, input: 10 },
   costUsd: 1,
   costSource: "estimated",
@@ -119,15 +123,43 @@ describe("usage formatting", () => {
     expect(rowName(row({ kind: "run", purpose: "review_prs" }), () => "Review PRs")).toBe("Review PRs");
   });
 
+  it("names a thread row by the label of the agent's session behind it, and still says it ran in T3 Code", () => {
+    const thread = row({ kind: "thread", harness: "t3", label: "Planning #169", threadTitle: "Plan the usage fix" });
+    expect(rowName(thread)).toBe("Planning #169");
+    expect(rowSource(thread)).toBe("T3 Code");
+  });
+
+  it("names the provider behind a thread on each model line, only where it is known", () => {
+    const line = (harness: "claude-code" | "codex" | "t3") => ({
+      harness,
+      model: "m",
+      tokens: EMPTY_TOKEN_USAGE,
+      costUsd: null,
+    });
+    const thread = row({ kind: "thread", harness: "t3" });
+    expect(modelProvider(thread, line("claude-code"))).toEqual({ harness: "claude-code", label: "Claude Code" });
+    expect(modelProvider(thread, line("codex"))?.label).toBe("Codex");
+    expect(modelProvider(thread, line("t3"))).toBeNull();
+    expect(modelProvider(row(), line("claude-code"))).toBeNull();
+  });
+
   it("shows one model, or the first and how many more", () => {
     expect(rowModel(row())).toBe("claude-opus-5-5");
     const two = row({
       models: [
-        { model: "a", tokens: EMPTY_TOKEN_USAGE, costUsd: null },
-        { model: "b", tokens: EMPTY_TOKEN_USAGE, costUsd: null },
+        { harness: "claude-code", model: "a", tokens: EMPTY_TOKEN_USAGE, costUsd: null },
+        { harness: "claude-code", model: "b", tokens: EMPTY_TOKEN_USAGE, costUsd: null },
       ],
     });
     expect(rowModel(two)).toBe("a +1");
+    // One model under two providers is still one model.
+    const twoProviders = row({
+      models: [
+        { harness: "claude-code", model: "a", tokens: EMPTY_TOKEN_USAGE, costUsd: null },
+        { harness: "t3", model: "a", tokens: EMPTY_TOKEN_USAGE, costUsd: null },
+      ],
+    });
+    expect(rowModel(twoProviders)).toBe("a");
     expect(rowModel(row({ models: [] }))).toBe("—");
   });
 });

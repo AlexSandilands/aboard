@@ -9,6 +9,7 @@ import {
   totalTokens,
   type AgentHarness,
   type CostSource,
+  type TaskLink,
   type TaskUsage,
   type TaskUsageRow,
   type UsageModelLine,
@@ -52,7 +53,8 @@ export interface RunUsageRecord {
 
 /**
  * One stored row as the stats count it (token-usage.md): the task it counts under (the session's first linking task,
- * or the run's own task), the harness bucket (a T3 thread's sessions count as T3 threads), the automation it was for
+ * or the run's own task), the harness bucket (a session behind any linked T3 thread counts as T3 threads, whichever
+ * was linked first), the automation it was for
  * (a run's purpose, or the Autopilot run that owns its session) and its cost (null without a price).
  */
 export interface AttributedUsage {
@@ -359,7 +361,10 @@ export function createUsageService(
 
   /** One task-usage row from stored rows: per model, priced, with what it cost in total. */
   const buildRow = (
-    base: Pick<TaskUsageRow, "key" | "kind" | "harness" | "sessionId" | "linkId" | "label" | "purpose" | "sharedWith">,
+    base: Pick<
+      TaskUsageRow,
+      "key" | "kind" | "harness" | "sessionId" | "linkId" | "label" | "threadTitle" | "purpose" | "sharedWith"
+    >,
     rows: readonly UsageRow[],
     untracked: boolean,
     price: Pricer,
@@ -369,9 +374,11 @@ export function createUsageService(
     let anyReported = false;
     for (const row of rows) {
       const model = row.model || null;
-      const line = byModel.get(row.model) ?? { model, tokens: EMPTY_TOKEN_USAGE, costUsd: null };
+      // Per provider too: a thread that switched from Claude Code to Codex shows each.
+      const key = `${row.harness}\0${row.model}`;
+      const line = byModel.get(key) ?? { harness: row.harness, model, tokens: EMPTY_TOKEN_USAGE, costUsd: null };
       line.tokens = addTokenUsage(line.tokens, row.tokens);
-      byModel.set(row.model, line);
+      byModel.set(key, line);
       if (row.source === "run_output" && row.reportedCostUsd !== null) {
         reported += row.reportedCostUsd;
         anyReported = true;
@@ -416,49 +423,88 @@ export function createUsageService(
     const others = (list: Array<{ id: string; number: number }>) =>
       list.filter((t) => t.id !== taskId).map((t) => t.number);
 
+    const idOf = (k: SessionKey) => `${k.harness}:${k.sessionId.toLowerCase()}`;
+    const sessionKeyOf = (link: TaskLink): SessionKey | null =>
+      link.kind === "agent_session" && link.ref.sessionId
+        ? { harness: link.ref.harness, sessionId: link.ref.sessionId.toLowerCase() }
+        : null;
+
+    // The sessions each linked thread covers, worked out before the pass so a session linked before its thread is
+    // still folded into the thread's row. A session behind two linked threads goes to the first.
+    const covered = new Map<string, SessionKey[]>();
+    const coveredBy = new Map<string, string>();
     for (const link of links) {
-      if (link.kind !== "agent_session" || !link.ref.sessionId) continue;
-      const key: SessionKey = { harness: link.ref.harness, sessionId: link.ref.sessionId.toLowerCase() };
-      const id = `${key.harness}:${key.sessionId}`;
-      if (shown.has(id)) continue;
-      shown.add(id);
-      const rows = usage.rowsForSessions([key]);
-      result.push(
-        buildRow(
-          {
-            key: id,
-            kind: "session",
-            harness: key.harness,
-            sessionId: key.sessionId,
-            linkId: link.id,
-            label: link.label ?? link.snapshot?.title ?? null,
-            purpose: null,
-            sharedWith: others(usage.tasksForSession(key)),
-          },
-          rows,
-          // The board has no reader for Copilot CLI yet (token-usage.md), so the row says not tracked.
-          rows.length === 0 && key.harness === "copilot-cli",
-          price,
-        ),
-      );
+      if (link.kind !== "t3_thread" || covered.has(link.ref.threadId)) continue;
+      const keys = usage.threadSessions(link.ref.threadId).filter((k) => !coveredBy.has(idOf(k)));
+      keys.forEach((k) => coveredBy.set(idOf(k), link.ref.threadId));
+      covered.set(link.ref.threadId, keys);
     }
+
+    // One pass in link order: a session behind a linked thread shows as part of that thread's row (it ran in T3 Code,
+    // the agent only linked its own session too), every other session as its own row.
     for (const link of links) {
+      const key = sessionKeyOf(link);
+      if (key && link.kind === "agent_session") {
+        const id = idOf(key);
+        if (shown.has(id) || coveredBy.has(id)) continue;
+        shown.add(id);
+        const rows = usage.rowsForSessions([key]);
+        result.push(
+          buildRow(
+            {
+              key: id,
+              kind: "session",
+              harness: key.harness,
+              sessionId: key.sessionId,
+              linkId: link.id,
+              label: link.label ?? link.snapshot?.title ?? null,
+              threadTitle: null,
+              purpose: null,
+              sharedWith: others(usage.tasksForSession(key)),
+            },
+            rows,
+            // The board has no reader for Copilot CLI yet (token-usage.md), so the row says not tracked.
+            rows.length === 0 && key.harness === "copilot-cli",
+            price,
+          ),
+        );
+        continue;
+      }
       if (link.kind !== "t3_thread") continue;
       const threadId = link.ref.threadId;
-      const keys = usage.threadSessions(threadId).filter((k) => !shown.has(`${k.harness}:${k.sessionId}`));
-      if (keys.length === 0) continue;
-      keys.forEach((k) => shown.add(`${k.harness}:${k.sessionId}`));
+      const rowKey = `t3:${threadId}`;
+      const keys = covered.get(threadId) ?? [];
+      // Not scanned yet (or nothing behind it): no row, and a session linked from it keeps its own row meanwhile.
+      if (keys.length === 0 || shown.has(rowKey)) continue;
+      shown.add(rowKey);
+      keys.forEach((k) => shown.add(idOf(k)));
+      const ids = new Set(keys.map(idOf));
+      // An agent in the thread that linked its own session usually labelled it ("Planning #169"): that names the row
+      // better than the thread's long title, which moves to threadTitle. Several different labels: the thread's title.
+      const labels = new Set(
+        links.flatMap((l) => {
+          const k = sessionKeyOf(l);
+          return k && ids.has(idOf(k)) && l.label ? [l.label] : [];
+        }),
+      );
+      const title = link.snapshot?.title ?? link.label ?? null;
+      const sessionLabel = labels.size === 1 ? [...labels][0]! : null;
+      const sharedWith = new Set([
+        ...others(usage.tasksForThread(threadId)),
+        ...keys.flatMap((k) => others(usage.tasksForSession(k))),
+      ]);
       result.push(
         buildRow(
           {
-            key: `t3:${threadId}`,
+            key: rowKey,
             kind: "thread",
             harness: "t3",
             sessionId: threadId,
             linkId: link.id,
-            label: link.snapshot?.title ?? link.label ?? null,
+            label: sessionLabel ?? title,
+            threadTitle: sessionLabel !== null && title !== sessionLabel ? title : null,
             purpose: null,
-            sharedWith: others(usage.tasksForThread(threadId)),
+            sharedWith: [...sharedWith].sort((a, b) => a - b),
           },
           usage.rowsForSessions(keys),
           false,
@@ -469,7 +515,7 @@ export function createUsageService(
     const runs = new Map<string, UsageRow[]>();
     for (const row of usage.rowsForTask(taskId)) {
       const id = `${row.harness}:${row.sessionId}`;
-      if (shown.has(id)) continue;
+      if (shown.has(id.toLowerCase())) continue;
       runs.set(id, [...(runs.get(id) ?? []), row]);
     }
     for (const [id, rows] of runs) {
@@ -482,6 +528,7 @@ export function createUsageService(
             sessionId: rows[0]!.sessionId,
             linkId: null,
             label: null,
+            threadTitle: null,
             purpose: rows[0]!.purpose,
             sharedWith: [],
           },

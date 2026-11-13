@@ -8,6 +8,7 @@ import {
   type TaskUsageRow,
   type TokenUsage,
   type UsageHarness,
+  type UsageModelLine,
 } from "@repo/contracts";
 
 // Formatting for the panel's Usage section (docs/features/token-usage.md). Estimates carry a "~" so they never read
@@ -143,6 +144,19 @@ export function harnessLabel(harness: UsageHarness): string {
   return harness === "t3" ? "T3 Code" : AGENT_HARNESSES[harness].label;
 }
 
+/**
+ * The provider a thread row's model line ran on ("Claude Code", "Codex"), so an expanded T3 row says what was behind
+ * it. Null for other rows, which name their harness already, and for tokens counted from T3's own turns, which don't
+ * say which provider ran them.
+ */
+export function modelProvider(
+  row: TaskUsageRow,
+  line: UsageModelLine,
+): { harness: Exclude<UsageHarness, "t3">; label: string } | null {
+  if (row.kind !== "thread" || line.harness === "t3") return null;
+  return { harness: line.harness, label: harnessLabel(line.harness) };
+}
+
 /** The row's name: its link's label, else something to tell it by. */
 export function rowName(row: TaskUsageRow, automationTitle: (key: string) => string | null = () => null): string {
   if (row.label) return row.label;
@@ -153,7 +167,8 @@ export function rowName(row: TaskUsageRow, automationTitle: (key: string) => str
 
 /** The model column: one model, the first plus how many more, or a dash when the source didn't say. */
 export function rowModel(row: TaskUsageRow): string {
-  const named = row.models.map((m) => m.model).filter((m): m is string => !!m);
+  // Unique: a thread row has a line per provider and model, so one model can appear twice.
+  const named = [...new Set(row.models.map((m) => m.model).filter((m): m is string => !!m))];
   if (named.length === 0) return "—";
   return named.length === 1 ? named[0]! : `${named[0]} +${named.length - 1}`;
 }
