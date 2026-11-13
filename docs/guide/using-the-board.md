@@ -213,6 +213,8 @@ Every open task has a hand-off menu. **Copy prompt** copies a ready-to-paste pro
 (Claude Code, Copilot, …), with a planning variant for tasks that have no plan yet. With [T3 Code](t3-code.md) paired,
 **New T3 Code thread…** starts a thread for the task directly.
 
+For a prompt you send often, save it as a [custom hand-off](#custom-hand-offs): it then sits in the same menu.
+
 A task of an epic delivered through an integration branch (the branch button in the epic's panel; see
 [Merge ready PRs](autopilot.md#merge-ready-prs)) is handed off to start from that branch: the prompt
 says to open its pull request against it, and the T3 dialog opens on a new worktree from it.
@@ -230,6 +232,31 @@ task instead, and the full prompt is on your clipboard to paste.
 In both dialogs the branch list starts with the task's own branches, under **This task**: its pull requests' branches,
 its T3 threads' and the ones its sessions run on, each marked with where it came from. Pick one that already has a
 worktree to carry on in that worktree (a quick fix on the task's branch, say) instead of making a new one.
+
+### Custom hand-offs
+
+If you keep opening the hand-off dialog and replacing its prompt with your own ("run this task's worktree in a sandbox
+so I can test it"), save that prompt once under **Settings → Agents → Custom hand-offs**. It then shows in every
+task's hand-off menu, under **Custom hand-offs**.
+
+Each one has:
+
+- **Name in the menu**, and **Starts**: a T3 Code thread or a Claude Code, Codex or Copilot CLI session.
+- **Prompt**: what the agent is told. `{{task}}` becomes the task's number, title, board link and how to read it;
+  `{{task.number}}`, `{{task.title}}`, `{{task.branch}}` and `{{boardUrl}}` fill in the same way. The chips under the
+  field insert them. Leave `{{task}}` out and the task's reference goes at the top anyway.
+- **Runs in**: a new worktree, the task's own worktree (a new one when the task has none yet) or the project's
+  checkout.
+- **Start without the dialog**: off, a click opens the usual dialog with the prompt, model and workspace filled in, to
+  change before sending. On, a click starts it straight away, and a toast says what started and where (or why it
+  didn't, with **Open dialog** to try by hand). In the menu these are marked **starts now**; the others end in "…".
+- **Model**: **Task's model** uses what the task would run on anyway; or pick a tier, a custom model or one of the
+  CLI's own models. A warning says when the model has nothing set for what the hand-off starts.
+- **Show on**: every project, or only the ones you tick.
+
+Drag a hand-off by its grip to change the menu's order. **Delete** asks before removing one. Until you have any, the
+menu's **Custom hand-offs** entry links to their settings instead. A hand-off is only offered where what it starts is: with the
+provider added, switched on and shown in the hand-off menus. Epics don't offer them.
 
 ## The card menu
 

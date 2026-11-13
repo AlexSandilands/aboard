@@ -101,6 +101,8 @@ export const StartSessionInput = z.object({
   /** `--effort`, `--reasoning-effort` or Codex's `model_reasoning_effort`; null or absent runs the CLI's own default. */
   effort: CliEffort.nullable().optional(),
   workspace: SessionWorkspace,
+  /** Names the session instead of the mode's label: a custom hand-off's name, e.g. "Sandbox check on #164". */
+  label: z.string().trim().min(1).max(120).optional(),
 });
 export type StartSessionInput = z.infer<typeof StartSessionInput>;
 

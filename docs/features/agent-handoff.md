@@ -26,7 +26,8 @@ harness-specific way. It offers two levels:
 | **New T3 Code thread** | T3 Code, with a token set | Creates the T3 thread, starts the agent and links the thread to the task | Pick model and workspace, press Send |
 | **New Claude Code / Codex / Copilot CLI session** | The CLI installed (PATH or Settings) | Makes a worktree (or uses the task's), opens the CLI in a terminal with the prompt and links the session (Codex links itself) | Pick model and workspace, press Send ([agent sessions](agent-sessions.md#starting-a-session)) |
 
-Both hand-offs send the same kind of prompt, so the agent behaves the same either way.
+Both hand-offs send the same kind of prompt, so the agent behaves the same either way. The user's own saved prompts
+start the same threads and sessions with a prompt of theirs instead: see [Custom hand-offs](#custom-hand-offs).
 
 ### The hand-off prompt
 
@@ -210,6 +211,9 @@ Copilot), stored as `handoffMenus` (each switch merges in, like notification kin
 and Fix PR menus (`canStartProjectT3Thread`, `handoffClis`), for someone who has the tool but doesn't want it offered.
 Sessions and threads already linked still open, and agents can still start threads (`agentT3Threads`).
 
+After those entries comes **Custom hand-offs**, listing the user's saved prompts shown on the task's project whose
+target can start here (see [Custom hand-offs](#custom-hand-offs)). With none, it stays and leads to their settings.
+
 Linked threads don't hide it: a task can have several (a follow-up for conflicts, a review). Each linked
 thread shows on the card while it is active, as a button that opens it in T3 Code; settled and archived
 threads are listed in the panel only ([board-layout.md](board-layout.md#links-on-cards)).
@@ -357,6 +361,90 @@ Agents aren't asked to report a branch. A session that moves itself into a workt
 linked from, since Claude Code finds a session to resume, and its title, by the folder it started in; its branch shows
 once it has a PR or a T3 thread.
 
+### Custom hand-offs
+
+A custom hand-off is a prompt the user saved (Settings → Agents → Custom hand-offs) for something they ask of tasks
+often, such as "run this task's worktree in a sandbox so I can test it". It starts a T3 Code thread or a Claude Code,
+Codex or Copilot CLI session on a task, through the launch dialog filled in or at once.
+
+**What one holds** (`CustomHandoff` in `packages/contracts/src/schemas.ts`; the list is the `customHandoffs` setting,
+20 at most, in menu order, replaced whole on a save and included in backups):
+
+| Field | Meaning |
+|---|---|
+| `name` | Its name in the menu |
+| `target` | What it starts: `t3-code`, `claude-code`, `codex` or `copilot-cli` (the `HandoffTarget` of the menu switches) |
+| `prompt` | The first message, with placeholders |
+| `workspace` | `new_worktree`, `task_worktree` or `current` (the project's checkout) |
+| `skipDialog` | Start at once instead of opening the dialog |
+| `model` | A `ModelChoice`; `inherit` runs each task on what a plain launch of it would |
+| `projectIds` | The projects whose tasks offer it; null is every project |
+
+**The prompt** (`renderCustomHandoffPrompt` in `packages/contracts/src/customHandoffs.ts`, used by the dialogs and by
+the server alike):
+
+- `{{task}}` is the task's reference: `#9 "Title"`, its board link and the `get_task` call that reads it. Unlike the
+  work prompt it prescribes no workflow; the hand-off's own text says what to do.
+- `{{task.number}}` (`#9`), `{{task.title}}`, `{{boardUrl}}` and `{{task.branch}}`: the first of the task's branches
+  its links name (an open PR's first, see [The task's branches](#the-tasks-branches)), or "(no branch yet)". A
+  session's branch needs git, so it isn't counted.
+- A prompt without `{{task}}` gets the reference on top, so the agent always knows which task it is on. A blank prompt
+  sends the reference alone.
+- The values are put in in one pass, so a title that holds `{{task}}` stays as it is.
+- It ends with what every board-started session is told about linking: the thread or session is linked already, or,
+  for Codex, how to link itself, under the name "<hand-off> on #N".
+
+**In the menu** (`CustomHandoffItems` in `components/handoff/CustomHandoffMenu.tsx`): one **Custom hand-offs** entry
+with a count, after the built-in launch entries, opens the list as a submenu, so the menu's height doesn't grow with
+the list. An entry marked **starts now** skips the dialog; one ending in "…" opens it. **Edit hand-offs…** goes to the
+settings section. On a window narrower than 640px or a touch screen the list opens in place instead of as a flyout.
+Which hand-offs a task offers is `customHandoffsFor` (contracts): those shown on its project whose target can start
+here, by the same rules as the built-in entries (`canStartT3Thread`, `handoffClis`, the **Show in hand-off menus**
+switches). An epic, a manual task and an archived task offer none, and show no entry. Elsewhere, with no hand-off to
+offer (none saved, or none for this project or what can start here), the entry stays without a count, and its submenu
+explains the feature and links to **Set up custom hand-offs…**, so the feature isn't only found in Settings. The entry
+is hidden only when nothing at all can start here (no T3 Code and no CLI in the menu).
+
+**With the dialog.** The entry opens its target's own launch dialog (`openT3Launch` / `openSessionLaunch` with the
+hand-off as `preset`) with the rendered prompt, and a badge beside the title naming the hand-off. The dialog has no
+**Plan with me**: a hand-off's text has no planning variant. Everything can be changed before sending.
+
+- The model: the dialog loads its options with `?handoff=<id>`, and the server resolves the task's model with the
+  hand-off's choice on top (as an automation's choice is), so the dialog opens on it.
+- The workspace: `presetWorkspaceChoice` (T3) and `presetWhere` (CLI). The task's worktree is the first of the task's
+  branches that has one; a task without one opens on the dialog's usual choice.
+- A CLI session is linked under the hand-off's name (`StartSessionInput.label`), and a T3 thread is titled
+  `#N <hand-off> · <task title>` (`StartT3ThreadInput.title`, `customHandoffThreadTitle`), with or without the dialog,
+  so several threads on one task can be told apart in T3 Code.
+
+**Without the dialog** (`POST /api/tasks/:id/custom-handoffs/:handoffId`, `integrations/customHandoff.ts`): the server
+renders the prompt and starts it, after checking what the menu checked (the project, the provider, its menu switch).
+
+- **T3 Code** goes through `launchTaskThread`, the launch Autopilot and `start_task_thread` use, so the access is never
+  above T3's default. The hand-off's workspace is passed as `AutoLaunchChoice.workspace` (the project's checkout, or
+  the task's worktree from `git worktree list`); only a custom hand-off passes one, so agents' and Autopilot's tasks
+  keep a worktree each. Like the card's own dialog, a thread started on a task in Review or Done is a follow-up.
+- **A CLI** goes through the session launch (`sessionLaunch.start`) with the model and effort the hand-off's choice
+  gives that CLI (`customHandoffModel`).
+- A new worktree for an integration epic's task starts from the epic's branch.
+- The task's worktree **falls back to a new worktree** when the task has none, and the result says so (`fellBack`).
+- The toast (`runCustomHandoff`, `customHandoffs.logic.ts`) says what started, on which model and where, with **Open
+  thread**; a fallback and a model that wasn't used are said in it. A failure's toast has the reason and **Open
+  dialog**, which opens the same hand-off's dialog. A CLI whose terminal won't open offers the command, as its dialog
+  does.
+
+**The model warning** (`customHandoffModel`): in settings, and in the toast after a launch, when the hand-off's own
+choice has nothing for its target: a tier or custom model with no model set for it (a custom model with no T3 Code
+model on a T3 thread starts on T3's default), a model typed for another provider, or a custom model since deleted.
+`inherit` warns of nothing, since what it comes down to depends on the task. For a CLI target the picker only offers
+that CLI's models.
+
+**In settings** (`settings/agents/CustomHandoffsSection.tsx`): see
+[board-layout.md](board-layout.md#the-settings-page).
+
+**Agents see none of this**: no tool lists or starts a custom hand-off. An agent started by one reads its prompt like
+any first message.
+
 ### Linking an existing thread
 
 (Sessions run in a terminal, in Claude Code, Codex or Copilot CLI, link themselves with `agentSession` instead; see
@@ -436,6 +524,8 @@ the user turns on **Let agents start threads** ([epics.md](epics.md#t3-code-thre
 | File | What it does |
 |---|---|
 | `packages/contracts/src/handoff.ts` | The hand-off prompts (`taskHandoffPrompt`: work, plan, orchestrate, subagent), the suggested model line and the default mode |
+| `packages/contracts/src/customHandoffs.ts` | Custom hand-offs: rendering a prompt, which a task offers (`customHandoffsFor`), the model per target and its warning (tested); the schema is in `schemas.ts` |
+| `apps/server/src/integrations/customHandoff.ts` | Starting a custom hand-off without its dialog, on the T3 or the CLI path (tested) |
 | `packages/contracts/src/planPrompt.ts` | Plan tasks: the built-in planning skill, `planTasksPrompt` and its short CLI prompt, which tasks can be planned, the launch inputs |
 | `apps/server/src/services/planning.ts` | Checks a planning session's tasks (`tasksToPlan`) and resolves the project's planning skill |
 | `packages/contracts/src/modelTiers.ts` | Model tiers, the task's `suggestedModel` and the tier settings |
@@ -446,6 +536,7 @@ the user turns on **Let agents start threads** ([epics.md](epics.md#t3-code-thre
 | `apps/server/src/integrations/t3.ts` | `launchOptions`, `startThread` and `launchTaskThread`, and linking the new thread to the task; `startProjectThread` for a project's Suggest epics |
 | `packages/contracts/src/taskBranches.ts` | The task's branches: `TaskBranch` and `linkBranches` (sources, order, exclusions) |
 | `apps/server/src/integrations/taskBranches.ts` | Sessions' branches and each branch's worktree from `git worktree list`; `findWorktree` checks an `existing_worktree` launch |
+| `apps/web/src/components/handoff/CustomHandoffMenu.tsx`, `customHandoffLaunch.ts`, `customHandoffs.logic.ts` | The Custom hand-offs submenu, running one (its dialog, or the launch and its toast) and the toast's text (tested) |
 | `apps/web/src/components/handoff/` | Buttons, the dialog (for a task, a project or a set of tasks to plan) and its pickers (`BranchPicker.tsx`: the branch picker with the pinned group), `PlanTasksDialog`; pasted images (`LaunchImages.tsx`, `launchImages.logic.ts`); pure logic in `handoff.logic.ts` |
 | `apps/web/src/components/board/boardSelection.logic.ts` | Ctrl/⌘-click picking of cards, and which of them a planning session can take |
 | `apps/web/src/components/settings/agents/ModelsSection.tsx`, `modelTiers.logic.ts` | Settings → Agents → Models; which providers' rows show and the per-tier update (`modelTiers.logic.ts` is tested) |

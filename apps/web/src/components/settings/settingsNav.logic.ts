@@ -112,6 +112,18 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
         "label",
         "model per label",
       ]),
+      section("agents.handoffs", "Custom hand-offs", [
+        "hand-off",
+        "handoff",
+        "custom prompt",
+        "saved prompt",
+        "preset",
+        "hand-off menu",
+        "skip dialog",
+        "start without the dialog",
+        "placeholder",
+        "sandbox",
+      ]),
       section("agents.operations", "Operations", [
         "operation",
         "reviewer model",

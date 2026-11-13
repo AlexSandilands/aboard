@@ -343,6 +343,11 @@ export interface AutoLaunchChoice {
   startFromOrigin?: boolean | undefined;
   /** Lowers the access further than T3's default (an Autopilot automation's setting); never raises it. */
   maxRuntimeMode?: T3RuntimeMode | undefined;
+  /**
+   * Run here instead of a new worktree: the project's checkout or an existing worktree. A custom hand-off's choice,
+   * which the user made; Autopilot and agents never pass it, so their tasks keep a worktree each.
+   */
+  workspace?: Exclude<T3LaunchWorkspace, { mode: "new_worktree" }> | undefined;
 }
 
 export type AutoLaunchSettings = Pick<StartT3ThreadInput, "modelSelection" | "runtimeMode" | "workspace">;
@@ -352,7 +357,8 @@ export type AutoLaunch = { ok: true; launch: AutoLaunchSettings } | { ok: false;
 /**
  * The launch an orchestrator gets for an epic's task without the dialog: the model and access the dialog would
  * start on, and a new worktree for every task in a git repository, so tasks running side by side never share a
- * checkout. A folder that isn't a repository can only run in the current checkout.
+ * checkout. A folder that isn't a repository can only run in the current checkout. A custom hand-off can name the
+ * workspace itself (`choice.workspace`).
  */
 export function autoLaunchSettings(options: T3LaunchOptions, choice: AutoLaunchChoice): AutoLaunch {
   const suggested = choice.work && !choice.defaultModel ? options.suggestion?.modelSelection : null;
@@ -374,6 +380,7 @@ export function autoLaunchSettings(options: T3LaunchOptions, choice: AutoLaunchC
       reason: `The model's provider offers no access mode within T3's default (${options.defaults.runtimeMode})`,
     };
   }
+  if (choice.workspace) return { ok: true, launch: { modelSelection, runtimeMode, workspace: choice.workspace } };
   if (!options.isRepo) {
     if (choice.baseRef) {
       return {

@@ -3,6 +3,7 @@ import {
   type AgentHarness,
   type AgentSessionSnapshot,
   type CreateTemplateInput,
+  type CustomHandoff,
   type MergeMethod,
   type TaskStatus,
   type TaskSummary,
@@ -361,19 +362,22 @@ interface DialogsState {
   /** The Autopilot digest panel, from the header button or the palette. */
   digestOpen: boolean;
   /**
-   * What the open "Start in T3 Code" dialog starts a thread for: a task (with `fixLinkId`, to fix that PR link: "Fix in →"),
-   * or a project's Suggest epics.
+   * What the open "Start in T3 Code" dialog starts a thread for: a task (with `fixLinkId`, to fix that PR link: "Fix in →";
+   * with `preset`, a custom hand-off whose prompt, model and workspace it opens on), or a project's Suggest epics.
    */
   t3Launch:
-    | { kind: "task"; taskId: string; fixLinkId?: string }
+    | { kind: "task"; taskId: string; fixLinkId?: string; preset?: CustomHandoff }
     | { kind: "project"; projectId: string }
     /** A thread that plans several of the project's tasks, linked to each. */
     | { kind: "plan"; projectId: string; taskIds: string[] }
     /** A thread that starts from a prompt the board built (Ask an agent on Settings → Autopilot), linked to nothing. */
     | { kind: "prompt"; projectId: string; label: string; prompt: string; writesCode: boolean }
     | null;
-  /** The open "New Claude Code / Copilot session" dialog: the task and the CLI it starts, and the PR link it fixes. */
-  sessionLaunch: { taskId: string; harness: AgentHarness; fixLinkId?: string } | null;
+  /**
+   * The open "New Claude Code / Copilot session" dialog: the task and the CLI it starts, the PR link it fixes, or the
+   * custom hand-off it opens on.
+   */
+  sessionLaunch: { taskId: string; harness: AgentHarness; fixLinkId?: string; preset?: CustomHandoff } | null;
   /** "Plan tasks…": the picker of the project's tasks to plan, and where the session starts once they are picked. */
   planPicker: { projectId: string; target: PlanTarget } | null;
   /** The new CLI session that plans the picked tasks. */
@@ -387,7 +391,7 @@ interface DialogsState {
   setDigestOpen: (open: boolean) => void;
   openViewDialog: (dialog: NonNullable<DialogsState["viewDialog"]>) => void;
   closeViewDialog: () => void;
-  openT3Launch: (taskId: string, fixLinkId?: string) => void;
+  openT3Launch: (taskId: string, fixLinkId?: string, preset?: CustomHandoff) => void;
   openProjectT3Launch: (projectId: string) => void;
   openPlanT3Launch: (projectId: string, taskIds: string[]) => void;
   openPromptT3Launch: (projectId: string, label: string, prompt: string, writesCode: boolean) => void;
@@ -396,7 +400,7 @@ interface DialogsState {
   openPlanSession: (projectId: string, taskIds: string[], harness: AgentHarness) => void;
   closePlanSession: () => void;
   closeT3Launch: () => void;
-  openSessionLaunch: (taskId: string, harness: AgentHarness, fixLinkId?: string) => void;
+  openSessionLaunch: (taskId: string, harness: AgentHarness, fixLinkId?: string, preset?: CustomHandoff) => void;
   closeSessionLaunch: () => void;
   openMergePr: (taskId: string, linkId: string) => void;
   closeMergePr: () => void;
@@ -456,7 +460,8 @@ export const useDialogs = create<DialogsState>()((set) => ({
   setDigestOpen: (digestOpen) => set({ digestOpen }),
   openViewDialog: (viewDialog) => set({ viewDialog }),
   closeViewDialog: () => set({ viewDialog: null }),
-  openT3Launch: (taskId, fixLinkId) => set({ t3Launch: { kind: "task", taskId, ...(fixLinkId ? { fixLinkId } : {}) } }),
+  openT3Launch: (taskId, fixLinkId, preset) =>
+    set({ t3Launch: { kind: "task", taskId, ...(fixLinkId ? { fixLinkId } : {}), ...(preset ? { preset } : {}) } }),
   openProjectT3Launch: (projectId) => set({ t3Launch: { kind: "project", projectId } }),
   openPlanT3Launch: (projectId, taskIds) => set({ t3Launch: { kind: "plan", projectId, taskIds } }),
   openPromptT3Launch: (projectId, label, prompt, writesCode) =>
@@ -466,8 +471,10 @@ export const useDialogs = create<DialogsState>()((set) => ({
   openPlanSession: (projectId, taskIds, harness) => set({ planSession: { projectId, taskIds, harness } }),
   closePlanSession: () => set({ planSession: null }),
   closeT3Launch: () => set({ t3Launch: null }),
-  openSessionLaunch: (taskId, harness, fixLinkId) =>
-    set({ sessionLaunch: { taskId, harness, ...(fixLinkId ? { fixLinkId } : {}) } }),
+  openSessionLaunch: (taskId, harness, fixLinkId, preset) =>
+    set({
+      sessionLaunch: { taskId, harness, ...(fixLinkId ? { fixLinkId } : {}), ...(preset ? { preset } : {}) },
+    }),
   closeSessionLaunch: () => set({ sessionLaunch: null }),
   openMergePr: (taskId, linkId) => set({ mergePr: { taskId, linkId } }),
   closeMergePr: () => set({ mergePr: null }),

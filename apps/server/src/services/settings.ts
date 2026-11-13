@@ -4,6 +4,8 @@ import {
   type AgentHarness,
   CliModel,
   cliEffortFor,
+  CUSTOM_HANDOFFS_MAX,
+  CustomHandoff,
   DEFAULT_HANDOFF_MENUS,
   DEFAULT_NOTIFICATION_SETTINGS,
   DEFAULT_REVIEW_MAX_ROUNDS,
@@ -51,6 +53,7 @@ const DEFAULTS: StoredSettings = {
   headlessReviewEnabled: false,
   providers: [],
   handoffMenus: DEFAULT_HANDOFF_MENUS,
+  customHandoffs: [],
   headlessReviewBudgetUsd: 2,
   issueImportEnabled: true,
   operationModels: {},
@@ -97,6 +100,7 @@ export const EXPORTED_SETTINGS: ReadonlySet<string> = new Set<string>([
     "headlessReviewEnabled",
     "providers",
     "handoffMenus",
+    "customHandoffs",
     "headlessReviewBudgetUsd",
     "issueImportEnabled",
     "operationModels",
@@ -211,6 +215,25 @@ export function storedProfileList(stored: unknown): ModelProfile[] {
   return profiles.slice(0, MODEL_PROFILES_MAX);
 }
 
+/**
+ * The stored custom hand-offs, each read on its own like custom models: one that no longer parses is dropped rather
+ * than the whole list, and a repeated id keeps its first.
+ */
+export function storedHandoffList(stored: unknown): CustomHandoff[] {
+  const handoffs: CustomHandoff[] = [];
+  for (const entry of Array.isArray(stored) ? stored : []) {
+    const parsed = CustomHandoff.safeParse(entry);
+    if (parsed.success && !handoffs.some((h) => h.id === parsed.data.id)) handoffs.push(parsed.data);
+  }
+  return handoffs.slice(0, CUSTOM_HANDOFFS_MAX);
+}
+
+/** A hand-off as stored: an empty project list shows it nowhere, which nobody means, so it is stored as everywhere. */
+const normalizeHandoff = (handoff: CustomHandoff): CustomHandoff => ({
+  ...handoff,
+  projectIds: handoff.projectIds?.length ? [...new Set(handoff.projectIds)] : null,
+});
+
 /** A provider as stored: a blank CLI path is none, so the CLI is looked up on PATH. */
 const normalizeProvider = (provider: ProviderSetting): ProviderSetting => ({
   id: provider.id,
@@ -281,6 +304,7 @@ export function loadSettings(repos: Repos): StoredSettings {
     operationModels: readOperationModels(stored.get("operationModels")),
     modelProfiles: storedProfileList(stored.get("modelProfiles")),
     providers: storedProviderList(stored.get("providers")),
+    customHandoffs: storedHandoffList(stored.get("customHandoffs")),
     notifications: mergeNotificationSettings(stored.get("notifications") as StoredNotificationSettings | undefined),
     keybindings: sanitizeKeybindingOverrides(stored.get("keybindings")),
     // A hand-edited value that no longer parses prices nothing rather than failing every read.
@@ -348,6 +372,9 @@ export function createSettingsService(core: Core): SettingsService {
         }
         if (input.handoffMenus !== undefined) {
           repos.settings.set("handoffMenus", { ...load().handoffMenus, ...input.handoffMenus });
+        }
+        if (input.customHandoffs !== undefined) {
+          repos.settings.set("customHandoffs", input.customHandoffs.map(normalizeHandoff));
         }
         if (input.headlessReviewBudgetUsd !== undefined) {
           repos.settings.set("headlessReviewBudgetUsd", input.headlessReviewBudgetUsd);

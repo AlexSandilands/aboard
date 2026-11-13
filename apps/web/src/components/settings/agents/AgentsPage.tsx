@@ -2,12 +2,13 @@ import { activeProviderIds, type AppSettings, type T3IntegrationStatus } from "@
 import { memo } from "react";
 import { useIntegrationsStatus, useSettingsSelect } from "~/state/queries";
 import { selectProviderEditorSettings } from "../ProviderEditors";
+import { CustomHandoffsSection, selectHandoffsSettings } from "./CustomHandoffsSection";
 import { ModelsSection, selectModelsSettings } from "./ModelsSection";
 import { OperationsSection } from "./OperationsSection";
 import { ProvidersSection } from "./ProvidersSection";
 
 /**
- * Settings → Agents: two split cards of the same shape, Providers and Models, then the Operations rows. Everything that
+ * Settings → Agents: split cards of the same shape (Providers, Models, Custom hand-offs), then the Operations rows. Everything that
  * comes in numbers (providers, tiers, custom models) is a row in a list with the selected one's settings beside it, so
  * the page is the same shape with one provider or eight. Before a provider is added there is one empty state and
  * nothing else.
@@ -19,6 +20,7 @@ export function AgentsPage({ settings }: { settings: AppSettings }) {
     <>
       <Providers />
       {any ? <Models t3={t3} /> : null}
+      {any ? <Handoffs /> : null}
       {any ? <OperationsSection blocked={activeProviderIds(settings).length === 0} /> : null}
     </>
   );
@@ -34,4 +36,9 @@ const Providers = memo(function Providers() {
 const Models = memo(function Models({ t3 }: { t3: T3IntegrationStatus | undefined }) {
   const settings = useSettingsSelect(selectModelsSettings);
   return settings ? <ModelsSection settings={settings} t3={t3} /> : null;
+});
+
+const Handoffs = memo(function Handoffs() {
+  const settings = useSettingsSelect(selectHandoffsSettings);
+  return settings ? <CustomHandoffsSection settings={settings} /> : null;
 });

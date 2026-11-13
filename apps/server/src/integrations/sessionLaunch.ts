@@ -24,6 +24,7 @@ import {
   type AppSettings,
   type CliEffort,
   cliEffortFor,
+  type ModelChoice,
   type SessionLaunchOptions,
   type StartPlanningSessionInput,
   type StartSessionInput,
@@ -45,6 +46,7 @@ import {
   copyCommand,
   displayLaunch,
   fitsCommandLine,
+  nameArgument,
   resolveTerminal,
   textArgument,
   type LaunchSpec,
@@ -63,8 +65,11 @@ import type { Logger } from "./util.ts";
 const SESSION_BRANCH_PREFIX = `${BRAND.id}/`;
 
 export interface SessionLaunchIntegration {
-  /** What the launch dialog offers for a task: CLIs, branches, the tier's models. */
-  options(taskId: string): Promise<SessionLaunchOptions>;
+  /**
+   * What the launch dialog offers for a task: CLIs, branches, the tier's models. `choice` is a custom hand-off's model,
+   * which the models then follow instead of the task's own.
+   */
+  options(taskId: string, choice?: ModelChoice): Promise<SessionLaunchOptions>;
   /** The task's own branches and their worktrees, for the T3 dialog's picker (the session dialog's options carry them). */
   taskBranches(taskId: string): Promise<TaskBranch[]>;
   /**
@@ -122,6 +127,28 @@ export function shortPrompt(
     (mode === "fix"
       ? ` Fix its failing checks, merge conflicts or requested changes, and push to that branch. Never force-push, never push to the default branch and never merge.`
       : "");
+  return fitShort(withAttachedImages(text, images), platform);
+}
+
+/**
+ * The first message of a custom hand-off's session when its prompt can't go on the command line. The mode's pointer
+ * would tell the agent to work on the task, which isn't what the hand-off asks (it may say "review only", or "run the
+ * sandbox"), so this one names the hand-off and has the agent read the task and wait for the prompt to be pasted. The
+ * label is the user's own text, so it goes in as this command line can carry it.
+ */
+export function handoffShortPrompt(
+  label: string,
+  task: { id: string; number: number },
+  harness: AgentHarness,
+  platform: NodeJS.Platform,
+  images: readonly LaunchImage[] = [],
+): string {
+  const name = nameArgument(label, platform);
+  const text =
+    `This session is for the hand-off "${name}" on #${task.number} from the ${BRAND.id} task board: call ` +
+    `get_task("${task.id}") on the ${BRAND.id} MCP server to read the task, then wait. What to do is in a prompt I ` +
+    "will paste next; until it arrives don't start on the task, change any file or move it on the board. " +
+    startedSessionLine(harness, name);
   return fitShort(withAttachedImages(text, images), platform);
 }
 
@@ -276,7 +303,8 @@ export function createSessionLaunch(deps: {
         sessionId,
         model: session.model,
         effort: session.effort,
-        name: label,
+        // A custom hand-off's label is the user's own text, so it is made safe for this command line.
+        name: nameArgument(label, h.platform),
         prompt,
       });
       return [exe, ...argv.slice(1)];
@@ -345,7 +373,7 @@ export function createSessionLaunch(deps: {
   };
 
   return {
-    async options(taskId) {
+    async options(taskId, choice) {
       const { task, root } = subject(taskId);
       const settings = deps.services().settings.get();
       const h = deps.host();
@@ -360,7 +388,7 @@ export function createSessionLaunch(deps: {
         branches[0] ??
         null;
       const tier = task.suggestedModel?.tier ?? null;
-      const model = resolveOperationChoice("launch", { task }, settings);
+      const model = resolveOperationChoice("launch", { task, automation: choice ? [choice] : [] }, settings);
       // A task with nothing chosen and no tier (the light fallback) keeps each CLI's default, as it always has.
       const profile = model.source === "fallback" ? null : model.profile;
       // A model typed for one provider fills in that CLI only.
@@ -468,17 +496,19 @@ export function createSessionLaunch(deps: {
         prompt: withAttachedImages(input.prompt, images),
         cwd,
         branch,
-        label: sessionLabel(input.mode, task.number),
+        label: input.label ?? sessionLabel(input.mode, task.number),
         windowTask: task.number,
         short: (platform) =>
-          shortPrompt(
-            input.mode,
-            task,
-            input.harness,
-            platform,
-            workspace.mode === "pr_branch" ? workspace.branch : undefined,
-            images,
-          ),
+          input.label
+            ? handoffShortPrompt(input.label, task, input.harness, platform, images)
+            : shortPrompt(
+                input.mode,
+                task,
+                input.harness,
+                platform,
+                workspace.mode === "pr_branch" ? workspace.branch : undefined,
+                images,
+              ),
         taskIds: [task.id],
         actor,
       });

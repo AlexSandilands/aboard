@@ -514,10 +514,17 @@ const LAUNCH_OPTIONS_GC_MS = 30_000;
 /** Opening the hand-off menu again within this long doesn't prefetch the launch options again. */
 const LAUNCH_OPTIONS_PREFETCH_STALE_MS = 15_000;
 
-const t3LaunchOptionsQuery = (taskId: string) => ({
-  queryKey: queryKeys.t3LaunchOptions(taskId),
+/** `?handoff=<id>` for the launch options of a custom hand-off's dialog, which start on its model. */
+const handoffQuery = (handoffId: string | null | undefined) =>
+  handoffId ? `?handoff=${encodeURIComponent(handoffId)}` : "";
+
+const t3LaunchOptionsQuery = (taskId: string, handoffId?: string | null) => ({
+  // Under the task's key, so whatever drops the task's options drops a hand-off's too.
+  queryKey: handoffId ? [...queryKeys.t3LaunchOptions(taskId), handoffId] : queryKeys.t3LaunchOptions(taskId),
   queryFn: ({ signal }: { signal: AbortSignal }) =>
-    api<T3LaunchOptions>(`/api/tasks/${encodeURIComponent(taskId)}/t3-launch-options`, { signal }),
+    api<T3LaunchOptions>(`/api/tasks/${encodeURIComponent(taskId)}/t3-launch-options${handoffQuery(handoffId)}`, {
+      signal,
+    }),
   gcTime: LAUNCH_OPTIONS_GC_MS,
   retry: false,
 });
@@ -534,9 +541,9 @@ const projectT3LaunchOptionsQuery = (projectId: string) => ({
  * Models, refs and defaults for starting a T3 Code thread. Cached briefly (see prefetchT3LaunchOptions) but always
  * refreshed when the dialog opens, since T3 can change between two opens.
  */
-export function useT3LaunchOptions(taskId: string | null) {
+export function useT3LaunchOptions(taskId: string | null, handoffId?: string | null) {
   return useQuery({
-    ...t3LaunchOptionsQuery(taskId ?? ""),
+    ...t3LaunchOptionsQuery(taskId ?? "", handoffId),
     enabled: !!taskId,
     staleTime: 0,
   });
@@ -551,10 +558,13 @@ export function useProjectT3LaunchOptions(projectId: string | null) {
   });
 }
 
-const sessionLaunchOptionsQuery = (taskId: string) => ({
-  queryKey: queryKeys.sessionLaunchOptions(taskId),
+const sessionLaunchOptionsQuery = (taskId: string, handoffId?: string | null) => ({
+  queryKey: handoffId ? [...queryKeys.sessionLaunchOptions(taskId), handoffId] : queryKeys.sessionLaunchOptions(taskId),
   queryFn: ({ signal }: { signal: AbortSignal }) =>
-    api<SessionLaunchOptions>(`/api/tasks/${encodeURIComponent(taskId)}/session-launch-options`, { signal }),
+    api<SessionLaunchOptions>(
+      `/api/tasks/${encodeURIComponent(taskId)}/session-launch-options${handoffQuery(handoffId)}`,
+      { signal },
+    ),
   gcTime: LAUNCH_OPTIONS_GC_MS,
   retry: false,
 });
@@ -563,8 +573,8 @@ const sessionLaunchOptionsQuery = (taskId: string) => ({
  * CLIs, branches and the tier's models for the new-session dialog. Cached briefly like T3's (see
  * usePrefetchSessionLaunchOptions) but always refreshed when the dialog opens.
  */
-export function useSessionLaunchOptions(taskId: string | null) {
-  return useQuery({ ...sessionLaunchOptionsQuery(taskId ?? ""), enabled: !!taskId, staleTime: 0 });
+export function useSessionLaunchOptions(taskId: string | null, handoffId?: string | null) {
+  return useQuery({ ...sessionLaunchOptionsQuery(taskId ?? "", handoffId), enabled: !!taskId, staleTime: 0 });
 }
 
 /**

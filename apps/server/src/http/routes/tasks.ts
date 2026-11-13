@@ -8,6 +8,7 @@ import {
   MoveTaskInput,
   PlanInput,
   SetDeliveryInput,
+  StartCustomHandoffInput,
   StartSessionInput,
   StartT3ThreadInput,
   TaskStatusInput,
@@ -30,6 +31,9 @@ const TaskListQuery = z.object({
 });
 
 const DeleteTaskQuery = z.object({ withTasks: queryFlag });
+
+/** A custom hand-off's id: the launch options then start on its model, for the dialog it opens. */
+const LaunchOptionsQuery = z.object({ handoff: z.string().trim().min(1).optional() });
 
 /** /api/tasks — task cards, plan replacement, phases, links and notes scoped to a task. */
 export function registerTaskRoutes(app: Hono, { services, integrations }: AppContext): void {
@@ -115,7 +119,9 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
   );
   app.get(
     "/api/tasks/:id/t3-launch-options",
-    handle(async (c) => c.json(await integrations.t3LaunchOptions(taskId(c)))),
+    handle(async (c) =>
+      c.json(await integrations.t3LaunchOptions(taskId(c), parseQuery(c, LaunchOptionsQuery).handoff)),
+    ),
   );
   app.post(
     "/api/tasks/:id/t3-thread",
@@ -127,7 +133,9 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
   );
   app.get(
     "/api/tasks/:id/session-launch-options",
-    handle(async (c) => c.json(await integrations.sessionLaunchOptions(taskId(c)))),
+    handle(async (c) =>
+      c.json(await integrations.sessionLaunchOptions(taskId(c), parseQuery(c, LaunchOptionsQuery).handoff)),
+    ),
   );
   app.post(
     "/api/tasks/:id/sessions",
@@ -135,6 +143,15 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
       const id = taskId(c);
       const input = await parseBody(c, StartSessionInput);
       return c.json(await integrations.startSession(id, input, actorOf(c)), 201);
+    }),
+  );
+  // A custom hand-off started without its dialog: the saved prompt, model and workspace (customHandoff.ts).
+  app.post(
+    "/api/tasks/:id/custom-handoffs/:handoffId",
+    handle(async (c) => {
+      const id = taskId(c);
+      const input = await parseBody(c, StartCustomHandoffInput);
+      return c.json(await integrations.startCustomHandoff(id, c.req.param("handoffId") ?? "", input, actorOf(c)), 201);
     }),
   );
   app.post(

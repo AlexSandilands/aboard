@@ -907,6 +907,50 @@ export const DEFAULT_HANDOFF_MENUS = Object.fromEntries(
   HandoffTarget.options.map((target) => [target, true]),
 ) as Record<HandoffTarget, boolean>;
 
+/** Most custom hand-offs the settings hold. */
+export const CUSTOM_HANDOFFS_MAX = 20;
+export const CUSTOM_HANDOFF_NAME_MAX = 60;
+export const CUSTOM_HANDOFF_PROMPT_MAX = 20_000;
+
+/**
+ * Where a custom hand-off runs: a new worktree, the task's own worktree (a new one when the task has none yet), or the
+ * project's checkout.
+ */
+export const CustomHandoffWorkspace = z.enum(["new_worktree", "task_worktree", "current"]);
+export type CustomHandoffWorkspace = z.infer<typeof CustomHandoffWorkspace>;
+
+/**
+ * A saved prompt in the tasks' hand-off menus (Settings → Agents → Custom hand-offs): what it starts, where, on which
+ * model, and whether it starts at once or opens the launch dialog filled in. See docs/features/agent-handoff.md.
+ */
+export const CustomHandoff = z.object({
+  id: z
+    .string()
+    .trim()
+    .min(1)
+    .max(40)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, "letters, digits, - and _ only"),
+  /** Its name in the menu. */
+  name: z.string().trim().min(1).max(CUSTOM_HANDOFF_NAME_MAX),
+  /** The first message, with `{{task}}`-style placeholders (customHandoffs.ts). Blank sends the task's reference alone. */
+  prompt: z.string().max(CUSTOM_HANDOFF_PROMPT_MAX),
+  target: HandoffTarget,
+  /** Start at once on the saved choices instead of opening the launch dialog. */
+  skipDialog: z.boolean(),
+  /** `inherit` runs on the model a plain launch of the task would (the board's Launch setting, else the task's own). */
+  model: ModelChoice,
+  workspace: CustomHandoffWorkspace,
+  /** The projects whose tasks offer it; null offers it everywhere. */
+  projectIds: z.array(z.string().min(1)).max(200).nullable(),
+});
+export type CustomHandoff = z.infer<typeof CustomHandoff>;
+
+export const CustomHandoffs = z
+  .array(CustomHandoff)
+  .max(CUSTOM_HANDOFFS_MAX)
+  .refine((list) => new Set(list.map((h) => h.id)).size === list.length, "Two hand-offs have the same id");
+export type CustomHandoffs = z.infer<typeof CustomHandoffs>;
+
 export const AppSettings = z
   .object({
     /** The issue trackers links and imports know, in the order keys are matched against them. */
@@ -940,6 +984,8 @@ export const AppSettings = z
      * reopen, and agents can still start threads (agentT3Threads).
      */
     handoffMenus: z.record(HandoffTarget, z.boolean()),
+    /** The user's saved prompts for the hand-off menus, in the order the menus list them. */
+    customHandoffs: CustomHandoffs,
     headlessReviewBudgetUsd: z.number().positive().max(100),
     /** Fill in tasks created from a ticket or a GitHub issue URL in the background. */
     issueImportEnabled: z.boolean(),
@@ -993,6 +1039,8 @@ export const UpdateSettingsInput = z.object({
   providers: ProviderSettings.optional(),
   /** Merges into the switches: targets left out keep theirs. */
   handoffMenus: z.partialRecord(HandoffTarget, z.boolean()).optional(),
+  /** Replaces the whole list of custom hand-offs. */
+  customHandoffs: CustomHandoffs.optional(),
   headlessReviewBudgetUsd: z.number().positive().max(100).optional(),
   issueImportEnabled: z.boolean().optional(),
   /** Merges into the operations' models: one left out keeps its model, and null puts one back to its default. */

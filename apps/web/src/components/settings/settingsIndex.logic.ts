@@ -48,12 +48,13 @@ const draft = (id: string, title: string, description: string, keywords: Readonl
 });
 
 /**
- * Cards and rows whose ids can't be listed: one per GitHub host `gh` is signed in to, one per custom model and one per
- * ticket system. A row may use one of these prefixes without an entry of its own.
+ * Cards and rows whose ids can't be listed: one per GitHub host `gh` is signed in to, one per custom model, one per
+ * custom hand-off and one per ticket system. A row may use one of these prefixes without an entry of its own.
  */
 export const DYNAMIC_ROW_PREFIXES: ReadonlyArray<string> = [
   "integrations.github.host-",
   "agents.models.custom.",
+  "agents.handoffs.",
   "integrations.tickets.system-",
 ];
 
