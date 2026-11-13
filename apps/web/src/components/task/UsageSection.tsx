@@ -7,6 +7,7 @@ import { SERIES_COLORS } from "~/components/stats/chartParts";
 import { cn } from "~/lib/utils";
 import { useAutopilotOverview } from "~/state/queries";
 import { PANEL_ICON_CLASS, PanelControl } from "./PanelControl";
+import { PanelLabel } from "./PanelLabel";
 import { UsageSummary } from "./SectionSummaries";
 import { TaskSection } from "./TaskSection";
 import {
@@ -124,7 +125,8 @@ function UsageRow({ row, automationTitle }: { row: TaskUsageRow; automationTitle
             />
             <RowIcon row={row} />
             <span className="flex min-w-0 flex-col">
-              <span className="truncate">{name}</span>
+              {/* Untrimmed: the source line sits right under it, and the trim would shrink the name to its cap height. */}
+              <PanelLabel className="[text-box:normal]">{name}</PanelLabel>
               <span className="flex min-w-0 flex-wrap items-center gap-1 text-xs font-normal text-muted-foreground">
                 <span className="truncate">{rowSource(row)}</span>
                 {/* The model column, which says it otherwise, is hidden on a narrow panel. */}
@@ -136,12 +138,9 @@ function UsageRow({ row, automationTitle }: { row: TaskUsageRow; automationTitle
               </span>
             </span>
           </span>
-          <span
-            className={cn(MODEL_COLUMN, "truncate text-xs font-normal text-muted-foreground")}
-            title={rowModel(row)}
-          >
+          <PanelLabel className={cn(MODEL_COLUMN, "text-xs font-normal text-muted-foreground")} title={rowModel(row)}>
             {row.untracked ? "not tracked" : rowModel(row)}
-          </span>
+          </PanelLabel>
           <span className="text-end text-xs font-normal tabular-nums">
             {row.untracked ? "—" : formatTokens(tokens)}
             {row.tokens.requests ? (
