@@ -82,7 +82,7 @@ them: [docs/features/github-setup.md](docs/features/github-setup.md).
 
 ## Releasing
 
-Publish a release on GitHub with a date tag (`v2026.10.21`) and generated notes; CI builds the installers,
+Publish a release on GitHub with a semver tag (`v1.4.2`) and generated notes; CI builds the installers,
 attaches them and updates the pacman repo. Details and one-time setup:
 [docs/features/releases.md](docs/features/releases.md).
 

@@ -5,7 +5,7 @@ import { agoText, updateStatusView } from "./desktopUpdate.logic";
 const base: DesktopUpdateState = {
   mode: "self-update",
   disabledReason: null,
-  currentVersion: "2026.11.6",
+  currentVersion: "1.4.2",
   autoCheck: true,
   status: "idle",
   version: null,
@@ -35,13 +35,13 @@ describe("updateStatusView", () => {
   });
 
   it("shows progress while downloading, with the button disabled", () => {
-    const view = updateStatusView({ ...base, status: "downloading", version: "2026.11.10", percent: 42 }, now);
+    const view = updateStatusView({ ...base, status: "downloading", version: "1.5.0", percent: 42 }, now);
     expect(view.percent).toBe(42);
     expect(view.button.action).toBeNull();
   });
 
   it("offers Restart to update once ready, and says why an install failed", () => {
-    const ready = { ...base, status: "ready" as const, version: "2026.11.10" };
+    const ready = { ...base, status: "ready" as const, version: "1.5.0" };
     expect(updateStatusView(ready, now).button).toEqual({
       label: "Restart to update",
       action: "install",
@@ -51,7 +51,7 @@ describe("updateStatusView", () => {
   });
 
   it("points notice-only installs at their package manager or the release page", () => {
-    const available = { ...base, mode: "notice-only" as const, status: "available" as const, version: "2026.11.10" };
+    const available = { ...base, mode: "notice-only" as const, status: "available" as const, version: "1.5.0" };
     expect(updateStatusView({ ...available, noticeVia: "pacman" }, now).text).toMatch(/pacman -Syu/);
     expect(updateStatusView({ ...available, noticeVia: "download" }, now).text).toMatch(/release page/);
     expect(updateStatusView(available, now).button.action).toBe("notes");

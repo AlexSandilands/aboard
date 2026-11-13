@@ -1,6 +1,6 @@
 name: Release
 
-# Publishing a release on GitHub starts this: give it a new tag named for the date (v2026.10.21) and let GitHub
+# Publishing a release on GitHub starts this: give it a new semver tag (v1.4.2) and let GitHub
 # generate the notes. It builds the Windows installer and the Linux packages, attaches them to the release, then
 # updates the pacman repo (the `pacman` release) and the AUR package. To rebuild a release's files, run it by hand
 # with the release's tag.
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag of the published release to build, e.g. v2026.10.21
+        description: Tag of the published release to build, e.g. v1.4.2
         required: true
 
 permissions:

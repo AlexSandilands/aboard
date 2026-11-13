@@ -9,10 +9,14 @@ machine.
 ### Cutting a release
 
 1. On GitHub, **Releases → Draft a new release**.
-2. **Choose a tag** and type a new one named for today's date, with no leading zeros: `v2026.10.21`, or
-   `v2026.10.5` rather than `v2026.10.05`. Target `main`.
+2. **Choose a tag** and type the next version, `vMAJOR.MINOR.PATCH`: `v1.4.2`. Target `main`. Which number to
+   raise, from the last release:
+   - **patch** (`v1.4.2` → `v1.4.3`) for fixes only;
+   - **minor** (`v1.5.0`) when it adds something;
+   - **major** (`v2.0.0`) when it breaks something people or agents rely on: an MCP tool or argument removed, a
+     setting that has to be redone.
 3. **Generate release notes**, edit them if you like, and **Publish release**. If the generator offers the
-   `pacman` release as the previous tag, pick the last dated one instead.
+   `pacman` release as the previous tag, pick the last version instead.
 
 Publishing starts `.github/workflows/release.yml`. When it finishes, the release has:
 
@@ -31,15 +35,23 @@ and the pacman repo serves the new version, so `pacman -Syu` picks it up.
 
 ### Versions
 
-A release's version is its tag without the `v`. `scripts/release-version.ts` checks the tag is a real date
-in that form and writes the version into the root `package.json` on the runner only; the committed version stays
-`0.1.0`, which marks a build from source. BRAND reads it from there, so the app's health endpoint, the installer
-names and the Arch package all agree.
+A release's version is its tag without the `v`. `scripts/release-version.ts` checks the tag is three numbers
+with no leading zeros and nothing after them, and writes the version into the root `package.json` on the runner
+only; the committed version stays `0.0.0`, which marks a build from source (the app checks for no updates then,
+and `v0.0.0` is refused as a tag). BRAND reads it from there, so the app's health endpoint, the installer names
+and the Arch package all agree.
 
-A tag that isn't a date (`v1.2`, `v2026.10.05`, `v2026.2.30`) fails the build before anything is packaged. Delete
+Any other tag (`v1.2`, `v1.02.0`, `v1.2.0-rc.1`, `v1.2.0+1`) fails the build before anything is packaged. Delete
 the release and publish again with a valid tag. Release tags can't be deleted or moved while the release tags
 ruleset is on ([GitHub setup](github-setup.md#the-release-tags-ruleset)), so the bad tag stays unless you switch it
 off first.
+
+The check only looks at the tag's form: it doesn't know the last release, so nothing stops a version lower than
+it. The installed apps and pacman would ignore such a release, and the pacman job leaves its repo alone, but
+the AUR job has no such check and would set the AUR package to it.
+
+Tags up to `v2026.11.13` are from the earlier scheme, the release's date
+([Switching from date versions](#switching-from-date-versions)).
 
 ### The workflow
 
@@ -98,7 +110,7 @@ with a tarball from `pnpm desktop:package tar.gz`:
 ```sh
 docker run --rm -v "$PWD":/src:ro -v /tmp/repo:/out -e PACMAN_GPG_PRIVATE_KEY="$(cat private.asc)" \
   archlinux:base-devel bash -c 'pacman -Syu --noconfirm nodejs && cd /src &&
-  .github/scripts/pacman-repo.sh 0.1.0 apps/desktop/release/aboard-0.1.0-linux-x64.tar.gz /out'
+  .github/scripts/pacman-repo.sh 0.0.0 apps/desktop/release/aboard-0.0.0-linux-x64.tar.gz /out'
 ```
 
 Any throwaway key works (`gpg --quick-generate-key test ed25519 sign never`).
@@ -114,7 +126,7 @@ After changing `scripts/arch-package.ts`, check that its `.SRCINFO` still matche
 `PKGBUILD`, on an Arch machine with a tarball from `pnpm desktop:package tar.gz`:
 
 ```sh
-node scripts/arch-package.ts aboard-bin 0.1.0 "$(sha256sum apps/desktop/release/*-linux-x64.tar.gz | cut -d' ' -f1)" /tmp/aur
+node scripts/arch-package.ts aboard-bin 0.0.0 "$(sha256sum apps/desktop/release/*-linux-x64.tar.gz | cut -d' ' -f1)" /tmp/aur
 cp apps/desktop/release/*-linux-x64.tar.gz /tmp/aur/ && cd /tmp/aur
 diff <(makepkg --printsrcinfo) .SRCINFO && makepkg -f   # no diff, then a package that builds
 ```
@@ -125,14 +137,34 @@ The tarball, with its own Electron, goes in `/opt/aboard`, plus `/usr/bin/aboard
 icon in the hicolor theme and the license. The dependencies are the libraries the bundled Electron links
 against: the same set as the .deb, plus `alsa-lib`, which a minimal Arch install lacks.
 
+### Switching from date versions
+
+Releases up to `v2026.11.13` were named for their date. Every date version sorts above every semver version
+(`2026.11.13` > `1.0.0`), so nothing moves from one to the other by itself:
+
+- **The pacman repo was restarted.** `aboard.db` was deleted from the `pacman` release by hand before the first
+  semver release, so the job's "won't go back a version" check found no current version and published. A
+  machine on a date version takes the semver package once with `sudo pacman -Sy aboard`, which warns of a
+  downgrade and installs it; after that `pacman -Syu` works as before.
+- **An app installed from a date release isn't offered the semver ones.** Its updater compares versions the same
+  way. Install the newer release by hand once (the installer, AppImage or package from the release page).
+- **Don't rebuild a date release with the workflow.** Its version is higher than any semver one, so the pacman
+  job's "won't go back a version" check lets it through: the date package would replace the current one in the
+  pacman repo, and in the AUR.
+- **GitHub's "Latest" badge** can go by version too. When publishing the first semver release, check **Set as
+  the latest release** is ticked: the update feed is read from the latest release.
+
 ## Decisions
 
 - **Releases start from GitHub's release page.** Writing the notes, choosing the tag and publishing happen in
   one place, and the notes come from GitHub's generator. The cost is that the release is visible for a few
   minutes before its files are attached.
-- **Date versions, one release a day.** `vYYYY.M.D` says when a build is from. Without leading zeros it is
-  valid semver, which electron-builder requires, and a valid pacman version. A second release on the same day
-  has to wait for the next day's tag.
+- **Semver versions, three numbers only.** `vMAJOR.MINOR.PATCH` allows any number of releases a day, so an
+  urgent fix is a patch release rather than a wait for tomorrow's tag, and electron-builder requires semver
+  anyway. No pre-release or build suffix: pacman can't take a `-` in a version, and would sort a pre-release
+  differently than semver does. The cost is that the version no longer says when a build is from.
+- **`0.0.0` marks a build from source.** It is the one version that can't be a release, so a first release of
+  `v0.1.0` is as good as `v1.0.0`.
 - **The version lives in the tag, not in a commit.** Nothing has to be bumped and merged before a release.
 - **Our own pacman repo, hosted in a release.** The AUR wasn't taking new accounts. A release holds files of
   any size without growing the git history, which 100 MB packages on a `gh-pages` branch would. The repo keeps
@@ -158,7 +190,12 @@ against: the same set as the .deb, plus `alsa-lib`, which a minimal Arch install
 | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Release on pushing a tag, with a draft made by CI | Two steps (tag, then edit the draft) instead of one page                                              |
 | Building Windows on Linux with Wine               | Saves a runner but needs Wine for the executable's icon and version info, and isn't tested on Windows |
-| `YYYY.M.N`, a counter within the month            | Any number of releases a day, but the version no longer says the date                                 |
+| Date versions, `vYYYY.M.D` (used until `v2026.11.13`) | Says when a build is from, but only one release a day                                             |
+| `vYYYY.M.N`, a counter within the month           | Any number of releases a day, but the version no longer says the date, and it isn't semver's meaning either |
+| `vYYYY.MDD.N`, the date and a counter within the day | Works everywhere and sorts after the date versions, but it's an unusual form to read and type      |
+| `vYYYY.M.D.N`, a fourth number                    | electron-builder rejects it: not semver                                                               |
+| A nightly channel beside the releases             | Solves a different problem; a same-day fix needs a second release, not a second channel               |
+| Semver with a pacman `epoch=1`                    | Lets pacman upgrade from the date versions by itself, but the epoch stays in the package for good; not worth it with one known install |
 | The pacman repo on GitHub Pages                   | Pages serves a branch, so every package would stay in the git history                                 |
 | An unsigned pacman repo (`SigLevel = Never`)      | No key to manage, but pacman would install whatever is at the URL                                     |
 | An Arch package built from source                 | Every install would download the dependencies and build the web app; slow, and not what CI tested     |

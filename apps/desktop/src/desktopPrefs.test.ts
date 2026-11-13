@@ -25,10 +25,10 @@ describe("parsePrefs", () => {
   });
 
   it("keeps the update settings, checking automatically unless told not to", () => {
-    expect(parsePrefs({ autoCheckUpdates: false, notifiedUpdate: "2026.11.10" })).toEqual({
+    expect(parsePrefs({ autoCheckUpdates: false, notifiedUpdate: "1.5.0" })).toEqual({
       ...DEFAULTS,
       autoCheckUpdates: false,
-      notifiedUpdate: "2026.11.10",
+      notifiedUpdate: "1.5.0",
     });
     expect(parsePrefs({ autoCheckUpdates: "no", notifiedUpdate: 3 })).toEqual(DEFAULTS);
   });
@@ -45,7 +45,7 @@ describe("readPrefs and writePrefs", () => {
 
   it("round trips, creating the directory", () => {
     const nested = join(dir, "profile");
-    const prefs = { trayIcon: "black", autoCheckUpdates: false, notifiedUpdate: "2026.11.10" } as const;
+    const prefs = { trayIcon: "black", autoCheckUpdates: false, notifiedUpdate: "1.5.0" } as const;
     writePrefs(nested, prefs);
     expect(readPrefs(nested)).toEqual(prefs);
     expect(readdirSync(nested)).toEqual(["prefs.json"]);

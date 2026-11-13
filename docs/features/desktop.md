@@ -106,8 +106,8 @@ in the background, and installs only when you click **Restart to update**.
   pkexec-based .deb/.rpm/pacman updaters). The .deb, .rpm, tarball and the Arch packages are **notice-only**: the
   shell reads the latest release's `latest-linux.yml` (where `resources/app-update.yml` points, `noticeFeedUrl`), compares its version with `BRAND.version` and says a newer
   one is out, with "update with pacman -Syu" for the Arch packages (running from `/opt/<id>/` with pacman installed and no `resources/package-type`) and "download it from the release page" for the rest. Nothing writes over a package manager's files.
-  Updates are **disabled** in dev builds, the sandbox shell and builds from source (a version that isn't a release's
-  date, like `0.1.0`), and nothing touches the network then.
+  Updates are **disabled** in dev builds, the sandbox shell and builds from source (the committed version, `0.0.0`, or
+  anything that isn't `MAJOR.MINOR.PATCH`), and nothing touches the network then.
 - **Feed.** `package.ts` gives electron-builder a `github` publish config with the owner and repo from the root
   `package.json` `repository` (`BRAND_REPOSITORY`), so it writes `resources/app-update.yml` and the `latest*.yml`
   feed; it never publishes. CI uploads the feed last ([releases](releases.md#the-workflow)).
