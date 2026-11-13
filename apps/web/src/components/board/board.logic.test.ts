@@ -2,6 +2,7 @@ import type { AttentionReason, BoardSnapshot, Project, TaskSummary } from "@repo
 import { describe, expect, it } from "vitest";
 import {
   attentionItems,
+  attentionLabel,
   buildLanes,
   columnCounts,
   COLUMN_PREVIEW_COUNT,
@@ -240,6 +241,13 @@ describe("reuseUnchangedLanes", () => {
     expect(second[1]).not.toBe(first[1]);
     expect(second[1]!.cells.planned).toBe(first[1]!.cells.planned);
     expect(second[1]!.cells.backlog).toEqual([changedB]);
+  });
+});
+
+describe("attentionLabel", () => {
+  it("names a failed session as its provider does, and other reasons by kind", () => {
+    expect(attentionLabel({ kind: "session_failed", message: "Thread failed" })).toBe("Thread failed");
+    expect(attentionLabel({ kind: "pr_checks_failing", message: "#7 checks failing" })).toBe("Checks failing");
   });
 });
 

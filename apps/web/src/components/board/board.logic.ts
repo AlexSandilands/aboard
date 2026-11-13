@@ -401,7 +401,7 @@ export function topAttention(reasons: ReadonlyArray<AttentionReason>): Attention
   return reasons.find((r) => r.severity === "error") ?? reasons[0] ?? null;
 }
 
-export const ATTENTION_LABELS: Record<AttentionReason["kind"], string> = {
+const ATTENTION_LABELS: Record<AttentionReason["kind"], string> = {
   blocked_step: "Blocked",
   pr_checks_failing: "Checks failing",
   pr_changes_requested: "Changes requested",
@@ -416,6 +416,14 @@ export const ATTENTION_LABELS: Record<AttentionReason["kind"], string> = {
   autopilot: "Autopilot",
   agent_request: "Asked for you",
 };
+
+/**
+ * The short label for a reason's chip. A failed session takes its message, which names it as its provider does
+ * ("Thread failed" for T3 Code); the other messages carry detail (a PR number, a step) the chip has no room for.
+ */
+export function attentionLabel(reason: Pick<AttentionReason, "kind" | "message">): string {
+  return reason.kind === "session_failed" ? reason.message : ATTENTION_LABELS[reason.kind];
+}
 
 /** One row of the sidebar's "Needs attention" list: a task, or a T3 thread several tasks share. */
 export type AttentionItem =

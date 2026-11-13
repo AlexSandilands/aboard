@@ -430,6 +430,40 @@ const threads: Scenario = (s, opts) => {
   thread("done", "Thread settled", { status: "done", settled: true });
   thread("done", "Thread archived", { status: "idle", archived: true });
 
+  // Three flags on one task, from three sections, for dismissing them one at a time or all at once.
+  {
+    const id = addTask(s, project.id, {
+      title: "Several flags at once",
+      status: "in_progress",
+      plan: {
+        phases: [
+          {
+            title: "Build",
+            steps: [
+              { title: "Read the usage files", status: "done" },
+              { title: "Wire the poller", status: "blocked" },
+              { title: "Show it in the panel" },
+            ],
+          },
+        ],
+      },
+      links: ["t3code://threads/sandbox-env/thread-flags", "https://github.com/example/shop/pull/190"],
+    });
+    const [threadLink, prLink] = s.tasks.detail(id).links;
+    const title = "Implementing the usage poller";
+    s.links.setSnapshot(threadLink!.id, { title, status: "failed", lastActivityAt: now, model: "claude-opus" });
+    s.links.setSnapshot(prLink!.id, {
+      state: "open",
+      checks: "failing",
+      reviewDecision: "review_required",
+      mergeable: "mergeable",
+      title: "Read usage from the session files",
+      headRef: "feature/usage-poller",
+      headOid: "head-190",
+      updatedAt: now,
+    });
+  }
+
   // A bulk planning session: three tasks share one thread that is waiting for input. The sidebar lists it once.
   for (const title of ["Planning batch: search", "Planning batch: export", "Planning batch: import"]) {
     const id = addTask(s, project.id, {

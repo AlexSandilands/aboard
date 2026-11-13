@@ -94,10 +94,12 @@ Failing checks, requested changes, blocked steps and requests from agents ("plea
 agent clears it).
 
 A flag you have dealt with, or that no longer matters (a thread that failed in an outage, on a task that got done
-anyway), can be dismissed without unlinking anything: right-click the card, or open the task panel's **⋯** menu, and
-pick **Dismiss all warnings**. The links stay, so their usage still counts. A dismissed flag comes back by itself when
+anyway), can be dismissed without unlinking anything. The task panel lists the task's flags under its title, each with
+**Dismiss**, and **Dismiss all** below them; **Dismiss all warnings** is also in the card's right-click menu and the
+panel's **⋯** menu. The links stay, so their usage still counts. A dismissed flag comes back by itself when
 the thing behind it changes: the thread fails again, a new commit's checks fail, another step gets blocked. A failed
-thread also stops flagging once its task is Done.
+thread also stops flagging once its task is Done. To bring one back yourself, open **N dismissed** in the task panel
+and press **Restore**.
 Agents are told which ticket, T3 thread and session a task is still missing, so links tend to fill in on
 their own.
 

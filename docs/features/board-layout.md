@@ -207,6 +207,10 @@ card with no previous place fades in. It is a board-level FLIP:
 
 ### Task panel sections
 
+Above the sections, under the title, the panel shows the callouts (an agent's request, an import, a resolution) and
+the task's attention flags with their Dismiss ([dismissing flags](task-lifecycle.md#dismissing-flags)). They aren't
+sections: they can't be collapsed, moved or hidden, so a flag stays reachable whatever the sections' layout.
+
 The panel's sections are Labels, Sessions, Usage, Links, Relations, Automation, Local review, Autopilot, Plan, Details (description and plan context
 together) and Activity. Each can be collapsed, reordered by dragging its handle, and hidden. A collapsed
 section shows a one-line summary in its header (`summarizeSection`): the label names, the number of threads and sessions (folded ones included) and any thread that needs you, the cost, tokens and cache share, the link count and

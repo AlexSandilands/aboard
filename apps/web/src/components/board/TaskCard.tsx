@@ -17,7 +17,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import { AttentionIcon } from "./attention";
-import { ATTENTION_LABELS, PRIORITY_ROW_ID, ticketKeys, topAttention } from "./board.logic";
+import { attentionLabel, PRIORITY_ROW_ID, ticketKeys, topAttention } from "./board.logic";
 import { useBoardContext } from "./BoardContext";
 import { isPickClick, isWindowPress } from "./boardSelection.logic";
 import { CardContextMenu } from "./CardContextMenu";
@@ -126,7 +126,7 @@ export const TaskCardContent = memo(function TaskCardContent({
         {attention ? (
           <span title={attention.message} className="flex shrink-0">
             <AttentionIcon severity={attention.severity} />
-            <span className="sr-only">{ATTENTION_LABELS[attention.kind]}</span>
+            <span className="sr-only">{attentionLabel(attention)}</span>
           </span>
         ) : null}
         {task.dueDate && task.status !== "done" ? <DueChip dueDate={task.dueDate} /> : null}
@@ -192,7 +192,7 @@ function CompactCardLine({
       {attention ? (
         <span title={attention.message} className="flex shrink-0">
           <AttentionIcon severity={attention.severity} />
-          <span className="sr-only">{ATTENTION_LABELS[attention.kind]}</span>
+          <span className="sr-only">{attentionLabel(attention)}</span>
         </span>
       ) : null}
     </div>

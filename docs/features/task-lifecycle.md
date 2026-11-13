@@ -251,8 +251,14 @@ its fingerprint is unchanged, so a new failure brings the flag back. Nothing is 
   silence one. Agents clear their own request with `request_attention(clear: true)`.
 - Rows are never pruned: one that matches no current reason is ignored, and dismissing the same key again replaces it.
   They cascade with the task and are part of its [backup](backup.md) bundle.
-- In the UI, **Dismiss all warnings** is in the card's right-click menu and the task panel's More menu
-  (`TaskMenuItems`), shown while the task has a flag.
+- In the UI, the task panel lists every standing flag under the title (`AttentionFlags.tsx`), a row each with the
+  section it comes from and **Dismiss**, plus **Dismiss all**. It is at the top rather than in each section so a flag
+  can be dismissed whether its section is open, collapsed or hidden. Under it, **N dismissed** expands to the hidden
+  flags with who dismissed each, **Restore** and **Restore all**. The agent's request and a failed import keep their
+  own callouts above it (`stripFlags` leaves them out), each with its Dismiss. **Dismiss all warnings** is also in the
+  card's right-click menu and the panel's More menu (`TaskMenuItems`), shown while the task has a flag.
+- A chip names a failed session as its message does (`attentionLabel`: "Thread failed" for T3 Code); other chips use
+  the kind's label.
 
 ### Missing links
 
@@ -297,6 +303,7 @@ reliably than on instructions they read once.
 | `packages/contracts/src/schemas.ts`         | `TaskStatus`, `TaskStatusInput`, `TaskResolution`, `CloseTaskInput`, `MoveTaskInput`              |
 | `packages/contracts/src/derive.ts`          | `deriveAttention`, progress, current step                                      |
 | `packages/contracts/src/sessionHealth.ts`   | `sessionHealth`: a session link's state, whatever runs it                      |
+| `apps/web/src/components/task/AttentionFlags.tsx`, `attentionFlags.logic.ts` | The panel's flags, their Dismiss, and the dismissed list |
 | `apps/server/src/services/attention.ts`, `db/repos/attentionDismissals.ts`, `db/migrations/051_attention_dismissals.sql` | Dismissing and restoring flags |
 | `apps/web/src/components/task/CloseTaskDialog.tsx`, `ResolutionCallout.tsx` | Closing and "Also resolved" in the panel           |
 | `apps/web/src/components/task/TaskMenuDialogs.tsx`, `deleteTasks.logic.ts` | The delete confirmation and its Undo toast |

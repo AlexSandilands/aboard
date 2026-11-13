@@ -140,6 +140,11 @@ describe("seed scenarios", () => {
     expect(links.some((l) => l.kind === "pr" && !l.snapshot)).toBe(true);
   });
 
+  it("threads has a task flagged from three sections at once", () => {
+    const task = seeded("threads").details.find((t) => t.title === "Several flags at once");
+    expect(task?.attention.map((a) => a.kind)).toEqual(["blocked_step", "session_failed", "pr_checks_failing"]);
+  });
+
   it("threads has an agent session in each status, and one beside a T3 thread", () => {
     const { details } = seeded("threads");
     const sessions = details.flatMap((t) => t.links.filter((l) => l.kind === "agent_session"));
