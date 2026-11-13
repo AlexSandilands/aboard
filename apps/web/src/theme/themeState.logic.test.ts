@@ -8,6 +8,7 @@ import {
   migrateThemeSelection,
   parseThemeHalves,
   parseThemeId,
+  remapThemeSelection,
   resolveActiveTheme,
   resolveDesktopTheme,
   resolveThemeAppearance,
@@ -104,6 +105,36 @@ describe("migrateThemeSelection", () => {
   it("runs once: what it writes is a saved choice", () => {
     const written = migrateThemeSelection(null, null);
     expect(migrateThemeSelection(written, paint)).toBeNull();
+  });
+});
+
+describe("remapThemeSelection", () => {
+  const renamed = new Map([
+    ["tide", "tide-custom"],
+    ["t3-code", "t3-code-custom"],
+  ]);
+
+  it("follows a whole-theme selection to the new id", () => {
+    expect(remapThemeSelection("tide", null, renamed)).toEqual({ themeId: "tide-custom", halves: null });
+  });
+
+  it("follows each half to the new id and keeps the other", () => {
+    expect(remapThemeSelection("grove", JSON.stringify({ light: "tide", dark: "ocean" }), renamed)).toEqual({
+      themeId: null,
+      halves: JSON.stringify({ light: "tide-custom", dark: "ocean" }),
+    });
+    expect(remapThemeSelection(null, JSON.stringify({ dark: "tide" }), renamed).halves).toBe(
+      JSON.stringify({ dark: "tide-custom" }),
+    );
+  });
+
+  it("leaves ids that weren't renamed, and the T3 Code card's own key, alone", () => {
+    expect(remapThemeSelection("grove", JSON.stringify({ light: "ocean" }), renamed)).toEqual({
+      themeId: null,
+      halves: null,
+    });
+    expect(remapThemeSelection("t3-code", null, renamed).themeId).toBeNull();
+    expect(remapThemeSelection(null, "{", renamed)).toEqual({ themeId: null, halves: null });
   });
 });
 

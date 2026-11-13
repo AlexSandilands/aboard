@@ -51,8 +51,11 @@ T3 Code, so on load `initTheme` runs `migrateThemeSelection` once, before it wri
 browser with no `theme-id` but a `theme-paint` snapshot has used the board before and keeps T3 Code (`t3-code` is
 written); one with neither is new and gets the default written down, so its own first snapshot isn't read as an old
 user's next time. `t3-chat` and `t3-code` stay reserved ids. A custom theme saved before `bridge`, `firefly`, `tide`
-and `t3-code` were reserved (one named "Tide", say) is no longer read: it stays in storage but isn't shown, and a
-selection naming it gets the built-in of that id. Re-iding such themes on load is a possible follow-up.
+and `t3-code` were reserved (one named "Tide", say) wouldn't be read under its id, so before that migration
+`initTheme` re-ids it (`reidReservedThemes`): `tide` becomes `tide-custom` (or `tide-custom-2`… when taken), keeping
+its label, and a `theme-id` or half naming the old id follows it (`remapThemeSelection`). A `theme-id` of `t3-code` is
+left alone, since that is the T3 Code card's own key. Entries that don't read as a theme are kept as they are, and
+nothing is written when no saved id is reserved, so it needs no marker to run once.
 
 Saved custom themes live in `themes` (a list in T3 Code's stored shape, parsed leniently) and are shown as cards
 after the built-ins; themes sharing a `collection` (an Open VSX extension) share one card. See

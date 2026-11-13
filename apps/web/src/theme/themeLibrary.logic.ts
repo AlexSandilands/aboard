@@ -32,6 +32,38 @@ export function readThemeLibrary(stored: ReadonlyArray<unknown>): ThemeLibrary {
   return { stored, themes };
 }
 
+export interface ReidResult {
+  stored: ReadonlyArray<unknown>;
+  /** Old id to new id, for the first entry saved under each old id; empty when nothing changed. */
+  renamed: ReadonlyMap<string, string>;
+}
+
+/**
+ * Gives saved custom themes whose id became reserved (a theme named "Tide", saved before the board had a built-in
+ * Tide) an id of their own, `tide-custom` or `tide-custom-2`…, since a reserved id is never read. Only entries that
+ * read as a theme under the new id are changed; everything else is kept as it is. Once run, no saved id is reserved,
+ * so running it again changes nothing.
+ */
+export function reidReservedThemes(stored: ReadonlyArray<unknown>): ReidResult {
+  const renamed = new Map<string, string>();
+  const taken = new Set<string>([...RESERVED_THEME_IDS, ...BUILT_IN_THEMES.map((theme) => theme.id)]);
+  for (const entry of stored) if (isRecord(entry) && typeof entry.id === "string") taken.add(entry.id);
+
+  let changed = false;
+  const next = stored.map((entry) => {
+    if (!isRecord(entry) || typeof entry.id !== "string" || !RESERVED_THEME_IDS.has(entry.id)) return entry;
+    let id = `${entry.id}-custom`;
+    for (let n = 2; taken.has(id); n++) id = `${entry.id}-custom-${n}`;
+    const candidate = { ...entry, id };
+    if (!parseStoredTheme(candidate)) return entry;
+    taken.add(id);
+    if (!renamed.has(entry.id)) renamed.set(entry.id, id);
+    changed = true;
+    return candidate;
+  });
+  return { stored: changed ? next : stored, renamed };
+}
+
 /**
  * The saved list, or a throw when it is there but isn't a list: writing over it would lose whatever it holds, so the
  * caller shows the error instead.

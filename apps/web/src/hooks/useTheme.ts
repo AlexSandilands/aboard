@@ -10,6 +10,7 @@ import { parseStoredThemes } from "~/theme/themeFile";
 import {
   installTheme,
   parseThemeLibrary,
+  reidReservedThemes,
   removeThemes,
   replaceCollection,
   themesInCollection,
@@ -24,6 +25,7 @@ import {
   migrateThemeSelection,
   parseThemeHalves,
   parseThemeId,
+  remapThemeSelection,
   resolveActiveTheme,
   resolveDesktopTheme,
   resolveThemeAppearance,
@@ -175,10 +177,30 @@ function applyCurrent(suppressTransitions: boolean) {
 }
 
 /**
+ * Custom themes saved under an id that has since become reserved (a "Tide" from before the built-in Tide) aren't read,
+ * so give them an id of their own and carry the selection along. Writes nothing when no saved id is reserved.
+ */
+function reidCustomThemes() {
+  let library: ThemeLibrary;
+  try {
+    library = parseThemeLibrary(read(CUSTOM_THEMES_KEY));
+  } catch {
+    return; // Not a list: leave it for the Appearance page to report.
+  }
+  const { stored, renamed } = reidReservedThemes(library.stored);
+  if (renamed.size === 0) return;
+  write(CUSTOM_THEMES_KEY, JSON.stringify(stored));
+  const remapped = remapThemeSelection(read(THEME_ID_KEY), read(HALVES_KEY), renamed);
+  if (remapped.themeId !== null) write(THEME_ID_KEY, remapped.themeId);
+  if (remapped.halves !== null) write(HALVES_KEY, remapped.halves);
+}
+
+/**
  * Called once at startup. index.html painted from the snapshot, but the snapshot may be missing (first run) or stale
  * (a theme changed shape in an update), and the shell hasn't heard the theme yet.
  */
 export function initTheme() {
+  reidCustomThemes();
   // Before applyCurrent writes this load's own paint snapshot, which the migration reads.
   const migrated = migrateThemeSelection(read(THEME_ID_KEY), read(THEME_PAINT_KEY));
   if (migrated !== null) write(THEME_ID_KEY, migrated);
