@@ -141,7 +141,9 @@ A second run finds its own file and `Include` line and changes nothing.
 The script is a file users download by itself, so the repo name, the GitHub URL and the fingerprint are written
 into it. `scripts/install-arch.test.ts` holds the first two to `package.json`, and the container test holds the
 fingerprint to the key file. After replacing the signing key, change `key_fingerprint` in the script and the
-fingerprints in the README in the same PR.
+fingerprints in the README in the same PR, and publish a release as soon as it merges: the script fetches the key
+from `main` but is itself the copy from the last release, so until then it refuses the new key and new installs
+fail.
 
 It reaches the `pacman` release only when a release is published, from that release's tag: a change to it on `main`
 isn't served until the next release.

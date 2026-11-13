@@ -67,10 +67,11 @@ echo "Downloading the repo's signing key..."
 curl -fsSL --proto '=https' --tlsv1.2 -o "$tmp/key.asc" "$key_url" || die "couldn't download $key_url"
 
 # Read in a throwaway keyring, so nothing is trusted before the fingerprint has been checked. Every primary key in
-# the file is listed: pacman-key --add would import them all, so a second key is refused too.
+# the file is listed: pacman-key --add would import them all, so a second key is refused too. A file gpg can't
+# read is refused below as well, as no key.
 mkdir -m 700 "$tmp/gnupg"
 found=$(GNUPGHOME="$tmp/gnupg" gpg --batch --show-keys --with-colons "$tmp/key.asc" |
-  awk -F: '$1 == "pub" { primary = 1 } $1 == "fpr" && primary { print $10; primary = 0 }')
+  awk -F: '$1 == "pub" { primary = 1 } $1 == "fpr" && primary { print $10; primary = 0 }') || found=
 if [ "$found" != "$key_fingerprint" ]; then
   die "the downloaded signing key isn't the expected one, so nothing was changed." \
     "expected: $key_fingerprint" \
