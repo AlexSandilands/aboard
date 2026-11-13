@@ -211,8 +211,8 @@ Copilot), stored as `handoffMenus` (each switch merges in, like notification kin
 and Fix PR menus (`canStartProjectT3Thread`, `handoffClis`), for someone who has the tool but doesn't want it offered.
 Sessions and threads already linked still open, and agents can still start threads (`agentT3Threads`).
 
-After those entries comes **Custom hand-offs**, when at least one of the user's saved prompts is shown on the task's
-project and its target can start here (see [Custom hand-offs](#custom-hand-offs)).
+After those entries comes **Custom hand-offs**, listing the user's saved prompts shown on the task's project whose
+target can start here (see [Custom hand-offs](#custom-hand-offs)). With none, it stays and leads to their settings.
 
 Linked threads don't hide it: a task can have several (a follow-up for conflicts, a review). Each linked
 thread shows on the card while it is active, as a button that opens it in T3 Code; settled and archived
@@ -400,7 +400,10 @@ the list. An entry marked **starts now** skips the dialog; one ending in "…" o
 settings section. On a window narrower than 640px or a touch screen the list opens in place instead of as a flyout.
 Which hand-offs a task offers is `customHandoffsFor` (contracts): those shown on its project whose target can start
 here, by the same rules as the built-in entries (`canStartT3Thread`, `handoffClis`, the **Show in hand-off menus**
-switches). An epic, a manual task and an archived task offer none.
+switches). An epic, a manual task and an archived task offer none, and show no entry. Elsewhere, with no hand-off to
+offer (none saved, or none for this project or what can start here), the entry stays without a count, and its submenu
+explains the feature and links to **Set up custom hand-offs…**, so the feature isn't only found in Settings. The entry
+is hidden only when nothing at all can start here (no T3 Code and no CLI in the menu).
 
 **With the dialog.** The entry opens its target's own launch dialog (`openT3Launch` / `openSessionLaunch` with the
 hand-off as `preset`) with the rendered prompt, and a badge beside the title naming the hand-off. The dialog has no

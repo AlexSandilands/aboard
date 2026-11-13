@@ -254,7 +254,8 @@ Each one has:
   CLI's own models. A warning says when the model has nothing set for what the hand-off starts.
 - **Show on**: every project, or only the ones you tick.
 
-Drag a hand-off by its grip to change the menu's order. A hand-off is only offered where what it starts is: with the
+Drag a hand-off by its grip to change the menu's order. **Delete** asks before removing one. Until you have any, the
+menu's **Custom hand-offs** entry links to their settings instead. A hand-off is only offered where what it starts is: with the
 provider added, switched on and shown in the hand-off menus. Epics don't offer them.
 
 ## The card menu

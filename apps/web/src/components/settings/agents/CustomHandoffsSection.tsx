@@ -23,6 +23,7 @@ import { ChevronDownIcon, GripVerticalIcon, PlusIcon, StarIcon, ZapIcon } from "
 import { useRef, useState } from "react";
 import { HandoffTargetIcon } from "~/components/handoff/CustomHandoffMenu";
 import { ModelChoicePicker } from "~/components/models/ModelChoicePicker";
+import { ConfirmDialog } from "~/components/task/ConfirmDialog";
 import { useSortableSensors } from "~/components/task/ManagedSections";
 import { Button } from "~/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
@@ -269,14 +270,23 @@ function HandoffEditor({
   const targetName = PROVIDERS[handoff.target].label;
   const providerOn = providerActive(settings, handoff.target);
   const { warning } = customHandoffModel(handoff, null, settings);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   return (
     <DetailBody>
+      <ConfirmDialog
+        open={confirmingDelete}
+        onOpenChange={setConfirmingDelete}
+        title={`Delete ${handoff.name}?`}
+        description="It goes from every task's hand-off menu. Threads and sessions it started are kept."
+        confirmLabel="Delete"
+        onConfirm={remove}
+      />
       <DetailHeader
         icon={<HandoffTargetIcon target={handoff.target} className="size-6 sm:size-6" />}
         title={handoff.name}
         subtitle={handoffDoes(handoff)}
         actions={
-          <Button size="xs" variant="ghost-destructive" onClick={remove}>
+          <Button size="xs" variant="ghost-destructive" onClick={() => setConfirmingDelete(true)}>
             Delete
           </Button>
         }

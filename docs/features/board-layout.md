@@ -544,7 +544,7 @@ providers, tiers and custom models are each a row in a list, however many there 
   list (`wideList`): the user's saved prompts in menu order on the left (`agents.handoffs.<id>`), each with what it
   starts, a summary and a "No dialog" or "Dialog" pill, dragged by its grip to reorder; the selected one's editor on
   the right (name, what it starts, the prompt with placeholder chips that insert at the caret, where it runs, whether
-  it skips the dialog, its model and the projects it shows on). With none there is an empty state with **Add
+  it skips the dialog, its model and the projects it shows on; **Delete** asks first, with `ConfirmDialog`). With none there is an empty state with **Add
   hand-off**. Every edit saves as it is made: text on blur, the rest at once, each built on the list still saving
   (`createHandoffEdits` in `customHandoffs.logic.ts`, tested). What they do is in
   [agent-handoff.md](agent-handoff.md#custom-hand-offs).

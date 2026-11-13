@@ -34,8 +34,9 @@ export function HandoffTargetIcon({ target, className }: { target: CustomHandoff
 /**
  * The user's custom hand-offs in a task's hand-off menu: one "Custom hand-offs" entry that opens the list, so the menu
  * stays the same height however many there are. An entry marked "starts now" starts at once; one ending in "…" opens
- * its launch dialog filled in. The list opens in place where a flyout wouldn't fit or can't be hovered. Nothing is
- * rendered when no hand-off is shown on the task's project with a target that can start here.
+ * its launch dialog filled in. The list opens in place where a flyout wouldn't fit or can't be hovered. With no hand-off
+ * shown on the task's project, the entry stays and leads to Settings, so the feature isn't hidden away there. Nothing is
+ * rendered where a hand-off never applies (epics, manual and archived tasks) or nothing can start here.
  */
 export function CustomHandoffItems({
   task,
@@ -55,7 +56,7 @@ export function CustomHandoffItems({
   const [open, setOpen] = useState(false);
   const openSettings = useOpenSettings();
   const handoffs = customHandoffsFor(task, settings?.customHandoffs, { t3: canStartT3, clis });
-  if (handoffs.length === 0) return null;
+  if (task.kind === "epic" || task.manual || task.archivedAt || (!canStartT3 && clis.length === 0)) return null;
 
   const items = (
     <>
@@ -74,14 +75,23 @@ export function CustomHandoffItems({
           ) : null}
         </MenuItem>
       ))}
-      <MenuSeparator />
+      {handoffs.length > 0 ? (
+        <MenuSeparator />
+      ) : (
+        <p className="max-w-64 px-2 py-1.5 text-xs text-muted-foreground">
+          Save prompts you hand off often, and start them from here in one click.
+        </p>
+      )}
       <MenuItem onClick={() => openSettings(CUSTOM_HANDOFFS_TARGET)}>
         <SettingsIcon />
-        Edit hand-offs…
+        {handoffs.length > 0 ? "Edit hand-offs…" : "Set up custom hand-offs…"}
       </MenuItem>
     </>
   );
-  const count = <span className="ps-3 text-xs text-muted-foreground tabular-nums">{handoffs.length}</span>;
+  const count =
+    handoffs.length > 0 ? (
+      <span className="ps-3 text-xs text-muted-foreground tabular-nums">{handoffs.length}</span>
+    ) : null;
 
   if (inline) {
     return (
