@@ -389,8 +389,10 @@ task drops it (`withClosedTask`).
   session's status, the Add buttons) don't drift across the window; one column on a wide window counts as the main
   column.
 - **Reading size.** Parts that read larger ask `useReadsLarge()`: in the window, outside the rail. The description and plan
-  context render `Markdown size="md"` (15px, a 72ch measure, a real heading scale, roomier code and tables:
-  `.markdown-md` in `index.css`) with pasted images in place ([attachments](attachments.md)), and their editors open
+  context render `Markdown size="md"` (15px, a real heading scale, roomier code and tables: `.markdown-md` in
+  `index.css`). The whole document stops at 56rem, the main column's width beside the rail, so its text, headings,
+  code and tables share one right edge with the plan below, and lines don't run the whole window when it shows one
+  column. They render with pasted images in place ([attachments](attachments.md)), and their editors open
   taller (`MarkdownInput tall`). Step notes are body size at an 80ch measure, with larger screenshot thumbnails.
 
 Fenced code blocks are syntax-highlighted wherever `Markdown` renders them, the docked panel included (`CodeBlock`):

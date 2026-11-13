@@ -29,6 +29,11 @@ heading, `> ` for a quote and three backticks for a code block; `**bold**`, `*it
 work as in Markdown. Pasted Markdown turns into the same, and copying gives Markdown back. Text with something the
 editor can't show (a table, HTML) opens as plain Markdown instead, and says so under the box.
 
+A quote whose first line is `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` shows as a coloured
+callout, as on GitHub; in the editor it stays a quote with the marker visible. Table cells wrap, and a table too wide
+for the panel scrolls sideways inside its own box, with a fade on the side that has more. A code block shows a copy
+button in its top right corner when you point at it.
+
 ## Pasting images
 
 Paste (or drag) a screenshot into a task's description, plan context or a step's notes, or into the description box

@@ -1,17 +1,27 @@
 import { type ComponentProps, createContext, memo, useContext, useMemo } from "react";
 import { attachmentIdOf } from "@repo/contracts";
+import {
+  InfoIcon,
+  LightbulbIcon,
+  type LucideIcon,
+  MessageSquareWarningIcon,
+  OctagonAlertIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import ReactMarkdown, { defaultUrlTransform, type Components, type ExtraProps, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { AttachmentPill } from "~/components/attachments/AttachmentPill";
 import { InlineAttachment } from "~/components/attachments/InlineAttachment";
 import { cn } from "~/lib/utils";
+import { type AlertType, alertTypeOf, remarkAlerts } from "./alerts.logic";
 import { CodeBlock } from "./CodeBlock";
+import { MarkdownTable } from "./MarkdownTable";
 import { remarkTaskRefs, taskRefNumber } from "./taskRefs.logic";
 
 type Plugins = NonNullable<Options["remarkPlugins"]>;
 
-const remarkPlugins: Plugins = [remarkGfm];
+const remarkPlugins: Plugins = [remarkGfm, remarkAlerts];
 
 /** Makes "#N" in the text a link to that task; keep the object stable, or the Markdown is rebuilt each render. */
 export interface TaskLinks {
@@ -58,18 +68,39 @@ function MarkdownImage({ node: _node, src, alt, ...props }: ComponentProps<"img"
   return inline ? <InlineAttachment id={id} name={alt || "image"} /> : <AttachmentPill id={id} name={alt || "image"} />;
 }
 
+const ALERTS: Record<AlertType, { title: string; Icon: LucideIcon }> = {
+  note: { title: "Note", Icon: InfoIcon },
+  tip: { title: "Tip", Icon: LightbulbIcon },
+  important: { title: "Important", Icon: MessageSquareWarningIcon },
+  warning: { title: "Warning", Icon: TriangleAlertIcon },
+  caution: { title: "Caution", Icon: OctagonAlertIcon },
+};
+
+/** A GitHub alert (`> [!NOTE]`, remarkAlerts): a tinted callout with its type as the title. */
+function MarkdownAlert({ node: _node, children, ...props }: ComponentProps<"aside"> & ExtraProps) {
+  const type = alertTypeOf((props as Record<string, unknown>)["data-alert"]);
+  if (!type) return <aside {...props}>{children}</aside>;
+  const { title, Icon } = ALERTS[type];
+  return (
+    <aside {...props} className="markdown-alert">
+      <p className="markdown-alert-title">
+        <Icon aria-hidden />
+        {title}
+      </p>
+      {children}
+    </aside>
+  );
+}
+
 /** react-markdown drops URLs with a scheme it doesn't know, and `attachment:` is how a pasted image is written. */
 const urlTransform = (url: string): string => (attachmentIdOf(url) ? url : defaultUrlTransform(url));
 
 const components: Components = {
   a: MarkdownLink,
+  aside: MarkdownAlert,
   img: MarkdownImage,
   pre: CodeBlock,
-  table: ({ node: _node, ...props }) => (
-    <div className="markdown-table-container">
-      <table {...props} />
-    </div>
-  ),
+  table: MarkdownTable,
 };
 
 /**
@@ -85,8 +116,10 @@ export const Markdown = memo(function Markdown({
 }: {
   children: string;
   /**
-   * "sm" for panel body text, "xs" for notes and quotes, "md" for a document in the task window: larger type at a
-   * reading measure, a real heading scale, and pasted images in place at the column's width.
+   * "sm" for panel body text, "xs" for notes and quotes, "md" for a document in the task window: larger type, a real
+   * heading scale, and pasted images in place at the column's width. It stops at 56rem, the width of the window's
+   * main column beside the rail, so text, headings, code and tables share one right edge there, and lines don't run
+   * the whole window when it shows one column.
    */
   size?: "md" | "sm" | "xs";
   /** Layout only. */
@@ -96,7 +129,7 @@ export const Markdown = memo(function Markdown({
   images?: boolean;
 }) {
   const plugins = useMemo<Plugins>(
-    () => (taskLinks ? [remarkGfm, [remarkTaskRefs, taskLinks.isKnown]] : remarkPlugins),
+    () => (taskLinks ? [remarkGfm, remarkAlerts, [remarkTaskRefs, taskLinks.isKnown]] : remarkPlugins),
     [taskLinks],
   );
   return (
@@ -104,7 +137,7 @@ export const Markdown = memo(function Markdown({
       className={cn(
         "markdown min-w-0 wrap-anywhere text-foreground/85",
         size === "md"
-          ? "markdown-md max-w-[72ch] text-[15px] leading-[1.65]"
+          ? "markdown-md max-w-[56rem] text-[15px] leading-[1.65]"
           : size === "sm"
             ? "text-[13px] leading-relaxed"
             : "text-xs leading-relaxed",

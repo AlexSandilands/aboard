@@ -249,6 +249,11 @@ Descriptions are written for agents, and they are most of what an agent knows ab
   ([how an agent links itself](agent-sessions.md#how-an-agent-links-itself)).
 - `get_task` must not tell a reviewer to start a reviewer: the review loop instructions come only from
   `move_task` and `start_review`.
+- Formatting is offered, not required. The long text fields (`description` on `create_task` and `update_task`,
+  plan `context`, `update_task.planContext`) end with `RICH_MARKDOWN_HINT` (`mcp/shared.ts`), and the skill's
+  _Writing descriptions and context_ section lists what renders. Nothing else mentions it (`INSTRUCTIONS`,
+  `add_to_backlog`, `add_note`), so short items stay short. When the renderer (`components/markdown/Markdown.tsx`)
+  gains or loses a feature, update that section.
 
 ### The shipped skill
 

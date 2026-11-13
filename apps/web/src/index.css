@@ -889,6 +889,8 @@ html:active-view-transition-type(sidebar-open, sidebar-close)::view-transition-o
   --destructive-foreground: var(--error-foreground);
   --info: var(--color-blue-500);
   --info-foreground: var(--color-blue-700);
+  /* GitHub alerts' Important (.markdown-alert); no other UI is violet. */
+  --important-foreground: var(--color-violet-700);
   --success: var(--color-emerald-500);
   --success-foreground: var(--color-emerald-700);
   --warning: var(--color-amber-500);
@@ -939,6 +941,7 @@ html:active-view-transition-type(sidebar-open, sidebar-close)::view-transition-o
     --border: --alpha(var(--color-white) / 6%);
     --input: --alpha(var(--color-white) / 8%);
     --info-foreground: var(--color-blue-400);
+    --important-foreground: var(--color-violet-400);
     --success-foreground: var(--color-emerald-400);
     --warning-foreground: var(--color-amber-400);
     --warning-surface: color-mix(in srgb, var(--warning) 16%, transparent);
@@ -1423,7 +1426,8 @@ code {
 .markdown ul,
 .markdown ol,
 .markdown blockquote,
-.markdown pre,
+.markdown .markdown-alert,
+.markdown .markdown-code-container,
 .markdown .markdown-table-container {
   margin: 0.65rem 0;
 }
@@ -1540,6 +1544,58 @@ code {
   color: var(--muted-foreground);
 }
 
+/* GitHub alerts (`> [!NOTE]`, components/markdown/alerts.logic.ts): a quote with a coloured rule and a titled first
+   row. The body keeps the prose colour, since an alert is meant to be read, unlike a muted quote. */
+.markdown .markdown-alert {
+  --alert-color: var(--info-foreground);
+  border-left: 3px solid var(--alert-color);
+  padding: 0.15rem 0 0.15rem 0.8rem;
+}
+
+.markdown .markdown-alert[data-alert="tip"] {
+  --alert-color: var(--success-foreground);
+}
+
+.markdown .markdown-alert[data-alert="important"] {
+  --alert-color: var(--important-foreground);
+}
+
+.markdown .markdown-alert[data-alert="warning"] {
+  --alert-color: var(--warning-foreground);
+}
+
+.markdown .markdown-alert[data-alert="caution"] {
+  --alert-color: var(--destructive-foreground);
+}
+
+/* Doubled so it outranks the document size's own block margins (.markdown.markdown-md p). */
+.markdown .markdown-alert.markdown-alert > * {
+  margin: 0.35rem 0;
+}
+
+.markdown .markdown-alert.markdown-alert > :first-child {
+  margin-top: 0;
+}
+
+.markdown .markdown-alert.markdown-alert > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown .markdown-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  color: var(--alert-color);
+  font-size: 0.92em;
+  font-weight: 600;
+}
+
+.markdown .markdown-alert-title svg {
+  width: 1.05em;
+  height: 1.05em;
+  flex-shrink: 0;
+}
+
 .markdown section[data-footnotes] {
   margin-top: 1.25rem;
   border-top: 1px solid var(--border);
@@ -1579,6 +1635,8 @@ code {
   font-size: 0.75rem;
 }
 
+/* A fenced block sits in `.markdown-code-container` (CodeBlock), which takes the block's margin and holds the copy
+   button over the pre's corner. */
 .markdown pre {
   max-width: 100%;
   overflow-x: auto;
@@ -1596,11 +1654,13 @@ code {
   padding: 0;
 }
 
-.markdown pre::-webkit-scrollbar {
+.markdown pre::-webkit-scrollbar,
+.markdown .markdown-table-container::-webkit-scrollbar {
   height: 7px;
 }
 
-.markdown pre::-webkit-scrollbar-thumb {
+.markdown pre::-webkit-scrollbar-thumb,
+.markdown .markdown-table-container::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: color-mix(in srgb, var(--border) 78%, transparent);
 }
@@ -1658,7 +1718,8 @@ code {
 }
 
 /* The document size (Markdown size="md"), for the task window: a real heading scale and roomier code and tables. The
-   reading measure and the base size are on the element (Markdown.tsx). */
+   base size and the width cap are on the element (Markdown.tsx): one cap for the whole document, never one per block,
+   since a `ch` cap on each block resolves in that block's own font size and gives every kind of block a different edge. */
 .markdown.markdown-md h1,
 .markdown.markdown-md h2,
 .markdown.markdown-md h3 {
@@ -1692,7 +1753,8 @@ code {
 .markdown.markdown-md ul,
 .markdown.markdown-md ol,
 .markdown.markdown-md blockquote,
-.markdown.markdown-md pre,
+.markdown.markdown-md .markdown-alert,
+.markdown.markdown-md .markdown-code-container,
 .markdown.markdown-md .markdown-table-container {
   margin: 0.85rem 0;
 }
@@ -1824,14 +1886,32 @@ code {
   }
 }
 
-/* Diagnostics-style tables: row separators only, uppercase headers, and a
-   scroll-fade container for horizontal overflow. The root chat-markdown
-   wrapping rules (overflow-wrap: anywhere) would let columns shrink to single
-   characters and defeat the overflow — restore word-boundary wrapping so the
-   min column width is the longest word. */
+/* Diagnostics-style tables: row separators only. A table is as wide as its content, up to the column, and its cells
+   wrap at word boundaries: the root `.markdown` wrapping (overflow-wrap: anywhere) would let columns shrink to a letter
+   or two, so it is reset here and each column is at least as wide as its longest word. Headers wrap like any cell: kept
+   on one line, a long header holds width its column's cells don't need, and the columns with long text get what is
+   left. A table that still can't fit (many columns, a long word) scrolls inside its container, never the panel or
+   window, with the edges that have more faded out (MarkdownTable sets data-more). */
+.markdown .markdown-table-container {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.markdown .markdown-table-container[data-more="left"] {
+  mask-image: linear-gradient(to right, transparent, #000 1.75rem);
+}
+
+.markdown .markdown-table-container[data-more="right"] {
+  mask-image: linear-gradient(to left, transparent, #000 1.75rem);
+}
+
+.markdown .markdown-table-container[data-more="both"] {
+  mask-image: linear-gradient(to right, transparent, #000 1.75rem, #000 calc(100% - 1.75rem), transparent);
+}
+
+/* Auto width: a narrow table stays as wide as its content, a wide one fills the container and wraps its cells. */
 .markdown table {
-  width: 100%;
-  min-width: max-content;
+  width: auto;
   border-collapse: collapse;
   overflow-wrap: normal;
   word-break: normal;
@@ -1842,32 +1922,17 @@ code {
 .markdown td {
   padding: 0.45rem 0.75rem;
   text-align: left;
+  vertical-align: top;
 }
 
 .markdown thead th {
   border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   padding-block: 0.55rem;
   font-weight: 600;
-  white-space: nowrap;
 }
 
 .markdown tbody td {
   border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-}
-
-/* Collapsed (default): single-line cells truncate so arbitrary chat content
-   cannot blow the column out; the footer toggle expands cells to wrap. */
-.markdown .markdown-table-container[data-expanded="false"] th,
-.markdown .markdown-table-container[data-expanded="false"] td {
-  overflow: hidden;
-  max-width: 24rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.markdown .markdown-table-container[data-expanded="true"] td {
-  max-width: 24rem;
-  overflow-wrap: anywhere;
 }
 
 /* Docking the task window (lib/windowZoom.ts, dockGhost): the panel's contents stay hidden under the window's copy
