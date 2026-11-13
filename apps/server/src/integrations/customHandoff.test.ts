@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -10,6 +10,7 @@ import {
   type TaskLink,
 } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
+import { canonicalPath } from "../autopilot/worktrees.ts";
 import { createGitFixture, git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
@@ -217,7 +218,8 @@ describe("a custom hand-off in a repository", { timeout: PROCESS_TEST_TIMEOUT },
       // That session's worktree is now the task's own: the next start runs there.
       const again = await app.start("sandbox");
       expect(again.body).toMatchObject({ workspace: "task_worktree", fellBack: false, branch: body.branch });
-      expect(again.body.session?.cwd).toBe(body.session?.cwd);
+      // Git names the worktree its own way (long names and forward slashes on Windows), so compare the folders.
+      expect(canonicalPath(again.body.session!.cwd)).toBe(canonicalPath(body.session!.cwd));
 
       // A T3 Code thread for the same task runs in that worktree too, on its branch.
       app.services.settings.update({
@@ -226,8 +228,8 @@ describe("a custom hand-off in a repository", { timeout: PROCESS_TEST_TIMEOUT },
       const thread = await app.start("thread");
       expect(app.launches[0]!.input.workspace).toMatchObject({ mode: "existing_worktree", branch: body.branch });
       const launchedIn = app.launches[0]!.input.workspace;
-      expect(launchedIn?.mode === "existing_worktree" && realpathSync(launchedIn.worktreePath)).toBe(
-        realpathSync(body.session!.cwd),
+      expect(launchedIn?.mode === "existing_worktree" && canonicalPath(launchedIn.worktreePath)).toBe(
+        canonicalPath(body.session!.cwd),
       );
       expect(thread.body).toMatchObject({ workspace: "task_worktree", fellBack: false, branch: body.branch });
     } finally {
