@@ -64,6 +64,21 @@ export function seedUsage(s: Services, db: Db, opts: { workspaceRoot?: string } 
   link(showcase.id, "claude-code", 4, "Planning the usage panel");
   s.links.add(showcase.id, { t3Thread: { environmentId: "seed-env", threadId: "seed-usage-thread" } }, AGENT);
   usage.setThreadSessions("seed-usage-thread", [{ harness: "t3", sessionId: "seed-usage-thread" }]);
+  // A T3 thread whose agent also linked its own Claude Code session: one T3 row, named by the session's label.
+  s.links.add(
+    showcase.id,
+    {
+      t3Thread: { environmentId: "seed-env", threadId: "seed-planning-thread" },
+      label: "Plan how the board reads token usage from transcripts and T3 turns",
+    },
+    AGENT,
+  );
+  link(showcase.id, "claude-code", 5, "Planning the token usage");
+  // The thread switched to Codex for a while, so its expanded row names both providers.
+  usage.setThreadSessions("seed-planning-thread", [
+    { harness: "claude-code", sessionId: SESSION(5) },
+    { harness: "codex", sessionId: SESSION(6) },
+  ]);
   usage.add([
     row({
       harness: "claude-code",
@@ -93,6 +108,20 @@ export function seedUsage(s: Services, db: Db, opts: { workspaceRoot?: string } 
       day: daysAgo(3),
       model: "claude-opus-5-5",
       tokens: t({ input: 6_000, output: 14_000, cacheRead: 168_000, cacheWrite5m: 22_000 }),
+    }),
+    row({
+      harness: "claude-code",
+      sessionId: SESSION(5),
+      day: daysAgo(4),
+      model: "claude-opus-5-5",
+      tokens: t({ input: 8_000, output: 31_000, cacheRead: 420_000, cacheWrite1h: 36_000 }),
+    }),
+    row({
+      harness: "codex",
+      sessionId: SESSION(6),
+      day: daysAgo(4),
+      model: "gpt-5.2-codex",
+      tokens: t({ input: 6_000, output: 4_000, cacheRead: 52_000 }),
     }),
     // A T3 thread on a remote machine, counted from T3's turns: one priced model and one with no price.
     row({

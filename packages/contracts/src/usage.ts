@@ -76,6 +76,11 @@ export type CostSource = z.infer<typeof CostSource>;
 
 /** One model's share of a row. `model` is null when the source didn't say. */
 export const UsageModelLine = z.object({
+  /**
+   * What ran it. On a T3 thread's row, the provider behind the thread (Claude Code, Codex); `t3` when it was counted
+   * from T3's own turns, which don't say which provider ran them.
+   */
+  harness: UsageHarness,
   model: z.string().nullable(),
   tokens: TokenUsage,
   /** Dollars for this model's tokens; null when it has no price. */
@@ -94,6 +99,11 @@ export const TaskUsageRow = z.object({
   linkId: z.string().nullable(),
   /** The link's label or the session's title; null when there is none. */
   label: z.string().nullable(),
+  /**
+   * The T3 thread's own title, set on a thread row named by the label of the Claude Code (or other) session linked
+   * behind it, so the panel can still show which thread it was; null otherwise.
+   */
+  threadTitle: z.string().nullable(),
   source: UsageSource,
   /** For board runs: what the run was for. */
   purpose: UsagePurpose.nullable(),

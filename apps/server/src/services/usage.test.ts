@@ -55,10 +55,14 @@ function setup(threads: Record<string, T3ThreadUsage> = {}, modelPrices?: ModelP
     fetchThread: (id) => Promise.resolve(threads[id] ?? null),
     ...(modelPrices ? { modelPrices } : {}),
   });
-  const linkSession = (taskId: string, sessionId: string) =>
-    s.links.add(taskId, { agentSession: { harness: "claude-code", sessionId, cwd: CWD } }, "test");
-  const linkThread = (taskId: string, threadId: string) =>
-    s.links.add(taskId, { t3Thread: { environmentId: "env", threadId } }, "test");
+  const linkSession = (taskId: string, sessionId: string, label?: string) =>
+    s.links.add(
+      taskId,
+      { agentSession: { harness: "claude-code", sessionId, cwd: CWD }, ...(label ? { label } : {}) },
+      "test",
+    );
+  const linkThread = (taskId: string, threadId: string, label?: string) =>
+    s.links.add(taskId, { t3Thread: { environmentId: "env", threadId }, ...(label ? { label } : {}) }, "test");
   const stored = () => repos.sessionUsage.rowsBetween("2000-01-01", "3000-01-01");
   return { h, s, task, transcript, usage, linkSession, linkThread, stored, folder, repos };
 }
@@ -164,14 +168,113 @@ describe("usage service", () => {
       ["t3", "t3_turn", "pt-2"],
       ["t3", "t3_turn", "pt-3"],
     ]);
+    // One T3 row: the self-linked session is folded into its thread's.
     const rows = usage.taskUsage(a.id)!.rows;
-    expect(rows.map((r) => r.kind)).toEqual(["session", "thread"]);
-    expect(rows[1]!.models.map((m) => [m.model, m.costUsd === null])).toEqual([
-      ["glm-4.6", true],
-      ["gpt-5.2-codex", false],
+    expect(rows.map((r) => [r.kind, r.harness])).toEqual([["thread", "t3"]]);
+    // Each model line says what ran it: the Claude session from its transcript, the rest from T3's turns.
+    expect(rows[0]!.models.map((m) => [m.harness, m.model, m.costUsd === null])).toEqual([
+      ["claude-code", "claude-sonnet-5-5", false],
+      ["t3", "glm-4.6", true],
+      ["t3", "gpt-5.2-codex", false],
     ]);
-    expect(rows[1]!.unpricedTokens).toBe(40);
+    expect(rows[0]!.unpricedTokens).toBe(40);
     usage.stop();
+  });
+
+  describe("a T3 thread with the agent's own session linked behind it", () => {
+    const behind = (...ids: string[]): T3ThreadUsage => ({
+      providerThreads: ids.map((id, i) => ({
+        id: `pt-${i}`,
+        driver: "claudeAgent",
+        harness: "claude-code" as const,
+        nativeId: id,
+      })),
+      turns: new Map(),
+    });
+
+    it("shows one T3 row named by the session's label, with the thread's title kept and the totals unchanged", async () => {
+      const { task, transcript, usage, linkSession, linkThread } = setup({ "thread-1": behind(S1) });
+      const a = task("A");
+      transcript(S1, message(S1, "m1", 5));
+      linkSession(a.id, S1, "Planning #1");
+      usage.scanSession({ harness: "claude-code", sessionId: S1 });
+      const before = usage.taskUsage(a.id)!;
+      expect(before.rows.map((r) => r.kind)).toEqual(["session"]);
+      const thread = linkThread(a.id, "thread-1", "A long thread title");
+      await usage.scanThread("thread-1");
+      const after = usage.taskUsage(a.id)!;
+      // Linked before its thread, the session is still folded into the thread's row.
+      expect(after.rows).toHaveLength(1);
+      expect(after.rows[0]).toMatchObject({
+        kind: "thread",
+        harness: "t3",
+        key: "t3:thread-1",
+        linkId: thread.id,
+        label: "Planning #1",
+        threadTitle: "A long thread title",
+      });
+      expect(after.tokens).toEqual(before.tokens);
+      expect(after.costUsd).toBe(before.costUsd);
+      usage.stop();
+    });
+
+    it("keeps a session no linked thread covers as a Claude Code row, and a thread not scanned yet leaves it in place", async () => {
+      const { task, transcript, usage, linkSession, linkThread } = setup({ "thread-1": behind(S1) });
+      const a = task("A");
+      transcript(S1, message(S1, "m1", 5));
+      transcript(S2, message(S2, "m2", 5));
+      linkThread(a.id, "thread-1", "Thread");
+      linkSession(a.id, S1, "Implementing #1");
+      linkSession(a.id, S2, "Review");
+      usage.scanSession({ harness: "claude-code", sessionId: S1 });
+      usage.scanSession({ harness: "claude-code", sessionId: S2 });
+      expect(usage.taskUsage(a.id)!.rows.map((r) => [r.harness, r.label])).toEqual([
+        ["claude-code", "Implementing #1"],
+        ["claude-code", "Review"],
+      ]);
+      await usage.scanThread("thread-1");
+      expect(usage.taskUsage(a.id)!.rows.map((r) => [r.harness, r.label])).toEqual([
+        ["t3", "Implementing #1"],
+        ["claude-code", "Review"],
+      ]);
+      usage.stop();
+    });
+
+    it("names the row by the thread's title when the sessions behind it have different labels or none", async () => {
+      const { task, transcript, usage, linkSession, linkThread } = setup({
+        "thread-1": behind(S1, S2),
+        "thread-2": behind("a09f26ed-ce2f-4449-b7eb-3bb01f89f268"),
+      });
+      const a = task("A");
+      transcript(S1, message(S1, "m1", 5));
+      transcript(S2, message(S2, "m2", 5));
+      linkThread(a.id, "thread-1", "First thread");
+      linkSession(a.id, S1, "Planning #1");
+      linkSession(a.id, S2, "Implementing #1");
+      linkThread(a.id, "thread-2", "Second thread");
+      linkSession(a.id, "a09f26ed-ce2f-4449-b7eb-3bb01f89f268");
+      transcript("a09f26ed-ce2f-4449-b7eb-3bb01f89f268", message("a09f26ed-ce2f-4449-b7eb-3bb01f89f268", "m3", 5));
+      await usage.scanThread("thread-1");
+      await usage.scanThread("thread-2");
+      expect(usage.taskUsage(a.id)!.rows.map((r) => [r.kind, r.label, r.threadTitle])).toEqual([
+        ["thread", "First thread", null],
+        ["thread", "Second thread", null],
+      ]);
+      usage.stop();
+    });
+
+    it("marks the thread row shared with a task that links only the session behind it", async () => {
+      const { task, transcript, usage, linkSession, linkThread } = setup({ "thread-1": behind(S1) });
+      const a = task("A");
+      const b = task("B");
+      transcript(S1, message(S1, "m1", 5));
+      linkThread(a.id, "thread-1");
+      linkSession(a.id, S1);
+      linkSession(b.id, S1);
+      await usage.scanThread("thread-1");
+      expect(usage.taskUsage(a.id)!.rows.map((r) => [r.kind, r.sharedWith])).toEqual([["thread", [b.number]]]);
+      usage.stop();
+    });
   });
 
   it("stores a run that keeps no transcript with its reported cost, and reads a run's transcript instead when it has one", () => {
@@ -304,6 +407,29 @@ describe("usage service", () => {
     usage.stop();
   });
 
+  it("counts a session behind a linked T3 thread as T3 threads in stats, under the task that linked it first", async () => {
+    const thread: T3ThreadUsage = {
+      providerThreads: [{ id: "pt-1", driver: "claudeAgent", harness: "claude-code", nativeId: S1 }],
+      turns: new Map(),
+    };
+    const { task, transcript, usage, linkSession, linkThread } = setup({ "thread-1": thread });
+    const a = task("A");
+    const b = task("B");
+    transcript(S1, message(S1, "m1", 5));
+    transcript(S2, message(S2, "m2", 5));
+    // The agent linked its session to A before anyone linked the thread (to B).
+    linkSession(a.id, S1, "Implementing #1");
+    linkSession(a.id, S2);
+    linkThread(b.id, "thread-1");
+    usage.scanSession({ harness: "claude-code", sessionId: S2 });
+    await usage.scanThread("thread-1");
+    const bySession = Object.fromEntries(
+      usage.attributed("2000-01-01", "3000-01-01").map((r) => [r.row.sessionId, [r.taskId, r.harness]]),
+    );
+    expect(bySession).toEqual({ [S1]: [a.id, "t3_thread"], [S2]: [a.id, "claude-code"] });
+    usage.stop();
+  });
+
   it("adds nothing when a restored board reads the same transcript again", () => {
     const { h, s, task, transcript, usage, linkSession, stored, folder } = setup();
     const a = task("A");
@@ -366,6 +492,35 @@ describe("usage service", () => {
 });
 
 describe("get_task's usage line", () => {
+  it("counts a thread with its agent's own session behind it as a T3 thread", async () => {
+    const { usageLine } = await import("../mcp/format.ts");
+    const id = (n: number) => `${n}09f26ed-ce2f-4449-b7eb-3bb01f89f268`;
+    const behind = (sessionId: string): T3ThreadUsage => ({
+      providerThreads: [{ id: "pt", driver: "claudeAgent", harness: "claude-code", nativeId: sessionId }],
+      turns: new Map(),
+    });
+    // Shaped like #169: planning and implementing in T3 threads whose agents linked their sessions too, two
+    // follow-up threads with nothing linked inside them, and two headless review sessions.
+    const threads = { plan: behind(id(1)), impl: behind(id(2)), f1: behind(id(3)), f2: behind(id(4)) };
+    const { task, transcript, usage, linkSession, linkThread } = setup(threads);
+    const a = task("A");
+    for (const n of [1, 2, 3, 4, 5, 6]) transcript(id(n), message(id(n), `m${n}`, 5));
+    linkThread(a.id, "plan");
+    linkSession(a.id, id(1), "Planning #1");
+    linkThread(a.id, "impl");
+    linkSession(a.id, id(2), "Implementing #1");
+    linkSession(a.id, id(5));
+    linkSession(a.id, id(6));
+    linkThread(a.id, "f1");
+    linkThread(a.id, "f2");
+    for (const t of Object.keys(threads)) await usage.scanThread(t);
+    for (const n of [5, 6]) usage.scanSession({ harness: "claude-code", sessionId: id(n) });
+    const line = usageLine(usage.taskUsage(a.id));
+    // Sources follow link order, so the planning thread comes first.
+    expect(line).toContain("T3 threads 4, Claude Code 2");
+    usage.stop();
+  });
+
   it("says the cost, tokens, sources, sharing and what has no price", async () => {
     const { usageLine } = await import("../mcp/format.ts");
     expect(usageLine(null)).toBeNull();
@@ -379,6 +534,7 @@ describe("get_task's usage line", () => {
             sessionId: "s",
             linkId: "l",
             label: null,
+            threadTitle: null,
             source: "transcript",
             purpose: null,
             models: [],

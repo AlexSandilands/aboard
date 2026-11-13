@@ -8,6 +8,7 @@ import {
   type TaskUsageRow,
   type TokenUsage,
   type UsageHarness,
+  type UsageModelLine,
 } from "@repo/contracts";
 
 // Formatting for the panel's Usage section (docs/features/token-usage.md). Estimates carry a "~" so they never read
@@ -141,6 +142,19 @@ export function rowSource(row: TaskUsageRow): string {
 
 export function harnessLabel(harness: UsageHarness): string {
   return harness === "t3" ? "T3 Code" : AGENT_HARNESSES[harness].label;
+}
+
+/**
+ * The provider a thread row's model line ran on ("Claude Code", "Codex"), so an expanded T3 row says what was behind
+ * it. Null for other rows, which name their harness already, and for tokens counted from T3's own turns, which don't
+ * say which provider ran them.
+ */
+export function modelProvider(
+  row: TaskUsageRow,
+  line: UsageModelLine,
+): { harness: Exclude<UsageHarness, "t3">; label: string } | null {
+  if (row.kind !== "thread" || line.harness === "t3") return null;
+  return { harness: line.harness, label: harnessLabel(line.harness) };
 }
 
 /** The row's name: its link's label, else something to tell it by. */

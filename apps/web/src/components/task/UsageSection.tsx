@@ -11,6 +11,7 @@ import { UsageSummary } from "./SectionSummaries";
 import { TaskSection } from "./TaskSection";
 import {
   formatTokens,
+  modelProvider,
   percents,
   priceSourceText,
   rowCost,
@@ -187,17 +188,35 @@ function Breakdown({ row }: { row: TaskUsageRow }) {
     ].filter(([, n]) => (n as number) > 0) as Array<[string, number]>;
   return (
     <ul className="m-0 mb-1 ms-9 list-none space-y-1 p-0 text-xs text-muted-foreground tabular-nums">
-      {row.models.map((m) => (
-        <li key={m.model ?? ""}>
-          <span className="font-medium text-foreground/80">{m.model ?? "Unknown model"}</span>
-          {" · "}
-          {kinds(m.tokens)
-            .map(([label, n]) => `${label} ${formatTokens(n)}`)
-            .join(" · ")}
-          {" · "}
-          {m.costUsd === null ? "no price" : `~$${m.costUsd.toFixed(2)}`}
+      {/* The row is named by the agent's own session label: say which thread it is. */}
+      {row.threadTitle ? (
+        <li className="break-words">
+          Thread: <span className="text-foreground/80">{row.threadTitle}</span>
         </li>
-      ))}
+      ) : null}
+      {row.models.map((m) => {
+        const provider = modelProvider(row, m);
+        return (
+          <li key={`${m.harness}:${m.model ?? ""}`}>
+            {provider ? (
+              <>
+                <span className="inline-flex items-center gap-1 align-text-bottom">
+                  <HarnessIcon harness={provider.harness} />
+                  {provider.label}
+                </span>
+                {" · "}
+              </>
+            ) : null}
+            <span className="font-medium text-foreground/80">{m.model ?? "Unknown model"}</span>
+            {" · "}
+            {kinds(m.tokens)
+              .map(([label, n]) => `${label} ${formatTokens(n)}`)
+              .join(" · ")}
+            {" · "}
+            {m.costUsd === null ? "no price" : `~$${m.costUsd.toFixed(2)}`}
+          </li>
+        );
+      })}
       {row.lastDay ? <li>Last used {row.lastDay}</li> : null}
     </ul>
   );
