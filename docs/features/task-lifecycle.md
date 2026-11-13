@@ -191,7 +191,7 @@ agent's request, which is stored on the task. A task needs attention when it has
 
 - a blocked step;
 - an open or draft PR with failing checks, changes requested, or conflicts;
-- a T3 thread waiting for input or approval, or failed;
+- an agent session waiting for input or approval, or failed (see [Sessions](#sessions-any-provider));
 - a local review that stalled, got stuck, failed, or was reviewed by the board with nobody fixing it;
 - a standing request from an agent (`request_attention`, see [notifications](notifications.md#agent-requests)).
 
@@ -200,7 +200,59 @@ card's ring), but the list shows one row per waiting or failed T3 thread, not pe
 thread (a bulk planning session) collapse into a row with the thread's title and the task numbers, which `attentionItems`
 (`apps/web/src/components/board/board.logic.ts`) groups by `environmentId:threadId`. The row opens the first task,
 each number its own. A thread with one task stays a task row, and a grouped task with another reason (failing
-checks, a blocked step) keeps a row of its own for it.
+checks, a blocked step) keeps a row of its own for it. Grouping follows the tasks' reasons, not the links' statuses, so
+a task whose flag for the thread was dismissed isn't in the row.
+
+#### Sessions, any provider
+
+A waiting or failed session raises `session_needs_input` or `session_failed` whatever runs it. `sessionHealth(link)`
+(`packages/contracts/src/sessionHealth.ts`) reads a `t3_thread` or `agent_session` link's snapshot as `working`,
+`waiting`, `failed`, `ok` or `unknown`, with the noun the flag uses ("Thread failed", "Session failed"). It has one
+reader per link kind: a new provider is added there and attention, its labels and its dismissal follow.
+
+- A failed session stops flagging once its task is **Done**: the work finished, so the failure is history. In Review it
+  still flags until dismissed. A session waiting on the user flags in any status.
+- An Autopilot run's session (`finished` or `failed`, which only a run sets) raises no session flag: the `autopilot`
+  reason already reports the run.
+- Terminal sessions (Claude Code, Codex, Copilot CLI) have no failure the board can read today, so in practice only T3
+  threads raise `session_failed`.
+
+#### Dismissing flags
+
+The user can dismiss any flag, one at a time or all of a task's at once, without unlinking what raised it (so a failed
+thread's usage still counts). Every reason carries a `key` (what raised it) and a `fingerprint` (the state that
+raised it). A dismissal stores both (`attention_dismissals`, one row per task and key) and hides the reason only while
+its fingerprint is unchanged, so a new failure brings the flag back. Nothing is hidden for good.
+
+| Reason                                    | Key                                  | Fingerprint                                          |
+| ----------------------------------------- | ------------------------------------ | ---------------------------------------------------- |
+| Session failed or waiting                 | `link:<linkId>`                      | The status and the session's last activity           |
+| PR checks, changes requested, conflict    | `pr:<linkId>:checks\|changes\|conflict` | The head commit (`headOid`), else the PR's `updatedAt` |
+| Blocked steps                             | `steps`                              | The blocked steps' ids, sorted                       |
+| Review stalled, stuck, failed, unattended | `review`                             | The state and the round                              |
+| Import failed                             | `import`                             | The error and when the import last changed           |
+| Agent request                             | `request`                            | When it was asked                                    |
+| Autopilot                                 | `autopilot`                          | The message                                          |
+
+- `deriveAttention` returns the standing reasons and the dismissed ones apart. `TaskSummary.attention` has only the
+  standing ones, so the card, the sidebar, the Needs attention filter, MCP results and Orchestrate
+  (`orchestrateNeedsLooking`) all stop seeing a dismissed flag. `dismissedAttention` carries the hidden ones, with who
+  dismissed them and when, for restoring.
+- `POST /api/tasks/:id/attention/dismissals` dismisses the reason with the body's `key`, or every standing reason
+  with no key. `DELETE` on the same path restores one (`?key=`) or all. `AttentionService` (`services/attention.ts`)
+  does both. A key the task isn't flagged for is `CONFLICT`; dismissing one already dismissed does nothing.
+- The agent's request and the Autopilot flag keep their own dismissal: dismissing them clears the request
+  (`attention_cleared`) and sets `dismissed_at` on the task's flagged runs, as their own buttons do, and neither can be
+  restored.
+- Dismissing marks the matching notifications read (the PR's `checks:` and `changes:` keys, the thread's keys, the
+  task's `review_finished` or `autopilot_failed`).
+- The activity log gets `attention_dismissed` and `attention_restored`, each with the flags' messages.
+- **Only the user dismisses.** There is no MCP tool: a flag is how a problem reaches the user, so an agent can't
+  silence one. Agents clear their own request with `request_attention(clear: true)`.
+- Rows are never pruned: one that matches no current reason is ignored, and dismissing the same key again replaces it.
+  They cascade with the task and are part of its [backup](backup.md) bundle.
+- In the UI, **Dismiss all warnings** is in the card's right-click menu and the task panel's More menu
+  (`TaskMenuItems`), shown while the task has a flag.
 
 ### Missing links
 
@@ -244,6 +296,8 @@ reliably than on instructions they read once.
 | `apps/server/src/mcp/tools/tasks.ts`        | `add_to_backlog`, `create_task`, `move_task`, `close_task`, `update_task`, `add_note` |
 | `packages/contracts/src/schemas.ts`         | `TaskStatus`, `TaskStatusInput`, `TaskResolution`, `CloseTaskInput`, `MoveTaskInput`              |
 | `packages/contracts/src/derive.ts`          | `deriveAttention`, progress, current step                                      |
+| `packages/contracts/src/sessionHealth.ts`   | `sessionHealth`: a session link's state, whatever runs it                      |
+| `apps/server/src/services/attention.ts`, `db/repos/attentionDismissals.ts`, `db/migrations/051_attention_dismissals.sql` | Dismissing and restoring flags |
 | `apps/web/src/components/task/CloseTaskDialog.tsx`, `ResolutionCallout.tsx` | Closing and "Also resolved" in the panel           |
 | `apps/web/src/components/task/TaskMenuDialogs.tsx`, `deleteTasks.logic.ts` | The delete confirmation and its Undo toast |
 | `apps/web/src/components/settings/RecentlyDeletedSection.tsx` | Settings → Recently deleted and the retention setting |

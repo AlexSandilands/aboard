@@ -92,6 +92,12 @@ the thread's ⌄ menu instead of rows of their own.
 Failing checks, requested changes, blocked steps and requests from agents ("please review the plans") show up under
 **Needs attention** in the sidebar. An agent's request stays until you press **Dismiss** in the task panel (or the
 agent clears it).
+
+A flag you have dealt with, or that no longer matters (a thread that failed in an outage, on a task that got done
+anyway), can be dismissed without unlinking anything: right-click the card, or open the task panel's **⋯** menu, and
+pick **Dismiss all warnings**. The links stay, so their usage still counts. A dismissed flag comes back by itself when
+the thing behind it changes: the thread fails again, a new commit's checks fail, another step gets blocked. A failed
+thread also stops flagging once its task is Done.
 Agents are told which ticket, T3 thread and session a task is still missing, so links tend to fill in on
 their own.
 

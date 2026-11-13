@@ -235,7 +235,7 @@ toggles):
 (its severity's colour) right after the title, whether its summary is plain or rich, so a warning the rich summary
 hides (a flagged Autopilot run reads "Done", PR and session chips carry no message) still shows. The message is the
 toggle's tooltip and part of its accessible name. `SECTION_ATTENTION` in `sections.logic.ts` is the one rule for which
-reasons belong where: Autopilot takes `autopilot`; Sessions `thread_needs_input` and `thread_failed`; Links
+reasons belong where: Autopilot takes `autopilot`; Sessions `session_needs_input` and `session_failed`; Links
 `pr_checks_failing`, `pr_changes_requested` and `pr_conflict`; Plan `blocked_step`; Local review `review_stalled`,
 `review_stuck`, `review_failed` and `review_unattended`. `import_failed` and `agent_request` belong to no section: the
 callouts at the top of the panel show them. `sectionAttention` picks the reason to show, an error before a warning, and

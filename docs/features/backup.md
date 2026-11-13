@@ -35,7 +35,7 @@ custom-automations.json  custom Autopilot automations (optional: absent before t
 suggestions.json     suggested changes to prompts and skills, open and decided (optional: absent before them)
 transfers.json       tasks this board moved in from other machines (optional: absent before moving tasks)
 applied-transfers.json  other boards' moves of this board's tasks that it has acted on (optional, likewise)
-tasks/2026-10/task-42.json   one task with its phases, steps, links, attachment rows, labels, reviews and findings
+tasks/2026-10/task-42.json   one task with its phases, steps, links, attachment rows, labels, reviews, findings and dismissed flags
 attachments/<task id>/<id>.png   the task's pasted images (see attachments.md)
 events/2026-10.json          the activity log for the month the events happened
 ```

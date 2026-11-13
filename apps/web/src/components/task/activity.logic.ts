@@ -175,6 +175,16 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       return line("note", "asked for your attention", str(p.message));
     case "attention_cleared":
       return line("other", "cleared the request for attention");
+    case "attention_dismissed":
+    case "attention_restored": {
+      const flags = Array.isArray(p.flags) ? p.flags.filter((f): f is string => typeof f === "string") : [];
+      const what = flags.length === 1 ? "a flag" : plural(flags.length, "flag");
+      return line(
+        "other",
+        event.type === "attention_dismissed" ? `dismissed ${what}` : `restored ${what}`,
+        flags.join("\n") || undefined,
+      );
+    }
     case "plan_set": {
       const steps = num(p.steps);
       const phases = num(p.phases);
