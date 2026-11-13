@@ -3,6 +3,7 @@ import {
   AGENT_HARNESSES,
   customHandoffLabel,
   customHandoffModel,
+  customHandoffThreadTitle,
   handoffTargetHarness,
   providerActive,
   providerOfHarness,
@@ -101,6 +102,7 @@ export function createCustomHandoffLauncher(deps: {
       {
         prompt,
         commandId,
+        title: customHandoffThreadTitle(handoff, task),
         work: true,
         // Like the card's own launch: on finished work the thread is a follow-up, which the board never messages.
         followUp: true,

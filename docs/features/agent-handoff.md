@@ -410,7 +410,9 @@ hand-off as `preset`) with the rendered prompt, and a badge beside the title nam
   hand-off's choice on top (as an automation's choice is), so the dialog opens on it.
 - The workspace: `presetWorkspaceChoice` (T3) and `presetWhere` (CLI). The task's worktree is the first of the task's
   branches that has one; a task without one opens on the dialog's usual choice.
-- A CLI session is linked under the hand-off's name (`StartSessionInput.label`).
+- A CLI session is linked under the hand-off's name (`StartSessionInput.label`), and a T3 thread is titled
+  `#N <hand-off> · <task title>` (`StartT3ThreadInput.title`, `customHandoffThreadTitle`), with or without the dialog,
+  so several threads on one task can be told apart in T3 Code.
 
 **Without the dialog** (`POST /api/tasks/:id/custom-handoffs/:handoffId`, `integrations/customHandoff.ts`): the server
 renders the prompt and starts it, after checking what the menu checked (the project, the provider, its menu switch).

@@ -1,11 +1,13 @@
 import {
   AGENT_HARNESSES,
   customHandoffLabel,
+  customHandoffModel,
   renderCustomHandoffPrompt,
   taskHandoffPrompt,
   taskWindowName,
   defaultHandoffMode,
   type AgentHarness,
+  type AppSettings,
   type CliEffort,
   type CustomHandoff,
   type PrFixInfo,
@@ -25,7 +27,14 @@ import { Spinner } from "~/components/ui/spinner";
 import { toastManager } from "~/components/ui/toast";
 import { cn } from "~/lib/utils";
 import { useStartSession } from "~/state/mutations";
-import { useAgentModels, useBoard, useFollowupEpicBranch, usePrFix, useSessionLaunchOptions } from "~/state/queries";
+import {
+  useAgentModels,
+  useBoard,
+  useFollowupEpicBranch,
+  usePrFix,
+  useSessionLaunchOptions,
+  useSettingsSelect,
+} from "~/state/queries";
 import { useDialogs } from "~/state/ui";
 import { effortAfterModelChange } from "./cliEffort.logic";
 import { copyFixPrompt } from "./FixPrMenu";
@@ -52,6 +61,13 @@ import {
   type SessionPicks,
   type SessionWhere,
 } from "./sessionLaunch.logic";
+
+/** What says which model a hand-off's choice comes down to. */
+const selectModelSettings = ({ modelTiers, modelProfiles, operationModels }: AppSettings) => ({
+  modelTiers,
+  modelProfiles,
+  operationModels,
+});
 
 const WHERE_LABELS = {
   new_worktree: "New worktree",
@@ -206,6 +222,15 @@ function Composer({
   // The models the CLI lists, for the picker; anything else can still be typed while the scan runs or if it fails.
   const scanned = useAgentModels(true);
   const start = useStartSession({ silent: true });
+  // Whether the model shown is the hand-off's own: not when it inherits, nor when its custom model was since deleted
+  // and the task's own model stands in.
+  const modelSettings = useSettingsSelect(selectModelSettings);
+  const handoffChoice =
+    preset && modelSettings && customHandoffModel(preset, task, modelSettings).resolved.source === "automation"
+      ? preset.model
+      : null;
+  const handoffPickedModel =
+    !handoffChoice || handoffChoice === "inherit" ? null : "tier" in handoffChoice ? "tier" : "model";
   const images = useLaunchImages();
   const cli = options?.clis.find((c) => c.harness === harness);
   // Codex can't be given a session id: the board can't link it, and its prompt asks it to link itself.
@@ -394,9 +419,9 @@ function Composer({
           {options.model && !plan ? (
             <span className="block">
               <span className="font-medium text-foreground">
-                {preset && preset.model !== "inherit"
+                {handoffPickedModel
                   ? // The options were loaded for the hand-off, so this is the model it picked.
-                    `Model: ${options.model.name}${"tier" in preset.model ? " tier" : ""}, from the hand-off`
+                    `Model: ${options.model.name}${handoffPickedModel === "tier" ? " tier" : ""}, from the hand-off`
                   : options.model.source === "label"
                     ? `Model: ${options.model.name}, from label ${options.model.label}`
                     : `Suggested model: ${options.model.name}`}

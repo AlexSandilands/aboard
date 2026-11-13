@@ -55,6 +55,15 @@ export const customHandoffLabel = (handoff: Pick<CustomHandoff, "name">, task: P
   `${handoff.name} on #${task.number}`.slice(0, 120);
 
 /**
+ * The title of a T3 Code thread a custom hand-off starts, e.g. "#164 Sandbox check · Add custom hand-offs": the
+ * hand-off's name first, so several threads on one task can be told apart in T3 Code's list.
+ */
+export const customHandoffThreadTitle = (
+  handoff: Pick<CustomHandoff, "name">,
+  task: Pick<TaskSummary, "number" | "title">,
+): string => `#${task.number} ${handoff.name} · ${task.title}`.slice(0, 300);
+
+/**
  * `{{task}}`: which task this is and how to read it. Unlike the work prompt it prescribes no workflow; the hand-off's
  * own text says what to do.
  */

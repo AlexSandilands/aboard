@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { BRAND } from "./brand.ts";
-import { customHandoffModel, customHandoffsFor, NO_TASK_BRANCH, renderCustomHandoffPrompt } from "./customHandoffs.ts";
+import {
+  customHandoffLabel,
+  customHandoffModel,
+  customHandoffThreadTitle,
+  customHandoffsFor,
+  NO_TASK_BRANCH,
+  renderCustomHandoffPrompt,
+} from "./customHandoffs.ts";
 import { EMPTY_MODEL_TIERS } from "./modelTiers.ts";
 import { CustomHandoff, CustomHandoffs, type TaskLink } from "./schemas.ts";
 
@@ -100,6 +107,14 @@ describe("renderCustomHandoffPrompt", () => {
     const codex = renderCustomHandoffPrompt(handoff({ target: "codex" }), task, BOARD);
     expect(codex).toContain('label: "Sandbox check on #164"');
     expect(codex).toContain("CODEX_THREAD_ID");
+  });
+});
+
+describe("what a hand-off's thread and session are called", () => {
+  it("puts the hand-off's name before the task's title in a thread's title, and labels a session by it", () => {
+    expect(customHandoffThreadTitle(handoff(), task)).toBe("#164 Sandbox check · Add custom hand-offs");
+    expect(customHandoffLabel(handoff(), task)).toBe("Sandbox check on #164");
+    expect(customHandoffThreadTitle(handoff(), { number: 1, title: "x".repeat(400) })).toHaveLength(300);
   });
 });
 

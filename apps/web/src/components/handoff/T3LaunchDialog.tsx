@@ -1,5 +1,6 @@
 import {
   clampRuntimeMode,
+  customHandoffThreadTitle,
   defaultHandoffMode,
   planningSessionLabel,
   renderCustomHandoffPrompt,
@@ -257,7 +258,13 @@ function TaskLaunchContent({
     start: (input, { onSuccess, onError }) =>
       mutation.mutate(
         // A plain launch on finished work is to ask about it (a follow-up); a PR fix or an epic's thread does work.
-        { taskId: task.id, ...input, ...(fix || epic ? {} : { followUp: true }) },
+        {
+          taskId: task.id,
+          ...input,
+          ...(fix || epic ? {} : { followUp: true }),
+          // Named after the hand-off, as a thread it starts without the dialog is.
+          ...(preset && !fix ? { title: customHandoffThreadTitle(preset, task) } : {}),
+        },
         { onSuccess: (link) => onSuccess(link.kind === "t3_thread" ? link.ref : null), onError },
       ),
   };

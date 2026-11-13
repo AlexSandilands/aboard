@@ -118,6 +118,7 @@ describe("starting a custom hand-off as a T3 Code thread", () => {
     expect(input.prompt).toContain(`Call get_task("${app.task.id}") on the ${BRAND.id} MCP server to read it.`);
     expect(input.prompt).toContain("\n\nRun the sandbox.\n\nThis thread is already linked to the task");
     expect(input).toMatchObject({
+      title: "#1 Sandbox check · Work",
       work: true,
       followUp: true,
       modelChoice: { tier: "deep" },
