@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -201,7 +201,7 @@ describe("starting a custom hand-off as a CLI session", () => {
 });
 
 describe("a custom hand-off in a repository", { timeout: PROCESS_TEST_TIMEOUT }, () => {
-  it("makes a new worktree from the default branch when the task has none, and says it fell back", async () => {
+  it("makes a new worktree when the task has none and says so, then runs in the task's worktree once it has one", async () => {
     const repo = createGitFixture();
     try {
       const app = appWith([handoff({ target: "claude-code", workspace: "task_worktree" })], {
@@ -217,6 +217,18 @@ describe("a custom hand-off in a repository", { timeout: PROCESS_TEST_TIMEOUT },
       const again = await app.start("sandbox");
       expect(again.body).toMatchObject({ workspace: "task_worktree", fellBack: false, branch: body.branch });
       expect(again.body.session?.cwd).toBe(body.session?.cwd);
+
+      // A T3 Code thread for the same task runs in that worktree too, on its branch.
+      app.services.settings.update({
+        customHandoffs: [handoff({ id: "thread", target: "t3-code", workspace: "task_worktree" })],
+      });
+      const thread = await app.start("thread");
+      expect(app.launches[0]!.input.workspace).toMatchObject({ mode: "existing_worktree", branch: body.branch });
+      const launchedIn = app.launches[0]!.input.workspace;
+      expect(launchedIn?.mode === "existing_worktree" && realpathSync(launchedIn.worktreePath)).toBe(
+        realpathSync(body.session!.cwd),
+      );
+      expect(thread.body).toMatchObject({ workspace: "task_worktree", fellBack: false, branch: body.branch });
     } finally {
       repo.cleanup();
     }

@@ -46,6 +46,7 @@ import {
   copyCommand,
   displayLaunch,
   fitsCommandLine,
+  nameArgument,
   resolveTerminal,
   textArgument,
   type LaunchSpec,
@@ -280,7 +281,8 @@ export function createSessionLaunch(deps: {
         sessionId,
         model: session.model,
         effort: session.effort,
-        name: label,
+        // A custom hand-off's label is the user's own text, so it is made safe for this command line.
+        name: nameArgument(label, h.platform),
         prompt,
       });
       return [exe, ...argv.slice(1)];
