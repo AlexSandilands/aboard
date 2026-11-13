@@ -5,10 +5,14 @@ be rewritten in Rust: a Rust server (REST, SSE, MCP, SQLite, Autopilot, the poll
 [GPUI](https://www.gpui.rs/) window replacing both the React app and the Electron shell. Nothing here is
 built. GPUI is pre-1.0 and changes weekly, so check the sources before acting on any claim about it.
 
-**Status, 2026-11-13: parked.** No rewrite is planned. The owner isn't convinced it's worth the effort, and
-task #85 was closed with this document as its result. Two spikes sit in the backlog in case the question comes
-back: #99 (a Rust server behind the same contract) and #100 (measuring a GPUI board prototype). The section on
-[how GPUI redraws](#how-gpui-redraws) was added on this date.
+**Status, 2026-11-13: parked.** No rewrite is planned, and task #85 ends with this document. The verdict below
+is the assessment's; the owner's decision was not to act on it, being unconvinced the rewrite is worth its
+effort. Two spikes sit in the backlog in case the question comes back: #99 (a Rust server behind the same
+contract) and #100 (measuring a GPUI board prototype).
+
+Revised once on that date, before it landed: [How GPUI redraws](#how-gpui-redraws) and
+[Sources and versions](#sources-and-versions) were added, and the statements about themes and auto-update were
+brought up to date. The sizes, counts and measurements are still those of 2026-11-06.
 
 ## Verdict
 
@@ -29,9 +33,9 @@ back: #99 (a Rust server behind the same contract) and #100 (measuring a GPUI bo
     2. There is no rich Markdown editor to replace TipTap.
     3. Machines without a working GPU are an unmeasured risk.
     4. We would lose the board in a browser and our web tooling.
-    5. GPUI redraws far more than what changed, so the smooth motion we expect on a board of hundreds of cards
-       is unproven ([How GPUI redraws](#how-gpui-redraws)).
-  - It also costs most of the effort: roughly 8–15 person-months.
+    5. GPUI redraws far more than what changed, so holding a high refresh rate on a board of hundreds of cards
+       takes extra work and is unproven ([How GPUI redraws](#how-gpui-redraws)).
+  - It also costs most of the effort: roughly 7–15 person-months.
   - Revisit when the conditions under [What would change the answer](#what-would-change-the-answer) move, and
     start with the measurement spike described there.
 - **Visible losses:** frosted glass (popovers become flat translucent surfaces), the WYSIWYG editor unless we
@@ -200,9 +204,10 @@ than Zed's window. So:
 - Hover, drag and live updates would each cost a pass over the whole board unless every card is its own cached
   view with hand-written guards. That is extra work in every UI row of [Effort](#effort), and it isn't counted
   there.
-- With that work done, the post's figures suggest a few milliseconds per change on a dense board: fine at 60 Hz,
-  over budget at 280 Hz. This is our reading of someone else's benchmark of list rows, not a measurement of
-  cards.
+- With that work done, the post's ~3 ms per 1,000 cached rows puts 300–500 cards at about 1–1.5 ms a change, if
+  a card costs what a row does. That fits a 280 Hz frame with little room, and stops fitting past roughly 1,000
+  cards or if a card costs more than the post's rows, which it doesn't describe. This is our reading of someone
+  else's benchmark of list rows, not a measurement of cards.
 - Virtualising the lanes (GPUI Kit's `VirtualList`) would cut the live element count, at the price of the
   dependency lines and FLIP motion needing bounds for cards that aren't rendered.
 - The memory, install size and always-on gains above don't depend on any of this.
@@ -236,7 +241,7 @@ would have nothing to work around. In their place there'd be GPUI's own limits.
 
 ## Look and feel
 
-The board's look is T3 Code's tokens and themes ([reference/style.md](../reference/style.md),
+The board's look is its own themes on T3 Code's token model ([reference/style.md](../reference/style.md),
 [appearance.md](../features/appearance.md)). GPUI draws with `div`-like elements and flexbox (via `taffy`),
 rounded corners, borders, box shadows, linear gradients, images, SVG and text, with sizes in `px` or `rems`. So
 a card, a column and the panel can be laid out the way they are now. What changes is how effects and motion are
@@ -246,7 +251,7 @@ made.
 
 | Today                                                                    | In GPUI                                                                                                                                         | Result                    |
 | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| Themes: 5 built-ins, 61 roles, light/dark halves, custom themes          | A theme struct built from the same data; the palette maths (`derive.ts`, `color.ts`) ported. GPUI colours are `Hsla`, so convert from OKLCH once | Identical                 |
+| Themes: 8 built-ins, 61 roles, light/dark halves, custom themes          | A theme struct built from the same data; the palette maths (`derive.ts`, `color.ts`) ported. GPUI colours are `Hsla`, so convert from OKLCH once | Identical                 |
 | VS Code and Open VSX theme import, the theme editor and Inspect          | Import is pure parsing (`serde_json`, `zip`). The editor needs GPUI Kit's `ColorPicker`. Inspect works by probing CSS variables, so it needs another approach | Identical, Inspect redone |
 | Contrast 50–200 %                                                        | Computed into the theme instead of CSS `color-mix`                                                                                              | Identical                 |
 | Interface and monospace fonts by name, 12–20 px root size                | GPUI loads system fonts by family; `rems` scale with the window's rem size                                                                      | Identical                 |
@@ -326,7 +331,7 @@ The second and third together keep most of it without a webview.
 ### How close it would look
 
 - **The same:** layout, typography, colours, every theme and its editor, contrast, fonts, icons, stage banners,
-  charts, the board's structure and how it moves.
+  charts, the board's structure.
 - **Close, with work:** grain, drag and drop feel, card motion, Markdown rendering, the title bar.
 - **Different:** frosted glass, which becomes flat translucent surfaces; the rich editor, unless option 2 or 3
   above is done; the HTML art pieces.
@@ -371,7 +376,9 @@ reasonable, but the tray and launching terminals and agent CLIs from inside the 
 
 ### Windows
 
-**Today:** a per-user NSIS installer, unsigned, so SmartScreen warns on first run. There's no auto-update.
+**Today:** a per-user NSIS installer, unsigned, so SmartScreen warns on first run. Since 2026-11-08 it updates
+itself from GitHub releases through electron-updater, as the AppImage does; the deb, rpm, tarball and Arch
+packages only say a newer version is out ([desktop.md](../features/desktop.md#updates)).
 
 **A GPUI app** needs:
 
@@ -382,8 +389,11 @@ reasonable, but the tray and launching terminals and agent CLIs from inside the 
   anyway.
 
 **Packaging:** `cargo-packager` produces NSIS (as now) or MSI. Zed uses Inno Setup and winget. Signing is the
-same unsolved question as today; Zed signs through Azure Trusted Signing. Auto-update is no harder or easier than
-with Electron.
+same unsolved question as today; Zed signs through Azure Trusted Signing.
+
+**Updates:** electron-updater has no place in a Rust app, so the updater (the check, the download, the swap on
+restart, the release feed CI writes) would be rebuilt or taken from a crate. None was researched here, and
+[Effort](#effort) doesn't count it.
 
 ### Compared
 
@@ -393,6 +403,7 @@ with Electron.
 | Linux runtime dependencies   | GTK 3, NSS, ALSA, libsecret, X libraries… | Vulkan or GL driver, Wayland/X11, xkbcommon, fontconfig                      |
 | Machines without a GPU       | Chromium falls back to software and works | Software Vulkan/GL or WARP: works slowly, unmeasured; `serve` still fine     |
 | Windows                      | Windows 10+, NSIS                          | Windows 10 1903+, DX11, NSIS or MSI                                          |
+| Updates                      | electron-updater: NSIS and AppImage update themselves | Rebuilt or from a crate; not researched                           |
 | Building from source         | Node and pnpm; `pnpm install` is quick     | Latest stable Rust (GPUI requires it), and on Linux the `-dev` headers for the libraries above |
 
 **Building from source gets heavier.** A clean release build of a GPUI app with wgpu, tree-sitter grammars, axum
@@ -459,7 +470,9 @@ because so much of it is building what React, dnd-kit and the browser give us no
 7. **Agents writing GPUI.** Fewer examples to learn from and a moving API mean more correction per change than
    React gets today.
 8. **Redraw cost on a dense board.** Every change costs a pass over all live views unless each card is a cached
-   view with manual guards, and a missed `notify` fails silently. See [How GPUI redraws](#how-gpui-redraws).
+   view with manual guards, and a missed `notify` fails silently. Even then the margin at 280 Hz is thin. See [How GPUI redraws](#how-gpui-redraws).
+
+9. **The updater.** Today's comes from electron-updater. A replacement was not researched or costed.
 
 ## What would change the answer
 
@@ -471,3 +484,29 @@ because so much of it is building what React, dnd-kit and the browser give us no
   and without a cached view per card. That spike is the next step if the window is pursued. It was out of scope
   here.
 - GPUI gaining a way to redraw less than a view, or retained subtrees landing upstream rather than in a fork.
+
+## Sources and versions
+
+What the claims above rest on, as checked on 2026-11-05 and 06 unless a line says otherwise. Claims that carry
+their own link in the text aren't repeated.
+
+| Claim | Source | Version, date |
+| --- | --- | --- |
+| The official GPUI crate, its licence (Apache-2.0) and "pre-1.0" warning | [crates.io/crates/gpui](https://crates.io/crates/gpui) and its README | 0.2.2, 2025-10-22 |
+| The snapshots apps outside Zed build on | [crates.io/crates/gpui-pre](https://crates.io/crates/gpui-pre) | 0.3.11, 2026-11-02 |
+| GPUI's API: `on_drag`, `on_drop`, `drag_over`, `on_drag_move`, `with_animation` and easings, `linear_gradient`, `img`, `svg`, `canvas`, `QuitMode`, the `gpui_*` platform crates, `gpui_web` | Read in `crates/` of [Zed's main branch](https://github.com/zed-industries/zed) | 2026-11 |
+| Zed's `editor`, `markdown`, `ui`, `text` and `rope` crates are GPL-3.0-or-later | Their `Cargo.toml` files in the same tree | 2026-11 |
+| GPUI Kit's components: `Input`, `Editor`, `TextView`, `VirtualList`, `ColorPicker`, `Chart`, the `wry` webview; no sortable list | [longbridge/gpui-kit](https://github.com/longbridge/gpui-kit) and [gpui-kit.com](https://gpui-kit.com/docs/comparison) | 0.9.0, 2026-11-02 |
+| `axum` with built-in SSE | [crates.io/crates/axum](https://crates.io/crates/axum) | 0.8.9 |
+| `rusqlite` with bundled SQLite | [crates.io/crates/rusqlite](https://crates.io/crates/rusqlite) | 0.41.1 |
+| `rmcp`, the official MCP SDK, with a streamable HTTP server as a Tower service | [crates.io/crates/rmcp](https://crates.io/crates/rmcp) | 3.9.0, 2026-11-05 |
+| `tray-icon`, `ksni`, `auto-launch` | Their crates.io pages | 0.26, unrecorded, 0.6 |
+
+**Stated without a recorded source.** Check these before relying on them:
+
+- That `tray-icon` on Windows must share GPUI's message loop. It follows from how the crate works, and nobody
+  was found doing it.
+- Zed's glibc 2.31 floor, and its use of Inno Setup, winget and Azure Trusted Signing.
+- The formats `cargo-packager` produces.
+- The versions of `reqwest`, `tokio-tungstenite`, `ksni` and `resvg`.
+
