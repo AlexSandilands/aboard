@@ -125,7 +125,8 @@ function UsageRow({ row, automationTitle }: { row: TaskUsageRow; automationTitle
             />
             <RowIcon row={row} />
             <span className="flex min-w-0 flex-col">
-              <PanelLabel>{name}</PanelLabel>
+              {/* Untrimmed: the source line sits right under it, and the trim would shrink the name to its cap height. */}
+              <PanelLabel className="[text-box:normal]">{name}</PanelLabel>
               <span className="flex min-w-0 flex-wrap items-center gap-1 text-xs font-normal text-muted-foreground">
                 <span className="truncate">{rowSource(row)}</span>
                 {/* The model column, which says it otherwise, is hidden on a narrow panel. */}
