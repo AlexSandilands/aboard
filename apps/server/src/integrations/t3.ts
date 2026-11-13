@@ -478,8 +478,11 @@ export interface T3Integration {
   pollLive(): Promise<void>;
   listProjects(): Promise<T3ProjectCandidate[]>;
   importProjects(ids: string[]): Promise<Project[]>;
-  /** Models, refs and defaults for the "Start in T3 Code" dialog of a task. */
-  launchOptions(taskId: string): Promise<T3LaunchOptions>;
+  /**
+   * Models, refs and defaults for the "Start in T3 Code" dialog of a task. `choice` is a custom hand-off's model, which
+   * the suggestion then follows instead of the task's own.
+   */
+  launchOptions(taskId: string, choice?: ModelChoice): Promise<T3LaunchOptions>;
   /** The same for a thread about a whole project (Suggest epics), which has no suggested model. */
   projectLaunchOptions(projectId: string): Promise<T3LaunchOptions>;
   /** T3's providers and models, for mapping model tiers to a T3 model in settings. */
@@ -976,8 +979,9 @@ export function createT3Integration(deps: {
     actor: string,
   ): Promise<TaskThreadLaunch> => {
     const { options, refsListed, refsUnreachable } = await loadLaunchOptions({ taskId }, choice.modelChoice);
-    // Unattended, a failed listing must not fall back to the shared checkout the way the dialog's choice does.
-    if (!refsListed) {
+    // Unattended, a failed listing must not fall back to the shared checkout the way the dialog's choice does. A
+    // launch that names its workspace needs no listing.
+    if (!refsListed && !choice.workspace) {
       const reason = "T3 Code couldn't list the project's branches, so the thread can't get its own worktree";
       // A dropped connection is T3 still coming up; a refusal or an odd answer is not.
       throw refsUnreachable ? t3Unavailable(reason) : new AppError("VALIDATION", reason);
@@ -1117,7 +1121,7 @@ export function createT3Integration(deps: {
     pollLive,
     threadUsage,
     listProjects,
-    launchOptions: async (taskId) => (await loadLaunchOptions({ taskId })).options,
+    launchOptions: async (taskId, choice) => (await loadLaunchOptions({ taskId }, choice)).options,
     projectLaunchOptions: async (projectId) => (await loadLaunchOptions({ projectId })).options,
     modelCatalog,
     // The public one is the card's launch dialog; launchTaskThread (MCP, Autopilot) starts threads internally.

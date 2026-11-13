@@ -18,6 +18,7 @@ export * from "./runThreads.ts";
 export * from "./planMarkdown.ts";
 export * from "./desktop.ts";
 export * from "./handoff.ts";
+export * from "./customHandoffs.ts";
 export * from "./t3Launch.ts";
 export * from "./agentModels.ts";
 export * from "./modelTiers.ts";

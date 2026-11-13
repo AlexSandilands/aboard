@@ -321,6 +321,11 @@ the task (not from a fork, and, when `origin`'s URL names a repository, in that 
 (the prompt tells the agent to push with `git push origin HEAD:<branch>`). The session is labelled "Fixing the PR of #N"
 (`sessionLabel`), and the short prompt (`shortPrompt`) names the branch and repeats the safety rules.
 
+A [custom hand-off](agent-handoff.md#custom-hand-offs) starts a session the same way, from its dialog or without it.
+Its session is labelled "<hand-off> on #N" (`StartSessionInput.label`, which replaces the mode's label). When its
+prompt can't go on the command line the CLI gets the usual short pointer to the task, and the full prompt is copied
+for pasting, as for any session.
+
 The terminal setting is resolved first, so one that can't run here is refused (400) before any worktree is made. A
 worktree made for a session whose terminal then didn't start stays, since the returned command runs in it, and the
 dialog closes so starting again doesn't quietly make a second one.

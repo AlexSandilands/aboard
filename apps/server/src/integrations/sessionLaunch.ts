@@ -24,6 +24,7 @@ import {
   type AppSettings,
   type CliEffort,
   cliEffortFor,
+  type ModelChoice,
   type SessionLaunchOptions,
   type StartPlanningSessionInput,
   type StartSessionInput,
@@ -63,8 +64,11 @@ import type { Logger } from "./util.ts";
 const SESSION_BRANCH_PREFIX = `${BRAND.id}/`;
 
 export interface SessionLaunchIntegration {
-  /** What the launch dialog offers for a task: CLIs, branches, the tier's models. */
-  options(taskId: string): Promise<SessionLaunchOptions>;
+  /**
+   * What the launch dialog offers for a task: CLIs, branches, the tier's models. `choice` is a custom hand-off's model,
+   * which the models then follow instead of the task's own.
+   */
+  options(taskId: string, choice?: ModelChoice): Promise<SessionLaunchOptions>;
   /** The task's own branches and their worktrees, for the T3 dialog's picker (the session dialog's options carry them). */
   taskBranches(taskId: string): Promise<TaskBranch[]>;
   /**
@@ -345,7 +349,7 @@ export function createSessionLaunch(deps: {
   };
 
   return {
-    async options(taskId) {
+    async options(taskId, choice) {
       const { task, root } = subject(taskId);
       const settings = deps.services().settings.get();
       const h = deps.host();
@@ -360,7 +364,7 @@ export function createSessionLaunch(deps: {
         branches[0] ??
         null;
       const tier = task.suggestedModel?.tier ?? null;
-      const model = resolveOperationChoice("launch", { task }, settings);
+      const model = resolveOperationChoice("launch", { task, automation: choice ? [choice] : [] }, settings);
       // A task with nothing chosen and no tier (the light fallback) keeps each CLI's default, as it always has.
       const profile = model.source === "fallback" ? null : model.profile;
       // A model typed for one provider fills in that CLI only.
@@ -468,7 +472,7 @@ export function createSessionLaunch(deps: {
         prompt: withAttachedImages(input.prompt, images),
         cwd,
         branch,
-        label: sessionLabel(input.mode, task.number),
+        label: input.label ?? sessionLabel(input.mode, task.number),
         windowTask: task.number,
         short: (platform) =>
           shortPrompt(

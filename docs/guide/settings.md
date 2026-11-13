@@ -41,7 +41,7 @@ and a click tries again.
 | **Board**        | [Appearance](#appearance) (colors & themes, contrast, glass, sidebar banner, priority lane and its pinned height, scroll to a task, the Autopilot countdown on lanes, panel animations, fonts), Notifications, [Desktop app](#updating-the-desktop-app) (desktop app only), Data (backup to git, archived projects, recently deleted tasks and how long they are kept) |
 | **Keybindings**  | [Shortcuts](using-the-board.md#keyboard) by group (General, Navigation, Layout, Tasks), with a search box |
 | **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), [Suggestions](#suggested-changes) |
-| **Agents**       | [Providers](#providers) (T3 Code, Claude Code, Codex and GitHub Copilot, once you add them: [connecting agents](connect-agents.md), [T3 Code](t3-code.md)), [Models](#models) (the Light, Standard and Deep tiers and custom models picked by a task label), Operations (the model each kind of run uses) |
+| **Agents**       | [Providers](#providers) (T3 Code, Claude Code, Codex and GitHub Copilot, once you add them: [connecting agents](connect-agents.md), [T3 Code](t3-code.md)), [Models](#models) (the Light, Standard and Deep tiers and custom models picked by a task label), Custom hand-offs (your own saved prompts for the hand-off menu: [using the board](using-the-board.md#custom-hand-offs)), Operations (the model each kind of run uses) |
 | **Autopilot**    | [Automations](autopilot.md#switching-automations-on) (status, Needs you, every automation and [your own](custom-automations.md) in one list), [Runs](autopilot.md#run-history), [Limits & safety](autopilot.md#limits) (caps, quiet hours, Preview everything, variables) |
 | **Integrations** | GitHub, Ticket systems, Terminal, Model prices |
 | **Projects**     | General (name, icon, folder), This project's overrides, Danger zone, for the project chosen at the top |
@@ -128,7 +128,7 @@ The board only offers the tools you add here. On a new install **Agents** shows 
 **Add provider** lists T3 Code,
 Claude Code, Codex and GitHub Copilot with what this machine has (installed and its version, running, or not found),
 and picking one adds it and opens it. Until you add a provider it appears nowhere else: not in the hand-off menus,
-the launch and planning dialogs, or Models and Operations, which appear once you add one. An upgraded board starts with the
+the launch and planning dialogs, or Models, Custom hand-offs and Operations, which appear once you add one. An upgraded board starts with the
 providers you were already using.
 
 The list on the left shows each provider you added with a dot, its version (or T3 Code's name) and an on/off switch;

@@ -15,6 +15,54 @@ describe("custom models", () => {
   });
 });
 
+describe("custom hand-offs", () => {
+  const handoff = {
+    id: "sandbox",
+    name: "Sandbox check",
+    prompt: "{{task}}\n\nRun the sandbox.",
+    target: "t3-code" as const,
+    skipDialog: true,
+    model: "inherit" as const,
+    workspace: "task_worktree" as const,
+    projectIds: null,
+  };
+
+  it("has none by default, and replaces the whole list on a save", () => {
+    const h = createTestHarness();
+    expect(h.services.settings.get().customHandoffs).toEqual([]);
+    const docs = {
+      ...handoff,
+      id: "docs",
+      name: "Write the docs",
+      target: "codex" as const,
+      model: { tier: "deep" as const },
+    };
+    expect(h.services.settings.update({ customHandoffs: [handoff, docs] }).customHandoffs).toEqual([handoff, docs]);
+    expect(h.services.settings.update({ customHandoffs: [docs] }).customHandoffs).toEqual([docs]);
+    // Another setting leaves them alone.
+    expect(h.services.settings.update({ githubPolling: false }).customHandoffs).toEqual([docs]);
+  });
+
+  it("stores an empty project list as every project", () => {
+    const h = createTestHarness();
+    const saved = h.services.settings.update({
+      customHandoffs: [
+        { ...handoff, projectIds: [] },
+        { ...handoff, id: "two", projectIds: ["p1", "p1"] },
+      ],
+    });
+    expect(saved.customHandoffs.map((x) => x.projectIds)).toEqual([null, ["p1"]]);
+  });
+
+  it("keeps the stored hand-offs that still parse when one doesn't", () => {
+    const h = createTestHarness();
+    createRepos(h.db).settings.set("customHandoffs", [handoff, { id: "bad" }, { ...handoff, name: "Again" }, 7]);
+    expect(h.services.settings.get().customHandoffs).toEqual([handoff]);
+    createRepos(h.db).settings.set("customHandoffs", "not a list");
+    expect(h.services.settings.get().customHandoffs).toEqual([]);
+  });
+});
+
 describe("CLI efforts", () => {
   const saved = (h: ReturnType<typeof createTestHarness>) => h.services.settings.get();
 

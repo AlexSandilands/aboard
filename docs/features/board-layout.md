@@ -540,6 +540,14 @@ providers, tiers and custom models are each a row in a list, however many there 
   in `agents/T3TierPicker.tsx`, which adds a **Default model** row), and **Preferred provider**, the CLI headless runs
   on the tier try first (`ModelTierSetting.provider`), left out with fewer than two CLIs. **Rescan models** asks the
   CLIs again. Which item a target names and what the list says is `agents/agents.logic.ts`.
+- **Custom hand-offs** (`agents.handoffs`, `agents/CustomHandoffsSection.tsx`): the same split card with a wider
+  list (`wideList`): the user's saved prompts in menu order on the left (`agents.handoffs.<id>`), each with what it
+  starts, a summary and a "No dialog" or "Dialog" pill, dragged by its grip to reorder; the selected one's editor on
+  the right (name, what it starts, the prompt with placeholder chips that insert at the caret, where it runs, whether
+  it skips the dialog, its model and the projects it shows on). With none there is an empty state with **Add
+  hand-off**. Every edit saves as it is made: text on blur, the rest at once, each built on the list still saving
+  (`createHandoffEdits` in `customHandoffs.logic.ts`, tested). What they do is in
+  [agent-handoff.md](agent-handoff.md#custom-hand-offs).
 - **Operations** (`agents.operations`, `agents/OperationsSection.tsx`): the board's model for each operation in
   `OPERATIONS`, in cards for Review, Autopilot and Board tools (`OPERATION_GROUPS`, `operations.logic.ts`), a row each
   (`agents.operations.<op>`), whose one line is what it resolves to, with what the operation is behind its ⓘ. The picker offers **Default** (nothing saved: the operation's default), the task's own
@@ -554,7 +562,7 @@ Board has one section that only exists in the desktop app: **Desktop app** (`boa
 of the sidebar, and `SettingsSearch` out of the results, in a browser (`DESKTOP_ONLY_SECTIONS`). How updates work:
 [desktop](desktop.md#updates).
 
-Models and Operations show only once a provider is added.
+Models, Custom hand-offs and Operations show only once a provider is added.
 
 `autopilot` is three tabs, each a sidebar section with a path of its own: **Automations** (`autopilot.automations`,
 `/settings/autopilot`: a status strip, Needs you, and every automation on the same split card, `?automation=`
@@ -868,7 +876,7 @@ Both live in zustand stores in `apps/web/src/state/ui.ts`, persisted in localSto
 | `apps/web/src/components/settings/settingsNavigation.ts` | `useOpenSettings`, `useLeaveWindow`                              |
 | `apps/web/src/components/settings/pages/`              | The group pages, the project page and the editor sub-pages      |
 | `apps/web/src/components/settings/integrations.logic.ts` | GitHub's and the terminal's status dots (tested)                |
-| `apps/web/src/components/settings/agents/` | Settings → Agents: the page, the split card, Providers (list, Add provider dialog, empty state), Models (tiers, custom models) and Operations; `agents.logic.ts` is tested |
+| `apps/web/src/components/settings/agents/` | Settings → Agents: the page, the split card, Providers (list, Add provider dialog, empty state), Models (tiers, custom models), Custom hand-offs and Operations; `agents.logic.ts` is tested |
 | `apps/web/src/components/settings/ProviderEditors.tsx`, `providers.logic.ts` | Each provider's editor, its dots and the selected provider (logic tested) |
 | `apps/web/src/components/settings/OperationModelLink.tsx`, `ProjectModelsSection.tsx` | The one-line links to an operation's row, and a project's reviewer model |
 | `apps/web/src/components/models/` | The shared model picker and its adapters (`ModelChoicePicker`, `CliModelPicker`, `T3ModelPicker`); options, search, disabled reasons, effort and the Operations list in `*.logic.ts` (tested) |

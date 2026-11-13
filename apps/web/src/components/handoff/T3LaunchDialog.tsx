@@ -2,9 +2,12 @@ import {
   clampRuntimeMode,
   defaultHandoffMode,
   planningSessionLabel,
+  renderCustomHandoffPrompt,
   suggestEpicsPrompt,
   taskNumberList,
   taskHandoffPrompt,
+  type CustomHandoff,
+  type CustomHandoffWorkspace,
   type PrFixInfo,
   type Project,
   type StartT3ThreadInput,
@@ -47,6 +50,7 @@ import {
   type Picks,
 } from "./handoff.logic";
 import { copyHandoffPrompt, copySuggestEpicsPrompt } from "./HandoffActions";
+import { HandoffBadge, HandoffNote } from "./HandoffPreset";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
 import { LaunchUnavailable, ToolbarSkeleton } from "./LaunchStates";
 import { usePlanPrompt } from "./PlanTasksDialog";
@@ -75,6 +79,10 @@ interface LaunchSubject {
   fixBranch?: string | null;
   /** Starts in the project's checkout whatever T3's default: planning writes no code. */
   checkout?: boolean;
+  /** A custom hand-off's workspace, which the dialog opens on. */
+  workspace?: CustomHandoffWorkspace | null;
+  /** The custom hand-off the dialog was opened from: named beside the title and under the composer. */
+  handoffName?: string;
 }
 
 /** The subject's launch mutation, with its id already bound. */
@@ -90,8 +98,8 @@ type LaunchOptionsQuery = ReturnType<typeof useT3LaunchOptions>;
 
 /**
  * "Start in T3 Code": a new-thread composer for a task (useDialogs().openT3Launch; with a `fixLinkId`, "Fix in →" on a
- * PR: Fix PRs' prompt for its problems, in a worktree from its branch) or for a project's Suggest epics
- * (openProjectT3Launch).
+ * PR: Fix PRs' prompt for its problems, in a worktree from its branch; with a `preset`, a custom hand-off's prompt,
+ * model and workspace) or for a project's Suggest epics (openProjectT3Launch).
  */
 export function T3LaunchDialog() {
   const target = useDialogs((s) => s.t3Launch);
@@ -107,9 +115,10 @@ export function T3LaunchDialog() {
       <DialogPopup className="max-w-220">
         {task && target?.kind === "task" ? (
           <TaskLaunch
-            key={`${task.id}:${target.fixLinkId ?? ""}`}
+            key={`${task.id}:${target.fixLinkId ?? ""}:${target.preset?.id ?? ""}`}
             task={task}
             fixLinkId={target.fixLinkId ?? null}
+            preset={target.preset ?? null}
             onDone={close}
           />
         ) : null}
@@ -134,10 +143,20 @@ export function T3LaunchDialog() {
   );
 }
 
-function TaskLaunch({ task, fixLinkId, onDone }: { task: TaskSummary; fixLinkId: string | null; onDone: () => void }) {
+function TaskLaunch({
+  task,
+  fixLinkId,
+  preset,
+  onDone,
+}: {
+  task: TaskSummary;
+  fixLinkId: string | null;
+  preset: CustomHandoff | null;
+  onDone: () => void;
+}) {
   const fix = usePrFix(fixLinkId);
-  if (!fixLinkId) return <TaskLaunchContent task={task} fix={null} onDone={onDone} />;
-  if (fix.data) return <TaskLaunchContent task={task} fix={fix.data} onDone={onDone} />;
+  if (!fixLinkId) return <TaskLaunchContent task={task} fix={null} preset={preset} onDone={onDone} />;
+  if (fix.data) return <TaskLaunchContent task={task} fix={fix.data} preset={null} onDone={onDone} />;
   return (
     <>
       <DialogHeader>
@@ -167,8 +186,20 @@ function TaskLaunch({ task, fixLinkId, onDone }: { task: TaskSummary; fixLinkId:
   );
 }
 
-function TaskLaunchContent({ task, fix, onDone }: { task: TaskSummary; fix: PrFixInfo | null; onDone: () => void }) {
-  const options = useT3LaunchOptions(task.id);
+function TaskLaunchContent({
+  task,
+  fix,
+  preset,
+  onDone,
+}: {
+  task: TaskSummary;
+  fix: PrFixInfo | null;
+  /** The custom hand-off the dialog opens on: its prompt, and its model and workspace picked. */
+  preset: CustomHandoff | null;
+  onDone: () => void;
+}) {
+  // A hand-off's options start on its model rather than the task's.
+  const options = useT3LaunchOptions(task.id, preset?.id);
   const modelSettings = useSettings().data;
   const mutation = useStartT3Thread({ silent: true });
   // An epic's thread orchestrates its tasks, which carry the plans, so it has no "Plan with me"; nor has a follow-up on
@@ -188,25 +219,39 @@ function TaskLaunchContent({ task, fix, onDone }: { task: TaskSummary; fix: PrFi
         integrationBranch: fix.branch,
         fixBranch: fix.branch,
       }
-    : {
-        label: `#${task.number} ${task.title}`,
-        promptFor: (plan) =>
-          taskHandoffPrompt({
-            task,
-            boardUrl: window.location.origin,
-            mode: epic ? "orchestrate" : followup ? "followup" : plan ? "plan" : "work",
-            linkedThread: true,
-            epicBranch,
-          }),
-        planToggle: !epic && !followup,
-        // An epic has no suggested model, so it starts on T3's default model, which is also what planning uses.
-        initialPlan: defaultHandoffMode(task) === "plan",
-        successDescription: `#${task.number} is linked to the new thread.`,
-        copyPrompt: () => copyHandoffPrompt(task, defaultHandoffMode(task), modelSettings, epicBranch),
-        offerOpen: false,
-        // A follow-up starts where the code is: the epic's branch while it's only there, else the default branch.
-        integrationBranch: epic ? null : followup ? epicBranch : task.integrationBranch,
-      };
+    : preset
+      ? {
+          label: `#${task.number} ${task.title}`,
+          // The hand-off's own text: it has no planning variant, so there is no Plan with me.
+          promptFor: () => renderCustomHandoffPrompt(preset, task, window.location.origin),
+          planToggle: false,
+          initialPlan: false,
+          successDescription: `#${task.number} is linked to the new thread.`,
+          copyPrompt: () => copyToClipboard(renderCustomHandoffPrompt(preset, task, window.location.origin), "prompt"),
+          offerOpen: false,
+          integrationBranch: task.integrationBranch,
+          workspace: preset.workspace,
+          handoffName: preset.name,
+        }
+      : {
+          label: `#${task.number} ${task.title}`,
+          promptFor: (plan) =>
+            taskHandoffPrompt({
+              task,
+              boardUrl: window.location.origin,
+              mode: epic ? "orchestrate" : followup ? "followup" : plan ? "plan" : "work",
+              linkedThread: true,
+              epicBranch,
+            }),
+          planToggle: !epic && !followup,
+          // An epic has no suggested model, so it starts on T3's default model, which is also what planning uses.
+          initialPlan: defaultHandoffMode(task) === "plan",
+          successDescription: `#${task.number} is linked to the new thread.`,
+          copyPrompt: () => copyHandoffPrompt(task, defaultHandoffMode(task), modelSettings, epicBranch),
+          offerOpen: false,
+          // A follow-up starts where the code is: the epic's branch while it's only there, else the default branch.
+          integrationBranch: epic ? null : followup ? epicBranch : task.integrationBranch,
+        };
   const starter: Starter = {
     isPending: mutation.isPending,
     start: (input, { onSuccess, onError }) =>
@@ -323,7 +368,10 @@ function LaunchContent({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>{subject.fixBranch ? "Fix the PR in T3 Code" : "Start in T3 Code"}</DialogTitle>
+        <DialogTitle className="flex flex-wrap items-center gap-2">
+          {subject.fixBranch ? "Fix the PR in T3 Code" : "Start in T3 Code"}
+          {subject.handoffName ? <HandoffBadge name={subject.handoffName} /> : null}
+        </DialogTitle>
         <DialogDescription>{subject.label}</DialogDescription>
       </DialogHeader>
       <div className="px-6 pb-6">
@@ -549,7 +597,10 @@ function Composer({
           startsFrom={workspace?.mode === "new_worktree" ? workspace.baseRef : null}
         />
       ) : null}
-      {options?.suggestion ? <SuggestionNote suggestion={options.suggestion} planWithMe={planWithMe} /> : null}
+      {options?.suggestion ? (
+        <SuggestionNote suggestion={options.suggestion} planWithMe={planWithMe} handoffName={subject.handoffName} />
+      ) : null}
+      {subject.handoffName ? <HandoffNote name={subject.handoffName} /> : null}
     </form>
   );
 }
@@ -577,7 +628,17 @@ function FixBranchNote({ branch, startsFrom }: { branch: string; startsFrom: str
 }
 
 /** The task's model (a custom model its label picks, else its suggested tier), and whether the dialog is using it. */
-function SuggestionNote({ suggestion, planWithMe }: { suggestion: T3LaunchSuggestion; planWithMe: boolean }) {
+function SuggestionNote({
+  suggestion,
+  planWithMe,
+  handoffName,
+}: {
+  suggestion: T3LaunchSuggestion;
+  planWithMe: boolean;
+  /** The custom hand-off the dialog opened from, whose model the suggestion is when it picked one. */
+  handoffName?: string | undefined;
+}) {
+  const fromHandoff = handoffName && suggestion.source === "automation";
   const status = planWithMe
     ? "Not used while planning."
     : suggestion.unavailable
@@ -586,9 +647,11 @@ function SuggestionNote({ suggestion, planWithMe }: { suggestion: T3LaunchSugges
   return (
     <p className="mt-2 px-1 text-xs text-muted-foreground">
       <span className="font-medium text-foreground">
-        {suggestion.source === "label"
-          ? `Model: ${suggestion.name}, from label ${suggestion.label}`
-          : `Suggested model: ${suggestion.tier ?? suggestion.name}`}
+        {fromHandoff
+          ? `Model: ${suggestion.tier ? `${suggestion.name} tier` : suggestion.name}, from the hand-off`
+          : suggestion.source === "label"
+            ? `Model: ${suggestion.name}, from label ${suggestion.label}`
+            : `Suggested model: ${suggestion.tier ?? suggestion.name}`}
       </span>
       {suggestion.reason ? ` · ${suggestion.reason}` : null}
       {status ? (

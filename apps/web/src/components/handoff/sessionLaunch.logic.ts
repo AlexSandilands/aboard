@@ -4,6 +4,7 @@ import {
   taskNumberList,
   type AgentHarness,
   type CliEffort,
+  type CustomHandoffWorkspace,
   type SessionLaunchOptions,
   type SessionWorkspace,
   type StartSessionResult,
@@ -34,6 +35,20 @@ export function initialWhere(
     ? (branches.find((b) => b === `origin/${integrationBranch}`) ?? branches.find((b) => b === integrationBranch))
     : undefined;
   return { mode: "new_worktree", baseRef: epicRef ?? options.defaultBaseRef };
+}
+
+/**
+ * Where a custom hand-off's dialog starts: the checkout, the task's own worktree when it has one, else what the dialog
+ * would start in anyway (a new worktree in a repository).
+ */
+export function presetWhere(
+  options: Pick<SessionLaunchOptions, "isRepo" | "defaultBaseRef" | "branches" | "taskBranches">,
+  workspace: CustomHandoffWorkspace,
+  integrationBranch: string | null = null,
+): SessionWhere {
+  if (workspace === "current") return { mode: "current" };
+  const own = workspace === "task_worktree" && options.isRepo ? taskWorktreeWhere(options) : null;
+  return own ?? initialWhere(options, integrationBranch);
 }
 
 /** The workspace to send, or null while a worktree has no branch to start from. */
@@ -67,11 +82,15 @@ export function initialSessionPicks(
   harness: AgentHarness,
   plan: boolean,
   integrationBranch: string | null,
+  /** A custom hand-off's workspace, which the dialog opens on. */
+  presetWorkspace: CustomHandoffWorkspace | null = null,
 ): SessionPicks {
   return {
     model: initialModel(options, harness, plan),
     effort: initialEffort(options, harness, plan),
-    where: initialWhere(options, integrationBranch),
+    where: presetWorkspace
+      ? presetWhere(options, presetWorkspace, integrationBranch)
+      : initialWhere(options, integrationBranch),
   };
 }
 
@@ -95,10 +114,15 @@ export function syncSessionPicks(
   harness: AgentHarness,
   plan: boolean,
   integrationBranch: string | null,
+  presetWorkspace: CustomHandoffWorkspace | null = null,
 ): SessionPickState {
   if (!options) return state;
   if (state.picks && (options === state.seededFrom || state.touched)) return state;
-  return { ...state, picks: initialSessionPicks(options, harness, plan, integrationBranch), seededFrom: options };
+  return {
+    ...state,
+    picks: initialSessionPicks(options, harness, plan, integrationBranch, presetWorkspace),
+    seededFrom: options,
+  };
 }
 
 /** A pick by the user: the choices change, and a refresh of the options stops moving them. */

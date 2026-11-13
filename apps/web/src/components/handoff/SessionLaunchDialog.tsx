@@ -1,13 +1,15 @@
 import {
   AGENT_HARNESSES,
+  customHandoffLabel,
+  renderCustomHandoffPrompt,
   taskHandoffPrompt,
   taskWindowName,
   defaultHandoffMode,
   type AgentHarness,
   type CliEffort,
+  type CustomHandoff,
   type PrFixInfo,
   type SessionLaunchOptions,
-  type StartSessionResult,
   type TaskSummary,
 } from "@repo/contracts";
 import { ArrowUpIcon, LightbulbIcon } from "lucide-react";
@@ -30,6 +32,8 @@ import { copyFixPrompt } from "./FixPrMenu";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
 import { LaunchUnavailable, ToolbarSkeleton } from "./LaunchStates";
 import { BranchPicker } from "./BranchPicker";
+import { announceSession } from "./announceSession";
+import { HandoffBadge, HandoffNote } from "./HandoffPreset";
 import { ComposerControl, ComposerStrip } from "./T3LaunchPickers";
 import {
   branchRows,
@@ -40,7 +44,6 @@ import {
   pickSessionBy,
   picksAfterPlanToggle,
   pinnedBranchRows,
-  startedDescription,
   syncSessionPicks,
   taskWorktreeWhere,
   toSessionWorkspace,
@@ -60,7 +63,8 @@ const WHERE_LABELS = {
  * "New Claude Code / Codex / Copilot CLI session": the hand-off prompt to edit, a model and where to run, then the CLI
  * opens in a terminal with the prompt and the board links the session, or, for Codex, the session links itself
  * (useDialogs().openSessionLaunch). With a `fixLinkId`
- * ("Fix in →" on a PR) the prompt is Fix PRs' for the PR's problems and the session works on the PR's own branch.
+ * ("Fix in →" on a PR) the prompt is Fix PRs' for the PR's problems and the session works on the PR's own branch. With
+ * a `preset` it opens on a custom hand-off's prompt, model and workspace.
  */
 export function SessionLaunchDialog() {
   const target = useDialogs((s) => s.sessionLaunch);
@@ -71,10 +75,11 @@ export function SessionLaunchDialog() {
       <DialogPopup className="max-w-220">
         {task && target ? (
           <SessionLaunch
-            key={`${task.id}:${target.harness}:${target.fixLinkId ?? ""}`}
+            key={`${task.id}:${target.harness}:${target.fixLinkId ?? ""}:${target.preset?.id ?? ""}`}
             task={task}
             harness={target.harness}
             fixLinkId={target.fixLinkId ?? null}
+            preset={target.fixLinkId ? null : (target.preset ?? null)}
             onDone={close}
           />
         ) : null}
@@ -87,21 +92,25 @@ function SessionLaunch({
   task,
   harness,
   fixLinkId,
+  preset,
   onDone,
 }: {
   task: TaskSummary;
   harness: AgentHarness;
   fixLinkId: string | null;
+  preset: CustomHandoff | null;
   onDone: () => void;
 }) {
-  const options = useSessionLaunchOptions(task.id);
+  // A hand-off's options start on its model rather than the task's.
+  const options = useSessionLaunchOptions(task.id, preset?.id);
   const fix = usePrFix(fixLinkId, harness);
   return (
     <>
       <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
+        <DialogTitle className="flex flex-wrap items-center gap-2">
           <HarnessIcon harness={harness} className="size-4" />
           {fixLinkId ? `Fix the PR in ${harnessLabel(harness)}` : `New ${harnessLabel(harness)} session`}
+          {preset ? <HandoffBadge name={preset.name} /> : null}
         </DialogTitle>
         <DialogDescription>
           #{task.number} {task.title}
@@ -131,6 +140,7 @@ function SessionLaunch({
                 : null
             }
             fix={fixLinkId ? (fix.data ?? null) : null}
+            preset={preset}
             onDone={onDone}
           />
         )}
@@ -139,76 +149,13 @@ function SessionLaunch({
   );
 }
 
-/**
- * Toasts what starting a session did. A terminal that didn't open offers the command to run by hand; a CLI that got
- * the short prompt gets the full one on the clipboard (or a button to copy it, when the clipboard refuses).
- */
-export function announceSession(
-  result: StartSessionResult,
-  {
-    harness,
-    prompt,
-    taskNumbers,
-    existingWorktree = false,
-  }: {
-    harness: AgentHarness;
-    prompt: string;
-    taskNumbers: readonly number[];
-    /** The session runs in a task's existing worktree rather than a new one. */
-    existingWorktree?: boolean;
-  },
-) {
-  if (!result.launched) {
-    const toastId = toastManager.add({
-      type: "error",
-      title: "Couldn't open a terminal",
-      description: `${result.error ?? "The terminal didn't start."} Run the command yourself instead${result.branch ? `: it runs in ${existingWorktree ? "the task's worktree" : "the new worktree"} on ${result.branch}` : ""}.`,
-      actionProps: {
-        children: "Copy command",
-        onClick: () => {
-          toastManager.close(toastId);
-          copyToClipboard(result.command, "command");
-        },
-      },
-    });
-    return;
-  }
-  const announce = (copied: boolean) => {
-    const toastId = toastManager.add({
-      type: "success",
-      title: `Started ${harnessLabel(harness)}`,
-      description: [result.shortReason, startedDescription(result, harness, taskNumbers, copied, existingWorktree)]
-        .filter(Boolean)
-        .join(" "),
-      // The clipboard can refuse a write that comes after the request; a click is a fresh gesture.
-      ...(result.shortPrompt && !copied
-        ? {
-            actionProps: {
-              children: "Copy prompt",
-              onClick: () => {
-                toastManager.close(toastId);
-                copyToClipboard(prompt, "prompt");
-              },
-            },
-          }
-        : {}),
-    });
-  };
-  // The CLI got a short pointer to the task; the full prompt goes on the clipboard to paste into it.
-  if (result.shortPrompt) {
-    navigator.clipboard.writeText(prompt).then(
-      () => announce(true),
-      () => announce(false),
-    );
-  } else announce(false);
-}
-
 function Composer({
   task,
   harness,
   options,
   failure,
   fix,
+  preset,
   onDone,
 }: {
   task: TaskSummary;
@@ -219,6 +166,8 @@ function Composer({
   failure: { message: string; onRetry: () => void } | null;
   /** Set to fix a PR: its prompt and branch, which the session works on. */
   fix: PrFixInfo | null;
+  /** The custom hand-off the dialog opens on: its prompt, and its model and workspace picked. */
+  preset: CustomHandoff | null;
   onDone: () => void;
 }) {
   // An epic's session orchestrates its tasks, which carry the plans, so it has no "Plan with me"; nor has a follow-up
@@ -230,25 +179,28 @@ function Composer({
   const promptFor = (plan: boolean) =>
     fix
       ? fix.prompt
-      : taskHandoffPrompt({
-          task,
-          boardUrl: window.location.origin,
-          mode: epic ? "orchestrate" : followup ? "followup" : plan ? "plan" : "work",
-          linkedSession: true,
-          // Codex picks its own session id, so its prompt asks it to link itself.
-          sessionHarness: harness,
-          epicBranch,
-        });
-  const [plan, setPlan] = useState(!fix && defaultHandoffMode(task) === "plan");
+      : preset
+        ? renderCustomHandoffPrompt(preset, task, window.location.origin)
+        : taskHandoffPrompt({
+            task,
+            boardUrl: window.location.origin,
+            mode: epic ? "orchestrate" : followup ? "followup" : plan ? "plan" : "work",
+            linkedSession: true,
+            // Codex picks its own session id, so its prompt asks it to link itself.
+            sessionHarness: harness,
+            epicBranch,
+          });
+  // A hand-off's own text has no planning variant, so its dialog has no Plan with me.
+  const [plan, setPlan] = useState(!fix && !preset && defaultHandoffMode(task) === "plan");
   const [prompt, setPrompt] = useState(() => promptFor(plan));
   // The choices start from the options. The dialog may open on cached ones that a refresh then changes (the task's
   // model, say), so until the user picks something they follow the newest; after that a refresh never moves them.
   // A follow-up starts where the code is: the epic's branch while it's only there, else the default branch.
   const integrationBranch = followup ? epicBranch : task.integrationBranch;
   const [pickState, setPickState] = useState(() =>
-    syncSessionPicks(emptySessionPickState, options, harness, plan, integrationBranch),
+    syncSessionPicks(emptySessionPickState, options, harness, plan, integrationBranch, preset?.workspace ?? null),
   );
-  const synced = syncSessionPicks(pickState, options, harness, plan, integrationBranch);
+  const synced = syncSessionPicks(pickState, options, harness, plan, integrationBranch, preset?.workspace ?? null);
   if (synced !== pickState) setPickState(synced);
   const ready = options && synced.picks ? { options, ...synced.picks } : null;
   // The models the CLI lists, for the picker; anything else can still be typed while the scan runs or if it fails.
@@ -314,6 +266,8 @@ function Composer({
         harness,
         mode: mode ?? (plan ? "plan" : "work"),
         prompt,
+        // Linked under the hand-off's name, which its prompt also gives a session that links itself.
+        ...(preset ? { label: customHandoffLabel(preset, task) } : {}),
         ...(images.ids.length > 0 ? { attachmentIds: images.ids } : {}),
         model: ready.model.trim() || null,
         // A model that takes no effort gets none, whatever was picked for the one before it.
@@ -379,7 +333,7 @@ function Composer({
           ) : failure ? null : (
             <ToolbarSkeleton />
           )}
-          {fix || epic || followup ? null : (
+          {fix || epic || followup || preset ? null : (
             <ComposerControl
               aria-pressed={plan}
               onClick={togglePlan}
@@ -440,9 +394,12 @@ function Composer({
           {options.model && !plan ? (
             <span className="block">
               <span className="font-medium text-foreground">
-                {options.model.source === "label"
-                  ? `Model: ${options.model.name}, from label ${options.model.label}`
-                  : `Suggested model: ${options.model.name}`}
+                {preset && preset.model !== "inherit"
+                  ? // The options were loaded for the hand-off, so this is the model it picked.
+                    `Model: ${options.model.name}${"tier" in preset.model ? " tier" : ""}, from the hand-off`
+                  : options.model.source === "label"
+                    ? `Model: ${options.model.name}, from label ${options.model.label}`
+                    : `Suggested model: ${options.model.name}`}
               </span>
               {options.models[harness]
                 ? null
@@ -457,6 +414,7 @@ function Composer({
             : null}
         </p>
       ) : null}
+      {preset ? <HandoffNote name={preset.name} /> : null}
     </form>
   );
 }

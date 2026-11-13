@@ -25,6 +25,7 @@ import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/compone
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { HarnessIcon, T3Icon, useHandoffClis } from "~/components/sessions/SessionParts";
 import { copyToClipboard } from "~/components/task/InlineInput";
+import { CustomHandoffItems } from "./CustomHandoffMenu";
 import { canStartProjectT3Thread } from "./handoff.logic";
 import { PrefetchSessionLaunchOptions, PrefetchT3LaunchOptions } from "./LaunchPrefetch";
 import { cn } from "~/lib/utils";
@@ -189,8 +190,8 @@ export function copyTaskReference(task: Pick<TaskSummary, "id" | "number" | "tit
 
 /**
  * Hands a task to an agent: starts a T3 Code thread (when `canStartT3`, see canStartT3Thread), a Claude Code or
- * Copilot CLI session in a terminal (when the CLI is installed; an epic's orchestrates its tasks), or
- * copies a ready-to-paste prompt for any harness.
+ * Copilot CLI session in a terminal (when the CLI is installed; an epic's orchestrates its tasks), one of the user's
+ * custom hand-offs (CustomHandoffItems), or copies a ready-to-paste prompt for any harness.
  */
 export function HandoffMenu({
   task,
@@ -240,6 +241,7 @@ export function HandoffMenu({
             New {AGENT_HARNESSES[harness].label} session…
           </MenuItem>
         ))}
+        <CustomHandoffItems task={task} canStartT3={canStartT3} clis={sessionClis} popupProps={cardHandlers} />
         {canStartT3 || sessionClis.length ? <MenuSeparator /> : null}
         {suggested === "orchestrate" ? (
           // An epic has one prompt: the one that starts its tasks.
