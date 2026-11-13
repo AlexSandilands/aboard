@@ -22,7 +22,8 @@ brought up to date. The sizes, counts and measurements are still those of 2026-1
   - Every part has a mature crate (axum, rusqlite, rmcp, tokio). The same SQLite file and migrations carry over,
     and our tests specify the behaviour.
   - It can ship behind today's React app and Electron shell with no visible change. That alone takes the
-    always-on part from ~96 MB to tens of MB and takes Node out of the runtime.
+    server process from ~96 MB to tens of MB and takes Node out of the runtime. Electron still sits in the tray
+    until the window is replaced, so most of the ~565 MB stays.
   - About 3.5–6 person-months.
 - **The GPUI window: not yet.**
   - It is buildable, and it would look nearly the same: same layout, type, colours and themes, and possibly
@@ -41,7 +42,8 @@ brought up to date. The sizes, counts and measurements are still those of 2026-1
 - **Visible losses:** frosted glass (popovers become flat translucent surfaces), the WYSIWYG editor unless we
   build one, agents' HTML art without a webview, and the board in a browser unless the web UI stays alongside.
 
-A full rewrite, done server first, is about 11–21 person-months to reach today's features.
+A full rewrite, done server first, is about 11–21 person-months to reach today's features, before two things
+this estimate leaves out: an updater, and a cached view per card with its guards.
 
 ## What a rewrite has to cover
 
@@ -194,8 +196,8 @@ competing signal-based framework, and the numbers come from their own unpublishe
 - **Zed isn't proof for an app like ours.** Zed's window has "tens of nodes and a few thousand elements"
   ([zed#63800](https://github.com/zed-industries/zed/pull/63800), closed 2026-09-24), and its editor is one custom
   element that bypasses GPUI's layout and views.
-- **The post's own verdict** is that GPUI is "probably good enough for many use-cases", and that a full frame is
-  relatively cheap.
+- **The post's own verdict** is that GPUI's state model is a dead end for complex desktop applications. It
+  grants that a full frame is relatively cheap, which makes GPUI "probably good enough for many use-cases".
 
 **What it means for the board.** A frame at 60 Hz has 16.7 ms and at 280 Hz has 3.6 ms. The board shows every
 card with no virtualisation, and a dense board is hundreds of cards of a few dozen elements each: more elements
@@ -391,7 +393,7 @@ packages only say a newer version is out ([desktop.md](../features/desktop.md#up
 **Packaging:** `cargo-packager` produces NSIS (as now) or MSI. Zed uses Inno Setup and winget. Signing is the
 same unsolved question as today; Zed signs through Azure Trusted Signing.
 
-**Updates:** electron-updater has no place in a Rust app, so the updater (the check, the download, the swap on
+**Updates, on Linux too:** electron-updater has no place in a Rust app, so the updater (the check, the download, the swap on
 restart, the release feed CI writes) would be rebuilt or taken from a crate. None was researched here, and
 [Effort](#effort) doesn't count it.
 
@@ -415,7 +417,8 @@ but nothing like Vite's hot reload.
 
 Rough person-months for one developer fluent in Rust, working with agents, to reach today's features. These are
 judgement, not measurement. GPUI's weekly API churn and agents' thinner knowledge of it are already counted in
-the UI rows.
+the UI rows. Not counted: an updater ([Windows](#windows)), and the per-card cached views of
+[How GPUI redraws](#how-gpui-redraws).
 
 | Area                                                                                                | Person-months |
 | --------------------------------------------------------------------------------------------------- | ------------- |
@@ -441,7 +444,7 @@ because so much of it is building what React, dnd-kit and the browser give us no
       shell starts it instead of `server.mjs`, and the React app doesn't change.
    2. Prove it the cheap way: run the existing HTTP route tests against both servers, and compare MCP tool
       output for a recorded set of calls character by character, since agents read that text.
-   3. The always-on part drops from ~96 MB to a few tens of MB, and Node leaves the runtime. Users notice
+   3. The server process drops from ~96 MB to a few tens of MB, and Node leaves the runtime. Users notice
       nothing, which is the point.
    4. Then build the GPUI window as a client of that server, opt-in at first beside the web UI, and retire Electron
       once it covers everything.
@@ -502,11 +505,14 @@ their own link in the text aren't repeated.
 | `rmcp`, the official MCP SDK, with a streamable HTTP server as a Tower service | [crates.io/crates/rmcp](https://crates.io/crates/rmcp) | 3.9.0, 2026-11-05 |
 | `tray-icon`, `ksni`, `auto-launch` | Their crates.io pages | 0.26, unrecorded, 0.6 |
 
-**Stated without a recorded source.** Check these before relying on them:
+**Stated without a recorded source.** Check these before relying on them. The list isn't complete: treat any
+claim about GPUI or a crate that has no link here or in the text the same way.
 
 - That `tray-icon` on Windows must share GPUI's message loop. It follows from how the crate works, and nobody
   was found doing it.
 - Zed's glibc 2.31 floor, and its use of Inno Setup, winget and Azure Trusted Signing.
 - The formats `cargo-packager` produces.
 - The versions of `reqwest`, `tokio-tungstenite`, `ksni` and `resvg`.
+- That GPUI needs the latest stable Rust, and the state of IME on Linux.
+- The Electron 45 and Zed 1.27 download sizes, read from their release pages on 2026-11-04.
 
