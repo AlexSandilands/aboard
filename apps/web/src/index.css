@@ -1885,7 +1885,7 @@ code {
 
 /* Diagnostics-style tables: row separators only, uppercase headers. The table fills the column and its cells wrap at
    word boundaries: the root `.markdown` wrapping (overflow-wrap: anywhere) would let columns shrink to a letter or two,
-   so it is reset here and each column keeps a minimum width. A table that still can't fit (many columns, a long word)
+   so it is reset here and each column is at least as wide as its longest word. A table that still can't fit (many columns, a long word)
    scrolls inside its container, never the panel or window, with the edges that have more faded out (MarkdownTable
    sets data-more). */
 .markdown .markdown-table-container {
@@ -1918,10 +1918,6 @@ code {
   padding: 0.45rem 0.75rem;
   text-align: left;
   vertical-align: top;
-}
-
-.markdown td {
-  min-width: 6em;
 }
 
 .markdown thead th {

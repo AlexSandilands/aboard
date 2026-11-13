@@ -49,7 +49,7 @@ Radius scale: sm = r-4px, md = r-2px, lg = r, xl = r+4, 2xl = r+8, 3xl = r+12.
   `<aside data-alert>`, and `MarkdownAlert` adds the icon and title. `.markdown-alert` is a 3px rule and a title in the
   type's `-foreground` colour (info, success, `--important-foreground` violet, warning, destructive); the body keeps
   the prose colour. Any other marker stays a plain quote, as on GitHub.
-- **Tables** fill the column and wrap at word boundaries, each body cell at least `6em`. A table that still can't fit
+- **Tables** fill the column and wrap at word boundaries, so a column is as narrow as its longest word. A table that still can't fit
   scrolls inside `.markdown-table-container`, never the panel or window; `MarkdownTable` sets `data-more` to the
   edges with more content, which a `mask-image` fades (a mask, so it works on glass and any theme).
 
