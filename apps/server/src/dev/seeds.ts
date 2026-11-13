@@ -14,6 +14,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createContext } from "../context.ts";
+import { CART_DRAWER_DESIGN, EDGE_CACHE_CONTEXT, INVOICE_PDFS_SPEC, REFUNDS_RATE_LIMIT } from "./longDescriptions.ts";
 import { seedModelPrices, seedUsage } from "./usageSeed.ts";
 import type { Db } from "../db/database.ts";
 import type { Services } from "../services/types.ts";
@@ -125,7 +126,11 @@ const basic: Scenario = (s, opts) => {
     { context: "Backlog task with a plan already written.", ...steps("Retry", ["Add backoff", "Log final failures"]) },
     AGENT,
   );
-  const edgeCache = addTask(s, shop.id, { title: "Cache product images at the edge", status: "planned" });
+  const edgeCache = addTask(s, shop.id, {
+    title: "Cache product images at the edge",
+    status: "planned",
+    plan: { context: EDGE_CACHE_CONTEXT, ...steps("Do it", ["Implement", "Test"]) },
+  });
   addTask(s, shop.id, {
     title: "Audit the checkout copy",
     status: "planned",
@@ -141,7 +146,7 @@ const basic: Scenario = (s, opts) => {
   const active = addTask(s, shop.id, {
     title: "Rewrite the cart drawer",
     status: "in_progress",
-    description: "The drawer re-renders the whole page on every quantity change.",
+    description: CART_DRAWER_DESIGN,
     plan: {
       context: "**Approach:** move cart state into a store and render the drawer from it.",
       phases: [
@@ -231,8 +236,16 @@ const basic: Scenario = (s, opts) => {
     for (const [child, status] of tasks) addTask(s, shop.id, { title: child, status, epicId: epic.id });
   }
 
-  const invoices = addTask(s, billing.id, { title: "Invoice PDFs in the customer's language", status: "backlog" });
-  addTask(s, billing.id, { title: "Rate-limit the refunds endpoint", status: "in_progress" });
+  const invoices = addTask(s, billing.id, {
+    title: "Invoice PDFs in the customer's language",
+    status: "backlog",
+    description: INVOICE_PDFS_SPEC,
+  });
+  addTask(s, billing.id, {
+    title: "Rate-limit the refunds endpoint",
+    status: "in_progress",
+    description: REFUNDS_RATE_LIMIT,
+  });
   addTask(s, billing.id, { title: "Nightly reconciliation report", status: "done" });
 
   // A dependency chain across both projects: edge cache > delivery estimates > invoice PDFs, with the cart

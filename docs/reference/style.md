@@ -49,8 +49,11 @@ Radius scale: sm = r-4px, md = r-2px, lg = r, xl = r+4, 2xl = r+8, 3xl = r+12.
   `<aside data-alert>`, and `MarkdownAlert` adds the icon and title. `.markdown-alert` is a 3px rule and a title in the
   type's `-foreground` colour (info, success, `--important-foreground` violet, warning, destructive); the body keeps
   the prose colour. Any other marker stays a plain quote, as on GitHub.
-- **Tables** fill the column and wrap at word boundaries, so a column is as narrow as its longest word. A table that still can't fit
-  scrolls inside `.markdown-table-container`, never the panel or window; `MarkdownTable` sets `data-more` to the
+- **Code blocks.** `CodeBlock` wraps the `pre` in `.markdown-code-container`, which takes the block's margin and holds
+  a copy button over the top right corner (outside the `pre`, so it stays put while long lines scroll). The button
+  shows on hover or keyboard focus, always on touch, and turns into a tick for a moment after copying (`useCopy`).
+- **Tables** are as wide as their content, up to the column, and wrap at word boundaries, headers included, so a
+  column is as narrow as its longest word. A table that still can't fit scrolls inside `.markdown-table-container`, never the panel or window; `MarkdownTable` sets `data-more` to the
   edges with more content, which a `mask-image` fades (a mask, so it works on glass and any theme).
 
 ## 3. Primitives — `W/components/ui/`

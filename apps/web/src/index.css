@@ -1427,7 +1427,7 @@ code {
 .markdown ol,
 .markdown blockquote,
 .markdown .markdown-alert,
-.markdown pre,
+.markdown .markdown-code-container,
 .markdown .markdown-table-container {
   margin: 0.65rem 0;
 }
@@ -1635,6 +1635,8 @@ code {
   font-size: 0.75rem;
 }
 
+/* A fenced block sits in `.markdown-code-container` (CodeBlock), which takes the block's margin and holds the copy
+   button over the pre's corner. */
 .markdown pre {
   max-width: 100%;
   overflow-x: auto;
@@ -1716,7 +1718,8 @@ code {
 }
 
 /* The document size (Markdown size="md"), for the task window: a real heading scale and roomier code and tables. The
-   reading measure and the base size are on the element (Markdown.tsx). */
+   base size and the width cap are on the element (Markdown.tsx): one cap for the whole document, never one per block,
+   since a `ch` cap on each block resolves in that block's own font size and gives every kind of block a different edge. */
 .markdown.markdown-md h1,
 .markdown.markdown-md h2,
 .markdown.markdown-md h3 {
@@ -1751,7 +1754,7 @@ code {
 .markdown.markdown-md ol,
 .markdown.markdown-md blockquote,
 .markdown.markdown-md .markdown-alert,
-.markdown.markdown-md pre,
+.markdown.markdown-md .markdown-code-container,
 .markdown.markdown-md .markdown-table-container {
   margin: 0.85rem 0;
 }
@@ -1883,11 +1886,12 @@ code {
   }
 }
 
-/* Diagnostics-style tables: row separators only, uppercase headers. The table fills the column and its cells wrap at
-   word boundaries: the root `.markdown` wrapping (overflow-wrap: anywhere) would let columns shrink to a letter or two,
-   so it is reset here and each column is at least as wide as its longest word. A table that still can't fit (many columns, a long word)
-   scrolls inside its container, never the panel or window, with the edges that have more faded out (MarkdownTable
-   sets data-more). */
+/* Diagnostics-style tables: row separators only. A table is as wide as its content, up to the column, and its cells
+   wrap at word boundaries: the root `.markdown` wrapping (overflow-wrap: anywhere) would let columns shrink to a letter
+   or two, so it is reset here and each column is at least as wide as its longest word. Headers wrap like any cell: kept
+   on one line, a long header holds width its column's cells don't need, and the columns with long text get what is
+   left. A table that still can't fit (many columns, a long word) scrolls inside its container, never the panel or
+   window, with the edges that have more faded out (MarkdownTable sets data-more). */
 .markdown .markdown-table-container {
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -1905,8 +1909,9 @@ code {
   mask-image: linear-gradient(to right, transparent, #000 1.75rem, #000 calc(100% - 1.75rem), transparent);
 }
 
+/* Auto width: a narrow table stays as wide as its content, a wide one fills the container and wraps its cells. */
 .markdown table {
-  width: 100%;
+  width: auto;
   border-collapse: collapse;
   overflow-wrap: normal;
   word-break: normal;
@@ -1924,7 +1929,6 @@ code {
   border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   padding-block: 0.55rem;
   font-weight: 600;
-  white-space: nowrap;
 }
 
 .markdown tbody td {

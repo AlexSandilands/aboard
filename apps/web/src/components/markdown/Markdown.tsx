@@ -116,8 +116,10 @@ export const Markdown = memo(function Markdown({
 }: {
   children: string;
   /**
-   * "sm" for panel body text, "xs" for notes and quotes, "md" for a document in the task window: larger type at a
-   * reading measure, a real heading scale, and pasted images in place at the column's width.
+   * "sm" for panel body text, "xs" for notes and quotes, "md" for a document in the task window: larger type, a real
+   * heading scale, and pasted images in place at the column's width. It stops at 56rem, the width of the window's
+   * main column beside the rail, so text, headings, code and tables share one right edge there, and lines don't run
+   * the whole window when it shows one column.
    */
   size?: "md" | "sm" | "xs";
   /** Layout only. */
@@ -135,7 +137,7 @@ export const Markdown = memo(function Markdown({
       className={cn(
         "markdown min-w-0 wrap-anywhere text-foreground/85",
         size === "md"
-          ? "markdown-md max-w-[72ch] text-[15px] leading-[1.65]"
+          ? "markdown-md max-w-[56rem] text-[15px] leading-[1.65]"
           : size === "sm"
             ? "text-[13px] leading-relaxed"
             : "text-xs leading-relaxed",

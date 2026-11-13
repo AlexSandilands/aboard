@@ -25,27 +25,12 @@ import { SettingsGroup, SettingsSectionHeader } from "~/components/settings/sett
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Sheet, SheetDescription, SheetHeader, SheetPopup, SheetTitle, SheetTrigger } from "~/components/ui/sheet";
-import { toastManager } from "~/components/ui/toast";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
+import { useCopy } from "~/hooks/useCopy";
 import { cn } from "~/lib/utils";
 import type { ChipTone } from "./insertChips.logic";
 import { SCRIPT_LANGUAGES, type ScriptRole } from "./scripts.logic";
 import { LanguageBadge, TONE, toneOf } from "./sdkStyle";
-
-/** Copies text, flipping `copied` on for a moment; a failure says so in a toast. */
-function useCopy(what: string) {
-  const [copied, setCopied] = useState(false);
-  const copy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      toastManager.add({ type: "error", title: `Couldn't copy the ${what}` });
-    }
-  };
-  return { copied, copy };
-}
 
 function CopyButton({ text, label }: { text: string; label: string }) {
   const { copied, copy } = useCopy("snippet");

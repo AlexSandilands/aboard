@@ -31,7 +31,8 @@ editor can't show (a table, HTML) opens as plain Markdown instead, and says so u
 
 A quote whose first line is `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` shows as a coloured
 callout, as on GitHub; in the editor it stays a quote with the marker visible. Table cells wrap, and a table too wide
-for the panel scrolls sideways inside its own box, with a fade on the side that has more.
+for the panel scrolls sideways inside its own box, with a fade on the side that has more. A code block shows a copy
+button in its top right corner when you point at it.
 
 ## Pasting images
 

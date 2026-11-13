@@ -9,6 +9,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { toastManager } from "~/components/ui/toast";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { useTestScript } from "~/state/customAutomations";
+import { useCopy } from "~/hooks/useCopy";
 import { useSettings } from "~/state/queries";
 import { testScriptRequest, withLanguage, type CustomForm } from "./customAutomations.logic";
 import { Choice, Field } from "./FormFields";
@@ -58,7 +59,7 @@ export function ScriptField({
   const label = check ? "Check script" : "Script";
   const setBody = (next: string) => patch(check ? { checkBody: next } : { body: next });
   const file = useRef<HTMLInputElement>(null);
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopy("script");
   const inserter = useRef<Inserter | null>(null);
   const boardVariables = useSettings().data?.automationVariables ?? [];
   const chips = insertChips({
@@ -91,16 +92,6 @@ export function ScriptField({
       ...(guessed ? (check ? { checkLanguage: guessed } : { language: guessed }) : {}),
       ...(check ? { checkBody: text } : { body: text }),
     });
-  };
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(body);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      toastManager.add({ type: "error", title: "Couldn't copy the script" });
-    }
   };
 
   return (
@@ -142,7 +133,7 @@ export function ScriptField({
               <FileUpIcon />
               Load from file
             </Button>
-            <Button size="xs" variant="ghost-muted" disabled={body === ""} onClick={() => void copy()}>
+            <Button size="xs" variant="ghost-muted" disabled={body === ""} onClick={() => void copy(body)}>
               {copied ? <CheckIcon /> : <CopyIcon />}
               {copied ? "Copied" : "Copy"}
             </Button>
