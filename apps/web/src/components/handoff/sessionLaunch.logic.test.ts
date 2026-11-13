@@ -11,6 +11,7 @@ import {
   syncSessionPicks,
   pickPinnedBranch,
   pinnedBranchRows,
+  presetWhere,
   taskWorktreeWhere,
   toSessionWorkspace,
   whereBranchLabel,
@@ -187,5 +188,34 @@ describe("the task's branches in the session dialog", () => {
     expect(startedDescription(result, "claude-code", [3], false, true)).toBe(
       "#3 is linked to the new session. It runs in the task's worktree on in-wt.",
     );
+  });
+});
+
+describe("a custom hand-off's workspace in the session dialog", () => {
+  const repo = { isRepo: true, defaultBaseRef: "origin/main", branches: ["main", "origin/main"] };
+  const own = {
+    name: "task/1",
+    sources: [{ kind: "agent_session" as const, label: "Claude Code session", inactive: false }],
+    worktreePath: "/wt/task-1",
+    inactive: false,
+  };
+
+  it("opens on the checkout, a new worktree, or the task's own worktree", () => {
+    expect(presetWhere(repo, "current")).toEqual({ mode: "current" });
+    expect(presetWhere(repo, "new_worktree")).toEqual({ mode: "new_worktree", baseRef: "origin/main" });
+    expect(presetWhere({ ...repo, taskBranches: [own] }, "task_worktree")).toEqual({
+      mode: "existing_worktree",
+      worktreePath: "/wt/task-1",
+      branch: "task/1",
+    });
+    // Asked for a new worktree, it gets one even when the task has its own.
+    expect(presetWhere({ ...repo, taskBranches: [own] }, "new_worktree").mode).toBe("new_worktree");
+  });
+
+  it("falls back to a new worktree when the task has none, and to the checkout outside a repository", () => {
+    expect(presetWhere(repo, "task_worktree")).toEqual({ mode: "new_worktree", baseRef: "origin/main" });
+    expect(presetWhere({ isRepo: false, defaultBaseRef: null, branches: [] }, "task_worktree")).toEqual({
+      mode: "current",
+    });
   });
 });

@@ -33,7 +33,7 @@ import { useBoardPick, useDialogs, type PlanTarget } from "~/state/ui";
 import { planSkillOf } from "./handoff.logic";
 import { AddImageControl, LaunchImageThumbs, useLaunchImages } from "./LaunchImages";
 import { effortAfterModelChange } from "./cliEffort.logic";
-import { announceSession } from "./SessionLaunchDialog";
+import { announceSession } from "./announceSession";
 import { ComposerStrip } from "./T3LaunchPickers";
 import { harnessLabel, modelError } from "./sessionLaunch.logic";
 

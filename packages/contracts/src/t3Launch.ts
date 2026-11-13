@@ -150,6 +150,8 @@ export const StartT3ThreadInput = z.object({
    */
   threadId: z.uuid().optional(),
   prompt: z.string().trim().min(1),
+  /** The thread's title in T3 Code instead of the task's number and title: a custom hand-off's, which names it. */
+  title: z.string().trim().min(1).max(300).optional(),
   /** Images pasted into the dialog: uploaded to T3 Code and sent with the first message. */
   attachmentIds: LaunchAttachmentIds.optional(),
   modelSelection: T3ModelSelection,

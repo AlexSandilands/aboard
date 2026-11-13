@@ -31,6 +31,7 @@ export const defaultSettings: AppSettings = {
   agentT3Threads: false,
   providers: [],
   handoffMenus: DEFAULT_HANDOFF_MENUS,
+  customHandoffs: [],
   headlessReviewBudgetUsd: 2,
   issueImportEnabled: true,
   operationModels: {},

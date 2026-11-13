@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createGitFixture, git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
-import { shortPrompt } from "./sessionLaunch.ts";
+import { handoffShortPrompt, shortPrompt } from "./sessionLaunch.ts";
 import { cmdQuote, shQuote, type LaunchSpec, type TerminalHost } from "./terminal.ts";
 
 const WT_SETTINGS = JSON.stringify({
@@ -136,6 +136,32 @@ describe("starting a session from the board", () => {
     );
   });
 
+  it("names the session by a custom hand-off's label, made safe for a Windows command line", async () => {
+    const app = appWith();
+    // The user's own text: a quote cmd can't escape, a % it would expand, a ; Windows Terminal splits on.
+    const label = 'Review "the diff"; 100%\\ on #1';
+    const { status, body } = await app.start({ label: `${label}\\` });
+    expect(status).toBe(201);
+    expect(body.launched).toBe(true);
+    const args = app.spawned[0]!.args;
+    // Windows Terminal takes a ; escaped; the CLI gets it back as written.
+    expect(args[args.indexOf("--name") + 1]).toBe("Review 'the diff'\\; 100\\ on #1");
+    expect(body.command).toContain(`--name "Review 'the diff'; 100\\ on #1" -- `);
+    // The link keeps the name as the user wrote it.
+    expect(app.sessionLinks()[0]!.label).toBe(`${label}\\`);
+  });
+
+  it("keeps a label as written on a POSIX command line, where single quotes take anything", async () => {
+    const app = appWith({
+      host: {
+        platform: "linux",
+        which: (name) => (name === "x-terminal-emulator" ? "/usr/bin/x-terminal-emulator" : null),
+      },
+    });
+    const { body } = await app.start({ label: 'Review "the diff" 100%\non #1' });
+    expect(body.command).toContain(`--name 'Review "the diff" 100% on #1' -- `);
+  });
+
   it("passes the chosen effort after the model, and refuses a level no CLI takes", async () => {
     const app = appWith();
     const { status } = await app.start({ model: "opus", effort: "high" });
@@ -204,6 +230,28 @@ describe("starting a session from the board", () => {
     // Windows Terminal is given every `;` as `\;`, which it passes on as `;`.
     expect(app.spawned[0]!.args.at(-1)).toBe(body.shortPrompt!.replaceAll(";", "\\;"));
     expect(body.shortPrompt).not.toContain('"');
+  });
+
+  it("gives a custom hand-off's session a pointer that waits for the prompt, not the mode's \"work on it\"", async () => {
+    const app = appWith();
+    // Refused on Windows for its %, so the CLI can't be given the hand-off's own text.
+    const { body } = await app.start({
+      prompt: "Review only, at 100% care. Change nothing.",
+      label: 'Review "100%" on #1',
+    });
+    expect(body.shortReason).toMatch(/contains %/);
+    expect(body.shortPrompt).toBe(handoffShortPrompt('Review "100%" on #1', app.task, "claude-code", "win32"));
+    expect(body.shortPrompt).toContain("This session is for the hand-off 'Review '100' on #1' on #1 from");
+    expect(body.shortPrompt).toContain(`get_task('${app.task.id}')`);
+    expect(body.shortPrompt).toContain("then wait");
+    expect(body.shortPrompt).toContain("don't start on the task");
+    expect(body.shortPrompt).not.toContain("Let's work on");
+    expect(body.shortPrompt).not.toMatch(/["%]/);
+    expect(app.spawned[0]!.args.at(-1)).toBe(body.shortPrompt!.replaceAll(";", "\\;"));
+    // A session that links itself does so under the hand-off's name, not the mode's.
+    const codex = handoffShortPrompt("Sandbox check on #1", app.task, "codex", "win32");
+    expect(codex).toContain("label: 'Sandbox check on #1'");
+    expect(codex).not.toContain("Implementing #1");
   });
 
   it("falls back to a short prompt when the prompt is too long for cmd", async () => {

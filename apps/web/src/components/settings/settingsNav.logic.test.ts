@@ -107,6 +107,7 @@ describe("providers in the list", () => {
     expect(visibleSections(agents, [{ id: "codex" }]).map((s) => s.id)).toEqual([
       "agents.providers",
       "agents.models",
+      "agents.handoffs",
       "agents.operations",
     ]);
     expect(visibleSections(settingsGroup("tasks"), undefined)).toBe(settingsGroup("tasks").sections);

@@ -36,6 +36,7 @@ import { createIssueImporter } from "./issueImport.ts";
 import { createModelPriceService } from "./modelPrices.ts";
 import { createProviders, type ProviderProbes } from "./providers.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
+import { createCustomHandoffLauncher } from "./customHandoff.ts";
 import { createSessionLaunch } from "./sessionLaunch.ts";
 import { createSessionTranscriptReader } from "./sessionTranscript.ts";
 import { createSettingsAsker } from "./settingsAsk.ts";
@@ -192,6 +193,15 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       });
     },
     ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  const customHandoffs = createCustomHandoffLauncher({
+    services: deps.services,
+    boardUrl: () => boardUrlOf(deps.config),
+    // Through the object, so tests can stand in for T3 Code here.
+    launchThread: (taskId, input, actor) => integrations.launchT3TaskThread(taskId, input, actor),
+    taskBranches: (taskId) => sessionLaunch.taskBranches(taskId),
+    sessionOptions: (taskId) => sessionLaunch.options(taskId),
+    startSession: (taskId, input, actor) => sessionLaunch.start(taskId, input, actor),
   });
   const agentModels = createAgentModels({
     services: deps.services,
@@ -374,10 +384,11 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     },
     testT3: () => t3.test(),
     connectT3: (value) => t3.connect(value),
-    async t3LaunchOptions(taskId) {
+    async t3LaunchOptions(taskId, handoffId) {
+      const choice = handoffId ? customHandoffs.get(handoffId).model : undefined;
       // The task's branches come from git, beside T3's options; a git failure only leaves the pinned group out.
       const [options, taskBranches] = await Promise.all([
-        t3.launchOptions(taskId),
+        t3.launchOptions(taskId, choice),
         sessionLaunch.taskBranches(taskId).catch(() => []),
       ]);
       return { ...options, taskBranches };
@@ -412,7 +423,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     terminalInfo: () => sessions.terminalInfo(),
     providers: (refresh, parts) => providers.status(refresh, parts),
     agentModels: (refresh) => agentModels.status(refresh),
-    sessionLaunchOptions: (taskId) => sessionLaunch.options(taskId),
+    sessionLaunchOptions: (taskId, handoffId) =>
+      sessionLaunch.options(taskId, handoffId ? customHandoffs.get(handoffId).model : undefined),
+    startCustomHandoff: (taskId, handoffId, input, actor) => customHandoffs.start(taskId, handoffId, input, actor),
     startSession: (taskId, input, actor) => sessionLaunch.start(taskId, input, actor),
     startPlanningSession: (projectId, input, actor) => sessionLaunch.startPlanning(projectId, input, actor),
     autopilotPass() {

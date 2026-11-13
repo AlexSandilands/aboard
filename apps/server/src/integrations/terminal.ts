@@ -124,6 +124,20 @@ export function textArgument(text: string, platform: NodeJS.Platform): { value: 
   return { value };
 }
 
+/**
+ * A session's name as it can go on a command line here as one argument (`--name`). A name can be the user's own text
+ * (a custom hand-off's), so it gets what textArgument does for a prompt, but is never refused: on Windows a `"`
+ * becomes `'`, and a `%` (which cmd.exe would expand) and a trailing backslash (which would escape the closing quote)
+ * are dropped. Line breaks and control characters become spaces everywhere. The session's link keeps the name as
+ * written.
+ */
+export function nameArgument(name: string, platform: NodeJS.Platform): string {
+  // oxlint-disable-next-line no-control-regex -- control characters are what this removes
+  const clean = name.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+  if (platform !== "win32") return clean;
+  return clean.replaceAll('"', "'").replaceAll("%", "").replace(/\\+$/, "").replace(/\s+/g, " ").trim() || "session";
+}
+
 /** Whether a launch fits on this platform's command line; a longer one must be shortened. */
 export function fitsCommandLine(spec: LaunchSpec, platform: NodeJS.Platform): boolean {
   const length = [spec.file, ...spec.args].reduce((sum, arg) => sum + arg.length + 3, 0);

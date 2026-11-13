@@ -32,6 +32,8 @@ import type {
   RestoreTasksInput,
   RestoreTasksResult,
   SessionLaunchOptions,
+  StartCustomHandoffInput,
+  StartCustomHandoffResult,
   StartPlanningSessionInput,
   StartPlanningThreadInput,
   StartSessionInput,
@@ -95,8 +97,11 @@ export interface Integrations {
    * creating it from origin's default branch and pushing it; a git failure refuses the switch.
    */
   setEpicDelivery(epicId: string, delivery: EpicDelivery, actor: string): Promise<TaskDetail>;
-  /** Models, refs and defaults for starting a T3 Code thread for a task. */
-  t3LaunchOptions(taskId: string): Promise<T3LaunchOptions>;
+  /**
+   * Models, refs and defaults for starting a T3 Code thread for a task. With `handoffId` the suggested model is that
+   * custom hand-off's, for the dialog it opens.
+   */
+  t3LaunchOptions(taskId: string, handoffId?: string): Promise<T3LaunchOptions>;
   /** The same for a thread about a whole project, such as Suggest epics. */
   t3ProjectLaunchOptions(projectId: string): Promise<T3LaunchOptions>;
   /** T3 Code's providers and models, for choosing each model tier's T3 model in settings. */
@@ -130,8 +135,18 @@ export interface Integrations {
   providers(refresh?: boolean, parts?: "all" | "cli"): Promise<ProvidersStatus>;
   /** The models each CLI lists, for the pickers in Settings → Agents → Models. */
   agentModels(refresh?: boolean): Promise<AgentModels>;
-  /** What the new-session dialog offers for a task (see SessionLaunchIntegration). */
-  sessionLaunchOptions(taskId: string): Promise<SessionLaunchOptions>;
+  /**
+   * What the new-session dialog offers for a task (see SessionLaunchIntegration). With `handoffId`, like
+   * t3LaunchOptions, the models follow that custom hand-off's model.
+   */
+  sessionLaunchOptions(taskId: string, handoffId?: string): Promise<SessionLaunchOptions>;
+  /** Starts a custom hand-off on a task without the dialog (see customHandoff.ts). */
+  startCustomHandoff(
+    taskId: string,
+    handoffId: string,
+    input: StartCustomHandoffInput,
+    actor: string,
+  ): Promise<StartCustomHandoffResult>;
   /** Starts a new Claude Code or Copilot CLI session on a task in a terminal and links it. */
   startSession(taskId: string, input: StartSessionInput, actor: string): Promise<StartSessionResult>;
   /** Starts a session that plans several of a project's tasks, in its checkout, and links it to each of them. */

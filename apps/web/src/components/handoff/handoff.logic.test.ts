@@ -20,6 +20,7 @@ import {
   optionValue,
   pickPinnedRef,
   pinnedRefRows,
+  presetWorkspaceChoice,
   withTaskRefs,
   refBadge,
   refDisabledReason,
@@ -458,5 +459,42 @@ describe("the task's branches in the T3 dialog", () => {
       mode: "new_worktree",
       ref: "origin/main-ish",
     });
+  });
+});
+
+describe("a custom hand-off's workspace in the T3 dialog", () => {
+  const branch = (name: string, worktreePath: string | null) => ({
+    name,
+    sources: [{ kind: "pr" as const, label: "PR #1 open", inactive: false }],
+    worktreePath,
+    inactive: false,
+  });
+  // The task's worktree on T3's refs, as withTaskRefs leaves them.
+  const withWorktree = withTaskRefs({ ...options, taskBranches: [branch("task/1", "C:\\wt\\task-1")] });
+
+  it("opens on the project's checkout or a new worktree as the hand-off says", () => {
+    expect(presetWorkspaceChoice(options, "current")).toEqual({ mode: "current", ref: null });
+    expect(presetWorkspaceChoice(options, "new_worktree")).toEqual({ mode: "new_worktree", ref: null });
+    // T3's own default of the current checkout doesn't win over the hand-off.
+    expect(initialPicks(options, { workspace: "new_worktree" }, false).choice.mode).toBe("new_worktree");
+  });
+
+  it("opens on the task's own worktree when it has one, else on the dialog's usual choice", () => {
+    expect(presetWorkspaceChoice(withWorktree, "task_worktree")).toEqual({ mode: "current", ref: "task/1" });
+    expect(toLaunchWorkspace(withWorktree, presetWorkspaceChoice(withWorktree, "task_worktree")!)).toEqual({
+      mode: "existing_worktree",
+      worktreePath: "C:\\wt\\task-1",
+      branch: "task/1",
+    });
+    // A branch with no worktree of its own isn't one to run in.
+    const noWorktree = { ...options, taskBranches: [branch("task/1", null)] };
+    expect(presetWorkspaceChoice(noWorktree, "task_worktree")).toBeNull();
+    expect(initialPicks(noWorktree, { workspace: "task_worktree" }, false).choice).toEqual(
+      initialPicks(noWorktree, {}, false).choice,
+    );
+  });
+
+  it("leaves a folder that isn't a repository on its checkout", () => {
+    expect(presetWorkspaceChoice({ ...options, isRepo: false }, "new_worktree")).toBeNull();
   });
 });

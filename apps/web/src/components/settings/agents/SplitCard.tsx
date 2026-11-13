@@ -25,15 +25,25 @@ export function SplitCard({
   list,
   children,
   detailOpen,
+  wideList = false,
 }: {
   list: ReactNode;
   children: ReactNode;
   detailOpen?: boolean;
+  /** A wider list column, for rows that end in a label of their own (a custom hand-off's "No dialog"). */
+  wideList?: boolean;
 }) {
   const oneAtATime = detailOpen !== undefined;
   return (
     <div className="@container/split">
-      <SettingsGroup className="overflow-hidden @min-[48rem]/split:grid @min-[48rem]/split:grid-cols-[16rem_minmax(0,1fr)] [&>*+*]:border-t-0">
+      <SettingsGroup
+        className={cn(
+          "overflow-hidden @min-[48rem]/split:grid [&>*+*]:border-t-0",
+          wideList
+            ? "@min-[48rem]/split:grid-cols-[19rem_minmax(0,1fr)]"
+            : "@min-[48rem]/split:grid-cols-[16rem_minmax(0,1fr)]",
+        )}
+      >
         <div
           className={cn(
             "border-b border-border/60 bg-muted/10 @min-[48rem]/split:border-r @min-[48rem]/split:border-b-0",

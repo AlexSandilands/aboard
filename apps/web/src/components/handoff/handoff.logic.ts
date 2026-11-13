@@ -4,6 +4,7 @@ import {
   type AgentCliStatus,
   type AgentHarness,
   type AppSettings,
+  type CustomHandoffWorkspace,
   type PlanSkillRef,
   providerActive,
   providerOfHarness,
@@ -280,6 +281,30 @@ export function initialWorkspaceChoice(
   return { mode: options.isRepo && options.defaults.envMode === "worktree" ? "new_worktree" : "current", ref: null };
 }
 
+/**
+ * Where a custom hand-off's dialog starts: the project's checkout, a new worktree (from the epic's branch for an
+ * integration epic's task), or the task's own worktree. Null leaves the dialog's usual choice: a folder that isn't a
+ * repository, or a task with no worktree yet. `options` carry the task's worktrees on their refs (withTaskRefs).
+ */
+export function presetWorkspaceChoice(
+  options: Pick<T3LaunchOptions, "isRepo" | "defaults" | "refs" | "workspaceRoot" | "taskBranches">,
+  workspace: CustomHandoffWorkspace,
+  integrationBranch: string | null = null,
+): WorkspaceChoice | null {
+  if (!options.isRepo) return null;
+  if (workspace === "current") return { mode: "current", ref: null };
+  if (workspace === "new_worktree") {
+    const initial = initialWorkspaceChoice(options, integrationBranch);
+    return initial.mode === "new_worktree" ? initial : { mode: "new_worktree", ref: null };
+  }
+  // The first of the task's branches that runs in a worktree of its own, in picker order (open PRs first).
+  for (const branch of options.taskBranches ?? []) {
+    const ref = options.refs.find((r) => !r.isRemote && r.name === branch.name);
+    if (ref && refWorktree(ref, options.workspaceRoot)) return { mode: "current", ref: ref.name };
+  }
+  return null;
+}
+
 /** What the launch dialog's pickers hold: the model, the access and where the thread starts. */
 export interface Picks {
   selection: T3ModelSelection | null;
@@ -293,7 +318,13 @@ export interface Picks {
  */
 export function initialPicks(
   options: T3LaunchOptions,
-  subject: { checkout?: boolean; integrationBranch?: string | null; fixBranch?: string | null },
+  subject: {
+    checkout?: boolean;
+    integrationBranch?: string | null;
+    fixBranch?: string | null;
+    /** A custom hand-off's workspace, which the dialog opens on. */
+    workspace?: CustomHandoffWorkspace | null;
+  },
   planWithMe: boolean,
 ): Picks {
   const selection = launchModelSelection(options, planWithMe);
@@ -302,6 +333,10 @@ export function initialPicks(
     options.providers.find((p) => p.instanceId === selection?.instanceId),
   );
   if (subject.checkout) return { selection, runtimeMode, choice: { mode: "current", ref: null } };
+  const preset = subject.workspace
+    ? presetWorkspaceChoice(options, subject.workspace, subject.integrationBranch ?? null)
+    : null;
+  if (preset) return { selection, runtimeMode, choice: preset };
   const initial = initialWorkspaceChoice(options, subject.integrationBranch ?? null);
   // A fix never starts in the user's own checkout, even when T3 lists no ref for the PR's branch.
   const choice: WorkspaceChoice =

@@ -358,6 +358,19 @@ describe("autoLaunchSettings", () => {
     });
   });
 
+  it("runs where a custom hand-off says instead of a new worktree, on the same model and access", () => {
+    const worktree = { mode: "existing_worktree" as const, worktreePath: "C:\\wt\\task", branch: "task/1" };
+    for (const workspace of [{ mode: "current" as const }, worktree]) {
+      expect(autoLaunchSettings(options({ suggest: true }), { work: true, workspace })).toEqual({
+        ok: true,
+        launch: { modelSelection: sonnet.selection, runtimeMode: "full-access", workspace },
+      });
+    }
+    // No branch listing is needed for a workspace that is named.
+    const unlisted = autoLaunchSettings(options({ refs: null }), { work: true, workspace: worktree });
+    expect(unlisted).toMatchObject({ ok: true, launch: { workspace: worktree } });
+  });
+
   it("works on T3's default model when the run has no T3 model of its own", () => {
     const result = autoLaunchSettings(options({ suggest: true }), { work: true, defaultModel: true });
     expect(result.ok && result.launch.modelSelection).not.toEqual(sonnet.selection);
