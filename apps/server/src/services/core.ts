@@ -1,4 +1,10 @@
-import type { BoardEvent, InboxNotification, T3IntegrationStatus, T3ThreadRef } from "@repo/contracts";
+import {
+  isLinkReasonKey,
+  type BoardEvent,
+  type InboxNotification,
+  type T3IntegrationStatus,
+  type T3ThreadRef,
+} from "@repo/contracts";
 import { generateKeyBetween } from "fractional-indexing";
 import type { EventBus } from "../bus.ts";
 import { nowIso, parseJson, transaction, type Db } from "../db/database.ts";
@@ -156,6 +162,25 @@ export function createCore(deps: {
     }
   };
 
+  /**
+   * A dismissal lasts only while what it hid still stands. Once a changed task no longer raises a dismissed reason
+   * in the dismissed state (the step was unblocked, the review moved on), its row goes, so the same state coming
+   * back later (the step blocked again) is flagged afresh rather than matching a stale row. Dismissals of a link's
+   * reasons are kept: a link's snapshot is a cache that is empty after a restore and until the next poll, and their
+   * fingerprints (the head commit, the session's last activity) already tell one failure from the next.
+   */
+  const dropLapsedDismissals = (p: Pending): void => {
+    const ids = [...p.tasks].filter((id) => !p.deletedTasks.has(id));
+    const dismissals = repos.attentionDismissals.forTasks(ids);
+    if (dismissals.size === 0) return;
+    for (const { summary } of assembleSummaries(repos, repos.tasks.getMany([...dismissals.keys()])).values()) {
+      const standing = new Set(summary.dismissedAttention.map((r) => r.key));
+      for (const { key } of dismissals.get(summary.id) ?? []) {
+        if (!isLinkReasonKey(key) && !standing.has(key)) repos.attentionDismissals.remove(summary.id, key);
+      }
+    }
+  };
+
   const flush = (p: Pending): void => {
     const events: BoardEvent[] = [];
     for (const taskId of p.deletedTasks) events.push({ type: "task.deleted", taskId });
@@ -229,6 +254,7 @@ export function createCore(deps: {
         result = transaction(db, () => {
           const value = fn(effectsFor(p));
           readFinished(p);
+          dropLapsedDismissals(p);
           return value;
         });
       } finally {

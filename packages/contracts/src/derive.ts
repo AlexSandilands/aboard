@@ -232,6 +232,9 @@ export function deriveAttention(input: AttentionInput): {
   return { attention, dismissed };
 }
 
+/** Whether a reason key belongs to a link (a session's, or one of a PR's three), not to the task's own state. */
+export const isLinkReasonKey = (key: string): boolean => key.startsWith("link:") || key.startsWith("pr:");
+
 /** The key of the reason a session link raises (`session_failed`, `session_needs_input`). */
 export const sessionReasonKey = (linkId: string): string => `link:${linkId}`;
 

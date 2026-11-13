@@ -178,6 +178,23 @@ describe("dismissing flags", () => {
     expect(s.tasks.summary(task.id).dismissedAttention).toEqual([]);
   });
 
+  it("flags a step blocked again after it was unblocked, though it was dismissed before", async () => {
+    const { s, task, step, thread, kinds, post } = flagged();
+    await post({});
+    s.plans.updateStep(step.id, { status: "in_progress" }, "claude-code");
+    // The link's dismissals stay (their state hasn't changed); the blocked step's is gone with the block.
+    expect(s.tasks.summary(task.id).dismissedAttention.map((a) => a.kind)).toEqual([
+      "session_failed",
+      "pr_checks_failing",
+    ]);
+    s.plans.updateStep(step.id, { status: "blocked" }, "claude-code");
+    expect(kinds()).toEqual(["blocked_step"]);
+    // A snapshot that is momentarily empty (a restore, before the next poll) doesn't cost the thread its dismissal.
+    s.links.setSnapshot(thread.id, null);
+    s.links.setSnapshot(thread.id, threadSnapshot("failed"));
+    expect(kinds()).toEqual(["blocked_step"]);
+  });
+
   it("dismisses everything at once: derived flags, the agent's request and Autopilot's runs", async () => {
     const { s, task, kinds, post, events } = flagged();
     s.attention.request(task.id, "Look", "claude-code");

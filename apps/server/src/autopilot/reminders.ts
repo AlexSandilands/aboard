@@ -5,6 +5,7 @@ import {
   UNSTICK_STALE_PREFIX,
   UNSTICK_WAITING_PREFIX,
   implementingThread,
+  sessionReasonKey,
   type NotifyInput,
 } from "@repo/contracts";
 import type { Services } from "../services/types.ts";
@@ -90,7 +91,9 @@ export function sendReminders(services: Services, now: Date): void {
           thread &&
           snapshot &&
           ["input", "approval"].includes(snapshot.status) &&
-          snapshot.lastActivityAt
+          snapshot.lastActivityAt &&
+          // The user dismissed the thread's flag on this task: a reminder of it would undo that.
+          !t.dismissedAttention.some((r) => r.key === sessionReasonKey(thread.id))
         ) {
           const ms = now.getTime() - Date.parse(snapshot.lastActivityAt);
           if (ms >= WAITING_AFTER_MS) {

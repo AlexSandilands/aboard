@@ -464,6 +464,16 @@ const threads: Scenario = (s, opts) => {
     });
   }
 
+  // An import that failed: its callout says why, with Retry and Dismiss.
+  {
+    const task = s.tasks.create({
+      projectId: project.id,
+      sourceUrl: "https://github.com/example/shop/issues/77",
+      actor: AGENT,
+    });
+    s.imports.fail(task.id, "gh isn't signed in: run `gh auth login` and retry");
+  }
+
   // A bulk planning session: three tasks share one thread that is waiting for input. The sidebar lists it once.
   for (const title of ["Planning batch: search", "Planning batch: export", "Planning batch: import"]) {
     const id = addTask(s, project.id, {

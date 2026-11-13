@@ -249,8 +249,13 @@ its fingerprint is unchanged, so a new failure brings the flag back. Nothing is 
 - The activity log gets `attention_dismissed` and `attention_restored`, each with the flags' messages.
 - **Only the user dismisses.** There is no MCP tool: a flag is how a problem reaches the user, so an agent can't
   silence one. Agents clear their own request with `request_attention(clear: true)`.
-- Rows are never pruned: one that matches no current reason is ignored, and dismissing the same key again replaces it.
-  They cascade with the task and are part of its [backup](backup.md) bundle.
+- A dismissal lasts while what it hid stands. When a write changes a task, `core.write` drops the task's dismissals
+  that no longer match a reason (`dropLapsedDismissals`): a step that was unblocked and is blocked again is flagged
+  afresh, though its fingerprint is the same. Dismissals of a link's reasons (`link:`, `pr:`) are kept instead: a
+  link's snapshot is a cache that is empty after a restore and until the next poll, and their fingerprints already
+  tell one failure from the next. The cost is that checks which pass and then fail again on the same commit stay
+  dismissed. Rows cascade with the task and are part of its [backup](backup.md) bundle.
+- A dismissed waiting thread also stops the "has waited on you" reminder (`reminders.ts`).
 - In the UI, the task panel lists every standing flag under the title (`AttentionFlags.tsx`), a row each with the
   section it comes from and **Dismiss**, plus **Dismiss all**. It is at the top rather than in each section so a flag
   can be dismissed whether its section is open, collapsed or hidden. Under it, **N dismissed** expands to the hidden
