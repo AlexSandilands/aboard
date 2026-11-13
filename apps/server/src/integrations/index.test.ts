@@ -161,7 +161,7 @@ describe("createIntegrations with real services", () => {
     await integrations.refreshLink(link.id);
     expect(services.links.get(link.id)).toMatchObject({ snapshot: { title: "Agent thread", status: "approval" } });
     expect(ghCalls).toEqual([]);
-    expect(services.tasks.summary(task.id).attention.map((a) => a.kind)).toEqual(["thread_needs_input"]);
+    expect(services.tasks.summary(task.id).attention.map((a) => a.kind)).toEqual(["session_needs_input"]);
     expect(integrations.t3Status()).toMatchObject({ detected: true, environmentId: ENV_ID, liveStatus: "ok" });
   });
 

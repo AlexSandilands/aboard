@@ -6,7 +6,7 @@ import { CollapsibleSectionHeader } from "~/components/ui/collapsible-section-he
 import { SidebarGroup } from "~/components/ui/sidebar";
 import { cn } from "~/lib/utils";
 import { AttentionIcon, ATTENTION_TONE } from "~/components/board/attention";
-import { ATTENTION_LABELS, attentionItems, topAttention, type AttentionItem } from "~/components/board/board.logic";
+import { attentionLabel, attentionItems, topAttention, type AttentionItem } from "~/components/board/board.logic";
 import { useOpenTask, useSelectedTaskId } from "~/components/board/boardNavigation";
 
 /**
@@ -112,7 +112,7 @@ const AttentionRow = memo(function AttentionRow({
               )}
             >
               <AttentionIcon severity={reason.severity} className="size-4" />
-              {ATTENTION_LABELS[reason.kind]}
+              {attentionLabel(reason)}
             </span>
           </div>
           <div className="mt-1 flex min-w-0">
@@ -185,7 +185,7 @@ const ThreadAttentionRow = memo(function ThreadAttentionRow({
               )}
             >
               <AttentionIcon severity={reason.severity} className="size-4" />
-              {ATTENTION_LABELS[reason.kind]}
+              {attentionLabel(reason)}
             </span>
           </div>
           <div className="mt-1 flex min-w-0">

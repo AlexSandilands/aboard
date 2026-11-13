@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
+  BellOffIcon,
   CheckIcon,
   CircleCheckBigIcon,
   CopyIcon,
@@ -41,7 +42,7 @@ import {
 } from "~/components/ui/menu";
 import { toastManager } from "~/components/ui/toast";
 import { cn } from "~/lib/utils";
-import { useResolveTask, useUpdateTask } from "~/state/mutations";
+import { useDismissAttention, useResolveTask, useUpdateTask } from "~/state/mutations";
 import { fetchTaskDetail, useBoard } from "~/state/queries";
 import { useDialogs, usePalette } from "~/state/ui";
 import { epicOptions } from "./epic.logic";
@@ -122,6 +123,7 @@ export function TaskMenuItems({
 }) {
   const { mutate: updateTask } = useUpdateTask();
   const { mutate: resolveTask } = useResolveTask();
+  const { mutate: dismissAttention } = useDismissAttention();
   const queryClient = useQueryClient();
   const actions = useTaskMenuActions(task, onOpenPlanEditor);
   const deleteShortcut = useShortcutLabel("task.delete");
@@ -157,6 +159,13 @@ export function TaskMenuItems({
       <WindowMenuItem task={task} />
       {item("jump")}
       {item("plan")}
+      {/* Only while something is flagged. Each flag comes back if what raised it changes. */}
+      {task.attention.length > 0 ? (
+        <MenuItem onClick={() => dismissAttention({ taskId: task.id })}>
+          <BellOffIcon />
+          {task.attention.length === 1 ? "Dismiss warning" : "Dismiss all warnings"}
+        </MenuItem>
+      ) : null}
       <MenuSub>
         <MenuSubTrigger>
           <FolderInputIcon />

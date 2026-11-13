@@ -183,6 +183,15 @@ describe("reminders", () => {
       expect(sent("thread_waited")).toHaveLength(1);
     });
 
+    it("says nothing about a thread whose flag you dismissed", async () => {
+      const { s, working, withThread, pass, sent } = setup();
+      const task = working();
+      withThread(task.id, "input");
+      s.attention.dismissAll(task.id, "user");
+      await pass(45 * MINUTE_MS);
+      expect(sent("thread_waited")).toEqual([]);
+    });
+
     it("is read when the thread stops waiting", async () => {
       const { s, working, pass } = setup();
       const task = working();

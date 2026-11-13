@@ -1,5 +1,6 @@
 import type { Db } from "../database.ts";
 import { createAttachmentsRepo } from "./attachments.ts";
+import { createAttentionDismissalsRepo } from "./attentionDismissals.ts";
 import { createAutopilotAutoPausesRepo } from "./autopilotAutoPauses.ts";
 import { createAutopilotCustomRepo } from "./autopilotCustom.ts";
 import { createAutopilotDraftsRepo } from "./autopilotDrafts.ts";
@@ -33,6 +34,7 @@ export function createRepos(db: Db) {
     tasks: createTasksRepo(sql),
     plans: createPlansRepo(sql),
     attachments: createAttachmentsRepo(sql),
+    attentionDismissals: createAttentionDismissalsRepo(sql),
     links: createLinksRepo(sql),
     events: createEventsRepo(sql),
     imports: createImportsRepo(sql),

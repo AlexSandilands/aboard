@@ -594,7 +594,7 @@ export const OrchestrateHold = z.enum(["off", "paused", "quiet_hours", "daily_ca
 export type OrchestrateHold = z.infer<typeof OrchestrateHold>;
 
 /** Attention that is the user's to answer: an orchestrator can only wait on it. */
-const WAITING_ON_USER = new Set(["agent_request", "thread_needs_input"]);
+const WAITING_ON_USER = new Set(["agent_request", "session_needs_input"]);
 
 /**
  * A task Orchestrate has a reason to look at: work going on, something wrong with it (a failed start included), or a

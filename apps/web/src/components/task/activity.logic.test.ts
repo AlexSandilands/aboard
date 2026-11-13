@@ -77,6 +77,14 @@ describe("describeEvent", () => {
       quote: "Review the plans",
     });
     expect(text("attention_cleared", { requestedBy: "claude-code" }).text).toBe("cleared the request for attention");
+    expect(text("attention_dismissed", { flags: ["Thread failed"] })).toMatchObject({
+      text: "dismissed a flag",
+      quote: "Thread failed",
+    });
+    expect(text("attention_restored", { flags: ["Thread failed", "#7 checks failing"] })).toMatchObject({
+      text: "restored 2 flags",
+      quote: "Thread failed\n#7 checks failing",
+    });
     expect(text("finding_resolved", { finding: "R1.2", status: "wont_fix", note: "By design" })).toEqual({
       icon: "review",
       text: "marked R1.2 won't fix",

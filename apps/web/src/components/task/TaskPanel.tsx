@@ -27,6 +27,7 @@ import { AutopilotSection } from "~/components/autopilot/AutopilotSection";
 import { LabelsSection } from "~/components/labels/LabelsSection";
 import { ReviewSection } from "~/components/review/ReviewSection";
 import { ActivityLog } from "./ActivityLog";
+import { AttentionFlags } from "./AttentionFlags";
 import { AttentionRequestCallout } from "./AttentionRequestCallout";
 import { LinksSection } from "./LinksSection";
 import { DetailsSection } from "./DetailsSection";
@@ -387,6 +388,7 @@ function TaskPanelBody({
       <div className={cn("flex flex-col gap-2 px-3 pb-3", inWindow && "sm:px-5")}>
         <AttentionRequestCallout task={task} />
         <ImportCallout task={task} />
+        <AttentionFlags task={task} />
         <ResolutionCallout task={task} />
         {task.kind === "epic" ? (
           <EpicChildren task={task} boardFilter={boardEpicFilter} onFilter={(epicId) => void setEpicFilter(epicId)} />

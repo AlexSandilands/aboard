@@ -100,6 +100,7 @@ export const TASK_BUNDLE_TABLES = [
   "task_labels",
   "task_reviews",
   "review_findings",
+  "attention_dismissals",
 ] as const;
 
 /** A task and the rows that belong to it: one file per task. Its events are kept apart, by month. */
@@ -113,6 +114,8 @@ export const TaskBundle = z.object({
   task_labels: z.array(BackupRow),
   task_reviews: z.array(BackupRow),
   review_findings: z.array(BackupRow),
+  /** Attention flags the user dismissed. Absent before flags could be dismissed. */
+  attention_dismissals: z.array(BackupRow).default([]),
 });
 export type TaskBundle = z.infer<typeof TaskBundle>;
 

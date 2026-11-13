@@ -3,7 +3,7 @@ import { RefreshCwIcon, TriangleAlertIcon } from "lucide-react";
 
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
-import { useRetryImport } from "~/state/mutations";
+import { useDismissAttention, useRetryImport } from "~/state/mutations";
 import { useSettings } from "~/state/queries";
 import {
   epicImportProgress,
@@ -19,6 +19,9 @@ import {
  */
 export function ImportCallout({ task }: { task: TaskDetail }) {
   const { mutate: retry, isPending } = useRetryImport();
+  const { mutate: dismiss, isPending: dismissing } = useDismissAttention();
+  // Present while the failure still flags the task; gone once dismissed, when the callout stays as plain information.
+  const flag = task.attention.find((a) => a.kind === "import_failed");
   const pending = importPendingLabel(task);
   const ticketSystems = useSettings().data?.ticketSystems ?? [];
   const failure = importFailure(task, ticketSystems);
@@ -40,6 +43,17 @@ export function ImportCallout({ task }: { task: TaskDetail }) {
             {isPending ? <Spinner /> : <RefreshCwIcon />}
             Retry
           </Button>
+          {flag ? (
+            <Button
+              size="xs"
+              variant="ghost"
+              disabled={dismissing}
+              title="Stop flagging this task for the failed import"
+              onClick={() => dismiss({ taskId: task.id, key: flag.key })}
+            >
+              Dismiss
+            </Button>
+          ) : null}
         </>
       ) : pending ? (
         <>

@@ -1,7 +1,8 @@
-import type { BoardSnapshot, Project, TaskSummary } from "@repo/contracts";
+import type { AttentionReason, BoardSnapshot, Project, TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   attentionItems,
+  attentionLabel,
   buildLanes,
   columnCounts,
   COLUMN_PREVIEW_COUNT,
@@ -64,6 +65,7 @@ function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
     currentStep: null,
     links: [],
     attention: [],
+    dismissedAttention: [],
     attentionRequest: null,
     lastNote: null,
     autoReview: null,
@@ -186,7 +188,9 @@ describe("buildLanes", () => {
   });
 
   it("filters to tasks needing attention", () => {
-    const flagged = task("flagged", { attention: [{ kind: "blocked_step", severity: "warning", message: "Blocked" }] });
+    const flagged = task("flagged", {
+      attention: [{ kind: "blocked_step", severity: "warning", message: "Blocked", key: "steps", fingerprint: "s" }],
+    });
     const lanes = buildLanes(board([flagged, task("calm")]), { ...noFilters, attentionOnly: true });
     expect(lanes).toHaveLength(1);
     expect(lanes[0]!.cells.backlog).toEqual([flagged]);
@@ -240,16 +244,32 @@ describe("reuseUnchangedLanes", () => {
   });
 });
 
+describe("attentionLabel", () => {
+  it("names a failed session as its provider does, and other reasons by kind", () => {
+    expect(attentionLabel({ kind: "session_failed", message: "Thread failed" })).toBe("Thread failed");
+    expect(attentionLabel({ kind: "pr_checks_failing", message: "#7 checks failing" })).toBe("Checks failing");
+  });
+});
+
 describe("attentionItems", () => {
-  const input = { kind: "thread_needs_input", severity: "warning", message: "Thread awaiting input" } as const;
-  const failed = { kind: "thread_failed", severity: "error", message: "Thread failed" } as const;
-  const conflict = { kind: "pr_conflict", severity: "warning", message: "" } as const;
+  const reason = (kind: AttentionReason["kind"], key: string = kind): AttentionReason => ({
+    kind,
+    severity: kind.endsWith("failed") ? "error" : "warning",
+    message: "",
+    key,
+    fingerprint: "",
+  });
+  const conflict = reason("pr_conflict");
+  const linkId = (taskId: string, threadId: string) => `${taskId}-${threadId}`;
+  /** The reason a task's link to a thread raises. */
+  const input = (taskId: string, threadId: string) => reason("session_needs_input", `link:${linkId(taskId, threadId)}`);
+  const failed = (taskId: string, threadId: string) => reason("session_failed", `link:${linkId(taskId, threadId)}`);
   const threadLink = (
     taskId: string,
     threadId: string,
     status: "input" | "failed" = "input",
   ): TaskSummary["links"][number] => ({
-    id: `${taskId}-${threadId}`,
+    id: linkId(taskId, threadId),
     taskId,
     kind: "t3_thread",
     url: "",
@@ -260,13 +280,13 @@ describe("attentionItems", () => {
     snapshot: { title: `Thread ${threadId}`, status },
   });
   const waiting = (id: string, threadId: string, overrides: Partial<TaskSummary> = {}) =>
-    task(id, { attention: [input], links: [threadLink(id, threadId)], ...overrides });
+    task(id, { attention: [input(id, threadId)], links: [threadLink(id, threadId)], ...overrides });
 
   it("puts errors first", () => {
     const warn = task("warn", { updatedAt: "2026-03-01", attention: [conflict] });
     const err = task("err", {
       updatedAt: "2026-01-01",
-      attention: [{ kind: "review_failed", severity: "error", message: "" }],
+      attention: [reason("review_failed")],
     });
     expect(attentionItems([warn, task("calm"), err]).map((i) => i.key)).toEqual(["err", "warn"]);
   });
@@ -290,13 +310,14 @@ describe("attentionItems", () => {
   });
 
   it("groups a failed thread as an error", () => {
-    const failedTask = (id: string) => task(id, { attention: [failed], links: [threadLink(id, "t1", "failed")] });
+    const failedTask = (id: string) =>
+      task(id, { attention: [failed(id, "t1")], links: [threadLink(id, "t1", "failed")] });
     const [item] = attentionItems([failedTask("a"), failedTask("b")]);
     expect(item).toMatchObject({ type: "thread", severity: "error" });
   });
 
   it("keeps a row for a grouped task's other reason, without the thread reason", () => {
-    const items = attentionItems([waiting("a", "t1"), waiting("b", "t1", { attention: [input, conflict] })]);
+    const items = attentionItems([waiting("a", "t1"), waiting("b", "t1", { attention: [input("b", "t1"), conflict] })]);
     expect(items.map((i) => i.type).sort()).toEqual(["task", "thread"]);
     const row = items.find((i) => i.type === "task");
     expect(row?.type === "task" && row.reasons).toEqual([conflict]);
@@ -304,20 +325,30 @@ describe("attentionItems", () => {
 
   it("keeps a lone thread's reason on the task when its other thread is grouped", () => {
     const both = task("a", {
-      attention: [input, failed],
+      attention: [input("a", "shared"), failed("a", "lone")],
       links: [threadLink("a", "shared"), threadLink("a", "lone", "failed")],
     });
     const items = attentionItems([both, waiting("b", "shared")]);
     const thread = items.find((i) => i.type === "thread");
-    expect(thread).toMatchObject({ severity: "warning", reason: { kind: "thread_needs_input" } });
+    expect(thread).toMatchObject({ severity: "warning", reason: { kind: "session_needs_input" } });
     const row = items.find((i) => i.type === "task");
-    expect(row?.type === "task" && row.reasons).toEqual([failed]);
+    expect(row?.type === "task" && row.reasons).toEqual([failed("a", "lone")]);
+  });
+
+  it("leaves out a task whose flag for the shared thread was dismissed", () => {
+    // The link still says the thread waits, but the user dismissed that on b: only a and c are grouped.
+    const dismissed = task("b", { attention: [], links: [threadLink("b", "t1")] });
+    const [item, ...rest] = attentionItems([waiting("a", "t1"), dismissed, waiting("c", "t1")]);
+    expect(rest).toEqual([]);
+    expect(item!.type === "thread" && item!.tasks.map((t) => t.id)).toEqual(["a", "c"]);
+    // With one task left the thread is no group, and the dismissed task has no row.
+    expect(attentionItems([waiting("a", "t1"), dismissed]).map((i) => i.key)).toEqual(["a"]);
   });
 
   it("ranks a thread by its most recent member and errors first", () => {
     const err = task("err", {
       updatedAt: "2026-01-01",
-      attention: [{ kind: "review_failed", severity: "error", message: "" }],
+      attention: [reason("review_failed")],
     });
     const items = attentionItems([
       waiting("a", "t1", { updatedAt: "2026-02-01" }),

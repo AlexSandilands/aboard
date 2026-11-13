@@ -985,4 +985,22 @@ describe("MCP endpoint", () => {
     expect((await call({ clear: true })).out).toContain("no request for attention to clear");
     expect(h.services.tasks.summary(task.id).attention).toEqual([]);
   });
+
+  it("leaves a flag the user dismissed out of what agents read", async () => {
+    const task = h.services.tasks.create({
+      projectId: h.services.projects.create({ workspaceRoot: "C:/Fake/proj" }).id,
+      title: "Plans",
+      plan: { phases: [{ title: "Write", steps: [{ title: "a" }] }] },
+    });
+    const step = h.services.tasks.detail(task.id).phases[0]!.steps[0]!;
+    h.services.plans.updateStep(step.id, { status: "blocked" }, "claude-code");
+    const read = async (name: string, args: Record<string, unknown>) =>
+      text(await client.callTool({ name, arguments: args }));
+    expect(await read("get_task", { task: "#1" })).toContain("Needs attention: Blocked: a");
+    expect(await read("list_tasks", { workspacePath: "C:/Fake/proj", attentionOnly: true })).toContain("#1");
+
+    h.services.attention.dismissAll(task.id, "user");
+    expect(await read("get_task", { task: "#1" })).not.toContain("Needs attention");
+    expect(await read("list_tasks", { workspacePath: "C:/Fake/proj", attentionOnly: true })).not.toContain("#1");
+  });
 });

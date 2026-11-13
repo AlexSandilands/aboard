@@ -238,7 +238,9 @@ describe("collapsedByDefault", () => {
   it("opens an epic's Autopilot only when a run needs attention: it has runs and no settings", () => {
     const flagged = task({
       kind: "epic",
-      attention: [{ kind: "autopilot", severity: "warning", message: "Merge epic PRs failed" }],
+      attention: [
+        { kind: "autopilot", severity: "warning", message: "Merge epic PRs failed", key: "autopilot", fingerprint: "" },
+      ],
     });
     expect(collapsedByDefault("autopilot", task({ kind: "epic" }))).toBe(true);
     expect(collapsedByDefault("autopilot", flagged)).toBe(false);
@@ -247,7 +249,11 @@ describe("collapsedByDefault", () => {
   });
 
   it("says why Autopilot needs a look in its collapsed line", () => {
-    const flagged = task({ attention: [{ kind: "autopilot", severity: "warning", message: "Start planned failed" }] });
+    const flagged = task({
+      attention: [
+        { kind: "autopilot", severity: "warning", message: "Start planned failed", key: "autopilot", fingerprint: "" },
+      ],
+    });
     expect(summarizeSection("autopilot", flagged)).toBe("Start planned failed");
   });
 
@@ -282,10 +288,12 @@ describe("sectionAttention", () => {
     kind,
     severity,
     message: `${kind} message`,
+    key: kind,
+    fingerprint: "",
   });
   const EXPECTED = {
     autopilot: ["autopilot"],
-    sessions: ["thread_needs_input", "thread_failed"],
+    sessions: ["session_needs_input", "session_failed"],
     links: ["pr_checks_failing", "pr_changes_requested", "pr_conflict"],
     plan: ["blocked_step"],
     review: ["review_stalled", "review_stuck", "review_failed", "review_unattended"],
@@ -336,7 +344,7 @@ describe("summarizeSection", () => {
     expect(summarizeSection("sessions", task({ links: [thread, session, link] }))).toBe("2");
     const attention = [
       { kind: "pr_checks_failing", severity: "error", message: "PR #4 checks failing" },
-      { kind: "thread_needs_input", severity: "warning", message: "Needs input" },
+      { kind: "session_needs_input", severity: "warning", message: "Needs input" },
     ] as SectionTask["attention"];
     expect(summarizeSection("sessions", task({ links: [thread, link], attention }))).toBe("1 · Needs input");
   });

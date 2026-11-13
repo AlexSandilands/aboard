@@ -127,7 +127,8 @@ conversations", apart from a missing approval.
 
 An open or draft PR puts the task under **Needs attention** when checks fail (error), changes are
 requested, or it conflicts (warnings). "Checks fail" is the `checks` verdict, so a failing optional check
-(`optionalChecks`) doesn't raise it when others are required; nor does it hold back Autopilot's merges or start Fix PRs. Merged and closed PRs never do.
+(`optionalChecks`) doesn't raise it when others are required; nor does it hold back Autopilot's merges or start Fix PRs. Merged and closed PRs never do. The user can [dismiss](task-lifecycle.md#dismissing-flags) each of
+the three; a dismissed one comes back when the PR's head commit changes.
 
 ### Merging
 

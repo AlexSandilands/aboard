@@ -207,6 +207,10 @@ card with no previous place fades in. It is a board-level FLIP:
 
 ### Task panel sections
 
+Above the sections, under the title, the panel shows the callouts (an agent's request, an import, a resolution) and
+the task's attention flags with their Dismiss ([dismissing flags](task-lifecycle.md#dismissing-flags)). They aren't
+sections: they can't be collapsed, moved or hidden, so a flag stays reachable whatever the sections' layout.
+
 The panel's sections are Labels, Sessions, Usage, Links, Relations, Automation, Local review, Autopilot, Plan, Details (description and plan context
 together) and Activity. Each can be collapsed, reordered by dragging its handle, and hidden. A collapsed
 section shows a one-line summary in its header (`summarizeSection`): the label names, the number of threads and sessions (folded ones included) and any thread that needs you, the cost, tokens and cache share, the link count and
@@ -235,7 +239,7 @@ toggles):
 (its severity's colour) right after the title, whether its summary is plain or rich, so a warning the rich summary
 hides (a flagged Autopilot run reads "Done", PR and session chips carry no message) still shows. The message is the
 toggle's tooltip and part of its accessible name. `SECTION_ATTENTION` in `sections.logic.ts` is the one rule for which
-reasons belong where: Autopilot takes `autopilot`; Sessions `thread_needs_input` and `thread_failed`; Links
+reasons belong where: Autopilot takes `autopilot`; Sessions `session_needs_input` and `session_failed`; Links
 `pr_checks_failing`, `pr_changes_requested` and `pr_conflict`; Plan `blocked_step`; Local review `review_stalled`,
 `review_stuck`, `review_failed` and `review_unattended`. `import_failed` and `agent_request` belong to no section: the
 callouts at the top of the panel show them. `sectionAttention` picks the reason to show, an error before a warning, and

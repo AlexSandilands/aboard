@@ -1,5 +1,6 @@
 import {
   TASK_STATUSES,
+  sessionReasonKey,
   type AttentionReason,
   type BoardSnapshot,
   type Project,
@@ -400,13 +401,13 @@ export function topAttention(reasons: ReadonlyArray<AttentionReason>): Attention
   return reasons.find((r) => r.severity === "error") ?? reasons[0] ?? null;
 }
 
-export const ATTENTION_LABELS: Record<AttentionReason["kind"], string> = {
+const ATTENTION_LABELS: Record<AttentionReason["kind"], string> = {
   blocked_step: "Blocked",
   pr_checks_failing: "Checks failing",
   pr_changes_requested: "Changes requested",
   pr_conflict: "Conflict",
-  thread_needs_input: "Needs input",
-  thread_failed: "Thread failed",
+  session_needs_input: "Needs input",
+  session_failed: "Session failed",
   review_stalled: "Needs review",
   review_stuck: "Review stuck",
   review_failed: "Review failed",
@@ -416,7 +417,13 @@ export const ATTENTION_LABELS: Record<AttentionReason["kind"], string> = {
   agent_request: "Asked for you",
 };
 
-const THREAD_REASONS = new Set<AttentionReason["kind"]>(["thread_needs_input", "thread_failed"]);
+/**
+ * The short label for a reason's chip. A failed session takes its message, which names it as its provider does
+ * ("Thread failed" for T3 Code); the other messages carry detail (a PR number, a step) the chip has no room for.
+ */
+export function attentionLabel(reason: Pick<AttentionReason, "kind" | "message">): string {
+  return reason.kind === "session_failed" ? reason.message : ATTENTION_LABELS[reason.kind];
+}
 
 /** One row of the sidebar's "Needs attention" list: a task, or a T3 thread several tasks share. */
 export type AttentionItem =
@@ -447,50 +454,35 @@ function itemUpdatedAt(item: AttentionItem): string {
     : item.tasks.reduce((m, t) => (t.updatedAt > m ? t.updatedAt : m), "");
 }
 
-/** The reason a T3 thread's status gives (see `deriveAttention`), or null when it needs nobody. */
-function threadReasonKind(status: string): "thread_needs_input" | "thread_failed" | null {
-  if (status === "input" || status === "approval") return "thread_needs_input";
-  return status === "failed" ? "thread_failed" : null;
-}
-
 /**
  * Items for the sidebar's "Needs attention" list: errors first, then most recently updated. Tasks linked to the
  * same T3 thread (a bulk planning session) that is waiting or failed collapse into one thread item, so one question
  * is one row. A grouped task that has another reason too keeps its own row for that reason; a thread with a single
- * task stays a task row.
+ * task stays a task row. Grouping follows the reasons, not the links' statuses, so a thread whose flag the user
+ * dismissed on a task doesn't bring that task back.
  */
 export function attentionItems(tasks: ReadonlyArray<TaskSummary>): AttentionItem[] {
   const flagged = tasks.filter((task) => task.attention.length > 0);
-  type Member = { task: TaskSummary; kind: AttentionReason["kind"]; reason: AttentionReason | undefined };
+  type Member = { task: TaskSummary; reason: AttentionReason };
   const byThread = new Map<string, { title: string; members: Member[] }>();
-  // Per task and reason kind: how many thread links give it, to tell whether all of them ended up grouped.
-  const linked = new Map<string, number>();
-  const countKey = (task: TaskSummary, kind: string) => `${task.id}:${kind}`;
   for (const task of flagged) {
-    for (const link of task.links) {
-      if (link.kind !== "t3_thread" || !link.snapshot) continue;
-      const kind = threadReasonKind(link.snapshot.status);
-      if (!kind) continue;
-      linked.set(countKey(task, kind), (linked.get(countKey(task, kind)) ?? 0) + 1);
+    for (const reason of task.attention) {
+      if (reason.kind !== "session_needs_input" && reason.kind !== "session_failed") continue;
+      const link = task.links.find((l) => sessionReasonKey(l.id) === reason.key);
+      if (link?.kind !== "t3_thread" || !link.snapshot) continue;
       const key = `${link.ref.environmentId}:${link.ref.threadId}`;
       const group = byThread.get(key) ?? { title: link.snapshot.title, members: [] };
-      group.members.push({ task, kind, reason: task.attention.find((r) => r.kind === kind) });
+      group.members.push({ task, reason });
       byThread.set(key, group);
     }
   }
-  const groupedCount = new Map<string, number>();
+  // The reasons a thread row stands for, so their tasks' own rows leave them out.
+  const grouped = new Set<AttentionReason>();
   const items: AttentionItem[] = [];
   for (const [key, group] of byThread) {
     if (group.members.length < 2) continue;
-    const failed = group.members.find((m) => m.kind === "thread_failed");
-    const top = failed ?? group.members[0]!;
-    const reason = top.reason ?? {
-      kind: top.kind,
-      severity: top.kind === "thread_failed" ? "error" : "warning",
-      message: ATTENTION_LABELS[top.kind],
-    };
-    for (const m of group.members)
-      groupedCount.set(countKey(m.task, m.kind), (groupedCount.get(countKey(m.task, m.kind)) ?? 0) + 1);
+    const { reason } = group.members.find((m) => m.reason.kind === "session_failed") ?? group.members[0]!;
+    for (const m of group.members) grouped.add(m.reason);
     items.push({
       type: "thread",
       key,
@@ -501,12 +493,7 @@ export function attentionItems(tasks: ReadonlyArray<TaskSummary>): AttentionItem
     });
   }
   for (const task of flagged) {
-    // A reason is left to the thread row only when every thread link that gives it was grouped.
-    const covered = (kind: AttentionReason["kind"]) => {
-      const total = linked.get(countKey(task, kind)) ?? 0;
-      return total > 0 && groupedCount.get(countKey(task, kind)) === total;
-    };
-    const reasons = task.attention.filter((r) => !(THREAD_REASONS.has(r.kind) && covered(r.kind)));
+    const reasons = task.attention.filter((r) => !grouped.has(r));
     if (reasons.length > 0) items.push({ type: "task", key: task.id, task, reasons });
   }
   return items.sort((a, b) => {

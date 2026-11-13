@@ -116,7 +116,7 @@ describe("imports service", () => {
     s.imports.fail(task.id, "gh is not signed in");
     const failed = s.tasks.summary(task.id);
     expect(failed.import).toMatchObject({ status: "failed", error: "gh is not signed in" });
-    expect(failed.attention).toEqual([
+    expect(failed.attention).toMatchObject([
       { kind: "import_failed", severity: "warning", message: "Import failed: gh is not signed in" },
     ]);
     expect(s.imports.pending()).toEqual([]);

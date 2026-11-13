@@ -133,6 +133,25 @@ export const useDismissAttentionRequest = (opts?: MutationOpts) =>
     (taskId: string) => api<TaskSummary>(`/api/tasks/${enc(taskId)}/attention-request`, { method: "DELETE" }),
     opts,
   );
+/**
+ * Dismisses one attention flag of a task by its reason's key, or with no key all of them. A flag stays hidden while
+ * the state that raised it stands; the server's events take it off the card.
+ */
+export const useDismissAttention = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ taskId, key }: { taskId: string; key?: string }) =>
+      api<TaskSummary>(`/api/tasks/${enc(taskId)}/attention/dismissals`, { body: key ? { key } : {} }),
+    opts,
+  );
+/** Shows a dismissed flag again, or with no key every dismissed flag of the task. */
+export const useRestoreAttention = (opts?: MutationOpts) =>
+  useApiMutation(
+    ({ taskId, key }: { taskId: string; key?: string }) =>
+      api<TaskSummary>(`/api/tasks/${enc(taskId)}/attention/dismissals${key ? `?key=${enc(key)}` : ""}`, {
+        method: "DELETE",
+      }),
+    opts,
+  );
 export const useUpdateTask = (opts?: MutationOpts) =>
   useApiMutation(
     ({ id, ...input }: UpdateTaskInput & { id: string }) =>

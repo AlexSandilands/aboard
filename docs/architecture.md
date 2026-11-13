@@ -131,6 +131,7 @@ ORM.
 | `task_templates`  | Starting points for new tasks, board-wide or per project; `tasks.template_id` records which one a task came from ([templates](features/templates.md)) |
 | `task_relations`  | "Blocker blocks blocked" pairs, across projects; cascade on delete ([relations](features/relations.md))                       |
 | `task_labels`     | A task's labels, normalized; one row per task and label ([labels](features/labels.md))                                        |
+| `attention_dismissals` | Attention flags the user dismissed: task, reason key, the fingerprint of the state dismissed ([task lifecycle](features/task-lifecycle.md#dismissing-flags)) |
 | `label_colors`    | Label colour overrides (a hue); labels without a row take a hue hashed from their name                                        |
 | `task_reviews`    | Local review rounds: round, cycle, status, reviewer, summary                                                                  |
 | `review_findings` | A round's findings: severity, location, status, resolution note                                                               |

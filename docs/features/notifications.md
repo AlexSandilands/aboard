@@ -71,6 +71,7 @@ producer's own write:
 | `pr_checks_failing`    | The next snapshot's checks are not failing (a later head passes), or the PR is merged or closed |
 | `pr_changes_requested` | The decision is no longer `changes_requested`, or the PR is merged or closed           |
 | `agent_request`        | The request is cleared or dismissed                                                    |
+| A dismissed flag's     | The user [dismisses the flag](task-lifecycle.md#dismissing-flags) on the task: the PR's checks and changes notifications, the thread's, the task's `review_finished` or `autopilot_failed` |
 | Any of a task's        | The task is Done or archived: `core.write` does it once for every task a write moved, closed or archived (the `status_changed`, `closed` and `archived` log entries), whichever route got it there. A task notified in that same write is skipped, and a later touch of a Done task reads nothing |
 
 Matching uses the dedupe key's prefix (`thread:<environmentId>:<threadId>:`, `checks:<linkId>:`, `changes:<linkId>:`) or task and

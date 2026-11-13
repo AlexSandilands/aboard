@@ -352,7 +352,7 @@ function autopilotSummary(
  */
 export const SECTION_ATTENTION: Partial<Record<SectionId, ReadonlyArray<AttentionReason["kind"]>>> = {
   autopilot: ["autopilot"],
-  sessions: ["thread_needs_input", "thread_failed"],
+  sessions: ["session_needs_input", "session_failed"],
   links: ["pr_checks_failing", "pr_changes_requested", "pr_conflict"],
   plan: ["blocked_step"],
   review: ["review_stalled", "review_stuck", "review_failed", "review_unattended"],
