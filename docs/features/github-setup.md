@@ -29,7 +29,7 @@ merging, PRs rarely overlap, and requiring it would mean a rebase and a full CI 
 
 `.github/rulesets/release-tags.json` covers `v*` tags and the `pacman` tag ([releases](releases.md)). They can be
 created, so publishing a release and the first pacman upload still work, but not moved or deleted. A tag that
-fails the release's date check has to stay, or the ruleset has to be switched off to delete it (below).
+fails the release's version check has to stay, or the ruleset has to be switched off to delete it (below).
 
 ### Repo options
 

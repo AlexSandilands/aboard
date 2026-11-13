@@ -50,7 +50,8 @@ The check only looks at the tag's form: it doesn't know the last release, so not
 it. The installed apps and pacman would ignore such a release, and the pacman job leaves its repo alone, but
 the AUR job has no such check and would set the AUR package to it.
 
-Tags up to `v2026.11.13` are from the earlier scheme, the release's date
+The first releases, `v0.1.0` to `v0.8.0`, were published with date tags (`v2026.10.21` to `v2026.11.13`) and
+renamed afterwards; their files still carry the date version
 ([Switching from date versions](#switching-from-date-versions)).
 
 ### The workflow
@@ -139,18 +140,22 @@ against: the same set as the .deb, plus `alsa-lib`, which a minimal Arch install
 
 ### Switching from date versions
 
-Releases up to `v2026.11.13` were named for their date. Every date version sorts above every semver version
-(`2026.11.13` > `1.0.0`), so nothing moves from one to the other by itself:
+The first eight releases were named for their date, `v2026.10.21` to `v2026.11.13`. Every date version sorts
+above every semver version (`2026.11.13` > `1.0.0`), so nothing moves from one to the other by itself:
 
+- **The date tags were renamed.** The eight dated releases count as 0.1 to 0.8, so semver started at `v0.9.0`.
+  Afterwards each was moved to a new tag on the same commit (`v2026.10.21` became `v0.1.0`, up to `v2026.11.13`
+  as `v0.8.0`), its title and notes updated to match, and the old tag deleted with the release tags ruleset
+  switched off for the run. Their files keep the date names and versions, and links with the old tags 404.
 - **The pacman repo was restarted.** `aboard.db` was deleted from the `pacman` release by hand before the first
   semver release, so the job's "won't go back a version" check found no current version and published. A
   machine on a date version takes the semver package once with `sudo pacman -Sy aboard`, which warns of a
   downgrade and installs it; after that `pacman -Syu` works as before.
 - **An app installed from a date release isn't offered the semver ones.** Its updater compares versions the same
   way. Install the newer release by hand once (the installer, AppImage or package from the release page).
-- **Don't rebuild a date release with the workflow.** Its version is higher than any semver one, so the pacman
-  job's "won't go back a version" check lets it through: the date package would replace the current one in the
-  pacman repo, and in the AUR.
+- **Rebuilding one of them** with the workflow builds it afresh as its `v0.x` version and adds those files next
+  to the dated ones. The pacman job leaves its repo alone, as the version is older than the current one; the AUR
+  job has no such check.
 - **GitHub's "Latest" badge** can go by version too. When publishing the first semver release, check **Set as
   the latest release** is ticked: the update feed is read from the latest release.
 
@@ -190,7 +195,7 @@ Releases up to `v2026.11.13` were named for their date. Every date version sorts
 | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Release on pushing a tag, with a draft made by CI | Two steps (tag, then edit the draft) instead of one page                                              |
 | Building Windows on Linux with Wine               | Saves a runner but needs Wine for the executable's icon and version info, and isn't tested on Windows |
-| Date versions, `vYYYY.M.D` (used until `v2026.11.13`) | Says when a build is from, but only one release a day                                             |
+| Date versions, `vYYYY.M.D` (the first releases, renamed `v0.1.0` to `v0.8.0`) | Says when a build is from, but only one release a day                                             |
 | `vYYYY.M.N`, a counter within the month           | Any number of releases a day, but the version no longer says the date, and it isn't semver's meaning either |
 | `vYYYY.MDD.N`, the date and a counter within the day | Works everywhere and sorts after the date versions, but it's an unusual form to read and type      |
 | `vYYYY.M.D.N`, a fourth number                    | electron-builder rejects it: not semver                                                               |
