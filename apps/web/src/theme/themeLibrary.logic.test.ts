@@ -6,6 +6,7 @@ import {
   installTheme,
   parseThemeLibrary,
   readThemeLibrary,
+  reidReservedThemes,
   removeThemes,
   replaceCollection,
   themesInCollection,
@@ -27,6 +28,58 @@ describe("parseThemeLibrary", () => {
   it("refuses to work on a saved value that isn't a list, so writing can't destroy it", () => {
     expect(() => parseThemeLibrary("{")).toThrow(/couldn't be read/);
     expect(() => parseThemeLibrary('{"a":1}')).toThrow(/couldn't be read/);
+  });
+});
+
+describe("reidReservedThemes", () => {
+  // Saved before "tide" and "t3-code" were reserved, so parseThemeFile can't make them.
+  const tide = { ...theme("Tidal"), id: "tide", label: "Tide" };
+  const t3 = { ...theme("Mine"), id: "t3-code", label: "T3 Code" };
+
+  it("gives a theme saved under a reserved id an id of its own, which is then read", () => {
+    const { stored, renamed } = reidReservedThemes([theme("Dusk"), tide, t3]);
+    expect(stored.map((entry) => (entry as ThemeDefinition).id)).toEqual(["dusk", "tide-custom", "t3-code-custom"]);
+    expect([...renamed]).toEqual([
+      ["tide", "tide-custom"],
+      ["t3-code", "t3-code-custom"],
+    ]);
+    expect(readThemeLibrary(stored).themes.map((t) => [t.id, t.label])).toEqual([
+      ["dusk", "Dusk"],
+      ["tide-custom", "Tide"],
+      ["t3-code-custom", "T3 Code"],
+    ]);
+  });
+
+  it("counts up when the suffixed id is taken", () => {
+    const taken = { ...theme("Other"), id: "tide-custom" };
+    const { stored, renamed } = reidReservedThemes([taken, tide, { ...tide, label: "Tide 2" }]);
+    expect(stored.map((entry) => (entry as ThemeDefinition).id)).toEqual([
+      "tide-custom",
+      "tide-custom-2",
+      "tide-custom-3",
+    ]);
+    expect(renamed.get("tide")).toBe("tide-custom-2");
+  });
+
+  it("leaves a clean list as it is", () => {
+    const list = [theme("Dusk"), theme("Dawn")];
+    const result = reidReservedThemes(list);
+    expect(result.stored).toBe(list);
+    expect(result.renamed.size).toBe(0);
+  });
+
+  it("keeps entries it can't read, even under a reserved id", () => {
+    const unreadable = [{ id: "tide", shape: "v2" }, "junk", null];
+    const result = reidReservedThemes(unreadable);
+    expect(result.stored).toBe(unreadable);
+    expect(result.renamed.size).toBe(0);
+  });
+
+  it("changes nothing when run again", () => {
+    const once = reidReservedThemes([tide, t3]).stored;
+    const twice = reidReservedThemes(once);
+    expect(twice.stored).toBe(once);
+    expect(twice.renamed.size).toBe(0);
   });
 });
 

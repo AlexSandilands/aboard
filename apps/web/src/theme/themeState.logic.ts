@@ -68,6 +68,42 @@ export function migrateThemeSelection(rawThemeId: string | null, rawPaint: strin
   return rawPaint !== null ? T3_CODE_THEME_ID : DEFAULT_THEME_ID;
 }
 
+/**
+ * The saved base theme id and halves after custom themes were re-id'd (see reidReservedThemes): a selection naming the
+ * old id follows the custom theme to its new one. `t3-code` as the base id is the T3 Code card's own key, so it stays.
+ * Null for either part means it needs no change.
+ */
+export function remapThemeSelection(
+  rawThemeId: string | null,
+  rawHalves: string | null,
+  renamed: ReadonlyMap<string, string>,
+): { themeId: string | null; halves: string | null } {
+  const themeId = rawThemeId !== null && rawThemeId !== T3_CODE_THEME_ID ? (renamed.get(rawThemeId) ?? null) : null;
+  let halves: string | null = null;
+  if (rawHalves) {
+    let value: unknown;
+    try {
+      value = JSON.parse(rawHalves);
+    } catch {
+      value = null;
+    }
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      const next: Record<string, unknown> = { ...value };
+      let changed = false;
+      for (const appearance of ["light", "dark"] as const) {
+        const id = next[appearance];
+        const to = typeof id === "string" ? renamed.get(id) : undefined;
+        if (to) {
+          next[appearance] = to;
+          changed = true;
+        }
+      }
+      if (changed) halves = JSON.stringify(next);
+    }
+  }
+  return { themeId, halves };
+}
+
 /** Keeps only the halves that name a theme with colours for that appearance. */
 export function parseThemeHalves(raw: string | null, custom: ReadonlyArray<ThemeDefinition>): ThemeHalves {
   if (!raw) return {};
