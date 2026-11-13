@@ -152,6 +152,14 @@ describe("usage formatting", () => {
       ],
     });
     expect(rowModel(two)).toBe("a +1");
+    // One model under two providers is still one model.
+    const twoProviders = row({
+      models: [
+        { harness: "claude-code", model: "a", tokens: EMPTY_TOKEN_USAGE, costUsd: null },
+        { harness: "t3", model: "a", tokens: EMPTY_TOKEN_USAGE, costUsd: null },
+      ],
+    });
+    expect(rowModel(twoProviders)).toBe("a");
     expect(rowModel(row({ models: [] }))).toBe("—");
   });
 });

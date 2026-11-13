@@ -167,7 +167,8 @@ export function rowName(row: TaskUsageRow, automationTitle: (key: string) => str
 
 /** The model column: one model, the first plus how many more, or a dash when the source didn't say. */
 export function rowModel(row: TaskUsageRow): string {
-  const named = row.models.map((m) => m.model).filter((m): m is string => !!m);
+  // Unique: a thread row has a line per provider and model, so one model can appear twice.
+  const named = [...new Set(row.models.map((m) => m.model).filter((m): m is string => !!m))];
   if (named.length === 0) return "—";
   return named.length === 1 ? named[0]! : `${named[0]} +${named.length - 1}`;
 }
