@@ -1,5 +1,6 @@
 import {
   type AddLinkResult,
+  AttentionDismissalInput,
   type DeleteTasksResult,
   TaskRefsInput,
   CloseTaskInput,
@@ -225,5 +226,27 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
   app.delete(
     "/api/tasks/:id/attention-request",
     handle((c) => c.json(services.attention.clear(taskId(c), actorOf(c)).task)),
+  );
+  // The user dismissing attention flags and showing them again: one by its reason's key, or with no key all of
+  // them. REST only: a flag is how a problem reaches the user, so no agent dismisses one.
+  app.post(
+    "/api/tasks/:id/attention/dismissals",
+    handle(async (c) => {
+      const { key } = await parseBody(c, AttentionDismissalInput);
+      const id = taskId(c);
+      return c.json(
+        key ? services.attention.dismiss(id, key, actorOf(c)) : services.attention.dismissAll(id, actorOf(c)),
+      );
+    }),
+  );
+  app.delete(
+    "/api/tasks/:id/attention/dismissals",
+    handle((c) => {
+      const { key } = parseQuery(c, AttentionDismissalInput);
+      const id = taskId(c);
+      return c.json(
+        key ? services.attention.restore(id, key, actorOf(c)) : services.attention.restoreAll(id, actorOf(c)),
+      );
+    }),
   );
 }

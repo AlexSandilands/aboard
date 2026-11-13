@@ -57,6 +57,7 @@ const rowsByTable = (dump: BoardDump): Record<Table, BackupRow[]> => ({
   task_labels: dump.tasks.flatMap((b) => b.task_labels),
   task_reviews: dump.tasks.flatMap((b) => b.task_reviews),
   review_findings: dump.tasks.flatMap((b) => b.review_findings),
+  attention_dismissals: dump.tasks.flatMap((b) => b.attention_dismissals),
   task_events: dump.task_events,
   session_usage: dump.session_usage,
   session_usage_cursor: dump.session_usage_cursor,

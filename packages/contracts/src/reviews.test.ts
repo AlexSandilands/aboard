@@ -197,21 +197,29 @@ describe("deriveAttention for reviews", () => {
     byBoard,
     verifiedOnPr: false,
   });
+  const attentionOf = (review: ReturnType<typeof summary>) =>
+    deriveAttention({ phases: [], links: [], review }).attention;
 
   it("flags loops that ended without a clean result", () => {
-    expect(deriveAttention([], [], summary("stalled")).map((r) => r.kind)).toEqual(["review_stalled"]);
-    expect(deriveAttention([], [], summary("stuck"))).toEqual([
-      { kind: "review_stuck", severity: "warning", message: "Review: 2 open after 3 rounds" },
+    expect(attentionOf(summary("stalled")).map((r) => r.kind)).toEqual(["review_stalled"]);
+    expect(attentionOf(summary("stuck"))).toEqual([
+      {
+        kind: "review_stuck",
+        severity: "warning",
+        message: "Review: 2 open after 3 rounds",
+        key: "review",
+        fingerprint: "stuck:3",
+      },
     ]);
-    expect(deriveAttention([], [], summary("failed")).map((r) => r.kind)).toEqual(["review_failed"]);
+    expect(attentionOf(summary("failed")).map((r) => r.kind)).toEqual(["review_failed"]);
   });
 
   it("leaves a review mid-loop to the agent", () => {
-    expect(deriveAttention([], [], summary("changes_requested"))).toEqual([]);
+    expect(attentionOf(summary("changes_requested"))).toEqual([]);
   });
 
   it("flags findings from the board's own reviewer, which no agent is looping on", () => {
-    expect(deriveAttention([], [], summary("changes_requested", true))).toEqual([
+    expect(attentionOf(summary("changes_requested", true))).toMatchObject([
       { kind: "review_unattended", severity: "warning", message: "Board review: 2 to fix" },
     ]);
     const rounds = [round(1, "submitted", 1, BOARD_REVIEWER)];

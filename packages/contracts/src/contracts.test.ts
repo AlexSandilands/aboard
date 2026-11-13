@@ -10,6 +10,11 @@ import {
   startedEpicTasks,
   unmergedEpicBranch,
   deriveAttention,
+  sessionHealth,
+  type AgentSessionStatus,
+  type AttentionDismissal,
+  type AttentionInput,
+  type T3ThreadStatus,
   describeEpicRollup,
   deriveEpicStatus,
   epicBranchMerge,
@@ -97,42 +102,128 @@ describe("deriveProgress", () => {
 });
 
 describe("deriveAttention", () => {
+  const base = { id: "l", taskId: "t", label: null, syncedAt: null, createdAt: "" };
+  const pr = (headOid: string | null, checks: "failing" | "passing" = "failing"): TaskLink => ({
+    ...base,
+    kind: "pr",
+    url: "https://github.com/a/b/pull/1",
+    ref: { host: "github.com", repo: "a/b", number: 1 },
+    snapshot: {
+      state: "open",
+      title: "x",
+      checks,
+      reviewDecision: "changes_requested",
+      mergeable: "conflicting",
+      headRef: null,
+      headOid,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  });
+  const thread = (status: T3ThreadStatus, lastActivityAt = "2026-01-01T00:00:00.000Z"): TaskLink => ({
+    ...base,
+    kind: "t3_thread",
+    url: "t3code://threads/e/t",
+    ref: { environmentId: "e", threadId: "t" },
+    snapshot: { title: "x", status, lastActivityAt },
+  });
+  const session = (status: AgentSessionStatus): TaskLink => ({
+    ...base,
+    kind: "agent_session",
+    url: "agent-session://claude-code/x",
+    ref: { harness: "claude-code", sessionId: "5f0c1b0e-0000-4000-8000-000000000000", cwd: "/repo" },
+    snapshot: { status, inApp: false },
+  });
+  /** Dismisses everything `input` raises, as the user would, and returns the dismissals. */
+  const dismissAll = (input: AttentionInput): AttentionDismissal[] =>
+    deriveAttention(input).attention.map(({ key, fingerprint }) => ({
+      key,
+      fingerprint,
+      actor: "user",
+      dismissedAt: "2026-01-02T00:00:00.000Z",
+    }));
+  const kinds = (input: AttentionInput) => deriveAttention(input).attention.map((r) => r.kind);
+
   it("warns about a failed import, with the reason", () => {
     const failed = { status: "failed", error: "gh isn't signed in", sourceUrl: "PROJ-1" } as const;
-    expect(deriveAttention([], [], null, failed)).toEqual([
-      { kind: "import_failed", severity: "warning", message: "Import failed: gh isn't signed in" },
+    expect(deriveAttention({ phases: [], links: [], issueImport: failed }).attention).toMatchObject([
+      { kind: "import_failed", severity: "warning", message: "Import failed: gh isn't signed in", key: "import" },
     ]);
-    expect(deriveAttention([], [], null, { ...failed, status: "pending", error: null })).toEqual([]);
+    expect(kinds({ phases: [], links: [], issueImport: { ...failed, status: "pending", error: null } })).toEqual([]);
   });
 
   it("flags blocked steps and failing PRs", () => {
-    const reasons = deriveAttention(phases(["blocked"]), [
-      {
-        id: "l",
-        taskId: "t",
-        kind: "pr",
-        url: "https://github.com/a/b/pull/1",
-        label: null,
-        syncedAt: null,
-        createdAt: "",
-        ref: { host: "github.com", repo: "a/b", number: 1 },
-        snapshot: {
-          state: "open",
-          title: "x",
-          checks: "failing",
-          reviewDecision: "changes_requested",
-          mergeable: "conflicting",
-          headRef: null,
-          updatedAt: null,
-        },
-      },
-    ]);
-    expect(reasons.map((r) => r.kind)).toEqual([
+    expect(kinds({ phases: phases(["blocked"]), links: [pr("abc")] })).toEqual([
       "blocked_step",
       "pr_checks_failing",
       "pr_changes_requested",
       "pr_conflict",
     ]);
+  });
+
+  it("flags a session that waits or failed, whatever runs it, named for its provider", () => {
+    expect(deriveAttention({ phases: [], links: [thread("failed")] }).attention).toMatchObject([
+      { kind: "session_failed", severity: "error", message: "Thread failed", key: "link:l" },
+    ]);
+    expect(deriveAttention({ phases: [], links: [thread("approval")] }).attention).toMatchObject([
+      { kind: "session_needs_input", message: "Thread awaiting approval" },
+    ]);
+    expect(kinds({ phases: [], links: [thread("working"), thread("done"), session("idle")] })).toEqual([]);
+  });
+
+  it("leaves an Autopilot run's failed session to the autopilot flag", () => {
+    expect(sessionHealth(session("failed"))).toMatchObject({ state: "failed", autopilotRun: true });
+    expect(kinds({ phases: [], links: [session("failed")], autopilot: "Review failed" })).toEqual(["autopilot"]);
+  });
+
+  it("drops a failed session once the task is Done, but not one waiting on the user", () => {
+    expect(kinds({ phases: [], links: [thread("failed")], status: "review" })).toEqual(["session_failed"]);
+    expect(kinds({ phases: [], links: [thread("failed")], status: "done" })).toEqual([]);
+    expect(kinds({ phases: [], links: [thread("input")], status: "done" })).toEqual(["session_needs_input"]);
+  });
+
+  it("hides a dismissed reason while the state that raised it stands", () => {
+    const input = { phases: phases(["blocked"]), links: [thread("failed"), pr("abc")] };
+    const dismissals = dismissAll(input);
+    const result = deriveAttention({ ...input, dismissals });
+    expect(result.attention).toEqual([]);
+    expect(result.dismissed.map((r) => r.kind)).toEqual([
+      "blocked_step",
+      "session_failed",
+      "pr_checks_failing",
+      "pr_changes_requested",
+      "pr_conflict",
+    ]);
+    expect(result.dismissed[0]).toMatchObject({ dismissedBy: "user", dismissedAt: "2026-01-02T00:00:00.000Z" });
+  });
+
+  it("raises a dismissed session again when it runs and fails again", () => {
+    const dismissals = dismissAll({ phases: [], links: [thread("failed")] });
+    const again = { phases: [], links: [thread("failed", "2026-01-03T00:00:00.000Z")], dismissals };
+    expect(kinds(again)).toEqual(["session_failed"]);
+    expect(deriveAttention(again).dismissed).toEqual([]);
+    // The same thread now waiting on the user is a different state too.
+    expect(kinds({ phases: [], links: [thread("input")], dismissals })).toEqual(["session_needs_input"]);
+  });
+
+  it("raises dismissed PR flags again on a new head commit", () => {
+    const dismissals = dismissAll({ phases: [], links: [pr("abc")] });
+    expect(kinds({ phases: [], links: [pr("abc")], dismissals })).toEqual([]);
+    expect(kinds({ phases: [], links: [pr("def")], dismissals })).toEqual([
+      "pr_checks_failing",
+      "pr_changes_requested",
+      "pr_conflict",
+    ]);
+    // A host that reports no head commit falls back to when the PR last changed.
+    const noHead = dismissAll({ phases: [], links: [pr(null)] });
+    expect(kinds({ phases: [], links: [pr(null)], dismissals: noHead })).toEqual([]);
+  });
+
+  it("raises dismissed blocked steps again when another step is blocked", () => {
+    const one = phases(["blocked", "todo"]);
+    const dismissals = dismissAll({ phases: one, links: [] });
+    expect(kinds({ phases: one, links: [], dismissals })).toEqual([]);
+    const two = [{ ...one[0]!, steps: one[0]!.steps.map((s) => ({ ...s, status: "blocked" as const })) }];
+    expect(kinds({ phases: two, links: [], dismissals })).toEqual(["blocked_step"]);
   });
 });
 

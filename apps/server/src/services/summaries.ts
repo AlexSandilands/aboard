@@ -53,7 +53,9 @@ export function toTaskReviews(rounds: readonly ReviewRecord[], findings: readonl
 }
 
 export function toTaskImport(record: ImportRecord | undefined): TaskImport | null {
-  return record ? { status: record.status, error: record.error, sourceUrl: record.sourceUrl } : null;
+  return record
+    ? { status: record.status, error: record.error, sourceUrl: record.sourceUrl, updatedAt: record.updatedAt }
+    : null;
 }
 
 export function taskRef(task: TaskRecord | undefined): TaskRef | null {
@@ -108,6 +110,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
       .sort((x, y) => x.number - y.number);
   const importsByTask = repos.imports.forTasks(ids);
   const autopilotByTask = repos.autopilotRuns.attentionFor(ids);
+  const dismissalsByTask = repos.attentionDismissals.forTasks(ids);
   const cleanPrReviewByTask = repos.autopilotRuns.cleanPrReviewTimes(ids);
   const { reviewMaxRounds } = loadSettings(repos);
 
@@ -125,6 +128,17 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
     const review = deriveReviewSummary(rounds, findings, reviewMaxRounds, cleanPrReviewByTask.get(record.id) ?? null);
     const issueImport = toTaskImport(importsByTask.get(record.id));
     const blockedBy = relatedTasks(relations.filter((r) => r.blockedId === record.id).map((r) => r.blockerId));
+    const attention = deriveAttention({
+      phases,
+      links,
+      status: record.status,
+      // A finished or manual task's review is history: the badge stays, the call to action doesn't.
+      review: record.status === "done" || record.manual ? null : review,
+      issueImport,
+      autopilot: autopilotByTask.get(record.id) ?? null,
+      request: record.attentionRequest,
+      dismissals: dismissalsByTask.get(record.id) ?? [],
+    });
     const summary: TaskSummary = {
       id: record.id,
       number: record.number,
@@ -150,15 +164,8 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
       stepStatuses: phases.flatMap((p) => p.steps.map((s) => s.status)),
       currentStep: deriveCurrentStep(phases),
       links,
-      // A finished or manual task's review is history: the badge stays, the call to action doesn't.
-      attention: deriveAttention(
-        phases,
-        links,
-        record.status === "done" || record.manual ? null : review,
-        issueImport,
-        autopilotByTask.get(record.id) ?? null,
-        record.attentionRequest,
-      ),
+      attention: attention.attention,
+      dismissedAttention: attention.dismissed,
       attentionRequest: record.attentionRequest,
       lastNote: note
         ? { text: typeof note.payload.text === "string" ? note.payload.text : "", actor: note.actor, at: note.at }

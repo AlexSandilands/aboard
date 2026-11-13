@@ -128,6 +128,9 @@ function seed() {
   h.db.exec(`INSERT INTO session_usage_cursor (harness, session_id, source_file, offset, size, state_json, updated_at)
     VALUES ('claude-code', 's-1', 's-1.jsonl', 900, 900, '{"last":"m1"}', '2026-10-16T00:00:00.000Z')`);
   h.db.exec("INSERT INTO session_usage_thread (thread_id, harness, session_id) VALUES ('thread-1', 'codex', 'c-1')");
+  // A flag the user dismissed goes with its task.
+  h.db.exec(`INSERT INTO attention_dismissals (task_id, key, fingerprint, actor, dismissed_at)
+    VALUES ('${a.id}', 'steps', 's1', 'user', '2026-10-16T00:00:00.000Z')`);
   // The pollers' cache, which must stay out of dumps.
   h.db.exec("UPDATE task_links SET snapshot_json = '{\"state\":\"open\"}', synced_at = '2026-10-16T00:00:00.000Z'");
   return { ...h, s, project, a, b, idea };
@@ -152,6 +155,7 @@ const PRIMARY_KEYS: Record<string, string> = {
   task_relations: "blocker_id, blocked_id",
   task_reviews: "id",
   review_findings: "id",
+  attention_dismissals: "task_id, key",
   task_events: "id",
   session_usage: "harness, session_id, source_file, day, model",
   session_usage_cursor: "harness, session_id, source_file",
@@ -517,6 +521,7 @@ describe("restore", () => {
       session_usage: _su,
       session_usage_cursor: _suc,
       session_usage_thread: _sut,
+      attention_dismissals: _ad,
       ...counts
     } = dump.manifest.counts;
     const old: BoardDump = {
@@ -559,7 +564,11 @@ describe("restore", () => {
           attention_requested_at: _at,
           ...task
         } = bundle.task;
-        return { ...bundle, task: { ...task, status: task.status === "backlog" ? "idea" : (task.status ?? null) } };
+        return {
+          ...bundle,
+          attention_dismissals: [],
+          task: { ...task, status: task.status === "backlog" ? "idea" : (task.status ?? null) },
+        };
       }),
       task_events: dump.task_events.map((e) =>
         e.type === "created" ? { ...e, payload_json: String(e.payload_json).replace('"backlog"', '"idea"') } : e,

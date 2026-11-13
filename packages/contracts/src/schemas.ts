@@ -436,8 +436,8 @@ export const AttentionReason = z.object({
     "pr_checks_failing",
     "pr_changes_requested",
     "pr_conflict",
-    "thread_needs_input",
-    "thread_failed",
+    "session_needs_input",
+    "session_failed",
     "review_stalled",
     "review_stuck",
     "review_failed",
@@ -448,8 +448,31 @@ export const AttentionReason = z.object({
   ]),
   severity: z.enum(["warning", "error"]),
   message: z.string(),
+  /** What raised the flag (`link:<id>`, `pr:<id>:checks`, `steps`, ...): the same while the same thing is wrong. */
+  key: z.string(),
+  /**
+   * The state that raised it (a thread's status and last activity, a PR's head commit, the blocked steps). A
+   * dismissal hides the reason only while this is unchanged, so a new failure brings the flag back.
+   */
+  fingerprint: z.string(),
 });
 export type AttentionReason = z.infer<typeof AttentionReason>;
+
+/** A reason the user dismissed, hidden while the state that raised it stands; restoring it shows it again. */
+export const DismissedAttention = AttentionReason.extend({ dismissedAt: IsoDate, dismissedBy: z.string() });
+export type DismissedAttention = z.infer<typeof DismissedAttention>;
+
+/** Which flag to dismiss or restore, by its reason's key; absent for every flag on the task. */
+export const AttentionDismissalInput = z.object({ key: z.string().min(1).optional() });
+export type AttentionDismissalInput = z.infer<typeof AttentionDismissalInput>;
+
+/** A stored dismissal: `key` and `fingerprint` are the dismissed reason's (see AttentionReason). */
+export interface AttentionDismissal {
+  key: string;
+  fingerprint: string;
+  actor: string;
+  dismissedAt: string;
+}
 
 /** An agent's standing request for the user to look at a task (the request_attention tool). */
 export const AttentionRequest = z.object({
@@ -491,6 +514,8 @@ export const TaskImport = z.object({
   error: z.string().nullable(),
   /** The ticket key or URL, or the issue URL, the task was created from. */
   sourceUrl: z.string(),
+  /** When the import last changed (its last attempt), so a dismissed failure returns when a retry fails again. */
+  updatedAt: IsoDate.optional(),
 });
 export type TaskImport = z.infer<typeof TaskImport>;
 
@@ -564,7 +589,10 @@ export const TaskSummary = z.object({
   stepStatuses: z.array(StepStatus),
   currentStep: CurrentStep.nullable(),
   links: z.array(TaskLink),
+  /** What needs the user now. Reasons they dismissed are left out and listed in `dismissedAttention`. */
   attention: z.array(AttentionReason),
+  /** Reasons the user dismissed that would otherwise still show, so they can be restored. */
+  dismissedAttention: z.array(DismissedAttention),
   /** The agent's request behind an `agent_request` attention reason; null when no agent has one standing. */
   attentionRequest: AttentionRequest.nullable(),
   lastNote: z.object({ text: z.string(), actor: z.string(), at: IsoDate }).nullable(),

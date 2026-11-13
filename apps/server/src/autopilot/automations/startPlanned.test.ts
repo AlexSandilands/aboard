@@ -577,11 +577,13 @@ describe("start planned tasks: one attempt per entry into Planned", () => {
         error: "Autopilot couldn't start this task: T3 isn't connected",
       },
     ]);
-    expect(s.tasks.summary(t.id).attention).toContainEqual({
-      kind: "autopilot",
-      severity: "warning",
-      message: "Autopilot couldn't start this task: T3 isn't connected",
-    });
+    expect(s.tasks.summary(t.id).attention).toContainEqual(
+      expect.objectContaining({
+        kind: "autopilot",
+        severity: "warning",
+        message: "Autopilot couldn't start this task: T3 isn't connected",
+      }),
+    );
     expect(s.notifications.list().items.filter((n) => n.taskId === t.id)).toHaveLength(1);
 
     // Moving it out clears the flag; moving it back in is a new entry, so it is tried again.

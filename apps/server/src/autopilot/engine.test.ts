@@ -597,11 +597,13 @@ describe("failures and attention", () => {
     expect(runs("agent")).toMatchObject([
       { status: "failed", error: "no runner today", needsAttention: true, runner: "headless", worktreePath: "/wt/1" },
     ]);
-    expect(s.tasks.summary(task.id).attention).toContainEqual({
-      kind: "autopilot",
-      severity: "warning",
-      message: "no runner today",
-    });
+    expect(s.tasks.summary(task.id).attention).toContainEqual(
+      expect.objectContaining({
+        kind: "autopilot",
+        severity: "warning",
+        message: "no runner today",
+      }),
+    );
 
     // Not retried: the dedupe key already has a run.
     await settle(engine);
@@ -934,11 +936,13 @@ describe("failures and attention", () => {
       })!;
       s.autopilot.start(again.id);
       s.autopilot.finish(again.id, { status: "failed", error: "again", needsAttention: true });
-      expect(s.tasks.summary(task.id).attention).toContainEqual({
-        kind: "autopilot",
-        severity: "warning",
-        message: "again",
-      });
+      expect(s.tasks.summary(task.id).attention).toContainEqual(
+        expect.objectContaining({
+          kind: "autopilot",
+          severity: "warning",
+          message: "again",
+        }),
+      );
     });
 
     it("lifts every flagged run of the task, so an older one doesn't take the dismissed one's place", () => {

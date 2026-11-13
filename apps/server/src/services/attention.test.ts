@@ -1,4 +1,4 @@
-import type { BoardEvent, TaskDetail } from "@repo/contracts";
+import type { BoardEvent, PrSnapshot, T3ThreadStatus, TaskDetail, TaskSummary } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 
@@ -26,8 +26,8 @@ describe("request attention", () => {
     const { s, task, created, events } = setup();
     const flagged = s.attention.request(task.id, "  Please review the plan  ", "claude-code");
     expect(flagged.attentionRequest).toMatchObject({ message: "Please review the plan", actor: "claude-code" });
-    expect(flagged.attention).toEqual([
-      { kind: "agent_request", severity: "warning", message: "Please review the plan" },
+    expect(flagged.attention).toMatchObject([
+      { kind: "agent_request", severity: "warning", message: "Please review the plan", key: "request" },
     ]);
     expect(s.tasks.summaries({ attentionOnly: true }).map((t) => t.id)).toEqual([task.id]);
     expect(created()).toHaveLength(1);
@@ -101,5 +101,123 @@ describe("request attention", () => {
     s.tasks.close(task.id, { resolution: "wont_do" }, "user");
     expect(s.tasks.summary(epic.id)).toMatchObject({ status: "done", attention: [], attentionRequest: null });
     expect(s.tasks.detail(epic.id).events.map((e) => e.type)).toContain("attention_cleared");
+  });
+});
+
+describe("dismissing flags", () => {
+  const HEAD = "1111111111111111111111111111111111111111";
+  const prSnapshot = (headOid = HEAD): PrSnapshot => ({
+    state: "open",
+    title: "Ship it",
+    checks: "failing",
+    reviewDecision: null,
+    mergeable: "mergeable",
+    headRef: "ship",
+    headOid,
+    updatedAt: "2026-10-01T11:00:00.000Z",
+  });
+  const threadSnapshot = (status: T3ThreadStatus, lastActivityAt = "2026-10-01T11:00:00.000Z") => ({
+    title: "Agent thread",
+    status,
+    lastActivityAt,
+  });
+
+  /** A task with a failed thread, a PR whose checks fail and a blocked step. */
+  function flagged() {
+    const ctx = setup();
+    const { s, task } = ctx;
+    const thread = s.links.add(task.id, { value: "t3code://threads/env/th1" }, "user");
+    const pr = s.links.add(task.id, { value: "https://github.com/acme/app/pull/7" }, "user");
+    s.links.setSnapshot(thread.id, threadSnapshot("working"));
+    s.links.setSnapshot(thread.id, threadSnapshot("failed"));
+    s.links.setSnapshot(pr.id, { ...prSnapshot(), checks: "passing" });
+    s.links.setSnapshot(pr.id, prSnapshot());
+    const step = s.tasks.detail(task.id).phases[0]!.steps[0]!;
+    s.plans.updateStep(step.id, { status: "blocked" }, "claude-code");
+    const kinds = () => s.tasks.summary(task.id).attention.map((a) => a.kind);
+    const post = (body: object) =>
+      ctx.request(`/api/tasks/${task.id}/attention/dismissals`, { method: "POST", json: body });
+    const del = (key?: string) =>
+      ctx.request(`/api/tasks/${task.id}/attention/dismissals${key ? `?key=${encodeURIComponent(key)}` : ""}`, {
+        method: "DELETE",
+      });
+    return { ...ctx, thread, pr, step, kinds, post, del };
+  }
+
+  it("hides one flag, keeps the link, and lists it as dismissed", async () => {
+    const { s, task, thread, kinds, post } = flagged();
+    expect(kinds()).toEqual(["blocked_step", "session_failed", "pr_checks_failing"]);
+    const res = await post({ key: `link:${thread.id}` });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as TaskSummary;
+    expect(body.attention.map((a) => a.kind)).toEqual(["blocked_step", "pr_checks_failing"]);
+    expect(body.dismissedAttention).toMatchObject([{ kind: "session_failed", dismissedBy: "user" }]);
+    expect(body.links.map((l) => l.id)).toContain(thread.id);
+    expect(s.tasks.detail(task.id).events.find((e) => e.type === "attention_dismissed")?.payload).toEqual({
+      flags: ["Thread failed"],
+    });
+    // Dismissing it again (a second tab) is harmless; a flag the task never had is refused.
+    expect((await post({ key: `link:${thread.id}` })).status).toBe(200);
+    expect((await post({ key: "link:nope" })).status).toBe(409);
+  });
+
+  it("raises a dismissed flag again when the state behind it changes", async () => {
+    const { s, thread, pr, step, task, kinds, post } = flagged();
+    await post({});
+    expect(kinds()).toEqual([]);
+    expect(s.tasks.summaries({ attentionOnly: true })).toEqual([]);
+
+    // The thread ran and failed again; the PR's checks fail on a new commit; a second step is blocked.
+    s.links.setSnapshot(thread.id, threadSnapshot("failed", "2026-10-01T12:30:00.000Z"));
+    expect(kinds()).toEqual(["session_failed"]);
+    s.links.setSnapshot(pr.id, prSnapshot("2222222222222222222222222222222222222222"));
+    expect(kinds()).toEqual(["session_failed", "pr_checks_failing"]);
+    const [added] = s.plans.addSteps(step.phaseId, [{ title: "b" }], "claude-code");
+    s.plans.updateStep(added!.id, { status: "blocked" }, "claude-code");
+    expect(kinds()).toEqual(["blocked_step", "session_failed", "pr_checks_failing"]);
+    expect(s.tasks.summary(task.id).dismissedAttention).toEqual([]);
+  });
+
+  it("dismisses everything at once: derived flags, the agent's request and Autopilot's runs", async () => {
+    const { s, task, kinds, post, events } = flagged();
+    s.attention.request(task.id, "Look", "claude-code");
+    const run = s.autopilot.record({
+      automation: "noop",
+      candidate: { dedupeKey: "k", summary: "stuck", taskId: task.id },
+      dryRun: false,
+    });
+    s.autopilot.finish(run!.id, { status: "failed", error: "No runner", needsAttention: true });
+    expect(kinds()).toEqual(["agent_request", "autopilot", "blocked_step", "session_failed", "pr_checks_failing"]);
+    events.length = 0;
+    const res = await post({});
+    const body = (await res.json()) as TaskSummary;
+    expect(body.attention).toEqual([]);
+    expect(body.attentionRequest).toBeNull();
+    // The request and the runs have their own dismissal, which can't be restored.
+    expect(body.dismissedAttention.map((a) => a.kind)).toEqual(["blocked_step", "session_failed", "pr_checks_failing"]);
+    expect(events.some((e) => e.type === "task.upserted" && e.task.id === task.id)).toBe(true);
+    expect(s.notifications.list().items.filter((n) => n.kind === "pr_checks_failing" && !n.readAt)).toEqual([]);
+    // Nothing left to dismiss.
+    expect((await post({})).status).toBe(200);
+  });
+
+  it("restores one dismissed flag, or all of them", async () => {
+    const { s, task, thread, kinds, post, del } = flagged();
+    await post({});
+    expect((await del(`link:${thread.id}`)).status).toBe(200);
+    expect(kinds()).toEqual(["session_failed"]);
+    const body = (await (await del()).json()) as TaskSummary;
+    expect(body.attention.map((a) => a.kind)).toEqual(["blocked_step", "session_failed", "pr_checks_failing"]);
+    expect(body.dismissedAttention).toEqual([]);
+    expect(s.tasks.detail(task.id).events.filter((e) => e.type === "attention_restored")).toHaveLength(2);
+  });
+
+  it("stops flagging a failed session once the task is Done", () => {
+    const { s, task, step, kinds } = flagged();
+    s.plans.updateStep(step.id, { status: "done" }, "claude-code");
+    s.tasks.move(task.id, { status: "review" }, "user");
+    expect(kinds()).toContain("session_failed");
+    s.tasks.move(task.id, { status: "done" }, "user");
+    expect(kinds()).not.toContain("session_failed");
   });
 });

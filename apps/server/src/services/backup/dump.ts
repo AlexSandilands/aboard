@@ -31,6 +31,7 @@ const TASK_ROWS_SQL: Record<(typeof TASK_BUNDLE_TABLES)[number], string> = {
   task_reviews: "SELECT * FROM task_reviews ORDER BY task_id, round",
   review_findings:
     "SELECT f.* FROM review_findings f JOIN task_reviews r ON r.id = f.review_id ORDER BY f.task_id, r.round, f.position",
+  attention_dismissals: "SELECT * FROM attention_dismissals ORDER BY task_id, key",
 };
 
 const rowsOf = (db: Db, table: string, sql: string): BackupRow[] => {
@@ -95,6 +96,7 @@ export function dumpBoard(db: Db): BoardDump {
           task_labels: [],
           task_reviews: [],
           review_findings: [],
+          attention_dismissals: [],
         },
       ]),
     );

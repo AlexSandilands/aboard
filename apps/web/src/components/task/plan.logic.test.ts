@@ -60,6 +60,7 @@ function detail(phases: PlanPhase[]): TaskDetail {
     currentStep: null,
     links: [],
     attention: [],
+    dismissedAttention: [],
     attentionRequest: null,
     lastNote: null,
     autoReview: null,
