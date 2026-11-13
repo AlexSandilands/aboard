@@ -38,6 +38,7 @@ files under each app.
 
 ### Guides
 
+- [Installing on Arch Linux](guide/arch-linux.md): the install script, what it does, doing it by hand
 - [Using the board](guide/using-the-board.md): plans, closing, links, labels, layout, shortcuts
 - [Settings](guide/settings.md): the settings page, its groups and how to get to them
 - [Templates](guide/templates.md): Bug, Spike, Feature and your own starting points for tasks

@@ -134,6 +134,8 @@ jobs:
           # The package before the database that lists it, so pacman never sees a database for a missing file.
           gh release upload pacman ./*.pkg.tar.zst ./*.pkg.tar.zst.sig --clobber
           gh release upload pacman "$repo.db" "$repo.db.sig" "$repo.files" "$repo.files.sig" --clobber
+          # What Arch users download to add the repo (packaging/install-arch.sh).
+          gh release upload pacman install-arch.sh --clobber
           # Older packages: the new database no longer lists them.
           gh release view pacman --json assets --jq '.assets[].name' | while read -r asset; do
             [ -e "$asset" ] || gh release delete-asset pacman "$asset" --yes

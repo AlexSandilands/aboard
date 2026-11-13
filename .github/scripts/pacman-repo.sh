@@ -11,6 +11,7 @@ version=$1
 tarball=$(realpath "$2")
 out=$(realpath -m "$3")
 repo=$(node -p 'require("./package.json").name')
+installer=$(realpath packaging/install-arch.sh)
 work=$(mktemp -d)
 
 node scripts/arch-package.ts "$repo" "$version" "$(sha256sum "$tarball" | cut -d' ' -f1)" "$work"
@@ -30,6 +31,9 @@ key=$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "fpr" { prin
 rm -rf "$out"
 mkdir -p "$out"
 cp "$work/$pkgfile" "$out/"
+# The one-command installer is served from the release too. It has to be here: publishing deletes every asset
+# that isn't in this folder.
+install -m 644 "$installer" "$out/install-arch.sh"
 cd "$out"
 gpg --batch --local-user "$key" --detach-sign "$pkgfile"
 repo-add --sign --key "$key" "$repo.db.tar.zst" "$pkgfile"
