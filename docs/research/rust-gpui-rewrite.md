@@ -5,6 +5,11 @@ be rewritten in Rust: a Rust server (REST, SSE, MCP, SQLite, Autopilot, the poll
 [GPUI](https://www.gpui.rs/) window replacing both the React app and the Electron shell. Nothing here is
 built. GPUI is pre-1.0 and changes weekly, so check the sources before acting on any claim about it.
 
+**Status, 2026-11-13: parked.** No rewrite is planned. The owner isn't convinced it's worth the effort, and
+task #85 was closed with this document as its result. Two spikes sit in the backlog in case the question comes
+back: #99 (a Rust server behind the same contract) and #100 (measuring a GPUI board prototype). The section on
+[how GPUI redraws](#how-gpui-redraws) was added on this date.
+
 ## Verdict
 
 **Feasible, and worth doing in two halves on different timelines.**
@@ -16,14 +21,16 @@ built. GPUI is pre-1.0 and changes weekly, so check the sources before acting on
     always-on part from ~96 MB to tens of MB and takes Node out of the runtime.
   - About 3.5–6 person-months.
 - **The GPUI window: not yet.**
-  - It is buildable, and it would look nearly the same: same layout, type, colours and themes, and probably
+  - It is buildable, and it would look nearly the same: same layout, type, colours and themes, and possibly
     smoother motion.
   - It would cut install size about tenfold (290 MiB to tens of MB) and memory severalfold.
-  - Four things hold it back today:
+  - Five things hold it back today:
     1. GPUI has no current official release, only weekly snapshots that break.
     2. There is no rich Markdown editor to replace TipTap.
     3. Machines without a working GPU are an unmeasured risk.
     4. We would lose the board in a browser and our web tooling.
+    5. GPUI redraws far more than what changed, so the smooth motion we expect on a board of hundreds of cards
+       is unproven ([How GPUI redraws](#how-gpui-redraws)).
   - It also costs most of the effort: roughly 8–15 person-months.
   - Revisit when the conditions under [What would change the answer](#what-would-change-the-answer) move, and
     start with the measurement spike described there.
@@ -161,6 +168,45 @@ motion, View Transitions, PNG grain, the opaque scroller) works around how Chrom
 - **Server side:** no benchmark matches our load. axum and rusqlite add little over SQLite itself. A Rust server
   holds data as structs rather than a JavaScript heap, and has no V8 heap that grows and only slowly shrinks.
 
+### How GPUI redraws
+
+Added 2026-11-13 from [A Critique of GPUI](https://blog.zortax.de/posts/a-critique-of-gpui) (2026-11-08). Its
+author wrote the wgpu port of GPUI's Linux renderer cited above, so they know the code. They also build zgui, a
+competing signal-based framework, and the numbers come from their own unpublished benchmark on one machine
+(i9-13900K, RTX 3080 Ti, Vulkan, Linux), which zgui was tuned on. Treat the numbers as an order of magnitude.
+
+- **A change doesn't say what changed.** A view calls `cx.notify()`, which carries only its entity id. GPUI then
+  renders again every view that isn't behind a valid `.cached()` boundary. The post says `.cached()` is rarely
+  used by application authors and restricts layout.
+- **The cost grows with what is on screen, not with the change.** With 3,000 live rows, each a cached view,
+  changing one label takes 8.4 ms, about 3 ms per 1,000 rows. A hover, a keystroke or writing an equal value costs
+  about the same. The same list written as plain elements takes 92 ms.
+- **Narrowing it is manual.** The smallest unit that can redraw alone is a view, so a label that should update
+  by itself needs its own entity, `Render` impl, subscription and equality guard. A forgotten `notify` is a
+  silent bug, which Zed's own design note calls an application bug.
+- **Forks help only partly.** Longbridge's `gpui-fast` keeps each view's subtree between frames and brings the
+  3,000-row label change down to 3.4 ms, but still walks the whole tree. In its own 60-panel benchmark it saves
+  83 % when each panel owns its state and is 11 % slower when panels share a model.
+- **Zed isn't proof for an app like ours.** Zed's window has "tens of nodes and a few thousand elements"
+  ([zed#63800](https://github.com/zed-industries/zed/pull/63800), closed 2026-09-24), and its editor is one custom
+  element that bypasses GPUI's layout and views.
+- **The post's own verdict** is that GPUI is "probably good enough for many use-cases", and that a full frame is
+  relatively cheap.
+
+**What it means for the board.** A frame at 60 Hz has 16.7 ms and at 280 Hz has 3.6 ms. The board shows every
+card with no virtualisation, and a dense board is hundreds of cards of a few dozen elements each: more elements
+than Zed's window. So:
+
+- Hover, drag and live updates would each cost a pass over the whole board unless every card is its own cached
+  view with hand-written guards. That is extra work in every UI row of [Effort](#effort), and it isn't counted
+  there.
+- With that work done, the post's figures suggest a few milliseconds per change on a dense board: fine at 60 Hz,
+  over budget at 280 Hz. This is our reading of someone else's benchmark of list rows, not a measurement of
+  cards.
+- Virtualising the lanes (GPUI Kit's `VirtualList`) would cut the live element count, at the price of the
+  dependency lines and FLIP motion needing bounds for cards that aren't rendered.
+- The memory, install size and always-on gains above don't depend on any of this.
+
 ### What to expect
 
 These are estimates from the figures above, not measurements. Each range is wide on purpose.
@@ -172,7 +218,7 @@ These are estimates from the figures above, not measurements. Each range is wide
 | Memory, window closed (tray)      | ~565 MB PSS      | 15–50 MB                | The window's GPU resources go. Today the hidden renderer and GPU process stay            |
 | Server cold start                 | ~120 ms          | 10–40 ms                | No JS to load. Migrations and SQLite open dominate                                       |
 | Window to first paint             | not measured     | 100–300 ms              | No renderer process or JS bundle; theme and data load as today                          |
-| Panel and sidebar slides          | 150–180 fps cap  | display refresh, likely | GPUI lays out every frame anyway. Unproven on a full board                               |
+| Panel and sidebar slides          | 150–180 fps cap  | unknown                 | GPUI lays out every frame anyway, but a frame costs a pass over the whole board (above)  |
 | API latency, SQLite queries       | ~12 ms full list | about the same          | Already bounded by SQLite and JSON size                                                  |
 
 **The biggest win is the always-on footprint.** The board runs all day in the tray so agents can reach MCP. That
@@ -227,7 +273,8 @@ the desktop behind the window rather than the board behind a popover.
   `with_animation` and the board reflows with it. The curve today, `cubic-bezier(0.2, 0.9, 0.25, 1)`, is a
   plain function GPUI's easing accepts. The snapshot motion, View Transitions, `holdFirstFrame` and `hurryToEnd`
   machinery exists because Chromium can't lay out a full board every frame quickly. In GPUI it has no reason to
-  exist, provided layout of a full board fits in a frame. That is likely, but nobody has measured it.
+  exist, provided layout of a full board fits in a frame. Nobody has measured that, and
+  [How GPUI redraws](#how-gpui-redraws) is a reason to doubt it at high refresh rates on a dense board.
 - **Card motion (FLIP).** GPUI has no layout animation. We'd keep each card's bounds from the last frame and,
   when they change, animate an offset from the old place to the new one. This is the same idea as `cardMotion.ts`,
   written against GPUI's element bounds: a few hundred lines.
@@ -283,8 +330,9 @@ The second and third together keep most of it without a webview.
 - **Close, with work:** grain, drag and drop feel, card motion, Markdown rendering, the title bar.
 - **Different:** frosted glass, which becomes flat translucent surfaces; the rich editor, unless option 2 or 3
   above is done; the HTML art pieces.
-- **Smoother, probably:** panel and sidebar slides and scrolling, since layout and paint no longer go through
-  Chromium.
+- **Smoother, possibly:** panel and sidebar slides and scrolling, since layout and paint no longer go through
+  Chromium. Whether a dense board holds the display's refresh rate is unmeasured
+  ([How GPUI redraws](#how-gpui-redraws)).
 
 ## Installing
 
@@ -410,11 +458,16 @@ because so much of it is building what React, dnd-kit and the browser give us no
 6. **Memory with wgpu.** The ~100 MB empty-window floor could eat into the memory win while the window is open.
 7. **Agents writing GPUI.** Fewer examples to learn from and a moving API mean more correction per change than
    React gets today.
+8. **Redraw cost on a dense board.** Every change costs a pass over all live views unless each card is a cached
+   view with manual guards, and a missed `notify` fails silently. See [How GPUI redraws](#how-gpui-redraws).
 
 ## What would change the answer
 
 - Zed publishing the split GPUI crates again, or a snapshot line that stops breaking every week.
 - A WYSIWYG Markdown editor for GPUI with real users, or a decision that source editing with a preview is enough.
-- Measurements from a short spike: the board, the panel slide and card dragging on `pnpm sandbox --seed dense`'s
-  data. Frame times and memory on a Linux GPU, Linux `llvmpipe`, Windows, and Windows under WARP. That spike is
-  the next step if the window is pursued. It was out of scope here.
+- Measurements from a short spike (#100): the board, the panel slide and card dragging on
+  `pnpm sandbox --seed dense`'s data. Frame times and memory on a Linux GPU, Linux `llvmpipe`, Windows, and
+  Windows under WARP. It should also time one card changing, a hover and a drag with every card on screen, with
+  and without a cached view per card. That spike is the next step if the window is pursued. It was out of scope
+  here.
+- GPUI gaining a way to redraw less than a view, or retained subtrees landing upstream rather than in a fork.
