@@ -130,6 +130,28 @@ export function shortPrompt(
   return fitShort(withAttachedImages(text, images), platform);
 }
 
+/**
+ * The first message of a custom hand-off's session when its prompt can't go on the command line. The mode's pointer
+ * would tell the agent to work on the task, which isn't what the hand-off asks (it may say "review only", or "run the
+ * sandbox"), so this one names the hand-off and has the agent read the task and wait for the prompt to be pasted. The
+ * label is the user's own text, so it goes in as this command line can carry it.
+ */
+export function handoffShortPrompt(
+  label: string,
+  task: { id: string; number: number },
+  harness: AgentHarness,
+  platform: NodeJS.Platform,
+  images: readonly LaunchImage[] = [],
+): string {
+  const name = nameArgument(label, platform);
+  const text =
+    `This session is for the hand-off "${name}" on #${task.number} from the ${BRAND.id} task board: call ` +
+    `get_task("${task.id}") on the ${BRAND.id} MCP server to read the task, then wait. What to do is in a prompt I ` +
+    "will paste next; until it arrives don't start on the task, change any file or move it on the board. " +
+    startedSessionLine(harness, name);
+  return fitShort(withAttachedImages(text, images), platform);
+}
+
 /** A short prompt as this command line takes it. */
 function fitShort(text: string, platform: NodeJS.Platform): string {
   const fitted = textArgument(text, platform);
@@ -477,14 +499,16 @@ export function createSessionLaunch(deps: {
         label: input.label ?? sessionLabel(input.mode, task.number),
         windowTask: task.number,
         short: (platform) =>
-          shortPrompt(
-            input.mode,
-            task,
-            input.harness,
-            platform,
-            workspace.mode === "pr_branch" ? workspace.branch : undefined,
-            images,
-          ),
+          input.label
+            ? handoffShortPrompt(input.label, task, input.harness, platform, images)
+            : shortPrompt(
+                input.mode,
+                task,
+                input.harness,
+                platform,
+                workspace.mode === "pr_branch" ? workspace.branch : undefined,
+                images,
+              ),
         taskIds: [task.id],
         actor,
       });

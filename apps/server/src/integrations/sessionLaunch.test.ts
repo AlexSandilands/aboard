@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createGitFixture, git } from "../test/gitRepo.ts";
 import { createTestHarness } from "../test/harness.ts";
 import { PROCESS_TEST_TIMEOUT } from "../test/timeouts.ts";
-import { shortPrompt } from "./sessionLaunch.ts";
+import { handoffShortPrompt, shortPrompt } from "./sessionLaunch.ts";
 import { cmdQuote, shQuote, type LaunchSpec, type TerminalHost } from "./terminal.ts";
 
 const WT_SETTINGS = JSON.stringify({
@@ -230,6 +230,28 @@ describe("starting a session from the board", () => {
     // Windows Terminal is given every `;` as `\;`, which it passes on as `;`.
     expect(app.spawned[0]!.args.at(-1)).toBe(body.shortPrompt!.replaceAll(";", "\\;"));
     expect(body.shortPrompt).not.toContain('"');
+  });
+
+  it("gives a custom hand-off's session a pointer that waits for the prompt, not the mode's \"work on it\"", async () => {
+    const app = appWith();
+    // Refused on Windows for its %, so the CLI can't be given the hand-off's own text.
+    const { body } = await app.start({
+      prompt: "Review only, at 100% care. Change nothing.",
+      label: 'Review "100%" on #1',
+    });
+    expect(body.shortReason).toMatch(/contains %/);
+    expect(body.shortPrompt).toBe(handoffShortPrompt('Review "100%" on #1', app.task, "claude-code", "win32"));
+    expect(body.shortPrompt).toContain("This session is for the hand-off 'Review '100' on #1' on #1 from");
+    expect(body.shortPrompt).toContain(`get_task('${app.task.id}')`);
+    expect(body.shortPrompt).toContain("then wait");
+    expect(body.shortPrompt).toContain("don't start on the task");
+    expect(body.shortPrompt).not.toContain("Let's work on");
+    expect(body.shortPrompt).not.toMatch(/["%]/);
+    expect(app.spawned[0]!.args.at(-1)).toBe(body.shortPrompt!.replaceAll(";", "\\;"));
+    // A session that links itself does so under the hand-off's name, not the mode's.
+    const codex = handoffShortPrompt("Sandbox check on #1", app.task, "codex", "win32");
+    expect(codex).toContain("label: 'Sandbox check on #1'");
+    expect(codex).not.toContain("Implementing #1");
   });
 
   it("falls back to a short prompt when the prompt is too long for cmd", async () => {

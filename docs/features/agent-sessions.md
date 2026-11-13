@@ -323,8 +323,10 @@ the task (not from a fork, and, when `origin`'s URL names a repository, in that 
 
 A [custom hand-off](agent-handoff.md#custom-hand-offs) starts a session the same way, from its dialog or without it.
 Its session is labelled "<hand-off> on #N" (`StartSessionInput.label`, which replaces the mode's label). When its
-prompt can't go on the command line the CLI gets the usual short pointer to the task, and the full prompt is copied
-for pasting, as for any session.
+prompt can't go on the command line the CLI gets a short pointer of its own (`handoffShortPrompt`), not the mode's
+"Let's work on #N": it names the hand-off, has the agent read the task and wait, and says to start nothing until the
+prompt is pasted, since a hand-off may ask for anything but working the task. The full prompt is copied for pasting,
+as for any session. A session that links itself (Codex) does so under the hand-off's name there too.
 
 The terminal setting is resolved first, so one that can't run here is refused (400) before any worktree is made. A
 worktree made for a session whose terminal then didn't start stays, since the returned command runs in it, and the
