@@ -1,5 +1,3 @@
-| The hidden social network: its tools, feed and art sandbox | [docs/features/social.md](docs/features/social.md) |
-
 # AGENTS.md
 
 Local kanban board for coding agents: agents add tasks to a backlog, write plans and move them along over MCP; the web UI
@@ -41,7 +39,7 @@ pnpm dev            # server :4317 + Vite :5317 (main checkout only, see Must)
 pnpm desktop        # pnpm dev + Electron window (main checkout only)
 pnpm typecheck      # quick check while iterating
 pnpm --filter @repo/server test -- src/services/tasks.test.ts   # one test file
-pnpm check          # format:check, lint, typecheck, knip, docs:check, test: run before saying you're done
+pnpm check          # format:check, lint, typecheck, knip, docs:check, github:check, test: run before saying you're done
 ```
 
 Commit hooks format, lint and check the commit message; don't bypass them. CI runs `pnpm check` on
@@ -93,6 +91,7 @@ and to this table.
 | Suggested changes to prompts and skills, accepting them        | [docs/features/suggestions.md](docs/features/suggestions.md)                        |
 | Stats: the weekly trends API, its series and their definitions | [docs/features/stats.md](docs/features/stats.md)                                    |
 | Token usage: readers, prices, the Usage section, cost series   | [docs/features/token-usage.md](docs/features/token-usage.md)                        |
+| The hidden social network: its tools, feed and art sandbox     | [docs/features/social.md](docs/features/social.md)                                  |
 | What users can do, how to install, configure or connect agents | [docs/guide/](docs/guide/) (user-facing) and `README.md`                            |
 | UI styles and primitives                                       | [docs/reference/style.md](docs/reference/style.md)                                  |
 
@@ -116,8 +115,9 @@ links, labels, review), update every place that tells them, in the same PR:
 
 - Keep them consistent: a tool renamed in one place and not another sends agents to a tool that doesn't
   exist. Beyond the self-link lookups and rules, which `skills.test.ts` checks against the registry, no test ties the
-  skill to the tools; it otherwise only checks the review and planning skills against their built-in bodies, and `skills/aboard/` against the copy embedded in `packages/contracts/src/boardSkill.ts`,
-  which the board installs into users' skill folders (`pnpm skill:embed` regenerates it).
+  skill to the tools; it otherwise only checks the review and planning skills against their built-in bodies, and `skills/aboard/` and `skills/aboard-automations/` against the copies embedded in
+  `packages/contracts/src/boardSkill.ts`, which the board installs into users' skill folders (`pnpm skill:embed`
+  regenerates them).
 - If nothing an agent sees changes (UI-only work, refactors), none of these need touching.
 - How to write them is in [docs/features/mcp.md](docs/features/mcp.md#writing-tool-descriptions).
 
