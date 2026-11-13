@@ -121,7 +121,7 @@ Any throwaway key works (`gpg --quick-generate-key test ed25519 sign never`).
 
 ### The install script
 
-`packaging/install-arch.sh` is what the README tells Arch users to run: download it from the `pacman` release, then
+`packaging/install-arch.sh` is what the README and the [Arch Linux guide](../guide/arch-linux.md) tell Arch users to run: download it from the `pacman` release, then
 `sudo bash install-arch.sh`. It takes no arguments and reads no environment variables. In order:
 
 1. Checks it is root and that `pacman`, `pacman-key`, `pacman-conf`, `curl` and `gpg` exist.
@@ -141,7 +141,7 @@ A second run finds its own file and `Include` line and changes nothing.
 The script is a file users download by itself, so the repo name, the GitHub URL and the fingerprint are written
 into it. `scripts/install-arch.test.ts` holds the first two to `package.json`, and the container test holds the
 fingerprint to the key file. After replacing the signing key, change `key_fingerprint` in the script and the
-fingerprints in the README in the same PR, and publish a release as soon as it merges: the script fetches the key
+fingerprints in `docs/guide/arch-linux.md` in the same PR, and publish a release as soon as it merges: the script fetches the key
 from `main` but is itself the copy from the last release, so until then it refuses the new key and new installs
 fail.
 
@@ -221,8 +221,8 @@ above every semver version (`2026.11.13` > `1.0.0`), so nothing moves from one t
   alone can't ship a package. The cost is one `pacman-key` step per machine.
 - **An install script that pins the key's fingerprint.** Comparing a fingerprint by eye is the step people skip,
   so the script does it. The script itself isn't signed: someone who could replace the release's files could
-  replace it too, which would reach new installs that run it, not machines that already trust the key. The README
-  keeps the manual steps for anyone who would sooner not run a script as root.
+  replace it too, which would reach new installs that run it, not machines that already trust the key. The Arch Linux
+  guide keeps the manual steps for anyone who would sooner not run a script as root.
 - **The script served from the `pacman` release, not from `main`.** What users run is what was released, at a URL
   next to the repo it sets up.
 - **The repo in its own file, `/etc/pacman.d/aboard.conf`.** The script then adds one line to `pacman.conf` and
