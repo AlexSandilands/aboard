@@ -58,6 +58,7 @@ import type { MachineJobs } from "./machines/jobs.ts";
 import type { LoginDetector } from "./machines/logins.ts";
 import type { RemoteWork } from "./machines/remoteWork.ts";
 import type { RunnerWork } from "./machines/runnerWork.ts";
+import type { RunnerInteractive } from "./machines/runnerInteractive.ts";
 import type { MachineSync } from "./machines/sync.ts";
 import type { SelfUpdater } from "./machines/selfUpdate.ts";
 import type { MergeTaskPrResult } from "./mergeTaskPr.ts";
@@ -83,6 +84,8 @@ export interface RunnerHost {
   workInFlight(): number;
   /** Registers how the server is stopped so its service starts it again, after an update. */
   onRestart(restart: () => void): void;
+  /** Threads in this machine's T3 Code and the folders of CLI sessions, for tasks it holds. */
+  interactive: RunnerInteractive;
 }
 
 export interface Integrations {

@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { AgentSessionRef } from "./agentSessions.ts";
+import { AgentHarness, AgentSessionRef } from "./agentSessions.ts";
+import { ModelChoice } from "./modelProfiles.ts";
+import { StartT3ThreadInput, T3LaunchWorkspace, T3RuntimeMode } from "./t3Launch.ts";
 
 // Work a board has a connected machine do for a task it holds (docs/features/remote-machines.md#work-on-the-machine):
 // a headless run, a custom automation's command or script. The board starts a job and reads it until it ends; the
@@ -69,3 +71,80 @@ export const MachineTranscriptRequest = z.object({
   offset: z.number().int().nonnegative().default(0),
 });
 export type MachineTranscriptRequest = z.infer<typeof MachineTranscriptRequest>;
+
+/**
+ * `POST /machine/t3`: the board acting in the machine's own T3 Code for a task the machine holds
+ * (docs/features/remote-machines.md#t3-code-on-the-machine). The machine finds its T3 as a board finds its own, and
+ * links a thread it starts to its copy of the task, which reaches the board through the change log.
+ */
+export const MACHINE_T3_PATH = "/machine/t3";
+export const MachineT3Request = z.discriminatedUnion("op", [
+  /** The launch dialog's models, projects and branches, from the machine's T3. */
+  z.object({ op: z.literal("options"), taskId: z.string().min(1), choice: ModelChoice.optional() }),
+  /** Starts a thread from the dialog and links it. Answers the link. */
+  z.object({ op: z.literal("start"), taskId: z.string().min(1), input: StartT3ThreadInput, actor: z.string() }),
+  /**
+   * Starts a thread without the dialog (a custom hand-off), on the choice the board made. Answers what the board's
+   * `launchTaskThread` does.
+   */
+  z.object({
+    op: z.literal("launch"),
+    taskId: z.string().min(1),
+    input: z.object({
+      prompt: z.string().min(1),
+      commandId: z.string().min(1),
+      title: z.string().optional(),
+      followUp: z.boolean().optional(),
+      work: z.boolean(),
+      modelChoice: ModelChoice.optional(),
+      defaultModel: z.boolean().optional(),
+      baseRef: z.string().optional(),
+      startFromOrigin: z.boolean().optional(),
+      maxRuntimeMode: T3RuntimeMode.optional(),
+      /** A custom hand-off's own workspace: the checkout or an existing worktree, never a new one (that is the default). */
+      workspace: T3LaunchWorkspace.optional(),
+    }),
+    actor: z.string(),
+  }),
+  /** Posts a message into one of the task's threads. */
+  z.object({
+    op: z.literal("message"),
+    taskId: z.string().min(1),
+    linkId: z.string().min(1),
+    text: z.string().min(1),
+    commandId: z.string().min(1),
+  }),
+]);
+export type MachineT3Request = z.infer<typeof MachineT3Request>;
+
+/**
+ * `POST /machine/sessions`: the board starting a CLI session in a terminal of its own that reaches the machine over
+ * SSH. The machine makes the session's folder (a worktree, or its checkout of the project) and links the session to
+ * its copy of the task; the board then opens `ssh` and tmux there (docs/features/agent-sessions.md#on-a-machine).
+ */
+export const MACHINE_SESSIONS_PATH = "/machine/sessions";
+export const MachineSessionRequest = z.object({
+  taskId: z.string().min(1),
+  harness: AgentHarness,
+  /** The id the board picked, for a CLI that takes one; null for one that picks its own (Codex), which links itself. */
+  sessionId: AgentSessionRef.shape.sessionId.nullable(),
+  label: z.string().min(1).max(200),
+  /** The tmux session the board opens it in, recorded on the session's link so it is found again. */
+  tmux: AgentSessionRef.shape.tmux,
+  /** A new worktree from a base (`origin/<branch>` or a branch name, read from origin after a fetch), or the checkout. */
+  workspace: z.discriminatedUnion("mode", [
+    z.object({ mode: z.literal("new_worktree"), baseRef: z.string().min(1).max(250).nullable() }),
+    z.object({ mode: z.literal("current") }),
+  ]),
+  actor: z.string(),
+});
+export type MachineSessionRequest = z.infer<typeof MachineSessionRequest>;
+
+export const MachineSessionResult = z.object({
+  /** The folder on the machine the session runs in. */
+  cwd: z.string(),
+  branch: z.string().nullable(),
+  /** The link the machine made; null when the CLI links itself. */
+  linkId: z.string().nullable(),
+});
+export type MachineSessionResult = z.infer<typeof MachineSessionResult>;

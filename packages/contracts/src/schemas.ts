@@ -3,7 +3,13 @@ import { GitHostStatus } from "./gitHosts.ts";
 import { AutopilotStatus } from "./autopilot.ts";
 import { KeybindingOverrides } from "./keybindings.ts";
 import { LabelHue } from "./labels.ts";
-import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
+import {
+  AgentSessionRef,
+  AgentSessionSnapshot,
+  LinkMachine,
+  TerminalOpenIn,
+  TerminalSetting,
+} from "./agentSessions.ts";
 import { AutomationVariables } from "./automationVariables.ts";
 import { BackupSettings, MachineName } from "./backup.ts";
 import { ModelChoice } from "./modelProfiles.ts";
@@ -376,6 +382,11 @@ export function nextPrChanges(
 export const T3ThreadRef = z.object({
   environmentId: z.string().min(1),
   threadId: z.string().min(1),
+  /**
+   * The connected machine whose T3 Code the thread runs in, for a thread started there for a task it holds. The board
+   * never polls or messages such a thread itself: the machine does, and its status arrives with the task's changes.
+   */
+  machine: LinkMachine.optional(),
 });
 export type T3ThreadRef = z.infer<typeof T3ThreadRef>;
 

@@ -48,7 +48,9 @@ export const RUNNER_INSTRUCTIONS =
   "those you can change as usual, and every change reaches the board. Other tasks can be read while the board is " +
   "reachable (the read is passed on to it) and can't be changed from here. A task you create here belongs to this " +
   "machine until the board takes it back; made while the board can't be reached, it gets the machine's prefix in " +
-  'its number ("#E7"), which it keeps. Epics, Autopilot, threads and merging are the board\'s.';
+  'its number ("#E7"), which it keeps. Epics, Autopilot, starting or messaging threads and merging are the ' +
+  "board's. Link your own session or T3 Code thread with link as usual: the link records that it is on this " +
+  "machine, so the board opens it here.";
 
 type Args = Record<string, unknown>;
 
