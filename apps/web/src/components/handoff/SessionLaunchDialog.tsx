@@ -16,7 +16,7 @@ import {
   type SessionLaunchOptions,
   type TaskSummary,
 } from "@repo/contracts";
-import { ArrowUpIcon, LightbulbIcon } from "lucide-react";
+import { ArrowUpIcon, LightbulbIcon, ServerIcon } from "lucide-react";
 import { useState } from "react";
 import { HarnessIcon } from "~/components/sessions/SessionParts";
 import { CliModelPicker } from "~/components/models/ModelChoicePicker";
@@ -63,6 +63,7 @@ import {
   type SessionPicks,
   type SessionWhere,
 } from "./sessionLaunch.logic";
+import { RunOnStripControl, runsElsewhereNote, useRunOn } from "~/components/task/RunOn";
 
 /** What says which model a hand-off's choice comes down to. */
 const selectModelSettings = ({ modelTiers, modelProfiles, operationModels }: AppSettings) => ({
@@ -249,6 +250,9 @@ function Composer({
   const model = ready?.model ?? "";
   const levels = modelLevels(scanned.data, harness, model.trim() || null);
   const badModel = modelError(model);
+  // A task set to run on another machine starts there, not in a session here (remote-machines.md#choosing-the-machine).
+  const { placement } = useRunOn(task);
+  const elsewhere = task.kind === "epic" ? null : runsElsewhereNote(placement);
   const blocker = !ready
     ? failure
       ? "The launch options didn't load"
@@ -261,7 +265,7 @@ function Composer({
           ? fix
             ? "The project's folder isn't a git repository"
             : "Choose a branch"
-          : (badModel ?? images.blocker);
+          : (badModel ?? elsewhere ?? images.blocker);
 
   const pick = (change: (picks: SessionPicks) => SessionPicks) => setPickState((state) => pickSessionBy(state, change));
   const pickModel = (next: string | null, nextLevels: readonly CliEffort[]) =>
@@ -403,6 +407,7 @@ function Composer({
           </span>
         ) : (
           <WhereStrip
+            task={task}
             options={ready.options}
             where={ready.where}
             onChange={(where) => pick((picks) => ({ ...picks, where }))}
@@ -441,6 +446,12 @@ function Composer({
             : null}
         </p>
       ) : null}
+      {elsewhere ? (
+        <p className="mt-2 flex items-start gap-2 px-1 text-xs leading-relaxed text-muted-foreground">
+          <ServerIcon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+          <span>{elsewhere}</span>
+        </p>
+      ) : null}
       {preset ? <HandoffNote name={preset.name} /> : null}
     </form>
   );
@@ -451,10 +462,12 @@ function Composer({
  * checkout. The branch picker pins the task's branches: one with a worktree runs the session there.
  */
 function WhereStrip({
+  task,
   options,
   where,
   onChange,
 }: {
+  task: TaskSummary;
   options: SessionLaunchOptions;
   where: SessionWhere;
   onChange: (where: SessionWhere) => void;
@@ -467,6 +480,7 @@ function WhereStrip({
   ];
   return (
     <>
+      <RunOnStripControl task={task} />
       <Select
         items={items}
         value={where.mode}

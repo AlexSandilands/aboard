@@ -26,6 +26,7 @@ import { cycleStepStatus, railSegmentTone, STEP_STATUS_LABELS, type RailTone } f
 import { STEP_TITLE_TONE, StepStatusGlyph } from "./StepVisuals";
 import { useReadsLarge } from "./taskLayout";
 import type { PlanActions } from "./usePlanActions";
+import { StepWaitingMark } from "./RunOn";
 
 const RAIL_TONE: Record<RailTone, string> = {
   success: "bg-success/40",
@@ -156,6 +157,7 @@ export function PlanStepRow({
                 {step.title}
               </button>
             )}
+            <StepWaitingMark stepId={step.id} />
             {isCurrent && !editingTitle ? (
               <Badge variant="default" size="sm">
                 Now

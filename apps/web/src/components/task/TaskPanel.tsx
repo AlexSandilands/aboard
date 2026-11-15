@@ -49,6 +49,7 @@ import { EpicChildren } from "./EpicChildren";
 import { useEpicFilter, useSetEpicFilter } from "~/components/board/boardNavigation";
 import { splitsIntoColumns, type SectionId, type TaskPanelLayout } from "./sections.logic";
 import { TaskLayoutContext } from "./taskLayout";
+import { MachineOfflineCallout, WaitingStepsProvider, useRunOn } from "./RunOn";
 
 const MIN_WIDTH = 380;
 const DEFAULT_WIDTH = 540;
@@ -280,17 +281,20 @@ export function TaskPanelContent({
         onDock={onDock}
         onOpenPlanEditor={openPlanEditor}
       />
+      <HeldOfflineCallout task={task} />
       <div className="min-h-0 flex-1">
         <PanelTaskLinksProvider>
-          <TaskPanelBody
-            task={task}
-            layout={layout}
-            projects={projects}
-            onOpenEditor={openEditor}
-            titleActions={
-              <TaskActions task={task} projects={projects} onClose={onClose} onOpenPlanEditor={openPlanEditor} />
-            }
-          />
+          <WaitingStepsProvider task={task}>
+            <TaskPanelBody
+              task={task}
+              layout={layout}
+              projects={projects}
+              onOpenEditor={openEditor}
+              titleActions={
+                <TaskActions task={task} projects={projects} onClose={onClose} onOpenPlanEditor={openPlanEditor} />
+              }
+            />
+          </WaitingStepsProvider>
         </PanelTaskLinksProvider>
       </div>
       <PlanEditor
@@ -468,6 +472,17 @@ function PanelSkeleton({ layout, onClose }: { layout: TaskPanelLayout; onClose: 
           <Skeleton key={i} className="h-6 w-full" />
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Under the header while the machine holding the task can't be reached (MachineOfflineCallout). */
+function HeldOfflineCallout({ task }: { task: TaskDetail }) {
+  const { placement } = useRunOn(task);
+  if (placement.state !== "held" || !placement.offline) return null;
+  return (
+    <div className="shrink-0 px-3 pt-2">
+      <MachineOfflineCallout placement={placement} />
     </div>
   );
 }

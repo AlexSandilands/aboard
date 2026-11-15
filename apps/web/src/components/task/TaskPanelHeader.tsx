@@ -14,7 +14,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useSetTaskExpanded } from "~/components/board/boardNavigation";
 import { useUpdateTask } from "~/state/mutations";
 import { EpicDeliveryButton, OnEpicBranchChip } from "./EpicDelivery";
-import { HoldBadge } from "./HoldBadge";
+import { RunOnChip } from "./RunOn";
 import { importPendingLabel } from "./import.logic";
 import { resolutionLabel } from "./resolution.logic";
 import type { TaskPanelLayout } from "./sections.logic";
@@ -160,7 +160,7 @@ export function TaskPanelHeader({
         </Badge>
       ) : null}
       <OnEpicBranchChip task={task} />
-      <HoldBadge task={task} />
+      {task.kind === "epic" ? null : <RunOnChip task={task} />}
       {archived ? (
         <Badge variant="warning" size="sm">
           Archived

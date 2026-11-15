@@ -19,7 +19,7 @@ import {
   type T3ThreadRef,
   type TaskSummary,
 } from "@repo/contracts";
-import { AlertCircleIcon, ArrowUpIcon, LightbulbIcon } from "lucide-react";
+import { AlertCircleIcon, ArrowUpIcon, LightbulbIcon, ServerIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { copyToClipboard } from "~/components/task/InlineInput";
 import { Button } from "~/components/ui/button";
@@ -59,6 +59,7 @@ import { usePlanPrompt } from "./PlanTasksDialog";
 import { RefPicker } from "./BranchPicker";
 import { AccessPicker, ComposerControl, ComposerStrip, WorkspaceMenu } from "./T3LaunchPickers";
 import { T3ModelPicker } from "~/components/models/T3ModelPicker";
+import { RunOnStripControl, runsElsewhereNote, useRunOn } from "~/components/task/RunOn";
 
 /**
  * What the dialog starts a thread for: a task, which the thread is linked to, a project's Suggest epics, or a plan
@@ -85,6 +86,10 @@ interface LaunchSubject {
   workspace?: CustomHandoffWorkspace | null;
   /** The custom hand-off the dialog was opened from: named beside the title and under the composer. */
   handoffName?: string;
+  /** The task whose machine the strip offers to choose (remote-machines.md#choosing-the-machine). */
+  runOnTask?: TaskSummary;
+  /** Why the thread can't start here: the task runs on another machine (runsElsewhereNote). */
+  elsewhere?: string | null;
 }
 
 /** The subject's launch mutation, with its id already bound. */
@@ -209,7 +214,9 @@ function TaskLaunchContent({
   const epic = task.kind === "epic";
   const followup = defaultHandoffMode(task) === "followup";
   const epicBranch = useFollowupEpicBranch(task);
-  const subject: LaunchSubject = fix
+  const { placement } = useRunOn(task);
+  const where = epic ? {} : { runOnTask: fix ? undefined : task, elsewhere: runsElsewhereNote(placement) };
+  const base: LaunchSubject = fix
     ? {
         label: `Fix PR #${fix.number} · ${taskLabel(task)} ${task.title}`,
         promptFor: () => fix.prompt,
@@ -254,6 +261,7 @@ function TaskLaunchContent({
           // A follow-up starts where the code is: the epic's branch while it's only there, else the default branch.
           integrationBranch: epic ? null : followup ? epicBranch : task.integrationBranch,
         };
+  const subject: LaunchSubject = { ...base, ...where };
   const starter: Starter = {
     isPending: mutation.isPending,
     start: (input, { onSuccess, onError }) =>
@@ -453,7 +461,7 @@ function Composer({
         : subject.fixBranch && workspace.mode !== "new_worktree"
           ? // The prompt has the agent fast-forward its branch to the PR's: that must never move one of yours.
             "Fix the PR in a new worktree, not in your checkout"
-          : images.blocker;
+          : (subject.elsewhere ?? images.blocker);
 
   const withModel = (current: Picks, next: T3ModelSelection | null): Picks => ({
     ...current,
@@ -581,6 +589,7 @@ function Composer({
       <ComposerStrip className="justify-between">
         {ready ? (
           <>
+            {subject.runOnTask ? <RunOnStripControl task={subject.runOnTask} /> : null}
             <WorkspaceMenu options={ready.options} choice={ready.choice} onChange={(choice) => pick({ choice })} />
             <RefPicker options={ready.options} choice={ready.choice} onChange={(choice) => pick({ choice })} />
           </>
@@ -608,6 +617,7 @@ function Composer({
       {options?.suggestion ? (
         <SuggestionNote suggestion={options.suggestion} planWithMe={planWithMe} handoffName={subject.handoffName} />
       ) : null}
+      {subject.elsewhere ? <ElsewhereNote text={subject.elsewhere} /> : null}
       {subject.handoffName ? <HandoffNote name={subject.handoffName} /> : null}
     </form>
   );
@@ -665,6 +675,16 @@ function SuggestionNote({
       {status ? (
         <span className={cn("block", !planWithMe && suggestion.unavailable && "text-warning")}>{status}</span>
       ) : null}
+    </p>
+  );
+}
+
+/** Under the composer when the task runs on another machine: why Start is off here, and how to start it there. */
+function ElsewhereNote({ text }: { text: string }) {
+  return (
+    <p className="mt-2 flex items-start gap-2 px-1 text-xs leading-relaxed text-muted-foreground">
+      <ServerIcon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+      <span>{text}</span>
     </p>
   );
 }
