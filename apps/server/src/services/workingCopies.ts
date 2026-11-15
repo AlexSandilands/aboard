@@ -1,6 +1,9 @@
 import {
+  BOARD_HISTORY,
   CHANGE_LOG_FORMAT,
   taskLabel,
+  type AutopilotRun,
+  type NotifyInput,
   type ChangesResponse,
   type CopiedProject,
   type CopiedUsage,
@@ -26,6 +29,7 @@ import {
   referencedIds,
   writeTaskState,
 } from "./taskState.ts";
+import type { ResolveMatch } from "./notifications.ts";
 import type { ProjectsService, Services } from "./types.ts";
 
 // A runner's side of held tasks (docs/features/remote-machines.md#held-tasks): the working copies it holds for its
@@ -76,6 +80,28 @@ export interface WorkingCopiesService {
   nextNumber(): { prefix: string; number: number };
   /** Calls `listener` after each write that added to the log. */
   onAppended(listener: () => void): void;
+  /**
+   * Logs a run of this machine's own Autopilot as it now stands, inside the write that changed it, under the board's
+   * id for its project. Nothing on a board.
+   */
+  logRun(run: AutopilotRun): void;
+  /**
+   * Brings the tasks held ones point at up to date with the board, those this runner already has as references;
+   * one that changed column is marked changed, so the engine looks at what it blocks.
+   */
+  refreshReferences(references: readonly TaskReference[]): void;
+  /**
+   * Logs a notification raised here, for the board's inbox. Nothing on a board, nor while an edit the board sent is
+   * applied: the board raised it already when it made the edit.
+   */
+  logNotice(input: NotifyInput): void;
+  /**
+   * Logs a resolve made here, so the board marks the same notifications read. Only one that marked something read
+   * here, or the first since a notification it covers was raised: a poller resolves on every read.
+   */
+  logResolve(match: ResolveMatch, changed: number): void;
+  /** The board's id for one of this runner's projects, else null (a project made here the board hasn't named). */
+  boardProjectOf(projectId: string | null): string | null;
 }
 
 export function createWorkingCopiesService(
@@ -99,6 +125,12 @@ export function createWorkingCopiesService(
   const forced = new Set<string>();
   const numberPool: number[] = [];
   let appended = false;
+  /** Above zero while an edit the board sent is applied: what it notifies, the board notified already. */
+  let applying = 0;
+  /** Resolves already logged since a notification they cover was last raised, by their match. */
+  const resolvesLogged = new Set<string>();
+  const matchKey = (match: ResolveMatch): string =>
+    "keyPrefix" in match ? `key:${match.keyPrefix}` : `task:${match.taskId}:${match.kind}`;
 
   const epoch = (): string => {
     const stored = copies.state("epoch");
@@ -131,6 +163,9 @@ export function createWorkingCopiesService(
     };
   };
 
+  /** A held task's state as this runner logs it: with what it read of the task's pull requests. */
+  const stateOf = (task: TaskRecord): TaskState => readTaskState(repos, task, { prSnapshots: true });
+
   /** What was last logged of a task, as one text: a write that leaves it the same logs nothing. */
   const loggedText = (state: TaskState, usage: readonly CopiedUsage[]): string =>
     `${JSON.stringify(state)}\n${JSON.stringify(usage)}`;
@@ -143,7 +178,7 @@ export function createWorkingCopiesService(
       if (copy?.role === "reference") continue;
       const task = repos.tasks.getAny(id);
       if (!task) continue;
-      const state = readTaskState(repos, task);
+      const state = stateOf(task);
       const usage = deps.usageOf(id);
       const json = loggedText(state, usage);
       const events = repos.events.after(id, copy?.lastEventId ?? 0);
@@ -219,7 +254,7 @@ export function createWorkingCopiesService(
 
   /** The service call an edit names, with its arguments as the board made it. */
   const dispatch = (request: HeldEditRequest): void => {
-    const { tasks, plans, links, attention, reviews } = deps.services();
+    const { tasks, plans, links, attention, reviews, autopilot } = deps.services();
     // The arguments were this version's own on the board; an edit this runner can't make sense of throws and is
     // refused like any other.
     const call = (fn: (...args: never[]) => unknown): void => void fn(...(request.args as never[]));
@@ -266,6 +301,10 @@ export function createWorkingCopiesService(
         return call(reviews.submit.bind(reviews));
       case "reviews.resolveFinding":
         return call(reviews.resolveFinding.bind(reviews));
+      case "autopilot.retry":
+        return call(autopilot.retry.bind(autopilot));
+      case "autopilot.dismiss":
+        return call(autopilot.dismiss.bind(autopilot));
     }
   };
 
@@ -352,11 +391,22 @@ export function createWorkingCopiesService(
         for (const event of request.events) {
           repos.events.append(saved.id, event.at, event.actor, event.type, event.payload);
         }
+        // What Autopilot did on the task so far, as history the engine here counts (a head already reviewed, rounds
+        // used). Not logged back: the board has them.
+        for (const run of request.runs ?? []) {
+          if (
+            repos.autopilotRuns.get(run.id) ||
+            repos.autopilotRuns.exists(run.automation, run.dedupeKey, run.dryRun)
+          ) {
+            continue;
+          }
+          repos.autopilotRuns.insert({ ...run, taskId: saved.id, projectId: project.id, machine: BOARD_HISTORY });
+        }
         copies.upsert({
           taskId: saved.id,
           role: "held",
           lastEventId: repos.events.lastId(),
-          loggedState: loggedText(readTaskState(repos, saved), deps.usageOf(saved.id)),
+          loggedState: loggedText(stateOf(saved), deps.usageOf(saved.id)),
           createdAt: now,
         });
         fx.task(saved.id);
@@ -371,7 +421,7 @@ export function createWorkingCopiesService(
         if (copy?.role !== "held" || !task) return;
         const events = repos.events.after(taskId, copy.lastEventId);
         append("released", taskId, {
-          state: readTaskState(repos, task),
+          state: stateOf(task),
           events: events.map(copiedEvent),
           usage: deps.usageOf(taskId),
         });
@@ -409,7 +459,12 @@ export function createWorkingCopiesService(
         return core.write((fx) => {
           const task = repos.tasks.getAny(request.taskId)!;
           upsertReferences(request.references, task.projectId);
-          core.withIds(request.ids, () => dispatch(request));
+          applying += 1;
+          try {
+            core.withIds(request.ids, () => dispatch(request));
+          } finally {
+            applying -= 1;
+          }
           fx.detail(request.taskId);
           return record(true, null);
         });
@@ -446,8 +501,71 @@ export function createWorkingCopiesService(
     },
 
     onAppended: (listener) => void listeners.push(listener),
+
+    logRun(run) {
+      if (!deps.logs) return;
+      const { machine: _machine, ...own } = run;
+      const boardId = run.projectId ? (copies.project(run.projectId)?.boardId ?? null) : null;
+      core.write(() =>
+        append("run", run.taskId ?? "", {
+          run: {
+            ...own,
+            projectId: boardId,
+            // Keys that name a project (a scheduled slot, a check item) name the board's: the board then dedupes
+            // by them should the work come back to it.
+            dedupeKey: run.projectId && boardId ? swapId(run.dedupeKey, run.projectId, boardId) : run.dedupeKey,
+          },
+        }),
+      );
+    },
+
+    refreshReferences(references) {
+      core.write((fx) => {
+        for (const ref of references) {
+          if (copies.get(ref.id)?.role !== "reference") continue;
+          const before = repos.tasks.getAny(ref.id);
+          if (!before) continue;
+          upsertReferences([ref], before.projectId);
+          if (before.status !== ref.status || before.title !== ref.title) fx.task(ref.id);
+          // The tasks it blocks see their blocker change.
+          for (const r of repos.relations.allFor([ref.id])) if (r.blockerId === ref.id) fx.task(r.blockedId);
+        }
+      });
+    },
+
+    logNotice(input) {
+      if (!deps.logs || applying > 0) return;
+      const taskId = input.taskId ?? null;
+      // A resolve it covers must be passed on again.
+      for (const key of resolvesLogged) {
+        const covered = key.startsWith("key:")
+          ? input.dedupeKey.startsWith(key.slice(4))
+          : key === `task:${taskId}:${input.kind}`;
+        if (covered) resolvesLogged.delete(key);
+      }
+      // Only what the board has: a notification about a task made here and not yet on the board, or about nothing
+      // held, still goes, and the board shows it without a task.
+      core.write(() =>
+        append("notice", taskId ?? "", {
+          notice: { kind: input.kind, taskId, title: input.title, body: input.body, dedupeKey: input.dedupeKey },
+        }),
+      );
+    },
+
+    logResolve(match, changed) {
+      if (!deps.logs || applying > 0) return;
+      const key = matchKey(match);
+      if (changed === 0 && resolvesLogged.has(key)) return;
+      resolvesLogged.add(key);
+      core.write(() => append("notice", "taskId" in match ? match.taskId : "", { resolve: match }));
+    },
+
+    boardProjectOf: (projectId) => (projectId ? (copies.project(projectId)?.boardId ?? null) : null),
   };
 }
+
+/** A dedupe key with one project's id swapped for another's: keys travel between board and runner in the board's. */
+export const swapId = (key: string, from: string, to: string): string => key.split(from).join(to);
 
 /** The sentence a runner refuses a change to a task it only refers to with. */
 export const notHeldHere = (task: Pick<TaskRecord, "number" | "numberPrefix">): AppError =>

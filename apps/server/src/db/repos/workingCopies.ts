@@ -156,6 +156,10 @@ export function createWorkingCopiesRepo(sql: Sql) {
       const row = sql.get<ProjectRow>("SELECT * FROM copied_projects WHERE project_id = ?", projectId);
       return row ? toProject(row) : null;
     },
+    /** Every project the runner has for the board. */
+    allProjects(): CopiedProjectRecord[] {
+      return sql.all<ProjectRow>("SELECT * FROM copied_projects").map(toProject);
+    },
     /** The runner's project for one of the board's, by the board's id for it, else by its repository. */
     projectFor(boardId: string, remote: string | null): CopiedProjectRecord | null {
       const row =

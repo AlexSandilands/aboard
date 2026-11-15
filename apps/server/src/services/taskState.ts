@@ -35,7 +35,11 @@ const fieldsOf = (task: TaskRecord): CopiedTaskFields => ({
 });
 
 /** The task's state as it stands in this database. */
-export function readTaskState(repos: Repos, task: TaskRecord): TaskState {
+/**
+ * `prSnapshots`: a runner's state carries what it read of the task's pull requests too, since its Autopilot polls
+ * them and the board leaves them alone while the machine holds the task (remote-machines.md#autopilot-on-the-machine).
+ */
+export function readTaskState(repos: Repos, task: TaskRecord, opts: { prSnapshots?: boolean } = {}): TaskState {
   const steps = repos.plans.stepsFor([task.id]);
   const phases: CopiedPhase[] = repos.plans.phasesFor([task.id]).map((phase) => ({
     id: phase.id,
@@ -69,9 +73,9 @@ export function readTaskState(repos: Repos, task: TaskRecord): TaskState {
       ref: row.ref_json,
       createdAt: row.created_at,
       auto: row.auto !== 0,
-      // A session or thread on a machine is read there, so what was read goes with the task; any other link each side
-      // reads.
-      ...(onMachine(row) ? { snapshot: row.snapshot_json } : {}),
+      // A session or thread on a machine is read there, so what was read goes with the task; so are a runner's pull
+      // requests, which its Autopilot polls. Any other link each side reads.
+      ...(onMachine(row) || (opts.prSnapshots && row.kind === "pr") ? { snapshot: row.snapshot_json } : {}),
     })),
     blockedBy: relations.filter((r) => r.blockedId === task.id).map((r) => r.blockerId),
     blocks: relations.filter((r) => r.blockerId === task.id).map((r) => r.blockedId),

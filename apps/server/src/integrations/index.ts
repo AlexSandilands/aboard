@@ -39,12 +39,15 @@ import { createBridgeChannel } from "./machines/bridgeChannel.ts";
 import { createCheckouts, type CloneRepo } from "./machines/checkouts.ts";
 import { createMachinesIntegration } from "./machines/index.ts";
 import { createMachineSync } from "./machines/sync.ts";
+import { createAutopilotSync } from "./machines/autopilotSync.ts";
 import { handOverAtStart } from "./machines/startOn.ts";
+import { taskRunsOn } from "../services/runOn.ts";
 import { createMachineJobs } from "./machines/jobs.ts";
 import { createRemoteWork } from "./machines/remoteWork.ts";
 import { createRunnerInteractive } from "./machines/runnerInteractive.ts";
 import { withMachineThreads } from "./machines/remoteT3.ts";
-import { createRunnerWork } from "./machines/runnerWork.ts";
+import { asRunnerRequest, createRunnerWork } from "./machines/runnerWork.ts";
+import { boardPlacement, runnerPlacement } from "../autopilot/placement.ts";
 import { runScript } from "./scriptRunner.ts";
 import { runShellCommand } from "./shellCommand.ts";
 import { createLoginDetector, type LoginProbes } from "./machines/logins.ts";
@@ -127,7 +130,13 @@ export interface IntegrationOverrides {
   /** Reaching connected machines: `ssh`, the tunnel's ports, the network and name lookups. */
   machines?: TunnelDeps & { fetch?: typeof fetch; resolve?: (hostname: string) => Promise<string[]> };
   /** A runner's own checks and update: the programs it probes for logins, and what an update downloads and runs. */
-  runnerHost?: { logins?: Partial<LoginProbes>; update?: Partial<SelfUpdateDeps>; clone?: CloneRepo };
+  runnerHost?: {
+    logins?: Partial<LoginProbes>;
+    update?: Partial<SelfUpdateDeps>;
+    clone?: CloneRepo;
+  };
+  /** The connected machine a task not held yet would run on (`taskRunsOn` unless set), for its dependents' hand-over. */
+  machineFor?: (taskId: string) => string | null;
   /** The repository a folder's `origin` names, read on the spot (read by the services, see createContext). */
   readRemote?: (workspaceRoot: string) => { remote: string; remoteUrl: string } | null;
   log?: Logger;
@@ -143,6 +152,11 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   const poller = createPrPoller({
     services: deps.services,
     hosts,
+    polledElsewhere: (taskId) => {
+      if (deps.config.role === "runner") return false;
+      const hold = deps.services().holds.get(taskId);
+      return hold !== null && machines.can(hold.machineId, "autopilot") !== false;
+    },
     ...(overrides.log ? { log: overrides.log } : {}),
   });
   const merges = createPrMerges({
@@ -308,10 +322,30 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       },
       ...(overrides.log ? { log: overrides.log } : {}),
     });
-  // A board sends the agent work of a task a machine holds to that machine; a runner does what it is sent. A task
-  // set to run on a machine is handed to it as it starts (remote-machines.md#choosing-the-machine).
+  /**
+   * On a runner, a task in an epic delivered through an integration branch starts from that branch, made on origin
+   * with this machine's own login when it isn't there yet: the board made it when the epic was set up, but it may
+   * since have been deleted, and the board may be off.
+   */
+  const ensureEpicBranchHere = async (taskId: string | null): Promise<void> => {
+    if (!taskId) return;
+    const s = deps.services();
+    const task = s.tasks.summary(taskId);
+    const root = s.projects.get(task.projectId).workspaceRoot;
+    if (task.kind === "epic" || !task.integrationBranch || !root) return;
+    await ensureEpicBranch(overrides.autopilotGit ?? defaultRunGit, root, task.integrationBranch);
+  };
+  // A board sends the agent work of a task a machine holds to that machine, handing a task set to run on a machine to
+  // it as it starts (remote-machines.md#choosing-the-machine); a runner does its work as a runner does (headless, from
+  // origin), whether its board sent it or its own Autopilot started it.
   const runner: Runner = isRunner
-    ? localRunner
+    ? {
+        async start(request, update) {
+          const sent = asRunnerRequest(request);
+          await ensureEpicBranchHere(sent.run.taskId);
+          return localRunner.start(sent, update);
+        },
+      }
     : {
         start: async (request, update) => {
           await handOverAtStart(deps.services(), machineSync, request);
@@ -332,7 +366,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
         if (link.kind === "pr" && link.ref) await poller.reread({ ...link, ref: link.ref }, { quiet: true });
       },
     }),
+    // Other people's PRs are the board's to review: a runner reads no repository of its own for them.
     repoOf: async (project) => {
+      if (isRunner) return null;
       const url = await repoUrls(project.workspaceRoot);
       return url ? remoteRepo(url) : null;
     },
@@ -340,6 +376,11 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       if (run.sessionId) refreshSession(run.sessionId);
     },
     boardUrl: () => boardUrlOf(deps.config),
+    // Each candidate is one server's: a runner's Autopilot acts on the tasks it holds (remote-machines.md).
+    placement: isRunner
+      ? runnerPlacement(deps.services, deps.config.instanceId)
+      : boardPlacement(deps.services, (machineId) => machines.can(machineId, "autopilot")),
+    reminders: !isRunner,
     ...(overrides.log ? { log: overrides.log } : {}),
   });
   const digests = createDigestGenerator({
@@ -389,9 +430,23 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     services: deps.services,
     machines,
     work: remoteWork,
+    autopilot: {
+      sync: (machineId) => autopilotSync.sync(machineId),
+      observe: (machineId, held) => autopilotSync.observe(machineId, held),
+    },
+    // Where a task not held yet would run (its own choice, then its project's): dependents set to the same machine
+    // go with a flagged task, so the machine can start them while the board is off.
+    machineFor: overrides.machineFor ?? ((taskId) => taskRunsOn(deps.services(), taskId).machineId),
     bus: deps.bus,
     runGit: overrides.runGit ?? defaultRunGit,
     ...(overrides.now ? { now: overrides.now } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  const autopilotSync = createAutopilotSync({
+    services: deps.services,
+    machines,
+    bus: deps.bus,
+    runGit: overrides.runGit ?? defaultRunGit,
     ...(overrides.log ? { log: overrides.log } : {}),
   });
   const jobs = createMachineJobs();
@@ -445,6 +500,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     modelPrices,
     machines,
     machineSync,
+    autopilotSync,
     runnerHost,
     remoteWork,
     readSessionTranscript: (ref, offset) => transcripts.readSession(ref, offset),
@@ -465,6 +521,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       if (deps.config.role !== "runner") {
         machines.start();
         machineSync.start();
+        autopilotSync.start();
       }
       providers.seedFromDetection().catch((error: unknown) => {
         (overrides.log ?? console).warn(`[providers] couldn't add the providers detection found: ${messageOf(error)}`);
@@ -484,6 +541,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       modelPrices.stop();
       machines.stop();
       machineSync.stop();
+      autopilotSync.stop();
       runnerHost.updater.stop();
     },
     t3ThreadUsage: (threadId) => t3.threadUsage(threadId),

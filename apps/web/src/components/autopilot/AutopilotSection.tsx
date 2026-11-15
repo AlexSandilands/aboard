@@ -11,7 +11,7 @@ import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { useDismissAutopilotRun, useRetryAutopilotRun } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotRuns } from "~/state/queries";
 import { pausedForRun } from "./health.logic";
-import { DetailLink, SessionValue } from "./RunHistoryRow";
+import { DetailLink, RunMachineBadge, SessionValue } from "./RunHistoryRow";
 import { threadLinkLabel } from "./runHistory.logic";
 import {
   automationTitle,
@@ -109,6 +109,7 @@ function RunRow({ run, title, retryable }: { run: AutopilotRun; title: string; r
           {runStatusLabel(run)}
         </Badge>
         <span className="min-w-0 truncate font-medium text-foreground/90">{title}</span>
+        {run.machine ? <RunMachineBadge name={run.machine.name} /> : null}
         <span className="ms-auto shrink-0 tabular-nums text-secondary-label" title={new Date(at).toLocaleString()}>
           {formatElapsedDurationLabel(at)}
         </span>

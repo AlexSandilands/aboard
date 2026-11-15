@@ -1,15 +1,21 @@
 import {
   ChangeLogFormatError,
+  isRetried,
+  unretiredKey,
   readChangeLogEntry,
   taskLabel,
   taskNumberValue,
   type ChangeLogEntry,
   type ChangesResponse,
   type CopiedEvent,
+  type AutopilotRun,
   type CopiedUsage,
   type HandOverRequest,
+  type NotifyInput,
+  type RunMachine,
   type HeldEditResult,
   type TaskDetail,
+  type TaskReference,
   type TaskState,
 } from "@repo/contracts";
 import type { HeldEditRecord, HoldRecord } from "../db/repos/holds.ts";
@@ -27,6 +33,7 @@ import {
   referencedIds,
   writeTaskState,
 } from "./taskState.ts";
+import type { ResolveMatch } from "./notifications.ts";
 import type { ProjectsService } from "./types.ts";
 
 // A board's side of held tasks (docs/features/remote-machines.md#held-tasks): which machine holds which task, how
@@ -34,6 +41,8 @@ import type { ProjectsService } from "./types.ts";
 
 /** How much of a task's activity goes with it, so an agent on the machine reads the same handover notes. */
 const HANDOVER_EVENTS = 50;
+/** How many of a task's finished Autopilot runs go with it: Review PRs and Fix PRs count rounds and attempts by them. */
+const HANDOVER_RUNS = 500;
 /** Who refuses an edit in the activity log: the board, on the machine's word. */
 const BOARD_ACTOR = "board";
 
@@ -87,6 +96,8 @@ export interface HoldsService {
   ): ApplyResult;
   /** The machine's edits that haven't reached it, in the order they were made. */
   pendingEdits(machineId: string): HeldEditRecord[];
+  /** The tasks the machine's held ones point at that it doesn't hold, as they stand here. */
+  referencesFor(machineId: string): TaskReference[];
   /** Records the machine's answer to an edit: taken, or refused as the task stands there. */
   settleEdit(editId: string, result: HeldEditResult): void;
   /** The next of the board's own task numbers, for a task a machine is making. */
@@ -102,6 +113,14 @@ export function createHoldsService(
     detail: (id: string) => TaskDetail;
     /** Keeps what a machine read of a held task's token usage, inside the write that applies its entry. */
     keepUsage: (machineId: string, taskId: string, rows: readonly CopiedUsage[]) => void;
+    /** Keeps a run the machine's own Autopilot made, inside the write that applies its entry. */
+    keepRun?: (run: AutopilotRun, machine: RunMachine) => void;
+    /** Raises a notification the machine raised, by this board's switches. */
+    notify?: (input: NotifyInput) => void;
+    /** Marks read what the machine marked read. */
+    resolve?: (match: ResolveMatch) => void;
+    /** Ends a machine's runs the board has going, when nothing on the machine will end them any more. */
+    endMachineRuns?: (machineId: string, error: string) => void;
   },
 ): HoldsService {
   const { repos } = core;
@@ -116,6 +135,17 @@ export function createHoldsService(
     const task = repos.tasks.get(id);
     if (!task) throw notFound("Task", id);
     return task;
+  };
+
+  /** Gives a retried run its key back (the machine refused the retry), unless another run has taken it since. */
+  const unretire = (runId: string): void => {
+    const run = repos.autopilotRuns.get(runId);
+    if (!run || !isRetried(run.dedupeKey)) return;
+    const dedupeKey = unretiredKey(run.dedupeKey);
+    if (repos.autopilotRuns.exists(run.automation, dedupeKey, run.dryRun)) return;
+    // A failed run on a task was flagged until the retry lifted it; nothing redoes it now, so the flag stands again.
+    const needsAttention = run.needsAttention || (run.status === "failed" && run.taskId !== null && !run.dismissedAt);
+    repos.autopilotRuns.update({ ...run, dedupeKey, needsAttention, updatedAt: core.now().toISOString() });
   };
 
   /** Ends a hold inside a write, saying why in the task's activity. Its waiting edits become the task's own state. */
@@ -213,6 +243,23 @@ export function createHoldsService(
     projectByRemote: ReadonlyMap<string, string>,
     fx: Effects,
   ): void => {
+    // A machine's runs and notifications are history and news, not the task's state: whoever holds the task now,
+    // and whether or not it is still held, they are the board's to keep.
+    if (entry.kind === "run")
+      return deps.keepRun?.(entry.payload.run, {
+        id: machine.id,
+        name: machine.name,
+      });
+    if (entry.kind === "notice") {
+      const { payload } = entry;
+      if ("resolve" in payload) {
+        if ("taskId" in payload.resolve && !repos.tasks.get(payload.resolve.taskId)) return;
+        return deps.resolve?.(payload.resolve);
+      }
+      const { notice } = payload;
+      const taskId = notice.taskId && repos.tasks.get(notice.taskId) ? notice.taskId : null;
+      return deps.notify?.({ ...notice, taskId });
+    }
     const task = repos.tasks.getAny(entry.taskId);
     const hold = holds.get(entry.taskId);
     // Entries from before this hold began (the task was taken back by force, then handed over again) are skipped
@@ -258,6 +305,10 @@ export function createHoldsService(
         state,
         events: repos.events.recent(taskId, HANDOVER_EVENTS).map(copiedEvent),
         references: repos.tasks.getMany(referencedIds(task, state)).map(referenceOf),
+        runs: repos.autopilotRuns
+          .forTask(taskId, HANDOVER_RUNS)
+          .filter((run) => !run.dryRun && run.finishedAt !== null)
+          .map(({ machine: _machine, ...run }) => run),
       };
     },
 
@@ -309,6 +360,8 @@ export function createHoldsService(
           for (const hold of holds.forMachine(machineId)) {
             if (!response.held.includes(hold.taskId)) dropHold(hold.taskId, machine, BOARD_ACTOR, { lost: true }, fx);
           }
+          // The runs it had going are gone with its database: nothing will end them but this.
+          deps.endMachineRuns?.(machineId, `${machine.name}'s database was replaced before this run finished`);
         }
         let applied = 0;
         let error: string | null = null;
@@ -338,6 +391,19 @@ export function createHoldsService(
 
     pendingEdits: (machineId) => holds.editsForMachine(machineId).filter((e) => e.settledHead === null),
 
+    referencesFor(machineId) {
+      const held = holds.forMachine(machineId).map((h) => h.taskId);
+      const heldSet = new Set(held);
+      const ids = new Set<string>();
+      for (const task of repos.tasks.getMany(held)) {
+        for (const id of referencedIds(task, readTaskState(repos, task))) if (!heldSet.has(id)) ids.add(id);
+      }
+      return repos.tasks
+        .getMany([...ids])
+        .map(referenceOf)
+        .toSorted((a, b) => a.id.localeCompare(b.id));
+    },
+
     settleEdit(editId, result) {
       core.write((fx) => {
         const edit = holds.edit(editId);
@@ -345,6 +411,8 @@ export function createHoldsService(
         if (!result.applied) {
           // What the board showed early is taken back; the machine's next entry puts the task as it is there.
           finishEdit(edit);
+          // A retry is the run's key, which no entry carries back: the run is put as it was.
+          if (edit.op === "autopilot.retry") unretire(String(edit.args[0]));
           fx.log(edit.taskId, BOARD_ACTOR, "edit_refused", { edit: edit.op, reason: result.error ?? "" });
           return;
         }

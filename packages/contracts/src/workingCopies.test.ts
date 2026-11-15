@@ -21,9 +21,14 @@ describe("the change log's format", () => {
   it("has a fixture for every format up to the current one", () => {
     const formats = Array.from({ length: CHANGE_LOG_FORMAT }, (_, i) => i + 1);
     expect([...fixtures.keys()].toSorted((a, b) => a - b)).toEqual(formats);
+    // The kinds each format could write: format 2 added a machine's runs and notifications.
+    const kinds: Record<number, string[]> = {
+      1: ["state", "created", "released"],
+      2: ["state", "created", "released", "run", "notice"],
+    };
     for (const [format, entries] of fixtures) {
       expect(entries.every((e) => e.version === format)).toBe(true);
-      expect(new Set(entries.map((e) => e.kind))).toEqual(new Set(["state", "created", "released"]));
+      expect(new Set(entries.map((e) => e.kind))).toEqual(new Set(kinds[format]));
     }
   });
 
@@ -36,8 +41,22 @@ describe("the change log's format", () => {
     for (const entries of fixtures.values()) {
       for (const stored of entries) {
         const entry = readChangeLogEntry(stored);
-        expect(entry).toMatchObject({ id: stored.id, kind: stored.kind, taskId: stored.taskId, at: stored.at });
-        expect(entry.payload.state.task.title).toEqual(expect.any(String));
+        expect(entry).toMatchObject({
+          id: stored.id,
+          kind: stored.kind,
+          taskId: stored.taskId,
+          at: stored.at,
+        });
+        // What each kind carries: a run, a notification, or the task's state.
+        const carried =
+          entry.kind === "run"
+            ? entry.payload.run.id
+            : entry.kind === "notice"
+              ? "notice" in entry.payload
+                ? entry.payload.notice.dedupeKey
+                : JSON.stringify(entry.payload.resolve)
+              : entry.payload.state.task.title;
+        expect(carried).toEqual(expect.any(String));
       }
     }
     const made = readChangeLogEntry(fixtures.get(1)![1]!);

@@ -4,6 +4,7 @@ import {
   ResumeAutoPauseInput,
   ListAutopilotRunsQuery,
   UpdateAutopilotEngineInput,
+  UpdateAutopilotLimitsInput,
   UpdateAutopilotSettingInput,
 } from "@repo/contracts";
 import type { Context, Hono } from "hono";
@@ -32,6 +33,15 @@ export function registerAutopilotRoutes(app: Hono, { services, integrations }: A
   app.patch(
     "/api/autopilot/engine",
     handle(async (c) => c.json(autopilot.updateEngine(await parseBody(c, UpdateAutopilotEngineInput)))),
+  );
+  // Connected machines' own Autopilot: their limits, and whether the board's latest settings reached them.
+  app.get(
+    "/api/autopilot/machines",
+    handle((c) => c.json(integrations.autopilotSync.machines())),
+  );
+  app.put(
+    "/api/autopilot/machines/:id/limits",
+    handle(async (c) => c.json(autopilot.setMachineLimits(idParam(c), await parseBody(c, UpdateAutopilotLimitsInput)))),
   );
   app.post(
     "/api/autopilot/pause",

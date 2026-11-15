@@ -101,6 +101,7 @@ export function createContext(
     fetchThreadUsage: (threadId) => integrations.t3ThreadUsage(threadId),
     modelPrices: () => integrations.modelPrices.current(),
     role: config.role ?? "board",
+    machineRunsAutopilot: (machineId) => integrations.machines.can(machineId, "autopilot"),
     onHeldEdit: (machineId) => integrations.machineSync.flush(machineId),
     heldWork: {
       shell: (request) => integrations.remoteWork.shell(request),

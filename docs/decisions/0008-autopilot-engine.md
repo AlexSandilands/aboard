@@ -76,6 +76,12 @@ scheduled agent run, or rules inside the server that start an agent only when an
   limited by the gate above, read fresh at the checked head (so a prompt-injected agent can only merge a PR that is
   in Review, cleanly reviewed, green and mergeable), by a Fix or Review run not being able to merge its own
   task's PR while it runs, and by fork PRs being refused. Existing On flags stay valid.
+- **On a connected machine, the machine's own engine.** (Amended by #184.) A task a connected machine holds is that
+  machine's: in the runner role the server runs this same engine over the tasks it holds only, by the board's
+  switches, automations and Pause all (sent to it), with limits of its own, so chains go on while the board is off.
+  Exactly one engine owns each candidate (`autopilot/placement.ts`); the board's leaves held tasks and pinned
+  scheduled automations to their machine. The machine's runs and notifications come back through its change log, and
+  auto-pause stays the board's ([remote machines](../features/remote-machines.md#autopilot-on-the-machine)).
 - **REST only.** Autopilot settings, pause and resume are REST routes for the UI. There is no MCP tool for
   them, so an agent can't turn Autopilot on, raise its limits or unpause it.
 - **The review watchdog stays separate.** `apps/server/src/integrations/reviewFallbacks.ts` is a fallback

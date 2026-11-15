@@ -127,6 +127,7 @@ import { RecurringRulesByProject } from "~/components/recurring/RecurringSection
 import { RunHistoryLink } from "./RunHistoryLink";
 import { useWhere } from "./useWhere";
 import { ownSettingsLabel } from "./where.logic";
+import { RunsOnSection } from "./RunsOnSection";
 import { WhereItRuns } from "./WhereItRuns";
 
 const BUILTIN_ICONS: Record<string, LucideIcon> = {
@@ -622,6 +623,7 @@ function AutomationDetail({
       {switchless ? null : (
         <WhereItRuns automation={automation} everywhereMode={restoreMode(entry, lastRun !== undefined)} />
       )}
+      {custom?.trigger.kind === "schedule" ? <RunsOnSection custom={custom} /> : null}
       {automation.key === AUTOPILOT_ORCHESTRATE ? (
         <p className="px-3 text-xs text-muted-foreground sm:px-4">
           Each lane&apos;s pill also shows Orchestrate&apos;s next check and has Run now.

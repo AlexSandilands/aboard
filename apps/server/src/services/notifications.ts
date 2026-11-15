@@ -35,6 +35,9 @@ export function endQuietNotice(repos: Repos, taskId: string, actor: string, at: 
 /** How many notifications are unread, among those kept. Also what the SSE events carry. */
 export const unreadNotifications = (repos: Repos, now: Date): number => repos.notifications.unread(cutoff(now));
 
+/** What `resolve` marks read: notifications by dedupe-key prefix, or a task's of one kind. */
+export type ResolveMatch = { keyPrefix: string } | { taskId: string; kind: NotificationKind };
+
 /** The attention inbox (docs/features/notifications.md). Producers call `notify`; the rest serves the inbox. */
 export interface NotificationsService {
   /**
@@ -56,10 +59,21 @@ export interface NotificationsService {
    * has resolved (the thread moved on, the checks passed, the request was cleared). Matches by dedupe-key prefix,
    * or by task and kind. Joins an open write; returns how many changed.
    */
-  resolve(match: { keyPrefix: string } | { taskId: string; kind: NotificationKind }): number;
+  resolve(match: ResolveMatch): number;
 }
 
-export function createNotificationsService(core: Core): NotificationsService {
+export function createNotificationsService(
+  core: Core,
+  deps: {
+    /**
+     * Every notification asked for, before this server's own switches decide: a runner passes them to its board,
+     * whose switches are the ones that count (remote-machines.md#autopilot-on-the-machine).
+     */
+    raised?: (input: NotifyInput) => void;
+    /** Every resolve, with how many it marked read here: a runner passes them to its board too. */
+    resolved?: (match: ResolveMatch, changed: number) => void;
+  } = {},
+): NotificationsService {
   const { repos } = core;
 
   const list: NotificationsService["list"] = (opts = {}) => {
@@ -77,6 +91,7 @@ export function createNotificationsService(core: Core): NotificationsService {
 
   return {
     notify(input) {
+      deps.raised?.(input);
       const settings = loadSettings(repos).notifications;
       if (!settings.kinds[input.kind]) return null;
       return core.write((fx) => {
@@ -132,6 +147,7 @@ export function createNotificationsService(core: Core): NotificationsService {
             ? repos.notifications.markKeyPrefixRead(match.keyPrefix, at)
             : repos.notifications.markTaskKindRead(match.taskId, match.kind, at);
         if (changed > 0) fx.notificationsChanged();
+        deps.resolved?.(match, changed);
         return changed;
       });
     },

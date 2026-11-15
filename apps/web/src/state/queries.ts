@@ -728,6 +728,8 @@ export function useBoardEvents() {
       // A machine was added, changed or removed, or its connection or install moved on.
       if (event.type === "machines.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.machines });
+        // A machine connecting or dropping changes what Autopilot settings say of it.
+        void queryClient.invalidateQueries({ queryKey: [...queryKeys.autopilot, "machines"] });
       }
       // Added, removed or switched elsewhere (another window, the migration's detection pass): the list follows, and
       // detection runs again since a new CLI path or provider changes what it checks.

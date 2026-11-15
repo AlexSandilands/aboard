@@ -245,6 +245,11 @@ export const CustomAutomation = z.object({
    * by `epicArmKey(epicId)` for an epic whose own setting switched it on.
    */
   armedProjects: z.record(z.string(), z.string()).default({}),
+  /**
+   * The connected machine a scheduled automation runs on (remote-machines.md#autopilot-on-the-machine): its id in the
+   * board's machines, or on a runner the instance id of the runner it is pinned to. Null or absent: the board.
+   */
+  machineId: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
