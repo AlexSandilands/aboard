@@ -278,7 +278,7 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
         if (!res.ok) throw new AppError("CONFLICT", await refusal(res, machine.name));
         try {
           const { head } = LogPosition.parse(await res.json());
-          return services().holds.confirm(taskId, machineId, request.state.task.updatedAt, head, actor);
+          return services().holds.confirm(taskId, machineId, request.state, head, actor);
         } catch (error) {
           // The machine has a copy the board won't follow: it gives it up again.
           await deps.machines.request(machineId, machineTaskPath(taskId), { method: "DELETE" }).catch(() => {});

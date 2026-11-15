@@ -138,6 +138,17 @@ describe("handing a task to a machine", () => {
     expect(cloned.at(-1)).toEqual({ url: "git@github.com:acme/app.git", dir });
   });
 
+  it("isn't recorded when the task changed while it was on its way, a link included", async () => {
+    const { board, machine, task } = await setup();
+    const sent = board.services.holds.prepare(task.id, machine.id, null);
+    // A link doesn't stamp the task, and the machine's copy doesn't have it.
+    board.services.links.add(task.id, { value: "https://example.com/spec" }, "user");
+    expect(() => board.services.holds.confirm(task.id, machine.id, sent.state, 0, "user")).toThrow(
+      /changed while it was being handed over/,
+    );
+    expect(board.services.tasks.summary(task.id).hold).toBeNull();
+  });
+
   it("refuses what can't be handed over", async () => {
     const { board, machine, project, task } = await setup();
     const epic = board.services.tasks.create({ projectId: project.id, title: "Big", kind: "epic" });

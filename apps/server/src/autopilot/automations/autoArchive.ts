@@ -45,7 +45,8 @@ export const autoArchive = defineAutomation({
         return !epicArchived.get(id);
       };
       const tasks = done
-        .filter((t) => t.kind !== "epic" && !inLiveEpic(t) && older(t, config.days))
+        // A task a machine holds can't be archived until it is taken back.
+        .filter((t) => t.kind !== "epic" && !t.hold && !inLiveEpic(t) && older(t, config.days))
         .filter((t) => !hasUnmergedPr(t))
         .map((t): Candidate => ({
           dedupeKey: `archive:${t.id}:${t.statusChangedAt}`,
@@ -62,6 +63,8 @@ export const autoArchive = defineAutomation({
           // An epic in Done has every unarchived task Done (any resolution).
           const children = services.tasks.summaries({ projectId: project.id, epicId: epic.id });
           if (!older(epic, days) || hasUnmergedPr(epic) || children.some(hasUnmergedPr)) return [];
+          // Nor an epic one of whose tasks a machine still holds.
+          if (children.some((child) => child.hold)) return [];
           return [
             {
               dedupeKey: `archive-epic:${epic.id}:${epic.statusChangedAt}`,

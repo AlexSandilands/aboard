@@ -312,6 +312,10 @@ export function restoreBoardLive(db: Db, dump: BoardDump, now: Date = new Date()
   db.exec("PRAGMA foreign_keys = OFF");
   try {
     loadDump(db, current, kept);
+    // Which machine held what, and the edits waiting for one, were about the board that was replaced: the queued
+    // edits name activity entries by id, and those ids are other entries now. The restored tasks are the board's
+    // own; a machine that still has one is told to drop it on its next read.
+    db.exec("DELETE FROM held_edits; DELETE FROM task_holds");
   } finally {
     db.exec("PRAGMA foreign_keys = ON");
   }

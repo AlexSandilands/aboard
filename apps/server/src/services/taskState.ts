@@ -135,7 +135,8 @@ export function writeTaskState(
   repos.tasks.update(next);
   repos.labels.replace(task.id, state.labels);
 
-  // The plan: what the state no longer has goes first, so a step that moved phases never meets a deleted phase.
+  // The plan: phases first, then steps, then what the state no longer has, so a step that moved to another phase is
+  // re-homed before its old phase goes (deleting a phase takes its steps with it).
   const stepIds = new Set(state.phases.flatMap((p) => p.steps.map((s) => s.id)));
   const phaseIds = new Set(state.phases.map((p) => p.id));
   const haveSteps = new Map(repos.plans.stepsFor([task.id]).map((s) => [s.id, s]));

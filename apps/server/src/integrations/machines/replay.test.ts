@@ -335,6 +335,34 @@ describe("an edit made on the board to a held task", () => {
     expect(onBoard().hold?.waiting).toBe(0);
   });
 
+  it("keeps the board's own part of an edit that also changes what the machine orders", async () => {
+    const { board, project, task, onBoard, onRunner, sync, settle, types } = await setup();
+    const epic = board.services.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+    board.services.tasks.update(task.id, { epicId: epic.id, title: "Renamed with it" }, "user");
+    await settle();
+    await sync();
+    expect(onRunner().title).toBe("Renamed with it");
+    expect(onBoard().parent?.id).toBe(epic.id);
+    expect(onBoard().hold?.waiting).toBe(0);
+    // The machine's entry replaced the rename's activity, not the epic's.
+    expect(types(onBoard().events, "epic_changed")).toHaveLength(1);
+    expect(types(onBoard().events, "updated")).toHaveLength(1);
+  });
+
+  it("isn't archived with its epic, by hand or by Autopilot's archiving", async () => {
+    const { board, runner, project, task, sync } = await setup();
+    const epic = board.services.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
+    board.services.tasks.update(task.id, { epicId: epic.id }, "user");
+    runner.services.tasks.close(task.id, { resolution: "wont_do" }, "claude");
+    await sync();
+    expect(board.services.tasks.summary(epic.id).status).toBe("done");
+    expect(() => board.services.tasks.update(epic.id, { archived: true }, "user")).toThrow(
+      /is held by engine, so it can't be archived with its epic/,
+    );
+    expect(() => board.services.tasks.archiveFinishedEpic(epic.id, "user")).toThrow(/archived with its epic/);
+    expect(board.services.tasks.summary(task.id).archivedAt).toBeNull();
+  });
+
   it("keeps what is the board's own to itself", async () => {
     const { board, project, task, onBoard, onRunner, settle } = await setup();
     const epic = board.services.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });

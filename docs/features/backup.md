@@ -69,7 +69,8 @@ The single-file form (`export --file`) is the same `BoardDump` as one JSON docum
   each machine's log (`machine_sync`) and the edits waiting for a machine (`held_edits`), like the `machines` table
   itself, belong to this board and that machine. The dump lists its tables by name, so none of them is in it, and a
   runner's working copies and change log aren't either. A held task is backed up as the board last saw it; restored,
-  it is a task the board holds itself. The counters are in the dump, so the highest number each machine's prefix
+  it is a task the board holds itself: restoring the whole board from Settings drops every hold and every edit
+  waiting for a machine, and a machine that still has one of the tasks is told to drop it. The counters are in the dump, so the highest number each machine's prefix
   reached (`machine_task_number:<prefix>`) survives a restore.
 - **A link's `snapshot_json`, `synced_at` and `pr_changes_json`** are the GitHub and T3 pollers' cache, rewritten on
   every poll (`pr_changes_json` is when each PR state began, for Autopilot's custom PR triggers).

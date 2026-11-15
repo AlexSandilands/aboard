@@ -25,6 +25,9 @@ interface Route {
   outbound?(args: unknown[]): { args: unknown[]; references?: string[] } | null;
 }
 
+/** Activity entries about what only the board decides: they stay when the machine's entries replace an edit's. */
+const BOARD_EVENTS: ReadonlySet<string> = new Set(["epic_changed", "moved_project", "archived", "unarchived"]);
+
 /** What only the board decides about a task, even while a machine holds it. */
 const BOARD_FIELDS = ["projectId", "archived", "epicId"] as const;
 
@@ -171,7 +174,11 @@ export function routeHeldEdits(
             args: out.args,
             ids: made.ids,
             references,
-            eventIds: repos.events.after(taskId, lastEvent).map((e) => e.id),
+            // What the board wrote for its own part of the edit (the epic) is not the machine's to replace.
+            eventIds: repos.events
+              .after(taskId, lastEvent)
+              .filter((e) => !BOARD_EVENTS.has(e.type))
+              .map((e) => e.id),
             settledHead: null,
             createdAt: core.now().toISOString(),
           });
@@ -199,6 +206,18 @@ export function routeHeldEdits(
     const withThem = opts.withTasks ? repos.tasks.childrenOf(picked).map((child) => child.id) : [];
     holds.assertNotHeld([...picked, ...withThem], "deleted");
     return deleteTasks(ids, opts, actor);
+  };
+  // Archiving an epic archives its Done tasks with it, past the check each would get on its own.
+  const heldChildren = (epicId: string): string[] => repos.tasks.childrenOf([epicId]).map((child) => child.id);
+  const updateTask = tasks.update.bind(tasks);
+  tasks.update = (id, input, actor) => {
+    if (input.archived === true) holds.assertNotHeld(heldChildren(id), "archived with its epic");
+    return updateTask(id, input, actor);
+  };
+  const archiveFinishedEpic = tasks.archiveFinishedEpic.bind(tasks);
+  tasks.archiveFinishedEpic = (id, actor) => {
+    holds.assertNotHeld(heldChildren(id), "archived with its epic");
+    return archiveFinishedEpic(id, actor);
   };
   const makeEpic = tasks.makeEpic.bind(tasks);
   tasks.makeEpic = (id, actor) => {

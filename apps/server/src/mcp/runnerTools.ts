@@ -25,6 +25,9 @@ export const RUNNER_READ_TOOLS: ReadonlySet<string> = new Set([
   "get_editable_prompt",
 ]);
 
+/** The read tools that list tasks: answered here, they show only what this machine holds, and say so. */
+const TASK_LISTS: ReadonlySet<string> = new Set(["board_overview", "board_activity", "list_tasks"]);
+
 /** Tools that make a task, which takes a number. */
 const CREATING_TOOLS: ReadonlySet<string> = new Set(["add_to_backlog", "create_task"]);
 
@@ -148,7 +151,7 @@ export function guardRunnerTools(server: McpServer, tc: ToolContext): void {
       if (early) return early;
       const result = await handler(args, extra);
       // A list answered here, without the board, is only this machine's part of it.
-      if (RUNNER_READ_TOOLS.has(name) && taskRefs(args).length === 0 && !result.isError) {
+      if (TASK_LISTS.has(name) && taskRefs(args).length === 0 && !result.isError) {
         const first = result.content[0];
         if (first?.type === "text") {
           const why = bridge.reachable() ? "" : ": the board can't be reached from it right now";

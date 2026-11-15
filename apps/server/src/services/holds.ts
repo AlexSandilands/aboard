@@ -68,10 +68,10 @@ export interface HoldsService {
   prepare(taskId: string, machineId: string, remote: { remote: string; remoteUrl: string } | null): HandOverRequest;
   /**
    * Records that the machine took the task, at `head` of its log: what it logged about the task before that is from
-   * an earlier hold. Throws CONFLICT when the task changed since `prepare` read it at `updatedAt`: the machine's
+   * an earlier hold. Throws CONFLICT when the task is no longer as `sent` (the state `prepare` read): the machine's
    * copy is then stale, and the caller takes it back.
    */
-  confirm(taskId: string, machineId: string, updatedAt: string, head: number, actor: string): TaskDetail;
+  confirm(taskId: string, machineId: string, sent: TaskState, head: number, actor: string): TaskDetail;
   /** Takes a task back without its machine. What the machine changed and the board hasn't applied is lost. */
   forceRelease(taskId: string, actor: string): void;
   position(machineId: string): MachinePosition;
@@ -254,12 +254,14 @@ export function createHoldsService(
       };
     },
 
-    confirm(taskId, machineId, updatedAt, head, actor) {
+    confirm(taskId, machineId, sent, head, actor) {
       core.write((fx) => {
         const task = taskOf(taskId);
         const machine = machineOf(machineId);
         if (holds.get(taskId)) throw new AppError("CONFLICT", `${taskLabel(task)} is already held`);
-        if (task.updatedAt !== updatedAt) {
+        // The whole state, not only when the task was last touched: a link or a label added meanwhile doesn't
+        // stamp the task, and the machine's first entry would take it away again.
+        if (JSON.stringify(readTaskState(repos, task)) !== JSON.stringify(sent)) {
           throw new AppError("CONFLICT", `${taskLabel(task)} changed while it was being handed over; try again`);
         }
         holds.insert({ taskId, machineId, heldAt: core.now().toISOString(), afterLogId: head });

@@ -482,14 +482,15 @@ it), its state, its last 50 activity entries (so an agent on the machine reads t
 project, and the tasks it points at. The runner stores it in its ordinary tables under the board's ids
 (`services/workingCopies.ts` `accept`), so every service and tool works on it as on a board; `working_copies`
 says which task rows are held. The board records the hold only after the runner has answered, and refuses when the
-task changed meanwhile. An epic, a manual task and an archived task can't be handed over.
+task is no longer as it was sent (its whole state is compared: a link added meanwhile doesn't stamp the task). An epic, a manual task and an archived task can't be handed over.
 
 **What the copy carries**, and so what the machine orders: title, description, plan context, status, resolution,
 the flags (Autopilot, auto-merge, auto-review, reviewer model, priority, manual), due date, an agent's request for
 attention, the suggested model, labels, the plan, links (without what a poller read of them: each side polls for
 itself) and the tasks blocking it. **What stays the board's**: the task's project, its epic, its place in the lane,
-archiving and deleting. A held task can't be archived, deleted, moved to another project or made an epic, and its
-project can't be archived or deleted, until it is taken back; its epic and its place in the lane change on the
+archiving and deleting. A held task can't be archived (by itself, with its epic, or by Autopilot's Auto-archive),
+deleted, moved to another project or made an epic, and its project can't be archived or deleted, until it is taken
+back; its epic and its place in the lane change on the
 board without the machine hearing of it. Review rounds and pasted images are in neither list: see the top of this
 page.
 
