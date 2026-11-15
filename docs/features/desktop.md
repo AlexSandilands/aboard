@@ -13,13 +13,15 @@ On start (`apps/desktop/src/server.ts`, `connectServer`) the shell probes
 
 | Answer                              | Shell does                                                        |
 | ----------------------------------- | ----------------------------------------------------------------- |
-| Our health (`id` matches `BRAND.id`) | Attaches. It never stops a server it didn't start                |
+| Our board's health (`id` matches `BRAND.id`, `role` is `board` or missing) | Attaches. It never stops a server it didn't start |
+| Our runner's health (`role` is `runner`, [remote machines](remote-machines.md)) | Fails like something else: a runner has no board to show |
 | Something else                      | Fails: the port is used by another app                            |
 | Nothing, in dev (`brandEnv("DEV_URL")` set) | Fails: start the app with `pnpm desktop`                  |
 | Nothing                             | Spawns the server                                                 |
 
 Spawning forks the bundled server (`apps/server/dist/server.mjs`, from `pnpm --filter @repo/server bundle`)
-in an Electron `utilityProcess`. It gets the port through env vars (and, when packaged, the
+in an Electron `utilityProcess`, with no arguments, so in the board role. The same bundle, on a Node of its own,
+is the headless server for remote machines ([remote machines](remote-machines.md)). It gets the port through env vars (and, when packaged, the
 bundled web dist), plus `NODE_NO_WARNINGS`. Its output goes to `server.log` in the app's logs folder; startup failures show the
 last 40 lines in a dialog.
 

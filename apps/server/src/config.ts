@@ -1,11 +1,13 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { BRAND, brandEnv } from "@repo/contracts";
+import { BRAND, DEFAULT_RUNNER_PORT, DEFAULT_SERVER_PORT, ServerRole, brandEnv } from "@repo/contracts";
 import type { SessionDirs } from "./integrations/agentSessions.ts";
 import { harnessHomesFrom, type HarnessHomes } from "./services/skillSync.ts";
 
 export interface Config {
+  /** `board`, or `runner`: the headless server on another machine, which serves no web app. */
+  role: ServerRole;
   port: number;
   /** The Vite dev server's port. It proxies browser requests with its own Origin, which the guard allows. */
   webPort: number;
@@ -14,7 +16,7 @@ export interface Config {
   dbPath: string;
   /** Optional bearer token required on /api and /mcp when set. */
   token: string | null;
-  /** Directory of the built web app to serve, if present. */
+  /** Directory of the built web app to serve, if present. Always null for a runner. */
   webDist: string | null;
   /** Home of the T3 Code install to integrate with (`~/.t3`). */
   t3Home: string;
@@ -48,21 +50,37 @@ export function boardUrlOf({
   return `http://127.0.0.1:${webDist && existsSync(webDist) ? port : webPort}`;
 }
 
-/** Env vars are prefixed with the product id, e.g. `ABOARD_HOME`. */
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const homeDir = env[brandEnv("HOME")] ?? join(homedir(), `.${BRAND.id}`);
+/**
+ * `~/.<id>`, or `~/.<id>-runner` for a runner: with its own data dir (and port), a runner beside a board on the same
+ * machine shares neither its database nor its port.
+ */
+export function defaultHomeDir(role: ServerRole, home = homedir()): string {
+  return join(home, role === "runner" ? `.${BRAND.id}-runner` : `.${BRAND.id}`);
+}
+
+/** Env vars are prefixed with the product id, e.g. `ABOARD_HOME`. `--runner` among `argv` picks the runner role. */
+export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: readonly string[] = []): Config {
+  const roleEnv = env[brandEnv("ROLE")];
+  const parsedRole = ServerRole.safeParse(roleEnv || "board");
+  if (!parsedRole.success) throw new Error(`${brandEnv("ROLE")} must be board or runner, not "${roleEnv}"`);
+  const role = argv.includes("--runner") ? "runner" : parsedRole.data;
+  const homeDir = env[brandEnv("HOME")] ?? defaultHomeDir(role);
   // The sandbox points this at a throwaway folder, so installing skills from it never writes the real ~/.claude.
   const userHome = env[brandEnv("USER_HOME")] || homedir();
   mkdirSync(homeDir, { recursive: true });
   return {
-    port: Number(env[brandEnv("PORT")] ?? 4317),
+    role,
+    port: Number(env[brandEnv("PORT")] ?? (role === "runner" ? DEFAULT_RUNNER_PORT : DEFAULT_SERVER_PORT)),
     webPort: Number(env[brandEnv("WEB_PORT")] ?? 5317),
     host: "127.0.0.1",
     homeDir,
     dbPath: join(homeDir, "data.sqlite"),
     token: env[brandEnv("TOKEN")] || null,
     webDist:
-      env[brandEnv("WEB_DIST")] ?? new URL("../../web/dist/", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"),
+      role === "runner"
+        ? null
+        : (env[brandEnv("WEB_DIST")] ??
+          new URL("../../web/dist/", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")),
     t3Home: env.T3CODE_HOME ?? join(homedir(), ".t3"),
     pollers: env[brandEnv("POLLERS")] !== "0",
     demo: env[brandEnv("DEMO")] === "1",

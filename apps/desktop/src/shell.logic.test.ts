@@ -13,8 +13,10 @@ import {
 } from "./shell.logic.ts";
 
 describe("isOwnHealth", () => {
-  it("accepts only our brand id", () => {
+  it("accepts only our brand id, as a board", () => {
     expect(isOwnHealth({ ok: true, id: BRAND.id, version: "1.0.0" })).toBe(true);
+    expect(isOwnHealth({ ok: true, id: BRAND.id, version: "1.0.0", role: "board" })).toBe(true);
+    expect(isOwnHealth({ ok: true, id: BRAND.id, version: "1.0.0", role: "runner" })).toBe(false);
     expect(isOwnHealth({ ok: true, id: "something-else", version: "1.0.0" })).toBe(false);
     // Older servers answered `{ ok: true }` without an id.
     expect(isOwnHealth({ ok: true })).toBe(false);

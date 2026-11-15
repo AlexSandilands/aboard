@@ -11,7 +11,7 @@ import { registerRunMcp } from "./mcp/runTools.ts";
 import { localGuard } from "./http/guard.ts";
 
 export interface AppContext {
-  config: Pick<Config, "port" | "webPort" | "token" | "userHome"> & Partial<Pick<Config, "webDist" | "demo">>;
+  config: Pick<Config, "port" | "webPort" | "token" | "userHome"> & Partial<Pick<Config, "webDist" | "demo" | "role">>;
   bus: EventBus;
   services: Services;
   integrations: Integrations;
@@ -21,7 +21,9 @@ export interface AppContext {
 export function createApp(ctx: AppContext): Hono {
   const app = new Hono();
   app.use("*", localGuard(ctx.config));
-  app.get("/api/health", (c) => c.json({ ok: true, id: BRAND.id, version: BRAND.version } satisfies Health));
+  app.get("/api/health", (c) =>
+    c.json({ ok: true, id: BRAND.id, version: BRAND.version, role: ctx.config.role ?? "board" } satisfies Health),
+  );
   registerSse(app, ctx.bus);
   registerApiRoutes(app, ctx);
   registerMcp(app, ctx);
