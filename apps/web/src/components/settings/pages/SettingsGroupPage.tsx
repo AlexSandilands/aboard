@@ -15,6 +15,7 @@ import { BackupSection } from "../BackupSection";
 import { GitHostsSection } from "../IntegrationsSections";
 import { IssueImportSection } from "../IssueImportSection";
 import { KeybindingsSection } from "../KeybindingsSection";
+import { MachinesSection } from "../machines/MachinesSection";
 import { PlanSkillSection } from "../PlanSkillSection";
 import { ReviewSettingsSection } from "../ReviewSettingsSection";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
@@ -123,6 +124,9 @@ function IntegrationsContent() {
       </SettingsSubsection>
       <SettingsSubsection id="integrations.terminal">
         <WithSettings>{(settings) => <TerminalSection settings={settings} />}</WithSettings>
+      </SettingsSubsection>
+      <SettingsSubsection id="integrations.machines">
+        <MachinesSection />
       </SettingsSubsection>
       <SettingsSubsection id="integrations.model-prices">
         <WithSettings>{(settings) => <ModelPricesSection settings={settings} />}</WithSettings>
