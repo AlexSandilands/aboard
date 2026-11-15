@@ -83,16 +83,42 @@ The name is yours to change. The prefix is one to three letters or digits, sugge
 tasks made on that machine while the board can't be reached, like `#E7`, so each machine has its own, and it can't
 be changed once a task carries it.
 
+## Choosing where a task runs
+
+Once a machine is connected, a task that hasn't started can be set to run on it:
+
+- **In the task's panel**, the chip beside its status reads **Run on this machine**. Click it and pick a machine,
+  this machine, or **Project default**.
+- **In the hand-off window** (Start in T3 Code, New Claude Code session), the same choice is in the strip under the
+  message box. It saves onto the task.
+- **For a whole project**, Settings › Projects › General › **Runs on** sets where its tasks run unless a task picks
+  another machine.
+
+The choice is shown only for a project with a folder, and only while the task is in Backlog or Planned. A task set to
+run on a machine shows the machine's letter in front of its number on the card, outlined: **E**182 starts on the
+machine whose prefix is E.
+
+**Autopilot starts it there.** When Start planned tasks starts the task, it hands it to the machine first, and the
+work happens there. A thread or a session from the hand-off window would run on this machine, so the window won't
+start the work of a task set to another machine: pick **This machine** in its strip to start it here instead. Planning
+it from the window (Plan with me) is fine, since that doesn't start the task. If the
+machine can't be reached or can't clone the repository when Autopilot starts the task, the run fails with the reason
+and nothing starts here.
+
+**Once a task has started it stays where it started.** A task that started here stays here; one that started on a
+machine stays there until you pull it back.
+
 ## Tasks a machine holds
 
-A task handed to a machine is worked on there, and the board follows along. Its card and its panel say where it
-is: **On engine**.
+A task handed to a machine is worked on there, and the board follows along. Its card's number carries the machine's
+letter (**E**182), and its panel says where it is: **On engine**.
 
 - **What the machine does shows up on the board** as it happens. If the board was closed or the machine couldn't be
   reached, it catches up when they are connected again, in the order things happened there.
 - **You can still change the task on the board.** The change shows at once and is passed to the machine. While the
-  machine can't be reached the badge counts what is waiting, **On engine · 2 waiting**, and those changes are
-  applied when it is back, after whatever happened there meanwhile. A change the machine can't apply any more (you
+  machine can't be reached the panel counts what is waiting, **On engine · 2 waiting**, marks the step you changed
+  with a clock and the activity line with "waiting for engine", and the card's letter gets an amber dot. Those changes
+  are applied when it is back, after whatever happened there meanwhile. A change the machine can't apply any more (you
   checked off a step the agent had deleted) is taken back, and the task's activity says so.
 - **Autopilot's runs for the task happen on the machine**: the agent works in a worktree there, from what is on
   GitHub, with the machine's own logins. Push the task's branch before you hand it over; the board tells you when a
@@ -119,17 +145,19 @@ is: **On engine**.
 - **A task made on the machine while the board can't be reached** gets the machine's prefix in its number, like
   `#E7`, and keeps it. Use it like any other number: `#E7` finds the task in search, and is a link in notes.
 
-There is no button yet for handing a task to a machine or taking it back; that comes with choosing the machine a
-task runs on. Until then it is done through the board's API:
+**When the machine can't be reached**, the chip reads **engine · offline**, the card's letter is greyed and struck
+through, and the panel says since when, with **Try now**. The agent on the machine carries on meanwhile.
 
-```sh
-curl -X POST http://127.0.0.1:4317/api/tasks/42/hold -H 'content-type: application/json' -d '{"machineId": "<the machine's id>"}'
-curl -X DELETE http://127.0.0.1:4317/api/tasks/42/hold
-```
+### Pulling a task back
 
-`GET /api/machines` lists the machines with their ids. Taking a task back needs the machine to be reachable, so
-its last changes come with it; `-d '{"force": true}'` takes it back without the machine and loses what it changed
-since the board last heard from it.
+Click **On engine** in the task's panel and choose **Pull back to this machine…**, then **Pull back**. The machine gives
+the task back with everything it did, this machine fetches the task's branch, and its runs, reviews and sessions
+happen here from then on. While Autopilot is running something for the task on the machine, Pull back waits: the
+popover says so.
+
+Pulling back needs the machine, so its last changes come with the task. While it can't be reached the popover also
+offers **Take back without engine…**, which brings the task back at once and loses what the machine did since the
+board last heard from it (commits it pushed are kept).
 
 ## Removing a machine
 

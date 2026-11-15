@@ -539,7 +539,7 @@ describe("restore", () => {
       session_usage_cursor: [],
       session_usage_thread: [],
       projects: dump.projects.map(
-        ({ plan_skill_json: _ps, variables_json: _v, review_model_json: _rm, ...project }) => project,
+        ({ plan_skill_json: _ps, variables_json: _v, review_model_json: _rm, run_on: _ro, ...project }) => project,
       ),
       tasks: dump.tasks.map((bundle) => {
         const {
@@ -559,6 +559,7 @@ describe("restore", () => {
           integration_merged_at: _im,
           moved_to_json: _mt,
           deleted_at: _del,
+          run_on: _ron,
           number_prefix: _np,
           attention_message: _atm,
           attention_actor: _aa,
