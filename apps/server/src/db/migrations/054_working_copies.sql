@@ -78,7 +78,10 @@ END;
 CREATE TABLE task_holds (
   task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
   machine_id TEXT NOT NULL REFERENCES machines(id) ON DELETE CASCADE,
-  held_at TEXT NOT NULL
+  held_at TEXT NOT NULL,
+  -- The machine's log position when it took the task: entries up to it are from before this hold (a hold ended
+  -- by force leaves some behind) and are not the task's any more.
+  after_log_id INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX task_holds_machine ON task_holds (machine_id);
 

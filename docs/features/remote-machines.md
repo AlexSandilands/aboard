@@ -554,8 +554,14 @@ since, 200 entries at a time. The loop runs for every connected machine whether 
   the board's by id, else by repository ([below](#projects-on-a-machine)), else General.
 - An answer from another `epoch` starts again from the beginning, and gives back the tasks the runner no longer
   lists as held (`released`, `lost: true`).
-- An entry for a task the board doesn't have that machine holding is skipped, and the runner is told to drop the
-  task: it was taken back by force.
+- An entry for a task the board doesn't have that machine holding is skipped: it was taken back by force. So is
+  an entry from before the hold began (`task_holds.after_log_id`, the log's head when the machine took the task),
+  which a task taken back by force and handed to the same machine again would otherwise bring back.
+- Once the board has read the whole log, and only then, a task the runner lists as held that the board didn't hand
+  it is one to drop, and the runner is told to. Before that the task may be one made on the machine whose `created`
+  entry is still to come.
+- An entry the board can't read stops replay there. The loop then waits as for a machine it can't reach (2 seconds,
+  doubling to 30) before asking again, and says so in the log once.
 
 ### Edits from the board
 
@@ -577,7 +583,9 @@ for it: the machine's entries are the ones kept.
 The machine's order wins. What an agent did while the link was down is already in its log, so the board's edits
 land after it. An edit the runner refuses as the task stands there (the step it checks off was deleted) is taken
 back: the board logs `edit_refused` with the reason, and the runner logs the state all the same, which puts the
-card back. One sent twice is applied once (`applied_edits`).
+card back. One sent twice is applied once (`applied_edits`). A runner gives its verdict even on an edit it can't
+read (a newer board's kind of edit), logging the state the same way; an answer that is no verdict at all leaves the
+edit queued when the runner failed (a 5xx) and refuses it otherwise.
 
 What is the board's alone isn't sent: a card's place in its lane, and its epic.
 
@@ -597,7 +605,8 @@ A project is the repository its `origin` names, never a path: the board's folder
 hand-over carries the project's id, title, `origin` URL and `host/owner/repo`. The runner looks its own project
 up by the board's id, then by repository (`copied_projects`); when it has none it clones the URL into
 `<data dir>/repos/<host-owner-repo>` (`integrations/machines/checkouts.ts`) with the machine's own git credentials,
-and makes its project there. A clone that fails refuses the hand-over with git's reason ("engine can't clone
+and makes its project there. The URL has to name a repository on a host over https, ssh or git (nothing git would
+take for an option or a command), and the folder's name comes from the URL itself. A clone that fails refuses the hand-over with git's reason ("engine can't clone
 git@github.com:acme/app.git: fatal: Could not read from remote repository."), and nothing is handed over. A
 project with no repository becomes a project with no folder. A task made on the runner names its project the same
 way, which is how the board finds its own.

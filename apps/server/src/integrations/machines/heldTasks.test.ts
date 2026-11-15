@@ -125,6 +125,19 @@ describe("handing a task to a machine", () => {
     );
   });
 
+  it("names the clone's folder from the URL it clones, whatever the request calls the repository", async () => {
+    const { runner, cloned } = await setup();
+    const { checkouts } = runner.integrations.runnerHost;
+    const dir = await checkouts.ensure({
+      id: "p",
+      title: "P",
+      remote: "../..",
+      remoteUrl: "git@github.com:acme/app.git",
+    });
+    expect(dir).toMatch(/[/\\]github\.com-acme-app$/);
+    expect(cloned.at(-1)).toEqual({ url: "git@github.com:acme/app.git", dir });
+  });
+
   it("refuses what can't be handed over", async () => {
     const { board, machine, project, task } = await setup();
     const epic = board.services.tasks.create({ projectId: project.id, title: "Big", kind: "epic" });

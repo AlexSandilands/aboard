@@ -141,6 +141,47 @@ describe("replaying a machine's log", () => {
     expect(onBoard().lastNote?.text).toBe("Written by a newer runner");
   });
 
+  it("leaves a task made on the machine with it while its entry is still to come", async () => {
+    const { board, runner, machine, task, onRunner, sync } = await setup();
+    // More than one answer's worth of entries, then a task made there.
+    for (let n = 0; n < 205; n++) runner.services.tasks.addNote(task.id, `Note ${n}`, "claude");
+    const made = runner.services.tasks.create({ projectId: onRunner().projectId, title: "Made behind a long log" });
+
+    const first = await sync();
+    expect(first).toMatchObject({ applied: 200, more: true, stray: [], error: null });
+    expect(runner.services.workingCopies.role(made.id)).toBe("held");
+
+    const second = await sync();
+    expect(second).toMatchObject({ more: false, stray: [] });
+    expect(board.services.tasks.summary(made.id).hold?.machineId).toBe(machine.id);
+    expect(runner.services.workingCopies.role(made.id)).toBe("held");
+  });
+
+  it("doesn't take a task made on the machine away while replay is stopped before it", async () => {
+    const { board, runner, task, onRunner, sync } = await setup();
+    runner.services.tasks.addNote(task.id, "In a format the board can't read", "claude");
+    runner.db.exec("UPDATE change_log SET version = 99");
+    const made = runner.services.tasks.create({ projectId: onRunner().projectId, title: "Made past it" });
+
+    const result = await sync();
+    expect(result).toMatchObject({ applied: 0, stray: [], more: false });
+    expect(result.error).toMatch(/is in format 99/);
+    expect(runner.services.workingCopies.role(made.id)).toBe("held");
+    expect(() => board.services.tasks.summary(made.id)).toThrow(/not found/i);
+  });
+
+  it("waits before asking again for an entry it can't read", async () => {
+    const { board, runner, task, net } = await setup();
+    runner.services.tasks.addNote(task.id, "In a format the board can't read", "claude");
+    runner.db.exec("UPDATE change_log SET version = 99");
+    net.sent.length = 0;
+
+    board.integrations.machineSync.start();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    // The runner answers at once while the entry is there; the board must not ask in a loop.
+    expect(net.sent.filter((r) => r.path === "/machine/changes").length).toBeLessThanOrEqual(2);
+  });
+
   it("gives back the tasks of a machine whose database was replaced", async () => {
     const { board, runner, machine, task, sync, onBoard } = await setup();
     // A reinstall with the data dir wiped: another log, and nothing held.
@@ -257,6 +298,25 @@ describe("an edit made on the board to a held task", () => {
     expect(types(now.events, "step_updated")).toHaveLength(0);
   });
 
+  it("is refused with a verdict by a machine that can't read it, which puts the card back", async () => {
+    const { board, task, onBoard, onRunner, sync, link, settle, types } = await setup();
+    await link(false);
+    board.services.tasks.update(task.id, { title: "Renamed on the board" }, "user");
+    await settle();
+    // An edit of a kind this runner's version doesn't know: a newer board's.
+    board.db.prepare("UPDATE held_edits SET op = 'tasks.somethingNewer'").run();
+
+    await link(true);
+    await sync();
+    await sync();
+    expect(onRunner().title).toBe("Ship the thing");
+    expect(onBoard().title).toBe("Ship the thing");
+    expect(onBoard().hold?.waiting).toBe(0);
+    expect(types(onBoard().events, "edit_refused")[0]?.payload).toMatchObject({
+      reason: "This machine's version can't apply that edit; update it",
+    });
+  });
+
   it("keeps what is the board's own to itself", async () => {
     const { board, project, task, onBoard, onRunner, settle } = await setup();
     const epic = board.services.tasks.create({ projectId: project.id, title: "Epic", kind: "epic" });
@@ -299,5 +359,28 @@ describe("taking a task back by force", () => {
     await sync();
     expect(onBoard().status).toBe("planned");
     expect(runner.services.workingCopies.role(task.id)).toBeNull();
+  });
+
+  it("leaves what the machine logged before a second hand-over out of the board", async () => {
+    const { board, runner, machine, task, onBoard, onRunner, sync, link } = await setup();
+    await link(false);
+    runner.services.tasks.move(task.id, { status: "in_progress" }, "claude");
+    runner.services.tasks.addNote(task.id, "Lost with the forced take-back", "claude");
+    await board.integrations.machineSync.release(task.id, { force: true }, "user");
+
+    // Back, and handed over again before the board has read the machine's log.
+    await link(true);
+    await board.integrations.machineSync.handOver(task.id, machine.id, "user");
+    await sync();
+    for (const side of [onBoard(), onRunner()]) {
+      expect(side.status).toBe("planned");
+      expect(side.lastNote).toBeNull();
+    }
+    expect(onBoard().hold?.machineId).toBe(machine.id);
+
+    // From here on the machine's changes are the task's again.
+    runner.services.tasks.move(task.id, { status: "in_progress" }, "claude");
+    await sync();
+    expect(onBoard().status).toBe("in_progress");
   });
 });

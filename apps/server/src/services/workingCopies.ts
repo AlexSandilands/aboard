@@ -58,6 +58,11 @@ export interface WorkingCopiesService {
   changes(after: number, epoch: string | undefined): Omit<ChangesResponse, "requests">;
   /** Applies an edit the board made to a held task. One sent twice is applied once. */
   applyEdit(request: HeldEditRequest): HeldEditResult;
+  /**
+   * Refuses an edit this runner can't read (a newer board's), logging the task's state so the board puts back what
+   * it showed early.
+   */
+  refuseEdit(id: string, taskId: string, reason: string): HeldEditResult;
   /** Keeps the prefix the board gave this machine and the highest number the board has seen under it. */
   setNumbering(prefix: string, counter: number): void;
   /** A number the board gave out for the next task made here. */
@@ -248,6 +253,29 @@ export function createWorkingCopiesService(
     }
   };
 
+  /** Remembers an edit's outcome inside the write that made it, so one sent again gets the same answer. */
+  const recordEdit = (id: string, applied: boolean, error: string | null): HeldEditResult => {
+    // The entry this write logs is the first after the head as it stands: the one that carries the outcome.
+    const result = { applied, error, head: copies.head() + 1 };
+    copies.recordEdit({ id, ...result }, core.now().toISOString());
+    copies.pruneEdits(new Date(core.now().getTime() - EDIT_MEMORY_MS).toISOString());
+    return result;
+  };
+
+  /** Refuses an edit, logging the task's state all the same when it is held, so the board puts back what it showed. */
+  const refuse = (id: string, taskId: string, reason: string): HeldEditResult => {
+    const prior = copies.appliedEdit(id);
+    if (prior) return { applied: prior.applied, error: prior.error, head: prior.head };
+    const held = copies.get(taskId)?.role === "held";
+    if (held) forced.add(taskId);
+    return core.write((fx) => {
+      if (held) fx.detail(taskId);
+      const result = recordEdit(id, false, reason);
+      // Nothing is logged for a task not held here: the outcome is at the head as it stands.
+      return held ? result : { ...result, head: copies.head() };
+    });
+  };
+
   return {
     role: (taskId) => copies.get(taskId)?.role ?? null,
 
@@ -302,11 +330,11 @@ export function createWorkingCopiesService(
           state,
           { blocks: true, actor: BOARD_ACTOR },
         );
-        // A copy sent again keeps the activity it already has.
-        if (!existing) {
-          for (const event of request.events) {
-            repos.events.append(saved.id, event.at, event.actor, event.type, event.payload);
-          }
+        // The board's word on the task, activity included: a copy left here from a hold the board ended by force
+        // is replaced, not added to.
+        if (existing) repos.events.deleteForTask(saved.id);
+        for (const event of request.events) {
+          repos.events.append(saved.id, event.at, event.actor, event.type, event.payload);
         }
         copies.upsert({
           taskId: saved.id,
@@ -347,19 +375,14 @@ export function createWorkingCopiesService(
       };
     },
 
+    refuseEdit: (id, taskId, reason) => refuse(id, taskId, reason),
+
     applyEdit(request) {
       const prior = copies.appliedEdit(request.id);
       if (prior) return { applied: prior.applied, error: prior.error, head: prior.head };
-      const at = core.now().toISOString();
-      const record = (applied: boolean, error: string | null): HeldEditResult => {
-        // The entry this write logs is the first after the head as it stands: the one that carries the outcome.
-        const result = { applied, error, head: copies.head() + 1 };
-        copies.recordEdit({ id: request.id, ...result }, at);
-        copies.pruneEdits(new Date(core.now().getTime() - EDIT_MEMORY_MS).toISOString());
-        return result;
-      };
+      const record = (applied: boolean, error: string | null) => recordEdit(request.id, applied, error);
       if (copies.get(request.taskId)?.role !== "held") {
-        return core.write(() => ({ ...record(false, "The machine no longer holds the task"), head: copies.head() }));
+        return refuse(request.id, request.taskId, "The machine no longer holds the task");
       }
       forced.add(request.taskId);
       try {
@@ -375,11 +398,7 @@ export function createWorkingCopiesService(
         // the board puts back what it showed.
         const message = error instanceof AppError ? error.message : "The machine couldn't apply the edit";
         if (!(error instanceof AppError)) console.error("[working-copies] edit failed", error);
-        forced.add(request.taskId);
-        return core.write((fx) => {
-          fx.detail(request.taskId);
-          return record(false, message);
-        });
+        return refuse(request.id, request.taskId, message);
       }
     },
 

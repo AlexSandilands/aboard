@@ -58,21 +58,23 @@ export function createCheckouts(deps: {
   /** One clone per folder at a time: two tasks of a project handed over together share it. */
   const cloning = new Map<string, Promise<string>>();
 
-  const folderOf = (project: CopiedProject): string =>
-    join(
-      deps.dir,
-      (project.remote ?? project.title).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "repo",
-    );
+  /** The folder for a repository, named from the URL that is cloned: `github.com-acme-app`. Never outside `dir`. */
+  const folderOf = (remote: string): string => {
+    const name = remote.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "");
+    return join(deps.dir, name || "repo");
+  };
 
   return {
     ensure(project) {
       if (!project.remoteUrl) return Promise.resolve(null);
       const url = project.remoteUrl;
+      const remote = remoteIdentity(url);
       // Only what names a repository on a host: nothing git would read as an option, a path here or a command.
-      if (remoteIdentity(url) === null || /^[-\s]|::/.test(url)) {
+      if (remote === null || /^[-\s]|::/.test(url)) {
         return Promise.reject(new AppError("VALIDATION", `${url} isn't a repository URL this machine can clone`));
       }
-      const dir = folderOf(project);
+      // The folder comes from the URL itself, not from what the request says the URL is.
+      const dir = folderOf(remote);
       if (existsSync(join(dir, ".git"))) return Promise.resolve(dir);
       const running = cloning.get(dir);
       if (running) return running;

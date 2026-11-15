@@ -7,6 +7,8 @@ export interface HoldRecord {
   taskId: string;
   machineId: string;
   heldAt: string;
+  /** The machine's log position when it took the task; its entries for the task up to it are from an earlier hold. */
+  afterLogId: number;
 }
 
 /** How far the board has applied a machine's change log. */
@@ -37,6 +39,7 @@ interface HoldRow {
   task_id: string;
   machine_id: string;
   held_at: string;
+  after_log_id: number;
 }
 
 interface EditRow {
@@ -53,7 +56,12 @@ interface EditRow {
   created_at: string;
 }
 
-const toHold = (r: HoldRow): HoldRecord => ({ taskId: r.task_id, machineId: r.machine_id, heldAt: r.held_at });
+const toHold = (r: HoldRow): HoldRecord => ({
+  taskId: r.task_id,
+  machineId: r.machine_id,
+  heldAt: r.held_at,
+  afterLogId: r.after_log_id,
+});
 
 const toEdit = (r: EditRow): HeldEditRecord => ({
   seq: r.seq,
@@ -100,11 +108,16 @@ export function createHoldsRepo(sql: Sql) {
     },
     insert(hold: HoldRecord): void {
       sql.run(
-        "INSERT INTO task_holds (task_id, machine_id, held_at) VALUES (?, ?, ?)",
+        "INSERT INTO task_holds (task_id, machine_id, held_at, after_log_id) VALUES (?, ?, ?, ?)",
         hold.taskId,
         hold.machineId,
         hold.heldAt,
+        hold.afterLogId,
       );
+    },
+    /** Forgets where a machine's holds started in its log: the log is another one now, and its ids start again. */
+    resetLogPositions(machineId: string): void {
+      sql.run("UPDATE task_holds SET after_log_id = 0 WHERE machine_id = ?", machineId);
     },
     delete(taskId: string): boolean {
       return Number(sql.run("DELETE FROM task_holds WHERE task_id = ?", taskId).changes) > 0;

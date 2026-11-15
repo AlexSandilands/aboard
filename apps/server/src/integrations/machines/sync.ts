@@ -6,6 +6,7 @@ import {
   MACHINE_CHANGES_PATH,
   MACHINE_EDITS_PATH,
   MACHINE_REPLIES_PATH,
+  LogPosition,
   MACHINE_TASKS_PATH,
   machineTaskPath,
   taskLabel,
@@ -86,6 +87,8 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
   const sending = new Map<string, Promise<void>>();
   const loops = new Set<string>();
   let remotes: { at: number; byRemote: Map<string, string> } | null = null;
+  /** Per machine, the log position replay is stuck at, once it has been reported. */
+  const unreadable = new Map<string, number>();
 
   const json = (body: unknown): RequestInit => ({
     method: "POST",
@@ -135,9 +138,11 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
       const res = await deps.machines.request(machineId, MACHINE_EDITS_PATH, json(request));
       const parsed = res.ok ? HeldEditResult.safeParse(await res.json().catch(() => null)) : null;
       if (parsed?.success) services().holds.settleEdit(edit.id, parsed.data);
+      // The runner failed, and may not next time: the edit stays queued, in front of the later ones.
+      else if (res.status >= 500 || res.ok) throw new Error(`The machine couldn't take an edit (${res.status})`);
       else {
-        // An answer that isn't the runner's verdict (a version that can't read the edit): refused, not retried
-        // forever in front of every later edit.
+        // A runner that can read the request gives its verdict even on an edit it can't make sense of, with the
+        // state logged. This one answered without one (a version from before edits): refused, not retried forever.
         const error = await refusal(res, "The machine");
         services().holds.settleEdit(edit.id, { applied: false, error, head: 0 });
       }
@@ -192,7 +197,12 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
     const changes = ChangesResponse.parse(await res.json());
     const madeThere = changes.entries.some((entry) => entry.kind === "created");
     const result = services().holds.apply(machineId, changes, madeThere ? await projectsByRemote() : undefined);
-    if (result.error) log.warn(`[machines] ${services().machines.get(machineId).name}'s log: ${result.error}`);
+    // Said once per entry: the loop comes back to it until the board can read it.
+    if (result.error && unreadable.get(machineId) !== result.appliedLogId) {
+      unreadable.set(machineId, result.appliedLogId);
+      log.warn(`[machines] ${services().machines.get(machineId).name}'s log: ${result.error}`);
+    }
+    if (!result.error) unreadable.delete(machineId);
     for (const taskId of result.stray) {
       if (handing.has(taskId)) continue;
       // Held there, not handed over from here (taken back by force while it was away): it drops its copy.
@@ -224,7 +234,10 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
         )
           return;
         try {
-          await pump(machineId, { wait: POLL_WAIT_MS });
+          const result = await pump(machineId, { wait: POLL_WAIT_MS });
+          // An entry this board can't read stays where it is, and the runner answers at once while it does: wait
+          // as for a machine that can't be reached, rather than ask again straight away.
+          if (result.error) throw new Error(result.error);
           delay = RETRY_MIN_MS;
         } catch {
           // Not connected, or it dropped: the link keeps trying its routes, and this waits for it.
@@ -264,7 +277,8 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
         });
         if (!res.ok) throw new AppError("CONFLICT", await refusal(res, machine.name));
         try {
-          return services().holds.confirm(taskId, machineId, request.state.task.updatedAt, actor);
+          const { head } = LogPosition.parse(await res.json());
+          return services().holds.confirm(taskId, machineId, request.state.task.updatedAt, head, actor);
         } catch (error) {
           // The machine has a copy the board won't follow: it gives it up again.
           await deps.machines.request(machineId, machineTaskPath(taskId), { method: "DELETE" }).catch(() => {});
@@ -290,7 +304,11 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
         await sendInOrder(machine.id);
         const res = await deps.machines.request(machine.id, machineTaskPath(taskId), { method: "DELETE" });
         if (!res.ok) throw new AppError("CONFLICT", await refusal(res, machine.name));
-        for (let read = 0; read < RELEASE_READS && services().holds.get(taskId); read++) await pump(machine.id);
+        // The release is the log's last entry: every read that leaves more to read doesn't count.
+        for (let read = 0; read < RELEASE_READS && services().holds.get(taskId); read++) {
+          let result = await pump(machine.id);
+          while (result.more && !result.error) result = await pump(machine.id);
+        }
       } catch (error) {
         throw new AppError(
           "CONFLICT",

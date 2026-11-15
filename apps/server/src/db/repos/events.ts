@@ -60,6 +60,10 @@ export function createEventsRepo(sql: Sql) {
         .all<EventRow>("SELECT * FROM task_events WHERE task_id = ? AND id > ? ORDER BY id", taskId, afterId)
         .map(toEvent);
     },
+    /** Drops a task's activity: a runner replacing a copy it was left with by the one the board hands it. */
+    deleteForTask(taskId: string): void {
+      sql.run("DELETE FROM task_events WHERE task_id = ?", taskId);
+    },
     /** The id of the newest entry of any task; 0 when there is none. */
     lastId(): number {
       return sql.get<{ id: number | null }>("SELECT MAX(id) AS id FROM task_events")?.id ?? 0;

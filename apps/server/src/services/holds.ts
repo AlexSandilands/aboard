@@ -53,6 +53,8 @@ export interface ApplyResult {
   stray: string[];
   /** Set when an entry couldn't be read; everything before it was applied and the position stays there. */
   error: string | null;
+  /** The machine has entries this answer didn't carry: read again. */
+  more: boolean;
 }
 
 export interface HoldsService {
@@ -65,10 +67,11 @@ export interface HoldsService {
    */
   prepare(taskId: string, machineId: string, remote: { remote: string; remoteUrl: string } | null): HandOverRequest;
   /**
-   * Records that the machine took the task. Throws CONFLICT when the task changed since `prepare` read it at
-   * `updatedAt`: the machine's copy is then stale, and the caller takes it back.
+   * Records that the machine took the task, at `head` of its log: what it logged about the task before that is from
+   * an earlier hold. Throws CONFLICT when the task changed since `prepare` read it at `updatedAt`: the machine's
+   * copy is then stale, and the caller takes it back.
    */
-  confirm(taskId: string, machineId: string, updatedAt: string, actor: string): TaskDetail;
+  confirm(taskId: string, machineId: string, updatedAt: string, head: number, actor: string): TaskDetail;
   /** Takes a task back without its machine. What the machine changed and the board hasn't applied is lost. */
   forceRelease(taskId: string, actor: string): void;
   position(machineId: string): MachinePosition;
@@ -78,7 +81,7 @@ export interface HoldsService {
    */
   apply(
     machineId: string,
-    response: Pick<ChangesResponse, "epoch" | "entries" | "held">,
+    response: Pick<ChangesResponse, "epoch" | "head" | "entries" | "held">,
     projectByRemote?: ReadonlyMap<string, string>,
   ): ApplyResult;
   /** The machine's edits that haven't reached it, in the order they were made. */
@@ -187,7 +190,7 @@ export function createHoldsService(
       position: positionAmong(repos.tasks.lane(project.id, state.task.status), {}),
     };
     repos.tasks.insert(task);
-    holds.insert({ taskId: task.id, machineId: machine.id, heldAt: at });
+    holds.insert({ taskId: task.id, machineId: machine.id, heldAt: at, afterLogId: 0 });
     applyState(task, entry.payload, entry.id, machine, fx);
     if (taken)
       fx.log(task.id, BOARD_ACTOR, "renumbered", { from: `${prefix}${identity.number}`, machine: machine.name });
@@ -204,7 +207,10 @@ export function createHoldsService(
     fx: Effects,
   ): void => {
     const task = repos.tasks.getAny(entry.taskId);
-    const held = holds.get(entry.taskId)?.machineId === machine.id;
+    const hold = holds.get(entry.taskId);
+    // Entries from before this hold began (the task was taken back by force, then handed over again) are skipped
+    // like those of a task the machine doesn't hold: what they say was given up.
+    const held = hold?.machineId === machine.id && entry.id > hold.afterLogId;
     if (entry.kind === "created" && !task) return applyCreated(entry, machine, projectByRemote, fx);
     // A task this board doesn't have the machine holding (taken back by force, say): its changes aren't the board's.
     if (!task || !held) return;
@@ -248,7 +254,7 @@ export function createHoldsService(
       };
     },
 
-    confirm(taskId, machineId, updatedAt, actor) {
+    confirm(taskId, machineId, updatedAt, head, actor) {
       core.write((fx) => {
         const task = taskOf(taskId);
         const machine = machineOf(machineId);
@@ -256,7 +262,7 @@ export function createHoldsService(
         if (task.updatedAt !== updatedAt) {
           throw new AppError("CONFLICT", `${taskLabel(task)} changed while it was being handed over; try again`);
         }
-        holds.insert({ taskId, machineId, heldAt: core.now().toISOString() });
+        holds.insert({ taskId, machineId, heldAt: core.now().toISOString(), afterLogId: head });
         fx.log(taskId, actor, "handed_over", { machine: machine.name });
       });
       return deps.detail(taskId);
@@ -290,6 +296,7 @@ export function createHoldsService(
         if (sync.epoch !== null && sync.epoch !== response.epoch) {
           // Another log: the machine's database was replaced, and its ids start again. The copies it had are gone.
           cursor = 0;
+          holds.resetLogPositions(machineId);
           for (const hold of holds.forMachine(machineId)) {
             if (!response.held.includes(hold.taskId)) dropHold(hold.taskId, machine, BOARD_ACTOR, { lost: true }, fx);
           }
@@ -312,8 +319,11 @@ export function createHoldsService(
           applied += 1;
         }
         holds.setSync({ machineId, epoch: response.epoch, appliedLogId: cursor });
-        const stray = response.held.filter((id) => holds.get(id)?.machineId !== machineId);
-        return { applied, appliedLogId: cursor, stray, error };
+        // Only once the whole log is read: a task made on the machine has no hold here until its `created` entry is
+        // applied, and that entry may be past what this answer carried or past one that couldn't be read.
+        const caughtUp = error === null && cursor >= response.head;
+        const stray = caughtUp ? response.held.filter((id) => holds.get(id)?.machineId !== machineId) : [];
+        return { applied, appliedLogId: cursor, stray, error, more: error === null && cursor < response.head };
       });
     },
 

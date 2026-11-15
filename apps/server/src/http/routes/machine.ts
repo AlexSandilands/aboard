@@ -25,6 +25,7 @@ import {
   type PairMachineResult,
 } from "@repo/contracts";
 import type { Hono } from "hono";
+import { z } from "zod";
 import type { AppContext } from "../../app.ts";
 import { machinePairingOf, peerAddress } from "../guard.ts";
 import { handle, idParam, noContent, parseBody, parseQuery } from "../respond.ts";
@@ -146,7 +147,17 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
   );
   app.post(
     MACHINE_EDITS_PATH,
-    handle(async (c) => c.json(copies.applyEdit(await parseBody(c, HeldEditRequest)))),
+    handle(async (c) => {
+      // An edit this version can't read (a newer board's) still gets a verdict, with the task's state logged: an
+      // error here would leave the board showing an edit the task never took.
+      const raw = await parseBody(c, z.looseObject({ id: z.string().min(1), taskId: z.string().min(1) }));
+      const edit = HeldEditRequest.safeParse(raw);
+      return c.json(
+        edit.success
+          ? copies.applyEdit(edit.data)
+          : copies.refuseEdit(raw.id, raw.taskId, "This machine's version can't apply that edit; update it"),
+      );
+    }),
   );
   app.post(
     MACHINE_REPLIES_PATH,
