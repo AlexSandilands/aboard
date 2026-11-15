@@ -2,8 +2,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
-import { BRAND, brandEnv } from "@repo/contracts";
-import { loadConfig } from "../config.ts";
+import { BRAND, DEFAULT_RUNNER_PORT, brandEnv } from "@repo/contracts";
+import { defaultHomeDir } from "../config.ts";
 import { runningServer } from "../serverFile.ts";
 import {
   LAUNCHD_LABEL,
@@ -96,6 +96,16 @@ function lingering(deps: ServiceDeps): boolean {
 
 const launchdTarget = (deps: ServiceDeps) => `gui/${deps.uid}`;
 
+/**
+ * Unloads the agent and waits for launchd to let go of it: `bootout` returns while the old one may still be
+ * stopping, and a `bootstrap` meanwhile fails.
+ */
+async function bootOut(deps: ServiceDeps): Promise<void> {
+  const target = `${launchdTarget(deps)}/${LAUNCHD_LABEL}`;
+  deps.run("launchctl", ["bootout", target]);
+  for (let i = 0; i < 20 && deps.run("launchctl", ["print", target]).status === 0; i++) await deps.sleep(250);
+}
+
 /** Whether the service itself is running, as opposed to a runner someone started by hand. */
 function serviceRunning(deps: ServiceDeps): boolean {
   if (deps.platform === "darwin") {
@@ -108,24 +118,24 @@ function serviceRunning(deps: ServiceDeps): boolean {
  * Puts things back after a failed install: the service file that was there before (with its service started
  * again), or none. Best effort: the error that got us here is what gets reported.
  */
-function rollBack(deps: ServiceDeps, path: string, previous: string | null): void {
+function rollBack(deps: ServiceDeps, path: string, previous: string | null): "removed" | "restored" | "not restarted" {
   if (deps.platform === "darwin") {
-    if (previous === null) deps.removeFile(path);
-    else {
-      deps.writeFile(path, previous);
-      deps.run("launchctl", ["bootstrap", launchdTarget(deps), path]);
+    if (previous === null) {
+      deps.removeFile(path);
+      return "removed";
     }
-    return;
+    deps.writeFile(path, previous);
+    return deps.run("launchctl", ["bootstrap", launchdTarget(deps), path]).status === 0 ? "restored" : "not restarted";
   }
   if (previous === null) {
     deps.run("systemctl", ["--user", "disable", SYSTEMD_UNIT]);
     deps.removeFile(path);
     deps.run("systemctl", ["--user", "daemon-reload"]);
-  } else {
-    deps.writeFile(path, previous);
-    deps.run("systemctl", ["--user", "daemon-reload"]);
-    deps.run("systemctl", ["--user", "restart", SYSTEMD_UNIT]);
+    return "removed";
   }
+  deps.writeFile(path, previous);
+  deps.run("systemctl", ["--user", "daemon-reload"]);
+  return deps.run("systemctl", ["--user", "restart", SYSTEMD_UNIT]).status === 0 ? "restored" : "not restarted";
 }
 
 async function install(deps: ServiceDeps, dryRun: boolean): Promise<number> {
@@ -168,16 +178,23 @@ async function install(deps: ServiceDeps, dryRun: boolean): Promise<number> {
   const previous = deps.readFile(file.path);
   deps.writeFile(file.path, file.contents);
   deps.out(`Wrote ${file.path}`);
+  // Both come from this shell's variables; a reinstall without them goes back to the defaults.
+  deps.out(`Data dir ${deps.dataDir}, port ${deps.env[brandEnv("PORT")] ?? DEFAULT_RUNNER_PORT}`);
   // launchd opens the log before the runner starts, and doesn't make its folder.
   if (deps.platform === "darwin") deps.mkdir(join(deps.dataDir, "logs"));
   // A loaded agent must be booted out before it can be bootstrapped again; not loaded is fine.
-  if (deps.platform === "darwin") deps.run("launchctl", ["bootout", `${launchdTarget(deps)}/${LAUNCHD_LABEL}`]);
+  if (deps.platform === "darwin") await bootOut(deps);
   try {
     for (const [command, args] of commands) must(deps, command, args);
   } catch (error) {
     // Not left half set up, and a reinstall that failed leaves the service that worked before.
-    rollBack(deps, file.path, previous);
-    if (previous !== null && error instanceof ServiceError) error.message += "; the previous service was put back";
+    const rolledBack = rollBack(deps, file.path, previous);
+    if (error instanceof ServiceError && rolledBack !== "removed") {
+      error.message +=
+        rolledBack === "restored"
+          ? "; the previous service was put back"
+          : "; the previous service file was put back, but it didn't start again";
+    }
     throw error;
   }
 
@@ -285,7 +302,8 @@ function currentServerCommand(env: NodeJS.ProcessEnv): string[] | null {
 
 function defaultDeps(): ServiceDeps {
   const env = process.env;
-  const dataDir = loadConfig(env, ["--runner"]).homeDir;
+  // Not loadConfig, which makes the folder: `status` or a dry run shouldn't leave one behind.
+  const dataDir = env[brandEnv("HOME")] ?? defaultHomeDir("runner");
   return {
     platform: process.platform,
     env,

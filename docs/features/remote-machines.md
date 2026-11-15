@@ -88,7 +88,9 @@ A runner has to outlive the SSH session or terminal that started it, and the boa
 
 Both run the launcher with `--runner` and restart it after a crash but not after a clean stop. The service gets
 `PATH` from the shell that installed it, so the runner finds `git`, `gh` and the agent CLIs, plus
-`brandEnv("HOME")` and `brandEnv("PORT")` when set. A token is never written into the service file.
+`brandEnv("HOME")` and `brandEnv("PORT")` when set. A token is never written into the service file. `status`
+and a reinstall find the runner through the same variables in the shell they run in, so run them with the values
+used at install (or none, for the defaults).
 
 `install`, on Linux: writes the unit, `systemctl --user daemon-reload`, `enable`, `restart` (so a reinstall
 runs the new command), then turns on linger with `loginctl enable-linger <user>` if it is off. Without linger

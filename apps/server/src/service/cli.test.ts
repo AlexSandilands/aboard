@@ -133,13 +133,24 @@ describe("service install", () => {
 
   it("puts the previous unit back when a reinstall fails", async () => {
     const { deps, files, commands, lines } = fakeDeps({
-      answers: { "systemctl --user restart": { status: 1, stderr: "Job failed" } },
+      answers: { "systemctl --user enable": { status: 1, stderr: "Unit is masked" } },
     });
     files.set(unitPath, "the old unit");
     expect(await runServiceCommand(["install"], deps)).toBe(1);
     expect(files.get(unitPath)).toBe("the old unit");
     expect(commands.slice(-2)).toEqual(["systemctl --user daemon-reload", `systemctl --user restart ${SYSTEMD_UNIT}`]);
     expect(lines.at(-1)).toContain("the previous service was put back");
+  });
+
+  it("says when the previous service was put back but didn't start", async () => {
+    const { deps, files, lines } = fakeDeps({
+      answers: { "systemctl --user restart": { status: 1, stderr: "Job failed" } },
+    });
+    files.set(unitPath, "the old unit");
+    // The restart fails both for the new unit and for the old one put back.
+    expect(await runServiceCommand(["install"], deps)).toBe(1);
+    expect(files.get(unitPath)).toBe("the old unit");
+    expect(lines.at(-1)).toContain("didn't start again");
   });
 
   it("refuses while a runner started by hand holds the port, but reinstalls over the service's own", async () => {
@@ -171,13 +182,19 @@ describe("service install", () => {
   });
 
   it("bootstraps a launchd agent on macOS", async () => {
-    const { deps, files, commands } = fakeDeps({ platform: "darwin", userHome: "/Users/u" });
+    const { deps, files, commands } = fakeDeps({
+      platform: "darwin",
+      userHome: "/Users/u",
+      // Booted out at once: no agent left to print.
+      answers: { [`launchctl print gui/501/${LAUNCHD_LABEL}`]: { status: 113 } },
+    });
     expect(await runServiceCommand(["install"], deps)).toBe(0);
     const path = `/Users/u/Library/LaunchAgents/${LAUNCHD_LABEL}.plist`;
     expect(files.get(path)).toContain(`<string>${LAUNCHER}</string>`);
     expect(commands).toEqual([
       "launchctl print gui/501",
       `launchctl bootout gui/501/${LAUNCHD_LABEL}`,
+      `launchctl print gui/501/${LAUNCHD_LABEL}`,
       `launchctl bootstrap gui/501 ${path}`,
     ]);
   });
