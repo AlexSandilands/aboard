@@ -2,9 +2,9 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRAND, brandEnv } from "@repo/contracts";
+import { BRAND, SERVER_LAUNCHER_NAME as LAUNCHER_NAME, brandEnv, serverReleaseName } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
-import { LAUNCHER_NAME, launcherScript, serverReleaseName } from "./tarball.ts";
+import { launcherScript } from "./tarball.ts";
 
 const dirs: string[] = [];
 afterEach(() => {

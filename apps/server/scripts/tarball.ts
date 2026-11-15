@@ -12,12 +12,17 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rm
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { BRAND, brandEnv } from "../../../packages/contracts/src/brand.ts";
+import {
+  RUNNER_INSTALL_SCRIPT,
+  SERVER_CHECKSUMS,
+  SERVER_LAUNCHER_NAME as LAUNCHER_NAME,
+  runnerInstallScript,
+  serverReleaseName,
+  type ServerPlatform,
+} from "../../../packages/contracts/src/runnerInstall.ts";
 
 /** The Node release every tarball carries. Bump it with the checksums below, from its SHASUMS256.txt. */
 export const NODE_VERSION = "24.22.3";
-
-export const SERVER_PLATFORMS = ["linux-x64", "linux-arm64", "darwin-arm64"] as const;
-export type ServerPlatform = (typeof SERVER_PLATFORMS)[number];
 
 /** SHA-256 of `node-v<NODE_VERSION>-<platform>.tar.gz`, pinned so a changed download fails the build. */
 const NODE_SHA256: Record<ServerPlatform, string> = {
@@ -25,18 +30,6 @@ const NODE_SHA256: Record<ServerPlatform, string> = {
   "linux-arm64": "261af2af250dfd7e9f25cf151d1b2713a0adf8f10a9ad116c4947f68627affe8",
   "darwin-arm64": "ff6e17d4874b76d272212b908cc020d6e815fba5a6c7eaaa06add725840307fd",
 };
-
-export const isServerPlatform = (value: string): value is ServerPlatform =>
-  (SERVER_PLATFORMS as readonly string[]).includes(value);
-
-/** The launcher's name, which is also the command users type: `aboard-server`. */
-export const LAUNCHER_NAME = `${BRAND.id}-server`;
-
-/** The folder the tarball unpacks to, versioned so two releases can sit side by side. */
-export const serverReleaseName = (version: string, platform: ServerPlatform): string =>
-  `${LAUNCHER_NAME}-${version}-${platform}`;
-
-export const SERVER_CHECKSUMS = "SHA256SUMS-server.txt";
 
 /**
  * `bin/<id>-server`: runs the bundled server on the bundled Node. It follows a symlink to itself (one in
@@ -146,5 +139,7 @@ export async function buildServerTarballs(options: {
   // The format `sha256sum -c` reads.
   const sums = tarballs.map((path) => `${sha256(path)}  ${basename(path)}\n`).join("");
   writeFileSync(join(outDir, SERVER_CHECKSUMS), sums);
+  // Published beside the tarballs: what a machine runs to install a runner of this version by hand.
+  writeFileSync(join(outDir, RUNNER_INSTALL_SCRIPT), runnerInstallScript(version), { mode: 0o755 });
   return tarballs;
 }
