@@ -427,10 +427,14 @@ export const HostedRunnerStatus = z.object({
 });
 export type HostedRunnerStatus = z.infer<typeof HostedRunnerStatus>;
 
-/** `PATCH /api/runner`. Turning it off stops the runner; what it holds stays in its data dir for when it is back. */
+/**
+ * `PATCH /api/runner`. Turning it off stops the runner; what it holds stays in its data dir for when it is back.
+ * Stopping or restarting it (a new bind) with runs in flight ends them, so that is refused unless `force` is set.
+ */
 export const UpdateHostedRunnerInput = z.object({
   enabled: z.boolean().optional(),
   bind: HostedRunnerBind.optional(),
+  force: z.boolean().optional(),
 });
 export type UpdateHostedRunnerInput = z.infer<typeof UpdateHostedRunnerInput>;
 

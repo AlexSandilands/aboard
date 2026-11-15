@@ -981,14 +981,18 @@ backups, stats or notifications. What differs:
 - it starts and stops with the board (and with the switch), and comes back on at the board's next start when left on;
 - it won't pair with the board that hosts it (409), and serves one other board like any runner;
 - it reports `updatesWithApp` and never updates itself ([updates](#updates));
-- it doesn't install the board skills (the board installs the same ones), and takes the board's T3 token, since both
-  talk to the one T3 Code on the machine;
+- it doesn't install the board skills (the board installs the same ones), and takes the board's T3 token, at its
+  start and whenever the board's changes, since both talk to the one T3 Code on the machine;
 - a start that fails (its port taken, by a standalone runner say) is kept as `failed` with the reason, which Settings
   shows; the board runs on.
 
 **Where it listens.** On loopback, which an SSH tunnel from the other board needs. **Reachable over Tailscale**
 (`bind: "private"`) restarts it listening as `brandEnv("BIND")=private` does ([above](#listening-beyond-loopback)).
 Only the runner's listener changes: the board's own stays on `127.0.0.1` with its own guard.
+
+Turning the switch off, or changing where it listens, stops or restarts the runner, which ends the runs it has going
+for the other board. `PATCH /api/runner` refuses that (CONFLICT) while it has runs in flight, unless `force` is set;
+Settings asks first ("2 runs for desk are going here…", **Stop anyway**).
 
 **Pairing.** `POST /api/runner/pairing` makes a code in the runner's database and answers it with the addresses to
 give the other board (the tailnet one when it listens there, and its loopback URL for a tunnel's far end). The other
@@ -1005,9 +1009,9 @@ first (`routeMcpCall` in `http/hostedForward.ts`) and hands it to the runner ove
 
 | What the call names                                                        | Goes to                                |
 | -------------------------------------------------------------------------- | -------------------------------------- |
-| A folder in the runner's data dir (`workspacePath`, a session's `cwd`): its clones and worktrees | The runner, whatever else it names |
+| A folder (`workspacePath`, a session's `cwd`) in the runner's data dir, or a worktree of one of its clones wherever it is (T3 Code makes a thread's in its own folder) | The runner, whatever else it names |
 | A task (`task`, `epic`, `tasks`) only the runner has, held or one it refers to | The runner                         |
-| A task number both have, one of them held by the runner                    | Refused, with both tasks' titles and ids |
+| A task number both have, whether the runner holds its task or only refers to it | Refused, with both tasks' titles and ids |
 | Tasks of both boards                                                       | Refused: one call per board            |
 | A `projectId` only the runner has                                          | The runner                             |
 | Anything else (a list, an overview, a task only the board has)             | The board                              |
@@ -1015,8 +1019,9 @@ first (`routeMcpCall` in `http/hostedForward.ts`) and hands it to the runner ove
 The runner then treats the call as one from an agent on it ([tools on a machine](#tools-on-a-machine)), so a read of
 a task it doesn't hold is passed to its board. While the runner runs, the board's server instructions end with
 `HOSTED_RUNNER_INSTRUCTIONS`, so agents know to pass an id when a number is refused. REST `/api/tasks/:ref…` is
-handed on the same way for a task only the runner has, unless the request has an `Origin`: a browser on the board
-only ever sees the board's tasks.
+handed on the same way for a task only the runner has, unless a browser sent it (an `Origin`, `Sec-Fetch-Site` or
+`Sec-Fetch-Dest` header, which every browser request has and a script's doesn't): a browser on the board only ever
+sees the board's tasks.
 
 ### Running a runner while developing
 

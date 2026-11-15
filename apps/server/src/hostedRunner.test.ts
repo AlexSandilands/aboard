@@ -1,11 +1,14 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BRAND, type HostedRunnerPairingCode, type HostedRunnerStatus } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Config } from "./config.ts";
+import { createHostedRunner, type CallNames, type HostedServer } from "./hostedRunner.ts";
 import { startServer, type RunningServer } from "./server.ts";
+import type { Services } from "./services/types.ts";
 import { harnessHomesFrom } from "./services/skillSync.ts";
 
 // A board that also runs tasks for another board (docs/features/remote-machines.md#a-board-that-is-also-a-runner),
@@ -29,7 +32,7 @@ const freePort = () =>
     });
   });
 
-async function board(overrides: Partial<Config> = {}): Promise<RunningServer> {
+async function startBoard(overrides: Partial<Config> = {}): Promise<RunningServer> {
   const homeDir = mkdtempSync(join(tmpdir(), `${BRAND.id}-hosted-`));
   dirs.push(homeDir);
   const config: Config = {
@@ -101,13 +104,13 @@ const createTask = async (url: string, title: string) =>
 
 /** Board A with its runner on, and board B paired with that runner, holding nothing yet. */
 async function pairedBoards() {
-  const a = await board();
+  const a = await startBoard();
   const status = await json<HostedRunnerStatus>(send(`${a.url}/api/runner`, "PATCH", { enabled: true }));
   expect(status).toMatchObject({ enabled: true, state: "running", board: null, heldTasks: 0 });
   const code = await json<HostedRunnerPairingCode>(send(`${a.url}/api/runner/pairing`, "POST"));
   expect(code.url).toBe(status.url);
 
-  const b = await board();
+  const b = await startBoard();
   const { machine } = await json<{ machine: { id: string; name: string } }>(
     send(`${b.url}/api/machines`, "POST", { via: "code", url: code.url, code: code.code }),
   );
@@ -116,7 +119,7 @@ async function pairedBoards() {
 
 describe("a board that also runs tasks for another board", { timeout: 30_000 }, () => {
   it("is off by default, and starts and stops its runner with the setting", async () => {
-    const a = await board();
+    const a = await startBoard();
     expect(await json<HostedRunnerStatus>(fetch(`${a.url}/api/runner`))).toMatchObject({
       enabled: false,
       state: "off",
@@ -141,15 +144,15 @@ describe("a board that also runs tasks for another board", { timeout: 30_000 }, 
   });
 
   it("says why its runner couldn't start", async () => {
-    const taken = await board();
-    const a = await board({ hostedRunnerPort: taken.port });
+    const taken = await startBoard();
+    const a = await startBoard({ hostedRunnerPort: taken.port });
     const status = await json<HostedRunnerStatus>(send(`${a.url}/api/runner`, "PATCH", { enabled: true }));
     expect(status).toMatchObject({ enabled: true, state: "failed" });
     expect(status.error).toContain(`Port ${taken.port} is in use`);
   });
 
   it("starts again with the board when it was left on", async () => {
-    const a = await board();
+    const a = await startBoard();
     await json(send(`${a.url}/api/runner`, "PATCH", { enabled: true }));
     const config = configs.get(a)!;
     await a.close();
@@ -242,8 +245,72 @@ describe("a board that also runs tasks for another board", { timeout: 30_000 }, 
     expect(byFolder.text).toContain("B's task");
   });
 
+  it("knows a worktree of the runner's clone made outside its data dir as the runner's", async () => {
+    const { a, b } = await pairedBoards();
+    const projectsOf = async (url: string) =>
+      (await json<Array<{ title: string }>>(fetch(`${url}/api/projects`))).map((p) => p.title).sort();
+    const before = await projectsOf(a.url);
+    // A clone of the runner's, and a worktree of it where T3 Code puts a thread's: outside the runner's data dir.
+    const clone = join(configs.get(a)!.homeDir, "runner", "repos", "app");
+    mkdirSync(clone, { recursive: true });
+    const git = (cwd: string, ...args: string[]) =>
+      execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd, stdio: "ignore" });
+    git(clone, "init", "--quiet");
+    writeFileSync(join(clone, "README.md"), "hello\n");
+    git(clone, "add", ".");
+    git(clone, "commit", "--quiet", "-m", "init");
+    const elsewhere = mkdtempSync(join(tmpdir(), `${BRAND.id}-t3-worktrees-`));
+    dirs.push(elsewhere);
+    git(clone, "worktree", "add", "--quiet", join(elsewhere, "thread"));
+
+    // It answers from the runner, which numbers a task once B has polled it.
+    await expect
+      .poll(
+        async () =>
+          (
+            await callTool(a.url, "add_to_backlog", {
+              title: "A follow-up for B",
+              workspacePath: join(elsewhere, "thread"),
+            })
+          ).text,
+        { timeout: 15_000 },
+      )
+      .not.toMatch(/^[A-Z_]+:/);
+    // Not a project, or a task, on A.
+    expect(await projectsOf(a.url)).toEqual(before);
+    expect(await (await fetch(`${a.url}/api/board`)).text()).not.toContain("A follow-up for B");
+    // B gets it from the runner.
+    await expect
+      .poll(async () => (await fetch(`${b.url}/api/board`)).text(), { timeout: 15_000 })
+      .toContain("A follow-up for B");
+  });
+
+  it("hands a script's change to a held task to the runner, and never a browser's read", async () => {
+    const { a, b, machineId, runnerUrl } = await pairedBoards();
+    const theirs = await createTask(b.url, "B's task");
+    await json(send(`${b.url}/api/tasks/${theirs.id}/hold`, "POST", { machineId }));
+    const noted = await send(`${a.url}/api/tasks/${theirs.id}/notes`, "POST", { text: "From a script here" });
+    expect(noted.status).toBe(201);
+    const copy = await json<{ lastNote: { text: string } }>(fetch(`${runnerUrl}/api/tasks/${theirs.id}`));
+    expect(copy.lastNote.text).toBe("From a script here");
+    // A same-origin GET carries no Origin, but a browser's always carries Sec-Fetch-*.
+    const fromPage = await fetch(`${a.url}/api/tasks/${theirs.id}`, { headers: { "sec-fetch-site": "same-origin" } });
+    expect(fromPage.status).toBe(404);
+  });
+
+  it("refuses one call naming tasks of both boards", async () => {
+    const { a, b, machineId } = await pairedBoards();
+    await createTask(b.url, "B's first");
+    const theirs = await createTask(b.url, "B's task");
+    const mine = await createTask(a.url, "A's own task");
+    await json(send(`${b.url}/api/tasks/${theirs.id}/hold`, "POST", { machineId }));
+    const both = await callTool(a.url, "get_handoff_prompt", { tasks: [mine.id, theirs.id] });
+    expect(both.isError).toBe(true);
+    expect(both.text).toContain("make one call for each");
+  });
+
   it("won't pair with the board it runs in", async () => {
-    const a = await board();
+    const a = await startBoard();
     await json(send(`${a.url}/api/runner`, "PATCH", { enabled: true }));
     const code = await json<HostedRunnerPairingCode>(send(`${a.url}/api/runner/pairing`, "POST"));
     const res = await send(`${a.url}/api/machines`, "POST", { via: "code", url: code.url, code: code.code });
@@ -255,5 +322,129 @@ describe("a board that also runs tasks for another board", { timeout: 30_000 }, 
     const { a } = await pairedBoards();
     const status = await json<HostedRunnerStatus>(send(`${a.url}/api/runner/pairing`, "DELETE"));
     expect(status.board).toBeNull();
+  });
+});
+
+/** A task as `route` sees it: its id and number on one side. */
+interface StubTask {
+  id: string;
+  number: number;
+  title: string;
+  role?: "held" | "reference";
+}
+
+function stubServices(tasks: StubTask[], projects: string[] = []): Services {
+  const find = (ref: string) => tasks.find((t) => t.id === ref || `#${t.number}` === ref || String(t.number) === ref);
+  let setting = { enabled: true, bind: "loopback" as const };
+  let t3Token: string | null = null;
+  return {
+    tasks: {
+      resolveId: (ref: string) => {
+        const task = find(ref);
+        if (!task) throw new Error("not found");
+        return task.id;
+      },
+      summary: (id: string) => ({ ...find(id)!, numberPrefix: null }),
+    },
+    workingCopies: { role: (id: string) => find(id)?.role ?? null, heldIds: () => [] },
+    machineAuth: { pairings: () => [{ board: { name: "desk" } }] },
+    projects: { list: () => projects.map((id) => ({ id })) },
+    settings: {
+      hostedRunner: () => setting,
+      setHostedRunner: (next: typeof setting) => (setting = next),
+      t3Token: () => t3Token,
+      update: (input: { t3Token?: string | null }) => {
+        if (input.t3Token !== undefined) t3Token = input.t3Token;
+      },
+      get: () => ({ machineName: "laptop" }),
+    },
+  } as unknown as Services;
+}
+
+/** A hosted runner over stub services, started, with `runs` in flight. */
+async function stubbed(board: Services, runner: Services, runs = 0) {
+  const hosted = createHostedRunner({
+    board: { homeDir: mkdtempSync(join(tmpdir(), `${BRAND.id}-route-`)) } as Config,
+    boardInstanceId: "00000000-0000-4000-8000-000000000000",
+    boardServices: () => board,
+    start: () =>
+      Promise.resolve({
+        url: "http://127.0.0.1:1",
+        port: 1,
+        ctx: {
+          services: runner,
+          instanceId: "x",
+          integrations: { runnerHost: { workInFlight: () => runs } },
+        },
+        close: () => Promise.resolve(),
+      } as unknown as HostedServer),
+    changed: () => {},
+    log: { info: () => {}, warn: () => {} },
+  });
+  await hosted.start();
+  return hosted;
+}
+
+describe("which board a call belongs to", () => {
+  const none: CallNames = { tasks: [], paths: [], projectIds: [] };
+
+  it("follows each row of the routing table", async () => {
+    const board = stubServices(
+      [
+        { id: "b1", number: 1, title: "Mine" },
+        { id: "b9", number: 9, title: "Mine too" },
+      ],
+      ["pb"],
+    );
+    const runner = stubServices(
+      [
+        { id: "r1", number: 1, title: "Theirs", role: "held" },
+        { id: "r5", number: 5, title: "Theirs too", role: "held" },
+        { id: "e9", number: 9, title: "Their epic", role: "reference" },
+        { id: "e3", number: 3, title: "Another epic", role: "reference" },
+      ],
+      ["pr"],
+    );
+    const hosted = await stubbed(board, runner);
+    const to = (names: Partial<typeof none>) => hosted.route({ ...none, ...names }).to;
+
+    expect(to({ tasks: ["r5"] })).toBe("runner");
+    expect(to({ tasks: ["#5"] })).toBe("runner");
+    expect(to({ tasks: ["#3"] })).toBe("runner");
+    expect(to({ tasks: ["b1"] })).toBe("board");
+    expect(to({ tasks: ["#404"] })).toBe("board");
+    expect(to({})).toBe("board");
+    expect(to({ projectIds: ["pr"] })).toBe("runner");
+    expect(to({ projectIds: ["pb"] })).toBe("board");
+    // A number on both, whether the runner holds its task or only refers to it.
+    const held = hosted.route({ ...none, tasks: ["#1"] });
+    expect(held).toMatchObject({ to: "ambiguous" });
+    expect(held.to === "ambiguous" && held.message).toContain("which this machine holds for desk (id r1)");
+    const referred = hosted.route({ ...none, tasks: ["#9"] });
+    expect(referred.to === "ambiguous" && referred.message).toContain(
+      "which a task this machine holds for it refers to",
+    );
+    expect(to({ tasks: ["b1", "r5"] })).toBe("ambiguous");
+  });
+
+  it("asks before ending runs in flight, and goes ahead when told to", async () => {
+    const board = stubServices([]);
+    const hosted = await stubbed(board, stubServices([]), 2);
+    await expect(hosted.configure({ enabled: false })).rejects.toThrow(/2 runs for desk are going here/);
+    await expect(hosted.configure({ bind: "private" })).rejects.toThrow(/restarting the runner ends them/);
+    expect(hosted.running()).toBe(true);
+    expect(board.settings.hostedRunner()).toEqual({ enabled: true, bind: "loopback" });
+    expect((await hosted.configure({ enabled: false, force: true })).state).toBe("off");
+  });
+
+  it("keeps the runner's T3 token the board's", async () => {
+    const board = stubServices([]);
+    const runner = stubServices([]);
+    board.settings.update({ t3Token: "first" });
+    const hosted = await stubbed(board, runner);
+    expect(runner.settings.t3Token()).toBe("first");
+    board.settings.update({ t3Token: "second" });
+    hosted.syncT3Token();
+    expect(runner.settings.t3Token()).toBe("second");
   });
 });

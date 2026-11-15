@@ -43,6 +43,14 @@ export async function startServer(config: Config): Promise<RunningServer> {
       start: (runner) => startServer(runner),
       changed: () => ctx.bus.publish({ type: "runner.changed" }),
     });
+    // Nothing is published when a setting changes; the runner's copy of the T3 token follows the board's from here.
+    const update = ctx.services.settings.update.bind(ctx.services.settings);
+    const hosted = ctx.hostedRunner;
+    ctx.services.settings.update = (input) => {
+      const result = update(input);
+      if (input.t3Token !== undefined) hosted.syncT3Token();
+      return result;
+    };
   }
   const app = createApp(ctx);
 

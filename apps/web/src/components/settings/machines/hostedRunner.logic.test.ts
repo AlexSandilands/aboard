@@ -1,6 +1,6 @@
 import type { HostedRunnerStatus } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { hostedRunnerLine, pairingAddresses } from "./hostedRunner.logic";
+import { hostedRunnerLine, pairingAddresses, runsWarning } from "./hostedRunner.logic";
 
 const status = (over: Partial<HostedRunnerStatus> = {}): HostedRunnerStatus => ({
   enabled: true,
@@ -46,5 +46,20 @@ describe("pairingAddresses", () => {
     expect(
       pairingAddresses({ url: "http://127.0.0.1:4318", tailscaleUrl: "http://100.64.0.7:4318" }).map((a) => a.url),
     ).toEqual(["http://100.64.0.7:4318", "http://127.0.0.1:4318"]);
+  });
+});
+
+describe("runsWarning", () => {
+  const board = { instanceId: "5d6c0e4a-7d3e-4f0b-9a55-0a2b2b3c4d5e", name: "desk", pairedAt: "", lastUsedAt: null };
+  it("asks before stopping or restarting a runner with runs going, and not otherwise", () => {
+    const busy = status({ board, runsInFlight: 2 });
+    expect(runsWarning(busy, { enabled: false })).toEqual({
+      text: "2 runs for desk are going here. Stopping the runner ends them.",
+      action: "Stop anyway",
+    });
+    expect(runsWarning(busy, { bind: "private" })?.action).toBe("Restart anyway");
+    expect(runsWarning(busy, { bind: "loopback" })).toBeNull();
+    expect(runsWarning(status({ board }), { enabled: false })).toBeNull();
+    expect(runsWarning(status({ state: "off", runsInFlight: 1 }), { enabled: true })).toBeNull();
   });
 });

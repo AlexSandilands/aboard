@@ -1,4 +1,4 @@
-import { BRAND, type HostedRunnerPairingCode } from "@repo/contracts";
+import { BRAND, type HostedRunnerPairingCode, type UpdateHostedRunnerInput } from "@repo/contracts";
 import { useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
@@ -11,7 +11,7 @@ import {
 } from "~/state/machines";
 import { cn } from "~/lib/utils";
 import { CopyButton, SettingsNote, SettingsRow, SettingsSection, StatusDot } from "../settingsLayout";
-import { hostedRunnerLine, pairingAddresses } from "./hostedRunner.logic";
+import { hostedRunnerLine, pairingAddresses, runsWarning } from "./hostedRunner.logic";
 
 /** The code just made, with where to type it on the other board. */
 function PairingCode({ code }: { code: HostedRunnerPairingCode }) {
@@ -50,6 +50,8 @@ export function HostedRunnerSection() {
   const makeCode = useHostedRunnerPairingCode();
   const unpair = useUnpairHostedRunner();
   const [confirmUnpair, setConfirmUnpair] = useState(false);
+  // A change that would end runs in flight, waiting for the user to say so.
+  const [pending, setPending] = useState<UpdateHostedRunnerInput | null>(null);
   const data = status.data;
 
   if (!data) {
@@ -63,6 +65,12 @@ export function HostedRunnerSection() {
   const running = data.state === "running";
   // A code is for the runner as it is now: one made before it was turned off or paired means nothing.
   const code = running && !data.board ? makeCode.data : undefined;
+  const change = (input: UpdateHostedRunnerInput) => {
+    makeCode.reset();
+    if (runsWarning(data, input)) setPending(input);
+    else configure.mutate(input);
+  };
+  const warning = pending ? runsWarning(data, pending) : null;
   return (
     <SettingsSection title="This machine">
       <SettingsRow
@@ -81,14 +89,30 @@ export function HostedRunnerSection() {
           <Switch
             checked={data.enabled}
             disabled={configure.isPending}
-            onCheckedChange={(enabled) => {
-              makeCode.reset();
-              configure.mutate({ enabled });
-            }}
+            onCheckedChange={(enabled) => change({ enabled })}
             aria-label="Let other machines run tasks here"
           />
         }
-      />
+      >
+        {pending && warning ? (
+          <div className="mt-3 flex flex-col gap-2 rounded-lg bg-warning/8 px-3 py-2.5 text-sm dark:bg-warning/16 @min-[32rem]/settings-row:flex-row @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-3">
+            <p className="min-w-0 flex-1">{warning.text}</p>
+            <div className="flex gap-2">
+              <Button size="xs" variant="ghost" onClick={() => setPending(null)}>
+                Cancel
+              </Button>
+              <Button
+                size="xs"
+                variant="destructive-outline"
+                disabled={configure.isPending}
+                onClick={() => configure.mutate({ ...pending, force: true }, { onSettled: () => setPending(null) })}
+              >
+                {warning.action}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </SettingsRow>
       {data.enabled ? (
         <SettingsRow
           id="integrations.machines.runner-tailscale"
@@ -98,7 +122,7 @@ export function HostedRunnerSection() {
             <Switch
               checked={data.bind === "private"}
               disabled={configure.isPending}
-              onCheckedChange={(on) => configure.mutate({ bind: on ? "private" : "loopback" })}
+              onCheckedChange={(on) => change({ bind: on ? "private" : "loopback" })}
               aria-label="Reachable over Tailscale"
             />
           }

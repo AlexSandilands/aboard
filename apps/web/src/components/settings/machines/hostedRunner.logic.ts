@@ -1,4 +1,4 @@
-import type { HostedRunnerStatus } from "@repo/contracts";
+import type { HostedRunnerStatus, UpdateHostedRunnerInput } from "@repo/contracts";
 import type { StatusTone } from "../settingsLayout";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -30,4 +30,26 @@ export function pairingAddresses(code: { url: string; tailscaleUrl: string | nul
         { label: "At the far end of an SSH tunnel to this machine", url: code.url },
       ]
     : [{ label: "At the far end of an SSH tunnel to this machine", url: code.url }];
+}
+
+/**
+ * What to ask before a change that stops or restarts the runner while it has runs going, which ends them; null when
+ * nothing would be cut short.
+ */
+export function runsWarning(
+  status: HostedRunnerStatus,
+  change: UpdateHostedRunnerInput,
+): { text: string; action: string } | null {
+  if (status.state !== "running" || status.runsInFlight === 0) return null;
+  const stops = change.enabled === false;
+  const restarts = change.bind !== undefined && change.bind !== status.bind;
+  if (!stops && !restarts) return null;
+  const runs = plural(status.runsInFlight, "run");
+  const owner = status.board?.name ?? "the other board";
+  return {
+    text: `${runs} for ${owner} ${status.runsInFlight === 1 ? "is" : "are"} going here. ${
+      stops ? "Stopping" : "Restarting"
+    } the runner ends ${status.runsInFlight === 1 ? "it" : "them"}.`,
+    action: stops ? "Stop anyway" : "Restart anyway",
+  };
 }

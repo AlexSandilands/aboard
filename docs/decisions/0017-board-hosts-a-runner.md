@@ -22,9 +22,10 @@ board binds loopback only, and that no request can make a pairing code.
   data dir (`<board data dir>/runner`), database, port, pairing, tokens, worktrees and Autopilot engine. No table
   is shared, so nothing it holds can be written to the board's.
 - **The board hands on what is the runner's.** A tool call on the board's `/mcp`, or a request to
-  `/api/tasks/:ref` without an `Origin`, that names a task only the runner has, or a folder in the runner's data
-  dir, is sent to the runner on loopback and answered by it (`apps/server/src/http/hostedForward.ts`). A task number
-  both boards use is refused with both ids; it is never guessed.
+  `/api/tasks/:ref` that no browser sent, that names a task only the runner has, or a folder that is the runner's (in
+  its data dir, or a worktree of one of its clones), is sent to the runner on loopback and answered by it
+  (`apps/server/src/http/hostedForward.ts`). A task number both boards use is refused with both ids; it is never
+  guessed.
 - **The runner listens; the board doesn't.** The runner's listener follows 0015 (loopback, or `private` when the user
   asks for Tailscale). The board's own listener stays on `127.0.0.1` with 0003's rules.
 - **A pairing code can come from the board's Settings.** `POST /api/runner/pairing` writes one into the hosted

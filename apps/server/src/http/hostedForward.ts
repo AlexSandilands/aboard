@@ -77,6 +77,13 @@ export async function routeMcpCall(hosted: HostedRunner, request: Request): Prom
 }
 
 /**
+ * Whether a browser sent it. A same-origin GET carries no `Origin`, but every browser sends the `Sec-Fetch-*` headers,
+ * which a script or an agent's HTTP client doesn't.
+ */
+const fromBrowser = (request: Request): boolean =>
+  ["origin", "sec-fetch-site", "sec-fetch-dest"].some((name) => request.headers.has(name));
+
+/**
  * The REST routes of a task, for a task the runner holds: a script on this machine working for the other board reads
  * and changes it through the board's address as an agent does. Never a browser's: the board's own pages show only
  * its own tasks.
@@ -84,7 +91,7 @@ export async function routeMcpCall(hosted: HostedRunner, request: Request): Prom
 export function registerHostedRunnerForwarding(app: Hono, hosted: HostedRunner): void {
   const forward = async (c: Parameters<Parameters<Hono["use"]>[1]>[0], next: () => Promise<void>) => {
     const ref = c.req.param("ref");
-    if (!ref || c.req.header("origin") !== undefined) return next();
+    if (!ref || fromBrowser(c.req.raw)) return next();
     const route = hosted.route({ tasks: [ref], paths: [], projectIds: [] });
     if (route.to !== "runner") return next();
     return forwardToRunner(route.url, c.req.raw);

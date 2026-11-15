@@ -13,6 +13,7 @@ import { hostedRunnerConfig, hostedRunnerHome, type Config } from "./config.ts";
 import { AppError } from "./errors.ts";
 import { addressKind } from "./http/addresses.ts";
 import { messageOf } from "./integrations/util.ts";
+import { mainCheckoutOf } from "./services/projects.ts";
 import type { Services } from "./services/types.ts";
 
 // A board that also runs tasks for another board (docs/features/remote-machines.md#a-board-that-is-also-a-runner).
@@ -55,8 +56,13 @@ export interface CallNames {
 
 export interface HostedRunner {
   status(): HostedRunnerStatus;
-  /** Saves the setting and starts, restarts or stops the runner to match. */
+  /**
+   * Saves the setting and starts, restarts or stops the runner to match. CONFLICT, changing nothing, when that would
+   * stop or restart it with runs in flight, unless `force` is set.
+   */
   configure(input: UpdateHostedRunnerInput): Promise<HostedRunnerStatus>;
+  /** Gives the running runner the board's T3 token again, after the board's changed: both use the one T3 Code. */
+  syncT3Token(): void;
   /** Starts the runner when the setting is on: at the board's start. A failure is kept in the status, not thrown. */
   start(): Promise<void>;
   /** A one-time code for another board. CONFLICT unless the runner is running. */
@@ -139,10 +145,7 @@ export function createHostedRunner(deps: HostedRunnerDeps): HostedRunner {
       server = started;
       runningBind = setting.bind;
       state = "running";
-      // The same T3 Code serves both: the runner reaches it with the board's token.
-      const token = deps.boardServices().settings.t3Token();
-      const runnerSettings = started.ctx.services.settings;
-      if (token && runnerSettings.t3Token() !== token) runnerSettings.update({ t3Token: token });
+      syncT3Token();
       log.info(`[runner] running tasks for another board on ${started.url} (data: ${config.homeDir})`);
     } catch (cause) {
       state = "failed";
@@ -155,6 +158,24 @@ export function createHostedRunner(deps: HostedRunnerDeps): HostedRunner {
     }
     deps.changed();
   }
+
+  /** The same T3 Code serves both: the runner reaches it with the board's token. */
+  function syncT3Token(): void {
+    if (!server) return;
+    const token = deps.boardServices().settings.t3Token();
+    const runnerSettings = server.ctx.services.settings;
+    if (runnerSettings.t3Token() !== token) runnerSettings.update({ t3Token: token });
+  }
+
+  /**
+   * Whether `path` is the runner's work: one of its clones or worktrees in its data dir, or a worktree of one of its
+   * clones made elsewhere (T3 Code makes a thread's worktree in its own folder).
+   */
+  const runnersPath = (path: string): boolean => {
+    if (inside(runnerHome, path)) return true;
+    const checkout = isAbsolute(path) ? mainCheckoutOf(path) : null;
+    return checkout !== null && inside(runnerHome, checkout.main);
+  };
 
   const enqueue = (): Promise<void> => {
     queue = queue.then(apply, apply);
@@ -203,14 +224,28 @@ export function createHostedRunner(deps: HostedRunnerDeps): HostedRunner {
       };
     },
 
-    async configure(input) {
+    async configure({ force, ...input }) {
       const current = deps.boardServices().settings.hostedRunner();
-      deps.boardServices().settings.setHostedRunner({ ...current, ...input });
+      const next = { ...current, ...input };
+      const runs = server?.ctx.integrations.runnerHost.workInFlight() ?? 0;
+      const stops = server !== null && (!next.enabled || next.bind !== runningBind);
+      if (stops && runs > 0 && !force) {
+        const owner = server!.ctx.services.machineAuth.pairings()[0]?.board.name ?? "another board";
+        throw new AppError(
+          "CONFLICT",
+          `${runs} run${runs === 1 ? "" : "s"} for ${owner} ${runs === 1 ? "is" : "are"} going here, and ` +
+            `${next.enabled ? "restarting" : "stopping"} the runner ends ${runs === 1 ? "it" : "them"}. Wait for ` +
+            `${runs === 1 ? "it" : "them"} to finish, or do it anyway.`,
+        );
+      }
+      deps.boardServices().settings.setHostedRunner(next);
       await enqueue();
       return this.status();
     },
 
     start: enqueue,
+
+    syncT3Token,
 
     pairingCode() {
       const services = runnerServices();
@@ -230,19 +265,18 @@ export function createHostedRunner(deps: HostedRunnerDeps): HostedRunner {
       const runner = { to: "runner" as const, url: server.url };
       // A folder in the runner's data dir is one of its clones or worktrees: whatever else the call names, it is
       // the other board's work.
-      if (paths.some((path) => inside(runnerHome, path))) return runner;
+      if (paths.some(runnersPath)) return runner;
 
       let board = false;
       let held = false;
       const both: string[] = [];
       for (const ref of tasks) {
         const found = lookup(ref);
-        if (found.held && found.board) both.push(ref);
-        else if (found.held) held = true;
+        // A number on both boards is never guessed, whether the runner holds its task or only refers to it (the
+        // epic or a blocker of a task it holds): one call could otherwise act on the wrong board's task.
+        if ((found.held || found.reference) && found.board) both.push(ref);
+        else if (found.held || found.reference) held = true;
         else if (found.board) board = true;
-        // Something the runner only refers to (the epic of a task it holds) is read there when this board has no
-        // such task: it is the other board's.
-        else if (found.reference) held = true;
       }
       if (both.length > 0) {
         const services = server.ctx.services;
@@ -250,9 +284,13 @@ export function createHostedRunner(deps: HostedRunnerDeps): HostedRunner {
           const here = deps.boardServices().tasks.summary(deps.boardServices().tasks.resolveId(ref));
           const there = services.tasks.summary(services.tasks.resolveId(ref));
           const owner = services.machineAuth.pairings()[0]?.board.name ?? "another board";
+          const whose =
+            services.workingCopies.role(there.id) === "held"
+              ? `which this machine holds for ${owner}`
+              : `on ${owner}, which a task this machine holds for it refers to`;
           return (
             `${taskLabel(here)} names two tasks: "${here.title}" on this board (id ${here.id}) and "${there.title}", ` +
-            `which this machine holds for ${owner} (id ${there.id}).`
+            `${whose} (id ${there.id}).`
           );
         });
         return {
