@@ -113,7 +113,8 @@ What it does, on Linux x64 or arm64 and macOS arm64, needing `curl` and `tar`:
 5. Runs `<id>-server pair` and says what to type into the board.
 
 Other options: `--version <v>`, `--base-url <url>` (the release files somewhere else, `file://` included) and
-`--porcelain`, which the board's SSH install uses: the script then prints `@@step <name>` as it starts each step and
+`--porcelain`, which the board's SSH install uses (reading stdout and stderr apart, so a warning the remote prints
+can't land inside one of these lines or carry the code into the install's log): the script then prints `@@step <name>` as it starts each step and
 ends with `@@pair ` and the JSON of `<id>-server pair --json` (the code, the runner's port, instance id and name, and
 its Tailscale address when `--tailscale` found one). Nothing in the script reads stdin, so it can be piped into `sh`.
 Running it again installs over what is there, which is also how a runner is updated by hand.
@@ -277,7 +278,9 @@ themselves. `sshFailure` turns what ssh printed into a sentence saying which of 
 validated (`SshTarget`) and passed after `--`, so it can't be read as an option.
 
 Connecting a machine the board already knows (a reinstall, a new code) keeps it one machine with its name and
-prefix, and puts the route just used first.
+prefix, and puts the route just used first. A prefix asked for that another machine holds is refused before
+anything is installed or a code is spent; one taken while an install ran is replaced by a suggested one, since the
+machine is paired by then. If storing a newly paired machine fails, its token is dropped again.
 
 **The prefix** is one to three capitals or digits starting with a letter, suggested from the name (`engine` → `E`,
 then `EN`, …) and unique among the board's machines. Tasks made on the machine while the board can't be reached
@@ -289,7 +292,9 @@ the machine, and leaves the runner installed: `<id>-server service uninstall` on
 
 A board run from source has version `0.0.0`, which no release carries, so it refuses an SSH install and asks for no
 updates, unless `brandEnv("RELEASE_URL")` names a folder or server holding the release files (what
-`pnpm server:package` writes into `apps/server/release/`).
+`pnpm server:package` writes into `apps/server/release/`); the install command the board shows then downloads from
+there and passes `--base-url`. With no release at all, the add dialog shows `<id>-server pair` in place of an
+install command that would 404.
 
 ### The Machines page
 
@@ -380,7 +385,9 @@ them on the runner, with the service's `PATH`, at most once a minute:
 | `git`    | git has a credential helper (gh's counts only while gh is logged in), or `ssh -T git@github.com` is greeted |
 
 Each is `ok`, `logged-out`, `missing` (not on the `PATH`) or `unknown` (the check didn't finish), with a sentence
-saying what to run. The git check is about GitHub only, where the board's pull requests are.
+saying what to run. The git check is about GitHub only, where the board's pull requests are. The checks start
+programs and one may reach for the network, so the status waits at most 4 seconds for them and otherwise answers
+with what was last known (`unknown` the first time); the check carries on for the next read.
 
 ### Updates
 
@@ -407,7 +414,9 @@ it a `current` to repoint, and `brandEnv("SERVICE")=1`, which `service install` 
 will start it again. Any other answers 409, and its machine shows `selfUpdate: false`.
 
 A machine **newer** than the board is left alone (`versionState: "newer"`): going back would run old code on a
-database the newer version has migrated. The board is the one to update.
+database the newer version has migrated. The board is the one to update. Both sides hold to it: the board's
+`POST /api/machines/:id/update` answers 409 for a newer machine, and a runner answers 409 to a version older than
+its own.
 
 **Protocol mismatch.** A machine whose `protocolVersion` the board can't talk to (`machineProtocolCompatible`)
 keeps its route and gets the connection `needs-update`. Nothing is exchanged with it: its status isn't read and

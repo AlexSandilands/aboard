@@ -19,7 +19,8 @@ export const RunnerPairOutput = z.object({
   instanceId: z.uuid(),
   name: z.string(),
   /** The machine's Tailscale address, when it was asked to listen there and has one. */
-  tailscaleIp: z.string().nullable().default(null),
+  // Whatever `tailscale ip` printed there; anything that isn't an address is dropped, not trusted as a host.
+  tailscaleIp: z.ipv4().nullable().default(null).catch(null),
 });
 export type RunnerPairOutput = z.infer<typeof RunnerPairOutput>;
 
@@ -70,7 +71,12 @@ export async function runSshInstall(
   const outcome: { result: RunnerPairOutput | null; unreadable: boolean } = { result: null, unreadable: false };
   let stderr = "";
   let lastLine = "";
-  let pending = "";
+  const log = (text: string) => {
+    // Never the result, wherever it turns up: it carries the pairing code.
+    if (text.trim() === "" || text.includes(RUNNER_INSTALL_RESULT_PREFIX.trim())) return;
+    lastLine = text.trim();
+    hooks.onLog(text);
+  };
   const line = (text: string) => {
     if (text.startsWith(RUNNER_INSTALL_RESULT_PREFIX)) {
       let json: unknown = null;
@@ -89,20 +95,30 @@ export async function runSshInstall(
       if (step.success) hooks.onStep(step.data);
       return;
     }
-    if (text.trim() === "") return;
-    lastLine = text.trim();
-    hooks.onLog(text);
+    log(text);
   };
-  const feed = (chunk: string) => {
-    pending += chunk;
-    const lines = pending.split(/\r?\n/);
-    pending = lines.pop() ?? "";
-    lines.forEach(line);
+  // A buffer per stream: the script prints its result in two writes, and anything the remote says on stderr in
+  // between must not land inside that line. Only stdout carries the script's own `@@` lines.
+  const reader = (take: (text: string) => void) => {
+    let pending = "";
+    return {
+      feed(chunk: string) {
+        const lines = (pending + chunk).split(/\r?\n/);
+        pending = lines.pop() ?? "";
+        lines.forEach(take);
+      },
+      end() {
+        if (pending) take(pending);
+        pending = "";
+      },
+    };
   };
-  child.onStdout(feed);
+  const out = reader(line);
+  const err = reader(log);
+  child.onStdout((chunk) => out.feed(chunk));
   child.onStderr((chunk) => {
     stderr = (stderr + chunk).slice(-4_000);
-    feed(chunk);
+    err.feed(chunk);
   });
 
   let timedOut = false;
@@ -111,7 +127,8 @@ export async function runSshInstall(
     child.kill();
   }, INSTALL_TIMEOUT_MS);
   const exit = await child.exit.finally(() => clearTimeout(timer));
-  if (pending) line(pending);
+  out.end();
+  err.end();
 
   if (timedOut) throw new SshInstallError(`The install on ${input.target} took too long and was stopped.`);
   // 255 is ssh's own: it never logged in, or the connection dropped.

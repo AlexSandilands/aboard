@@ -1,6 +1,14 @@
 import type { Machine } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { directRouteFrom, machineSummary, moveRoute, nameFromTarget, untilLabel, versionLine } from "./machines.logic";
+import {
+  asSentence,
+  directRouteFrom,
+  machineSummary,
+  moveRoute,
+  nameFromTarget,
+  untilLabel,
+  versionLine,
+} from "./machines.logic";
 
 const machine = (over: Partial<Machine> = {}): Machine => ({
   id: "m1",
@@ -151,6 +159,13 @@ describe("routes", () => {
     expect(untilLabel("2026-11-15T10:02:00.000Z", now)).toBe("2m");
     expect(untilLabel("2026-11-15T09:59:00.000Z", now)).toBe("a moment");
     expect(untilLabel(null, now)).toBe("a moment");
+  });
+});
+
+describe("an error shown before more text", () => {
+  it("ends in one full stop", () => {
+    expect(asSentence("ssh engine: Connection refused")).toBe("ssh engine: Connection refused.");
+    expect(asSentence("Run `ssh engine` once, then try again. ")).toBe("Run `ssh engine` once, then try again.");
   });
 });
 

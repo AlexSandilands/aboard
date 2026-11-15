@@ -20,6 +20,9 @@ import type { AppContext } from "../../app.ts";
 import { machinePairingOf, peerAddress } from "../guard.ts";
 import { handle, noContent, parseBody } from "../respond.ts";
 
+/** How long a status answer waits for the login checks, which start programs and may reach for the network. */
+const STATUS_LOGINS_WAIT_MS = 4_000;
+
 const CAPABILITIES: MachineCapability[] = ["pairing", "status", "update"];
 
 /**
@@ -80,7 +83,8 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
         version: BRAND.version,
         platform: serverPlatformOf(process.platform, process.arch) ?? `${process.platform}-${process.arch}`,
         runsInFlight: services.autopilot.status().active.length,
-        logins: await logins.logins(),
+        // Well inside the board's request timeout: a slow check answers with what was last known.
+        logins: await logins.loginsWithin(STATUS_LOGINS_WAIT_MS),
         update: updater.state(),
         selfUpdate: updater.available(),
       } satisfies MachineStatus),

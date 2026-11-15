@@ -39,6 +39,7 @@ import { SettingsGroup, SettingsNote, SettingsSectionHeader, StatusDot } from ".
 import { AddMachineDialog } from "./AddMachineDialog";
 import {
   LOGIN_WORDS,
+  asSentence,
   directRouteFrom,
   loginName,
   machineSummary,
@@ -88,8 +89,8 @@ function ConnectionCallout({ machine }: { machine: Machine }) {
       <Callout tone="error">
         <p>
           <strong className="font-semibold">No route to {machine.name} works right now.</strong>{" "}
-          {machine.error ? `${machine.error}. ` : ""}The board keeps trying; the machine carries on with its tasks
-          meanwhile.
+          {machine.error ? `${asSentence(machine.error)} ` : ""}The board keeps trying; the machine carries on with its
+          tasks meanwhile.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button size="xs" variant="outline" disabled={check.isPending} onClick={() => check.mutate(machine.id)}>
@@ -260,7 +261,7 @@ function RoutesPart({ machine, asOf }: { machine: Machine; asOf: number }) {
                 </span>
                 {state?.status === "failed" ? (
                   <p className="text-xs break-words text-muted-foreground">
-                    {state.error}. Next try in {untilLabel(state.retryAt, asOf)}.
+                    {state.error ? `${asSentence(state.error)} ` : ""}Next try in {untilLabel(state.retryAt, asOf)}.
                   </p>
                 ) : null}
               </div>

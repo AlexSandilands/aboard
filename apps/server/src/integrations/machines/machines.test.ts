@@ -2,12 +2,14 @@ import {
   BRAND,
   MACHINE_DESCRIPTOR_PATH,
   MACHINE_PROTOCOL_VERSION,
+  MACHINE_STATUS_PATH,
   MACHINE_UPDATE_PATH,
   MachinesResponse,
   RUNNER_INSTALL_RESULT_PREFIX,
   RUNNER_INSTALL_STEP_PREFIX,
   type Machine,
 } from "@repo/contracts";
+import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "../../errors.ts";
 import { createTestHarness } from "../../test/harness.ts";
@@ -44,6 +46,8 @@ function setup(options: { releaseUrl?: string } = {}) {
     reachable: new Set(["127.0.0.1", "100.101.102.103"]),
     /** Changes the descriptor the board reads, to stand in for a runner on another version. */
     descriptor: (d: Record<string, unknown>): Record<string, unknown> => d,
+    /** Changes the status the board reads, to stand in for a runner the install script installed. */
+    status: (s: Record<string, unknown>): Record<string, unknown> => s,
     /** What the runner answers an update request with, in place of its own answer. */
     updateAnswer: null as Record<string, unknown> | null,
     sent: [] as Array<{ path: string; method: string; body: string | null }>,
@@ -62,6 +66,9 @@ function setup(options: { releaseUrl?: string } = {}) {
       ...rest,
       headers: { ...Object.fromEntries(new Headers(init?.headers)), host: url.host },
     });
+    if (url.pathname === MACHINE_STATUS_PATH && res.ok) {
+      return Response.json(net.status((await res.json()) as Record<string, unknown>));
+    }
     if (url.pathname !== MACHINE_DESCRIPTOR_PATH || !res.ok) return res;
     return Response.json(net.descriptor((await res.json()) as Record<string, unknown>));
   }) as typeof fetch;
@@ -232,25 +239,39 @@ describe("connecting a machine by its pairing code", () => {
   });
 
   it("refuses a wrong code, an address that isn't safe for plain http, and a prefix in use", async () => {
-    const { machines, connectByCode, reasonOf, runner } = setup();
+    const { board, machines, reasonOf, runner } = setup();
     expect(await reasonOf(machines.connect({ via: "code", url: TAILNET, code: "AAAA-AAAA-AAAA" }))).toMatch(
       /^VALIDATION: .*wrong/,
     );
     expect(await reasonOf(machines.connect({ via: "code", url: "http://192.168.1.20:4318", code: "x" }))).toMatch(
       /^VALIDATION: .*tailnet/,
     );
-    const { machine } = await connectByCode();
+    // Another machine has the prefix; the runner isn't known yet, so the code isn't even spent.
+    board.services.machines.add({
+      instanceId: randomUUID(),
+      name: "x-ray",
+      prefix: "X",
+      routes: [{ kind: "direct", url: "http://100.9.9.9:4318" }],
+    });
     const code = runner.services.machineAuth.createPairingCode().code;
-    expect(await reasonOf(machines.connect({ via: "code", url: TAILNET, code, prefix: machine!.prefix }))).toMatch(
+    expect(await reasonOf(machines.connect({ via: "code", url: TAILNET, code, prefix: "x" }))).toMatch(
       /^CONFLICT: .*prefix/,
     );
+    expect((await machines.connect({ via: "code", url: TAILNET, code })).machine).toMatchObject({ prefix: "E" });
   });
 
   it("connecting the same machine again keeps it one machine, with the new route first", async () => {
     const { machines, connectByCode, runner } = setup();
     const { machine } = await connectByCode();
     const code = runner.services.machineAuth.createPairingCode().code;
-    await machines.connect({ via: "code", url: "http://127.0.0.1:4318", code, name: "ignored" });
+    // Its own prefix typed again is not a prefix "in use".
+    await machines.connect({
+      via: "code",
+      url: "http://127.0.0.1:4318",
+      code,
+      name: "ignored",
+      prefix: machine!.prefix,
+    });
     const list = machines.list().machines;
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ id: machine!.id, name: machine!.name });
@@ -332,6 +353,51 @@ describe("a connected machine", () => {
     // Updated: it speaks our protocol again and is connected.
     net.descriptor = (d) => d;
     expect(await machines.check(id)).toMatchObject({ connection: "connected", versionState: "same", update: null });
+  });
+
+  it("that is behind the board is asked to update once, and not again while it says it is waiting", async () => {
+    const { machines, connectByCode, net } = setup({ releaseUrl: "http://releases.test" });
+    const id = (await connectByCode()).machine!.id;
+    const waiting = { state: "waiting", targetVersion: BRAND.version, error: null };
+    net.descriptor = (d) => ({ ...d, version: "0.0.0-old" });
+    net.updateAnswer = waiting;
+    net.sent.length = 0;
+    const asked = () => net.sent.filter((s) => s.path === MACHINE_UPDATE_PATH).map((s) => JSON.parse(s.body ?? "{}"));
+    // A runner the install script installed, which reports the update it was asked for, as a real one does.
+    net.status = (s) => ({
+      ...s,
+      version: "0.0.0-old",
+      selfUpdate: true,
+      runsInFlight: 2,
+      ...(asked().length > 0 ? { update: waiting } : {}),
+    });
+
+    expect(await machines.check(id)).toMatchObject({ connection: "connected", versionState: "older", update: waiting });
+    expect(asked()).toEqual([{ version: BRAND.version, now: false }]);
+
+    // From here its status says how the update goes.
+    expect(await machines.check(id)).toMatchObject({ update: waiting, runsInFlight: 2 });
+    expect(asked()).toHaveLength(1);
+
+    // The user not waiting for the runs is a second request, with `now`.
+    await machines.requestUpdate(id, true);
+    expect(asked().at(-1)).toEqual({ version: BRAND.version, now: true });
+  });
+
+  it("that can't update itself, or is newer than the board, is never asked to", async () => {
+    const { machines, connectByCode, net, reasonOf } = setup({ releaseUrl: "http://releases.test" });
+    const id = (await connectByCode()).machine!.id;
+    const asked = () => net.sent.some((s) => s.path === MACHINE_UPDATE_PATH);
+    // Behind, but not installed by the script (what the runner under test truly is).
+    net.descriptor = (d) => ({ ...d, version: "0.0.0-old" });
+    expect(await machines.check(id)).toMatchObject({ versionState: "older", selfUpdate: false, update: null });
+    expect(asked()).toBe(false);
+    // Newer: left alone, and the board refuses to send it back a version even when asked to.
+    net.descriptor = (d) => ({ ...d, version: "9.9.9" });
+    net.status = (s) => ({ ...s, version: "9.9.9", selfUpdate: true });
+    expect(await machines.check(id)).toMatchObject({ versionState: "newer", update: null });
+    expect(await reasonOf(machines.requestUpdate(id, true))).toMatch(/^CONFLICT: .*never moved back/);
+    expect(asked()).toBe(false);
   });
 
   it("is renamed, re-prefixed and re-routed, and removing it unpairs the runner", async () => {

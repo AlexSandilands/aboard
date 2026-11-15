@@ -42,10 +42,17 @@ export const RUNNER_INSTALL_STEP_PREFIX = "@@step ";
  * The one-line command that installs a runner by hand on a machine and prints a pairing code. `tailscale` makes the
  * runner reachable at its Tailscale address, for a machine the board can't SSH to.
  */
-export function runnerInstallCommand(version: string, options: { tailscale?: boolean } = {}): string {
-  const base = serverReleaseBaseUrl(version) ?? "<release URL>";
-  const args = options.tailscale ? " -s -- --tailscale" : "";
-  return `curl -fsSL ${base}/${RUNNER_INSTALL_SCRIPT} | sh${args}`;
+export function runnerInstallCommand(
+  version: string,
+  options: { tailscale?: boolean; /** The release files somewhere other than GitHub. */ baseUrl?: string | null } = {},
+): string {
+  const base = options.baseUrl || serverReleaseBaseUrl(version) || "<release URL>";
+  // The script must be told too, or it would download the tarball from GitHub.
+  const args = [
+    ...(options.baseUrl ? ["--base-url", `'${options.baseUrl.replaceAll("'", "'\\''")}'`] : []),
+    ...(options.tailscale ? ["--tailscale"] : []),
+  ];
+  return `curl -fsSL ${base}/${RUNNER_INSTALL_SCRIPT} | sh${args.length > 0 ? ` -s -- ${args.join(" ")}` : ""}`;
 }
 
 /**

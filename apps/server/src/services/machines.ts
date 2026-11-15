@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import {
   MachinePrefix,
+  MachineRoute as MachineRouteSchema,
   suggestMachinePrefix,
   type MachineLogin,
   type MachineRoute,
   type UpdateMachineInput,
 } from "@repo/contracts";
+import { z } from "zod";
 import type { MachineRecord } from "../db/repos/machines.ts";
 import { AppError, notFound } from "../errors.ts";
 import type { Core } from "./core.ts";
@@ -56,6 +58,12 @@ export function createMachinesService(core: Pick<Core, "repos" | "now" | "write"
       .all()
       .filter((m) => m.id !== exceptId)
       .map((m) => m.prefix);
+  /** Nothing unreadable is stored: a route this version can't parse would cost the machine all of its routes. */
+  const validRoutes = (routes: MachineRoute[]): MachineRoute[] => {
+    const parsed = z.array(MachineRouteSchema).min(1).safeParse(routes);
+    if (!parsed.success) throw new AppError("VALIDATION", "A machine needs at least one route, each a valid one");
+    return parsed.data;
+  };
   const requireFreePrefix = (prefix: string, exceptId?: string): void => {
     const owner = repo.all().find((m) => m.id !== exceptId && m.prefix === prefix);
     if (owner) throw new AppError("CONFLICT", `The prefix ${prefix} is ${owner.name}'s. Pick another.`);
@@ -78,7 +86,7 @@ export function createMachinesService(core: Pick<Core, "repos" | "now" | "write"
           name,
           prefix: chosen,
           prefixFixed: false,
-          routes,
+          routes: validRoutes(routes),
           version: null,
           protocolVersion: null,
           platform: null,
@@ -107,7 +115,7 @@ export function createMachinesService(core: Pick<Core, "repos" | "now" | "write"
           ...machine,
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.prefix !== undefined ? { prefix: input.prefix } : {}),
-          ...(input.routes !== undefined ? { routes: input.routes } : {}),
+          ...(input.routes !== undefined ? { routes: validRoutes(input.routes) } : {}),
         };
         repo.update(next);
         return next;

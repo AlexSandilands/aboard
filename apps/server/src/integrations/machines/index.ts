@@ -185,7 +185,11 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
       state = { state: "failed", targetVersion: BRAND.version, error: messageOf(error) };
     }
     const entry = live.get(machine.id);
-    if (entry) entry.update = state;
+    if (entry) {
+      entry.update = state;
+      // A connected runner's status is what is shown, and it was read before this answer.
+      if (entry.status) entry.status = { ...entry.status, update: state };
+    }
     return state;
   }
 
@@ -261,14 +265,18 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
     return url;
   };
 
+  // Prefixes are stored in capitals; a caller that didn't come through the API's schema may not have them so.
+  const prefixOwner = (prefix: string | undefined): MachineRecord | undefined => {
+    const wanted = prefix?.trim().toUpperCase();
+    return wanted === undefined
+      ? undefined
+      : machines()
+          .list()
+          .find((m) => m.prefix === wanted);
+  };
   const requireFreePrefix = (prefix: string | undefined): void => {
-    const owner =
-      prefix === undefined
-        ? undefined
-        : machines()
-            .list()
-            .find((m) => m.prefix === prefix);
-    if (owner) throw new AppError("CONFLICT", `The prefix ${prefix} is ${owner.name}'s. Pick another.`);
+    const owner = prefixOwner(prefix);
+    if (owner) throw new AppError("CONFLICT", `The prefix ${owner.prefix} is ${owner.name}'s. Pick another.`);
   };
 
   /** Records a machine just paired with, or the new routes of one already known, and (re)starts its link. */
@@ -283,23 +291,36 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
       a.kind === "ssh" && b.kind === "ssh"
         ? a.target === b.target
         : a.kind === b.kind && JSON.stringify(a) === JSON.stringify(b);
-    const machine = known
-      ? // Connected again (a reinstall, a new code): the routes just used go first, and its name and prefix stay.
-        machines().update(known.id, {
-          routes: [...input.routes, ...known.routes.filter((r) => !input.routes.some((n) => sameRoute(n, r)))],
-        })
-      : machines().add(input);
+    let machine: MachineRecord;
+    try {
+      machine = known
+        ? // Connected again (a reinstall, a new code): the routes just used go first, and its name and prefix stay.
+          machines().update(known.id, {
+            routes: [...input.routes, ...known.routes.filter((r) => !input.routes.some((n) => sameRoute(n, r)))],
+          })
+        : machines().add({
+            ...input,
+            // Taken while the install ran: the machine is paired by now, so it gets a suggested one, not an error.
+            prefix: prefixOwner(input.prefix) ? undefined : input.prefix,
+          });
+    } catch (error) {
+      // Paired but not stored: nothing would show it or could unpair it, so the token is given up.
+      if (!known) deps.secrets.remove(input.instanceId);
+      throw error;
+    }
     startLink(machine);
     changed();
     return machine;
   }
 
   async function connectByCode(input: Extract<ConnectMachineInput, { via: "code" }>): Promise<Machine> {
-    requireFreePrefix(input.prefix);
     const url = new URL(input.url).origin;
     let descriptor;
     try {
-      descriptor = await deps.client.pair(url, input.code);
+      // Who is there, before the code is spent: a machine already connected keeps its prefix, whatever was typed.
+      const found = await deps.client.describe(url);
+      if (!machines().byInstance(found.instanceId)) requireFreePrefix(input.prefix);
+      descriptor = await deps.client.pair(url, input.code, found.instanceId);
     } catch (error) {
       throw asAppError(error);
     }
@@ -314,7 +335,11 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
   }
 
   function startInstall(input: Extract<ConnectMachineInput, { via: "ssh" }>): MachineInstall {
-    requireFreePrefix(input.prefix);
+    // An install onto a machine already connected (found by its SSH destination) keeps that machine's prefix.
+    const reinstall = machines()
+      .list()
+      .some((m) => m.routes.some((r) => r.kind === "ssh" && r.target === input.target));
+    if (!reinstall) requireFreePrefix(input.prefix);
     if (!releaseAvailable) {
       throw new AppError(
         "CONFLICT",
@@ -407,8 +432,8 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
     list: () => ({
       machines: machines().list().map(compose),
       installs: installs.map(snapshot),
-      installCommand: runnerInstallCommand(BRAND.version),
-      installCommandTailscale: runnerInstallCommand(BRAND.version, { tailscale: true }),
+      installCommand: runnerInstallCommand(BRAND.version, { baseUrl: deps.releaseUrl }),
+      installCommandTailscale: runnerInstallCommand(BRAND.version, { tailscale: true, baseUrl: deps.releaseUrl }),
       releaseAvailable,
     }),
 
@@ -466,9 +491,14 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
       if (!releaseAvailable) {
         throw new AppError("CONFLICT", `Version ${BRAND.version} of this board has no release to update a machine to.`);
       }
-      const state = await sendUpdate(machine, reachableUrl(machine, entry), now);
-      // A connected runner's status is what is shown; read it again so the answer isn't hidden behind the old one.
-      if (entry.status) entry.status = { ...entry.status, update: state };
+      // Migrations only go forward: old code on a database a newer version has migrated may not even start.
+      if (machine.version !== null && compareReleaseVersions(machine.version, BRAND.version) > 0) {
+        throw new AppError(
+          "CONFLICT",
+          `${machine.name} runs ${machine.version}, newer than this board (${BRAND.version}). Update the board; a machine is never moved back a version.`,
+        );
+      }
+      await sendUpdate(machine, reachableUrl(machine, entry), now);
       changed();
       return compose(machines().get(id));
     },

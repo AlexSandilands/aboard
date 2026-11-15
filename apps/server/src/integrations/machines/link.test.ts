@@ -151,6 +151,30 @@ describe("a machine's link", () => {
     w.link.close();
   });
 
+  it("closed while a route is opening, closes that route and tries nothing more", async () => {
+    let finish: (handle: RouteHandle) => void = () => {};
+    const closed: string[] = [];
+    let probes = 0;
+    const link = createMachineLink({
+      routes: [ssh],
+      open: () => new Promise<RouteHandle>((resolve) => (finish = resolve)),
+      probe: () => {
+        probes += 1;
+        return Promise.resolve(connected);
+      },
+      onChange: () => {},
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    link.close();
+    finish({ url: "http://ssh.test", close: () => closed.push("ssh"), ended: new Promise<void>(() => {}) });
+    await vi.advanceTimersByTimeAsync(LINK_CHECK_INTERVAL_MS * 2);
+    expect(closed).toEqual(["ssh"]);
+    expect(link.url()).toBeNull();
+    // The one probe is the opened route's; no check ran after the close.
+    expect(probes).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("waits 2s, 4s, 8s and at most five minutes between tries", () => {
     expect([1, 2, 3, 20].map(retryDelayMs)).toEqual([2_000, 4_000, 8_000, 300_000]);
   });

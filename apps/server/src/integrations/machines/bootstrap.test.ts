@@ -60,6 +60,38 @@ describe("the SSH install", () => {
     expect(call.args).toContain("BatchMode=yes");
   });
 
+  it("keeps the remote's stderr out of the result line, and the pairing code out of the log", async () => {
+    const steps: string[] = [];
+    const log: string[] = [];
+    const spawn = (): SshChild => {
+      let out: (text: string) => void = () => {};
+      let err: (text: string) => void = () => {};
+      return {
+        onStdout: (listener) => (out = listener),
+        onStderr: (listener) => (err = listener),
+        exit: Promise.resolve().then(() => {
+          // As the script writes it: the prefix, then the launcher prints the JSON, with a warning in between.
+          out(`${RUNNER_INSTALL_STEP_PREFIX}pair\n${RUNNER_INSTALL_RESULT_PREFIX}`);
+          err("(node:4242) ExperimentalWarning: SQLite is an experimental feature\n");
+          out(`${JSON.stringify(pair)}\n`);
+          return { code: 0 };
+        }),
+        kill: () => {},
+      };
+    };
+    const result = await runSshInstall(input, { onStep: (s) => steps.push(s), onLog: (l) => log.push(l) }, spawn);
+    expect(result).toEqual(pair);
+    expect(log).toEqual(["(node:4242) ExperimentalWarning: SQLite is an experimental feature"]);
+    expect(log.join("\n")).not.toContain(pair.code);
+  });
+
+  it("drops a Tailscale address that isn't one", async () => {
+    const { result } = await install({
+      stdout: `${RUNNER_INSTALL_RESULT_PREFIX}${JSON.stringify({ ...pair, tailscaleIp: "evil.example.com/x" })}\n`,
+    });
+    expect(result).toEqual({ ...pair, tailscaleIp: null });
+  });
+
   it("quotes what it passes to the remote shell", async () => {
     const { call } = await install({ stdout: "" }, { baseUrl: "file:///tmp/my release; rm -rf ~" });
     expect(call.args.at(-1)).toBe(

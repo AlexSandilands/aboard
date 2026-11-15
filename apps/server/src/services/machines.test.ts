@@ -36,6 +36,18 @@ describe("machines", () => {
     );
   });
 
+  it("stores no route it couldn't read back", () => {
+    const { services } = createTestHarness();
+    const bad = [...routes, { kind: "direct", url: "not a url" } as MachineRoute];
+    expect(codeOf(() => services.machines.add({ instanceId: randomUUID(), name: "engine", routes: bad }))).toBe(
+      "VALIDATION",
+    );
+    const engine = services.machines.add({ instanceId: randomUUID(), name: "engine", routes });
+    expect(codeOf(() => services.machines.update(engine.id, { routes: bad }))).toBe("VALIDATION");
+    expect(codeOf(() => services.machines.update(engine.id, { routes: [] }))).toBe("VALIDATION");
+    expect(services.machines.get(engine.id).routes).toEqual(routes);
+  });
+
   it("changes the name, prefix and routes until a task carries the prefix", () => {
     const { services } = createTestHarness();
     const engine = services.machines.add({ instanceId: randomUUID(), name: "engine", routes });

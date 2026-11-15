@@ -97,7 +97,14 @@ async function gitLogin(probes: LoginProbes, gh: MachineLogin): Promise<MachineL
 export interface LoginDetector {
   /** The runner's logins, checked now or within the last minute. */
   logins(): Promise<MachineLogin[]>;
+  /**
+   * The same, waiting at most `maxWaitMs`: past that, the last answer there was (or every login as unknown), while
+   * the check carries on for the next call. The checks can take longer than a board waits for an answer.
+   */
+  loginsWithin(maxWaitMs: number): Promise<MachineLogin[]>;
 }
+
+const LOGIN_NAMES: MachineLoginName[] = ["claude", "codex", "gh", "git"];
 
 export function createLoginDetector(overrides: Partial<LoginProbes> = {}, now: () => number = Date.now): LoginDetector {
   const env = overrides.env ?? process.env;
@@ -107,6 +114,7 @@ export function createLoginDetector(overrides: Partial<LoginProbes> = {}, now: (
     run: overrides.run ?? runProbe,
   };
   let cached: { at: number; value: Promise<MachineLogin[]> } | null = null;
+  let last: MachineLogin[] | null = null;
 
   const detect = async (): Promise<MachineLogin[]> => {
     const [claude, codex, gh] = await Promise.all([
@@ -114,20 +122,33 @@ export function createLoginDetector(overrides: Partial<LoginProbes> = {}, now: (
       cliLogin(probes, "codex", ["login", "status"], "Run `codex login` on the machine."),
       cliLogin(probes, "gh", ["auth", "status"], "Run `gh auth login` on the machine."),
     ]);
-    return [claude, codex, gh, await gitLogin(probes, gh)];
+    last = [claude, codex, gh, await gitLogin(probes, gh)];
+    return last;
+  };
+
+  const logins = (): Promise<MachineLogin[]> => {
+    if (!cached || now() - cached.at > CACHE_MS) {
+      const value = detect();
+      cached = { at: now(), value };
+      // A check that threw isn't kept: the next call tries again.
+      value.catch(() => {
+        if (cached?.value === value) cached = null;
+      });
+    }
+    return cached.value;
   };
 
   return {
-    logins() {
-      if (!cached || now() - cached.at > CACHE_MS) {
-        const value = detect();
-        cached = { at: now(), value };
-        // A check that threw isn't kept: the next call tries again.
-        value.catch(() => {
-          if (cached?.value === value) cached = null;
-        });
-      }
-      return cached.value;
+    logins,
+    loginsWithin(maxWaitMs) {
+      let timer: NodeJS.Timeout | undefined;
+      const fallback = new Promise<MachineLogin[]>((resolve) => {
+        timer = setTimeout(
+          () => resolve(last ?? LOGIN_NAMES.map((name) => login(name, "unknown", "Still being checked."))),
+          maxWaitMs,
+        );
+      });
+      return Promise.race([logins(), fallback]).finally(() => clearTimeout(timer));
     },
   };
 }

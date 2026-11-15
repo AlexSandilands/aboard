@@ -72,6 +72,9 @@ export function machineSummary(machine: Machine): MachineSummary {
   };
 }
 
+/** `text` as a sentence to carry on from: one full stop at its end, whether or not it came with one. */
+export const asSentence = (text: string): string => `${text.trim().replace(/[.!?]+$/, "")}.`;
+
 /** How a login reads beside its name. */
 export const LOGIN_WORDS: Record<MachineLogin["state"], string> = {
   ok: "Logged in",

@@ -1,5 +1,6 @@
 import {
   DEFAULT_RUNNER_PORT,
+  SERVER_LAUNCHER_NAME,
   suggestMachinePrefix,
   type ConnectMachineInput,
   type MachinesResponse,
@@ -193,8 +194,20 @@ export function AddMachineDialog({
           ) : (
             <ol className="flex flex-col gap-4">
               <li className="flex min-w-0 flex-col gap-1.5">
-                <span>1. On the machine, run:</span>
-                <CommandSnippet command={data.installCommandTailscale} />
+                {data.releaseAvailable ? (
+                  <>
+                    <span>1. On the machine, run:</span>
+                    <CommandSnippet command={data.installCommandTailscale} />
+                  </>
+                ) : (
+                  <>
+                    <span>1. On the machine, start a runner of this version and make a code:</span>
+                    <CommandSnippet command={`${SERVER_LAUNCHER_NAME} pair`} />
+                    <span className="text-xs text-muted-foreground">
+                      This board runs from source, so there is no release for an install command to download.
+                    </span>
+                  </>
+                )}
               </li>
               <li className="flex min-w-0 flex-col gap-1.5">
                 <span>2. Enter the address and the code it prints:</span>

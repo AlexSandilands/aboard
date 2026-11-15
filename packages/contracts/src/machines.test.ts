@@ -112,5 +112,8 @@ describe("the runner install script", () => {
   it("is the command the board shows", () => {
     expect(runnerInstallCommand("1.4.2")).toMatch(/^curl -fsSL https:\/\/.+\/v1\.4\.2\/install-runner\.sh \| sh$/);
     expect(runnerInstallCommand("1.4.2", { tailscale: true })).toMatch(/\| sh -s -- --tailscale$/);
+    expect(runnerInstallCommand("1.4.2", { tailscale: true, baseUrl: "http://files.test/r" })).toBe(
+      "curl -fsSL http://files.test/r/install-runner.sh | sh -s -- --base-url 'http://files.test/r' --tailscale",
+    );
   });
 });

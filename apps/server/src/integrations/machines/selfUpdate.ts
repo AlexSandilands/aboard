@@ -19,6 +19,7 @@ import {
   SERVER_CHECKSUMS,
   SERVER_LAUNCHER_NAME,
   brandEnv,
+  compareReleaseVersions,
   serverPlatformOf,
   serverReleaseBaseUrl,
   serverReleaseName,
@@ -204,6 +205,10 @@ export function createSelfUpdater(deps: SelfUpdateDeps): SelfUpdater {
           "This runner wasn't installed by the install script, or isn't running as its service, so it can't update " +
             "itself. Run the install script on the machine again.",
         );
+      }
+      // Migrations only go forward, so neither does a runner, whoever asks.
+      if (compareReleaseVersions(version, BRAND.version) < 0) {
+        throw new AppError("CONFLICT", `This runner is on ${BRAND.version} and is never moved back to ${version}.`);
       }
       const same = current.targetVersion === version;
       if (same && (current.state === "downloading" || current.state === "restarting")) return current;

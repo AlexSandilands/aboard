@@ -64,6 +64,19 @@ describe("a runner's logins", () => {
     expect(await states(key.detector)).toMatchObject({ git: "ok" });
   });
 
+  it("answers within the wait with what was last known, and catches up afterwards", async () => {
+    let release: (result: ProbeResult) => void = () => {};
+    const detector = createLoginDetector({
+      env: {},
+      find: (command) => (command === "gh" ? "/usr/bin/gh" : null),
+      run: () => new Promise((resolve) => (release = resolve)),
+    });
+    expect(await states({ logins: () => detector.loginsWithin(10) })).toMatchObject({ gh: "unknown", git: "unknown" });
+    release(ok);
+    expect(await states(detector)).toMatchObject({ gh: "ok", claude: "missing" });
+    expect(await states({ logins: () => detector.loginsWithin(10) })).toMatchObject({ gh: "ok" });
+  });
+
   it("says unknown when a check doesn't finish, and reuses an answer for a minute", async () => {
     const { detector, ran } = machine(["claude"], { "claude auth status": { code: null, stdout: "", stderr: "" } });
     expect(await states(detector)).toMatchObject({ claude: "unknown" });
