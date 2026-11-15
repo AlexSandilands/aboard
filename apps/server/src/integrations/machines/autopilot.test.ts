@@ -271,4 +271,24 @@ describe("Autopilot on a machine", () => {
     });
     expect(runner.services.autopilot.resolve(automation(runner.services), cloneThere.id).enabled).toBe(true);
   });
+
+  it("keeps a machine's run when the board tried the same work before handing the task over", async () => {
+    const { board, machine, first } = await setup();
+    const tried = board.services.autopilot.record({
+      automation: AUTOPILOT_START_PLANNED,
+      candidate: { dedupeKey: "start:x", summary: "start", taskId: first.id },
+      dryRun: false,
+    })!;
+    board.services.autopilot.finish(tried.id, { status: "failed", error: "cut short" });
+    board.services.autopilot.keepFromMachine(
+      { ...tried, id: "machine-run", status: "succeeded", error: null },
+      { id: machine.id, name: "engine" },
+    );
+    const runs = board.services.autopilot.runsForTask(first.id);
+    expect(runs.find((r) => r.id === "machine-run")).toMatchObject({
+      dedupeKey: "start:x",
+      machine: { name: "engine" },
+    });
+    expect(runs.find((r) => r.id === tried.id)?.dedupeKey).toBe(`retried:${tried.id}:start:x`);
+  });
 });

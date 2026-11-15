@@ -291,6 +291,16 @@ export function createAutopilotRunsRepo(sql: Sql) {
     update(run: AutopilotRun): void {
       sql.update("autopilot_runs", toRow(run));
     },
+    /** The run holding an automation's dedupe key, real or dry. */
+    byKey(automation: string, dedupeKey: string, dryRun: boolean): AutopilotRun | null {
+      const row = sql.get<RunRow>(
+        "SELECT * FROM autopilot_runs WHERE automation = ? AND dedupe_key = ? AND dry_run = ?",
+        automation,
+        dedupeKey,
+        dryRun ? 1 : 0,
+      );
+      return row ? toRun(row) : null;
+    },
     /** Whether the automation already has a run (real or dry-run, as asked) for this dedupe key. */
     exists(automation: string, dedupeKey: string, dryRun: boolean): boolean {
       return (

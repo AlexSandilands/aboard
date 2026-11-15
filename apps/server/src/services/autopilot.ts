@@ -1295,8 +1295,13 @@ export function createAutopilotService(
         const projectId = run.projectId && repos.projects.get(run.projectId) ? run.projectId : null;
         const next: AutopilotRun = { ...run, taskId, projectId, machine };
         if (before) repos.autopilotRuns.update(next);
-        else if (repos.autopilotRuns.exists(run.automation, run.dedupeKey, run.dryRun)) return null;
-        else repos.autopilotRuns.insert(next);
+        else {
+          // The board tried the same work before handing the task over (a start that failed, say): the machine has
+          // done it since, so the board's run becomes history, as a retry would make it.
+          const holder = repos.autopilotRuns.byKey(run.automation, run.dedupeKey, run.dryRun);
+          if (holder) repos.autopilotRuns.update({ ...holder, dedupeKey: retiredKey(holder), updatedAt: nowIso() });
+          repos.autopilotRuns.insert(next);
+        }
         if (taskId) fx.task(taskId);
         fx.autopilot();
         return {

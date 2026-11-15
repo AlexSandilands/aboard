@@ -40,6 +40,8 @@ export function createAutopilotSync(deps: {
 }): AutopilotSync {
   const log = deps.log ?? console;
   const services = () => deps.services();
+  /** Per machine, the revision of what it should have now, as last worked out. */
+  const latest = new Map<string, string>();
   /** Per machine, what it last took: the revision, and whether Pause all was on in it. */
   const taken = new Map<string, { revision: string; paused: boolean }>();
   /** Machines being sent to now, so a burst of changes sends each once. */
@@ -75,6 +77,7 @@ export function createAutopilotSync(deps: {
     // A runner from before Autopilot ran there takes none: the board keeps doing its tasks' Autopilot itself.
     if (deps.machines.can(machineId, "autopilot") === false) return;
     const config = await configFor(machineId);
+    latest.set(machineId, config.revision);
     if (taken.get(machineId)?.revision === config.revision) return;
     const res = await deps.machines.request(machineId, MACHINE_AUTOPILOT_PATH, {
       method: "PUT",
@@ -140,7 +143,8 @@ export function createAutopilotSync(deps: {
           runsAutopilot,
           limits,
           ownLimits: own,
-          synced: had !== undefined && !sending.has(machine.id) && !again.has(machine.id),
+          // Unknown until worked out once (the next round of its log does): not synced until then.
+          synced: had !== undefined && latest.get(machine.id) === had.revision,
           pauseDelivered: had?.paused === paused,
           activeRuns: usage.active,
           runsToday: usage.started,

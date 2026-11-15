@@ -7,7 +7,6 @@ import {
   type AutopilotLimits as Limits,
   type UpdateAutopilotEngineInput,
 } from "@repo/contracts";
-import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
@@ -20,6 +19,7 @@ import {
   SettingsSection,
   UnitInput,
 } from "~/components/settings/settingsLayout";
+import { cn } from "~/lib/utils";
 import { useAutopilotMachines, useUpdateMachineLimits } from "~/state/autopilotMachines";
 import { useUpdateAutopilotEngine } from "~/state/mutations";
 import { useAutopilotOverview } from "~/state/queries";
@@ -214,8 +214,8 @@ function LimitsSection({ engine }: { engine: AutopilotEngineSettings }) {
       title="Spending & timing"
       headerAction={
         machines.length > 0 ? (
-          <span className="flex items-center gap-2 text-xs text-muted-foreground">
-            Limits for
+          <span className="flex items-center gap-2 text-xs whitespace-nowrap text-muted-foreground">
+            <span className="hidden sm:inline">Limits for</span>
             <OptionSelect
               label="Limits for"
               options={options}
@@ -227,17 +227,18 @@ function LimitsSection({ engine }: { engine: AutopilotEngineSettings }) {
       }
     >
       {machine && note ? (
-        <div className="px-3 pt-3 sm:px-4">
-          <Alert variant={note.tone === "warning" ? "warning" : "info"} className="px-2.5 py-1.5 text-xs">
-            <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
-              <span>{note.text}</span>
-              {machine.ownLimits ? (
-                <Button size="xs" variant="outline" onClick={() => updateMachine.mutate({ reset: true })}>
-                  Use this board's
-                </Button>
-              ) : null}
-            </AlertDescription>
-          </Alert>
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3 py-2.5 text-xs sm:px-4",
+            note.tone === "warning" ? "bg-warning/8 text-warning-foreground" : "text-muted-foreground",
+          )}
+        >
+          <span className="min-w-0">{note.text}</span>
+          {machine.ownLimits ? (
+            <Button size="xs" variant="outline" onClick={() => updateMachine.mutate({ reset: true })}>
+              Use this board&apos;s
+            </Button>
+          ) : null}
         </div>
       ) : null}
       <SettingsRow
