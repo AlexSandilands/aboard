@@ -231,11 +231,14 @@ function HeldChip({ task, placement }: { task: RunOnTask; placement: Extract<Pla
               <div className="min-w-0">
                 <p className="font-medium text-foreground">{placement.machineName}</p>
                 <p className="text-muted-foreground">
-                  {placement.offline
-                    ? capitalize(sinceText(placement.machine?.lastSeenAt ?? null))
-                    : placement.waiting > 0
+                  {[
+                    placement.offline ? capitalize(sinceText(placement.machine?.lastSeenAt ?? null)) : "Connected",
+                    placement.waiting > 0
                       ? `${placement.waiting} ${placement.waiting === 1 ? "change" : "changes"} made here waiting for it`
-                      : "Connected"}
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </p>
               </div>
             </div>

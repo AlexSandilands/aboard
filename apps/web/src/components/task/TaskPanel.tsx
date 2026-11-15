@@ -110,11 +110,12 @@ export function TaskPanel({
     >
       <ResizeHandle handlers={handlers} />
       {/* Keeps the contents at the panel's full width (at least MIN_WIDTH) and is the container the @ queries see.
-          Pinned to the right edge, so it slides on its own transform while the aside's width opens the board up. */}
+          Pinned to the right edge, so it slides on its own transform while the aside's width opens the board up. Above
+          the board's sticky column headers, which it covers when the window is narrower than MIN_WIDTH / 70vw. */}
       <div
         ref={contentsRef}
         data-panel-contents=""
-        className="@container absolute inset-y-0 right-0 flex min-h-0 max-w-[70vw] flex-col border-l border-border bg-background"
+        className="@container absolute inset-y-0 right-0 z-20 flex min-h-0 max-w-[70vw] flex-col border-l border-border bg-background"
         style={{ width: `var(${RESIZABLE_WIDTH_PROPERTY})`, minWidth: MIN_WIDTH }}
       >
         {inWindow ? <InWindowPlaceholder /> : <TaskPanelContent key={taskId} taskId={taskId} onClose={onClose} />}
