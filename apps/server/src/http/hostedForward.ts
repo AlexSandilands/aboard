@@ -1,5 +1,7 @@
 import type { Hono } from "hono";
+import { AppError } from "../errors.ts";
 import type { CallNames, HostedRunner } from "../hostedRunner.ts";
+import { errorResponse } from "./respond.ts";
 
 // Calls on this board that belong to the runner it hosts for another board (hostedRunner.ts): agents on this machine
 // call the board's 127.0.0.1 address for both, so the board hands on what names a task the runner holds. They have
@@ -85,14 +87,18 @@ const fromBrowser = (request: Request): boolean =>
 
 /**
  * The REST routes of a task, for a task the runner holds: a script on this machine working for the other board reads
- * and changes it through the board's address as an agent does. Never a browser's: the board's own pages show only
- * its own tasks.
+ * and changes it through the board's address as an agent does, and a number both boards use is refused. Never a
+ * browser's: the board's own pages show only its own tasks.
  */
 export function registerHostedRunnerForwarding(app: Hono, hosted: HostedRunner): void {
   const forward = async (c: Parameters<Parameters<Hono["use"]>[1]>[0], next: () => Promise<void>) => {
     const ref = c.req.param("ref");
     if (!ref || fromBrowser(c.req.raw)) return next();
     const route = hosted.route({ tasks: [ref], paths: [], projectIds: [] });
+    // A number both boards use is refused here as on MCP, with both ids: never guessed to be this board's.
+    if (route.to === "ambiguous") {
+      return errorResponse(c, new AppError("CONFLICT", route.message.replace(/^CONFLICT: /, "")));
+    }
     if (route.to !== "runner") return next();
     return forwardToRunner(route.url, c.req.raw);
   };

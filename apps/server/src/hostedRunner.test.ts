@@ -248,6 +248,18 @@ describe("a board that also runs tasks for another board", { timeout: 30_000 }, 
     // Neither changed.
     expect(a.ctx.services.tasks.detail(mine.id).phases[0]?.steps[0]?.status).toBe("todo");
 
+    // The same through the board's REST address, for a script: refused with both ids, and A's task is untouched.
+    const viaRest = await send(`${a.url}/api/tasks/${encodeURIComponent(`#${mine.number}`)}/notes`, "POST", {
+      text: "Meant for B's task",
+    });
+    expect(viaRest.status).toBe(409);
+    const refused = JSON.stringify(await viaRest.json());
+    expect(refused).toContain(mine.id);
+    expect(refused).toContain(theirs.id);
+    const read = await fetch(`${a.url}/api/tasks/${mine.number}`);
+    expect(read.status).toBe(409);
+    expect(a.ctx.services.tasks.detail(mine.id).lastNote).toBeNull();
+
     // A folder in the runner's data dir says whose it is.
     const runnerHome = join(configs.get(a)!.homeDir, "runner", "worktrees", "some-task");
     const byFolder = await callTool(a.url, "get_task", {

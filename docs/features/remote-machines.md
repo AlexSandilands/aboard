@@ -1019,7 +1019,8 @@ first (`routeMcpCall` in `http/hostedForward.ts`) and hands it to the runner ove
 The runner then treats the call as one from an agent on it ([tools on a machine](#tools-on-a-machine)), so a read of
 a task it doesn't hold is passed to its board. While the runner runs, the board's server instructions end with
 `HOSTED_RUNNER_INSTRUCTIONS`, so agents know to pass an id when a number is refused. REST `/api/tasks/:ref…` is
-handed on the same way for a task only the runner has, unless a browser sent it (an `Origin`, `Sec-Fetch-Site` or
+handed on the same way for a task only the runner has, and a number both boards use is refused there too (409, both
+ids), unless a browser sent it (an `Origin`, `Sec-Fetch-Site` or
 `Sec-Fetch-Dest` header, which every browser request has and a script's doesn't): a browser on the board only ever
 sees the board's tasks.
 
