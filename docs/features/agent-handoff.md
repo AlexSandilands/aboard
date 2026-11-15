@@ -252,6 +252,13 @@ worktree default and "start new worktrees from origin" come from the same settin
 
 The thread is titled `#<number> <task title>`. Ctrl+Enter in the prompt sends it.
 
+**Where the task runs.** Once a machine is connected, the strip under the composer starts with the task's machine
+(**This machine**, or the machine's name), the same choice as the task panel's chip, saved onto the task
+([remote-machines.md](remote-machines.md#choosing-the-machine)). A task set to run on another machine, or held by one,
+can't start a thread or session from here, which would run on this machine: Send is off and a note under the composer
+says to pick **This machine**, or that the machine holds the task and it has to be pulled back first. The Claude Code /
+Codex / Copilot session dialog does the same in its strip. Not for an epic, a PR fix's branch, or a project.
+
 **Loading.** The options (models, refs, defaults) come from T3, so they take a moment. The prompt, the image button and
 **Plan with me** work straight away; the model, effort, access, workspace and branch controls show skeletons until the
 options arrive, and Send stays disabled. What you typed is kept. The choices are made from the options when they

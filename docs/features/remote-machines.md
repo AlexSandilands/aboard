@@ -471,7 +471,7 @@ The board owns every task. Handing one to a machine gives that machine a **worki
 place where changes to the task are ordered: an agent there changes the copy, the runner records each change in a
 log, and the board applies the log. While a machine holds a task, the board's `task_holds` row says so, and the
 task's summary carries `hold: {machineId, machineName, since, waiting}`, which the card and the panel show as
-`On <machine>` (`components/task/HoldBadge.tsx`).
+`On <machine>` (the panel's chip and the card's number, [below](#choosing-the-machine)).
 
 ```text
  board                                          runner
@@ -583,7 +583,10 @@ wrapper, in one write:
 2. queues it in `held_edits`: the method's name, its arguments, the ids it gave what it made (a step, a link), and
    the activity entries it wrote.
 
-`hold.waiting` counts the queued edits the machine hasn't answered, and the badge reads `On engine · 2 waiting`.
+`hold.waiting` counts the queued edits the machine hasn't answered, and the panel's chip reads `On engine · 2 waiting`.
+`hold.waitingSteps` (the steps an `updateStep` or `moveStep` edit names) and `hold.waitingEvents` (the activity those
+edits wrote here) let the panel mark them: a clock beside the step, and "waiting for engine" in place of the
+entry's age.
 The edits are sent in order (`POST /machine/edits`), straight away while the machine is connected, and before the
 next read of its log otherwise. The runner runs the same method with the same arguments, handing out the same ids
 (`core.withIds`), so an edit made later on the board can point at a step an earlier one added. Its outcome is a
@@ -602,6 +605,47 @@ What is the board's alone isn't sent: a card's place in its lane, and its epic.
 The methods passed on are the ones that change a task, its plan, its links, a request for attention and its review
 rounds (`reviews.openRound`, `submit`, `resolveFinding`): Run review or a finding resolved on the board happens on
 the machine, under the ids the board gave.
+
+### Choosing the machine
+
+Where a task runs is a property of the task (`packages/contracts/src/runOn.ts`): its own `runOn` (a connected
+machine's id, `here`, or null to follow its project), then its project's `runOn` (a machine's id, or null for this
+machine), then this machine. A machine the board no longer has counts as no choice. The server reads it in one place,
+`services/runOn.ts` `taskRunsOn`; the web app with `resolveRunOn` too (`components/task/runOn.logic.ts`).
+
+- **Setting it.** `PUT /api/tasks/:id/run-on {runOn}` (`tasks.setRunOn`, which logs `run_on`) and
+  `PATCH /api/projects/:id {runOn}`. Only the user sets it: no MCP tool does. An epic, a manual or archived task has
+  none, and an unknown machine is refused.
+- **Locked once started.** A task that left Backlog and Planned, or that a machine holds, keeps where it is (CONFLICT):
+  one that started here stays here, and one held stays held until it is pulled back.
+- **Handing over at start.** The board's runner is wrapped (`integrations/machines/startOn.ts` `handOverAtStart`):
+  a Start planned run of a task that resolves to a machine and isn't held hands it over first, as `autopilot`, and the
+  run then goes to the machine like every run of a held task. A hand-over that fails (the machine can't be reached,
+  can't clone the repository) fails the run with that reason; nothing starts here instead. Start planned is the one way
+  a task starts on a machine for now: a thread or session from the hand-off window runs on this machine, so the window
+  refuses to start one for a task that runs elsewhere.
+- **What the board shows.** The task panel's chip beside Status picks the machine before the task starts ("Run on
+  engine", a menu of the project's default, this machine and each machine with how it is) and, once held, is the hold
+  ("On engine", "On engine · 2 waiting", "engine · offline") with Pull back in its popover. The hand-off window has the
+  same choice in the strip under the composer, and it saves onto the task. A card's number carries the machine's
+  prefix (`E182`): outlined for a task that will start there, tinted while held, with an amber dot while edits wait,
+  greyed and struck through while the machine can't be reached. Project settings › General has Runs on. All of it
+  shows only once a machine is connected and the project has a folder.
+- **A machine that can't be reached** greys the chip and the card's prefix, and the panel says since when, with Try
+  now (`POST /api/machines/:id/check`). It is not an attention flag: the agent there carries on.
+- **What agents see.** `get_task` says `Machine: engine (…)` for a task that will start on one, and `Held by: engine
+  (…)` once it has, and that only the user changes it.
+
+A task-less scheduled automation's own machine pin is #184's, with Autopilot on the machine: a job today needs a held
+task.
+
+### Pulling a task back
+
+`POST /api/tasks/:id/pull-back {force?}` (`machineSync.pullBack`) is the user's way to bring a started task here. It is
+refused (CONFLICT, naming the automation) while a run for the task is queued or going, so there is no agent on the
+machine to stop; runs push their own branch. Otherwise it takes the task back as below (with `force` for a machine that
+can't be reached, which the panel offers only then), sets the task to `here`, and fetches `origin` in the board's
+checkout so the branch the machine pushed is here. A fetch that fails is logged, not fatal.
 
 ### Taking a task back
 
@@ -927,7 +971,12 @@ change the task on the runner meanwhile.
 | `apps/server/src/integrations/machines/remoteWork.ts` | The board's side: sending runs, commands and scripts, settings, images, the unpushed check, transcripts |
 | `apps/server/src/integrations/machines/runnerWork.ts` | The runner's side: what each job kind does, and taking the board's settings |
 | `apps/server/src/integrations/machines/jobs.ts` | A runner's jobs in memory, and the errors that travel        |
-| `apps/server/src/http/routes/tasks.ts`  | `POST` and `DELETE /api/tasks/:id/hold`                              |
+| `apps/server/src/http/routes/tasks.ts`  | `POST` and `DELETE /api/tasks/:id/hold`, `POST …/pull-back`, `PUT …/run-on` |
+| `packages/contracts/src/runOn.ts`       | `RUN_HERE`, `resolveRunOn`, `runOnLocked`                             |
+| `apps/server/src/services/runOn.ts`     | `taskRunsOn`: where a task runs, read on the server                   |
+| `apps/server/src/integrations/machines/startOn.ts` | Handing a task to its machine when Start planned starts it  |
+| `apps/web/src/components/task/RunOn.tsx`, `runOn.logic.ts` | The panel's chip, the hand-off window's control, the card's number, the offline callout, the waiting marks |
+| `apps/web/src/components/settings/ProjectRunOnRow.tsx` | Project settings › Runs on                               |
 | `apps/server/src/test/boardAndRunner.ts` | A paired board and runner for tests, with a link that can be cut    |
 | `apps/web/src/components/settings/machines/` | The Machines section, the add dialog and their logic            |
 | `apps/web/src/state/machines.ts`        | The machines query and its mutations                                  |
