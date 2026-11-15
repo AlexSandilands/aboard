@@ -186,16 +186,16 @@ export function sinceText(lastSeenAt: string | null, now = Date.now()): string {
 /**
  * What the hand-off windows say about a task that runs on another machine: `blocker` when a thread or session from
  * here would do its work on this machine (the window's Send is off), else a `note` to show. Planning doesn't start the
- * task (it stays in Backlog or Planned), so a planning launch goes ahead for a task that will start on a machine; a
- * task a machine already holds is worked on there, so nothing starts beside it here.
+ * task (it stays in Backlog or Planned), so a planning launch goes ahead for a task that will start on a machine. A
+ * task a machine already holds gets its threads and sessions there, so they go ahead too.
  */
 export function launchElsewhere(
   placement: Placement,
   planning: boolean,
 ): { blocker: string | null; note: string | null } {
   if (placement.state === "held") {
-    const text = `${placement.machineName} holds this task, and its work happens there. A thread or session from here would work beside it on this machine: pull the task back first.`;
-    return { blocker: text, note: text };
+    // Its threads and sessions start on the machine (remote-machines.md#interactive-work), so they go ahead.
+    return { blocker: null, note: `${placement.machineName} holds this task: the thread or session starts there.` };
   }
   if (placement.state !== "will") return { blocker: null, note: null };
   const name = placement.machine.name;

@@ -258,7 +258,8 @@ The thread is titled `#<number> <task title>`. Ctrl+Enter in the prompt sends it
 work in a thread or session from here, which would run on this machine: Send is off and a note under the composer says
 to pick **This machine**. Planning (Plan with me, a planning session) is allowed, since it doesn't start the task; the
 note then says where it will start (`launchElsewhere` in `components/task/runOn.logic.ts`). A task a machine holds
-can't get any thread or session here until it is pulled back. The Claude Code /
+starts its thread or session on that machine ([remote-machines.md](remote-machines.md#interactive-work)), which the
+note says. The Claude Code /
 Codex / Copilot session dialog does the same in its strip. Not for an epic, a PR fix's branch, or a project.
 
 **Loading.** The options (models, refs, defaults) come from T3, so they take a moment. The prompt, the image button and

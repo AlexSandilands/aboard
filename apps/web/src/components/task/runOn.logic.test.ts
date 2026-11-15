@@ -162,9 +162,9 @@ describe("launchElsewhere", () => {
     expect(launchElsewhere(will, false).blocker).toContain("This task runs on engine");
   });
 
-  it("blocks any thread for a task a machine holds, planning or not", () => {
-    expect(launchElsewhere(held, true).blocker).toContain("engine holds this task");
-    expect(launchElsewhere(held, false).blocker).toContain("engine holds this task");
+  it("lets a task a machine holds start its thread or session, which runs there", () => {
+    expect(launchElsewhere(held, false)).toEqual({ blocker: null, note: expect.stringContaining("starts there") });
+    expect(launchElsewhere(held, true).blocker).toBeNull();
   });
 
   it("says nothing for a task that runs here", () => {
