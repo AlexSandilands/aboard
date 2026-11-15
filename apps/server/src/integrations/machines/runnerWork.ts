@@ -47,6 +47,21 @@ export function machineSettingsOf(settings: AppSettings): Record<string, unknown
   return out;
 }
 
+/**
+ * A run as a runner does it, whoever asked: headless, since a T3 thread is the board's machine's, and from origin's
+ * copy of its base, since only what was pushed is here. A nudge goes into a T3 thread, which no runner has.
+ */
+export function asRunnerRequest(request: RunnerRequest): RunnerRequest {
+  if (request.kind === "nudge")
+    throw new Error("A nudge goes into a T3 Code thread, and T3 Code threads don't run on a machine");
+  return {
+    ...request,
+    kind: "start",
+    options: { ...request.options, runner: "headless" },
+    workspace: { ...request.workspace, fromOrigin: true },
+  };
+}
+
 const RunParams = z.object({
   request: z.looseObject({
     run: AutopilotRun,
@@ -118,17 +133,7 @@ export function createRunnerWork(deps: {
       if (sessionId) deps.runEnded?.(sessionId);
     };
     try {
-      const result = await deps.runner.start(
-        {
-          ...sent,
-          run: adopted,
-          // A T3 thread is the board's; here every run is headless, from what origin has.
-          kind: "start",
-          options: { ...sent.options, runner: "headless" },
-          workspace: { ...sent.workspace, fromOrigin: true },
-        },
-        record,
-      );
+      const result = await deps.runner.start(asRunnerRequest({ ...sent, run: adopted, kind: "start" }), record);
       const { result: _text, output: _output, ...patch } = result;
       s.autopilot.settle(adopted.id, "succeeded", patch);
       sessionId = result.sessionId ?? sessionId;

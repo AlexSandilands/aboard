@@ -86,6 +86,12 @@ export interface CustomAutomationsService {
   /** Its switches go with it; its runs stay as history. */
   delete(id: string): void;
   /**
+   * Pins a scheduled automation to a connected machine, whose Autopilot then runs it there (null: the board). Throws
+   * VALIDATION for one without a schedule (a task's automation runs where the task is), NOT_FOUND for an unknown
+   * machine.
+   */
+  setMachine(id: string, machineId: string | null): CustomAutomation;
+  /**
    * Runs a draft script once, now, in a project's folder (it really executes: nothing about it is a dry run) and says
    * what it did. Nothing is saved. Throws NOT_FOUND for an unknown project or task, VALIDATION for a project with no
    * folder, CONFLICT while another test is running.
@@ -407,6 +413,28 @@ export function createCustomAutomationsService(
       return { automation, skill: installed };
     },
 
+    setMachine(id, machineId) {
+      return core.write((fx) => {
+        const current = get(id);
+        if (machineId !== null) {
+          if (current.trigger.kind !== "schedule") {
+            throw new AppError(
+              "VALIDATION",
+              `${current.name} runs on tasks, so it runs wherever each task is; only a scheduled automation is pinned`,
+            );
+          }
+          if (!repos.machines.get(machineId)) throw new AppError("NOT_FOUND", `Machine ${machineId} not found`);
+        }
+        const next = {
+          ...current,
+          machineId,
+          updatedAt: core.now().toISOString(),
+        };
+        repos.autopilotCustom.update(next);
+        fx.autopilot();
+        return next;
+      });
+    },
     update(id, input) {
       const patch = UpdateCustomAutomationInput.parse(input);
       return core.write((fx) => {

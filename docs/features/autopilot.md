@@ -135,6 +135,12 @@ Engine-wide settings are one `autopilotEngine` key in the `settings` table, and 
 | `worktreeRetentionDays` | 7              | Days a finished headless run's worktree is kept when its PR hasn't merged |
 | `agentDefaults`        | auto, $5, 60 min, T3's default | What agent automations run with unless they override it ([below](#agent-defaults)) |
 
+**On connected machines.** A machine that runs Autopilot for the tasks it holds has its own max concurrent, daily caps
+and quiet hours (`AutopilotLimits`), set behind **Limits for** in Settings → Autopilot → Limits & safety; until set it
+goes by the board's. Each server's limits count only the runs it made: the board's caps leave out the runs replayed
+from a machine. The rest of the engine settings are shared. See
+[remote machines](remote-machines.md#autopilot-on-the-machine).
+
 Quiet hours and the caps only hold back automations with `needsAgent`; board-only actions (archiving a card)
 go ahead.
 
@@ -180,6 +186,9 @@ so they need no hook of their own. Events published while the engine itself writ
 6. For agent automations, holds the candidate in quiet hours, at the concurrency cap or at a daily cap. Held
    candidates aren't recorded, so a later pass picks them up. A candidate with `startsNoAgent` (Fix PRs giving up)
    isn't held: it starts no agent, so the caps and quiet hours don't apply to it, and it counts toward neither the daily run cap nor the concurrency count.
+   Before any of that, a candidate another server's engine owns is dropped (`autopilot/placement.ts`): on a board, a
+   task a machine holds that runs Autopilot itself, or a scheduled automation pinned to a machine; on a runner, anything
+   but the tasks it holds and the automations pinned to it ([remote machines](remote-machines.md#autopilot-on-the-machine)).
 7. Records a `queued` run, marks it `running`, and calls the action. Agent actions, and automations marked
    `background` (custom shell commands and scripts), go on in the background; other board-only actions are awaited, one
    after another.
@@ -220,6 +229,10 @@ leave them out.
 
 - A task's runs log `autopilot_run` activity under the actor `autopilot`: when it starts, when it ends, and
   once for a dry-run preview.
+- A run a connected machine's own Autopilot made is kept on the board under its id with `machine` set (`machine_id`,
+  `machine_name`, migration 057), replayed from that machine's log; the run history and the task's Autopilot section
+  show it as "on <machine>". The board doesn't recover such a run after its own restart, clean up its worktree, or
+  count it against its limits.
 - Every change to a run publishes `autopilot.changed` with the pause state and the runs in flight; the board
   snapshot carries the same `autopilot` object, so lanes, epic bands and cards can show what's running. Each run
   in flight carries its task's `epicId`, read from the task when the status is built (it isn't stored on the run).
@@ -402,6 +415,9 @@ switches nothing on either, since only the user's import saves the automation it
 | `GET /api/autopilot`                            | Pause, engine settings and the catalogue (with each automation's group, field descriptors and defaults), plus today's agent runs and spend, Needs you, auto-pauses, tuning hints and each automation's last finished run, for the settings page |
 | `PATCH /api/autopilot/engine`                   | Updates engine settings; `quietHours` may be partial   |
 | `POST /api/autopilot/pause`, `/resume`          | Pause all, and back                                    |
+| `GET /api/autopilot/machines`                   | Each connected machine that runs Autopilot: its limits, whether it has the latest settings and Pause all, its runs today |
+| `PUT /api/autopilot/machines/:id/limits`        | A machine's own limits, partially; `{"reset": true}` goes back to the board's |
+| `PUT /api/autopilot/custom/:id/machine`         | Pins a scheduled custom automation to a machine (`{"machineId": null}`: the board) |
 | `GET /api/autopilot/modes`                      | Every switch that is set (not Inherit) at any scope, as `{ scopeKind, scopeId, automation, mode }`: the one read the Where it runs widget needs for its exceptions, instead of a scope per project and epic |
 | `GET /api/autopilot/board`, `/projects/:id`, `/projects/:id/epics/:epicId` | Each automation at that scope: its own mode and config, and what it resolves to (an epic's through its project and the board) |
 | `PUT /api/autopilot/board/:automation`, `/projects/:id/:automation`, `/projects/:id/epics/:epicId/:automation` | Sets mode and/or config; Inherit with no config removes the row |
@@ -2154,6 +2170,9 @@ while the key is set at that scope) removes the key so it inherits.
 | `apps/server/src/db/migrations/020_autopilot_digests.sql` | `autopilot_digests`, the digests |
 | `apps/server/src/mcp/format.ts` | `autopilotFlagHint`, the planning-time nudge to flag a task |
 | `apps/server/src/db/repos/autopilotSettings.ts`, `autopilotRuns.ts` | Their SQL, and `attentionFor` |
+| `apps/server/src/db/migrations/057_machine_autopilot.sql` | A run's machine, a machine's own limits, a scheduled automation's machine pin |
+| `apps/server/src/autopilot/placement.ts` | Which engine (the board's or a connected machine's) acts on a candidate |
+| `apps/web/src/components/autopilot/machines.logic.ts`, `RunsOnSection.tsx` | Limits for a machine, Pause all not yet delivered, Runs on |
 | `apps/server/src/services/autopilot.ts` | Settings, pause, scopes, the run lifecycle and restart recovery |
 | `apps/server/src/autopilot/types.ts` | `Automation`, `Candidate`, `Runner`, `RunnerRequest` |
 | `apps/server/src/autopilot/runner.ts` | The T3, nudge and headless runners and the runner choice |

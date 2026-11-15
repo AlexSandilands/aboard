@@ -418,7 +418,19 @@ export function inQuietHours(quiet: AutopilotEngineSettings["quietHours"], minut
 export const AutopilotRunDeferral = z.enum(["head_moved"]);
 export type AutopilotRunDeferral = z.infer<typeof AutopilotRunDeferral>;
 
-export const DEFERRAL_TEXT: Record<AutopilotRunDeferral, string> = { head_moved: "head moved" };
+export const DEFERRAL_TEXT: Record<AutopilotRunDeferral, string> = {
+  head_moved: "head moved",
+};
+
+/** Where a run ran: the board's machine it was replayed from (remote-machines.md#autopilot-on-the-machine). */
+export const RunMachine = z.object({ id: z.string(), name: z.string() });
+export type RunMachine = z.infer<typeof RunMachine>;
+
+/**
+ * On a runner, what the board did before the machine took the work over (a held task's earlier runs, a pinned
+ * automation's): kept as history its engine counts, never its own, so its limits and clean-up leave it out.
+ */
+export const BOARD_HISTORY: RunMachine = { id: "board", name: "the board" };
 
 export const AutopilotRun = z.object({
   id: z.string(),
@@ -454,6 +466,8 @@ export const AutopilotRun = z.object({
   startedAt: z.string().nullable(),
   finishedAt: z.string().nullable(),
   updatedAt: z.string(),
+  /** The connected machine whose Autopilot made the run; absent or null for a run made here. */
+  machine: RunMachine.nullable().optional(),
 });
 export type AutopilotRun = z.infer<typeof AutopilotRun>;
 
@@ -464,6 +478,7 @@ export const AutopilotActiveRun = AutopilotRun.pick({
   taskId: true,
   projectId: true,
   status: true,
+  machine: true,
 }).extend({
   /** The epic the run's task is in, so an epic's button can spin; not stored, read from the task. */
   epicId: z.string().nullable(),

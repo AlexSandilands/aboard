@@ -35,6 +35,7 @@ import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import { useResumeAutoPause } from "~/state/autopilotRunHistory";
 import { useCustomAutomations, useDismissAutomationDraft } from "~/state/customAutomations";
+import { useAutopilotMachines } from "~/state/autopilotMachines";
 import { useDismissAutopilotRun, useRetryAutopilotRun, useSetAutopilotPaused } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotProjectScopes, useBoard } from "~/state/queries";
 import { useBoardAutomations } from "./AutomationRows";
@@ -45,6 +46,7 @@ import { QuickSetup, type QuickSetupState } from "./QuickSetup";
 import { AutomationsSplit, customOf, type ListedAutomation } from "./AutomationsSplit";
 import { HINT_ICONS, useApplyHint, type HintTarget } from "./HealthSections";
 import { pausedForRun } from "./health.logic";
+import { pauseDeliveryText } from "./machines.logic";
 
 type Tab = "automations" | "runs" | "limits";
 
@@ -190,6 +192,8 @@ function StatusStrip({ overview, anyOn }: { overview: AutopilotOverview; anyOn: 
   const setPaused = useSetAutopilotPaused();
   const openSettings = useOpenSettings();
   const { paused } = overview;
+  // A machine running its own Autopilot that Pause all (or Resume) hasn't reached yet.
+  const delivery = pauseDeliveryText(useAutopilotMachines().data ?? [], paused);
   // Under Preview everything the automations only record what they would do, so the strip mustn't say they run.
   const state = paused
     ? "Paused: no new runs start"
@@ -226,6 +230,7 @@ function StatusStrip({ overview, anyOn }: { overview: AutopilotOverview; anyOn: 
           Limits
         </Button>
       </span>
+      {delivery ? <span className="basis-full text-xs text-warning-foreground">{delivery}</span> : null}
     </SettingsGroup>
   );
 }

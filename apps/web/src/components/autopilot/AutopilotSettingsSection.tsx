@@ -1,10 +1,13 @@
+import { useState } from "react";
 import {
   RUNNER_CHOICES,
   T3_RUNTIME_MODES,
   type AutopilotAgentDefaults,
   type AutopilotEngineSettings,
+  type AutopilotLimits as Limits,
   type UpdateAutopilotEngineInput,
 } from "@repo/contracts";
+import { Button } from "~/components/ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { toastManager } from "~/components/ui/toast";
@@ -16,9 +19,19 @@ import {
   SettingsSection,
   UnitInput,
 } from "~/components/settings/settingsLayout";
+import { cn } from "~/lib/utils";
+import { useAutopilotMachines, useUpdateMachineLimits } from "~/state/autopilotMachines";
 import { useUpdateAutopilotEngine } from "~/state/mutations";
 import { useAutopilotOverview } from "~/state/queries";
 import { parseLimit } from "./autopilot.logic";
+import {
+  limitMachines,
+  machineLimitsNote,
+  targetMachine,
+  targetOf,
+  targetValue,
+  type LimitsTarget,
+} from "./machines.logic";
 import { TimeInput } from "./TimeInput";
 import { VariablesSection } from "./VariablesSection";
 
@@ -49,85 +62,7 @@ function EngineSections({ engine }: { engine: AutopilotEngineSettings }) {
   const save = (input: UpdateAutopilotEngineInput) => update.mutate(input);
   return (
     <>
-      <SettingsSection id="autopilot.limits.spending" title="Spending & timing">
-        <SettingsRow
-          id="autopilot.limits.max-concurrent"
-          title="Agent runs at once"
-          description="How many of Autopilot's agent runs can be open at once."
-          info="Counts runs Autopilot has open. A T3 thread Autopilot started counts only against Start planned, while it is working; threads you start yourself never count."
-          control={
-            <LimitInput
-              label="Agent runs at once"
-              value={engine.maxConcurrent}
-              min={1}
-              max={10}
-              integer
-              required
-              onSave={(next) => save({ maxConcurrent: next ?? 1 })}
-            />
-          }
-        />
-        <SettingsRow
-          id="autopilot.limits.daily-run-cap"
-          title="Daily run cap"
-          description="The most agent runs to start per day (local time). Empty is no cap."
-          control={
-            <LimitInput
-              label="Daily run cap"
-              value={engine.dailyRunCap}
-              min={1}
-              max={1000}
-              integer
-              unit="runs"
-              onSave={(next) => save({ dailyRunCap: next })}
-            />
-          }
-        />
-        <SettingsRow
-          id="autopilot.limits.daily-spend-cap"
-          title="Daily spend cap"
-          description="No more runs start once today's cost this much. Empty is no cap."
-          control={
-            <LimitInput
-              label="Daily spend cap"
-              value={engine.dailySpendCapUsd}
-              min={0.01}
-              max={10000}
-              integer={false}
-              unit="USD"
-              onSave={(next) => save({ dailySpendCapUsd: next })}
-            />
-          }
-        />
-        <SettingsRow
-          id="autopilot.limits.quiet-hours"
-          title="Quiet hours"
-          description="No agent runs start in this window (local time)."
-          info="The window may cross midnight. Automations that only change the board still run."
-          control={
-            <>
-              <TimeInput
-                label="Quiet hours start"
-                value={engine.quietHours.start}
-                disabled={!engine.quietHours.enabled}
-                onSave={(start) => save({ quietHours: { start } })}
-              />
-              <span className="text-xs text-muted-foreground">to</span>
-              <TimeInput
-                label="Quiet hours end"
-                value={engine.quietHours.end}
-                disabled={!engine.quietHours.enabled}
-                onSave={(end) => save({ quietHours: { end } })}
-              />
-              <Switch
-                aria-label="Quiet hours"
-                checked={engine.quietHours.enabled}
-                onCheckedChange={(enabled) => save({ quietHours: { enabled } })}
-              />
-            </>
-          }
-        />
-      </SettingsSection>
+      <LimitsSection engine={engine} />
       <SettingsSection
         id="autopilot.limits.agent-defaults"
         title="Defaults for agent runs"
@@ -241,6 +176,143 @@ function EngineSections({ engine }: { engine: AutopilotEngineSettings }) {
       </SettingsSection>
       <VariablesSection />
     </>
+  );
+}
+
+/**
+ * Spending & timing: Autopilot's limits on this board, or with "Limits for" on a connected machine whose Autopilot
+ * runs the tasks it holds (remote-machines.md#autopilot-on-the-machine). Each machine counts only its own runs.
+ */
+function LimitsSection({ engine }: { engine: AutopilotEngineSettings }) {
+  const machines = limitMachines(useAutopilotMachines().data ?? []);
+  const [target, setTarget] = useState<LimitsTarget>("board");
+  const machine = targetMachine(target, machines);
+  const updateBoard = useUpdateAutopilotEngine();
+  const updateMachine = useUpdateMachineLimits(machine?.id ?? "");
+  const limits: Limits = machine ? machine.limits : engine;
+  const saveLimits = (input: UpdateAutopilotEngineInput) => {
+    if (machine) updateMachine.mutate(input);
+    else updateBoard.mutate(input);
+  };
+  const note = machine ? machineLimitsNote(machine) : null;
+  const options = [
+    { value: "board", label: "This board" },
+    ...machines.map((m) => ({
+      value: m.id,
+      label: m.connection === "connected" ? m.name : `${m.name} · offline`,
+    })),
+  ];
+  return (
+    <SettingsSection
+      id="autopilot.limits.spending"
+      title="Spending & timing"
+      headerAction={
+        machines.length > 0 ? (
+          <span className="flex items-center gap-2 text-xs whitespace-nowrap text-muted-foreground">
+            <span className="hidden sm:inline">Limits for</span>
+            <OptionSelect
+              label="Limits for"
+              options={options}
+              value={machine ? targetValue(target) : "board"}
+              onSave={(next) => setTarget(targetOf(next))}
+            />
+          </span>
+        ) : undefined
+      }
+    >
+      {machine && note ? (
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3 py-2.5 text-xs sm:px-4",
+            note.tone === "warning" ? "bg-warning/8 text-warning-foreground" : "text-muted-foreground",
+          )}
+        >
+          <span className="min-w-0">{note.text}</span>
+          {machine.ownLimits ? (
+            <Button size="xs" variant="outline" onClick={() => updateMachine.mutate({ reset: true })}>
+              Use this board&apos;s
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      <SettingsRow
+        id="autopilot.limits.max-concurrent"
+        title="Agent runs at once"
+        description="How many of Autopilot's agent runs can be open at once."
+        info="Counts runs Autopilot has open. A T3 thread Autopilot started counts only against Start planned, while it is working; threads you start yourself never count."
+        control={
+          <LimitInput
+            label="Agent runs at once"
+            value={limits.maxConcurrent}
+            min={1}
+            max={10}
+            integer
+            required
+            onSave={(next) => saveLimits({ maxConcurrent: next ?? 1 })}
+          />
+        }
+      />
+      <SettingsRow
+        id="autopilot.limits.daily-run-cap"
+        title="Daily run cap"
+        description="The most agent runs to start per day (local time). Empty is no cap."
+        control={
+          <LimitInput
+            label="Daily run cap"
+            value={limits.dailyRunCap}
+            min={1}
+            max={1000}
+            integer
+            unit="runs"
+            onSave={(next) => saveLimits({ dailyRunCap: next })}
+          />
+        }
+      />
+      <SettingsRow
+        id="autopilot.limits.daily-spend-cap"
+        title="Daily spend cap"
+        description="No more runs start once today's cost this much. Empty is no cap."
+        control={
+          <LimitInput
+            label="Daily spend cap"
+            value={limits.dailySpendCapUsd}
+            min={0.01}
+            max={10000}
+            integer={false}
+            unit="USD"
+            onSave={(next) => saveLimits({ dailySpendCapUsd: next })}
+          />
+        }
+      />
+      <SettingsRow
+        id="autopilot.limits.quiet-hours"
+        title="Quiet hours"
+        description="No agent runs start in this window (local time)."
+        info="The window may cross midnight. Automations that only change the board still run."
+        control={
+          <>
+            <TimeInput
+              label="Quiet hours start"
+              value={limits.quietHours.start}
+              disabled={!limits.quietHours.enabled}
+              onSave={(start) => saveLimits({ quietHours: { start } })}
+            />
+            <span className="text-xs text-muted-foreground">to</span>
+            <TimeInput
+              label="Quiet hours end"
+              value={limits.quietHours.end}
+              disabled={!limits.quietHours.enabled}
+              onSave={(end) => saveLimits({ quietHours: { end } })}
+            />
+            <Switch
+              aria-label="Quiet hours"
+              checked={limits.quietHours.enabled}
+              onCheckedChange={(enabled) => saveLimits({ quietHours: { enabled } })}
+            />
+          </>
+        }
+      />
+    </SettingsSection>
   );
 }
 

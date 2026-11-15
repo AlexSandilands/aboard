@@ -484,6 +484,8 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
       live.delete(id);
       // Its tasks come back to the board as the board last saw them: nothing will ever read its log again.
       for (const hold of deps.services().holds.forMachine(id)) deps.services().holds.forceRelease(hold.taskId, "user");
+      // And its runs going as the board last heard: nothing will end them now.
+      deps.services().autopilot.endMachineRuns(id, `${machine.name} was removed before this run finished`);
       machines().remove(id);
       changed();
     },

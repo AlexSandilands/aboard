@@ -120,10 +120,21 @@ letter (**E**182), and its panel says where it is: **On engine**.
   with a clock and the activity line with "waiting for engine", and the card's letter gets an amber dot. Those changes
   are applied when it is back, after whatever happened there meanwhile. A change the machine can't apply any more (you
   checked off a step the agent had deleted) is taken back, and the task's activity says so.
-- **Autopilot's runs for the task happen on the machine**: the agent works in a worktree there, from what is on
-  GitHub, with the machine's own logins. Push the task's branch before you hand it over; the board tells you when a
-  branch of the task has commits that aren't pushed, since the machine can't see them. A run there is always
-  headless, even where an automation is set to T3 Code.
+- **Autopilot runs on the machine, by itself.** The machine runs your Autopilot automations for the tasks it holds,
+  with the switches you set on the board, even while this computer is off: it starts a flagged task once its
+  blockers are done, then reviews, fixes and merges its PR. Its runs show here with **on engine** once the board hears
+  from it, and so do its notifications. The agent works in a worktree there, from what is on GitHub, with the
+  machine's own logins. Push the task's branch before you hand it over; the board tells you when a branch of the task
+  has commits that aren't pushed, since the machine can't see them. A run there is always headless, even where an
+  automation is set to T3 Code.
+- **To keep a chain going while this computer is off**, hand over the tasks of the chain that should run there. A
+  task the board keeps waits for the board.
+- **Each machine has its own limits.** In **Settings → Autopilot → Limits & safety**, pick the machine under
+  **Limits for** to set how many runs it may have at once, its daily caps and its quiet hours. Until you do, it goes
+  by this board's. **Pause all** reaches every machine; while one can't be reached, the Autopilot page and the
+  header say it hasn't got it yet.
+- **A scheduled automation can run on a machine** too: open it in Settings → Autopilot and pick the machine under
+  **Runs on**. It then runs there whether or not this computer is on.
 - **Reviews happen there too.** Review rounds open and the board's reviewer runs on the machine, by your review
   settings; the findings show in the task's panel as usual, and Run review or resolving a finding on the board
   reaches the machine.

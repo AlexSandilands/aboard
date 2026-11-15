@@ -122,7 +122,8 @@ export function workingAgents(services: Services, now: Date): number {
     const run = services.autopilot
       .runsForTask(task.id, 20)
       .find((r) => r.automation === AUTOPILOT_START_PLANNED && !r.dryRun && r.status !== "queued");
-    return run ? t3RunWorking(task, run, at) : false;
+    // A run a machine's Autopilot made takes that machine's room, not this server's.
+    return run && !run.machine ? t3RunWorking(task, run, at) : false;
   }).length;
 }
 

@@ -6,6 +6,7 @@ import { messageOf } from "../integrations/util.ts";
 import type { Logger } from "../integrations/util.ts";
 import type { Services } from "../services/types.ts";
 import { agentHold } from "./limits.ts";
+import type { Placement } from "./placement.ts";
 import { sendReminders } from "./reminders.ts";
 import {
   NO_RUNNER,
@@ -58,6 +59,13 @@ export function createAutopilotEngine(deps: {
   boardUrl?: () => string;
   /** A run ended, so the board can show its headless session as finished or failed at once. */
   runEnded?: (run: AutopilotRun) => void;
+  /**
+   * Which automations run on this server and which candidates are its own (autopilot/placement.ts): a board leaves
+   * the tasks a machine holds to that machine's Autopilot, and a runner acts only on those. Everything when unset.
+   */
+  placement?: Placement;
+  /** Whether this server sends the quiet-task and waiting-thread reminders: a board does, a runner leaves them to it. */
+  reminders?: boolean;
   now?: () => Date;
   debounceMs?: number;
   tickMs?: number;
@@ -229,6 +237,8 @@ export function createAutopilotEngine(deps: {
         // A candidate that is an epic card (today only Auto-archive's) is resolved on the epic itself.
         epicId = task.kind === "epic" ? found.taskId! : (task.parent?.id ?? null);
       }
+      // Another server's to act on (a task a machine holds, or one this runner doesn't): not even previewed here.
+      if (deps.placement && !deps.placement.owns(candidate, automation)) continue;
       const projectId = candidate.projectId ?? null;
       if (projectId && s.autopilot.isAutoPaused(automation.key, projectId)) continue;
       // Only where the automation is on: a check may return more than it was asked for.
@@ -262,13 +272,14 @@ export function createAutopilotEngine(deps: {
     // Reminders only tell the user something, so Pause all doesn't hold them back (notifications.ts has quiet hours).
     // Dry run does: it promises to change nothing, and a reminder sends a notification and writes a note.
     try {
-      if (!s.autopilot.engine().dryRun) self(() => sendReminders(s, at));
+      if (deps.reminders !== false && !s.autopilot.engine().dryRun) self(() => sendReminders(s, at));
     } catch (error) {
       log.warn(`[autopilot] reminders failed: ${messageOf(error)}`);
     }
     if (s.autopilot.status().paused) return;
     const engine = s.autopilot.engine();
     for (const automation of s.autopilot.automations()) {
+      if (deps.placement && !deps.placement.runsHere(automation)) continue;
       await runAutomation(s, automation, engine, at).catch((error: unknown) => {
         log.warn(`[autopilot] ${automation.key} failed: ${messageOf(error)}`);
       });

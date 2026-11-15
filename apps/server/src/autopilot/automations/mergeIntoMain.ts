@@ -91,7 +91,8 @@ export function mainCandidates(services: Services, tasks: readonly TaskSummary[]
   if (all.length === 0) return [];
   const active = services.autopilot
     .status()
-    .active.filter((r) => r.automation === AUTOPILOT_MERGE_EPIC_PRS && r.taskId !== null);
+    // A machine merges what it holds by itself; only this server's own merges hold a repository here.
+    .active.filter((r) => r.automation === AUTOPILOT_MERGE_EPIC_PRS && r.taskId !== null && !r.machine);
   const busy = new Set<string>();
   for (const run of active) {
     const task = tasks.find((t) => t.id === run.taskId);

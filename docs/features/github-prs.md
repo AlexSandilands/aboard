@@ -39,6 +39,11 @@ parse URLs) gave a ref to links stored before this, as plain URLs or ref-less PR
 `apps/server/src/integrations/prPoller.ts`, which reads each batch with the host's `readSnapshots` (GitHub's GraphQL
 query and mapping are `githubSnapshot.ts`):
 
+- **A task a connected machine holds** and whose machine runs Autopilot isn't polled by the board (`polledElsewhere`):
+  the machine polls its PRs with its own `gh` login, reviews, fixes and merges them, and its log carries the snapshots
+  it read, so the card shows the same thing. One writer, so a merged PR moves the task once and notifies once
+  ([remote machines](remote-machines.md#autopilot-on-the-machine)).
+
 - A tick every 20 seconds picks the `pr` links that are due (`prIsDue`, `integrations/prPolling.ts`), groups them
   by host and repo, and reads each group with one aliased query (`pollQuery`: `pr0`, `pr1`, … with numbers as
   variables), at most 25 PRs a query and 4 queries at a time. A link is due once its tier's interval has passed since

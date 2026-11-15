@@ -6,9 +6,11 @@ import {
   customAutomationId,
   effectiveVariables,
   epicArmKey,
+  type NotifyInput,
   type T3IntegrationStatus,
 } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
+import { createRunnerAutopilotService } from "./runnerAutopilot.ts";
 import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
 import { AUTOMATIONS } from "../autopilot/automations/index.ts";
@@ -35,7 +37,7 @@ import { createLabelsService } from "./labels.ts";
 import { createLinksService, type LinksModule } from "./links.ts";
 import { createMachineAuthService } from "./machineAuth.ts";
 import { createMachinesService } from "./machines.ts";
-import { createNotificationsService } from "./notifications.ts";
+import { createNotificationsService, type ResolveMatch } from "./notifications.ts";
 import { createPlans, type PlansModule } from "./plans.ts";
 import { createProjectsService } from "./projects.ts";
 import { createRelations, type RelationsModule } from "./relations.ts";
@@ -94,6 +96,8 @@ export interface ServiceDeps {
   modelPrices?: ModelPrices;
   /** `runner` for a server that holds tasks for a board (remote-machines.md); a board otherwise. */
   role?: "board" | "runner";
+  /** Whether a connected machine runs Autopilot for the tasks it holds (null until it has said). */
+  machineRunsAutopilot?: (machineId: string) => boolean | null;
   /** Called when an edit to a held task is queued for its machine, so it is sent at once. */
   onHeldEdit?: (machineId: string) => void;
   /** The repository a folder's `origin` names, read on the spot; a runner uses it for projects made there. */
@@ -106,7 +110,13 @@ export function createServices(deps: ServiceDeps): Services {
   const attachments = createAttachmentsService(core, deps.attachmentsDir);
   const builtIn = deps.automations ?? AUTOMATIONS;
   const settings = createSettingsService(core);
-  const notifications = createNotificationsService(core);
+  // A runner passes what it raises and resolves to its board; bound once the working copies, which log it, exist.
+  let raised: ((input: NotifyInput) => void) | null = null;
+  let resolved: ((match: ResolveMatch, changed: number) => void) | null = null;
+  const notifications = createNotificationsService(core, {
+    raised: (input) => raised?.(input),
+    resolved: (match, changed) => resolved?.(match, changed),
+  });
   // Recurring rules are built after the projects they belong to; an unarchived project starts them from now.
   let restartRecurring: ((projectIds: readonly string[]) => void) | null = null;
   const projects = createProjectsService(core, {
@@ -135,6 +145,10 @@ export function createServices(deps: ServiceDeps): Services {
     logs: role === "runner",
     usageOf: (taskId) => usage.copyOf(taskId),
   });
+  if (role === "runner") {
+    raised = (input) => workingCopies.logNotice(input);
+    resolved = (match, changed) => workingCopies.logResolve(match, changed);
+  }
   const tasks = createTasksService(core, {
     projects,
     plans: () => plans!,
@@ -245,8 +259,13 @@ export function createServices(deps: ServiceDeps): Services {
       projects,
       detail: (id) => tasks.service.detail(id),
       keepUsage: (machineId, taskId, rows) => usage.keepFromMachine(machineId, taskId, rows),
+      keepRun: (run, machine) => all!.autopilot.keepFromMachine(run, machine),
+      notify: (input) => void notifications.notify(input),
+      resolve: (match) => void notifications.resolve(match),
+      endMachineRuns: (machineId, error) => void all!.autopilot.endMachineRuns(machineId, error),
     }),
     workingCopies,
+    runnerAutopilot: createRunnerAutopilotService(core, { logRun: (run) => workingCopies.logRun(run) }),
     repoPrReviews: createRepoPrReviewsService(core, { notifications }),
     autopilot: createAutopilotService(core, {
       automations,
@@ -268,6 +287,8 @@ export function createServices(deps: ServiceDeps): Services {
       },
       plannedTasks: (projectIds) =>
         projectIds.flatMap((projectId) => tasks.service.summaries({ projectId, status: "planned" })),
+      // A runner's own runs go to its board through the log; its board counts failures and pauses.
+      ...(role === "runner" ? { runWritten: (run) => workingCopies.logRun(run), autoPause: false } : {}),
     }),
     recurring,
     customAutomations,
@@ -291,6 +312,10 @@ export function createServices(deps: ServiceDeps): Services {
     }),
   };
   // Last, so every wrapper above is inside it: an edit to a held task is queued for its machine whoever makes it.
-  routeHeldEdits(core, all, { role, onQueued: (machineId) => deps.onHeldEdit?.(machineId) });
+  routeHeldEdits(core, all, {
+    role,
+    onQueued: (machineId) => deps.onHeldEdit?.(machineId),
+    ...(deps.machineRunsAutopilot ? { runsAutopilot: deps.machineRunsAutopilot } : {}),
+  });
   return all;
 }

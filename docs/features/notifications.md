@@ -53,6 +53,12 @@ three switches: each of the two automations' effective state somewhere (the proj
 unarchived epic with it On) became the setting, and an install with no projects or Autopilot settings keeps the defaults
 (on, on, and off for `task_unblocked`).
 
+**On a connected machine.** What a runner raises (an agent's request for attention, a failed run of its own Autopilot,
+failing checks on a held task's PR) is passed to the board in its change log, before the runner's own switches decide
+anything, and the board raises it again under the same dedupe key, by its own switches and quiet hours. So it
+reaches the inbox once, when the board next reads the machine's log
+([remote machines](remote-machines.md#autopilot-on-the-machine)).
+
 The thread and PR producers sit in `links.setSnapshot`, the call both pollers make, and compare the new
 snapshot with the stored one. **A link seen for the first time never notifies**: whatever state it was linked
 in, you already know. Dry runs never notify.

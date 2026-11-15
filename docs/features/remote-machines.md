@@ -1,6 +1,6 @@
 # Remote machines
 
-Board tasks: #179, #180, #181, #12, #182, #185, in epic #178 (run tasks on another machine).
+Board tasks: #179, #180, #181, #12, #182, #183, #184, #185, in epic #178 (run tasks on another machine).
 
 A task can be set to run on another machine: a server or a second computer the board connects to. That machine
 runs the same server as the board, started in the **runner** role: it serves no board or web app, holds the
@@ -11,15 +11,13 @@ connects a machine (installing over SSH, routes, status, logins, updates and the
 and [held tasks](#held-tasks): handing a task to a machine, the change log the machine keeps and the board
 replays, the board's own edits to a held task, the numbers a machine gives the tasks it makes, and
 [work on the machine](#work-on-the-machine): the headless runs, review rounds and scripts of a held task, and how
-the board shows the sessions and tokens of work it can't see, and [interactive work](#interactive-work): T3 Code
-threads in the machine's own T3 Code and CLI sessions opened over ssh in tmux there.
+the board shows the sessions and tokens of work it can't see, [interactive work](#interactive-work): T3 Code
+threads in the machine's own T3 Code and CLI sessions opened over ssh in tmux there, and [Autopilot on the
+machine](#autopilot-on-the-machine): the machine's own engine running the board's automations over the tasks it
+holds, so a chain of tasks goes on while the board is off.
 
-Not built yet: choosing a machine for a task in the UI (a hand-over is an API call, `POST /api/tasks/:id/hold`),
-Autopilot's engine running on the machine by itself (a board starts every run), and connecting a machine's own T3 Code
-from the board (it is set up on the machine). An image attached on the machine isn't sent to the board. Nor are notifications: what an agent on a
-machine does to a held task changes the card (its request for attention shows as a flag) but raises no inbox entry
-or pop-up on the board. Those are the later tasks of epic #178. What a user does is in the
-[guide](../guide/remote-machines.md).
+Not built yet: connecting a machine's own T3 Code from the board (it is set up on the machine). An image attached on
+the machine isn't sent to the board. What a user does is in the [guide](../guide/remote-machines.md).
 
 ## How it works
 
@@ -197,6 +195,8 @@ What a board says to a runner is under `/machine/`, apart from the board's own A
 | `PUT /machine/attachments/:id` | yes | One of a held task's pasted images                                        |
 | `POST /machine/t3`         | yes   | The board acting in the machine's T3 Code for a held task ([below](#t3-code-on-the-machine)) |
 | `POST /machine/sessions`   | yes   | The folder and link of a CLI session the board opens there over ssh ([below](#terminals-on-the-machine)) |
+| `PUT /machine/autopilot`   | yes   | The board's Autopilot, for the machine's own engine ([below](#autopilot-on-the-machine)) |
+| `PUT /machine/references`  | yes   | The tasks held ones point at, as the board has them now                     |
 
 ```json
 {
@@ -206,7 +206,7 @@ What a board says to a runner is under `/machine/`, apart from the board's own A
   "version": "1.4.2",
   "protocolVersion": 1,
   "role": "runner",
-  "capabilities": ["pairing", "status", "update", "tasks", "runs"],
+  "capabilities": ["pairing", "status", "update", "tasks", "runs", "autopilot"],
   "paired": false
 }
 ```
@@ -524,6 +524,8 @@ entry is **the task's whole state after the change**, plus the activity entries 
 | `state`    | A held task changed                            | The state, the new activity, and what its sessions and runs there have used |
 | `created`  | A task was made on the runner                  | Its identity, project and references too; it is held at once |
 | `released` | The board took the task back                   | The last state; the runner drops its copy with this entry  |
+| `run`      | A run of the machine's own Autopilot was written (format 2) | The run as it stands, under the board's id for its project; `taskId` is "" for a run with no task |
+| `notice`   | A notification was raised on the runner (format 2) | Its kind, task, title, body and dedupe key          |
 
 A write that changed nothing logs nothing (the state last logged is kept beside the copy). Entry ids are the
 runner's own counter. `epoch` names the log: a random id made with the runner's database, so a board can tell a
@@ -676,8 +678,9 @@ way, which is how the board finds its own.
 
 ### Work on the machine
 
-A task a machine holds is worked on there. The board decides what runs (its Autopilot engine, its automations, its
-settings); the machine does it, with the code a board runs locally.
+A task a machine holds is worked on there, with the code a board runs locally. A machine that runs Autopilot itself
+(the `autopilot` capability) decides its own runs ([below](#autopilot-on-the-machine)); for a runner from before
+that, and for what the board starts by hand, the board decides and sends the work as a job:
 
 ```text
  board                                                    runner
@@ -780,6 +783,98 @@ ids in its own attachments folder, and drops them with the task's copy when the 
 hand-over sends them all. So the paths an agent is given there (`get_task`'s Images, the reviewer's
 `--add-dir`) are the runner's own. Images attached on the machine stay there.
 
+### Autopilot on the machine
+
+A machine with the `autopilot` capability runs the same engine as a board ([ADR 0008](../decisions/0008-autopilot-engine.md)),
+by the board's switches and automations, over the tasks it holds. So a chain of flagged tasks goes on while the board
+is off: the machine starts the next one when its blockers finish, reviews, fixes and merges, and the board catches up
+on what happened when it is back.
+
+```text
+ board                                                          runner
+ autopilotSync ──PUT /machine/autopilot {revision, …}──► runnerAutopilot: the board's switches, by its own ids
+               ◄────────────── {revision} ───────────────  engine (runnerPlacement): its held tasks only
+ holds.apply ◄──GET /machine/changes── run and notice entries, with the task's states
+```
+
+**One engine per candidate** (`autopilot/placement.ts`). The board's engine leaves out every candidate whose task a
+machine holds when that machine runs Autopilot (`machines.can(id, "autopilot")`, unknown counting as yes), and every
+scheduled automation pinned to a machine. The runner's engine runs only Start planned, Review PRs, Fix PRs, Merge ready
+PRs and custom automations (`RUNNER_AUTOMATIONS`), only for the tasks it holds, plus the scheduled automations pinned
+to it. Everything else is the board's: Recurring tasks, the digest, Orchestrate, Auto-archive, other people's PRs and
+the reminders. A runner from before this gets no config and the board keeps sending its runs as jobs.
+
+**What the board sends** (`PUT /machine/autopilot`, `MachineAutopilotConfig`): every Autopilot switch and its config,
+by the board's project ids, which the runner maps to its own and keeps for projects it adopts later (a hand-over
+applies them again); the engine settings with the machine's limits laid in; the custom automations; Pause all; where
+automations paused themselves; and the projects a pinned automation runs in, which the runner clones in the background
+as for a hand-over; and the automation variables, the board's and each project's, so a custom automation that reads
+one runs there too. Each config is named by a `revision` (a hash of it). The board sends it on every round of the
+machine's log, at hand-over and soon after anything in Autopilot changes, when it differs from what the machine has;
+the machine answers with the revision it took, and the runner keeps it in `runner_state`, so it runs by it after a
+restart with the board away. Every answer to the board's poll says which revision the runner has and whether it is
+paused (`ChangesResponse.autopilot`), so a board that restarted, or a runner whose database was replaced, is set right
+on the next round. Models, review settings and providers go as before ([the board's settings](#work-on-the-machine)).
+
+**What Autopilot did before the hand-over** goes with the task: its finished real runs (`HandOverRequest.runs`), as
+history the machine's engine counts (a head already reviewed, Review PRs' rounds, Fix PRs' attempts) and doesn't send
+back. The runner marks such history `machine: BOARD_HISTORY`, so its own limits and worktree clean-up leave it out. A
+scheduled automation pinned to the machine takes its history the same way, in the config (`history`), so a slot or a
+check item the board already did isn't done again there. Dedupe keys that name a project (`schedule:<project>:…`,
+`check:<project>:…`) travel in the board's project ids both ways: the runner swaps its own in when it logs a run, and
+the board's in when it takes history (`swapId`).
+
+**Retry and Dismiss** on a run of a held task (the panel's, Run history's, `retry_autopilot_run`) are edits like any
+other (`autopilot.retry`, `autopilot.dismiss`) when its machine runs Autopilot: applied on the board at once and on
+the machine, where its engine then picks the work up again. A retry the machine refuses (it doesn't have the run) gives
+the board's run its key back. A retry of a pinned automation's task-less run (the machine's own, or one from before the pin it has as
+history) goes in the config (`retried`, for a week) and the runner retires the same run.
+
+**Runs on the machine** are its own: in its own `autopilot_runs`, counted against its own limits, headless and from
+origin (`asRunnerRequest`, as a job is). The runner logs each one as it is written (`run` entries, change log format 2),
+and the board keeps it under the same id with `machine_id` and `machine_name` set (`autopilot.keepFromMachine`). A run
+the board sent as a job isn't logged: the board has it. Such runs show "on engine" in the run history and the task's
+Autopilot section. The board's limits, `recover` and worktree cleanup leave them out, and the board counts each
+machine's runs apart (`usage(…, machineId)`). Nor do the board's own one-at-a-time checks (a
+scheduled agent's slot, Merge ready PRs' repository) count them. When the machine is removed, or its log comes from a
+replaced database, the board ends the runs it still had going for it as failed, since nothing on the machine will
+(`autopilot.endMachineRuns`). When the board had tried the same work before handing the task over
+(the same automation and dedupe key), its run is retired as a retry retires one, so the machine's is kept.
+
+**Notifications** raised on the runner go to the board as `notice` entries, before the runner's own switches; the board
+raises each by its own switches and dedupe key, so a request for attention, a failed run or failing checks on a held
+task reach the inbox. What the runner marks read because its cause went (checks passing, a request cleared) goes the
+same way (`{resolve}`), logged when it marked something read there or is the first since a notification it covers was
+raised, since a poller resolves on every read. One raised while the runner applies the board's own edit isn't sent: the
+board raised it when it made the edit. **Auto-pause** is the board's: it counts failures in a row over the runs it keeps, the
+machine's included, and the pause goes down with the config; the runner never pauses by itself.
+
+**Pull requests.** While a machine that runs Autopilot holds a task, the board's poller leaves the task's PR links
+alone (`polledElsewhere`): the runner polls them with its own `gh`, and its state carries what it read
+(`readTaskState(…, { prSnapshots: true })`), so the card still shows checks and reviews. Review PRs, Fix PRs and Merge
+ready PRs run on the runner, as do their head-move checks in its clone. Before a run of its own Autopilot, a task in an
+integration epic gets its branch on origin if it isn't there (`ensureEpicBranch`, with the runner's own login).
+
+**Chains.** Handing over a task whose Autopilot flag is On also hands over what it blocks, and so on down, when those
+tasks resolve to the same machine ([their machine](#choosing-the-machine), `taskRunsOn`, as `MachineSyncDeps.machineFor`). A task that resolves to the board stays and waits
+for it. A blocker the board holds that finishes there reaches the machine with the next round (`PUT /machine/references`,
+sent when the references of its held tasks change), so the machine starts what it blocked.
+
+**Limits per machine.** Max concurrent, the daily run and spend caps and quiet hours are each machine's
+(`AutopilotLimits`, `machines.autopilot_limits_json`; none set means the board's own). Settings → Autopilot → Limits &
+safety edits them behind **Limits for**, which lists this board and the machines that run Autopilot, says whose limits
+apply and whether they have reached the machine (`GET /api/autopilot/machines`). Dry run, the agent defaults and
+worktree retention are shared.
+
+**Pause all** is part of the config, so it reaches a connected machine within a round. `pauseDelivered` is false while
+a machine hasn't taken the board's current pause state (null until it has answered since the board started); the Autopilot page's status line and the header's Resume
+button name such machines.
+
+**A scheduled automation pinned to a machine** (`autopilot_custom.machine_id`, **Runs on** in the automation's detail,
+`PUT /api/autopilot/custom/:id/machine`) runs there: the board's engine leaves it out, and the machine's engine runs
+it in its clone of each project it is on in, its agent, command or script with the machine's logins. Only a scheduled
+automation is pinned: one on tasks runs wherever each task is. A machine that doesn't run Autopilot (a runner from before it) can't be
+picked, and one pinned before that was known runs on the board, as **Runs on** says.
 ### Interactive work
 
 What the user starts from the board on a held task runs on the machine too. Both are synchronous requests the dialog
@@ -876,6 +971,11 @@ with `POST /api/tasks/:id/hold {"machineId": "<id>"}`; an agent on the runner is
 board catch up, stop its process (`kill -STOP <pid>`, then `-CONT`) or touch a server file so it restarts, and
 change the task on the runner meanwhile.
 
+To try a chain on the runner's own Autopilot: hand the tasks over **before** switching Start planned on (the board's
+engine would otherwise start the first one itself), and point the runner's Claude Code at a stand-in script that reads
+the prompt on stdin, moves the task it names through the runner's API, and prints `claude -p --output-format json`'s
+result line. Setting the board's own CLI path to `/bin/false` keeps the board from starting a real agent.
+
 ## Decisions
 
 - **The same bundle in another role, not a second program.** Spawning agents, worktrees, session status and the
@@ -952,6 +1052,19 @@ change the task on the runner meanwhile.
 - **No expiry.** A runner works unattended for weeks, and a token that expired would stop it until someone was at
   both machines. Revoking is one command.
 
+- **The machine runs the engine, not the board's runs by proxy.** Chaining has to go on while the board is off, so the
+  rules that start the next task must run where the task is. Each candidate has exactly one engine (placement), so
+  nothing runs twice, and a machine from before this keeps being driven by the board.
+- **The board's whole Autopilot goes down, not what one task needs.** Switches are per project and epic and custom
+  automations come and go; the runner keeps them as sent and maps them to its projects as it adopts them, so a task
+  handed over later, or a pinned automation, already has them.
+- **Runs and notifications travel in the log.** The log is already ordered, replayed once and caught up after an
+  outage; a run of the machine's own is the machine's record, which the board keeps, unlike a job, which is the
+  board's record of work it asked for.
+- **Auto-pause on the board.** It is the one place the user resumes it, and it sees every run once replayed.
+- **One writer per PR.** Two pollers would both move a task whose PR merged and both notify; the board stays off a
+  held task's PRs and takes the machine's reading.
+
 ## Alternatives considered
 
 | Option                                   | Why not chosen                                                                       |
@@ -974,6 +1087,10 @@ change the task on the runner meanwhile.
 | A run's progress as log entries | The log is a task's state; a run that fails before touching the task has none to write, and a run is the board's record, not the task's |
 | Syncing every setting to the runner | Most are about the board's own machine (terminal, CLI paths, backup); only what work on a task reads is sent |
 | Renumbering a machine's tasks when the board sees them | A number in a commit, a branch or a note would point at another task |
+| The board's engine starting runs on the machine (jobs) for every automation | Nothing would start while the board is off, which is when chains matter |
+| Syncing only the switches a held task needs | A task handed over later, or a scheduled automation pinned there, would find none until the next sync |
+| Runs as part of the task's state | A task-less run (a pinned automation) has no task, and a run's every update would rewrite the task |
+| The runner pausing automations by itself | The user couldn't resume it from the board, and the board wouldn't show it |
 | One limit on wrong pairing codes for everyone | Any machine that could reach the runner could keep pairing refused by sending wrong codes |
 
 ## Code map
@@ -1019,6 +1136,11 @@ change the task on the runner meanwhile.
 | `apps/server/src/integrations/machines/remoteT3.ts` | The board's T3 Code with a held task's threads sent to its machine (`withMachineThreads`) |
 | `apps/server/src/integrations/remoteTerminal.ts` | A session on a machine: ssh route, tmux script, quoting, preflight (tested) |
 | `apps/server/src/integrations/machines/jobs.ts` | A runner's jobs in memory, and the errors that travel        |
+| `packages/contracts/src/machineAutopilot.ts` | What a board sends a machine of its Autopilot, limits, the settings page's view of each machine |
+| `apps/server/src/autopilot/placement.ts` | Which engine acts on which candidate: the board's or a machine's            |
+| `apps/server/src/integrations/machines/autopilotSync.ts` | The board sending its Autopilot to each machine, and what each has taken |
+| `apps/server/src/services/runnerAutopilot.ts` | A runner taking the board's Autopilot as its own                   |
+| `apps/server/src/http/routes/tasks.ts`  | `POST` and `DELETE /api/tasks/:id/hold`                              |
 | `apps/server/src/http/routes/tasks.ts`  | `POST` and `DELETE /api/tasks/:id/hold`, `POST …/pull-back`, `PUT …/run-on` |
 | `packages/contracts/src/runOn.ts`       | `RUN_HERE`, `resolveRunOn`, `runOnLocked`                             |
 | `apps/server/src/services/runOn.ts`     | `taskRunsOn`: where a task runs, read on the server                   |
