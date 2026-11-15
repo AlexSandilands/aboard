@@ -1,14 +1,20 @@
 import {
   ApiErrorBody,
   MACHINE_JOBS_PATH,
+  MACHINE_SESSIONS_PATH,
   MACHINE_SETTINGS_PATH,
+  MACHINE_T3_PATH,
   MACHINE_TRANSCRIPT_PATH,
   MachineJobState,
+  MachineSessionResult,
   machineAttachmentPath,
   machineJobPath,
   type AgentSessionRef,
+  type MachineCapability,
   type MachineJobKind,
   type MachineJobRequest,
+  type MachineSessionRequest,
+  type MachineT3Request,
   type TaskSummary,
 } from "@repo/contracts";
 import { readRunnerOptions } from "../../autopilot/runnerOptions.ts";
@@ -43,6 +49,18 @@ const RUN_GRACE_MS = 15 * 60_000;
 const COMMAND_GRACE_MS = 5 * 60_000;
 
 export interface RemoteWork {
+  /** The machine holding a task, or null when the board holds it. */
+  holder(taskId: string | null | undefined): { id: string; name: string } | null;
+  /**
+   * Has the machine holding the task act in its own T3 Code (`POST /machine/t3`) and answers what it said; null for a
+   * task the board holds. Throws an AppError with the machine's own sentence when it refuses.
+   */
+  t3(taskId: string, request: MachineT3Request): Promise<unknown> | null;
+  /** Has the machine holding the task make a CLI session's folder and link it; null for a task the board holds. */
+  prepareSession(
+    taskId: string,
+    request: MachineSessionRequest,
+  ): Promise<MachineSessionResult & { machine: { id: string; name: string } }> | null;
   /** `local`, except that agent work on a task a machine holds is done on that machine. */
   runner(local: Runner): Runner;
   /** Runs a custom automation's command on the machine holding its task; null for a task the board holds itself. */
@@ -112,6 +130,43 @@ export function createRemoteWork(deps: {
     const hold = taskId ? services().holds.get(taskId) : null;
     if (!hold) return null;
     return { id: hold.machineId, name: services().machines.get(hold.machineId).name };
+  };
+
+  /**
+   * One request that answers at once, for interactive work a dialog waits on. A machine that can't be reached, or
+   * runs a version without `capability`, is a CONFLICT saying so; a refusal carries the machine's own sentence.
+   */
+  const askNow = async (
+    machine: { id: string; name: string },
+    capability: MachineCapability,
+    what: string,
+    path: string,
+    body: unknown,
+  ): Promise<unknown> => {
+    if (deps.machines.can(machine.id, capability) === false) {
+      throw new AppError("CONFLICT", `${machine.name} runs a version that can't ${what}; update it first`);
+    }
+    let res: Response;
+    try {
+      // Long enough for T3 Code to make a worktree, or git to fetch before one.
+      res = await deps.machines.request(machine.id, path, json("POST", body), { timeoutMs: 90_000 });
+    } catch (error) {
+      throw new AppError("CONFLICT", `${machine.name} holds this task and can't be reached: ${messageOf(error)}`);
+    }
+    if (!res.ok) {
+      const refused = ApiErrorBody.safeParse(
+        await res
+          .clone()
+          .json()
+          .catch(() => null),
+      );
+      throw new AppError(
+        refused.success ? refused.data.error.code : "CONFLICT",
+        refused.success ? `On ${machine.name}: ${refused.data.error.message}` : await refusal(res, machine.name, what),
+        refused.success ? refused.data.error.details : undefined,
+      );
+    }
+    return res.json();
   };
 
   /**
@@ -230,24 +285,64 @@ export function createRemoteWork(deps: {
     }
   };
 
+  /**
+   * Sends one image to the machine as the task's. The machine stores it under the task, claimed or not here. False
+   * for a machine from before images travelled (a 404).
+   */
+  const putImage = async (
+    machineId: string,
+    taskId: string,
+    image: { id: string; filename: string; mime: string },
+  ): Promise<boolean> => {
+    const { bytes } = services().attachments.read(image.id);
+    const query = new URLSearchParams({ taskId, filename: image.filename });
+    const res = await deps.machines.request(machineId, `${machineAttachmentPath(image.id)}?${query.toString()}`, {
+      method: "PUT",
+      headers: { "content-type": image.mime },
+      body: new Uint8Array(bytes),
+    });
+    if (res.ok) {
+      sentImages.add(`${machineId}:${image.id}`);
+      return true;
+    }
+    if (res.status !== 404) throw new Error(`the machine answered ${res.status}`);
+    return false;
+  };
+
   const sendImages: RemoteWork["sendImages"] = async (taskId, machineId, opts = {}) => {
     const s = services();
     for (const image of s.attachments.forTask(taskId)) {
       if (!opts.again && sentImages.has(`${machineId}:${image.id}`)) continue;
       // One at a time, each on its own: a file that is gone, or a link that dropped, doesn't keep the rest back.
       try {
-        const { bytes } = s.attachments.read(image.id);
-        const query = new URLSearchParams({ taskId, filename: image.filename });
-        const res = await deps.machines.request(machineId, `${machineAttachmentPath(image.id)}?${query.toString()}`, {
-          method: "PUT",
-          headers: { "content-type": image.mime },
-          body: new Uint8Array(bytes),
-        });
-        // A machine from before images travelled (a 404) is left without them.
-        if (res.ok) sentImages.add(`${machineId}:${image.id}`);
-        else if (res.status !== 404) throw new Error(`the machine answered ${res.status}`);
+        await putImage(machineId, taskId, image);
       } catch (error) {
         log.warn(`[machines] couldn't send the image ${image.filename} of a held task: ${messageOf(error)}`);
+      }
+    }
+  };
+
+  /**
+   * The images pasted into a launch dialog, sent before the launch: they aren't the task's yet (the launch claims
+   * them), so `sendImages` wouldn't send them, and the machine uploads them to its T3 Code from its own copies. Every
+   * one must arrive, or the launch would fail there with a sentence about an image the user can see.
+   */
+  const sendLaunchImages = async (machine: { id: string; name: string }, taskId: string, ids: readonly string[]) => {
+    if (ids.length === 0) return;
+    // Checked here first, so an image that is gone is said as it is on a board.
+    const images = services().attachments.forLaunch(ids, taskId);
+    for (const image of images) {
+      let sent: boolean;
+      try {
+        sent = await putImage(machine.id, taskId, image);
+      } catch (error) {
+        throw new AppError("CONFLICT", `Couldn't send ${image.filename} to ${machine.name}: ${messageOf(error)}`);
+      }
+      if (!sent) {
+        throw new AppError(
+          "CONFLICT",
+          `${machine.name} runs a version that can't take images; update it first, or start without them`,
+        );
       }
     }
   };
@@ -305,6 +400,26 @@ export function createRemoteWork(deps: {
   };
 
   return {
+    holder: holderOf,
+
+    t3(taskId, request) {
+      const machine = holderOf(taskId);
+      if (!machine) return null;
+      return (async () => {
+        if (request.op === "start") await sendLaunchImages(machine, taskId, request.input.attachmentIds ?? []);
+        return askNow(machine, "t3", "start T3 Code threads", MACHINE_T3_PATH, request);
+      })();
+    },
+
+    prepareSession(taskId, request) {
+      const machine = holderOf(taskId);
+      if (!machine) return null;
+      return (async () => {
+        const answer = await askNow(machine, "sessions", "start sessions", MACHINE_SESSIONS_PATH, request);
+        return { ...MachineSessionResult.parse(answer), machine };
+      })();
+    },
+
     runner: (local) => ({
       start(request, update = () => {}) {
         const machine = holderOf(request.run.taskId);

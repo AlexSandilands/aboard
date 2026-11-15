@@ -1,6 +1,6 @@
 # Handing tasks to agents
 
-Board task: #9. Verified against T3 Code 0.0.46 (nightly, October 2026).
+Board tasks: #9, #185 (threads on a machine). Verified against T3 Code 0.0.46 (nightly, October 2026).
 
 The board tracks work, but the work itself happens in an agent harness: Claude Code, Copilot, T3 Code and
 similar. This document covers how a task on the board becomes a running agent session, and how that session
@@ -303,6 +303,13 @@ own web client uses:
 4. On success, give the images to the task (they are then backed up, deleted with it and listed by `get_task`) and add
    a `t3_thread` link to it. The card shows the thread straight away, and the 20-second live status poll takes over
    from there. A Suggest epics or Plan tasks thread has no one task, so its images stay unclaimed.
+
+#### On a machine
+
+For a task a connected machine holds, the dialog, the launch and every message to the thread go to that machine's own
+T3 Code, through the machine ([remote machines](remote-machines.md#t3-code-on-the-machine)): the options are its T3's
+providers, models and branches, and the thread's link carries its T3's environment id and `ref.machine`. The board
+never reaches that T3 Code itself. Its token is set on the machine.
 
 ### Follow-up threads
 

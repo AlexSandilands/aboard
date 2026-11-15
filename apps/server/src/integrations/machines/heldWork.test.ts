@@ -194,9 +194,9 @@ describe("what the board shows of work on a machine", () => {
     // The board's own poll finds no such session on this machine, and leaves what the machine said.
     await board.integrations.refreshLink(there.id);
     expect(link()).toMatchObject({ snapshot: { status: "busy" } });
-    await expect(board.integrations.resumeSession(there.id, { mode: "resume" })).rejects.toThrow(
-      "This session ran on engine",
-    );
+    // Opened over ssh, in tmux on the machine (interactive.test.ts), never from a folder here.
+    // The folder and quoting are the shell's here (a POSIX shell, or PowerShell on Windows); ssh goes to the machine.
+    expect(board.integrations.resumeCommand(there.id, "resume").command).toContain("ssh -t -- 100.101.102.103 ");
 
     runner.services.links.setSnapshot(there.id, {
       status: "finished",

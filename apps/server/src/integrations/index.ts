@@ -1,6 +1,6 @@
 import { createUsageSweep } from "./usageSweep.ts";
 import { randomUUID } from "node:crypto";
-import { taskLabel, epicBranchName, planningSessionLabel } from "@repo/contracts";
+import { taskLabel, epicBranchName, planningSessionLabel, type T3ThreadRef } from "@repo/contracts";
 import { createWorktreeCleanup } from "../autopilot/cleanup.ts";
 import { ensureEpicBranch } from "../autopilot/epicBranch.ts";
 import { createDigestGenerator } from "../autopilot/digest.ts";
@@ -42,6 +42,8 @@ import { createMachineSync } from "./machines/sync.ts";
 import { handOverAtStart } from "./machines/startOn.ts";
 import { createMachineJobs } from "./machines/jobs.ts";
 import { createRemoteWork } from "./machines/remoteWork.ts";
+import { createRunnerInteractive } from "./machines/runnerInteractive.ts";
+import { withMachineThreads } from "./machines/remoteT3.ts";
 import { createRunnerWork } from "./machines/runnerWork.ts";
 import { runScript } from "./scriptRunner.ts";
 import { runShellCommand } from "./shellCommand.ts";
@@ -152,14 +154,28 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     tokens: createRunTokens(),
     gitHost: overrides.gitHost ? () => overrides.gitHost! : (host) => hosts.forHost(host),
   };
-  const t3 = createT3Integration({
+  const isRunner = deps.config.role === "runner";
+  /** This server as a link made on it names it, on a runner. */
+  const thisMachine = () => ({ id: deps.config.instanceId, name: deps.services().settings.get().machineName });
+  const ownT3 = createT3Integration({
     t3Home: deps.config.t3Home,
     bus: deps.bus,
     services: deps.services,
     ...(overrides.fetch ? { fetch: overrides.fetch } : {}),
     ...(overrides.openSocket ? { openSocket: overrides.openSocket } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
+    ...(isRunner ? { always: true, machine: thisMachine } : {}),
   });
+  // On a board, the threads of a task a machine holds are in that machine's T3 Code: everything here reaches them
+  // through it. Built before the machines are (below), and only called after.
+  const t3 = isRunner
+    ? ownT3
+    : withMachineThreads(ownT3, {
+        remote: () => remoteWork,
+        sync: () => machineSync,
+        services: deps.services,
+        ...(overrides.log ? { log: overrides.log } : {}),
+      });
   const reviews = createReviewFallbacks({
     services: deps.services,
     t3,
@@ -205,12 +221,16 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     userHome: deps.config.userHome,
     machineId: deps.config.instanceId,
     always: deps.config.role === "runner",
+    machine: (instanceId) => {
+      const record = deps.services().machines.byInstance(instanceId);
+      return record ? { name: record.name, routes: record.routes } : null;
+    },
+    ...(overrides.machines?.spawn ? { spawnSsh: overrides.machines.spawn } : {}),
     ...(overrides.processProbe ? { probe: overrides.processProbe } : {}),
     ...(overrides.terminalHost ? { host: overrides.terminalHost } : {}),
     ...(overrides.spawnTerminal ? { spawn: overrides.spawnTerminal } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
-  const isRunner = deps.config.role === "runner";
   // Built once the machines are (below); only called after that.
   let remoteWork!: ReturnType<typeof createRemoteWork>;
   const transcripts = createSessionTranscriptReader({
@@ -226,6 +246,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     spawn: overrides.spawnTerminal ?? spawnTerminal,
     runGit: overrides.autopilotGit ?? defaultRunGit,
     worktreesDir: deps.config.worktreesDir,
+    // A runner holds no task for another machine; a board opens the sessions of the tasks its machines hold there.
+    ...(isRunner ? {} : { remote: () => remoteWork }),
+    ...(overrides.machines?.spawn ? { spawnSsh: overrides.machines.spawn } : {}),
     linked: (linkId) => {
       sessions.refresh(deps.services().links.get(linkId)).catch((error: unknown) => {
         (overrides.log ?? console).warn(`[sessions] couldn't refresh ${linkId}: ${messageOf(error)}`);
@@ -276,9 +299,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       ...(overrides.runAgent ? { runAgent: overrides.runAgent } : {}),
       sessionLinked: refreshSession,
       boardMcp: () => ({ url: `http://127.0.0.1:${deps.config.port}/mcp`, token: deps.config.token ?? null }),
-      ...(isRunner
-        ? { machine: () => ({ id: deps.config.instanceId, name: deps.services().settings.get().machineName }) }
-        : {}),
+      ...(isRunner ? { machine: thisMachine } : {}),
       runTools: {
         mint: (runId, scope, ttlMs) => {
           const { token, revoke } = runTools.tokens.mint(runId, scope, ttlMs);
@@ -404,6 +425,13 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     onRestart: (restart) => {
       restartRunner = restart;
     },
+    interactive: createRunnerInteractive({
+      services: deps.services,
+      t3: ownT3,
+      runGit: overrides.autopilotGit ?? defaultRunGit,
+      worktreesDir: deps.config.worktreesDir,
+      machine: thisMachine,
+    }),
   };
   let started = false;
   const usageSweep = createUsageSweep(() => deps.services().usage, overrides.log ?? console);
@@ -470,7 +498,8 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       // A session or thread linked just now has its tokens read at once, not at the next sweep.
       try {
         if (link.kind === "agent_session") deps.services().usage.scanSession(link.ref);
-        if (link.kind === "t3_thread")
+        // A thread in a machine's T3 Code has its tokens read there, and they arrive with the task's changes.
+        if (link.kind === "t3_thread" && !link.ref.machine)
           void deps
             .services()
             .usage.scanThread(link.ref.threadId)
@@ -543,12 +572,18 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     launchT3TaskThread: (taskId, input, actor) => t3.launchTaskThread(taskId, input, actor),
     messageT3Thread: (link, text) => t3.sendToThread(link, text, randomUUID()),
     async resolveLinkInput(input) {
+      // A thread linked on a runner is in this machine's T3 Code: the link says so, for the board it is shown on.
+      const here = (ref: T3ThreadRef): T3ThreadRef => (isRunner ? { ...ref, machine: thisMachine() } : ref);
+      if (input.t3Thread) return { input: { ...input, t3Thread: here(input.t3Thread) } };
       // An explicit kind other than t3_thread means the caller chose how to read the value.
-      if (input.t3Thread || !input.value || (input.kind && input.kind !== "t3_thread")) return { input };
+      if (!input.value || (input.kind && input.kind !== "t3_thread")) return { input };
       const resolved = await t3.resolveThread(input.value);
       if (!resolved) return { input };
       const { value: _value, ...rest } = input;
-      return { input: { ...rest, t3Thread: resolved.ref }, ...(resolved.warning ? { warning: resolved.warning } : {}) };
+      return {
+        input: { ...rest, t3Thread: here(resolved.ref) },
+        ...(resolved.warning ? { warning: resolved.warning } : {}),
+      };
     },
     resumeCommand: (linkId, mode) => sessions.resumeCommand(linkId, mode),
     resumeSession: (linkId, input) => sessions.resume(linkId, input),

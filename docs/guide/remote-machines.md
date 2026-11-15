@@ -130,8 +130,16 @@ letter (**E**182), and its panel says where it is: **On engine**.
 - **A custom automation's command or script** for the task runs on the machine, in its copy of the project, as the
   user the runner runs as. The run says "on engine".
 - **Sessions and tokens** of work on the machine show on the task: a session's status, its tokens (marked "on
-  engine" in Usage) and, for agents, its transcript. Opening such a session in a terminal isn't possible from the
-  board yet.
+  engine" in Usage) and, for agents, its transcript.
+- **New Claude Code, Codex or Copilot CLI sessions** from the hand-off menu run on the machine, and so does **Open in
+  terminal** for a session there, Autopilot's included. Your terminal connects with `ssh` and the session runs in
+  `tmux` on the machine, so it keeps going when you close the terminal; opening it again picks it up where it is. This
+  needs an SSH route to the machine (or Tailscale, where `ssh <its tailnet name>` works for you), key login without
+  a password prompt, and `tmux` and the CLI installed there. The board tells you which one is missing. Pasted images
+  can't go with such a session yet.
+- **T3 Code threads** for the task start in the machine's own T3 Code, and open in your T3 Code app when that
+  machine is connected to it. Set up T3 Code and its token on the machine first, as on the board
+  ([T3 Code](t3-code.md)).
 - **Some things wait until the task is back on the board**: archiving it, deleting it, moving it to another
   project, and moving it to another board.
 - **A task made on the machine while the board can't be reached** gets the machine's prefix in its number, like
