@@ -52,6 +52,16 @@ export interface Config {
   releaseUrl?: string | null;
   /** The last LiteLLM price list fetched, with its fetch time (integrations/modelPrices.ts). Not backed up. */
   modelPricesPath: string;
+  /**
+   * A board's: the port of the runner it hosts when the user lets other machines run tasks here
+   * (`brandEnv("RUNNER_PORT")`, else the runner's default; hostedRunner.ts).
+   */
+  hostedRunnerPort?: number;
+  /**
+   * A runner's: the instance id of the board it runs inside, in that board's process (hostedRunner.ts). Such a runner
+   * updates with the app, never at a board's request, and won't pair with the board hosting it.
+   */
+  hostedBy?: string | null;
 }
 
 /** Where the user opens the board: this server when it serves the built web app, else the Vite dev server. */
@@ -112,9 +122,38 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: readonly 
     attachmentsDir: join(homeDir, "attachments"),
     modelPricesPath: join(homeDir, "model-prices.json"),
     releaseUrl: env[brandEnv("RELEASE_URL")] || null,
+    ...(role === "board" ? { hostedRunnerPort: Number(env[brandEnv("RUNNER_PORT")] || DEFAULT_RUNNER_PORT) } : {}),
     sessionDirs: {
       claudeDir: env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"),
       copilotDir: env.COPILOT_HOME || join(homedir(), ".copilot"),
     },
+  };
+}
+
+/** The data dir of the runner a board hosts: a folder of the board's own. */
+export const hostedRunnerHome = (board: Pick<Config, "homeDir">): string => join(board.homeDir, "runner");
+
+/**
+ * The config of the runner a board hosts (hostedRunner.ts): the board's own, with the runner's data in a folder of the
+ * board's data dir, so it shares no table, backup or worktree with the board, and the sandbox's throwaway board takes
+ * its runner with it.
+ */
+export function hostedRunnerConfig(board: Config, instanceId: string, bind: ServerBind): Config {
+  const homeDir = hostedRunnerHome(board);
+  mkdirSync(homeDir, { recursive: true });
+  return {
+    ...board,
+    role: "runner",
+    port: board.hostedRunnerPort ?? DEFAULT_RUNNER_PORT,
+    bind,
+    homeDir,
+    dbPath: join(homeDir, "data.sqlite"),
+    webDist: null,
+    demo: false,
+    worktreesDir: join(homeDir, "worktrees"),
+    attachmentsDir: join(homeDir, "attachments"),
+    modelPricesPath: join(homeDir, "model-prices.json"),
+    hostedRunnerPort: undefined,
+    hostedBy: instanceId,
   };
 }

@@ -1,5 +1,6 @@
 import { hostname } from "node:os";
 import {
+  HostedRunnerSetting,
   AGENT_HARNESSES,
   type AgentHarness,
   CliModel,
@@ -33,6 +34,9 @@ import { AUTOPILOT_ENGINE_KEY } from "./autopilot.ts";
 import type { Core } from "./core.ts";
 import { GENERAL_PROJECT_KEY } from "./projects.ts";
 import type { SettingsService } from "./types.ts";
+
+/** Whether this board hosts a runner for another board (hostedRunner.ts). This machine's, so never exported. */
+const HOSTED_RUNNER_KEY = "hostedRunner";
 
 type StoredSettings = Omit<AppSettings, "t3TokenSet" | "machineName" | "machineNameIsDefault"> & {
   t3Token: string | null;
@@ -432,6 +436,11 @@ export function createSettingsService(core: Core): SettingsService {
       return get();
     },
     t3Token: () => load().t3Token,
+    hostedRunner: () =>
+      HostedRunnerSetting.catch({ enabled: false, bind: "loopback" }).parse(
+        repos.settings.get(HOSTED_RUNNER_KEY) ?? {},
+      ),
+    setHostedRunner: (value) => core.write(() => repos.settings.set(HOSTED_RUNNER_KEY, value)),
     providersSeedPending: () => repos.settings.all().get(PROVIDERS_DETECT_SEED_KEY) === true,
     clearProvidersSeed: () => core.write(() => repos.settings.delete(PROVIDERS_DETECT_SEED_KEY)),
   };

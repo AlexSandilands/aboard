@@ -46,6 +46,8 @@ const BOARD_ACTOR = "board";
 export interface WorkingCopiesService {
   /** What a task row is on this runner; null on a board, or for a task this database doesn't have. */
   role(taskId: string): WorkingCopyRole | null;
+  /** The tasks this runner holds (not the ones it only references). */
+  heldIds(): string[];
   /** The runner's project for one of the board's, or null when it has none yet (see `adoptProject`). */
   projectFor(project: CopiedProject): Project | null;
   /** The board's id for one of this runner's projects; null for one the board hasn't named. */
@@ -333,6 +335,7 @@ export function createWorkingCopiesService(
 
   return {
     role: (taskId) => copies.get(taskId)?.role ?? null,
+    heldIds: () => copies.heldIds(),
 
     projectFor(project) {
       const mapping = copies.projectFor(project.id, project.remote);

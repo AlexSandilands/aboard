@@ -103,6 +103,7 @@ export const queryKeys = {
   digests: ["digests"] as const,
   suggestions: ["suggestions"] as const,
   machines: ["machines"] as const,
+  hostedRunner: ["hostedRunner"] as const,
 };
 
 /** Marks a Where it runs save in flight, so the event stream doesn't refetch the switches between its writes. */
@@ -730,6 +731,9 @@ export function useBoardEvents() {
         void queryClient.invalidateQueries({ queryKey: queryKeys.machines });
         // A machine connecting or dropping changes what Autopilot settings say of it.
         void queryClient.invalidateQueries({ queryKey: [...queryKeys.autopilot, "machines"] });
+      }
+      if (event.type === "runner.changed") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.hostedRunner });
       }
       // Added, removed or switched elsewhere (another window, the migration's detection pass): the list follows, and
       // detection runs again since a new CLI path or provider changes what it checks.

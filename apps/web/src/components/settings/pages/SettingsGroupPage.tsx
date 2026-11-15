@@ -15,6 +15,7 @@ import { BackupSection } from "../BackupSection";
 import { GitHostsSection } from "../IntegrationsSections";
 import { IssueImportSection } from "../IssueImportSection";
 import { KeybindingsSection } from "../KeybindingsSection";
+import { HostedRunnerSection } from "../machines/HostedRunnerSection";
 import { MachinesSection } from "../machines/MachinesSection";
 import { PlanSkillSection } from "../PlanSkillSection";
 import { ReviewSettingsSection } from "../ReviewSettingsSection";
@@ -127,6 +128,7 @@ function IntegrationsContent() {
       </SettingsSubsection>
       <SettingsSubsection id="integrations.machines">
         <MachinesSection />
+        <HostedRunnerSection />
       </SettingsSubsection>
       <SettingsSubsection id="integrations.model-prices">
         <WithSettings>{(settings) => <ModelPricesSection settings={settings} />}</WithSettings>

@@ -1,6 +1,7 @@
 import type { UsageService } from "./usage.ts";
 import type { RepoPrReviewsService } from "./repoPrReviews.ts";
 import type {
+  HostedRunnerSetting,
   AgentSessionSnapshot,
   AppSettings,
   BoardSnapshot,
@@ -370,6 +371,9 @@ export interface SettingsService {
   update(input: UpdateSettingsInput): AppSettings;
   /** The stored T3 token (server-side only). */
   t3Token(): string | null;
+  /** "Let other machines run tasks here" (hostedRunner.ts); not part of AppSettings, and never backed up. */
+  hostedRunner(): HostedRunnerSetting;
+  setHostedRunner(value: HostedRunnerSetting): void;
   /** Whether an upgraded install still has providers to add from detection (providers.ts seedFromDetection). */
   providersSeedPending(): boolean;
   clearProvidersSeed(): void;

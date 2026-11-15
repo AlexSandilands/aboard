@@ -744,6 +744,8 @@ export const BoardEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("board.reset") }),
   /** A connected machine was added, changed or removed, or its connection changed; Settings refetches the list. */
   z.object({ type: z.literal("machines.changed") }),
+  /** The runner this board hosts for another board started, stopped or was paired; Settings refetches it. */
+  z.object({ type: z.literal("runner.changed") }),
 ]);
 export type BoardEvent = z.infer<typeof BoardEvent>;
 

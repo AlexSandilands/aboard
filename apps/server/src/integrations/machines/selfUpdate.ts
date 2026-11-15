@@ -53,6 +53,11 @@ export interface SelfUpdateDeps {
   /** Runs a program to its end; rejects when it fails. Returns its stdout. */
   exec?: (exe: string, args: string[]) => Promise<string>;
   log?: Logger;
+  /**
+   * Set for a runner a board hosts in its own process (hostedRunner.ts): it is part of that install, which updates
+   * itself, so no board may move it to another version.
+   */
+  withApp?: boolean;
 }
 
 export interface SelfUpdater {
@@ -106,7 +111,7 @@ export function createSelfUpdater(deps: SelfUpdateDeps): SelfUpdater {
   const root = installRoot(env[brandEnv("LAUNCHER")]);
   const platform = serverPlatformOf(deps.platform ?? process.platform, deps.arch ?? process.arch);
   // The marker `service install` puts in the service: without a service, exiting would just stop the runner.
-  const available = root !== null && platform !== null && env[brandEnv("SERVICE")] === "1";
+  const available = !deps.withApp && root !== null && platform !== null && env[brandEnv("SERVICE")] === "1";
 
   let current: MachineUpdateState = { state: "idle", targetVersion: null, error: null };
   let waiting: NodeJS.Timeout | null = null;
@@ -198,6 +203,13 @@ export function createSelfUpdater(deps: SelfUpdateDeps): SelfUpdater {
         stopWaiting();
         current = { state: "idle", targetVersion: null, error: null };
         return current;
+      }
+      if (deps.withApp) {
+        throw new AppError(
+          "CONFLICT",
+          `This runner is part of ${BRAND.name} on this machine and updates with it, never at a board's request. ` +
+            `Update ${BRAND.name} here.`,
+        );
       }
       if (!available) {
         throw new AppError(
