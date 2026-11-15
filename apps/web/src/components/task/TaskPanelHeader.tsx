@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type TaskDetail } from "@repo/contracts";
+import { taskLabel, TASK_STATUSES, type TaskDetail } from "@repo/contracts";
 import type { ReactNode } from "react";
 import { ArchiveIcon, Maximize2Icon, Minimize2Icon, XIcon } from "lucide-react";
 
@@ -14,6 +14,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useSetTaskExpanded } from "~/components/board/boardNavigation";
 import { useUpdateTask } from "~/state/mutations";
 import { EpicDeliveryButton, OnEpicBranchChip } from "./EpicDelivery";
+import { HoldBadge } from "./HoldBadge";
 import { importPendingLabel } from "./import.logic";
 import { resolutionLabel } from "./resolution.logic";
 import type { TaskPanelLayout } from "./sections.logic";
@@ -120,7 +121,7 @@ export function TaskPanelHeader({
   return (
     <header className={inWindow ? WINDOW_TOP_BAR_CLASS : PANEL_TOP_BAR_CLASS}>
       {inWindow ? null : <ClosePanelButton onClose={onClose} />}
-      <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">#{task.number}</span>
+      <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">{taskLabel(task)}</span>
       {task.kind === "epic" ? (
         // An epic's column follows its tasks, so there is nothing to pick.
         <Tooltip>
@@ -159,6 +160,7 @@ export function TaskPanelHeader({
         </Badge>
       ) : null}
       <OnEpicBranchChip task={task} />
+      <HoldBadge task={task} />
       {archived ? (
         <Badge variant="warning" size="sm">
           Archived

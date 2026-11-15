@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   AGENT_HARNESSES,
   AgentHarness,
   AgentSessionRef,
@@ -111,7 +112,7 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
           summary.status !== "done" &&
           prWaitsForLocalReview(summary.status, summary.review, services.reviews.effectiveAutoReview(id));
         return textResult(
-          `Linked to #${summary.number}: ${linkText(link, services.settings.get().ticketSystems)}${warning ? `\nWarning: ${warning}` : ""}` +
+          `Linked to ${taskLabel(summary)}: ${linkText(link, services.settings.get().ticketSystems)}${warning ? `\nWarning: ${warning}` : ""}` +
             (early
               ? `\nNote: local review is on for this task, so this PR was opened before the review loop ended. ${EARLY_PR_NEXT}`
               : ""),
@@ -139,7 +140,9 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
         const id = services.tasks.resolveId(args.task);
         const link = services.links.unlink(id, args.value, actor(args.actor));
         const summary = services.tasks.summary(id);
-        return textResult(`Unlinked from #${summary.number}: ${linkText(link, services.settings.get().ticketSystems)}`);
+        return textResult(
+          `Unlinked from ${taskLabel(summary)}: ${linkText(link, services.settings.get().ticketSystems)}`,
+        );
       }),
   );
 };

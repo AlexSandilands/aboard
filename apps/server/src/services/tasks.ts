@@ -1,5 +1,6 @@
 import type { UsageService } from "./usage.ts";
 import {
+  taskLabel,
   deriveEpicRollup,
   deriveEpicStatus,
   epicBranchMerge,
@@ -8,6 +9,8 @@ import {
   parseImportSource,
   renderTemplateText,
   overrideValue,
+  parseTaskNumberRef,
+  taskNumberValue,
   sameModelChoice,
   resolutionNeedsTask,
   startedEpicTasks,
@@ -57,12 +60,11 @@ const MANUAL_AUTO_MERGE_MESSAGE = "A manual task has no pull request to merge; m
 export function matchesQuery({ record, summary }: AssembledTask, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  const number = /^#?(\d+)$/.exec(q);
-  if (number && Number(number[1]) === record.number) return true;
+  if (parseTaskNumberRef(q).some((n) => n.number === record.number && n.prefix === record.numberPrefix)) return true;
   const haystack = [
     record.title,
     record.description ?? "",
-    `#${record.number}`,
+    taskLabel(record),
     ...summary.links.flatMap((l) => (l.kind === "ticket" ? [l.ref.key] : [])),
     ...summary.labels,
   ];
@@ -89,6 +91,9 @@ export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: 
   let epic = repos.tasks.get(epicId);
   if (!epic || epic.kind !== "epic") return;
   fx.task(epicId);
+  // On a runner an epic is only a reference to the board's: its status is what the board said, not what the few
+  // tasks held here add up to.
+  if (repos.workingCopies.get(epicId)?.role === "reference") return;
   // An archived epic keeps the status it left with (Done), so a task of it archived later can't move it (reopening or
   // unarchiving one unarchives the epic first, see unarchiveEpicFor). Its card is still republished: the roll-up may
   // have changed.
@@ -142,6 +147,11 @@ export function createTasksService(
     attachments: AttachmentsService;
     /** Tokens of the task's sessions for its detail; optional so tests that build tasks alone needn't. */
     usage?: Pick<UsageService, "taskUsage">;
+    /**
+     * On a runner: the number for a task made there, in place of the board's counter (see
+     * WorkingCopiesService.nextNumber).
+     */
+    numbering?: () => { prefix: string; number: number };
   },
 ): { service: TasksService; record: (id: string) => TaskRecord } {
   const { repos } = core;
@@ -152,17 +162,21 @@ export function createTasksService(
     return task;
   };
 
+  /** The task a reference names, in the trash or not: a uuid, or its number as "#42", "42", "#E7" or "E7". */
+  const lookUp = (ref: string): TaskRecord | null => {
+    const trimmed = ref.trim();
+    return parseTaskNumberRef(trimmed).length > 0 ? repos.tasks.byNumberRefAny(trimmed) : repos.tasks.getAny(trimmed);
+  };
+
   /** Not found, saying so when the task is in the trash: its number still belongs to it and to no other task. */
   const missing = (ref: string): AppError => {
-    const number = /^#?(\d+)$/.exec(ref.trim());
-    const trashed = number ? repos.tasks.byNumberAny(Number(number[1])) : repos.tasks.getAny(ref.trim());
+    const trashed = lookUp(ref);
     return trashed?.deletedAt ? deletedError(trashed) : notFound("Task", ref.trim());
   };
 
-  /** A task in the trash or not, by uuid, "#42" or "42"; NOT_FOUND once it is purged. */
+  /** A task in the trash or not, by uuid or number; NOT_FOUND once it is purged. */
   const anyRecord = (ref: string): TaskRecord => {
-    const number = /^#?(\d+)$/.exec(ref.trim());
-    const task = number ? repos.tasks.byNumberAny(Number(number[1])) : repos.tasks.getAny(ref.trim());
+    const task = lookUp(ref);
     if (!task) throw notFound("Task", ref.trim());
     return task;
   };
@@ -170,7 +184,7 @@ export function createTasksService(
   /** A task in the trash, by uuid, "#42" or "42". */
   const trashedRecord = (ref: string): TaskRecord => {
     const task = anyRecord(ref);
-    if (task.deletedAt === null) throw new AppError("VALIDATION", `#${task.number} is not in the trash`);
+    if (task.deletedAt === null) throw new AppError("VALIDATION", `${taskLabel(task)} is not in the trash`);
     return task;
   };
 
@@ -207,7 +221,7 @@ export function createTasksService(
     for (const r of resolved) fx.task(r.id);
     if (task.resolvedByTaskId) fx.detail(task.resolvedByTaskId);
     if (task.parentId) {
-      fx.log(task.parentId, actor, "child_removed", { task: task.number, title: task.title, deleted: true });
+      fx.log(task.parentId, actor, "child_removed", { task: taskNumberValue(task), title: task.title, deleted: true });
       syncEpic(task.parentId, actor, fx);
     }
     return stamped;
@@ -242,7 +256,7 @@ export function createTasksService(
       }
     }
     if (rejoin && !withEpic) {
-      fx.log(epic.id, actor, "child_added", { task: task.number, title: task.title, restored: true });
+      fx.log(epic.id, actor, "child_added", { task: taskNumberValue(task), title: task.title, restored: true });
       syncEpic(epic.id, actor, fx);
     }
     if (task.kind === "epic") syncEpic(task.id, actor, fx);
@@ -260,7 +274,7 @@ export function createTasksService(
     }
     // Tasks closed against this one keep their resolution; their log records what they pointed at.
     for (const resolved of repos.tasks.resolvedBy([task.id])) {
-      fx.log(resolved.id, actor, "resolver_deleted", { number: task.number, title: task.title });
+      fx.log(resolved.id, actor, "resolver_deleted", { number: taskNumberValue(task), title: task.title });
     }
     // Tasks it blocks, or that block it, drop the relation with it; their logs say what went.
     deps.relations().noteDeletionIn(task, actor, fx);
@@ -313,7 +327,10 @@ export function createTasksService(
     if (by.id === task.id) throw new AppError("VALIDATION", "A task cannot be resolved by itself");
     // Two tasks closed against each other would leave neither as the one that holds the work.
     if (by.resolvedByTaskId === task.id) {
-      throw new AppError("VALIDATION", `#${by.number} is already closed against #${task.number}; reopen it first`);
+      throw new AppError(
+        "VALIDATION",
+        `${taskLabel(by)} is already closed against ${taskLabel(task)}; reopen it first`,
+      );
     }
     return by;
   };
@@ -321,13 +338,13 @@ export function createTasksService(
   /** The epic `ref` names, checked as a home for a task in `projectId`. */
   const epicFor = (ref: string, projectId: string): TaskRecord => {
     const epic = record(service.resolveId(ref));
-    if (epic.kind !== "epic") throw new AppError("VALIDATION", `#${epic.number} is not an epic`);
+    if (epic.kind !== "epic") throw new AppError("VALIDATION", `${taskLabel(epic)} is not an epic`);
     if (epic.archivedAt !== null)
-      throw new AppError("VALIDATION", `Epic #${epic.number} is archived; unarchive it first`);
+      throw new AppError("VALIDATION", `Epic ${taskLabel(epic)} is archived; unarchive it first`);
     if (epic.projectId !== projectId) {
       throw new AppError(
         "VALIDATION",
-        `Epic #${epic.number} is in another project; a task and its epic share a project`,
+        `Epic ${taskLabel(epic)} is in another project; a task and its epic share a project`,
       );
     }
     return epic;
@@ -370,7 +387,7 @@ export function createTasksService(
     if (!epic || epic.archivedAt === null) return;
     const restored = { ...epic, archivedAt: null, movedTo: null, updatedAt: nowIso() };
     repos.tasks.update({ ...restored, position: endOfLane(restored) });
-    fx.log(epic.id, actor, "unarchived", { becauseTask: task.number, reopened });
+    fx.log(epic.id, actor, "unarchived", { becauseTask: taskNumberValue(task), reopened });
   };
 
   /** Logs a task joining or leaving an epic on both sides. The caller saves the task and syncs both epics. */
@@ -382,13 +399,16 @@ export function createTasksService(
     fx: Effects,
   ) => {
     fx.log(task.id, actor, "epic_changed", { from: from?.number ?? null, to: to?.number ?? null });
-    if (from) fx.log(from.id, actor, "child_removed", { task: task.number, title: task.title });
-    if (to) fx.log(to.id, actor, "child_added", { task: task.number, title: task.title });
+    if (from) fx.log(from.id, actor, "child_removed", { task: taskNumberValue(task), title: task.title });
+    if (to) fx.log(to.id, actor, "child_added", { task: taskNumberValue(task), title: task.title });
   };
 
   const service: TasksService = {
     summaries(query: TaskQuery = {}): TaskSummary[] {
-      const records = repos.tasks.list(query);
+      // On a runner, the tasks its held ones only point at aren't its tasks to list.
+      const listed = repos.tasks.list(query);
+      const roles = repos.workingCopies.forTasks(listed.map((t) => t.id));
+      const records = listed.filter((t) => roles.get(t.id)?.role !== "reference");
       // A filter, not a label list: no cap, and a term that normalises to nothing just matches nothing.
       const labels = query.labels?.length ? query.labels.map(normalizeLabel) : null;
       return [...assembleSummaries(repos, records).values()]
@@ -424,10 +444,8 @@ export function createTasksService(
     },
 
     resolveId(ref) {
-      const trimmed = ref.trim();
-      const number = /^#?(\d+)$/.exec(trimmed);
-      const task = number ? repos.tasks.byNumber(Number(number[1])) : repos.tasks.get(trimmed);
-      if (!task) throw missing(trimmed);
+      const task = lookUp(ref);
+      if (!task || task.deletedAt !== null) throw missing(ref);
       return task.id;
     },
 
@@ -519,6 +537,7 @@ export function createTasksService(
             : undefined);
         const hasSteps = (plan?.phases ?? []).some((p) => p.steps.length > 0);
         const now = nowIso();
+        const numbering = opts.number ?? deps.numbering?.() ?? { prefix: "", number: repos.tasks.nextNumber() };
         const status = input.status ?? (input.plan && hasSteps ? "planned" : "backlog");
         if (status === "planned" && !hasSteps && !manual) {
           throw new AppError(
@@ -528,7 +547,8 @@ export function createTasksService(
         }
         const task: TaskRecord = {
           id: randomUUID(),
-          number: repos.tasks.nextNumber(),
+          number: numbering.number,
+          numberPrefix: numbering.prefix,
           projectId: project.id,
           kind,
           parentId: epic?.id ?? null,
@@ -570,7 +590,7 @@ export function createTasksService(
           ...(epic ? { epic: epic.number } : {}),
         });
         if (epic) {
-          fx.log(epic.id, actor, "child_added", { task: task.number, title: task.title });
+          fx.log(epic.id, actor, "child_added", { task: taskNumberValue(task), title: task.title });
           syncEpic(epic.id, actor, fx);
         }
         const labels = input.labels ?? template?.labels;
@@ -682,7 +702,7 @@ export function createTasksService(
           if (!manual && current.status !== "backlog" && repos.plans.countSteps(id) === 0) {
             throw new AppError(
               "VALIDATION",
-              `#${current.number} has no plan, so it can only become a code task in Backlog; add a plan first`,
+              `${taskLabel(current)} has no plan, so it can only become a code task in Backlog; add a plan first`,
             );
           }
           next.manual = manual;
@@ -756,7 +776,7 @@ export function createTasksService(
             if (open.length > 0) {
               throw new AppError(
                 "VALIDATION",
-                `Epic #${current.number} still has open tasks (${open.map((c) => `#${c.number}`).join(", ")}). ` +
+                `Epic ${taskLabel(current)} still has open tasks (${open.map((c) => taskLabel(c)).join(", ")}). ` +
                   "Finish, close or archive them, or take them out of the epic, before archiving it.",
               );
             }
@@ -824,7 +844,7 @@ export function createTasksService(
       core.write((fx) => {
         const current = record(id);
         if (current.kind !== "epic")
-          throw new AppError("VALIDATION", `#${current.number} isn't an epic; only epics have a delivery`);
+          throw new AppError("VALIDATION", `${taskLabel(current)} isn't an epic; only epics have a delivery`);
         if (delivery === "integration" && !branch) {
           throw new AppError("VALIDATION", "Integration delivery needs its branch");
         }
@@ -836,8 +856,8 @@ export function createTasksService(
           if (started.length > 0) {
             throw new AppError(
               "VALIDATION",
-              `Epic #${current.number} can't go back to pull requests to main: ` +
-                `${started.map((c) => `#${c.number}`).join(", ")} already started from ${current.integrationBranch}, ` +
+              `Epic ${taskLabel(current)} can't go back to pull requests to main: ` +
+                `${started.map((c) => taskLabel(c)).join(", ")} already started from ${current.integrationBranch}, ` +
                 "and their branches and pull requests target it. Finish the epic through its integration branch.",
             );
           }
@@ -873,10 +893,8 @@ export function createTasksService(
             if (open.length > 0 || children.length === 0) {
               throw new AppError(
                 "VALIDATION",
-                `#${current.number} can be marked merged into the default branch once all its tasks are done` +
-                  (open.length > 0
-                    ? `; still open: ${open.map((c) => `#${c.number}`).join(", ")}`
-                    : "; it has none yet"),
+                `${taskLabel(current)} can be marked merged into the default branch once all its tasks are done` +
+                  (open.length > 0 ? `; still open: ${open.map((c) => taskLabel(c)).join(", ")}` : "; it has none yet"),
               );
             }
             repos.tasks.update({ ...current, integrationMergedAt: nowIso(), updatedAt: nowIso() });
@@ -886,14 +904,14 @@ export function createTasksService(
           }
           throw new AppError(
             "VALIDATION",
-            `#${current.number} is an epic; its status follows its child tasks, so move those instead` +
+            `${taskLabel(current)} is an epic; its status follows its child tasks, so move those instead` +
               (current.delivery === "integration"
                 ? ". Once they are all done, move it to Done to mark its branch merged into the default branch"
                 : ""),
           );
         }
         if (statusChanged && status !== "backlog" && !current.manual && repos.plans.countSteps(id) === 0) {
-          throw planRequired(current.number);
+          throw planRequired(taskNumberValue(current));
         }
         if (!statusChanged && !input.beforeId && !input.afterId) return;
         if (input.beforeId === id || input.afterId === id) {
@@ -942,7 +960,7 @@ export function createTasksService(
       core.write((fx) => {
         const current = record(id);
         if (current.kind === "epic") {
-          throw new AppError("VALIDATION", `#${current.number} is an epic; it is done once its child tasks are`);
+          throw new AppError("VALIDATION", `${taskLabel(current)} is an epic; it is done once its child tasks are`);
         }
         const by = closingTask(current, input);
         const now = nowIso();
@@ -961,7 +979,7 @@ export function createTasksService(
         fx.log(id, actor, "closed", {
           resolution: input.resolution,
           from: current.status,
-          ...(by ? { byTask: by.number } : {}),
+          ...(by ? { byTask: taskNumberValue(by) } : {}),
         });
         if (by) fx.detail(by.id);
         if (current.resolvedByTaskId && current.resolvedByTaskId !== by?.id) fx.detail(current.resolvedByTaskId);
@@ -973,18 +991,18 @@ export function createTasksService(
     archiveFinishedEpic(id, actor) {
       return core.write((fx) => {
         const epic = record(id);
-        if (epic.kind !== "epic") throw new AppError("VALIDATION", `#${epic.number} is not an epic`);
-        if (epic.archivedAt !== null) throw new AppError("VALIDATION", `Epic #${epic.number} is already archived`);
+        if (epic.kind !== "epic") throw new AppError("VALIDATION", `${taskLabel(epic)} is not an epic`);
+        if (epic.archivedAt !== null) throw new AppError("VALIDATION", `Epic ${taskLabel(epic)} is already archived`);
         const tasks = repos.tasks.childrenOf([id]).filter((c) => c.archivedAt === null);
         const open = tasks.filter((c) => c.status !== "done");
         if (open.length > 0) {
           throw new AppError(
             "VALIDATION",
-            `Epic #${epic.number} still has open tasks (${open.map((c) => `#${c.number}`).join(", ")})`,
+            `Epic ${taskLabel(epic)} still has open tasks (${open.map((c) => taskLabel(c)).join(", ")})`,
           );
         }
         if (epic.status !== "done")
-          throw new AppError("VALIDATION", `Epic #${epic.number} isn't finished (not in Done)`);
+          throw new AppError("VALIDATION", `Epic ${taskLabel(epic)} isn't finished (not in Done)`);
         const now = nowIso();
         const archived = { ...epic, archivedAt: now, updatedAt: now };
         archiveWithEpic(archived, tasks, actor, fx);
@@ -1058,6 +1076,7 @@ export function createTasksService(
         return {
           id: t.id,
           number: t.number,
+          numberPrefix: t.numberPrefix,
           title: t.title,
           kind: t.kind,
           projectId: t.projectId,

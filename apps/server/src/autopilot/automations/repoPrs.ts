@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
+  taskLabel,
   AUTOPILOT_REVIEW_PRS,
   AUTOPILOT_ACTOR,
   BRAND,
@@ -337,7 +338,7 @@ async function pollProject(
         plan,
       });
     } catch (error) {
-      errors.push(`#${listed.number}: ${messageOf(error)}`);
+      errors.push(`${taskLabel(listed)}: ${messageOf(error)}`);
     }
   }
   return { items, error: errors.length > 0 ? `Couldn't read ${repo} ${errors.join("; ")}` : null };

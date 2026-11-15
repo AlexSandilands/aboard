@@ -83,9 +83,38 @@ The name is yours to change. The prefix is one to three letters or digits, sugge
 tasks made on that machine while the board can't be reached, like `#E7`, so each machine has its own, and it can't
 be changed once a task carries it.
 
+## Tasks a machine holds
+
+A task handed to a machine is worked on there, and the board follows along. Its card and its panel say where it
+is: **On engine**.
+
+- **What the machine does shows up on the board** as it happens. If the board was closed or the machine couldn't be
+  reached, it catches up when they are connected again, in the order things happened there.
+- **You can still change the task on the board.** The change shows at once and is passed to the machine. While the
+  machine can't be reached the badge counts what is waiting, **On engine · 2 waiting**, and those changes are
+  applied when it is back, after whatever happened there meanwhile. A change the machine can't apply any more (you
+  checked off a step the agent had deleted) is taken back, and the task's activity says so.
+- **Some things wait until the task is back on the board**: archiving it, deleting it, moving it to another
+  project, and moving it to another board.
+- **A task made on the machine while the board can't be reached** gets the machine's prefix in its number, like
+  `#E7`, and keeps it. Use it like any other number: `#E7` finds the task in search, and is a link in notes.
+
+There is no button yet for handing a task to a machine or taking it back; that comes with choosing the machine a
+task runs on. Until then it is done through the board's API:
+
+```sh
+curl -X POST http://127.0.0.1:4317/api/tasks/42/hold -H 'content-type: application/json' -d '{"machineId": "<the machine's id>"}'
+curl -X DELETE http://127.0.0.1:4317/api/tasks/42/hold
+```
+
+`GET /api/machines` lists the machines with their ids. Taking a task back needs the machine to be reachable, so
+its last changes come with it; `-d '{"force": true}'` takes it back without the machine and loses what it changed
+since the board last heard from it.
+
 ## Removing a machine
 
-Open the machine and click **Remove machine…**. The board unpairs from it and forgets it. The runner stays
+Open the machine and click **Remove machine…**. The board unpairs from it and forgets it. Tasks it held come back
+to the board as the board last saw them. The runner stays
 installed on the machine; to remove that too, run this there:
 
 ```sh

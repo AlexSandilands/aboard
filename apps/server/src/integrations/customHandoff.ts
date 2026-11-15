@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  taskLabel,
   AGENT_HARNESSES,
   customHandoffLabel,
   customHandoffModel,
@@ -50,10 +51,10 @@ const taskWorktree = (branches: readonly TaskBranch[]): { worktreePath: string; 
 
 /** Why a hand-off isn't offered on a task, as its menu decides (customHandoffsFor), or null when it is. */
 function unavailable(handoff: CustomHandoff, task: TaskSummary, settings: AppSettings): string | null {
-  if (task.kind === "epic") return `#${task.number} is an epic: custom hand-offs start on its tasks`;
+  if (task.kind === "epic") return `${taskLabel(task)} is an epic: custom hand-offs start on its tasks`;
   if (task.manual)
-    return `#${task.number} is a manual task: it is for people to do, so no agent session is started on it`;
-  if (task.archivedAt) return `#${task.number} is archived`;
+    return `${taskLabel(task)} is a manual task: it is for people to do, so no agent session is started on it`;
+  if (task.archivedAt) return `${taskLabel(task)} is archived`;
   if (handoff.projectIds && !handoff.projectIds.includes(task.projectId)) {
     return `“${handoff.name}” isn't shown on this task's project (Settings → Agents → Custom hand-offs)`;
   }

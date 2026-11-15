@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   ATTENTION_AUTOPILOT_KEY,
   ATTENTION_REQUEST_KEY,
   type AttentionReason,
@@ -79,7 +80,7 @@ export function createAttentionService(
             if (summary.dismissedAttention.some((r) => r.key === key)) return null;
             throw new AppError(
               "CONFLICT",
-              `#${summary.number} has no such flag (any more), so there is nothing to dismiss`,
+              `${taskLabel(summary)} has no such flag (any more), so there is nothing to dismiss`,
             );
           });
     const standing = reasons.filter((r): r is AttentionReason => r !== null);
@@ -89,7 +90,9 @@ export function createAttentionService(
       const hidden: string[] = [];
       for (const reason of standing) {
         if (reason.key === ATTENTION_REQUEST_KEY) {
-          clearRequest(fx, deps.task(taskId), actor);
+          // Through the service, not the helper: on a task a machine holds this is an edit the machine has to take,
+          // or its next log entry would put the request back (services/heldEdits.ts).
+          service.clear(taskId, actor);
           continue;
         }
         if (reason.key === ATTENTION_AUTOPILOT_KEY) {
@@ -124,7 +127,7 @@ export function createAttentionService(
     return deps.summary(taskId);
   };
 
-  return {
+  const service: AttentionService = {
     dismiss: (taskId, key, actor) => dismissReasons(taskId, [key], actor),
     dismissAll: (taskId, actor) => dismissReasons(taskId, "all", actor),
     restore: (taskId, key, actor) => restoreReasons(taskId, [key], actor),
@@ -136,7 +139,7 @@ export function createAttentionService(
       core.write((fx) => {
         const task = deps.task(taskId);
         if (task.status === "done") {
-          throw new AppError("VALIDATION", `#${task.number} is done; a finished task doesn't ask for attention`);
+          throw new AppError("VALIDATION", `${taskLabel(task)} is done; a finished task doesn't ask for attention`);
         }
         const requestedAt = core.now().toISOString();
         repos.tasks.update({
@@ -149,8 +152,8 @@ export function createAttentionService(
         deps.notifications.notify({
           kind: "agent_request",
           taskId,
-          title: `Attention requested on #${task.number}`,
-          body: `#${task.number} ${task.title}\n${text}`,
+          title: `Attention requested on ${taskLabel(task)}`,
+          body: `${taskLabel(task)} ${task.title}\n${text}`,
           dedupeKey: `request:${taskId}:${requestedAt}`,
         });
       });
@@ -162,4 +165,5 @@ export function createAttentionService(
       return { cleared, task: deps.summary(taskId) };
     },
   };
+  return service;
 }

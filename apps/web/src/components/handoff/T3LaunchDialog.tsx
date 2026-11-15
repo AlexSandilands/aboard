@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   clampRuntimeMode,
   customHandoffThreadTitle,
   defaultHandoffMode,
@@ -163,7 +164,7 @@ function TaskLaunch({
       <DialogHeader>
         <DialogTitle>Fix the PR in T3 Code</DialogTitle>
         <DialogDescription>
-          #{task.number} {task.title}
+          {taskLabel(task)} {task.title}
         </DialogDescription>
       </DialogHeader>
       <div className="px-6 pb-6">
@@ -210,11 +211,11 @@ function TaskLaunchContent({
   const epicBranch = useFollowupEpicBranch(task);
   const subject: LaunchSubject = fix
     ? {
-        label: `Fix PR #${fix.number} · #${task.number} ${task.title}`,
+        label: `Fix PR #${fix.number} · ${taskLabel(task)} ${task.title}`,
         promptFor: () => fix.prompt,
         planToggle: false,
         initialPlan: false,
-        successDescription: `#${task.number} is linked to the new thread, which works on ${fix.branch}.`,
+        successDescription: `${taskLabel(task)} is linked to the new thread, which works on ${fix.branch}.`,
         copyPrompt: () => copyToClipboard(fix.prompt, "fix prompt"),
         offerOpen: false,
         integrationBranch: fix.branch,
@@ -222,12 +223,12 @@ function TaskLaunchContent({
       }
     : preset
       ? {
-          label: `#${task.number} ${task.title}`,
+          label: `${taskLabel(task)} ${task.title}`,
           // The hand-off's own text: it has no planning variant, so there is no Plan with me.
           promptFor: () => renderCustomHandoffPrompt(preset, task, window.location.origin),
           planToggle: false,
           initialPlan: false,
-          successDescription: `#${task.number} is linked to the new thread.`,
+          successDescription: `${taskLabel(task)} is linked to the new thread.`,
           copyPrompt: () => copyToClipboard(renderCustomHandoffPrompt(preset, task, window.location.origin), "prompt"),
           offerOpen: false,
           integrationBranch: task.integrationBranch,
@@ -235,7 +236,7 @@ function TaskLaunchContent({
           handoffName: preset.name,
         }
       : {
-          label: `#${task.number} ${task.title}`,
+          label: `${taskLabel(task)} ${task.title}`,
           promptFor: (plan) =>
             taskHandoffPrompt({
               task,
@@ -247,7 +248,7 @@ function TaskLaunchContent({
           planToggle: !epic && !followup,
           // An epic has no suggested model, so it starts on T3's default model, which is also what planning uses.
           initialPlan: defaultHandoffMode(task) === "plan",
-          successDescription: `#${task.number} is linked to the new thread.`,
+          successDescription: `${taskLabel(task)} is linked to the new thread.`,
           copyPrompt: () => copyHandoffPrompt(task, defaultHandoffMode(task), modelSettings, epicBranch),
           offerOpen: false,
           // A follow-up starts where the code is: the epic's branch while it's only there, else the default branch.

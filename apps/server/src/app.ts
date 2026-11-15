@@ -6,7 +6,7 @@ import type { Services } from "./services/types.ts";
 import type { Integrations } from "./integrations/types.ts";
 import { registerSse } from "./sse.ts";
 import { registerApiRoutes } from "./http/routes.ts";
-import { registerMcp } from "./mcp/server.ts";
+import { createMachineToolCaller, registerMcp } from "./mcp/server.ts";
 import { registerRunMcp } from "./mcp/runTools.ts";
 import { guard } from "./http/guard.ts";
 import { registerMachineRoutes } from "./http/routes/machine.ts";
@@ -33,5 +33,8 @@ export function createApp(ctx: AppContext): Hono {
   registerApiRoutes(app, ctx);
   registerMcp(app, ctx);
   registerRunMcp(app, () => ctx.integrations.runTools);
+  // A machine holding tasks for this board reads the others through it.
+  if ((ctx.config.role ?? "board") === "board")
+    ctx.integrations.machineSync.setToolCaller(createMachineToolCaller(app, ctx));
   return app;
 }

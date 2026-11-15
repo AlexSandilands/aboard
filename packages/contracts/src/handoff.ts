@@ -1,3 +1,4 @@
+import { taskLabel } from "./taskNumbers.ts";
 import { startedSessionLine, type AgentHarness } from "./agentSessions.ts";
 import { BRAND } from "./brand.ts";
 import { describeChoice, resolveTaskModel, type ModelProfile } from "./modelProfiles.ts";
@@ -94,22 +95,22 @@ export function handoffModeError(
   subagent = false,
 ): string | null {
   if (task.manual) {
-    return `#${task.number} is a manual task: it is for people to do, so no agent session is started on it. Make it a code task first (update_task manual: false) if an agent should work on it.`;
+    return `${taskLabel(task)} is a manual task: it is for people to do, so no agent session is started on it. Make it a code task first (update_task manual: false) if an agent should work on it.`;
   }
   const epic = task.kind === "epic";
   if (epic && mode !== "orchestrate") {
-    return `#${task.number} is an epic: its prompt is mode "orchestrate". Hand off its tasks with their own prompts.`;
+    return `${taskLabel(task)} is an epic: its prompt is mode "orchestrate". Hand off its tasks with their own prompts.`;
   }
-  if (!epic && mode === "orchestrate") return `#${task.number} isn't an epic; only epics are orchestrated`;
+  if (!epic && mode === "orchestrate") return `${taskLabel(task)} isn't an epic; only epics are orchestrated`;
   if (mode === "followup" && task.status !== undefined && task.status !== "review" && task.status !== "done") {
-    return `#${task.number} isn't finished: a follow-up is for a task in Review or Done. Use mode "work" to work on it.`;
+    return `${taskLabel(task)} isn't finished: a follow-up is for a task in Review or Done. Use mode "work" to work on it.`;
   }
   if (subagent && mode !== "work") {
     return "Only work prompts go to subagents: a subagent can't plan with the user or orchestrate. Draft unplanned tasks' plans yourself.";
   }
   // The user approves a plan before its task starts; a subagent can't ask them.
   if (subagent && task.progress?.total === 0) {
-    return `#${task.number} has no plan yet. Draft one, get the user's approval and save it with set_plan before starting a subagent on it.`;
+    return `${taskLabel(task)} has no plan yet. Draft one, get the user's approval and save it with set_plan before starting a subagent on it.`;
   }
   return null;
 }
@@ -127,7 +128,7 @@ export function taskReferenceLine({
   boardUrl,
 }: Omit<HandoffPromptInput, "mode" | "linkedThread" | "modelTiers">): string {
   return [
-    `#${task.number} "${task.title}"`,
+    `${taskLabel(task)} "${task.title}"`,
     `Board: ${taskBoardUrl(boardUrl, task.id)}`,
     `Call get_task("${task.id}") on the ${BRAND.id} MCP server, then continue from the current step.`,
   ].join("\n");
@@ -169,7 +170,7 @@ export function suggestedModelLine(
 export function integrationBranchLine(task: HandoffPromptInput["task"]): string | null {
   const branch = task.kind === "epic" ? null : task.integrationBranch;
   if (!branch) return null;
-  const epic = task.parent ? `epic #${task.parent.number}` : "its epic";
+  const epic = task.parent ? `epic ${taskLabel(task.parent)}` : "its epic";
   return (
     `This task is in ${epic}, which is delivered through the integration branch \`${branch}\`: branch from ` +
     `\`origin/${branch}\` (not the default branch) and open your pull request against \`${branch}\` ` +
@@ -194,7 +195,7 @@ export function taskHandoffPrompt({
   subagent = false,
   epicBranch = null,
 }: HandoffPromptInput): string {
-  const ref = `#${task.number} "${task.title}"`;
+  const ref = `${taskLabel(task)} "${task.title}"`;
   const getTask = `Call get_task("${task.id}") on the ${BRAND.id} MCP server`;
   // What a board-started session is told about its link, or null when the board didn't start one.
   const started = (label: string, target: "the task" | "the epic" = "the task") =>
@@ -202,13 +203,13 @@ export function taskHandoffPrompt({
   if (mode === "orchestrate") {
     return orchestratePrompt(task, boardUrl, {
       linkedThread,
-      started: started(`Orchestrating #${task.number}`, "the epic"),
+      started: started(`Orchestrating ${taskLabel(task)}`, "the epic"),
     });
   }
   if (mode === "followup") {
     return followupPrompt(task, boardUrl, {
       linkedThread,
-      started: started(`Follow-up on #${task.number}`),
+      started: started(`Follow-up on ${taskLabel(task)}`),
       epicBranch,
     });
   }
@@ -251,7 +252,7 @@ export function taskHandoffPrompt({
   if (linkedSession) {
     lines.push(
       "",
-      `${started(`${mode === "plan" ? "Planning" : "Implementing"} #${task.number}`)} Link the task to its ticket with ` +
+      `${started(`${mode === "plan" ? "Planning" : "Implementing"} ${taskLabel(task)}`)} Link the task to its ticket with ` +
         "link if it has one.",
     );
     return lines.join("\n");
@@ -261,7 +262,7 @@ export function taskHandoffPrompt({
     linkedThread
       ? "This thread is already linked to the task; don't link it again."
       : `Link the task to its ticket with link if it has one. ${t3ThreadLinkLine("to the task")}`,
-    sessionLinkLine({ label: `${mode === "plan" ? "Planning" : "Implementing"} #${task.number}`, also: true }),
+    sessionLinkLine({ label: `${mode === "plan" ? "Planning" : "Implementing"} ${taskLabel(task)}`, also: true }),
     SELF_LINK_RULES,
   );
   return lines.join("\n");
@@ -272,7 +273,7 @@ function followupCodeLine(task: HandoffPromptInput["task"], epicBranch: string |
   const prs = (task.links ?? []).filter((l) => l.kind === "pr").map((l) => l.url);
   const prText = prs.length === 0 ? "" : `Its pull request${prs.length === 1 ? "" : "s"}: ${prs.join(", ")}. `;
   if (epicBranch) {
-    const epic = task.parent ? `epic #${task.parent.number}` : "its epic";
+    const epic = task.parent ? `epic ${taskLabel(task.parent)}` : "its epic";
     return (
       `${prText}It merged into the integration branch \`${epicBranch}\` of ${epic}, which hasn't merged into the ` +
       `default branch yet: the code is on \`origin/${epicBranch}\`, not on the default branch.`
@@ -297,7 +298,7 @@ function followupPrompt(
 ): string {
   const where = task.status === "review" ? "in Review" : "finished";
   return [
-    `Let's follow up on #${task.number} "${task.title}" from the ${BRAND.id} task board. Its work is ${where}.`,
+    `Let's follow up on ${taskLabel(task)} "${task.title}" from the ${BRAND.id} task board. Its work is ${where}.`,
     `Board: ${taskBoardUrl(boardUrl, task.id)}`,
     "",
     `1. Call get_task("${task.id}") on the ${BRAND.id} MCP server to see what was done: the plan, its step notes and the handover notes.`,
@@ -314,7 +315,7 @@ function followupPrompt(
       : linked.linkedThread
         ? ["This thread is already linked to the task; don't link it again."]
         : [
-            `${sessionLinkLine({ label: `Follow-up on #${task.number}` })} Don't link a T3 thread to the task: the board ` +
+            `${sessionLinkLine({ label: `Follow-up on ${taskLabel(task)}` })} Don't link a T3 thread to the task: the board ` +
               "would take it for the thread that did the work.",
             `${SELF_LINK_ENV_RULE} ${SELF_LINK_FAILED}`,
           ]),
@@ -326,7 +327,7 @@ function followupPrompt(
  * can't start subagents of its own, so it stops at questions and at an open review round and reports back.
  */
 function subagentPrompt(task: HandoffPromptInput["task"], boardUrl: string): string {
-  const ref = `#${task.number} "${task.title}"`;
+  const ref = `${taskLabel(task)} "${task.title}"`;
   return [
     `Work on ${ref} from the ${BRAND.id} task board. You are a subagent: the session that started you is orchestrating this task's epic and reads your report.`,
     `Board: ${taskBoardUrl(boardUrl, task.id)}`,
@@ -366,10 +367,10 @@ function orchestratePrompt(
   boardUrl: string,
   linked: { linkedThread: boolean; started: string | null },
 ): string {
-  const ref = `#${task.number}`;
+  const ref = taskLabel(task);
   const overview = `epic_overview("${task.id}")`;
   return [
-    `Let's run the epic #${task.number} "${task.title}" from the ${BRAND.id} task board: start its tasks and see them through to review.`,
+    `Let's run the epic ${taskLabel(task)} "${task.title}" from the ${BRAND.id} task board: start its tasks and see them through to review.`,
     `Board: ${taskBoardUrl(boardUrl, task.id)}`,
     "",
     `1. Call ${overview} on the ${BRAND.id} MCP server: it lists the epic's tasks with their status, plan progress, current step and sessions. get_task("${task.id}") adds the epic's description.`,

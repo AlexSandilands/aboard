@@ -1,3 +1,4 @@
+import { taskLabel } from "@repo/contracts";
 import type { ApiErrorCode } from "@repo/contracts";
 
 /** Typed domain error. HTTP routes and MCP tools map it to a response; anything else is INTERNAL. */
@@ -16,9 +17,9 @@ export const notFound = (what: string, id: string) => new AppError("NOT_FOUND", 
 
 /** A task in the trash: its number still belongs to it, so a reference to it never reaches another task. */
 export const deletedError = (task: { number: number }) =>
-  new AppError("NOT_FOUND", `Task #${task.number} was deleted; the user can restore it from the trash (Settings)`);
+  new AppError("NOT_FOUND", `Task ${taskLabel(task)} was deleted; the user can restore it from the trash (Settings)`);
 
-export const planRequired = (taskNumber: number) =>
+export const planRequired = (taskNumber: number | string) =>
   new AppError(
     "PLAN_REQUIRED",
     `Task #${taskNumber} has no plan. Only Backlog tasks may exist without a plan — add at least one plan step (set_plan) before moving it out of Backlog.`,

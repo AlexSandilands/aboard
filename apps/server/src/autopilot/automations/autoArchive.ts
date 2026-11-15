@@ -1,3 +1,4 @@
+import { taskLabel } from "@repo/contracts";
 import type { TaskSummary } from "@repo/contracts";
 import { z } from "zod";
 import { defineAutomation, type Candidate } from "../types.ts";
@@ -44,11 +45,12 @@ export const autoArchive = defineAutomation({
         return !epicArchived.get(id);
       };
       const tasks = done
-        .filter((t) => t.kind !== "epic" && !inLiveEpic(t) && older(t, config.days))
+        // A task a machine holds can't be archived until it is taken back.
+        .filter((t) => t.kind !== "epic" && !t.hold && !inLiveEpic(t) && older(t, config.days))
         .filter((t) => !hasUnmergedPr(t))
         .map((t): Candidate => ({
           dedupeKey: `archive:${t.id}:${t.statusChangedAt}`,
-          summary: `archive #${t.number} after ${config.days} days in Done`,
+          summary: `archive ${taskLabel(t)} after ${config.days} days in Done`,
           taskId: t.id,
         }));
       const epics = done
@@ -61,10 +63,12 @@ export const autoArchive = defineAutomation({
           // An epic in Done has every unarchived task Done (any resolution).
           const children = services.tasks.summaries({ projectId: project.id, epicId: epic.id });
           if (!older(epic, days) || hasUnmergedPr(epic) || children.some(hasUnmergedPr)) return [];
+          // Nor an epic one of whose tasks a machine still holds.
+          if (children.some((child) => child.hold)) return [];
           return [
             {
               dedupeKey: `archive-epic:${epic.id}:${epic.statusChangedAt}`,
-              summary: `archive #${epic.number} with its ${tasksOf(children.length)} after ${days} days in Done`,
+              summary: `archive ${taskLabel(epic)} with its ${tasksOf(children.length)} after ${days} days in Done`,
               taskId: epic.id,
               data: { days },
             },

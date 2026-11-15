@@ -131,6 +131,21 @@ export function createLinksRepo(sql: Sql) {
     insert(r: LinkRow): void {
       sql.insert("task_links", { ...r });
     },
+    /** Gives a link another id, keeping what a poller read of it: the id a machine holding the task knows it by. */
+    reId(id: string, newId: string): void {
+      sql.run("UPDATE task_links SET id = ? WHERE id = ?", newId, id);
+    },
+    /** Sets what a holder of the task may change on a link, leaving its poller's snapshot alone. */
+    setCopied(id: string, label: string | null, refJson: string | null, auto: boolean, createdAt: string): void {
+      sql.run(
+        "UPDATE task_links SET label = ?, ref_json = ?, auto = ?, created_at = ? WHERE id = ?",
+        label,
+        refJson,
+        auto ? 1 : 0,
+        createdAt,
+        id,
+      );
+    },
     setRef(id: string, refJson: string): void {
       sql.run("UPDATE task_links SET ref_json = ? WHERE id = ?", refJson, id);
     },

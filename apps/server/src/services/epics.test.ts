@@ -74,7 +74,7 @@ describe("epics", () => {
   it("puts a child in an epic at creation and derives the epic's status from it", () => {
     const { s, epic, child } = setup();
     const a = child("A");
-    expect(a.parent).toEqual({ id: epic.id, number: epic.number, title: "Storefront Revamp" });
+    expect(a.parent).toEqual({ id: epic.id, number: epic.number, numberPrefix: "", title: "Storefront Revamp" });
     expect(a.rollup).toBeNull();
     const after = s.tasks.detail(epic.id);
     expect(after.status).toBe("planned");

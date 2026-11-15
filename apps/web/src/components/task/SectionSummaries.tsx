@@ -1,3 +1,4 @@
+import { taskLabel } from "@repo/contracts";
 import type { AppSettings, T3IntegrationStatus, TaskDetail } from "@repo/contracts";
 import type { ReactNode } from "react";
 
@@ -123,7 +124,7 @@ function RelationBadge({ chip }: { chip: RelationChip }) {
             render={
               <button
                 type="button"
-                aria-label={`Open #${chip.number} ${chip.title}`}
+                aria-label={`Open ${taskLabel(chip)} ${chip.title}`}
                 {...linkHandlers}
                 onClick={(event) => {
                   // Overrides linkHandlers' onClick, so it has to stop the click reaching the header's toggle itself.
@@ -135,7 +136,7 @@ function RelationBadge({ chip }: { chip: RelationChip }) {
           />
         }
       >
-        <span className="tabular-nums">#{chip.number}</span>
+        <span className="tabular-nums">{taskLabel(chip)}</span>
       </TooltipTrigger>
       <TooltipPopup>
         <span className="flex flex-col gap-0.5">

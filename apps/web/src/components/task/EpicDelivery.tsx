@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   awaitingBranchMerge,
   epicBranchName,
   startedEpicTasks,
@@ -48,7 +49,7 @@ export function EpicDeliveryControl({ epic }: { epic: EpicLike }) {
     <div className="flex flex-col gap-1.5">
       <h3 className="text-sm font-medium">Delivery</h3>
       <ToggleGroup
-        aria-label={`Delivery of epic #${epic.number}`}
+        aria-label={`Delivery of epic ${taskLabel(epic)}`}
         disabled={set.isPending || locked}
         value={value ? [value] : []}
         onValueChange={(next) => {
@@ -69,7 +70,7 @@ export function EpicDeliveryControl({ epic }: { epic: EpicLike }) {
       </p>
       {locked ? (
         <p className="text-2xs text-muted-foreground">
-          {started.map((t) => `#${t.number}`).join(", ")} already started from the branch, so the epic finishes through
+          {started.map((t) => taskLabel(t)).join(", ")} already started from the branch, so the epic finishes through
           it.
         </p>
       ) : null}

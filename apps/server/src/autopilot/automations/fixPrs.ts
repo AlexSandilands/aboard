@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
+  taskNumberValue,
+  taskLabel,
   AGENT_HARNESSES,
   AUTOPILOT_FIX_PRS,
   AUTOPILOT_REVIEW_PRS,
@@ -308,8 +310,8 @@ export function fixPrompt({
   const url = prUrl(pr);
   const lines = [
     manual
-      ? `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task #${task.number} "${task.title}". The user asked you to fix what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. ${harness && !AGENT_HARNESSES[harness].presetSessionId ? selfLinkLine(harness, sessionLabel("fix", task.number)) : `${BRAND.name} started this session and already linked it to the task, so don't link it yourself.`}`
-      : `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task #${task.number} "${task.title}". ${BRAND.name} Autopilot sent you because of what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. This is ${budget === "conflicts" ? "conflict-only fix attempt" : budget === "comments" ? "review-comment fix attempt" : "fix attempt"} ${round} of at most ${maxRounds} on this PR.`,
+      ? `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task ${taskLabel(task)} "${task.title}". The user asked you to fix what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. ${harness && !AGENT_HARNESSES[harness].presetSessionId ? selfLinkLine(harness, sessionLabel("fix", taskNumberValue(task))) : `${BRAND.name} started this session and already linked it to the task, so don't link it yourself.`}`
+      : `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task ${taskLabel(task)} "${task.title}". ${BRAND.name} Autopilot sent you because of what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. This is ${budget === "conflicts" ? "conflict-only fix attempt" : budget === "comments" ? "review-comment fix attempt" : "fix attempt"} ${round} of at most ${maxRounds} on this PR.`,
     "",
     "## What needs fixing",
     "",
@@ -377,7 +379,7 @@ export function fixPrompt({
       : `- Once your commits are pushed, reply on each review thread you were sent to. Its first line is exactly \`${prFixedReply("<sha>")}\` (the pushed commit that fixes it) for a point you fixed, or \`${prDeclinedReply("<reason>")}\` for one you won't fix; say what you did below it. Write the reply to \`${replyFile}\` in the worktree's root and post it with \`${hints.reply(replyFile)}\`; delete the file afterwards and never commit it. ${resolveThreads ? `Don't resolve threads yourself: ${BRAND.name} resolves each one you fixed once its commit is on the PR, and declined ones stay open for the reviewer.` : "Don't resolve threads: the reviewer does."}`,
     manual
       ? `- The user is watching this session: if something is unclear or you can't fix it, say so instead of guessing.`
-      : `- Nobody is watching this session, so you can't ask anything. If you can't fix something, say why in your reply or a note on task #${task.number}, and stop.`,
+      : `- Nobody is watching this session, so you can't ask anything. If you can't fix something, say why in your reply or a note on task ${taskLabel(task)}, and stop.`,
   );
   if (skill.source !== "builtin") {
     const body = readSkillBody(skill.path);

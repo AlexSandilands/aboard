@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  taskLabel,
   TASK_BUNDLE_TABLES,
   transferFromRow,
   transferRow,
@@ -110,6 +111,9 @@ export function createTransferService(
            UNION
            SELECT task_id AS id FROM task_links
              WHERE kind = 'agent_session' AND json_extract(snapshot_json, '$.status') IN ('busy', 'idle', 'running')
+           UNION
+           -- Held by a connected machine: it orders the task's changes, so another board can't take it over.
+           SELECT task_id AS id FROM task_holds
            ORDER BY id`,
         )
         .all() as Array<{ id: string }>
@@ -173,7 +177,7 @@ export function createTransferService(
       // An archived copy here (moved away earlier, or archived by hand) or one in the trash is replaced; a live one never is.
       const existing = repos.tasks.getAny(taskId);
       if (existing && existing.archivedAt === null && existing.deletedAt === null) {
-        throw new AppError("CONFLICT", `Already on this board as #${existing.number}`);
+        throw new AppError("CONFLICT", `Already on this board as ${taskLabel(existing)}`);
       }
       if (!repos.projects.get(targetProject)) throw new AppError("NOT_FOUND", `No project ${targetProject} here`);
       let closedAgainst: string[] = [];
@@ -198,6 +202,8 @@ export function createTransferService(
       const task: BackupRow = {
         ...bundle.task,
         number,
+        // Its old number here keeps its prefix; a new one is this board's own, whatever numbered it over there.
+        number_prefix: existing ? existing.numberPrefix : "",
         project_id: targetProject,
         archived_at: null,
         moved_to_json: null,
@@ -298,13 +304,13 @@ export function createTransferService(
         if (options.mode === "move" && gone) {
           throw new AppError(
             "CONFLICT",
-            `${machine} already moved it to ${gone.machine} as #${gone.number}; move it from ${gone.machine}`,
+            `${machine} already moved it to ${gone.machine} as ${taskLabel(gone)}; move it from ${gone.machine}`,
           );
         }
         if (options.mode === "move" && busy.has(taskId)) {
           throw new AppError(
             "CONFLICT",
-            `An agent session or Autopilot run was going on it at ${machine}'s last backup; copy it, or move it once that's done`,
+            `An agent session or Autopilot run was going on it, or a machine held it, at ${machine}'s last backup; copy it, or move it once that's done`,
           );
         }
         const sourceProject = String(bundle.task.project_id);
@@ -379,6 +385,12 @@ export function createTransferService(
       const twice = task.movedTo !== null;
       const changed = !twice && task.updatedAt > transfer.sourceUpdatedAt;
       const busy = busyTaskIds().includes(task.id);
+      // Moved away while a machine here held it (handed over after the backup the other board read): the hold ends,
+      // and what the machine changes from now on is not this board's.
+      if (repos.holds.delete(task.id)) {
+        for (const edit of repos.holds.editsForTask(task.id)) repos.holds.deleteEdit(edit.id);
+        fx.log(task.id, actor, "released", { moved: true });
+      }
       // Its open tasks stay here, loose: an archived epic would hide them while they still claim it.
       if (task.kind === "epic") {
         for (const child of repos.tasks.childrenOf([task.id]).filter((c) => c.archivedAt === null)) {
@@ -414,10 +426,10 @@ export function createTransferService(
           kind: "backup_notice",
           taskId: task.id,
           title: twice
-            ? `#${task.number} was moved to both ${task.movedTo!.machine} and ${transfer.toMachine}`
-            : `#${task.number} moved to ${transfer.toMachine} with changes left here`,
+            ? `${taskLabel(task)} was moved to both ${task.movedTo!.machine} and ${transfer.toMachine}`
+            : `${taskLabel(task)} moved to ${transfer.toMachine} with changes left here`,
           body:
-            `#${task.number} "${task.title}" was moved to ${transfer.toMachine} as #${transfer.toNumber}, and archived ` +
+            `${taskLabel(task)} "${task.title}" was moved to ${transfer.toMachine} as #${transfer.toNumber}, and archived ` +
             "here. " +
             [
               changed ? "It changed here after the backup it was moved from, so those changes didn't go with it." : "",

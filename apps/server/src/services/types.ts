@@ -58,6 +58,8 @@ import type { Effects } from "./core.ts";
 import type { AttentionService } from "./attention.ts";
 import type { MachineAuthService } from "./machineAuth.ts";
 import type { MachinesService } from "./machines.ts";
+import type { HoldsService } from "./holds.ts";
+import type { WorkingCopiesService } from "./workingCopies.ts";
 import type { NotificationsService } from "./notifications.ts";
 import type { SkillSyncService } from "./skillSync.ts";
 import type { SocialService } from "./social.ts";
@@ -100,6 +102,10 @@ export interface Services {
   machineAuth: MachineAuthService;
   /** The machines this board is connected to, as stored. */
   machines: MachinesService;
+  /** A board's side of the tasks its machines hold: who holds what, replay and the edit queue. */
+  holds: HoldsService;
+  /** A runner's side: the working copies it holds and their change log. */
+  workingCopies: WorkingCopiesService;
 }
 
 export interface ProjectRef {
@@ -162,7 +168,7 @@ export interface TasksService {
   detail(id: string): TaskDetail;
   /** When the latest activity entry not written by `actor` happened, or null when there is none. */
   lastActivityAt(id: string, exceptActor: string): string | null;
-  /** Accepts a uuid, "#42" or "42". */
+  /** Accepts a uuid, "#42" or "42", and a machine-numbered task's "#E7" or "E7" in any case. */
   resolveId(ref: string): string;
   /**
    * Lands in "planned" when `plan` is given (with ≥1 step), else "backlog". Appends to the end of the column.
@@ -307,6 +313,8 @@ export interface AddLinkOptions {
 export interface CreateTaskOptions {
   /** Read `sourceUrl` as a ticket of this system only, so a key two systems match isn't taken for the other. */
   ticketSystem?: string;
+  /** The number the task takes, in place of the next one of this board's counter: one a runner was given or made. */
+  number?: { prefix: string; number: number };
 }
 
 export interface LinksService {

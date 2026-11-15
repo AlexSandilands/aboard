@@ -1,4 +1,4 @@
-import { describeEpicRollup } from "@repo/contracts";
+import { taskLabel, describeEpicRollup } from "@repo/contracts";
 import { ChevronRightIcon, GroupIcon } from "lucide-react";
 import { memo, type CSSProperties, type MouseEvent } from "react";
 import { AutopilotEpicButton } from "~/components/autopilot/AutopilotEpicButton";
@@ -75,7 +75,7 @@ export const EpicBand = memo(function EpicBand({
       variant="ghost-muted"
       size="icon-xs"
       aria-expanded={!collapsed}
-      aria-label={collapsed ? `Expand epic #${epic.number}` : `Collapse epic #${epic.number}`}
+      aria-label={collapsed ? `Expand epic ${taskLabel(epic)}` : `Collapse epic ${taskLabel(epic)}`}
       onClick={() => toggleEpicCollapsed(band.id)}
     >
       <ChevronRightIcon className={cn("size-3.5 transition-transform", !collapsed && "rotate-90")} />
@@ -88,7 +88,7 @@ export const EpicBand = memo(function EpicBand({
   const title = (
     <>
       <GroupIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">#{epic.number}</span>
+      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{taskLabel(epic)}</span>
       <span className="min-w-0 truncate text-sm font-medium text-foreground/90">{epic.title}</span>
     </>
   );
@@ -105,7 +105,7 @@ export const EpicBand = memo(function EpicBand({
 
   return (
     <section
-      aria-label={`Epic #${epic.number} ${epic.title}`}
+      aria-label={`Epic ${taskLabel(epic)} ${epic.title}`}
       data-vt-frame
       style={style}
       className={cn(

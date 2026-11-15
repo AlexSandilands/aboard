@@ -15,7 +15,8 @@ Work that belongs to no code project (a document to update, something to review)
 project: pass `general: true` to `add_to_backlog` / `create_task` instead of `workspacePath`. Leaving the
 path out never defaults to it, and work in a repo belongs in the repo's project.
 
-Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3).
+Tasks are referenced as `#42`, steps as `"2.3"` (phase 2, step 3). A task made on one of the user's connected
+machines while the board couldn't be reached carries that machine's prefix, `#E7`: use it as written.
 
 ## Workflow
 

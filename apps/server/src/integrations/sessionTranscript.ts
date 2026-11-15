@@ -1,3 +1,4 @@
+import { taskNumberValue, taskLabel } from "@repo/contracts";
 import type { AgentSessionRef, TaskLink } from "@repo/contracts";
 import { AppError } from "../errors.ts";
 import type { Services } from "../services/types.ts";
@@ -11,7 +12,7 @@ import {
 import { transcriptPath } from "./claudeSessionTitle.ts";
 
 export interface SessionTranscript {
-  taskNumber: number;
+  taskNumber: number | string;
   sessionId: string;
   label: string | null;
   /** The other linked sessions, described, when none was asked for and the newest was read. */
@@ -59,7 +60,7 @@ export function createSessionTranscriptReader(deps: {
         ];
         throw new AppError(
           "NOT_FOUND",
-          `#${task.number} has no Claude Code transcript: no Claude Code session is linked to it` +
+          `${taskLabel(task)} has no Claude Code transcript: no Claude Code session is linked to it` +
             `${others.length ? ` (the transcripts of ${others.join(" and ")} can't be read here)` : ""}.`,
         );
       }
@@ -71,7 +72,7 @@ export function createSessionTranscriptReader(deps: {
         if (!link) {
           throw new AppError(
             "VALIDATION",
-            `Session ${redact(session)} isn't linked to #${task.number}. Linked Claude Code sessions: ${sessions.map(describe).join("; ")}.`,
+            `Session ${redact(session)} isn't linked to ${taskLabel(task)}. Linked Claude Code sessions: ${sessions.map(describe).join("; ")}.`,
           );
         }
       } else {
@@ -99,7 +100,7 @@ export function createSessionTranscriptReader(deps: {
         throw new AppError("NOT_FOUND", `The transcript of session ${ref.sessionId} couldn't be read.`);
       }
       return {
-        taskNumber: task.number,
+        taskNumber: taskNumberValue(task),
         sessionId: ref.sessionId,
         label: link.label ?? null,
         ...(others.length ? { otherSessions: others } : {}),

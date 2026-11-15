@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   sameSuggestedModel,
   toSuggestedModel,
   type PlanInput,
@@ -8,7 +9,6 @@ import {
   type SuggestedModelInput,
 } from "@repo/contracts";
 import { generateNKeysBetween } from "fractional-indexing";
-import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";
 import type { PhaseRecord, StepRecord } from "../db/repos/plans.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
@@ -52,7 +52,7 @@ export function withSuggestedModel(
 /** Epics carry no plan: their children do, and the epic's status follows them. */
 function noPlanOnEpic(task: TaskRecord): void {
   if (task.kind === "epic") {
-    throw new AppError("VALIDATION", `#${task.number} is an epic, which has no plan; plan its child tasks instead`);
+    throw new AppError("VALIDATION", `${taskLabel(task)} is an epic, which has no plan; plan its child tasks instead`);
   }
 }
 
@@ -107,7 +107,7 @@ export function createPlans(
   ): StepRecord =>
     withStatus(
       {
-        id: randomUUID(),
+        id: core.newId(),
         taskId,
         phaseId,
         title: input.title,
@@ -173,7 +173,7 @@ export function createPlans(
       const phase: PhaseRecord = existingPhase
         ? { ...existingPhase, title: phaseInput.title, position: phaseKeys[pi]!, updatedAt: now }
         : {
-            id: randomUUID(),
+            id: core.newId(),
             taskId: task.id,
             title: phaseInput.title,
             position: phaseKeys[pi]!,
@@ -310,7 +310,7 @@ export function createPlans(
         const now = nowIso();
         const siblings = repos.plans.phasesFor([taskId]);
         const phase: PhaseRecord = {
-          id: randomUUID(),
+          id: core.newId(),
           taskId,
           title: requireTitle(title),
           position: positionAmong(siblings, { afterId: opts?.afterPhaseId }),

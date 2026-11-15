@@ -1,4 +1,4 @@
-import { planTaskProblem, type PlanSkillRef, type TaskSummary } from "@repo/contracts";
+import { taskLabel, planTaskProblem, type PlanSkillRef, type TaskSummary } from "@repo/contracts";
 import { AppError } from "../errors.ts";
 import type { Services } from "./types.ts";
 
@@ -7,7 +7,7 @@ import type { Services } from "./types.ts";
 
 /** Why a task can't be planned in a bulk session, or null when it can. */
 export function planningProblem(task: TaskSummary, projectId: string): string | null {
-  return task.projectId === projectId ? planTaskProblem(task) : `#${task.number} is in another project`;
+  return task.projectId === projectId ? planTaskProblem(task) : `${taskLabel(task)} is in another project`;
 }
 
 /**

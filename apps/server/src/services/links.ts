@@ -4,6 +4,7 @@ import {
   rejectedValueText,
   nextPrChanges,
   t3DesktopThreadUrl,
+  taskLabel,
   type ClassifiedLink,
   type LinkInput,
   type PrSnapshot,
@@ -13,7 +14,6 @@ import {
   type TicketRef,
   type TicketSystem,
 } from "@repo/contracts";
-import { randomUUID } from "node:crypto";
 import { nowIso, parseJson } from "../db/database.ts";
 import { toLink, type LinkRow } from "../db/repos/links.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
@@ -172,7 +172,7 @@ export function createLinksService(
     const now = parseJson<PrSnapshot | T3ThreadSnapshot>(after);
     if (!was || !now) return;
     const task = deps.task(row.task_id);
-    const taskLabel = `#${task.number} ${task.title}`;
+    const named = `${taskLabel(task)} ${task.title}`;
     if (row.kind === "pr") {
       const prev = was as PrSnapshot;
       const next = now as PrSnapshot;
@@ -193,7 +193,7 @@ export function createLinksService(
           kind: "pr_checks_failing",
           taskId: task.id,
           title: `Checks failing on ${label}`,
-          body: taskLabel,
+          body: named,
           dedupeKey: `checks:${row.id}:${next.headOid ?? next.updatedAt ?? ""}`,
         });
       }
@@ -203,7 +203,7 @@ export function createLinksService(
           kind: "pr_changes_requested",
           taskId: task.id,
           title: `Changes requested on ${label}`,
-          body: taskLabel,
+          body: named,
           dedupeKey: `changes:${row.id}:${next.updatedAt ?? ""}`,
         });
       }
@@ -230,7 +230,7 @@ export function createLinksService(
           .map((l) => deps.task(l.task_id))
           .filter((t) => t.status !== "done");
         const tasks = open.length > 0 ? open : [task];
-        const labels = tasks.slice(0, MAX_LISTED_TASKS).map((t) => `#${t.number} ${t.title}`);
+        const labels = tasks.slice(0, MAX_LISTED_TASKS).map((t) => `${taskLabel(t)} ${t.title}`);
         if (tasks.length > MAX_LISTED_TASKS) labels.push(`+${tasks.length - MAX_LISTED_TASKS} more`);
         deps.notifications.notify({
           kind: "thread_waiting",
@@ -264,7 +264,7 @@ export function createLinksService(
         if ((classified.kind === "agent_session" || classified.kind === "t3_thread") && task.manual) {
           throw new AppError(
             "VALIDATION",
-            `#${task.number} is a manual task, which people do and agents leave alone, so no agent session or thread ` +
+            `${taskLabel(task)} is a manual task, which people do and agents leave alone, so no agent session or thread ` +
               "is linked to it. Make it a code task first (update_task manual: false) if an agent should work on it.",
           );
         }
@@ -308,7 +308,7 @@ export function createLinksService(
           return toLink(existing);
         }
         const row: LinkRow = {
-          id: randomUUID(),
+          id: core.newId(),
           task_id: task.id,
           kind: classified.kind,
           url: classified.url,
@@ -342,7 +342,7 @@ export function createLinksService(
         const rows = repos.links.forTasks([task.id]);
         const row = rows.find((l) => l.id === wanted) ?? matchingLink(rows, wanted, deps.settings.get().ticketSystems);
         if (!row) {
-          throw new AppError("NOT_FOUND", `#${task.number} has no link matching "${wanted}"`);
+          throw new AppError("NOT_FOUND", `${taskLabel(task)} has no link matching "${wanted}"`);
         }
         const link = toLink(row);
         repos.links.delete(row.id);

@@ -3,6 +3,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  taskNumberValue,
+  taskLabel,
   AUTOPILOT_ACTOR,
   implementingThread,
   autopilotSessionName,
@@ -221,7 +223,7 @@ export function createAutopilotRunner(deps: {
 
   const nudge = async (request: RunnerRequest, task: TaskSummary, update: (patch: RunPatch) => void) => {
     const thread = implementingThread(task);
-    if (!thread) throw new Error(`#${task.number} has no live T3 Code thread to nudge`);
+    if (!thread) throw new Error(`${taskLabel(task)} has no live T3 Code thread to nudge`);
     update({ runner: "t3", threadUrl: thread.url });
     await whileUnavailable(
       () => deps.t3.sendToThread(thread, request.prompt, runCommandId(request.run.id)),
@@ -553,7 +555,7 @@ export function createAutopilotRunner(deps: {
     const worktree = await createWorktree(runGit, {
       repo: project.workspaceRoot,
       root: deps.worktreesDir,
-      taskNumber: task.number,
+      taskNumber: taskNumberValue(task),
       runId: request.run.id,
       baseRef: request.workspace?.prBase || request.workspace?.baseRef,
       baseFromOrigin: Boolean(request.workspace?.prBase),
@@ -602,7 +604,7 @@ export function createAutopilotRunner(deps: {
           );
           deps.sessionLinked?.(id);
         } catch (error) {
-          log.warn(`[autopilot] couldn't link the session of #${task.number}: ${messageOf(error)}`);
+          log.warn(`[autopilot] couldn't link the session of ${taskLabel(task)}: ${messageOf(error)}`);
         }
       },
     );

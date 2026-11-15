@@ -1,6 +1,7 @@
 import {
   RESTORE_CONFIRM_WORD,
   type BackupCommit,
+  type BackupTaskNumber,
   type BackupDiff,
   type BackupMachine,
   type RestoreBoardInput,
@@ -163,9 +164,9 @@ interface Source {
 }
 
 function TasksTab({ diff, loading, source }: { diff: BackupDiff | undefined; loading: boolean; source: Source }) {
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<Set<BackupTaskNumber>>(new Set());
   const restore = useMutation({
-    mutationFn: (numbers: number[]) =>
+    mutationFn: (numbers: BackupTaskNumber[]) =>
       api<RestoreTasksResult>("/api/backup/restore-tasks", {
         method: "POST",
         // Changed tasks are replaced: picking one is asking for the backup's version.
@@ -177,7 +178,7 @@ function TasksTab({ diff, loading, source }: { diff: BackupDiff | undefined; loa
   if (diff.tasks.length === 0)
     return <p className="text-muted-foreground">Every task in this backup is on the board as it is.</p>;
   const results = new Map((restore.data?.results ?? []).map((r) => [r.number, r]));
-  const toggle = (number: number, on: boolean) =>
+  const toggle = (number: BackupTaskNumber, on: boolean) =>
     setSelected((prev) => {
       const next = new Set(prev);
       if (on) next.add(number);
@@ -205,7 +206,7 @@ function TasksTab({ diff, loading, source }: { diff: BackupDiff | undefined; loa
               />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate">
-                  #{task.number} {task.title}
+                  {/* The backup's number already carries a machine's prefix ("E7"). */}#{task.number} {task.title}
                 </span>
                 <span className="text-muted-foreground">
                   {task.change === "missing" ? "Missing" : "Changed"} · {task.projectName ?? "Unknown project"}

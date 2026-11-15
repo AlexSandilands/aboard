@@ -163,6 +163,9 @@ describe("models and windows", () => {
   it("names a task's window after the product and the task, in characters wt takes as a name", () => {
     expect(taskWindowName(115)).toBe(`${BRAND.id}-115`);
     expect(isTaskWindowName(taskWindowName(115))).toBe(true);
+    // A task a connected machine numbered.
+    expect(isTaskWindowName(taskWindowName("E7"))).toBe(true);
+    expect(isTaskWindowName(taskWindowName("EN2345"))).toBe(true);
     expect(isTaskWindowName("0")).toBe(false);
     expect(isTaskWindowName("new")).toBe(false);
     expect(isTaskWindowName("a b")).toBe(false);

@@ -1,3 +1,4 @@
+import { taskLabel } from "@repo/contracts";
 import type { SocialPost } from "@repo/contracts";
 import { useMemo } from "react";
 import { useOpenTask } from "~/components/board/boardNavigation";
@@ -78,7 +79,7 @@ function Post({ post, rootId }: { post: SocialPost; rootId?: number }) {
             className="ms-auto min-w-0 truncate rounded-sm text-muted-foreground opacity-0 outline-none group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => void openTask(post.task!.id)}
           >
-            from #{post.task.number} {post.task.title}
+            from {taskLabel(post.task)} {post.task.title}
           </button>
         ) : null}
       </div>

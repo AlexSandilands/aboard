@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   BOARD_ACTOR,
   deriveReviewSummary,
   resolveOperationModel,
@@ -88,7 +89,7 @@ export function createReviewsService(
       kind: "review_finished",
       taskId,
       title: headline,
-      body: `#${task.number} ${task.title}\n${detail}`,
+      body: `${taskLabel(task)} ${task.title}\n${detail}`,
       dedupeKey: `review:${roundId}:${summary.state}`,
     });
   };
@@ -121,12 +122,12 @@ export function createReviewsService(
   const openRoundIn = (taskId: string, opts: OpenRoundOptions, fx: Effects): ReviewRecord => {
     const task = deps.task(taskId);
     if (task.kind === "epic") {
-      throw new AppError("VALIDATION", `#${task.number} is an epic; review its child tasks instead`);
+      throw new AppError("VALIDATION", `${taskLabel(task)} is an epic; review its child tasks instead`);
     }
     if (task.manual) {
       throw new AppError(
         "VALIDATION",
-        `#${task.number} is a manual task, a to-do for a person, so it has no change to review. Make it a code task first if it does.`,
+        `${taskLabel(task)} is a manual task, a to-do for a person, so it has no change to review. Make it a code task first if it does.`,
       );
     }
     const latest = repos.reviews.latest(taskId);

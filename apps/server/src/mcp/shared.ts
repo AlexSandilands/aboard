@@ -62,7 +62,10 @@ export const generalField = z
       "update, something to review). Use it instead of workspacePath and projectId, never with them.",
   );
 
-export const taskField = z.string().min(1).describe('Task reference: "#42", "42", or the task uuid.');
+export const taskField = z
+  .string()
+  .min(1)
+  .describe('Task reference: "#42", "42", or the task uuid. A task numbered by a connected machine is "#E7" or "E7".');
 
 export const epicField = z
   .string()

@@ -1,3 +1,4 @@
+import { taskLabel } from "@repo/contracts";
 import type { Project, TaskDetail } from "@repo/contracts";
 import { useState, type ReactNode } from "react";
 
@@ -67,12 +68,12 @@ export function TaskTitle({
         {task.parent ? (
           <button
             type="button"
-            title={`In epic #${task.parent.number} ${task.parent.title}`}
+            title={`In epic ${taskLabel(task.parent)} ${task.parent.title}`}
             onClick={() => void openTask(task.parent!.id)}
             className="inline-flex h-6 max-w-[40%] min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border/60 bg-card/40 px-1.5 text-foreground/80 outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
           >
             <GroupIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="shrink-0 tabular-nums text-muted-foreground">#{task.parent.number}</span>
+            <span className="shrink-0 tabular-nums text-muted-foreground">{taskLabel(task.parent)}</span>
             <span className="min-w-0 truncate">{task.parent.title}</span>
           </button>
         ) : null}

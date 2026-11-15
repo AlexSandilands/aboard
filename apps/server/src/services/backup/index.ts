@@ -1,9 +1,12 @@
 import {
+  taskNumberValue,
+  readTaskNumberValue,
   TASK_BUNDLE_TABLES,
   type BackupDiffTask,
   type BackupRow,
   type BoardDump,
   type TaskBundle,
+  type TaskNumberValue,
 } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import type { Core } from "../core.ts";
@@ -16,8 +19,8 @@ import { createTransferService, type TransferService } from "./transfers.ts";
 
 export interface RestoreTaskResult {
   taskId: string;
-  /** The task's number on this board: the backup's, unless another task holds it by now. */
-  number: number;
+  /** The task's number on this board (`42`, or `"E7"`): the backup's, unless another task holds it by now. */
+  number: TaskNumberValue;
 }
 
 export interface BackupDiffResult {
@@ -40,7 +43,7 @@ export interface BackupService extends TransferService {
    */
   restoreTask(
     dump: BoardDump,
-    number: number,
+    number: TaskNumberValue,
     options: {
       force?: boolean;
       actor: string;
@@ -81,7 +84,10 @@ export function createBackupService(
         const projectId = String(bundle.task.project_id);
         return [
           {
-            number: Number(bundle.task.number),
+            number: taskNumberValue({
+              number: Number(bundle.task.number),
+              numberPrefix: String(bundle.task.number_prefix ?? ""),
+            }),
             taskId: id,
             title: String(bundle.task.title),
             status: String(bundle.task.status),
@@ -115,8 +121,14 @@ export function createBackupService(
     restoreTask(dump, number, { force = false, actor, attachmentsFrom = null }) {
       // Before the write: upgrading an older dump runs its own transaction on a scratch database.
       const current = upgradeDump(dump);
-      const bundle = current.tasks.find((b) => b.task.number === number);
-      if (!bundle) throw new AppError("NOT_FOUND", `Task #${number} is not in this backup`);
+      // By prefix and number: #7 and a machine's #E7 are two tasks.
+      const wanted = readTaskNumberValue(number);
+      const bundle = wanted
+        ? current.tasks.find(
+            (b) => b.task.number === wanted.number && String(b.task.number_prefix ?? "") === wanted.prefix,
+          )
+        : undefined;
+      if (!bundle || !wanted) throw new AppError("NOT_FOUND", `Task #${number} is not in this backup`);
       const taskId = String(bundle.task.id);
       const events = current.task_events.filter((e) => e.task_id === taskId).map(({ id: _id, ...event }) => event);
 
@@ -150,8 +162,11 @@ export function createBackupService(
         }
         // Restoring a task brings it back to the board, even one that was in the backup's trash.
         const task: BackupRow = { ...bundle.task, deleted_at: null };
-        if (repos.tasks.byNumberAny(number)) task.number = repos.tasks.nextNumber();
-        else db.prepare("UPDATE counters SET value = max(value, ?) WHERE name = 'task_number'").run(number);
+        // Another task took its number since: it gets the next one, of the board's counter or of its machine's.
+        if (repos.tasks.byNumberAny(wanted.number, wanted.prefix)) {
+          task.number = wanted.prefix ? repos.tasks.nextMachineNumber(wanted.prefix) : repos.tasks.nextNumber();
+        } else if (wanted.prefix) repos.tasks.raiseMachineCounter(wanted.prefix, wanted.number);
+        else db.prepare("UPDATE counters SET value = max(value, ?) WHERE name = 'task_number'").run(wanted.number);
         if (task.resolved_by_task_id && !repos.tasks.get(String(task.resolved_by_task_id))) {
           task.resolved_by_task_id = null;
         }
@@ -188,7 +203,7 @@ export function createBackupService(
         syncEpicStatus(repos, taskId, actor, fx);
         if (task.parent_id) syncEpicStatus(repos, String(task.parent_id), actor, fx);
         copyAttachmentFiles(bundle.task_attachments, attachmentsFrom, attachmentsDir);
-        return { taskId, number: Number(task.number) };
+        return { taskId, number: taskNumberValue({ number: Number(task.number), numberPrefix: wanted.prefix }) };
       });
     },
   };

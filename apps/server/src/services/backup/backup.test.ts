@@ -559,6 +559,7 @@ describe("restore", () => {
           integration_merged_at: _im,
           moved_to_json: _mt,
           deleted_at: _del,
+          number_prefix: _np,
           attention_message: _atm,
           attention_actor: _aa,
           attention_requested_at: _at,

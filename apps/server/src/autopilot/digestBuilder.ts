@@ -1,4 +1,4 @@
-import { STATUS_LABELS, type NotificationKind, type TaskStatus } from "@repo/contracts";
+import { taskLabel, STATUS_LABELS, type NotificationKind, type TaskStatus } from "@repo/contracts";
 
 // The plain digest (docs/features/autopilot.md#automations): what changed on the board over a period, as
 // Markdown, built by code with no LLM. Pure: `services/digests.ts` gathers the data, this renders it.
@@ -80,7 +80,7 @@ const ATTENTION_TEXT: Partial<Record<NotificationKind, string>> = {
   agent_request: "an agent asked you to look at it",
 };
 
-const task = (t: TaskRef) => `#${t.number} ${escapeMd(t.title)}`;
+const task = (t: TaskRef) => `${taskLabel(t)} ${escapeMd(t.title)}`;
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 

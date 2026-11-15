@@ -34,6 +34,18 @@ steps current, group large features into epics, link the task's ticket and the T
 | `tools/autopilot.ts` | `retry_autopilot_run`: hands a task's failed or skipped Autopilot run back to the engine (see [autopilot.md](autopilot.md#a-pass)); `draft_automation`: keeps a custom automation, or with `replaces` a new version of one, as a draft for the user to import or apply (see [autopilot.md](autopilot.md#drafts)) |
 | `tools/suggestions.ts` | `list_editable_prompts`, `get_editable_prompt`, `suggest_change`: proposed changes to prompts and skills, for the user to accept (see [suggestions.md](suggestions.md)) |
 
+A task is named by `"#42"`, `"42"` or its uuid, and one a connected machine numbered by `"#E7"` or `"E7"`
+([numbering](task-lifecycle.md#numbering)); results print numbers with `taskLabel`, so they read `#E7` too. A task
+a machine holds says so in its header (`Held by: engine (…)`, with how many of the board's edits are waiting), and
+a change made to it through the board's tools goes through that machine
+([remote machines](remote-machines.md#edits-from-the-board)).
+
+On a runner the same tools are served, wrapped by `mcp/runnerTools.ts`: they act on the tasks the runner holds,
+pass a read of anything else to the board, and refuse a change to anything else
+([remote machines](remote-machines.md#tools-on-a-machine)). A tool added here needs a place there: a read that the
+board may run for a machine goes in `RUNNER_READ_TOOLS`, one that only makes sense on the board in
+`BOARD_ONLY_TOOLS`; anything else is taken to act on the task its `task` argument names.
+
 `add_to_backlog`, `create_task` and `update_task` take `labels` (`update_task` replaces the list), and
 `list_tasks` filters by any of several `labels`. `board_overview` ends with **Labels in use** and their
 counts. See [labels.md](labels.md).

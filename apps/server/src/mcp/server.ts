@@ -11,6 +11,8 @@ import {
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { AppContext } from "../app.ts";
+import type { CallTool } from "../integrations/machines/sync.ts";
+import { RUNNER_INSTRUCTIONS, RUNNER_READ_TOOLS, guardRunnerTools } from "./runnerTools.ts";
 import type { ToolContext } from "./shared.ts";
 import { registerAutopilotTools } from "./tools/autopilot.ts";
 import { registerReadTools } from "./tools/read.ts";
@@ -67,7 +69,11 @@ function actorFromUserAgent(userAgent: string | null): string | undefined {
 }
 
 function createMcpServer(ctx: AppContext, request: Request): McpServer {
-  const server = new McpServer({ name: BRAND.id, version: "0.1.0" }, { instructions: INSTRUCTIONS });
+  const runner = ctx.config.role === "runner";
+  const server = new McpServer(
+    { name: BRAND.id, version: "0.1.0" },
+    { instructions: runner ? `${INSTRUCTIONS}${RUNNER_INSTRUCTIONS}` : INSTRUCTIONS },
+  );
   const fallbackActor = actorFromUserAgent(request.headers.get("user-agent"));
   // A caller that sends the actor header is pinned to it, whatever `actor` argument its agent passes (apart from
   // `submit_review`, which keeps its own): Autopilot's runs use it so what a run writes can be told from the rest.
@@ -79,6 +85,8 @@ function createMcpServer(ctx: AppContext, request: Request): McpServer {
       pinnedActor || explicit?.trim() || server.server.getClientVersion()?.name || fallbackActor || "agent",
     client: () => server.server.getClientVersion()?.name || fallbackActor,
   };
+  // Before the tools: on a runner each is wrapped as it is registered.
+  if (runner) guardRunnerTools(server, tc);
   registerReadTools(server, tc);
   registerTaskTools(server, tc);
   registerPlanTools(server, tc);
@@ -103,6 +111,36 @@ const methodNotAllowed = () =>
     }),
     { status: 405, headers: { "content-type": "application/json", allow: "POST" } },
   );
+
+/**
+ * Runs one of this board's read tools for a machine that holds tasks for it and asked about one it doesn't hold
+ * (remote-machines.md#tools-on-a-machine). The call goes through the endpoint like any agent's, so the answer is the
+ * one an agent here would get. Anything but a read is refused: a machine changes only what it holds.
+ */
+export function createMachineToolCaller(app: Hono, ctx: AppContext): CallTool {
+  return async ({ name, arguments: args, actor }) => {
+    if (!RUNNER_READ_TOOLS.has(name)) return { text: `CONFLICT: ${name} can't be run for a machine`, isError: true };
+    const res = await app.request("/mcp", {
+      method: "POST",
+      headers: {
+        host: `127.0.0.1:${ctx.config.port}`,
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        ...(ctx.config.token ? { authorization: `Bearer ${ctx.config.token}` } : {}),
+        ...(actor ? { [ACTOR_HEADER]: actor } : {}),
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+    });
+    const body = (await res.json().catch(() => null)) as {
+      result?: { content?: Array<{ type: string; text?: string }>; isError?: boolean };
+      error?: { message?: string };
+    } | null;
+    if (!body?.result)
+      return { text: `INTERNAL: ${body?.error?.message ?? `the board answered ${res.status}`}`, isError: true };
+    const text = (body.result.content ?? []).map((c) => (c.type === "text" ? (c.text ?? "") : "")).join("\n");
+    return { text, isError: body.result.isError === true };
+  };
+}
 
 /**
  * Mounts the MCP endpoint at /mcp: streamable HTTP in stateless mode, a fresh server and

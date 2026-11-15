@@ -1,4 +1,4 @@
-import { describeEpicRollup, TASK_STATUSES, type TaskDetail, type TaskSummary } from "@repo/contracts";
+import { taskLabel, describeEpicRollup, TASK_STATUSES, type TaskDetail, type TaskSummary } from "@repo/contracts";
 import { FilterIcon, PlusIcon } from "lucide-react";
 
 import { AttentionIcon } from "~/components/board/attention";
@@ -109,7 +109,7 @@ function ChildRow({ task, onOpen }: { task: TaskSummary; onOpen: () => void }) {
       )}
     >
       <span className="flex min-w-0 items-center gap-1.5 text-sm">
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">#{task.number}</span>
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{taskLabel(task)}</span>
         <span className="min-w-0 truncate text-foreground/90">{task.title}</span>
         {attention ? (
           <span className="flex shrink-0 items-center" title={attention.message}>

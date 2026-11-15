@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
 import { join } from "node:path";
 import {
+  taskNumberValue,
+  taskLabel,
   AGENT_HARNESSES,
   type AgentHarness,
   BRAND,
@@ -120,10 +122,14 @@ export function shortPrompt(
       : `call get_task("${task.id}") on the ${BRAND.id} MCP server first.`;
   const text =
     (mode === "fix"
-      ? `Let's fix the pull request on branch ${branch ?? "(see the task)"} of #${task.number}`
-      : `${verb} #${task.number}`) +
+      ? `Let's fix the pull request on branch ${branch ?? "(see the task)"} of ${taskLabel(task)}`
+      : `${verb} ${taskLabel(task)}`) +
     ` from the ${BRAND.id} task board: ${first} ` +
-    startedSessionLine(harness, sessionLabel(mode, task.number), mode === "orchestrate" ? "the epic" : "the task") +
+    startedSessionLine(
+      harness,
+      sessionLabel(mode, taskNumberValue(task)),
+      mode === "orchestrate" ? "the epic" : "the task",
+    ) +
     (mode === "fix"
       ? ` Fix its failing checks, merge conflicts or requested changes, and push to that branch. Never force-push, never push to the default branch and never merge.`
       : "");
@@ -145,7 +151,7 @@ export function handoffShortPrompt(
 ): string {
   const name = nameArgument(label, platform);
   const text =
-    `This session is for the hand-off "${name}" on #${task.number} from the ${BRAND.id} task board: call ` +
+    `This session is for the hand-off "${name}" on ${taskLabel(task)} from the ${BRAND.id} task board: call ` +
     `get_task("${task.id}") on the ${BRAND.id} MCP server to read the task, then wait. What to do is in a prompt I ` +
     "will paste next; until it arrives don't start on the task, change any file or move it on the board. " +
     startedSessionLine(harness, name);
@@ -289,7 +295,7 @@ export function createSessionLaunch(deps: {
       branch: string | null;
       label: string;
       /** The task whose named window the session opens in. */
-      windowTask: number;
+      windowTask: number | string;
       /** A pointer to the work that any command line takes, for when the prompt doesn't fit. */
       short: (platform: NodeJS.Platform) => string;
       taskIds: readonly string[];
@@ -453,7 +459,7 @@ export function createSessionLaunch(deps: {
         if (!prBranches(task, origin).includes(workspace.branch)) {
           throw new AppError(
             "VALIDATION",
-            `#${task.number} has no open pull request on ${workspace.branch}${origin ? ` in ${origin.repo}` : ""}`,
+            `${taskLabel(task)} has no open pull request on ${workspace.branch}${origin ? ` in ${origin.repo}` : ""}`,
           );
         }
       }
@@ -474,7 +480,7 @@ export function createSessionLaunch(deps: {
           const worktree = await createWorktree(deps.runGit, {
             repo: root,
             root: join(deps.worktreesDir, "sessions"),
-            taskNumber: task.number,
+            taskNumber: taskNumberValue(task),
             runId,
             ...(workspace.mode === "pr_branch" ? { branch: workspace.branch } : { baseRef: workspace.baseRef }),
             branchPrefix: SESSION_BRANCH_PREFIX,
@@ -496,8 +502,8 @@ export function createSessionLaunch(deps: {
         prompt: withAttachedImages(input.prompt, images),
         cwd,
         branch,
-        label: input.label ?? sessionLabel(input.mode, task.number),
-        windowTask: task.number,
+        label: input.label ?? sessionLabel(input.mode, taskNumberValue(task)),
+        windowTask: taskNumberValue(task),
         short: (platform) =>
           input.label
             ? handoffShortPrompt(input.label, task, input.harness, platform, images)
@@ -534,7 +540,7 @@ export function createSessionLaunch(deps: {
         cwd: root,
         branch: null,
         label: planningSessionLabel(tasks),
-        windowTask: tasks[0]!.number,
+        windowTask: taskNumberValue(tasks[0]!),
         short: (platform) => fitShort(withAttachedImages(planTasksShortPrompt(tasks, input.harness), images), platform),
         taskIds: tasks.map((task) => task.id),
         actor,

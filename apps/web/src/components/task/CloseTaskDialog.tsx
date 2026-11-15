@@ -1,3 +1,4 @@
+import { taskLabel } from "@repo/contracts";
 import type { TaskResolution, TaskSummary } from "@repo/contracts";
 import { useState } from "react";
 
@@ -77,7 +78,7 @@ export function CloseTaskDialog({
           <DialogTitle>{shown ? closeDialogTitle(tasks, shown) : null}</DialogTitle>
           <DialogDescription>
             {tasks.length === 1 ? "It moves" : "They move"} to Done without needing a plan, and the other task shows it
-            also resolved {tasks.map((t) => `#${t.number}`).join(", ")}.
+            also resolved {tasks.map((t) => taskLabel(t)).join(", ")}.
           </DialogDescription>
         </DialogHeader>
         <DialogPanel className="flex min-h-0 flex-col gap-2">
@@ -110,7 +111,7 @@ export function CloseTaskDialog({
                     className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-accent focus-visible:bg-accent disabled:opacity-60"
                   >
                     <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-                      #{candidate.number}
+                      {taskLabel(candidate)}
                     </span>
                     <span className="min-w-0 flex-1 truncate">{candidate.title}</span>
                     {project ? <span className="shrink-0 text-xs text-muted-foreground">{project.title}</span> : null}

@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type Project } from "@repo/contracts";
+import { taskLabel, TASK_STATUSES, type Project } from "@repo/contracts";
 import { useMemo } from "react";
 import { PauseAllButton } from "~/components/autopilot/PauseAllButton";
 import { DigestButton } from "~/components/digest/DigestButton";
@@ -278,7 +278,7 @@ function EpicFilterMenu() {
           {epics.map((epic) => (
             <MenuRadioItem key={epic.id} value={epic.id}>
               <span className="flex min-w-0 items-center gap-1.5">
-                <span className="shrink-0 tabular-nums text-muted-foreground">#{epic.number}</span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">{taskLabel(epic)}</span>
                 <span className="max-w-64 min-w-0 truncate">{epic.title}</span>
               </span>
             </MenuRadioItem>
@@ -414,12 +414,12 @@ function ActiveEpicFilter() {
   return (
     <span className="inline-flex h-6 max-w-64 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border/60 bg-card/40 ps-1.5 pe-0.5 text-xs text-foreground/80">
       <GroupIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="shrink-0 tabular-nums text-muted-foreground">#{epic.number}</span>
+      <span className="shrink-0 tabular-nums text-muted-foreground">{taskLabel(epic)}</span>
       <span className="min-w-0 truncate">{epic.title}</span>
       <Button
         variant="ghost-muted"
         size="icon-micro"
-        aria-label={`Stop filtering to epic #${epic.number}`}
+        aria-label={`Stop filtering to epic ${taskLabel(epic)}`}
         onClick={() => void setEpicFilter(null)}
       >
         <XIcon />

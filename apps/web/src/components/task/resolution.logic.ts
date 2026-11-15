@@ -1,8 +1,9 @@
+import { taskLabel } from "@repo/contracts";
 import type { TaskResolution, TaskSummary } from "@repo/contracts";
 
 /** Short card/panel label: "Done by #4", "Duplicate of #4", "Won't do"; null for open tasks. */
 export function resolutionLabel(task: Pick<TaskSummary, "resolution" | "resolvedBy">): string | null {
-  const by = task.resolvedBy ? ` #${task.resolvedBy.number}` : "";
+  const by = task.resolvedBy ? ` ${taskLabel(task.resolvedBy)}` : "";
   switch (task.resolution) {
     case "completed":
       return by ? `Done by${by}` : "Done elsewhere";
@@ -20,7 +21,7 @@ export function closeDialogTitle(
   tasks: ReadonlyArray<Pick<TaskSummary, "number">>,
   resolution: Exclude<TaskResolution, "wont_do">,
 ): string {
-  const what = tasks.length === 1 ? `#${tasks[0]!.number}` : `${tasks.length} tasks`;
+  const what = tasks.length === 1 ? taskLabel(tasks[0]!) : `${tasks.length} tasks`;
   return resolution === "completed" ? `Close ${what} as done by…` : `Close ${what} as a duplicate of…`;
 }
 
@@ -41,7 +42,7 @@ export function closeCandidates(
   const matches = (task: TaskSummary) => {
     if (!q) return true;
     if (number && task.number === Number(number[1])) return true;
-    const haystack = `#${task.number} ${task.title}`.toLowerCase();
+    const haystack = `${taskLabel(task)} ${task.title}`.toLowerCase();
     return words.every((word) => haystack.includes(word));
   };
   return tasks

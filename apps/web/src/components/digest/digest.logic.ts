@@ -1,3 +1,4 @@
+import { taskNumberValue } from "@repo/contracts";
 import type { Digest, DigestMode, TaskSummary } from "@repo/contracts";
 import { formatCost } from "~/components/autopilot/autopilot.logic";
 
@@ -64,6 +65,9 @@ export function digestOptionLabel(digest: Pick<Digest, "to" | "readAt">): string
 }
 
 /** Task number to id, for linking "#42" in a digest. The board snapshot leaves archived tasks out, so those stay text. */
-export function taskIdsByNumber(tasks: ReadonlyArray<Pick<TaskSummary, "id" | "number">>): Map<number, string> {
-  return new Map(tasks.map((t) => [t.number, t.id]));
+export function taskIdsByNumber(
+  tasks: ReadonlyArray<Pick<TaskSummary, "id" | "number" | "numberPrefix">>,
+): Map<number | string, string> {
+  // A task a machine numbered is keyed by its text ("E7"), so it never shares a key with the board's #7.
+  return new Map(tasks.map((t) => [taskNumberValue(t), t.id]));
 }

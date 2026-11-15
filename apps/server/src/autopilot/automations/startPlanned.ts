@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   AUTOPILOT_START_PLANNED,
   ReviewSkillRef,
   t3RunWorking,
@@ -76,6 +77,8 @@ export function notStartable(task: TaskSummary): string | null {
   if (task.archivedAt !== null) return "it's archived";
   if (task.status !== "planned") return "it's no longer in Planned";
   if (task.autopilot !== true) return "its Autopilot flag isn't On";
+  // A machine orders its changes and works on it there; starting it here too would be two agents on one task.
+  if (task.hold) return `${task.hold.machineName} holds it`;
   if (task.progress.total === 0) return "it has no plan";
   if (task.blocked) return "it's blocked by unfinished tasks";
   return null;
@@ -212,7 +215,7 @@ export const startPlanned = defineAutomation({
           {
             candidate: {
               dedupeKey: `start:${task.id}:${task.statusChangedAt}`,
-              summary: `start #${task.number} "${task.title}"`,
+              summary: `start ${taskLabel(task)} "${task.title}"`,
               taskId: task.id,
             } satisfies Candidate,
             preview: engine.dryRun || (resolved?.preview ?? false),
@@ -243,7 +246,7 @@ export const startPlanned = defineAutomation({
   act: async (candidate, { services, runner, run, config, boardUrl }) => {
     const task = services.tasks.summary(candidate.taskId!);
     const reason = notStartable(task);
-    if (reason) return { status: "skipped", summary: `Skipped #${task.number}: ${reason}` };
+    if (reason) return { status: "skipped", summary: `Skipped ${taskLabel(task)}: ${reason}` };
 
     const prompt = [
       taskHandoffPrompt({ task, boardUrl, mode: "work", linkedThread: true }),
@@ -275,7 +278,7 @@ export const startPlanned = defineAutomation({
       });
     } catch (error) {
       if (error instanceof RunAbandonedError) {
-        return { status: "skipped", summary: `Skipped #${task.number}: ${error.message}` };
+        return { status: "skipped", summary: `Skipped ${taskLabel(task)}: ${error.message}` };
       }
       // A headless run only ends when the agent does: one that hit its budget or timeout did start.
       const begun = services.tasks.summary(task.id).status !== "planned";
@@ -295,17 +298,17 @@ export const startPlanned = defineAutomation({
     const thread = started.runner === "t3" && started.threadUrl ? { url: started.threadUrl, since: Date.now() } : null;
     const outcome = await leftPlanned(services, task.id, started.runner === "headless" ? Date.now() : deadline, thread);
     if (outcome === "failed") {
-      return failed(`its T3 Code thread failed before moving #${task.number} out of Planned`, patch);
+      return failed(`its T3 Code thread failed before moving ${taskLabel(task)} out of Planned`, patch);
     }
     if (outcome === "late") {
       return failed(
-        `the agent didn't move #${task.number} out of Planned within ${config.graceMinutes} minutes`,
+        `the agent didn't move ${taskLabel(task)} out of Planned within ${config.graceMinutes} minutes`,
         patch,
       );
     }
     return {
       ...patch,
-      summary: `Started #${task.number} ${started.runner === "headless" ? "headless" : "in T3 Code"}`,
+      summary: `Started ${taskLabel(task)} ${started.runner === "headless" ? "headless" : "in T3 Code"}`,
     };
   },
 });

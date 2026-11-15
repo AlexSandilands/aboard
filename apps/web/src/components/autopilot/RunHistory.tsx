@@ -1,4 +1,5 @@
 import {
+  taskNumberValue,
   AUTOPILOT_ALL_RUNS,
   RETIRED_AUTOMATION_TITLES,
   RUN_DELETE_IDS_MAX,
@@ -104,7 +105,10 @@ export function RunHistory({
   const setTicked = (ids: ReadonlySet<string>) => setSelection({ key: filterKey, ids });
   const [target, setTarget] = useState<DeleteTarget | null>(null);
 
-  const taskNumbers = useMemo(() => new Map(board.data?.tasks.map((t) => [t.id, t.number]) ?? []), [board.data?.tasks]);
+  const taskNumbers = useMemo(
+    () => new Map(board.data?.tasks.map((t) => [t.id, taskNumberValue(t)]) ?? []),
+    [board.data?.tasks],
+  );
   const projectTitle = (id: string | null) => projects.find((p) => p.id === id)?.title ?? null;
   const automationItems = [
     { value: AUTOPILOT_ALL_RUNS, label: "All automations" },
@@ -424,7 +428,7 @@ function RunList({
   opened: ReadonlySet<string>;
   onOpen: (id: string, open: boolean) => void;
   projectTitle: (id: string | null) => string | null;
-  taskNumber: (id: string | null) => number | null;
+  taskNumber: (id: string | null) => number | string | null;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;

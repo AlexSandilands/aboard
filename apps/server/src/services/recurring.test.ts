@@ -119,6 +119,7 @@ describe("recurring rules", () => {
     s.recurring.handled(rule.id, { dueAt: localStamp(new Date()), taskId: task.id });
     expect(s.recurring.list(project.id)[0]?.lastTask).toEqual({
       number: task.number,
+      numberPrefix: "",
       status: "backlog",
       archived: false,
     });

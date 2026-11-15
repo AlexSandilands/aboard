@@ -11,7 +11,14 @@
 import { existsSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { ACTOR_HEADER, BRAND, type BoardDump } from "@repo/contracts";
+import {
+  ACTOR_HEADER,
+  BRAND,
+  parseTaskNumberRef,
+  taskNumberValue,
+  type BoardDump,
+  type TaskNumberValue,
+} from "@repo/contracts";
 import { loadConfig, type Config } from "./config.ts";
 import { createContext } from "./context.ts";
 import { openDatabase } from "./db/database.ts";
@@ -88,7 +95,7 @@ async function importBoard(config: Config, path: string, machine: string | undef
 async function restoreTask(
   config: Config,
   path: string,
-  number: number,
+  number: TaskNumberValue,
   machine: string | undefined,
   force: boolean,
 ): Promise<void> {
@@ -96,7 +103,7 @@ async function restoreTask(
   const dump = readDump(from.path);
   const attachmentsFrom = from.folder;
   const running = await runningServerUrl(config.homeDir);
-  let result: { taskId: string; number: number };
+  let result: { taskId: string; number: TaskNumberValue };
   if (running) {
     // Through the server, so open boards update and its database connection isn't bypassed.
     const res = await fetch(`${running}/api/backup/restore-task`, {
@@ -151,9 +158,16 @@ async function main(): Promise<void> {
       if (!args[0]) throw new Error(USAGE);
       return importBoard(config, args[0], values.machine, values.force);
     case "restore-task": {
-      const number = Number(args[1]?.replace(/^#/, ""));
-      if (!args[0] || !Number.isInteger(number) || number < 1) throw new Error(USAGE);
-      return restoreTask(config, args[0], number, values.machine, values.force);
+      // `42`, `#42`, or `E7` for a task a connected machine numbered.
+      const ref = parseTaskNumberRef(args[1] ?? "")[0];
+      if (!args[0] || !ref || ref.number < 1) throw new Error(USAGE);
+      return restoreTask(
+        config,
+        args[0],
+        taskNumberValue({ number: ref.number, numberPrefix: ref.prefix }),
+        values.machine,
+        values.force,
+      );
     }
     default:
       throw new Error(`Unknown command ${command}\n${USAGE}`);

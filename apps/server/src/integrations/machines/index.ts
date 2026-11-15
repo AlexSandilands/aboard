@@ -69,7 +69,7 @@ export interface MachinesIntegration {
    * A request to a connected machine's API, over the route in use. Throws CONFLICT unless the machine is connected:
    * nothing is exchanged with one that is unreachable, unpaired or on another protocol version.
    */
-  request(id: string, path: string, init?: RequestInit): Promise<Response>;
+  request(id: string, path: string, init?: RequestInit, options?: { timeoutMs?: number }): Promise<Response>;
   start(): void;
   stop(): void;
 }
@@ -472,6 +472,8 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
       else deps.secrets.remove(machine.instanceId);
       entry?.link.close();
       live.delete(id);
+      // Its tasks come back to the board as the board last saw them: nothing will ever read its log again.
+      for (const hold of deps.services().holds.forMachine(id)) deps.services().holds.forceRelease(hold.taskId, "user");
       machines().remove(id);
       changed();
     },
@@ -510,14 +512,14 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
       return compose(machines().get(id));
     },
 
-    async request(id, path, init) {
+    async request(id, path, init, options) {
       const { machine, entry } = entryOf(id);
       const state = entry.link.state();
       if (state.connection !== "connected") {
         throw new AppError("CONFLICT", `${machine.name} isn't connected. ${state.error ?? ""}`.trim());
       }
       try {
-        return await deps.client.request(targetOf(machine, reachableUrl(machine, entry)), path, init);
+        return await deps.client.request(targetOf(machine, reachableUrl(machine, entry)), path, init, options);
       } catch (error) {
         throw asAppError(error);
       }

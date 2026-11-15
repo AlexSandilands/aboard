@@ -9,6 +9,7 @@ import { createAutopilotRecurringRepo } from "./autopilotRecurring.ts";
 import { createAutopilotRunsRepo } from "./autopilotRuns.ts";
 import { createAutopilotSettingsRepo } from "./autopilotSettings.ts";
 import { createEventsRepo } from "./events.ts";
+import { createHoldsRepo } from "./holds.ts";
 import { createImportsRepo } from "./imports.ts";
 import { createLabelsRepo } from "./labels.ts";
 import { createLinksRepo } from "./links.ts";
@@ -27,6 +28,7 @@ import { createSql } from "./sql.ts";
 import { createSuggestionsRepo } from "./suggestions.ts";
 import { createTemplatesRepo } from "./templates.ts";
 import { createTasksRepo } from "./tasks.ts";
+import { createWorkingCopiesRepo } from "./workingCopies.ts";
 
 /** All table repositories over one database. */
 export function createRepos(db: Db) {
@@ -59,6 +61,8 @@ export function createRepos(db: Db) {
     sessionUsage: createSessionUsageRepo(sql),
     machineAuth: createMachineAuthRepo(sql),
     machines: createMachinesRepo(sql),
+    holds: createHoldsRepo(sql),
+    workingCopies: createWorkingCopiesRepo(sql),
   };
 }
 export type Repos = ReturnType<typeof createRepos>;
