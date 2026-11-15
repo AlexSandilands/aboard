@@ -24,6 +24,7 @@ import type { RunGit } from "../backup.ts";
 import { messageOf, type Logger } from "../util.ts";
 import { remoteIdentity } from "./checkouts.ts";
 import type { MachinesIntegration } from "./index.ts";
+import type { RemoteWork } from "./remoteWork.ts";
 
 // A board's side of held tasks, live (docs/features/remote-machines.md#held-tasks): handing a task to a machine and
 // taking it back, reading the machine's change log and applying it, sending the edits made here, and answering
@@ -48,6 +49,8 @@ export type CallTool = (params: CallToolParams) => Promise<CallToolReply>;
 export interface MachineSyncDeps {
   services: () => Services;
   machines: Pick<MachinesIntegration, "request">;
+  /** What a machine needs before it works on a task: the board's settings, and the task's images. */
+  work?: Pick<RemoteWork, "syncSettings" | "sendImages" | "unpushed">;
   bus: EventBus;
   runGit: RunGit;
   now?: () => Date;
@@ -180,6 +183,8 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
   }
 
   async function pump(machineId: string, opts: { wait?: number } = {}): Promise<ApplyResult> {
+    // Sent when they changed since the last round: rules run on the machine by them (whether a move opens a review).
+    await deps.work?.syncSettings(machineId).catch(() => {});
     await sendInOrder(machineId);
     const position = services().holds.position(machineId);
     const wait = opts.wait ?? 0;
@@ -214,6 +219,20 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
       });
     }
     return result;
+  }
+
+  /** What follows a hand-over and must not undo it: the task's images, and a word on work the machine can't see. */
+  async function afterHandOver(taskId: string, machineId: string, machineName: string): Promise<void> {
+    // Each on its own: an image that couldn't be sent says nothing about the warning.
+    try {
+      const warning = await deps.work?.unpushed(taskId, machineName);
+      // A note, so the agent on the machine reads it too.
+      if (warning) services().tasks.addNote(taskId, warning, "board");
+    } catch (error) {
+      log.warn(`[machines] after handing over to ${machineName}: ${messageOf(error)}`);
+    }
+    // All of them: the machine dropped whatever it had of the task when it last gave it back.
+    await deps.work?.sendImages(taskId, machineId, { again: true });
   }
 
   const sleep = (ms: number) =>
@@ -272,13 +291,16 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
       const request = services().holds.prepare(taskId, machineId, await remoteOf(project.workspaceRoot));
       handing.add(taskId);
       try {
+        await deps.work?.syncSettings(machineId);
         const res = await deps.machines.request(machineId, MACHINE_TASKS_PATH, json(request), {
           timeoutMs: HAND_OVER_TIMEOUT_MS,
         });
         if (!res.ok) throw new AppError("CONFLICT", await refusal(res, machine.name));
         try {
           const { head } = LogPosition.parse(await res.json());
-          return services().holds.confirm(taskId, machineId, request.state, head, actor);
+          const detail = services().holds.confirm(taskId, machineId, request.state, head, actor);
+          await afterHandOver(taskId, machine.id, machine.name);
+          return detail;
         } catch (error) {
           // The machine has a copy the board won't follow: it gives it up again.
           await deps.machines.request(machineId, machineTaskPath(taskId), { method: "DELETE" }).catch(() => {});

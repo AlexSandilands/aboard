@@ -364,7 +364,9 @@ draft removes it; one you leave is dropped after 14 days. Drafts aren't backed u
 
 A command or script runs as you, in sh (Windows PowerShell on Windows) or its language's interpreter, whenever its
 trigger fires in a project it's on in. The builder reminds you with a **Runs as you** pill by the Details heading:
-hover, tap or tab to it for the short version, and the Windows advice for a command. The board's own environment variables, such as its API token, are left out of its
+hover, tap or tab to it for the short version, and the Windows advice for a command. For a task a
+[connected machine](remote-machines.md) holds, the command or script runs on that machine instead, in its own clone
+of the project and as the user its runner runs as; the pill names your machines, and the run says where it ran. The board's own environment variables, such as its API token, are left out of its
 environment. An agent can only draft one over MCP, which you import (see [Asking an agent for one](#asking-an-agent-for-one)),
 and the API only takes a command, a script or a check from the board's settings page (a request without the page's
 Origin is refused). That keeps agents from setting one up by accident; it isn't a lock, since anything that can run

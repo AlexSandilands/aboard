@@ -1141,7 +1141,8 @@ command ("Which command?") or a script ("The script") has a small amber **Runs a
 (`RunsAsYouBadge` in `ScriptWarning.tsx`) instead of an alert: its card opens on hover, on click or tap, and on
 keyboard focus, and Esc closes it (it stays closed until focus leaves the pill). It says the code runs on this machine
 as the user, with their logins, can do anything they can in the project's folder, and that text from GitHub can come
-from anyone who can comment; a command's adds the Windows advice (let the program read the variable itself, since
+from anyone who can comment; on a board with connected machines it names them, since a task one of them holds runs
+the code there, as the runner's user; a command's adds the Windows advice (let the program read the variable itself, since
 PowerShell doesn't escape quotes and npm and pnpm hand arguments to cmd.exe). Code someone else wrote keeps the full
 `ScriptWarning`: the import page, an agent's draft or change, and the script confirmation.
 Each row of
@@ -1550,6 +1551,11 @@ on the REST writes is unchanged, so this opens no path to setting up a command o
   opens the builder on the automation with the change filled in, and its **Save changes** dismisses the draft.
 
 ### Runners
+
+A run for a task a connected machine holds is carried out on that machine, always headless, by the same runner
+code; so are a custom automation's command and script for such a task
+([remote machines](remote-machines.md#work-on-the-machine)). The rest of this section is what happens on whichever
+machine runs it.
 
 An agent action calls `ctx.runner.start({ run, prompt, operation, options, … })` (`autopilot/runner.ts`); `operation` is what the run's model is resolved for ([Models](#models)). The engine
 binds the run's `update` into it, so the session, thread or worktree is on the run as soon as it exists, and a

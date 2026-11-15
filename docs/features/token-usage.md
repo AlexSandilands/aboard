@@ -146,6 +146,16 @@ with the error. Unlinking keeps the rows; purging a task deletes its run rows an
 the rows of its own sessions and threads no other task links, never those of a session unlinked earlier or a
 task-less run's.
 
+### On a connected machine
+
+The sessions and runs of a task a machine holds leave their files on that machine, so its readers count them: the
+same transcripts and run output, into the runner's own `session_usage`. Each entry of the machine's change log
+carries the task's rows whole (`usage`: the rows of the sessions it links and of its own runs there), and the
+board writes them over what that machine sent before (`replaceFromMachine`), so an entry applied twice changes
+nothing. They are stored with `machine_id`, the board's machine they came from; `TaskUsageRow.machine` is its name,
+which the panel shows as "on engine". The rows are priced on the board, like its own. Nothing on the board rereads
+them: their files aren't here ([remote machines](remote-machines.md#sessions-usage-and-transcripts)).
+
 ## Decisions
 
 - **History is kept.** Claude Code deletes transcripts after 30 days, so the rows outlive their files. That is a

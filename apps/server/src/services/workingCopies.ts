@@ -3,6 +3,8 @@ import {
   taskLabel,
   type ChangesResponse,
   type CopiedProject,
+  type CopiedUsage,
+  type TaskState,
   type HandOverRequest,
   type HeldEditRequest,
   type HeldEditResult,
@@ -86,6 +88,8 @@ export function createWorkingCopiesService(
     readRemote: (workspaceRoot: string) => { remote: string; remoteUrl: string } | null;
     /** A runner logs changes; a board keeps this service only to answer `role`. */
     logs: boolean;
+    /** What a task's sessions and runs on this machine have used, sent with its changes. */
+    usageOf: (taskId: string) => CopiedUsage[];
   },
 ): WorkingCopiesService {
   const { repos } = core;
@@ -127,6 +131,10 @@ export function createWorkingCopiesService(
     };
   };
 
+  /** What was last logged of a task, as one text: a write that leaves it the same logs nothing. */
+  const loggedText = (state: TaskState, usage: readonly CopiedUsage[]): string =>
+    `${JSON.stringify(state)}\n${JSON.stringify(usage)}`;
+
   /** Logs what this write changed on held tasks, and takes a task made here as a held one. */
   const logChanges = (marks: WriteMarks): void => {
     const roles = copies.forTasks(marks.tasks);
@@ -136,7 +144,8 @@ export function createWorkingCopiesService(
       const task = repos.tasks.getAny(id);
       if (!task) continue;
       const state = readTaskState(repos, task);
-      const json = JSON.stringify(state);
+      const usage = deps.usageOf(id);
+      const json = loggedText(state, usage);
       const events = repos.events.after(id, copy?.lastEventId ?? 0);
       if (!copy) {
         const references = repos.tasks.getMany(referencedIds(task, state)).map(referenceOf);
@@ -146,10 +155,11 @@ export function createWorkingCopiesService(
           epicId: task.parentId,
           state,
           events: events.map(copiedEvent),
+          usage,
           references,
         });
       } else if (json !== copy.loggedState || events.length > 0 || forced.has(id)) {
-        append("state", id, { state, events: events.map(copiedEvent) });
+        append("state", id, { state, events: events.map(copiedEvent), usage });
       } else continue;
       forced.delete(id);
       copies.upsert({
@@ -209,7 +219,7 @@ export function createWorkingCopiesService(
 
   /** The service call an edit names, with its arguments as the board made it. */
   const dispatch = (request: HeldEditRequest): void => {
-    const { tasks, plans, links, attention } = deps.services();
+    const { tasks, plans, links, attention, reviews } = deps.services();
     // The arguments were this version's own on the board; an edit this runner can't make sense of throws and is
     // refused like any other.
     const call = (fn: (...args: never[]) => unknown): void => void fn(...(request.args as never[]));
@@ -250,6 +260,12 @@ export function createWorkingCopiesService(
         return call(attention.request.bind(attention));
       case "attention.clear":
         return call(attention.clear.bind(attention));
+      case "reviews.openRound":
+        return call(reviews.openRound.bind(reviews));
+      case "reviews.submit":
+        return call(reviews.submit.bind(reviews));
+      case "reviews.resolveFinding":
+        return call(reviews.resolveFinding.bind(reviews));
     }
   };
 
@@ -340,7 +356,7 @@ export function createWorkingCopiesService(
           taskId: saved.id,
           role: "held",
           lastEventId: repos.events.lastId(),
-          loggedState: JSON.stringify(readTaskState(repos, saved)),
+          loggedState: loggedText(readTaskState(repos, saved), deps.usageOf(saved.id)),
           createdAt: now,
         });
         fx.task(saved.id);
@@ -354,7 +370,11 @@ export function createWorkingCopiesService(
         const task = repos.tasks.getAny(taskId);
         if (copy?.role !== "held" || !task) return;
         const events = repos.events.after(taskId, copy.lastEventId);
-        append("released", taskId, { state: readTaskState(repos, task), events: events.map(copiedEvent) });
+        append("released", taskId, {
+          state: readTaskState(repos, task),
+          events: events.map(copiedEvent),
+          usage: deps.usageOf(taskId),
+        });
         // Another held task may still point at it (its blocker, say): then it stays, as a reference.
         copies.upsert({ ...copy, role: "reference", loggedState: null });
         dropLooseReferences(fx);

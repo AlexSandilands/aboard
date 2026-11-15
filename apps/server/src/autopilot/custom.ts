@@ -648,7 +648,9 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
       }
       // A script's interpreter may be missing: that fails the run with a plain message, like a command that fails.
       const noun = action.kind === "script" ? "script" : "command";
-      const where = task ? ` for ${taskLabel(task)}` : ` in ${project.title}`;
+      // A task a connected machine holds runs there, as that machine's user: the run says so.
+      const on = task?.hold ? ` on ${task.hold.machineName}` : "";
+      const where = task ? ` for ${taskLabel(task)}${on}` : ` in ${project.title}`;
       const failed = (summary: string, error: string, base: { detail: string | null; exitCode: number | null }) => ({
         ...base,
         status: "failed" as const,
@@ -664,6 +666,7 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
                 language: action.language,
                 body: action.body,
                 cwd: project.workspaceRoot,
+                taskId: task?.id ?? null,
                 env: customShellEnv(values),
                 context: customScriptContext(values),
                 timeoutMs: action.timeoutSeconds * 1000,
@@ -671,6 +674,7 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
             : await deps.runShell({
                 command: action.command,
                 cwd: project.workspaceRoot,
+                taskId: task?.id ?? null,
                 env: customShellEnv(values),
                 timeoutMs: action.timeoutSeconds * 1000,
               });

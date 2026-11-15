@@ -14,6 +14,7 @@ import {
   type ConnectMachineInput,
   type ConnectMachineResult,
   type Machine,
+  type MachineCapability,
   type MachineInstall,
   type MachineInstallStepKey,
   type MachineRoute,
@@ -70,6 +71,11 @@ export interface MachinesIntegration {
    * nothing is exchanged with one that is unreachable, unpaired or on another protocol version.
    */
   request(id: string, path: string, init?: RequestInit, options?: { timeoutMs?: number }): Promise<Response>;
+  /**
+   * Whether the machine said it can do `capability`, when it last answered. Null while that isn't known (not reached
+   * since the board started), so a caller can leave the machine itself to refuse.
+   */
+  can(id: string, capability: MachineCapability): boolean | null;
   start(): void;
   stop(): void;
 }
@@ -79,6 +85,8 @@ interface Live {
   status: MachineStatus | null;
   /** The update last asked for, as the runner answered: all that is known of it while the protocols differ. */
   update: MachineUpdateState | null;
+  /** What the runner said it can do when it last answered; null until it has. */
+  capabilities: readonly string[] | null;
 }
 
 const MAX_INSTALLS = 10;
@@ -201,6 +209,7 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
       .find((m) => m.id === id);
     if (!entry || !machine) return;
     const { descriptor } = found;
+    entry.capabilities = descriptor.capabilities;
     let status: MachineStatus | null = null;
     if (found.state === "connected" && descriptor.capabilities.includes("status")) {
       try {
@@ -241,6 +250,7 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
     live.get(machine.id)?.link.close();
     const entry: Live = {
       status: null,
+      capabilities: live.get(machine.id)?.capabilities ?? null,
       update: live.get(machine.id)?.update ?? null,
       link: createMachineLink({
         routes: machine.routes,
@@ -511,6 +521,8 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
       changed();
       return compose(machines().get(id));
     },
+
+    can: (id, capability) => live.get(id)?.capabilities?.includes(capability) ?? null,
 
     async request(id, path, init, options) {
       const { machine, entry } = entryOf(id);

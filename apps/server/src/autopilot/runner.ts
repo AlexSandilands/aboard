@@ -177,6 +177,12 @@ export function createAutopilotRunner(deps: {
   /** This board's MCP endpoint and API token, for a run that gets only the board's server (`boardTools`). */
   boardMcp?: () => { url: string; token: string | null };
   /**
+   * On a runner: the machine itself, which a run's session link then names, so its board knows where the session's
+   * files are. A task's run also gets this server's own MCP config on top of the user's, since the CLI there may
+   * have no registration for it (or one for a board on the same machine).
+   */
+  machine?: () => { id: string; name: string } | null;
+  /**
    * Mints a run's board-served tools (`request.runTools`): the `/mcp/run` URL, the run's token for it, and how to
    * revoke the token when the run ends.
    */
@@ -408,7 +414,7 @@ export function createAutopilotRunner(deps: {
     task: TaskSummary | null,
     options: RunnerOptions,
     settings: AppSettings,
-    where: Pick<AgentArgsInput, "defaultBranch" | "boardMcpConfig"> & {
+    where: Pick<AgentArgsInput, "defaultBranch" | "boardMcpConfig" | "ownMcp"> & {
       cwd: string;
       prompt: string;
       /** The push guard's hooks folder, for the agent's git. */
@@ -461,6 +467,7 @@ export function createAutopilotRunner(deps: {
         ...(request.deniedTools ? { deniedTools: request.deniedTools } : {}),
         ...(request.untrustedInput ? { untrusted: true } : {}),
         ...(where.boardMcpConfig ? { boardMcpConfig: where.boardMcpConfig } : {}),
+        ...(where.ownMcp ? { ownMcp: where.ownMcp } : {}),
         ...(tools ? { runTools: { url: tools.url, configPath: tools.configPath } } : {}),
         ...(request.outputSchema ? { outputSchema: request.outputSchema } : {}),
       };
@@ -558,7 +565,7 @@ export function createAutopilotRunner(deps: {
       taskNumber: taskNumberValue(task),
       runId: request.run.id,
       baseRef: request.workspace?.prBase || request.workspace?.baseRef,
-      baseFromOrigin: Boolean(request.workspace?.prBase),
+      baseFromOrigin: Boolean(request.workspace?.prBase) || Boolean(request.workspace?.fromOrigin),
       branch: request.workspace?.branch,
       // A reviewer can't push, so it may read the default branch too.
       readOnly: request.access === "read-only",
@@ -578,36 +585,53 @@ export function createAutopilotRunner(deps: {
     }
     const settings = s.settings.get();
     const readOnly = request.access === "read-only" || request.access === "none";
-    const { outcome, sessionId } = await runOnDriver(
-      request,
-      task,
-      options,
-      settings,
-      {
-        cwd: worktree.path,
-        prompt: `${request.prompt}\n\n${headlessWorkspaceNote(worktree, readOnly, request.workspace?.branch ? null : request.workspace?.prBase)}`,
-        defaultBranch: worktree.defaultBranch,
-        hooksPath: worktree.hooksPath,
-      },
-      { runner: "headless", worktreePath: worktree.path },
-      update,
-      (harness, id) => {
-        try {
-          // So the card offers "Open in terminal" to resume the session in its worktree.
-          s.links.add(
-            task.id,
-            {
-              agentSession: { harness, sessionId: id, cwd: worktree.path },
-              label: autopilotSessionName(request.label, task),
-            },
-            AUTOPILOT_ACTOR,
-          );
-          deps.sessionLinked?.(id);
-        } catch (error) {
-          log.warn(`[autopilot] couldn't link the session of ${taskLabel(task)}: ${messageOf(error)}`);
-        }
-      },
-    );
+    const machine = deps.machine?.() ?? null;
+    // Outside the worktree: the config may carry the server's token.
+    const ownMcpDir = machine && deps.boardMcp ? await mkdtemp(join(tmpdir(), `${BRAND.id}-mcp-`)) : null;
+    let outcome: AgentOutcome;
+    let sessionId: string | null;
+    try {
+      let ownMcp: AgentArgsInput["ownMcp"];
+      if (ownMcpDir) {
+        const own = deps.boardMcp!();
+        const configPath = join(ownMcpDir, "mcp.json");
+        await writeFile(configPath, boardMcpConfig(own.url, own.token), { mode: 0o600 });
+        ownMcp = { url: own.url, configPath, token: own.token !== null };
+      }
+      ({ outcome, sessionId } = await runOnDriver(
+        request,
+        task,
+        options,
+        settings,
+        {
+          cwd: worktree.path,
+          prompt: `${request.prompt}\n\n${headlessWorkspaceNote(worktree, readOnly, request.workspace?.branch ? null : request.workspace?.prBase)}`,
+          defaultBranch: worktree.defaultBranch,
+          hooksPath: worktree.hooksPath,
+          ...(ownMcp ? { ownMcp } : {}),
+        },
+        { runner: "headless", worktreePath: worktree.path },
+        update,
+        (harness, id) => {
+          try {
+            // So the card offers "Open in terminal" to resume the session in its worktree.
+            s.links.add(
+              task.id,
+              {
+                agentSession: { harness, sessionId: id, cwd: worktree.path, ...(machine ? { machine } : {}) },
+                label: autopilotSessionName(request.label, task),
+              },
+              AUTOPILOT_ACTOR,
+            );
+            deps.sessionLinked?.(id);
+          } catch (error) {
+            log.warn(`[autopilot] couldn't link the session of ${taskLabel(task)}: ${messageOf(error)}`);
+          }
+        },
+      ));
+    } finally {
+      if (ownMcpDir) await rm(ownMcpDir, { recursive: true, force: true }).catch(() => null);
+    }
     return {
       runner: "headless",
       ...(sessionId ? { sessionId } : {}),

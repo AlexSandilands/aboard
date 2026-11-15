@@ -32,6 +32,11 @@ export const AgentSessionRef = z.object({
     .regex(UUID, "must be a UUID")
     .transform((id) => id.toLowerCase()),
   cwd: z.string().trim().min(1).refine(isAbsolutePath, "must be an absolute path").transform(trimTrailingSeparators),
+  /**
+   * The connected machine the session ran on (its instance id and name), when that isn't the board's own: `cwd` and the
+   * harness's files are there, so that machine reads the session's status, title, usage and transcript.
+   */
+  machine: z.object({ id: z.string().min(1), name: z.string() }).optional(),
 });
 export type AgentSessionRef = z.infer<typeof AgentSessionRef>;
 

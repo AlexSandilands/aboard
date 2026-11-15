@@ -16,6 +16,8 @@ export interface UsageRow {
   purpose: string | null;
   tokens: TokenUsage;
   reportedCostUsd: number | null;
+  /** The connected machine that read it and sent it here; absent or null for what this board read itself. */
+  machineId?: string | null;
 }
 
 export interface UsageCursor {
@@ -45,6 +47,7 @@ interface DbRow {
   cache_write_1h: number;
   requests: number | null;
   reported_cost_usd: number | null;
+  machine_id: string | null;
 }
 
 const fromDb = (r: DbRow): UsageRow => ({
@@ -65,6 +68,7 @@ const fromDb = (r: DbRow): UsageRow => ({
     ...(r.requests === null ? {} : { requests: r.requests }),
   },
   reportedCostUsd: r.reported_cost_usd,
+  machineId: r.machine_id,
 });
 
 // Every session or thread a live task links, as (harness, session_id) pairs: agent sessions directly, T3 threads
@@ -120,6 +124,48 @@ export function createSessionUsageRepo(sql: Sql) {
     add(rows: readonly UsageRow[]): void {
       const at = now();
       for (const row of rows) add(row, at);
+    },
+    /**
+     * Writes what a connected machine read of a task's sessions and runs, whole: everything that machine sent before
+     * for those sessions or for the task's own runs is replaced, so applying it twice changes nothing.
+     */
+    replaceFromMachine(machineId: string, taskId: string, rows: ReadonlyArray<UsageRow & { ofTask: boolean }>): void {
+      sql.run("DELETE FROM session_usage WHERE machine_id = ? AND task_id = ?", machineId, taskId);
+      const sessions = new Map(rows.map((r) => [`${r.harness}:${r.sessionId}`, r]));
+      for (const r of sessions.values()) {
+        sql.run(
+          "DELETE FROM session_usage WHERE machine_id = ? AND harness = ? AND session_id = ?",
+          machineId,
+          r.harness,
+          r.sessionId,
+        );
+      }
+      const at = now();
+      for (const row of rows) {
+        const t = row.tokens;
+        sql.run(
+          `INSERT OR REPLACE INTO session_usage (harness, session_id, source_file, day, model, source, task_id, purpose,
+             input, output, cache_read, cache_write_5m, cache_write_1h, requests, reported_cost_usd, updated_at, machine_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          row.harness,
+          row.sessionId,
+          row.sourceFile,
+          row.day,
+          row.model,
+          row.source,
+          row.ofTask ? taskId : null,
+          row.purpose,
+          t.input,
+          t.output,
+          t.cacheRead,
+          t.cacheWrite5m,
+          t.cacheWrite1h,
+          t.requests ?? null,
+          row.reportedCostUsd,
+          at,
+          machineId,
+        );
+      }
     },
     /** Replaces everything read from one source file: for a file that shrank or was replaced, or a full reread. */
     replaceFile(key: SessionKey, sourceFile: string, rows: readonly UsageRow[]): void {

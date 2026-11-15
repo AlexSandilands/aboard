@@ -1,6 +1,7 @@
 import type {
   CopiedEvent,
   CopiedPhase,
+  CopiedReview,
   CopiedTaskFields,
   TaskEvent,
   TaskIdentity,
@@ -68,10 +69,54 @@ export function readTaskState(repos: Repos, task: TaskRecord): TaskState {
       ref: row.ref_json,
       createdAt: row.created_at,
       auto: row.auto !== 0,
+      // A session on a machine is read there, so what was read goes with the task; any other link each side reads.
+      ...(onMachine(row) ? { snapshot: row.snapshot_json } : {}),
     })),
     blockedBy: relations.filter((r) => r.blockedId === task.id).map((r) => r.blockerId),
     blocks: relations.filter((r) => r.blockerId === task.id).map((r) => r.blockedId),
+    reviews: readReviews(repos, task.id),
   };
+}
+
+function readReviews(repos: Repos, taskId: string): CopiedReview[] {
+  const findings = repos.reviews.findingsFor([taskId]);
+  return repos.reviews.forTasks([taskId]).map(({ taskId: _task, ...round }) => ({
+    ...round,
+    findings: findings
+      .filter((f) => f.reviewId === round.id)
+      .map(({ taskId: _t, reviewId: _r, round: _n, ...finding }) => finding),
+  }));
+}
+
+/** Writes the task's review rounds as the state has them: the rounds of a held task are its machine's. */
+function writeReviews(repos: Repos, taskId: string, reviews: readonly CopiedReview[]): void {
+  const haveRounds = new Map(repos.reviews.forTasks([taskId]).map((r) => [r.id, r]));
+  const haveFindings = new Map(repos.reviews.findingsFor([taskId]).map((f) => [f.id, f]));
+  const keptRounds = new Set(reviews.map((r) => r.id));
+  const keptFindings = new Set(reviews.flatMap((r) => r.findings.map((f) => f.id)));
+  // First what the state no longer has: a round's number is unique in its task.
+  for (const id of haveFindings.keys()) if (!keptFindings.has(id)) repos.reviews.deleteFinding(id);
+  for (const id of haveRounds.keys()) if (!keptRounds.has(id)) repos.reviews.delete(id);
+  for (const { findings, ...round } of reviews) {
+    const record = { ...round, taskId };
+    if (haveRounds.has(round.id)) repos.reviews.update(record);
+    else repos.reviews.insert(record);
+    for (const finding of findings) {
+      const row = { ...finding, taskId, reviewId: round.id, round: round.round };
+      if (haveFindings.has(finding.id)) repos.reviews.updateFinding(row);
+      else repos.reviews.insertFinding(row);
+    }
+  }
+}
+
+/** Whether a link is an agent session that ran on a connected machine: its ref names the machine. */
+function onMachine(row: { kind: string; ref_json: string | null }): boolean {
+  if (row.kind !== "agent_session" || !row.ref_json) return false;
+  try {
+    return Boolean((JSON.parse(row.ref_json) as { machine?: unknown }).machine);
+  } catch {
+    return false;
+  }
 }
 
 export const identityOf = (task: TaskRecord): TaskIdentity => ({
@@ -175,6 +220,7 @@ export function writeTaskState(
     if (twin) {
       if (twin.id !== link.id) repos.links.reId(twin.id, link.id);
       repos.links.setCopied(link.id, link.label, link.ref, link.auto, link.createdAt);
+      if (link.snapshot !== undefined) repos.links.setSnapshot(link.id, link.snapshot, state.task.updatedAt);
     } else {
       repos.links.insert({
         id: link.id,
@@ -183,8 +229,8 @@ export function writeTaskState(
         url: link.url,
         label: link.label,
         ref_json: link.ref,
-        snapshot_json: null,
-        synced_at: null,
+        snapshot_json: link.snapshot ?? null,
+        synced_at: link.snapshot ? state.task.updatedAt : null,
         created_at: link.createdAt,
         auto: link.auto ? 1 : 0,
       });
@@ -210,6 +256,8 @@ export function writeTaskState(
   };
   setSide(state.blockedBy, "blockedBy");
   if (opts.blocks) setSide(state.blocks, "blocks");
+  // A state from before rounds travelled says nothing of them: this side's stay.
+  if (state.reviews) writeReviews(repos, task.id, state.reviews);
   return next;
 }
 

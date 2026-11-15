@@ -1,4 +1,5 @@
 import type { IntegrationOverrides } from "../integrations/index.ts";
+import type { SessionDirs } from "../integrations/agentSessions.ts";
 import type { GitResult } from "../integrations/backup.ts";
 import { createTestHarness } from "./harness.ts";
 
@@ -12,6 +13,8 @@ export interface PairOptions {
   clone?: (url: string, dir: string) => Promise<GitResult>;
   board?: IntegrationOverrides;
   runner?: IntegrationOverrides;
+  /** Where the runner's harnesses keep their files, for tests that read a session there. */
+  runnerSessionDirs?: SessionDirs;
 }
 
 /**
@@ -30,6 +33,7 @@ export async function createBoardAndRunner(options: PairOptions = {}) {
   const cloned: Array<{ url: string; dir: string }> = [];
   const runner = createTestHarness({
     role: "runner",
+    ...(options.runnerSessionDirs ? { sessionDirs: options.runnerSessionDirs } : {}),
     integrations: {
       now: () => clock.now,
       readRemote: () => null,

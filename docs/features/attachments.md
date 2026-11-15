@@ -62,6 +62,14 @@ previews, × removes), and Send waits for uploads to finish.
   Suggest epics or Plan tasks launch has no one task, so its images stay unclaimed and are swept after a day; T3
   keeps its own copy, and a CLI session has read the file by then.
 
+## On a connected machine
+
+A task handed to a connected machine takes its images along: after the hand-over, and before each run, the board
+sends the ones the machine doesn't have, and the runner stores them under the same ids in its own attachments
+folder (`attachments.adopt`, with the same type and size checks). The paths an agent on the machine is given are
+therefore the machine's. Images attached on the machine aren't sent back
+([remote machines](remote-machines.md#images)).
+
 ## Backup
 
 The rows go in the task's JSON (`task_attachments`); the files are copied next to the JSON as

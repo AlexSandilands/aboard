@@ -11,7 +11,7 @@ code. One command does all of it; don't rebuild it by hand.
 
 ## Pick a mode
 
-- **Isolated (default):** `pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|autopilot|crowded|branches|none]`. This checkout's server on
+- **Isolated (default):** `pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|autopilot|crowded|branches|machine|none]`. This checkout's server on
   a temp data dir and its own home folder for skills, pollers off, T3 Code integration off, Vite with hot reload. Use it for anything:
   web, server or contracts changes, and anything that writes.
 - **Desktop:** `pnpm sandbox --desktop [--seed ...]`. The isolated sandbox plus the Electron shell attached
@@ -23,6 +23,10 @@ code. One command does all of it; don't rebuild it by hand.
   (the headless server a remote machine runs, no web app) on its own port and data dir, for work on running tasks
   on another machine. The ready line has `runner: {url, port, home}`; `curl <runner.url>/api/health` answers with
   `"role":"runner"`. Not combinable with `--live`, and not added to a running sandbox: stop it first.
+- **Background work on:** add `--pollers`. The isolated sandbox runs with its pollers off, so Autopilot's engine, the
+  review watchdog and session status never act. With this they do, on the board and on a `--runner`, in the
+  sandbox's own data dirs: for trying an Autopilot run or a board review end to end. Nothing is enabled until you
+  switch an automation on, and GitHub is read with your own `gh` login. Not combinable with `--live`.
 - **Production build:** add `--prod` to any mode. Builds the web app and serves it with `vite preview` instead of
   the dev server, so no hot reload (restart to pick up edits). Use it to judge performance: React's development
   build renders several times slower, which shows up as dropped frames the real app doesn't have.
@@ -52,6 +56,12 @@ Seeds (`apps/server/src/dev/seeds.ts`):
 - `dense`: for checking rendering cost. A project with twenty cards in every column, one with an epic whose children
   span every column, fifteen cards spread across the columns beside the same fifteen in backlog, and a single card.
   Pair it with `--prod`.
+- `machine`: for work on a connected machine, with `--runner --pollers`. One project whose repository the sandbox's
+  runner already has a clone of (a bare `origin` in the data dir, no network), three planned tasks, and two custom
+  automations in Preview: an agent on In progress and a script on Review. Pair the runner
+  ([remote machines](../../../docs/features/remote-machines.md#running-a-runner-while-developing)), hand a task over,
+  switch the automations on, and the runs happen on the runner. Agents need a `claude` on the runner's `PATH`, or a
+  stand-in set as the provider's CLI path in the runner's settings.
 - `none`: an empty board.
 
 ## Steps

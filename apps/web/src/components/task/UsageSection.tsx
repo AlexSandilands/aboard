@@ -131,6 +131,7 @@ function UsageRow({ row, automationTitle }: { row: TaskUsageRow; automationTitle
                 <span className="truncate">{rowSource(row)}</span>
                 {/* The model column, which says it otherwise, is hidden on a narrow panel. */}
                 {row.untracked ? <span className="@md:hidden">· not tracked</span> : null}
+                {row.machine ? <Chip tone="info">on {row.machine}</Chip> : null}
                 {row.sharedWith.length > 0 ? (
                   <Chip tone="info">shared with {row.sharedWith.map((n) => `#${n}`).join(", ")}</Chip>
                 ) : null}

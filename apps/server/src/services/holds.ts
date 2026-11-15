@@ -6,6 +6,7 @@ import {
   type ChangeLogEntry,
   type ChangesResponse,
   type CopiedEvent,
+  type CopiedUsage,
   type HandOverRequest,
   type HeldEditResult,
   type TaskDetail,
@@ -96,7 +97,12 @@ export interface HoldsService {
 
 export function createHoldsService(
   core: Core,
-  deps: { projects: ProjectsService; detail: (id: string) => TaskDetail },
+  deps: {
+    projects: ProjectsService;
+    detail: (id: string) => TaskDetail;
+    /** Keeps what a machine read of a held task's token usage, inside the write that applies its entry. */
+    keepUsage: (machineId: string, taskId: string, rows: readonly CopiedUsage[]) => void;
+  },
 ): HoldsService {
   const { repos } = core;
   const holds = repos.holds;
@@ -134,7 +140,7 @@ export function createHoldsService(
   /** Writes a machine's state of a task over the board's, with the activity the machine logged. */
   const applyState = (
     task: TaskRecord,
-    payload: { state: TaskState; events: CopiedEvent[] },
+    payload: { state: TaskState; events: CopiedEvent[]; usage?: CopiedUsage[] | undefined },
     entryId: number,
     machine: MachineRecord,
     fx: Effects,
@@ -147,6 +153,7 @@ export function createHoldsService(
     for (const edit of holds.editsForTask(task.id)) {
       if (edit.settledHead !== null && edit.settledHead <= entryId) finishEdit(edit);
     }
+    if (payload.usage) deps.keepUsage(machine.id, task.id, payload.usage);
     for (const event of payload.events) fx.replay(task.id, event);
     fx.task(task.id);
     if (statusChanged && task.parentId) syncEpicStatus(repos, task.parentId, machine.name, fx);
