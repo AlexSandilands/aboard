@@ -285,24 +285,64 @@ export function createRemoteWork(deps: {
     }
   };
 
+  /**
+   * Sends one image to the machine as the task's. The machine stores it under the task, claimed or not here. False
+   * for a machine from before images travelled (a 404).
+   */
+  const putImage = async (
+    machineId: string,
+    taskId: string,
+    image: { id: string; filename: string; mime: string },
+  ): Promise<boolean> => {
+    const { bytes } = services().attachments.read(image.id);
+    const query = new URLSearchParams({ taskId, filename: image.filename });
+    const res = await deps.machines.request(machineId, `${machineAttachmentPath(image.id)}?${query.toString()}`, {
+      method: "PUT",
+      headers: { "content-type": image.mime },
+      body: new Uint8Array(bytes),
+    });
+    if (res.ok) {
+      sentImages.add(`${machineId}:${image.id}`);
+      return true;
+    }
+    if (res.status !== 404) throw new Error(`the machine answered ${res.status}`);
+    return false;
+  };
+
   const sendImages: RemoteWork["sendImages"] = async (taskId, machineId, opts = {}) => {
     const s = services();
     for (const image of s.attachments.forTask(taskId)) {
       if (!opts.again && sentImages.has(`${machineId}:${image.id}`)) continue;
       // One at a time, each on its own: a file that is gone, or a link that dropped, doesn't keep the rest back.
       try {
-        const { bytes } = s.attachments.read(image.id);
-        const query = new URLSearchParams({ taskId, filename: image.filename });
-        const res = await deps.machines.request(machineId, `${machineAttachmentPath(image.id)}?${query.toString()}`, {
-          method: "PUT",
-          headers: { "content-type": image.mime },
-          body: new Uint8Array(bytes),
-        });
-        // A machine from before images travelled (a 404) is left without them.
-        if (res.ok) sentImages.add(`${machineId}:${image.id}`);
-        else if (res.status !== 404) throw new Error(`the machine answered ${res.status}`);
+        await putImage(machineId, taskId, image);
       } catch (error) {
         log.warn(`[machines] couldn't send the image ${image.filename} of a held task: ${messageOf(error)}`);
+      }
+    }
+  };
+
+  /**
+   * The images pasted into a launch dialog, sent before the launch: they aren't the task's yet (the launch claims
+   * them), so `sendImages` wouldn't send them, and the machine uploads them to its T3 Code from its own copies. Every
+   * one must arrive, or the launch would fail there with a sentence about an image the user can see.
+   */
+  const sendLaunchImages = async (machine: { id: string; name: string }, taskId: string, ids: readonly string[]) => {
+    if (ids.length === 0) return;
+    // Checked here first, so an image that is gone is said as it is on a board.
+    const images = services().attachments.forLaunch(ids, taskId);
+    for (const image of images) {
+      let sent: boolean;
+      try {
+        sent = await putImage(machine.id, taskId, image);
+      } catch (error) {
+        throw new AppError("CONFLICT", `Couldn't send ${image.filename} to ${machine.name}: ${messageOf(error)}`);
+      }
+      if (!sent) {
+        throw new AppError(
+          "CONFLICT",
+          `${machine.name} runs a version that can't take images; update it first, or start without them`,
+        );
       }
     }
   };
@@ -366,8 +406,7 @@ export function createRemoteWork(deps: {
       const machine = holderOf(taskId);
       if (!machine) return null;
       return (async () => {
-        // The dialog's images: the machine uploads them to its T3 from its own copies.
-        if (request.op === "start") await sendImages(taskId, machine.id);
+        if (request.op === "start") await sendLaunchImages(machine, taskId, request.input.attachmentIds ?? []);
         return askNow(machine, "t3", "start T3 Code threads", MACHINE_T3_PATH, request);
       })();
     },

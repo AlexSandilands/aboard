@@ -41,6 +41,26 @@ describe("T3 Code threads of a task a machine holds", () => {
     expect(net.sent.some((r) => r.path === "/machine/t3")).toBe(true);
   });
 
+  it("take the dialog's pasted images to the machine as the task's before the start", async () => {
+    const { board, runner, task, net } = await setup();
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    // Pasted into the dialog: nobody's yet, until a launch claims it.
+    const image = board.services.attachments.upload({
+      taskId: null,
+      filename: "bug.png",
+      mime: "image/png",
+      bytes: png,
+    });
+    await expect(
+      board.integrations.startT3Thread(task.id, { ...START, attachmentIds: [image.id] }, "user"),
+    ).rejects.toThrow("On engine: T3 Code is not running");
+    const sent = net.sent.map((r) => r.path);
+    expect(sent.indexOf(`/machine/attachments/${image.id}`)).toBeLessThan(sent.indexOf("/machine/t3"));
+    expect(runner.services.attachments.forTask(task.id)).toMatchObject([{ id: image.id, filename: "bug.png" }]);
+    // The start failed: the image stays the dialog's here, to try again with.
+    expect(board.services.attachments.forTask(task.id)).toEqual([]);
+  });
+
   it("are linked with the machine, polled there and messaged through it", async () => {
     const { board, runner, task, engine, sync } = await setup();
     // What the machine's T3 integration does once a thread has started.

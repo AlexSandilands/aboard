@@ -753,7 +753,7 @@ acts on a task's thread reaches the right T3 Code without knowing there is a mac
 
 | On the board                                              | For a held task                                                             |
 | --------------------------------------------------------- | --------------------------------------------------------------------------- |
-| The launch dialog's options, starting from it             | `POST /machine/t3 {op: "options" \| "start"}`; the dialog's images are sent first |
+| The launch dialog's options, starting from it             | `POST /machine/t3 {op: "options" \| "start"}`; the dialog's images are sent first, as the task's, and claimed here once it starts |
 | A custom hand-off's thread (`launchTaskThread`)           | `{op: "launch"}`                                                            |
 | Messaging a thread with `ref.machine` (nudges, the review loop, `message_task_thread`) | `{op: "message", linkId}` to the machine that holds the task |
 | A thread's workspace, retrying its preparation            | Not known here: none, and "retry it there"                                  |

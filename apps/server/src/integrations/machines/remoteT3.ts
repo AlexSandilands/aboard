@@ -16,7 +16,7 @@ export function withMachineThreads(
     remote: () => Pick<RemoteWork, "t3" | "holder">;
     /** Applies the machine's log now, so a thread it just linked is on the board before the answer goes back. */
     sync: () => Pick<MachineSync, "pump">;
-    services: () => Pick<Services, "links">;
+    services: () => Pick<Services, "links" | "attachments">;
     log?: Logger;
   },
 ): T3Integration {
@@ -46,7 +46,17 @@ export function withMachineThreads(
     async startThread(taskId, input, actor) {
       const there = deps.remote().t3(taskId, { op: "start", taskId, input, actor });
       if (!there) return t3.startThread(taskId, input, actor);
-      return caughtUp(taskId, (await there) as TaskLink);
+      const link = (await there) as TaskLink;
+      // The images are the task's now, here as on the machine (which claimed its copies): backed up and deleted with
+      // it, as a launch here does. After the start, so a failure here can't undo a thread that started.
+      if (input.attachmentIds?.length) {
+        try {
+          deps.services().attachments.claimIds(taskId, input.attachmentIds);
+        } catch (error) {
+          log.warn(`[machines] couldn't give the launch's images to the task: ${messageOf(error)}`);
+        }
+      }
+      return caughtUp(taskId, link);
     },
 
     async launchTaskThread(taskId, input, actor) {
