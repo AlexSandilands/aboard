@@ -1,6 +1,5 @@
 import { createUsageSweep } from "./usageSweep.ts";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import { taskLabel, epicBranchName, planningSessionLabel } from "@repo/contracts";
 import { createWorktreeCleanup } from "../autopilot/cleanup.ts";
 import { ensureEpicBranch } from "../autopilot/epicBranch.ts";
@@ -50,7 +49,7 @@ import { createSelfUpdater, type SelfUpdateDeps } from "./machines/selfUpdate.ts
 import { createRouteOpener, type TunnelDeps } from "./machines/tunnel.ts";
 import { createModelPriceService } from "./modelPrices.ts";
 import { createProviders, type ProviderProbes } from "./providers.ts";
-import { createReviewFallbacks } from "./reviewFallbacks.ts";
+import { createReviewFallbacks, machineWorktreeOf } from "./reviewFallbacks.ts";
 import { createCustomHandoffLauncher } from "./customHandoff.ts";
 import { createSessionLaunch } from "./sessionLaunch.ts";
 import { createSessionTranscriptReader } from "./sessionTranscript.ts";
@@ -163,14 +162,11 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   const reviews = createReviewFallbacks({
     services: deps.services,
     t3,
+    // Unknown until the machine has answered once: then it is taken to, as every machine on this version does.
+    reviewsThere: (machineId) => machines.can(machineId, "runs") !== false,
     ...(deps.config.role === "runner"
       ? {
-          // The newest session of the task that ran in a folder still there: its run's worktree.
-          worktreeOf: (task) =>
-            task.links
-              .filter((l) => l.kind === "agent_session")
-              .map((l) => l.ref.cwd)
-              .findLast((cwd) => existsSync(cwd)) ?? null,
+          worktreeOf: (task) => machineWorktreeOf(task, deps.config.instanceId),
         }
       : {}),
     ...(overrides.runHeadless ? { runHeadless: overrides.runHeadless } : {}),
@@ -371,8 +367,10 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.log ? { log: overrides.log } : {}),
   });
   const jobs = createMachineJobs();
+  const workInFlight = () => deps.services().autopilot.status().active.length + jobs.inFlight((kind) => kind !== "run");
   const runnerHost: RunnerHost = {
     jobs,
+    workInFlight,
     work: createRunnerWork({
       services: deps.services,
       jobs,
@@ -391,7 +389,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     }),
     logins: createLoginDetector(overrides.runnerHost?.logins),
     updater: createSelfUpdater({
-      runsInFlight: () => deps.services().autopilot.status().active.length,
+      runsInFlight: workInFlight,
       restart: () => restartRunner?.(),
       ...(overrides.log ? { log: overrides.log } : {}),
       ...overrides.runnerHost?.update,

@@ -103,8 +103,7 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
       c.json({
         version: BRAND.version,
         platform: serverPlatformOf(process.platform, process.arch) ?? `${process.platform}-${process.arch}`,
-        // Runs the board sent here are kept as this runner's own runs while they go.
-        runsInFlight: services.autopilot.status().active.length,
+        runsInFlight: integrations.runnerHost.workInFlight(),
         // Well inside the board's request timeout: a slow check answers with what was last known.
         logins: await logins.loginsWithin(STATUS_LOGINS_WAIT_MS),
         update: updater.state(),

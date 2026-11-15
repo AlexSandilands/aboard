@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import {
   taskNumberValue,
@@ -29,6 +30,25 @@ export const REVIEW_WATCHDOG_INTERVAL_MS = 30_000;
 /** Thread states where the agent is busy (or waiting on the user), so its review may still come. */
 const BUSY = new Set(["working", "input", "approval"]);
 
+/**
+ * The folder a task's change is in on a runner: where its newest session that ran on this machine worked, when that
+ * folder is still there (its run's worktree). A session linked on the board names a folder of the board's machine,
+ * whatever happens to exist at that path here, so only this machine's own count.
+ */
+export function machineWorktreeOf(
+  task: Pick<TaskSummary, "links">,
+  instanceId: string,
+  exists: (path: string) => boolean = existsSync,
+): string | null {
+  return (
+    task.links
+      .filter((l) => l.kind === "agent_session")
+      .filter((l) => l.ref.machine?.id === instanceId)
+      .map((l) => l.ref.cwd)
+      .findLast((cwd) => exists(cwd)) ?? null
+  );
+}
+
 export interface ReviewFallbacks {
   /** One pass over pending rounds; resolves when any nudge is sent (not when a headless review ends). */
   tick(): Promise<void>;
@@ -52,6 +72,11 @@ export function createReviewFallbacks(deps: {
    * folder there is a clone nobody works in). Null when there is none to prefer.
    */
   worktreeOf?: (task: TaskSummary) => string | null;
+  /**
+   * On a board: whether the machine holding a task reviews it there. A runner from before review rounds travelled
+   * doesn't, so its tasks keep the board's own watchdog. Unset, every machine does.
+   */
+  reviewsThere?: (machineId: string) => boolean;
   now?: () => number;
   graceMs?: number;
   agentGraceMs?: number;
@@ -192,7 +217,7 @@ export function createReviewFallbacks(deps: {
     // A task turned manual while a round was pending has no change, and no agent, to chase.
     if (task.status !== "review" || task.archivedAt || task.manual) return;
     // A task a machine holds is reviewed there, where its change is: its rounds arrive with the machine's log.
-    if (task.hold) return;
+    if (task.hold && (deps.reviewsThere?.(task.hold.machineId) ?? true)) return;
     const thread = implementingThread(task);
     if (thread?.snapshot && BUSY.has(thread.snapshot.status)) return;
     const userAsked = round.openedBy === "user" && !round.nudgedAt;
@@ -243,7 +268,8 @@ export function createReviewFallbacks(deps: {
       const s = deps.services();
       for (const round of s.reviews.roundsWithStatus("running")) {
         // A held task's round is running on its machine, which is the one to say otherwise.
-        if (s.holds.get(round.taskId)) continue;
+        const hold = s.holds.get(round.taskId);
+        if (hold && (deps.reviewsThere?.(hold.machineId) ?? true)) continue;
         s.reviews.setRoundStatus(round.id, "pending", {
           actor: BOARD_REVIEWER,
           error: "The board restarted mid-review",

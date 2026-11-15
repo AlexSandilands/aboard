@@ -1214,8 +1214,12 @@ export function createAutopilotService(
           // nothing re-checks, so it is flagged for the user.
           // The key is retired as by `retry`, unless this work was cut short before: a run that itself restarts the
           // board must not loop. Runs stranded together don't make each other history.
+          // A run for a task a machine holds wasn't cut short there: its agent goes on, unobserved. Redoing the work
+          // would put a second agent on the same branch, so it is flagged for the user like any other launch.
+          const onMachine = run.taskId ? repos.holds.get(run.taskId) : null;
           if (
             RETRIED_AFTER_RESTART.has(run.automation) &&
+            !onMachine &&
             !run.dryRun &&
             !isSupersededRun(
               run,
@@ -1246,7 +1250,9 @@ export function createAutopilotService(
           const failed: AutopilotRun = {
             ...run,
             status: "failed",
-            error,
+            error: onMachine
+              ? `${error}. It ran on ${repos.machines.get(onMachine.machineId)?.name ?? "a machine"}, where its agent may still be working: look at the task before retrying`
+              : error,
             needsAttention: run.taskId !== null,
             finishedAt: at,
             updatedAt: at,

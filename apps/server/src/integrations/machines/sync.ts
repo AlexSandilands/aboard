@@ -223,14 +223,15 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
 
   /** What follows a hand-over and must not undo it: the task's images, and a word on work the machine can't see. */
   async function afterHandOver(taskId: string, machineId: string, machineName: string): Promise<void> {
+    // Each on its own: an image that couldn't be sent says nothing about the warning.
     try {
-      await deps.work?.sendImages(taskId, machineId);
       const warning = await deps.work?.unpushed(taskId, machineName);
       // A note, so the agent on the machine reads it too.
       if (warning) services().tasks.addNote(taskId, warning, "board");
     } catch (error) {
       log.warn(`[machines] after handing over to ${machineName}: ${messageOf(error)}`);
     }
+    await deps.work?.sendImages(taskId, machineId);
   }
 
   const sleep = (ms: number) =>

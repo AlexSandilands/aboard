@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { claudeProjectSlug } from "../claudeSessionTitle.ts";
-import { createReviewFallbacks } from "../reviewFallbacks.ts";
+import { AUTOPILOT_REVIEW_PRS } from "@repo/contracts";
+import { createReviewFallbacks, machineWorktreeOf } from "../reviewFallbacks.ts";
+import { InterpreterMissingError } from "../scriptRunner.ts";
+import { createRemoteWork } from "./remoteWork.ts";
 import type { RunHeadless } from "../headlessReview.ts";
 
 type HeadlessRequest = Parameters<RunHeadless>[0];
@@ -279,5 +282,190 @@ describe("what the board shows of work on a machine", () => {
     expect([...readFileSync(there[0]!.path)]).toEqual([...png]);
     // Not the board's folder: the machine's own.
     expect(there[0]!.path).not.toBe(board.services.attachments.forTask(task.id)[0]!.path);
+  });
+});
+
+describe("a job the board reads on a machine", () => {
+  const script = (taskId: string) => ({
+    language: "sh" as const,
+    body: "echo hi",
+    cwd: "/the/boards/folder",
+    taskId,
+    env: {},
+    context: {},
+    timeoutMs: 1_000,
+  });
+  const answer = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+  /** The board's work on machines, with the link in the test's hands and a clock that only waiting moves. */
+  async function work(options: Parameters<typeof createBoardAndRunner>[0] = {}) {
+    // With a repository, so the machine has a folder of the project to run a script in.
+    const pair = await setup({ remotes: { "/work/app": "git@github.com:acme/app.git" }, ...options });
+    const clock = { now: 0 };
+    const waits: number[] = [];
+    const sent: string[] = [];
+    const link = {
+      /** Requests that fail before they reach the machine. */
+      down: 0,
+      can: true as boolean | null,
+      respond: null as ((path: string, init?: RequestInit) => Response | null) | null,
+    };
+    const remote = createRemoteWork({
+      services: () => pair.board.services,
+      machines: {
+        can: () => link.can,
+        request: (id, path, init, opts) => {
+          sent.push(`${init?.method ?? "GET"} ${path.split("?")[0]}`);
+          if (link.down > 0) {
+            link.down -= 1;
+            return Promise.reject(new TypeError("fetch failed"));
+          }
+          const canned = link.respond?.(path, init);
+          return canned ? Promise.resolve(canned) : pair.board.integrations.machines.request(id, path, init, opts);
+        },
+      },
+      runGit: () => Promise.resolve({ code: 1, stdout: "", stderr: "" }),
+      now: () => clock.now,
+      sleep: (ms) => {
+        waits.push(ms);
+        clock.now += ms;
+        return Promise.resolve();
+      },
+      log: { warn: () => {} },
+    });
+    return { ...pair, remote, link, waits, sent, clock };
+  }
+
+  it("asks again while the machine can't be reached, and starts the job once", async () => {
+    const ran: string[] = [];
+    const { remote, link, waits, task } = await work({
+      runner: {
+        runScript: (request) => {
+          ran.push(request.cwd);
+          return Promise.resolve({
+            exitCode: 0,
+            output: "hi\n",
+            stdout: "hi\n",
+            stderr: "",
+            timedOut: false,
+            stdoutTruncated: false,
+          });
+        },
+      },
+    });
+    link.down = 2;
+    const result = await remote.script(script(task.id));
+    expect(result).toMatchObject({ exitCode: 0, output: "hi\n" });
+    expect(waits).toEqual([2_000, 4_000]);
+    expect(ran).toHaveLength(1);
+  });
+
+  it("gives up on a machine that stays away past the job's time, saying its outcome is unknown", async () => {
+    const { remote, link, waits, task } = await work();
+    link.down = Number.POSITIVE_INFINITY;
+    await expect(remote.script(script(task.id))).rejects.toThrow(
+      "engine couldn't be reached, so what became of this is unknown: fetch failed",
+    );
+    // Backing off to half a minute, for the script's second plus the five minutes of grace.
+    expect(Math.max(...waits)).toBe(30_000);
+    expect(waits.reduce((sum, ms) => sum + ms, 0)).toBeLessThanOrEqual(301_000);
+  });
+
+  it("fails a job the machine no longer knows: it restarted", async () => {
+    const { remote, link, task } = await work({
+      runner: { runScript: () => new Promise(() => {}) },
+    });
+    // Started for real; then the runner comes back with no jobs.
+    link.respond = (path, init) =>
+      !init?.method && path.startsWith("/machine/jobs/") ? answer({ id: "x", state: "unknown", updates: [] }) : null;
+    await expect(remote.script(script(task.id))).rejects.toThrow("engine restarted while this was going");
+  });
+
+  it("rebuilds a missing interpreter as the error a script action reports, and passes a refusal on", async () => {
+    const { remote, link, task } = await work({
+      runner: { runScript: () => Promise.reject(new InterpreterMissingError("python3")) },
+    });
+    const missing = await remote.script(script(task.id))!.catch((error: unknown) => error);
+    expect(missing).toBeInstanceOf(InterpreterMissingError);
+    expect((missing as Error).message).toBe("python3 not found on PATH");
+
+    link.respond = () => answer({ error: { code: "CONFLICT", message: "#1 isn't held by this machine" } }, 409);
+    await expect(remote.script(script(task.id))).rejects.toThrow("#1 isn't held by this machine");
+  });
+
+  it("refuses up front on a machine that said it can't run things, sending nothing", async () => {
+    const { remote, link, sent, task } = await work();
+    link.can = false;
+    await expect(remote.script(script(task.id))).rejects.toThrow(
+      "engine runs a version that can't run things for a task; update it first",
+    );
+    expect(sent).toEqual([]);
+  });
+});
+
+describe("the board's settings on a machine", () => {
+  it("keeps where the machine's own CLIs are, and skips a setting it can't read without dropping the rest", async () => {
+    const { runner } = await setup();
+    runner.services.settings.update({ providers: [{ id: "claude-code", enabled: false, cliPath: "/opt/claude" }] });
+    runner.integrations.runnerHost.work.applySettings({
+      providers: [
+        { id: "claude-code", enabled: true, cliPath: "C:\\board\\claude.exe" },
+        { id: "codex", enabled: true },
+      ],
+      reviewMaxRounds: "many",
+      autoReview: false,
+      machineName: "not the board's to set",
+    });
+    const settings = runner.services.settings.get();
+    expect(settings.providers).toEqual([
+      { id: "claude-code", enabled: true, cliPath: "/opt/claude" },
+      { id: "codex", enabled: true, cliPath: null },
+    ]);
+    expect(settings.autoReview).toBe(false);
+    expect(settings.reviewMaxRounds).toBe(3);
+    expect(settings.machineName).toBe("engine");
+  });
+});
+
+describe("a board restart while a machine works", () => {
+  it("flags the run instead of redoing it: the agent on the machine goes on", async () => {
+    const { board, task } = await setup();
+    const run = board.services.autopilot.record({
+      automation: AUTOPILOT_REVIEW_PRS,
+      candidate: { dedupeKey: "review:pr:abc", summary: "review PR #7", taskId: task.id },
+      dryRun: false,
+    })!;
+    board.services.autopilot.start(run.id);
+    expect(board.services.autopilot.recover()).toBe(1);
+
+    const [after] = board.services.autopilot.runsForTask(task.id);
+    expect(after).toMatchObject({ status: "failed", needsAttention: true, dedupeKey: "review:pr:abc" });
+    expect(after!.error).toContain("It ran on engine, where its agent may still be working");
+  });
+});
+
+describe("where a machine's reviewer works", () => {
+  it("is the folder of the task's newest session that ran on this machine, not one the board linked", () => {
+    const session = (cwd: string, machine?: string) => ({
+      kind: "agent_session" as const,
+      ref: {
+        harness: "claude-code" as const,
+        sessionId: "s",
+        cwd,
+        ...(machine ? { machine: { id: machine, name: machine } } : {}),
+      },
+    });
+    const links = [
+      session("/w/old", "here"),
+      session("/w/new", "here"),
+      session("/w/gone", "here"),
+      session("/home/me/app"),
+      session("/w/other", "elsewhere"),
+    ];
+    const task = { links } as unknown as Parameters<typeof machineWorktreeOf>[0];
+    // Every path exists but the worktree that was cleaned up.
+    expect(machineWorktreeOf(task, "here", (path) => path !== "/w/gone")).toBe("/w/new");
+    expect(machineWorktreeOf(task, "nobody", () => true)).toBeNull();
   });
 });

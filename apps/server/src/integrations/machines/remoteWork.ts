@@ -6,7 +6,6 @@ import {
   MachineJobState,
   machineAttachmentPath,
   machineJobPath,
-  taskLabel,
   type AgentSessionRef,
   type MachineJobKind,
   type MachineJobRequest,
@@ -50,7 +49,7 @@ export interface RemoteWork {
   transcript(ref: AgentSessionRef, offset: number): Promise<TranscriptRead> | null;
   /** Sends the board's settings to a machine when they differ from what it was last sent. */
   syncSettings(machineId: string): Promise<void>;
-  /** Copies a task's pasted images to a machine, so the paths in its prompts resolve there. */
+  /** Copies a task's pasted images to a machine, so the paths in its prompts resolve there. Never throws. */
   sendImages(taskId: string, machineId: string): Promise<void>;
   /**
    * What the machine can't see of a task's work: its branches in the board's checkout with commits that aren't on
@@ -65,7 +64,7 @@ export interface RemoteWork {
 
 export function createRemoteWork(deps: {
   services: () => Services;
-  machines: Pick<MachinesIntegration, "request">;
+  machines: Pick<MachinesIntegration, "request" | "can">;
   runGit: RunGit;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -116,6 +115,10 @@ export function createRemoteWork(deps: {
     budgetMs: number,
     onUpdate: (patch: Record<string, unknown>) => void = () => {},
   ): Promise<unknown> {
+    // Said before anything is sent: a runner from before work on a machine would only answer 404.
+    if (deps.machines.can(machine.id, "runs") === false) {
+      throw new Error(`${machine.name} runs a version that can't run things for a task; update it first`);
+    }
     const deadline = now() + budgetMs;
     let delay = RETRY_MIN_MS;
     /** One request, tried again while the machine can't be reached. An answer that isn't a job's state throws. */
@@ -218,16 +221,20 @@ export function createRemoteWork(deps: {
     const s = services();
     for (const image of s.attachments.forTask(taskId)) {
       if (sentImages.has(`${machineId}:${image.id}`)) continue;
-      const { bytes } = s.attachments.read(image.id);
-      const query = new URLSearchParams({ taskId, filename: image.filename });
-      const res = await deps.machines.request(machineId, `${machineAttachmentPath(image.id)}?${query.toString()}`, {
-        method: "PUT",
-        headers: { "content-type": image.mime },
-        body: new Uint8Array(bytes),
-      });
-      if (res.ok) sentImages.add(`${machineId}:${image.id}`);
-      else if (res.status !== 404) {
-        log.warn(`[machines] couldn't send an image of ${taskLabel(s.tasks.summary(taskId))}: ${res.status}`);
+      // One at a time, each on its own: a file that is gone, or a link that dropped, doesn't keep the rest back.
+      try {
+        const { bytes } = s.attachments.read(image.id);
+        const query = new URLSearchParams({ taskId, filename: image.filename });
+        const res = await deps.machines.request(machineId, `${machineAttachmentPath(image.id)}?${query.toString()}`, {
+          method: "PUT",
+          headers: { "content-type": image.mime },
+          body: new Uint8Array(bytes),
+        });
+        // A machine from before images travelled (a 404) is left without them.
+        if (res.ok) sentImages.add(`${machineId}:${image.id}`);
+        else if (res.status !== 404) throw new Error(`the machine answered ${res.status}`);
+      } catch (error) {
+        log.warn(`[machines] couldn't send the image ${image.filename} of a held task: ${messageOf(error)}`);
       }
     }
   };
@@ -255,7 +262,7 @@ export function createRemoteWork(deps: {
       // The job's own request says what is wrong with the machine.
     });
     // Images pasted since the hand-over: the prompt may name them.
-    await sendImages(task.id, machine.id).catch(() => {});
+    await sendImages(task.id, machine.id);
     const { stillWanted: _stillWanted, ...sent } = request;
     const result = (await runJob(
       machine,

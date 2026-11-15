@@ -20,12 +20,13 @@ export interface MachineJobs {
   read(id: string, after: number, wait: number): Promise<MachineJobState>;
   /** Drops a finished job: the board has its outcome. A running one is kept. */
   forget(id: string): void;
-  /** Jobs still going. */
-  inFlight(): number;
+  /** Jobs still going, of the kinds `counts` says (all of them by default). */
+  inFlight(counts?: (kind: string) => boolean): number;
 }
 
 interface Job {
   id: string;
+  kind: string;
   state: "running" | "done" | "failed";
   updates: Array<{ seq: number; patch: Record<string, unknown> }>;
   result?: unknown;
@@ -77,7 +78,14 @@ export function createMachineJobs(deps: { now?: () => number } = {}): MachineJob
       prune();
       const known = jobs.get(request.id);
       if (known) return stateOf(known, 0);
-      const job: Job = { id: request.id, state: "running", updates: [], finishedAt: null, waiters: new Set() };
+      const job: Job = {
+        id: request.id,
+        kind: request.kind,
+        state: "running",
+        updates: [],
+        finishedAt: null,
+        waiters: new Set(),
+      };
       jobs.set(job.id, job);
       const update: JobUpdate = (patch) => {
         if (job.state !== "running") return;
@@ -123,6 +131,7 @@ export function createMachineJobs(deps: { now?: () => number } = {}): MachineJob
       if (jobs.get(id)?.state !== "running") jobs.delete(id);
     },
 
-    inFlight: () => [...jobs.values()].filter((job) => job.state === "running").length,
+    inFlight: (counts = () => true) =>
+      [...jobs.values()].filter((job) => job.state === "running" && counts(job.kind)).length,
   };
 }

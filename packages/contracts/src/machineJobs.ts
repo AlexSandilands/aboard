@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AgentSessionRef } from "./agentSessions.ts";
 
 // Work a board has a connected machine do for a task it holds (docs/features/remote-machines.md#work-on-the-machine):
 // a headless run, a custom automation's command or script. The board starts a job and reads it until it ends; the
@@ -62,8 +63,9 @@ export type MachineSettingsInput = z.infer<typeof MachineSettingsInput>;
 
 /** `POST /machine/transcript`: a session that ran on the machine, by its id and the folder it ran in. */
 export const MachineTranscriptRequest = z.object({
-  sessionId: z.string().min(1),
-  cwd: z.string().min(1),
+  // Both become parts of a path under the harness's folder: a UUID and an absolute folder, as a session link has them.
+  sessionId: AgentSessionRef.shape.sessionId,
+  cwd: AgentSessionRef.shape.cwd,
   offset: z.number().int().nonnegative().default(0),
 });
 export type MachineTranscriptRequest = z.infer<typeof MachineTranscriptRequest>;

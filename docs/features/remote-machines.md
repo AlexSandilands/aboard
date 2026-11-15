@@ -649,7 +649,12 @@ twice starts one job. Jobs are in memory:
 - A machine the board can't reach is asked again (2 seconds, doubling to 30) until the run's own timeout plus 15
   minutes has passed. The job goes on there meanwhile, and what the agent does to the task arrives through the log
   either way.
-- A board that restarts mid-run fails its run as it does a local one; the job on the machine finishes unobserved.
+- A board that restarts mid-run fails its run as it does a local one, and flags it: the job on the machine finishes
+  unobserved. A Review PRs or Fix PRs run, which a board otherwise redoes after a restart, is not redone for a held
+  task, since a second agent would work on the same branch beside the first.
+- A machine that never said it can do this (no `runs` among its capabilities: a runner from before it) is refused
+  before anything is sent, with "update it first". The board's own review watchdog keeps looking after such a
+  machine's tasks.
 
 | Kind     | What runs                                                                                          |
 | -------- | -------------------------------------------------------------------------------------------------- |
@@ -670,7 +675,7 @@ runner itself. Three things differ from a run on a board:
   servers, since a machine set up only as a runner has no registration for it.
 
 The runner keeps the run in its own `autopilot_runs` under the board's id while it goes (`autopilot.adopt`), so it
-counts in `runsInFlight`, its session's status follows it, and the worktree cleanup finds it later. It logs nothing
+counts in `runsInFlight` (with the commands and scripts going, which an update would cut short just the same), its session's status follows it, and the worktree cleanup finds it later. It logs nothing
 on the task and flags nothing: the board's run does.
 
 **Unpushed commits.** A machine has what is on origin. Before a run, and at hand-over, the board looks in its own

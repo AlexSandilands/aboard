@@ -76,6 +76,11 @@ export interface RunnerHost {
   /** The work this runner is doing for its board on tasks it holds. */
   jobs: MachineJobs;
   work: RunnerWork;
+  /**
+   * What this runner is doing now: its runs (those the board sent are kept as its own while they go) and the
+   * commands and scripts the board started, which an update or a restart would cut short just the same.
+   */
+  workInFlight(): number;
   /** Registers how the server is stopped so its service starts it again, after an update. */
   onRestart(restart: () => void): void;
 }
