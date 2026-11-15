@@ -1,6 +1,5 @@
-import { realpathSync } from "node:fs";
 import { networkInterfaces } from "node:os";
-import { isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute } from "node:path";
 import {
   taskLabel,
   type HostedRunnerPairingCode,
@@ -9,6 +8,7 @@ import {
   type UpdateHostedRunnerInput,
 } from "@repo/contracts";
 import type { AppContext } from "./app.ts";
+import { canonicalPath, isInside } from "./autopilot/worktrees.ts";
 import { hostedRunnerConfig, hostedRunnerHome, type Config } from "./config.ts";
 import { AppError } from "./errors.ts";
 import { addressKind } from "./http/addresses.ts";
@@ -86,20 +86,12 @@ function tailnetAddress(): string | null {
   return null;
 }
 
-/** `path` as it really is, when it exists: a worktree reached through a symlink still counts as inside. */
-function real(path: string): string {
-  try {
-    return realpathSync(path);
-  } catch {
-    return resolve(path);
-  }
-}
-
-const inside = (dir: string, path: string): boolean => {
-  if (!isAbsolute(path)) return false;
-  const rel = relative(real(dir), real(path));
-  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
-};
+/**
+ * Whether `path` is `dir` or inside it, both as the file system names them: a worktree reached through a symlink, or a
+ * Windows short name (`RUNNER~1`) on one side and the long name git wrote on the other, still counts as inside.
+ */
+const inside = (dir: string, path: string): boolean =>
+  isAbsolute(path) && isInside(canonicalPath(path), canonicalPath(dir));
 
 export function createHostedRunner(deps: HostedRunnerDeps): HostedRunner {
   const log = deps.log ?? console;
