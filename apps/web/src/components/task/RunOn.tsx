@@ -340,19 +340,6 @@ export function RunOnStripControl({ task }: { task: RunOnTask }) {
 }
 
 /**
- * Why the hand-off window can't start the task here: it is set to run on a machine, and a thread or session started
- * from this window would run on this one. Null when it runs here.
- */
-export function runsElsewhereNote(placement: Placement): string | null {
-  if (placement.state === "held") {
-    return `${placement.machineName} holds this task, and its work happens there. A thread or session from here would work beside it on this machine: pull the task back first.`;
-  }
-  if (placement.state !== "will") return null;
-  const name = placement.machine.name;
-  return `This task runs on ${name}. Autopilot's Start planned starts it there once its Autopilot flag is on; a thread or session from here would run on this machine. Choose This machine to start it here.`;
-}
-
-/**
  * The card's number, with the machine's letter in front when the task runs on one: dashed before it starts, an amber
  * dot while edits made here wait for the machine, greyed and struck through while the machine can't be reached.
  */

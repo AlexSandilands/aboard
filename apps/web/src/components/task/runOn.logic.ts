@@ -182,3 +182,29 @@ export function sinceText(lastSeenAt: string | null, now = Date.now()): string {
     : at.toLocaleDateString([], { month: "short", day: "numeric" });
   return `hasn't answered since ${when}`;
 }
+
+/**
+ * What the hand-off windows say about a task that runs on another machine: `blocker` when a thread or session from
+ * here would do its work on this machine (the window's Send is off), else a `note` to show. Planning doesn't start the
+ * task (it stays in Backlog or Planned), so a planning launch goes ahead for a task that will start on a machine; a
+ * task a machine already holds is worked on there, so nothing starts beside it here.
+ */
+export function launchElsewhere(
+  placement: Placement,
+  planning: boolean,
+): { blocker: string | null; note: string | null } {
+  if (placement.state === "held") {
+    const text = `${placement.machineName} holds this task, and its work happens there. A thread or session from here would work beside it on this machine: pull the task back first.`;
+    return { blocker: text, note: text };
+  }
+  if (placement.state !== "will") return { blocker: null, note: null };
+  const name = placement.machine.name;
+  if (planning) {
+    return {
+      blocker: null,
+      note: `Planning here is fine: the task stays where it is. It starts on ${name} when Autopilot's Start planned starts it.`,
+    };
+  }
+  const text = `This task runs on ${name}. Autopilot's Start planned starts it there once its Autopilot flag is on; a thread or session from here would run on this machine. Choose This machine to start it here, or plan it with Plan with me.`;
+  return { blocker: text, note: text };
+}

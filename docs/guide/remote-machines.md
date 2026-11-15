@@ -100,7 +100,8 @@ machine whose prefix is E.
 
 **Autopilot starts it there.** When Start planned tasks starts the task, it hands it to the machine first, and the
 work happens there. A thread or a session from the hand-off window would run on this machine, so the window won't
-start one for a task set to another machine: pick **This machine** in its strip to start it here instead. If the
+start the work of a task set to another machine: pick **This machine** in its strip to start it here instead. Planning
+it from the window (Plan with me) is fine, since that doesn't start the task. If the
 machine can't be reached or can't clone the repository when Autopilot starts the task, the run fails with the reason
 and nothing starts here.
 

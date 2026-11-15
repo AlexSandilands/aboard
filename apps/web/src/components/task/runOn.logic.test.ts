@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canChooseRunOn,
   heldLabel,
+  launchElsewhere,
   machineNumberParts,
   placementOf,
   placementTitle,
@@ -137,5 +138,36 @@ describe("machineNumberParts", () => {
       letter: "S",
       rest: "#E7",
     });
+  });
+});
+
+describe("launchElsewhere", () => {
+  const will = { state: "will", machine: engine } as const;
+  const held = {
+    state: "held",
+    machineId: "engine",
+    machineName: "engine",
+    machine: engine,
+    waiting: 0,
+    offline: false,
+  } as const;
+
+  it("lets a planning thread run here for a task that will start on a machine, and says where it starts", () => {
+    const { blocker, note } = launchElsewhere(will, true);
+    expect(blocker).toBeNull();
+    expect(note).toContain("starts on engine");
+  });
+
+  it("blocks starting the work here for a task that will start on a machine", () => {
+    expect(launchElsewhere(will, false).blocker).toContain("This task runs on engine");
+  });
+
+  it("blocks any thread for a task a machine holds, planning or not", () => {
+    expect(launchElsewhere(held, true).blocker).toContain("engine holds this task");
+    expect(launchElsewhere(held, false).blocker).toContain("engine holds this task");
+  });
+
+  it("says nothing for a task that runs here", () => {
+    expect(launchElsewhere({ state: "here" }, false)).toEqual({ blocker: null, note: null });
   });
 });

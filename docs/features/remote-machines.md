@@ -623,7 +623,8 @@ machine), then this machine. A machine the board no longer has counts as no choi
   run then goes to the machine like every run of a held task. A hand-over that fails (the machine can't be reached,
   can't clone the repository) fails the run with that reason; nothing starts here instead. Start planned is the one way
   a task starts on a machine for now: a thread or session from the hand-off window runs on this machine, so the window
-  refuses to start one for a task that runs elsewhere.
+  refuses one that would start the work of a task that runs elsewhere. Planning it there is allowed (the task stays in
+  Backlog or Planned), and a task a machine holds gets no thread or session here at all.
 - **What the board shows.** The task panel's chip beside Status picks the machine before the task starts ("Run on
   engine", a menu of the project's default, this machine and each machine with how it is) and, once held, is the hold
   ("On engine", "On engine · 2 waiting", "engine · offline") with Pull back in its popover. The hand-off window has the

@@ -59,7 +59,8 @@ import { usePlanPrompt } from "./PlanTasksDialog";
 import { RefPicker } from "./BranchPicker";
 import { AccessPicker, ComposerControl, ComposerStrip, WorkspaceMenu } from "./T3LaunchPickers";
 import { T3ModelPicker } from "~/components/models/T3ModelPicker";
-import { RunOnStripControl, runsElsewhereNote, useRunOn } from "~/components/task/RunOn";
+import { RunOnStripControl, useRunOn } from "~/components/task/RunOn";
+import { launchElsewhere, type Placement } from "~/components/task/runOn.logic";
 
 /**
  * What the dialog starts a thread for: a task, which the thread is linked to, a project's Suggest epics, or a plan
@@ -88,8 +89,8 @@ interface LaunchSubject {
   handoffName?: string;
   /** The task whose machine the strip offers to choose (remote-machines.md#choosing-the-machine). */
   runOnTask?: TaskSummary;
-  /** Why the thread can't start here: the task runs on another machine (runsElsewhereNote). */
-  elsewhere?: string | null;
+  /** Where the task runs, for whether the thread can start here (launchElsewhere); absent for an epic. */
+  placement?: Placement;
 }
 
 /** The subject's launch mutation, with its id already bound. */
@@ -215,7 +216,7 @@ function TaskLaunchContent({
   const followup = defaultHandoffMode(task) === "followup";
   const epicBranch = useFollowupEpicBranch(task);
   const { placement } = useRunOn(task);
-  const where = epic ? {} : { runOnTask: fix ? undefined : task, elsewhere: runsElsewhereNote(placement) };
+  const where = epic ? {} : { runOnTask: fix ? undefined : task, placement };
   const base: LaunchSubject = fix
     ? {
         label: `Fix PR #${fix.number} · ${taskLabel(task)} ${task.title}`,
@@ -432,6 +433,8 @@ function Composer({
     [loaded, fixing],
   );
   const [planWithMe, setPlanWithMe] = useState(subject.initialPlan);
+  // A planning thread doesn't start the task, so it may run here whatever machine the task will start on.
+  const elsewhere = subject.placement ? launchElsewhere(subject.placement, planWithMe) : { blocker: null, note: null };
   const [prompt, setPrompt] = useState(() => promptFor(planWithMe));
   // The choices start from the options. The dialog may open on cached ones that a refresh then changes (the task's
   // model, say), so until the user picks something they follow the newest; after that a refresh never moves them.
@@ -461,7 +464,7 @@ function Composer({
         : subject.fixBranch && workspace.mode !== "new_worktree"
           ? // The prompt has the agent fast-forward its branch to the PR's: that must never move one of yours.
             "Fix the PR in a new worktree, not in your checkout"
-          : (subject.elsewhere ?? images.blocker);
+          : (elsewhere.blocker ?? images.blocker);
 
   const withModel = (current: Picks, next: T3ModelSelection | null): Picks => ({
     ...current,
@@ -617,7 +620,7 @@ function Composer({
       {options?.suggestion ? (
         <SuggestionNote suggestion={options.suggestion} planWithMe={planWithMe} handoffName={subject.handoffName} />
       ) : null}
-      {subject.elsewhere ? <ElsewhereNote text={subject.elsewhere} /> : null}
+      {elsewhere.note ? <ElsewhereNote text={elsewhere.note} /> : null}
       {subject.handoffName ? <HandoffNote name={subject.handoffName} /> : null}
     </form>
   );

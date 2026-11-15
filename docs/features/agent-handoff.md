@@ -254,9 +254,11 @@ The thread is titled `#<number> <task title>`. Ctrl+Enter in the prompt sends it
 
 **Where the task runs.** Once a machine is connected, the strip under the composer starts with the task's machine
 (**This machine**, or the machine's name), the same choice as the task panel's chip, saved onto the task
-([remote-machines.md](remote-machines.md#choosing-the-machine)). A task set to run on another machine, or held by one,
-can't start a thread or session from here, which would run on this machine: Send is off and a note under the composer
-says to pick **This machine**, or that the machine holds the task and it has to be pulled back first. The Claude Code /
+([remote-machines.md](remote-machines.md#choosing-the-machine)). A task set to run on another machine can't start its
+work in a thread or session from here, which would run on this machine: Send is off and a note under the composer says
+to pick **This machine**. Planning (Plan with me, a planning session) is allowed, since it doesn't start the task; the
+note then says where it will start (`launchElsewhere` in `components/task/runOn.logic.ts`). A task a machine holds
+can't get any thread or session here until it is pulled back. The Claude Code /
 Codex / Copilot session dialog does the same in its strip. Not for an epic, a PR fix's branch, or a project.
 
 **Loading.** The options (models, refs, defaults) come from T3, so they take a moment. The prompt, the image button and

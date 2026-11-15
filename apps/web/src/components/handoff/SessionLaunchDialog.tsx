@@ -63,7 +63,8 @@ import {
   type SessionPicks,
   type SessionWhere,
 } from "./sessionLaunch.logic";
-import { RunOnStripControl, runsElsewhereNote, useRunOn } from "~/components/task/RunOn";
+import { RunOnStripControl, useRunOn } from "~/components/task/RunOn";
+import { launchElsewhere } from "~/components/task/runOn.logic";
 
 /** What says which model a hand-off's choice comes down to. */
 const selectModelSettings = ({ modelTiers, modelProfiles, operationModels }: AppSettings) => ({
@@ -252,7 +253,8 @@ function Composer({
   const badModel = modelError(model);
   // A task set to run on another machine starts there, not in a session here (remote-machines.md#choosing-the-machine).
   const { placement } = useRunOn(task);
-  const elsewhere = task.kind === "epic" ? null : runsElsewhereNote(placement);
+  // A planning session doesn't start the task, so it may run here whatever machine the task will start on.
+  const elsewhere = task.kind === "epic" ? { blocker: null, note: null } : launchElsewhere(placement, plan);
   const blocker = !ready
     ? failure
       ? "The launch options didn't load"
@@ -265,7 +267,7 @@ function Composer({
           ? fix
             ? "The project's folder isn't a git repository"
             : "Choose a branch"
-          : (badModel ?? elsewhere ?? images.blocker);
+          : (badModel ?? elsewhere.blocker ?? images.blocker);
 
   const pick = (change: (picks: SessionPicks) => SessionPicks) => setPickState((state) => pickSessionBy(state, change));
   const pickModel = (next: string | null, nextLevels: readonly CliEffort[]) =>
@@ -446,10 +448,10 @@ function Composer({
             : null}
         </p>
       ) : null}
-      {elsewhere ? (
+      {elsewhere.note ? (
         <p className="mt-2 flex items-start gap-2 px-1 text-xs leading-relaxed text-muted-foreground">
           <ServerIcon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-          <span>{elsewhere}</span>
+          <span>{elsewhere.note}</span>
         </p>
       ) : null}
       {preset ? <HandoffNote name={preset.name} /> : null}
