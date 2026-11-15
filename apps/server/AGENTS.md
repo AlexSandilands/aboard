@@ -30,7 +30,10 @@ and review integrations. How it fits together: [docs/architecture.md](../../docs
   stripping can't run (parameter properties). `dev` must not use `node --watch`: on NTFS it restarts when a
   file is merely read, which kills Autopilot runs. `scripts/dev.ts` starts `tsx watch` with stdin ignored:
   under `concurrently` on Windows, an inherited idle stdin pipe hangs the server before it listens.
-  `scripts/bundle.ts` builds `dist/server.mjs` for the desktop app.
+  `scripts/bundle.ts` builds `dist/server.mjs` for the desktop app, and with `--tarballs` the headless server
+  release for remote machines (`scripts/tarball.ts`, [remote machines](../../docs/features/remote-machines.md)).
+- `--runner` starts the runner role, which serves no web app; `/api/health` reports the role. Code that only a
+  board should run checks `config.role`.
 
 ## Tests
 

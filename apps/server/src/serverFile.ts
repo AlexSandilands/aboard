@@ -25,6 +25,11 @@ export function removeServerFile(homeDir: string): void {
 
 /** The URL of a server that is running on `homeDir`, or null. A file left by a crashed server doesn't count. */
 export async function runningServerUrl(homeDir: string): Promise<string | null> {
+  return (await runningServer(homeDir))?.url ?? null;
+}
+
+/** The server running on `homeDir` and what its health says, or null. */
+export async function runningServer(homeDir: string): Promise<{ url: string; health: Health } | null> {
   let url: string;
   try {
     url = ServerFile.parse(JSON.parse(readFileSync(join(homeDir, SERVER_FILE), "utf8"))).url;
@@ -34,7 +39,7 @@ export async function runningServerUrl(homeDir: string): Promise<string | null> 
   try {
     const res = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(2000) });
     const health = Health.safeParse(await res.json());
-    return health.success && health.data.id === BRAND.id ? url : null;
+    return health.success && health.data.id === BRAND.id ? { url, health: health.data } : null;
   } catch {
     return null;
   }

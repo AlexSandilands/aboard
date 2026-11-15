@@ -19,6 +19,10 @@ code. One command does all of it; don't rebuild it by hand.
   "Sandbox" and it keeps its profile in the sandbox's data dir, so it can run beside the user's real app.
   Starts the sandbox if needed; on a running one it only opens the shell. `pnpm sandbox stop` closes it.
   Its log is `desktop.log` in the sandbox home. Not combinable with `--live`.
+- **Runner:** `pnpm sandbox --runner [--seed ...]`. The isolated sandbox plus a second server in the runner role
+  (the headless server a remote machine runs, no web app) on its own port and data dir, for work on running tasks
+  on another machine. The ready line has `runner: {url, port, home}`; `curl <runner.url>/api/health` answers with
+  `"role":"runner"`. Not combinable with `--live`, and not added to a running sandbox: stop it first.
 - **Production build:** add `--prod` to any mode. Builds the web app and serves it with `vite preview` instead of
   the dev server, so no hot reload (restart to pick up edits). Use it to judge performance: React's development
   build renders several times slower, which shows up as dropped frames the real app doesn't have.
@@ -55,7 +59,7 @@ Seeds (`apps/server/src/dev/seeds.ts`):
 1. Start it **in the background** (it keeps running), e.g. Bash with `run_in_background: true`:
    `pnpm sandbox --seed basic`.
 2. Wait for the line starting with `SANDBOX_READY`. It carries JSON with `url`, `serverPort`,
-   `webPort`, `mode`, `seed` and `home`. Don't navigate before it appears; it means the server, Vite
+   `webPort`, `mode`, `seed` and `home` (and `runner` with `--runner`). Don't navigate before it appears; it means the server, Vite
    and Vite's proxy all answer. `pnpm sandbox status` prints it again. If a sandbox for this checkout
    is already running, starting again just prints its ready line (stop it first for a fresh seed).
 3. Open `url` (the T3 preview browser, or give it to the user). If the preview times out, retry once,

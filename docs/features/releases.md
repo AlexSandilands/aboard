@@ -1,7 +1,7 @@
 # Releases
 
-Publishing a release on GitHub builds the desktop app for Windows and Linux, attaches the installers to the
-release, and updates the board's own pacman repo for Arch Linux. Nothing is built or published from a developer's
+Publishing a release on GitHub builds the desktop app for Windows and Linux and the headless server for remote
+machines, attaches them to the release, and updates the board's own pacman repo for Arch Linux. Nothing is built or published from a developer's
 machine.
 
 ## How it works
@@ -27,7 +27,8 @@ Publishing starts `.github/workflows/release.yml`. When it finishes, the release
 | `aboard_<version>_amd64.deb`                     | Debian, Ubuntu, Mint                                |
 | `aboard-<version>.x86_64.rpm`                    | Fedora, openSUSE                                    |
 | `aboard-<version>-linux-x64.tar.gz`              | The unpacked app; the Arch package installs this    |
-| `SHA256SUMS-windows.txt`, `SHA256SUMS-linux.txt` | Checksums of the files above                        |
+| `aboard-server-<version>-<platform>.tar.gz`      | The headless server for a remote machine, with its own Node: `linux-x64`, `linux-arm64`, `darwin-arm64` ([remote machines](remote-machines.md)) |
+| `SHA256SUMS-windows.txt`, `SHA256SUMS-linux.txt`, `SHA256SUMS-server.txt` | Checksums of the files above |
 | `Aboard-Setup-<version>.exe.blockmap`            | Lets the Windows updater fetch only changed blocks  |
 | `latest.yml`, `latest-linux.yml`                 | The update feed the installed app reads             |
 
@@ -72,8 +73,15 @@ read from the root `package.json` `repository`; it also writes `resources/app-up
 is where the updater looks. It never uploads anything itself (`publish: "never"`). How the app uses the feed:
 [desktop](desktop.md#updates).
 
-Once both have finished, `pacman` and `aur` update the Arch packages from the release's Linux tarball, each
-skipping with a notice when its secret is missing. The release itself is unaffected either way.
+`server` runs beside them on `ubuntu-latest`: it stamps the version, runs `pnpm server:package`, which bundles the
+server and builds one tarball per platform with a pinned Node runtime
+([remote machines](remote-machines.md#the-release)), and uploads them with `SHA256SUMS-server.txt`. The bundle is
+plain JavaScript, so one Linux runner builds the macOS tarball too.
+
+Once `package` has finished, `pacman` and `aur` update the Arch packages from the release's Linux tarball, each
+skipping with a notice when its secret is missing. The release itself is unaffected either way. They download that
+tarball by its full name, `aboard-<version>-linux-x64.tar.gz`: the server's tarball for the same platform ends the
+same way.
 
 The release doesn't run `pnpm check`: CI already ran it on the commit when it reached `main`.
 

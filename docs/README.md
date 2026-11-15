@@ -75,6 +75,7 @@ files under each app.
 - [Local review](features/local-review.md): the review loop before a PR
 - [Desktop app](features/desktop.md): the Electron shell
 - [Releases](features/releases.md): cutting a release, the installers and the pacman repo CI builds for it
+- [Remote machines](features/remote-machines.md): the runner role, the headless server release with its own Node, the background service
 - [GitHub setup](features/github-setup.md): the rulesets on `main` and release tags, repo options, Dependabot, applying them
 - [Notifications](features/notifications.md): the attention inbox, OS pop-ups, badges
 - [Rich Markdown editor](features/rich-editor.md): editing descriptions and notes as rich text, stored as exact Markdown

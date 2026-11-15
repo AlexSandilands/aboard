@@ -14,7 +14,7 @@ import type { AppContext } from "./app.ts";
 export function createContext(
   config: Pick<Config, "dbPath" | "port" | "webPort" | "token" | "t3Home" | "pollers" | "userHome" | "sessionDirs"> &
     Partial<
-      Pick<Config, "webDist" | "worktreesDir" | "attachmentsDir" | "harnessHomes" | "demo" | "modelPricesPath">
+      Pick<Config, "webDist" | "worktreesDir" | "attachmentsDir" | "harnessHomes" | "demo" | "modelPricesPath" | "role">
     > & {
       /** This board's id (instance.ts); read from the data dir unless set. An in-memory database gets a new one. */
       instanceId?: string;

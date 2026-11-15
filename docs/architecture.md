@@ -49,12 +49,14 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 
 | Variable                  | Default                     | Meaning                                                            |
 | ------------------------- | --------------------------- | ------------------------------------------------------------------ |
-| `brandEnv("HOME")`        | `~/.<id>`                   | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, `instance-id` (this board's id, see features/backup.md), `model-prices.json` (the last LiteLLM price list fetched, not backed up; features/token-usage.md), and `worktrees/` for Autopilot's headless runs |
-| `brandEnv("PORT")`        | `4317`                      | Listen port. Also read by Vite's proxy and the desktop shell       |
+| `brandEnv("HOME")`        | `~/.<id>` (`~/.<id>-runner` for a runner) | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, `instance-id` (this board's id, see features/backup.md), `model-prices.json` (the last LiteLLM price list fetched, not backed up; features/token-usage.md), and `worktrees/` for Autopilot's headless runs |
+| `brandEnv("PORT")`        | `4317` (`4318` for a runner) | Listen port. Also read by Vite's proxy and the desktop shell       |
 | `brandEnv("WEB_PORT")`    | `5317`                      | Vite's port. The guard allows it as an Origin                      |
 | `brandEnv("TOKEN")`       | none                        | Optional bearer token for `/api/*`, `/mcp` and `/events`           |
 | `brandEnv("WEB_DIST")`    | `apps/web/dist`             | Built web app to serve                                             |
 | `brandEnv("POLLERS")`     | on                          | `0` turns off the background pollers               |
+| `brandEnv("ROLE")`        | `board`                     | `runner` (or the `--runner` argument) starts the headless runner, which serves no web app (features/remote-machines.md) |
+| `brandEnv("LAUNCHER")`    | none                        | Set by the headless release's launcher to its own path, for `service install` (features/remote-machines.md) |
 | `brandEnv("DEMO")`        | off                         | `1` registers `/api/demo` (`http/routes/demo.ts`), which sets PR checks and pretend Autopilot runs for recording the README demo. Only the isolated sandbox sets it |
 | `brandEnv("DEV_URL")`     | none                        | Desktop only: load this URL (Vite) and attach instead of spawning  |
 | `brandEnv("USER_HOME")`   | the OS home folder          | Where global skills are read and installed (`.claude/skills`, …). The sandbox points it at its own folder, and then the board skills ignore `CLAUDE_CONFIG_DIR`, `COPILOT_HOME` and `CODEX_HOME` |

@@ -9,10 +9,13 @@ import {
   type GitHubRepository,
 } from "@repo/contracts";
 
-/** True when a `/api/health` body comes from our server, not some other app holding the port. */
+/**
+ * True when a `/api/health` body comes from our board server, not some other app holding the port. A runner (the
+ * headless server for another machine) is ours too, but has no board to show.
+ */
 export function isOwnHealth(body: unknown): boolean {
   const parsed = Health.safeParse(body);
-  return parsed.success && parsed.data.id === BRAND.id;
+  return parsed.success && parsed.data.id === BRAND.id && parsed.data.role === "board";
 }
 
 const DESKTOP_THEMES = new Set<unknown>(["light", "dark", "system"] satisfies DesktopTheme[]);

@@ -1143,6 +1143,21 @@ export const ApiErrorBody = z.object({
 });
 export type ApiErrorBody = z.infer<typeof ApiErrorBody>;
 
-/** `GET /api/health`. `id` lets a client (the desktop shell) tell our server apart from whatever else holds the port. */
-export const Health = z.object({ ok: z.literal(true), id: z.string(), version: z.string() });
+/**
+ * What a server is for. `board` serves the board and its web app; `runner` is the headless server on another
+ * machine that runs tasks for a board (docs/features/remote-machines.md) and serves no web app.
+ */
+export const ServerRole = z.enum(["board", "runner"]);
+export type ServerRole = z.infer<typeof ServerRole>;
+
+/**
+ * `GET /api/health`. `id` lets a client (the desktop shell) tell our server apart from whatever else holds the port;
+ * `role` tells a board from a runner. Servers from before runners didn't send it, and were all boards.
+ */
+export const Health = z.object({
+  ok: z.literal(true),
+  id: z.string(),
+  version: z.string(),
+  role: ServerRole.default("board"),
+});
 export type Health = z.infer<typeof Health>;

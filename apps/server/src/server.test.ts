@@ -17,6 +17,7 @@ function testConfig(overrides: Partial<Config> = {}): Config {
   const homeDir = mkdtempSync(join(tmpdir(), `${BRAND.id}-server-`));
   dirs.push(homeDir);
   return {
+    role: "board",
     port: 0,
     webPort: 5317,
     host: "127.0.0.1",
@@ -44,7 +45,7 @@ describe("startServer", { timeout: 20_000 }, () => {
     expect(server.url).toBe(`http://127.0.0.1:${server.port}`);
 
     const health = await fetch(`${server.url}/api/health`);
-    expect(await health.json()).toEqual({ ok: true, id: BRAND.id, version: BRAND.version });
+    expect(await health.json()).toEqual({ ok: true, id: BRAND.id, version: BRAND.version, role: "board" });
     // The Origin guard must know the real port, not the 0 we asked for.
     const sameOrigin = await fetch(`${server.url}/api/health`, { headers: { origin: server.url } });
     expect(sameOrigin.status).toBe(200);
@@ -55,6 +56,13 @@ describe("startServer", { timeout: 20_000 }, () => {
     await server.close();
     await expect(fetch(`${server.url}/api/health`)).rejects.toThrow("fetch failed");
     // Idempotent: a second quit signal must not throw on the closed DB.
+    await server.close();
+  });
+
+  it("reports the runner role in health", async () => {
+    const server = await startServer(testConfig({ role: "runner" }));
+    const health = await fetch(`${server.url}/api/health`);
+    expect(await health.json()).toEqual({ ok: true, id: BRAND.id, version: BRAND.version, role: "runner" });
     await server.close();
   });
 
