@@ -195,9 +195,8 @@ describe("what the board shows of work on a machine", () => {
     await board.integrations.refreshLink(there.id);
     expect(link()).toMatchObject({ snapshot: { status: "busy" } });
     // Opened over ssh, in tmux on the machine (interactive.test.ts), never from a folder here.
-    expect(board.integrations.resumeCommand(there.id, "resume").command).toMatch(
-      /^cd .* && ssh -t -- 100\.101\.102\.103 /,
-    );
+    // The folder and quoting are the shell's here (a POSIX shell, or PowerShell on Windows); ssh goes to the machine.
+    expect(board.integrations.resumeCommand(there.id, "resume").command).toContain("ssh -t -- 100.101.102.103 ");
 
     runner.services.links.setSnapshot(there.id, {
       status: "finished",
