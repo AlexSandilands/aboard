@@ -1,3 +1,4 @@
+import { taskLabel } from "@repo/contracts";
 import type { AppSettings, TrashedTask } from "@repo/contracts";
 import { useState } from "react";
 import { ConfirmDialog } from "~/components/task/ConfirmDialog";
@@ -68,7 +69,7 @@ export function RecentlyDeletedSection({ settings }: { settings: AppSettings }) 
             key={task.id}
             title={
               <span className="flex min-w-0 gap-1.5">
-                <span className="shrink-0 text-muted-foreground tabular-nums">#{task.number}</span>
+                <span className="shrink-0 text-muted-foreground tabular-nums">{taskLabel(task)}</span>
                 <span className="min-w-0 break-words">{task.title}</span>
               </span>
             }

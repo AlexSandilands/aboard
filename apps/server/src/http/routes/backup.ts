@@ -1,4 +1,5 @@
 import {
+  BackupTaskNumber,
   BackupSource,
   BoardDump,
   CheckBackupRemoteInput,
@@ -14,7 +15,7 @@ import { actorOf, handle, parseBody, parseQuery } from "../respond.ts";
 
 const RestoreTaskBody = z.object({
   dump: BoardDump,
-  number: z.number().int().positive(),
+  number: BackupTaskNumber,
   force: z.boolean().optional(),
   /** The backup folder the dump was read from (the CLI runs on this machine), for the task's pasted images. */
   attachmentsFrom: z.string().nullable().optional(),

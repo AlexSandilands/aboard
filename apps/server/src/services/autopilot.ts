@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import {
+  taskLabel,
   AUTOMATION_WEEK_DAYS,
   AUTOMATION_WEEK_LAST_RUNS,
   AUTOPILOT_ACTIVE_STATUSES,
@@ -493,7 +494,7 @@ export function createAutopilotService(
       kind: "autopilot_failed",
       taskId: run.taskId,
       title: run.status === "failed" ? `${title} failed` : `${title} needs you`,
-      body: [task ? `#${task.number} ${task.title}` : null, run.error ?? run.summary].filter(Boolean).join("\n"),
+      body: [task ? `${taskLabel(task)} ${task.title}` : null, run.error ?? run.summary].filter(Boolean).join("\n"),
       dedupeKey: `autopilot:${run.id}`,
     });
   };
@@ -586,7 +587,7 @@ export function createAutopilotService(
           kind: "failed_run",
           run,
           title: titleOf(run.automation),
-          task: `#${task.number} ${task.title}`,
+          task: `${taskLabel(task)} ${task.title}`,
         },
       ];
     });
@@ -625,7 +626,7 @@ export function createAutopilotService(
       .map((r): AutopilotNeed => ({
         kind: "pr_approval",
         url: r.url,
-        pr: `${r.repo}#${r.number}`,
+        pr: `${r.repo}${taskLabel(r)}`,
         title: r.title,
         author: r.author,
         reason: r.reasonDetail ?? "ready for your approval",

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
+  taskLabel,
   defaultHandoffMode,
   HANDOFF_MODES,
   handoffModeError,
@@ -130,7 +131,7 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
     (args) =>
       run(async () => {
         const task = services.tasks.summary(services.tasks.resolveId(args.task));
-        const ref = `"#${task.number}"`;
+        const ref = `"${taskLabel(task)}"`;
         const mode: HandoffMode = args.mode ?? defaultHandoffMode(task);
         const problem = handoffModeError(task, mode);
         if (problem) throw new AppError("VALIDATION", problem);
@@ -138,11 +139,11 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
         if (task.blocked && mode === "work") {
           const by = task.blockedBy
             .filter((b) => b.status !== "done")
-            .map((b) => `#${b.number}`)
+            .map((b) => taskLabel(b))
             .join(", ");
           throw new AppError(
             "CONFLICT",
-            `#${task.number} is blocked by ${by}, which aren't Done yet. Start it once they are.`,
+            `${taskLabel(task)} is blocked by ${by}, which aren't Done yet. Start it once they are.`,
           );
         }
         const blocker = t3LaunchBlocker(ctx, services.projects.get(task.projectId));
@@ -153,7 +154,7 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
           const state = busy.snapshot ? `${busy.snapshot.title} (${busy.snapshot.status})` : "just started";
           throw new AppError(
             "CONFLICT",
-            `#${task.number} already has a T3 thread on it: ${state}. ` +
+            `${taskLabel(task)} already has a T3 thread on it: ${state}. ` +
               `Send it a message with message_task_thread(${ref}, ...) instead.`,
           );
         }
@@ -192,7 +193,7 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
           throw new AppError(error.code, `${sentence(error.message)}. ${next}`, error.details);
         }
         return textResult(
-          `Started #${task.number} in a new T3 Code thread (${mode} prompt) and linked it: ${linkText(launch.link)}\n` +
+          `Started ${taskLabel(task)} in a new T3 Code thread (${mode} prompt) and linked it: ${linkText(launch.link)}\n` +
             `${launchSummary(launch)}\n` +
             `Follow it with ${task.parent ? "epic_overview" : "get_task"}, or message it with message_task_thread(${ref}, ...).`,
         );
@@ -224,15 +225,15 @@ export const registerThreadTools: ToolRegistrar = (server, { services, ctx, acto
         if (!thread) {
           throw new AppError(
             "VALIDATION",
-            `#${task.number} has no T3 thread to message: none is linked, or the ones linked are archived or were ` +
+            `${taskLabel(task)} has no T3 thread to message: none is linked, or the ones linked are archived or were ` +
               `opened to ask about the finished work, which a message would interrupt. Start one with ` +
-              `start_task_thread("#${task.number}"), or leave the session an add_note on the task instead.`,
+              `start_task_thread("${taskLabel(task)}"), or leave the session an add_note on the task instead.`,
           );
         }
         // T3 shows it as the user's own message, so say who really sent it.
         const text = `From an orchestrating agent (sent through the board):\n\n${args.text}`;
         await ctx.integrations.messageT3Thread(thread, text);
-        return textResult(`Sent to #${task.number}'s thread: ${linkText(thread)}`);
+        return textResult(`Sent to ${taskLabel(task)}'s thread: ${linkText(thread)}`);
       }),
   );
 };

@@ -1,3 +1,4 @@
+import { taskLabel } from "./taskNumbers.ts";
 import { z } from "zod";
 import { AGENT_HARNESSES, startedSessionLine, type AgentHarness } from "./agentSessions.ts";
 import { BRAND } from "./brand.ts";
@@ -52,7 +53,7 @@ export const handoffTargetLabel = (target: HandoffTarget): string => {
 
 /** The name a custom hand-off's CLI session is linked under, e.g. "Sandbox check on #164". */
 export const customHandoffLabel = (handoff: Pick<CustomHandoff, "name">, task: Pick<TaskSummary, "number">): string =>
-  `${handoff.name} on #${task.number}`.slice(0, 120);
+  `${handoff.name} on ${taskLabel(task)}`.slice(0, 120);
 
 /**
  * The title of a T3 Code thread a custom hand-off starts, e.g. "#164 Sandbox check · Add custom hand-offs": the
@@ -61,7 +62,7 @@ export const customHandoffLabel = (handoff: Pick<CustomHandoff, "name">, task: P
 export const customHandoffThreadTitle = (
   handoff: Pick<CustomHandoff, "name">,
   task: Pick<TaskSummary, "number" | "title">,
-): string => `#${task.number} ${handoff.name} · ${task.title}`.slice(0, 300);
+): string => `${taskLabel(task)} ${handoff.name} · ${task.title}`.slice(0, 300);
 
 /**
  * `{{task}}`: which task this is and how to read it. Unlike the work prompt it prescribes no workflow; the hand-off's
@@ -69,7 +70,7 @@ export const customHandoffThreadTitle = (
  */
 export function customHandoffReference(task: HandoffTask, boardUrl: string): string {
   return [
-    `#${task.number} "${task.title}"`,
+    `${taskLabel(task)} "${task.title}"`,
     `Board: ${taskBoardUrl(boardUrl, task.id)}`,
     `Call get_task("${task.id}") on the ${BRAND.id} MCP server to read it.`,
   ].join("\n");
@@ -95,7 +96,7 @@ export function renderCustomHandoffPrompt(
   const reference = customHandoffReference(task, boardUrl);
   const values: Record<string, string> = {
     task: reference,
-    "task.number": `#${task.number}`,
+    "task.number": taskLabel(task),
     "task.title": task.title,
     "task.branch": customHandoffBranch(task) ?? NO_TASK_BRANCH,
     boardUrl: boardUrl.replace(/\/+$/, ""),

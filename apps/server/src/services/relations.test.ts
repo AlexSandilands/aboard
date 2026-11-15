@@ -32,10 +32,14 @@ describe("task relations", () => {
     const a = task("A");
     const b = task("B");
     const updated = s.tasks.update(b.id, { addBlockedBy: [`#${a.number}`] }, "agent");
-    expect(updated.blockedBy).toEqual([{ id: a.id, number: a.number, title: "A", status: "planned", archived: false }]);
+    expect(updated.blockedBy).toEqual([
+      { id: a.id, number: a.number, numberPrefix: "", title: "A", status: "planned", archived: false },
+    ]);
     expect(updated.blocked).toBe(true);
     const blocker = s.tasks.summary(a.id);
-    expect(blocker.blocks).toEqual([{ id: b.id, number: b.number, title: "B", status: "planned", archived: false }]);
+    expect(blocker.blocks).toEqual([
+      { id: b.id, number: b.number, numberPrefix: "", title: "B", status: "planned", archived: false },
+    ]);
     expect(blocker.blocked).toBe(false);
     expect(updated.events.map((e) => e.type)).toContain("blocker_added");
     expect(s.tasks.detail(a.id).events.at(-1)).toMatchObject({

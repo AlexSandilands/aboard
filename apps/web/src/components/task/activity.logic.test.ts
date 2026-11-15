@@ -203,3 +203,29 @@ describe("links logic", () => {
     expect(threadStatusPresentation("input")?.label).toBe("Awaiting Input");
   });
 });
+
+describe("a task a machine holds", () => {
+  const text = (type: string, payload: Record<string, unknown>) => describeEvent(event(type, payload), ctx).text;
+
+  it("says where it went and how it came back", () => {
+    expect(text("handed_over", { machine: "engine" })).toBe(
+      "handed this to engine, which orders its changes from here",
+    );
+    expect(text("released", { machine: "engine" })).toBe("took this back from engine");
+    expect(text("released", { machine: "engine", forced: true })).toBe(
+      "took this back from engine without waiting for it",
+    );
+    expect(text("released", { machine: "engine", lost: true })).toBe("took this back: engine no longer has it");
+  });
+
+  it("gives the machine's reason for refusing a change made on the board", () => {
+    expect(text("edit_refused", { edit: "plans.updateStep", reason: "Step not found" })).toBe(
+      "took back a change made here: the machine refused it (Step not found)",
+    );
+  });
+
+  it("names tasks a machine numbered", () => {
+    expect(text("renumbered", { from: "E7", machine: "engine" })).toBe("gave this a new number: #E7 was taken");
+    expect(text("blocker_added", { task: "E7", title: "Made away" })).toContain("#E7");
+  });
+});

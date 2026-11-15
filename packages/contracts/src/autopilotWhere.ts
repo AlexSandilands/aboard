@@ -1,3 +1,4 @@
+import { taskLabel } from "./taskNumbers.ts";
 import { z } from "zod";
 import { AutopilotMode, AutopilotScopeKind } from "./autopilot.ts";
 
@@ -105,7 +106,7 @@ export function projectIsOn(board: AutopilotMode, project: Pick<WhereProject, "m
   return isOn(projectState(board, project));
 }
 
-const epicLabel = (epic: Pick<WhereEpic, "number">): string => `epic #${epic.number}`;
+const epicLabel = (epic: Pick<WhereEpic, "number">): string => `epic ${taskLabel(epic)}`;
 
 /** "a", "a, b", "a, b, c" or "a, b, c and 2 more", so a long list can't swallow the sentence. */
 function nameList(names: ReadonlyArray<string>): string {

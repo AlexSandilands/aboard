@@ -1,3 +1,4 @@
+import { taskLabel } from "@repo/contracts";
 import type { Project, TaskSummary } from "@repo/contracts";
 import { useEffect, useLayoutEffect, useMemo, useState, type RefObject } from "react";
 import { isInPriorityLane } from "./board.logic";
@@ -211,7 +212,7 @@ export function DependencyLines({
             box={box}
             direction={direction}
             slot={slot}
-            label={`#${hidden.number}`}
+            label={taskLabel(hidden)}
             edge={edge}
             color={color}
             style={style}

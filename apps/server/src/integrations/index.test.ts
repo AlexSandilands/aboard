@@ -42,6 +42,7 @@ function setup(opts: { runGh?: RunGh; fetch?: FetchFn; githubFetch?: FetchFn; wi
       config: {
         t3Home,
         pollers: false,
+        reposDir: "/nonexistent/repos",
         userHome: "/nonexistent",
         sessionDirs: { claudeDir: "/nonexistent/.claude", copilotDir: "/nonexistent/.copilot" },
         worktreesDir: "/nonexistent/worktrees",

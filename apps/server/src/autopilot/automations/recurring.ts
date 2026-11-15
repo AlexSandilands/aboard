@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   AUTOPILOT_RECURRING,
   latestDue,
   localStamp,
@@ -63,7 +64,7 @@ export const recurring = defineAutomation({
           {
             dedupeKey: `recurring:${rule.id}:${dueAt}`,
             summary: open
-              ? `skip recurring rule "${rule.name}": #${open.number} is still open`
+              ? `skip recurring rule "${rule.name}": ${taskLabel(open)} is still open`
               : `create a task from recurring rule "${rule.name}"`,
             projectId: project.id,
             data: { ruleId: rule.id, dueAt } satisfies RecurringData,
@@ -84,7 +85,7 @@ export const recurring = defineAutomation({
       const open = openTaskOf(services, rule);
       if (open) {
         services.recurring.handled(rule.id, { dueAt });
-        return { status: "skipped", summary: `Skipped "${rule.name}": #${open.number} is still open` };
+        return { status: "skipped", summary: `Skipped "${rule.name}": ${taskLabel(open)} is still open` };
       }
       if (!rule.templateId) throw new Error(`The template of "${rule.name}" was deleted; pick another one`);
       const template = services.templates.get(rule.templateId);
@@ -98,7 +99,7 @@ export const recurring = defineAutomation({
       });
       services.tasks.addNote(task.id, `Created by Autopilot from recurring rule ${rule.name}`, actor);
       services.recurring.handled(rule.id, { dueAt, taskId: task.id });
-      return { summary: `Created #${task.number} from "${rule.name}"` };
+      return { summary: `Created ${taskLabel(task)} from "${rule.name}"` };
     } catch (error) {
       services.recurring.handled(rule.id, { dueAt });
       throw error;

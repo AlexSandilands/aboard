@@ -1,4 +1,4 @@
-import { FINDING_SEVERITIES, type FindingSeverity } from "@repo/contracts";
+import { taskLabel, FINDING_SEVERITIES, type FindingSeverity } from "@repo/contracts";
 import type { ActivityTask, BoardActivity, FinishedTask } from "../services/activity.ts";
 import { OPEN_STATUSES } from "../services/activity.ts";
 import { statusLabel } from "./format.ts";
@@ -19,7 +19,7 @@ export const ACTIVITY_CAPS = {
 const NOTE_LENGTH = 200;
 const REASON_LENGTH = 160;
 
-const ref = (t: ActivityTask) => `#${t.number}`;
+const ref = (t: ActivityTask) => taskLabel(t);
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const cut = (text: string, max: number) => {
   const one = text.replace(/\s+/g, " ").trim();

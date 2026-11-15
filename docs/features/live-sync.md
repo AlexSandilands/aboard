@@ -33,6 +33,11 @@ to its TanStack Query cache.
 `task.upserted` is always followed by `task.detail_changed`. Changes that only affect a task's detail send
 `task.detail_changed` alone.
 
+A task a connected machine holds changes on that machine. The board applies the machine's change log in a write of
+its own ([remote machines](remote-machines.md#replay)), so those changes reach browsers as the same `task.upserted`
+and `task.detail_changed`, one pair per task for each read of the log. The summary's `hold` says which machine holds
+the task and how many edits made on the board are waiting for it; a change in that count is a `task.upserted` too.
+
 ### Web app
 
 - `useBoardEvents` (`apps/web/src/state/queries.ts`), mounted once in `AppLayout`, opens the

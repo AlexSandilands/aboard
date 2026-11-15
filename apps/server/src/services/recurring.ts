@@ -53,7 +53,12 @@ export function createRecurringService(
     if (rule.lastTaskId) {
       try {
         const task = deps.tasks.summary(rule.lastTaskId);
-        lastTask = { number: task.number, status: task.status, archived: task.archivedAt !== null };
+        lastTask = {
+          number: task.number,
+          numberPrefix: task.numberPrefix ?? "",
+          status: task.status,
+          archived: task.archivedAt !== null,
+        };
       } catch {
         // Deleted since: the rule's last_task_id is cleared by the database, so this is a race at most.
       }

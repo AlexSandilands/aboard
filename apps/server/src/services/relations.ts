@@ -1,3 +1,4 @@
+import { taskNumberValue, taskLabel } from "@repo/contracts";
 import { nowIso } from "../db/database.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
 import { AppError } from "../errors.ts";
@@ -22,7 +23,7 @@ export function createRelations(
   deps: { resolveId: (ref: string) => string; record: (id: string) => TaskRecord },
 ): RelationsModule {
   const { repos } = core;
-  const label = (task: TaskRecord): string => `#${task.number}`;
+  const label = (task: TaskRecord): string => taskLabel(task);
 
   return {
     addBlockersIn(taskId, blockerRefs, actor, fx) {
@@ -45,8 +46,8 @@ export function createRelations(
           );
         }
         if (!repos.relations.add(blocker.id, task.id, nowIso(), actor)) continue;
-        fx.log(task.id, actor, "blocker_added", { task: blocker.number, title: blocker.title });
-        fx.log(blocker.id, actor, "blocks_added", { task: task.number, title: task.title });
+        fx.log(task.id, actor, "blocker_added", { task: taskNumberValue(blocker), title: blocker.title });
+        fx.log(blocker.id, actor, "blocks_added", { task: taskNumberValue(task), title: task.title });
       }
     },
 
@@ -55,8 +56,8 @@ export function createRelations(
       for (const ref of blockerRefs) {
         const blocker = deps.record(deps.resolveId(ref));
         if (!repos.relations.remove(blocker.id, task.id)) continue;
-        fx.log(task.id, actor, "blocker_removed", { task: blocker.number, title: blocker.title });
-        fx.log(blocker.id, actor, "blocks_removed", { task: task.number, title: task.title });
+        fx.log(task.id, actor, "blocker_removed", { task: taskNumberValue(blocker), title: blocker.title });
+        fx.log(blocker.id, actor, "blocks_removed", { task: taskNumberValue(task), title: task.title });
       }
     },
 
@@ -64,7 +65,7 @@ export function createRelations(
       for (const r of repos.relations.allFor([task.id])) {
         const blocks = r.blockerId === task.id;
         fx.log(blocks ? r.blockedId : r.blockerId, actor, blocks ? "blocker_deleted" : "blocked_deleted", {
-          task: task.number,
+          task: taskNumberValue(task),
           title: task.title,
         });
       }

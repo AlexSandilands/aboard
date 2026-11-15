@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   AUTOPILOT_ACTOR,
   AUTOPILOT_UNBLOCK_DEPENDENTS,
   AUTOPILOT_UNSTICK,
@@ -76,7 +77,7 @@ export function sendReminders(services: Services, now: Date): void {
               t.id,
               {
                 kind: "task_quiet",
-                title: `#${t.number} has gone quiet`,
+                title: `${taskLabel(t)} has gone quiet`,
                 body: `${message}: “${t.title}”.`,
                 dedupeKey: `stale:${t.id}:${lastActivityAt}`,
               },
@@ -103,7 +104,7 @@ export function sendReminders(services: Services, now: Date): void {
               t.id,
               {
                 kind: "thread_waited",
-                title: `#${t.number} is waiting for you`,
+                title: `${taskLabel(t)} is waiting for you`,
                 body: `${message}: “${t.title}”.`,
                 dedupeKey: `waiting:${thread.id}:${snapshot.lastActivityAt}`,
               },
@@ -137,13 +138,15 @@ export function sendReminders(services: Services, now: Date): void {
         // About something that just happened: not blockers finished long ago (when the setting is first switched on,
         // or a Done task is attached as a blocker).
         if (Date.parse(lastDoneAt) < since) continue;
-        const names = blockers.map((b) => `#${b.number}${b.resolution === "wont_do" ? " (won't do)" : ""}`).join(", ");
+        const names = blockers
+          .map((b) => `${taskLabel(b)}${b.resolution === "wont_do" ? " (won't do)" : ""}`)
+          .join(", ");
         remind(
           AUTOPILOT_UNBLOCK_DEPENDENTS,
           t.id,
           {
             kind: "task_unblocked",
-            title: `#${t.number} is unblocked`,
+            title: `${taskLabel(t)} is unblocked`,
             body: `${names} finished, so “${t.title}” has nothing left blocking it.`,
             dedupeKey: `unblock:${t.id}:${lastDoneAt}`,
           },

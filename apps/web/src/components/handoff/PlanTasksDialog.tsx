@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   AGENT_HARNESSES,
   MAX_PLAN_TASKS,
   planningSessionLabel,
@@ -136,7 +137,7 @@ function Picker({ project, target, onDone }: { project: Project; target: PlanTar
                       onChange={() => toggle(task.id)}
                     />
                     <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                      #{task.number}
+                      {taskLabel(task)}
                     </span>
                     <span className="min-w-0 truncate">{task.title}</span>
                     {task.status !== "backlog" ? (

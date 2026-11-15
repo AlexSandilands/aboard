@@ -1,5 +1,7 @@
 import { dirname } from "node:path";
 import {
+  taskNumberValue,
+  taskLabel,
   BOARD_REVIEWER,
   implementingThread,
   REVIEW_DONE_NEXT,
@@ -82,7 +84,7 @@ export function createReviewFallbacks(deps: {
       s.reviews.markNudged(round.id, BOARD_REVIEWER);
       return true;
     } catch (error) {
-      log.warn(`[review] couldn't nudge the T3 thread of #${task.number}: ${messageOf(error)}`);
+      log.warn(`[review] couldn't nudge the T3 thread of ${taskLabel(task)}: ${messageOf(error)}`);
       return false;
     }
   };
@@ -111,7 +113,7 @@ export function createReviewFallbacks(deps: {
         effort: resolved.effort,
         ...(images.length ? { addDirs: [...new Set(images.map((i) => dirname(i.path)))] } : {}),
         prompt: headlessPrompt({
-          taskNumber: task.number,
+          taskNumber: taskNumberValue(task),
           round: round.round,
           taskText: renderTaskDetail(s.tasks.detail(task.id), project, {
             events: 0,
@@ -162,12 +164,12 @@ export function createReviewFallbacks(deps: {
           maxRounds: settings.reviewMaxRounds,
         });
       } else if (reviewIsDone(after.review) && !after.links.some((l) => l.kind === "pr")) {
-        text = `Review round ${round.round} of task #${task.number} "${task.title}" came back clean. ${REVIEW_DONE_NEXT}`;
+        text = `Review round ${round.round} of task ${taskLabel(task)} "${task.title}" came back clean. ${REVIEW_DONE_NEXT}`;
         key = `review-${round.id}-done`;
       }
       if (text) {
         await deps.t3.sendToThread(thread, text, key).catch((error: unknown) => {
-          log.warn(`[review] couldn't send to the T3 thread of #${task.number}: ${messageOf(error)}`);
+          log.warn(`[review] couldn't send to the T3 thread of ${taskLabel(task)}: ${messageOf(error)}`);
         });
       }
     } catch (error) {

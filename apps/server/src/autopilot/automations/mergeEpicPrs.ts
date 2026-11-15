@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  taskLabel,
   AUTOPILOT_MERGE_EPIC_PRS,
   BRAND,
   describeCounts,
@@ -94,7 +95,7 @@ const RESOLUTION: Record<NonNullable<TaskSummary["resolution"]>, string> = {
 function taskLine(task: TaskSummary, branch: string, runs: readonly AutopilotRun[]): string {
   const done = task.status === "done";
   const state = task.resolution ? RESOLUTION[task.resolution] : STATUS_LABEL[task.status];
-  const parts = [`#${task.number} ${task.title.replace(/\s+/g, " ")}`, state];
+  const parts = [`${taskLabel(task)} ${task.title.replace(/\s+/g, " ")}`, state];
   for (const link of prsInto(task, branch)) {
     const reviews = runs.flatMap((r) => {
       const out = prReviewOutput(r);
@@ -126,7 +127,7 @@ export function epicPrBody(
   const counted = children.filter((c) => c.archivedAt === null);
   const done = counted.filter((c) => c.status === "done").length;
   return [
-    `Epic #${epic.number} "${epic.title}", delivered through the integration branch \`${branch}\`.`,
+    `Epic ${taskLabel(epic)} "${epic.title}", delivered through the integration branch \`${branch}\`.`,
     "",
     `📋 ${BRAND.name} Autopilot merges each task's pull request into \`${branch}\` once its reviews are finished and its checks pass, and keeps this description current. It never merges this pull request: that is yours, once you're happy with the whole epic.`,
     "",
@@ -201,7 +202,7 @@ function cut(text: string, max: number): string {
  */
 export function epicPrTitle(epic: Pick<TaskSummary, "number" | "title">, childPrTitles: readonly string[]): string {
   const children = childPrTitles.flatMap((t) => parseConventionalHeader(t) ?? []);
-  if (children.length === 0) return `Epic #${epic.number}: ${epic.title}`;
+  if (children.length === 0) return `Epic ${taskLabel(epic)}: ${epic.title}`;
 
   // An epic already titled as a header keeps its parts; its subject gets the same clean-up as a built one.
   const own = parseConventionalHeader(epic.title.replace(/\s+/g, " "));
@@ -213,7 +214,7 @@ export function epicPrTitle(epic: Pick<TaskSummary, "number" | "title">, childPr
   const breaking = children.some((c) => c.breaking);
   // A title of nothing but periods leaves no subject: keep the plain title rather than an empty header.
   const subject = subjectOf(epic.title);
-  if (!subject) return `Epic #${epic.number}: ${epic.title}`;
+  if (!subject) return `Epic ${taskLabel(epic)}: ${epic.title}`;
   return header(type, scope, breaking, subject);
 }
 
@@ -303,7 +304,7 @@ function intoEpicBranches(services: Services, tasks: readonly TaskSummary[], now
         return [
           {
             dedupeKey: earlier.runs === 0 ? earlier.key : `${earlier.key}:${earlier.runs + 1}`,
-            summary: `merge PR #${link.ref.number} of #${task.number} into ${branch}`,
+            summary: `merge PR #${link.ref.number} of ${taskLabel(task)} into ${branch}`,
             taskId: task.id,
             data,
           },
@@ -338,14 +339,14 @@ function intoEpicBranches(services: Services, tasks: readonly TaskSummary[], now
     const upkeep: Candidate = own
       ? {
           dedupeKey: `epic-pr-body:${own.id}:${hashOf(body)}`,
-          summary: `update the description of epic #${epic.number}'s PR #${own.ref.number}`,
+          summary: `update the description of epic ${taskLabel(epic)}'s PR #${own.ref.number}`,
           taskId: epic.id,
           data,
         }
       : {
           // With the merged count, so a failed attempt is tried again after the next merge.
           dedupeKey: `epic-pr:${epic.id}:${branch}:${merged.length}`,
-          summary: `open a draft PR from ${branch} for epic #${epic.number}`,
+          summary: `open a draft PR from ${branch} for epic ${taskLabel(epic)}`,
           taskId: epic.id,
           data,
         };
@@ -365,7 +366,7 @@ async function actEpic(
     if (!link) return { status: "skipped", summary: "The PR link was removed" };
     // Re-checked on the latest state: a push, a new finding or the epic switching back since the check.
     if (task.integrationBranch !== data.branch) {
-      return { status: "skipped", summary: `#${task.number}'s epic no longer delivers through ${data.branch}` };
+      return { status: "skipped", summary: `${taskLabel(task)}'s epic no longer delivers through ${data.branch}` };
     }
     if (link.snapshot?.headOid !== data.headOid) {
       return { status: "skipped", deferred: "head_moved", summary: `PR #${data.number} moved on before the merge` };
@@ -414,20 +415,20 @@ async function actEpic(
 
   const epic = services.tasks.summary(candidate.taskId!);
   if (epic.integrationBranch !== data.branch) {
-    return { status: "skipped", summary: `Epic #${epic.number} no longer delivers through ${data.branch}` };
+    return { status: "skipped", summary: `Epic ${taskLabel(epic)} no longer delivers through ${data.branch}` };
   }
   if (data.kind === "open_pr") {
     const pr = await gitHosts.ensureEpicPr({
       host: data.host,
       repo: data.repo,
       head: data.branch,
-      title: data.title ?? `Epic #${epic.number}: ${epic.title}`,
+      title: data.title ?? `Epic ${taskLabel(epic)}: ${epic.title}`,
       body: data.body,
     });
     services.links.add(epic.id, { value: pr.url }, actor);
     if (!pr.created) await gitHosts.setPrBody({ host: data.host, repo: data.repo, number: pr.number }, data.body);
     return {
-      summary: `${pr.created ? "Opened draft" : "Linked"} PR #${pr.number} from ${data.branch} for epic #${epic.number}`,
+      summary: `${pr.created ? "Opened draft" : "Linked"} PR #${pr.number} from ${data.branch} for epic ${taskLabel(epic)}`,
     };
   }
   const link = epic.links.find((l): l is PrLink => l.id === data.linkId && isPrLink(l));

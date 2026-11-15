@@ -1,3 +1,4 @@
+import { taskLabel } from "@repo/contracts";
 import type { BackupMachine, ImportTasksInput, ImportTasksResult, MachineTasks, TransferMode } from "@repo/contracts";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -152,7 +153,7 @@ function Picker({ offer, onDone }: { offer: MachineTasks; onDone: () => void }) 
               <li key={task.taskId} className="flex items-start gap-2.5 px-3 py-2 text-xs">
                 <input
                   type="checkbox"
-                  aria-label={`Pick #${task.number}`}
+                  aria-label={`Pick ${taskLabel(task)}`}
                   className="mt-0.5 size-3.5 shrink-0 cursor-pointer accent-primary"
                   checked={chosen.has(task.taskId)}
                   disabled={blocked !== null || run.isPending}
@@ -160,7 +161,7 @@ function Picker({ offer, onDone }: { offer: MachineTasks; onDone: () => void }) 
                 />
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate">
-                    #{task.number} {task.title}
+                    {taskLabel(task)} {task.title}
                   </span>
                   <span className="text-muted-foreground">
                     {blocked ?? taskNote(task, titles.get(task.projectId) ?? null)}

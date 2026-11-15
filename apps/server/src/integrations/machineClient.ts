@@ -95,6 +95,8 @@ export interface MachineClient {
 export interface MachineRequestOptions {
   /** Send even to a runner on another protocol version. Only the update request may: its shape never changes. */
   anyProtocol?: boolean;
+  /** How long to wait for the answer, for a request the runner holds open or works on for a while. */
+  timeoutMs?: number;
 }
 
 const TIMEOUT_MS = 10_000;
@@ -161,10 +163,15 @@ export function createMachineClient(deps: MachineClientDeps): MachineClient {
   }
 
   /** One request, never following a redirect: a redirect would carry what we send to an address nobody checked. */
-  async function send(origin: string, path: string, init: RequestInit = {}): Promise<Response> {
+  async function send(
+    origin: string,
+    path: string,
+    init: RequestInit = {},
+    timeoutMs: number = TIMEOUT_MS,
+  ): Promise<Response> {
     let res: Response;
     try {
-      res = await fetchFn(`${origin}${path}`, { ...init, redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS) });
+      res = await fetchFn(`${origin}${path}`, { ...init, redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
     } catch {
       throw new MachineClientError("unreachable", `Nothing answers at ${origin}`);
     }
@@ -286,12 +293,14 @@ export function createMachineClient(deps: MachineClientDeps): MachineClient {
       const origin = await verify(target, options.anyProtocol === true);
       const headers = new Headers(init.headers);
       headers.set("authorization", `Bearer ${stored.token}`);
-      const res = await send(origin, `${pathname}${search}`, { ...init, headers }).catch((error: unknown) => {
-        // Not sent again here, since it may have arrived; but the next call asks afresh who answers where, and so
-        // moves on to the name's other addresses.
-        verified.delete(origin);
-        throw error;
-      });
+      const res = await send(origin, `${pathname}${search}`, { ...init, headers }, options.timeoutMs).catch(
+        (error: unknown) => {
+          // Not sent again here, since it may have arrived; but the next call asks afresh who answers where, and so
+          // moves on to the name's other addresses.
+          verified.delete(origin);
+          throw error;
+        },
+      );
       if (res.status === 401) {
         verified.delete(origin);
         throw new MachineClientError("revoked", "The machine no longer accepts this board; pair it again");

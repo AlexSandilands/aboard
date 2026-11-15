@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { attachmentToken, MAX_LAUNCH_IMAGES, StepStatus } from "@repo/contracts";
+import { taskLabel, attachmentToken, MAX_LAUNCH_IMAGES, StepStatus } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
 import { batchedCompletionHint, harnessOfClient } from "../format.ts";
 import {
@@ -64,9 +64,9 @@ export const registerPlanTools: ToolRegistrar = (server, { services, actor, clie
               ? `
 Deleted ${deleted.length} step(s): ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}.`
               : "";
-          return taskResult(services, task.id, `Plan set for #${task.number}.${dropped}`, {
+          return taskResult(services, task.id, `Plan set for ${taskLabel(task)}.${dropped}`, {
             planningHints: true,
-            selfLink: { harness: harnessOfClient(client()), label: `Planning #${task.number}` },
+            selfLink: { harness: harnessOfClient(client()), label: `Planning ${taskLabel(task)}` },
           });
         },
         {
@@ -155,7 +155,7 @@ Deleted ${deleted.length} step(s): ${shown.join(", ")}${more > 0 ? `, and ${more
         ].join(" and ");
         // Only mid-work: at Review or Done the open-steps hint asks for exactly this catch-up.
         const batched =
-          after.status === "in_progress" ? batchedCompletionHint(before, after.phases, `"#${after.number}"`) : null;
+          after.status === "in_progress" ? batchedCompletionHint(before, after.phases, `"${taskLabel(after)}"`) : null;
         return taskResult(services, id, `Updated ${counts} in the plan.${batched ? `\n\n${batched}` : ""}`, {
           captureHint: true,
         });

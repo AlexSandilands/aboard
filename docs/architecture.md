@@ -50,7 +50,7 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 
 | Variable                  | Default                     | Meaning                                                            |
 | ------------------------- | --------------------------- | ------------------------------------------------------------------ |
-| `brandEnv("HOME")`        | `~/.<id>` (`~/.<id>-runner` for a runner) | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, `instance-id` (this board's id, see features/backup.md), `machine-tokens.json` (mode 0600: the tokens for the runners this board is paired with, never backed up; features/remote-machines.md), `model-prices.json` (the last LiteLLM price list fetched, not backed up; features/token-usage.md), and `worktrees/` for Autopilot's headless runs |
+| `brandEnv("HOME")`        | `~/.<id>` (`~/.<id>-runner` for a runner) | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, `instance-id` (this board's id, see features/backup.md), `machine-tokens.json` (mode 0600: the tokens for the runners this board is paired with, never backed up; features/remote-machines.md), `model-prices.json` (the last LiteLLM price list fetched, not backed up; features/token-usage.md), `worktrees/` for Autopilot's headless runs, and on a runner `repos/`, its clones of the board's projects (features/remote-machines.md#projects-on-a-machine) |
 | `brandEnv("PORT")`        | `4317` (`4318` for a runner) | Listen port. Also read by Vite's proxy and the desktop shell       |
 | `brandEnv("WEB_PORT")`    | `5317`                      | Vite's port. The guard allows it as an Origin                      |
 | `brandEnv("TOKEN")`       | none                        | Optional bearer token for `/api/*`, `/mcp` and `/events`           |
@@ -122,6 +122,11 @@ Errors are `AppError`s (`errors.ts`) with a code: `NOT_FOUND` 404, `VALIDATION` 
 `PLAN_REQUIRED` 422, `INTERNAL` 500. REST returns `{error: {code, message, details}}`; MCP returns
 `CODE: message` as an error result, sometimes with a hint.
 
+A task a connected machine holds takes one more step: the change is made on that machine, logged there, and
+applied on the board in a write of its own, which publishes as above; an edit made on the board is applied here at
+once and queued for the machine ([remote machines](features/remote-machines.md#held-tasks)). Both go through
+`core.write`, so nothing downstream tells them from a local change.
+
 `BoardEvent` (`packages/contracts/src/schemas.ts`) is `project.upserted`, `project.deleted`,
 `task.upserted` (a full `TaskSummary`), `task.deleted`, `task.detail_changed`, `integrations.changed`,
 `labels.colors_changed`, `autopilot.changed`, `notification.created`, `notifications.changed`, `suggestions.changed` and `providers.changed`. Every `task.upserted` comes with a `task.detail_changed`.
@@ -140,7 +145,7 @@ ORM.
 | Table             | Holds                                                                                                                         |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `projects`        | A swimlane: title, `workspace_root` and its normalized `workspace_key` (unique), icon, T3 project id, position, archive, review skill |
-| `tasks`           | `number` (the `#42`), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override, `auto_merge` ([merge_task_pr](features/github-prs.md#merge_task_pr)), `priority` ([board-layout](features/board-layout.md#the-priority-lane)), `suggested_tier` and `suggested_reason`, `kind` (`task` or `epic`) and `parent_id` (the task's epic, [epics](features/epics.md)) |
+| `tasks`           | `number` (the `#42`) and `number_prefix` (the `E` of `#E7`, for a task a connected machine numbered; unique together), project, title, description, `plan_context`, status, position, archive, resolution and `resolved_by_task_id`, `auto_review` override, `auto_merge` ([merge_task_pr](features/github-prs.md#merge_task_pr)), `priority` ([board-layout](features/board-layout.md#the-priority-lane)), `suggested_tier` and `suggested_reason`, `kind` (`task` or `epic`) and `parent_id` (the task's epic, [epics](features/epics.md)) |
 | `plan_phases`     | Ordered phases of a task's plan                                                                                               |
 | `plan_steps`      | Ordered steps: status, notes, `started_at`, `completed_at`                                                                    |
 | `task_links`      | PR, ticket ([ticket systems](features/ticket-systems.md)), GitHub issue, T3 thread, agent session or URL links, with a parsed `ref_json` and a poller-written `snapshot_json`. Unique per task, kind and URL |
@@ -151,11 +156,13 @@ ORM.
 | `task_labels`     | A task's labels, normalized; one row per task and label ([labels](features/labels.md))                                        |
 | `attention_dismissals` | Attention flags the user dismissed: task, reason key, the fingerprint of the state dismissed ([task lifecycle](features/task-lifecycle.md#dismissing-flags)) |
 | `machines` | The machines a board is connected to: instance id, name, prefix, ordered routes and what each last said of itself ([remote machines](features/remote-machines.md#connecting-a-machine)). Not part of a backup; the token for each is in `machine-tokens.json` |
+| `task_holds`, `machine_sync`, `held_edits` | A board's side of the tasks its machines hold: which machine holds which task, how far each machine's change log is applied, and the edits made here that a machine hasn't taken ([remote machines](features/remote-machines.md#held-tasks)). Not part of a backup |
+| `working_copies`, `change_log`, `copied_projects`, `applied_edits`, `runner_state` | A runner's side: which of its task rows are held for the board or only referred to, the ordered log of every change to a held task, which repository each of its projects is, the board's edits it has dealt with, and its log's epoch and number prefix. Not part of a backup |
 | `machine_pairing_codes`, `machine_tokens` | A runner's pairing state: the one-time code not yet used and the paired board's token, both as SHA-256 hashes ([remote machines](features/remote-machines.md#pairing)). Not part of a backup |
 | `label_colors`    | Label colour overrides (a hue); labels without a row take a hue hashed from their name                                        |
 | `task_reviews`    | Local review rounds: round, cycle, status, reviewer, summary                                                                  |
 | `review_findings` | A round's findings: severity, location, status, resolution note                                                               |
-| `counters`        | `task_number`, the high-water mark for task numbers                                                                           |
+| `counters`        | `task_number`, the high-water mark for task numbers, and `machine_task_number:<prefix>`, the same for each connected machine's prefixed numbers |
 | `autopilot_settings` | An Autopilot automation's mode and config at one scope (board, project) ([autopilot](features/autopilot.md))               |
 | `autopilot_recurring` | Recurring-task rules: project, template, schedule, flag, the cursor and the last task made ([autopilot](features/autopilot.md)) |
 | `autopilot_custom` | Custom automations: name, trigger, filters, action and when it was armed ([autopilot](features/autopilot.md#custom-automations)) |

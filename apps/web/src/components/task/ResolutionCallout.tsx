@@ -1,3 +1,4 @@
+import { taskLabel } from "@repo/contracts";
 import type { TaskDetail, TaskRef } from "@repo/contracts";
 import { CircleCheckBigIcon, CopyIcon, XCircleIcon } from "lucide-react";
 
@@ -50,7 +51,7 @@ function TaskRefButton({ task }: { task: TaskRef }) {
       onClick={() => void openTask(task.id)}
       className="flex min-w-0 items-center gap-1 rounded-sm text-foreground/90 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <span className="shrink-0 font-mono text-xs tabular-nums">#{task.number}</span>
+      <span className="shrink-0 font-mono text-xs tabular-nums">{taskLabel(task)}</span>
       <span className="min-w-0 truncate">{task.title}</span>
     </button>
   );

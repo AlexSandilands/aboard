@@ -1,4 +1,4 @@
-import { AUTOPILOT_MERGE_EPIC_PRS, type AutopilotRun, type TaskSummary } from "@repo/contracts";
+import { taskLabel, AUTOPILOT_MERGE_EPIC_PRS, type AutopilotRun, type TaskSummary } from "@repo/contracts";
 import { createHash } from "node:crypto";
 import { AppError } from "../../errors.ts";
 import { isTransientHostError } from "../../integrations/gitHost.ts";
@@ -131,7 +131,7 @@ export function mainCandidates(services: Services, tasks: readonly TaskSummary[]
       const data: MainHoldData = { kind: "main_hold", reason: verdict.reason };
       out.push({
         dedupeKey: `main-hold:${verdict.link?.id ?? task.id}:${head}:${hashOf(verdict.reason)}`,
-        summary: `say why #${task.number} can't merge into main by itself`,
+        summary: `say why ${taskLabel(task)} can't merge into main by itself`,
         taskId: task.id,
         data,
       });
@@ -155,7 +155,7 @@ export function mainCandidates(services: Services, tasks: readonly TaskSummary[]
     };
     out.push({
       dedupeKey: earlier.runs === 0 ? earlier.key : `${earlier.key}:${earlier.runs + 1}`,
-      summary: `merge PR #${link.ref.number} of #${task.number} into ${base}`,
+      summary: `merge PR #${link.ref.number} of ${taskLabel(task)} into ${base}`,
       taskId: task.id,
       data,
     });
@@ -167,7 +167,7 @@ export function mainCandidates(services: Services, tasks: readonly TaskSummary[]
 export function holdAction(task: TaskSummary, data: MainHoldData): ActionResult {
   return {
     status: "skipped",
-    summary: `Ready to merge into main, but Autopilot won't merge #${task.number} by itself: ${data.reason}. Merge it yourself, or fix that.`,
+    summary: `Ready to merge into main, but Autopilot won't merge ${taskLabel(task)} by itself: ${data.reason}. Merge it yourself, or fix that.`,
     needsAttention: true,
   };
 }
@@ -186,7 +186,7 @@ export async function mainMergeAction(
 ): Promise<ActionResult> {
   const task = services.tasks.summary(taskId);
   if (!intoMainOn(services, task)) {
-    return { status: "skipped", summary: `Didn't merge PR #${data.number}: Into main is off for #${task.number}` };
+    return { status: "skipped", summary: `Didn't merge PR #${data.number}: Into main is off for ${taskLabel(task)}` };
   }
   const verdict = autoMergeVerdict(services, task, Date.now());
   if (verdict.kind !== "ready") {

@@ -1,3 +1,4 @@
+import { taskLabel } from "./taskNumbers.ts";
 import { z } from "zod";
 import { AgentHarness, startedSessionLine } from "./agentSessions.ts";
 import { LaunchAttachmentIds } from "./attachments.ts";
@@ -111,14 +112,14 @@ export interface PlanTasksPromptInput {
 }
 
 /** "#3, #4 and #7". */
-export const taskNumberList = (tasks: ReadonlyArray<Pick<TaskSummary, "number">>): string => {
-  const refs = tasks.map((task) => `#${task.number}`);
+export const taskNumberList = (tasks: ReadonlyArray<Pick<TaskSummary, "number" | "numberPrefix">>): string => {
+  const refs = tasks.map((task) => taskLabel(task));
   return refs.length <= 1 ? (refs[0] ?? "") : `${refs.slice(0, -1).join(", ")} and ${refs.at(-1)}`;
 };
 
 /** The label a planning session is linked under: "Planning #3, #4, #7". */
-export const planningSessionLabel = (tasks: ReadonlyArray<Pick<TaskSummary, "number">>): string =>
-  `Planning ${tasks.map((task) => `#${task.number}`).join(", ")}`;
+export const planningSessionLabel = (tasks: ReadonlyArray<Pick<TaskSummary, "number" | "numberPrefix">>): string =>
+  `Planning ${tasks.map((task) => taskLabel(task)).join(", ")}`;
 
 const planSkillLines = (skill: PlanSkillRef): string[] =>
   skill.source === "builtin"
@@ -143,7 +144,7 @@ export function planTasksPrompt({
     `Let's plan ${tasks.length === 1 ? "a task" : `${tasks.length} tasks`} in the ${project.title} project on the ${BRAND.id} task board together.`,
     `Board: ${origin}/`,
     "",
-    ...tasks.map((task) => `- #${task.number} "${task.title}": get_task("${task.id}")`),
+    ...tasks.map((task) => `- ${taskLabel(task)} "${task.title}": get_task("${task.id}")`),
     "",
     `Read each with get_task on the ${BRAND.id} MCP server, then shape a plan for each with me and save it. Don't implement anything.`,
     "",
@@ -160,12 +161,12 @@ export function planTasksPrompt({
  * fetches the full prompt over MCP instead. Built from task numbers alone, which every shell can take.
  */
 export const planTasksShortPrompt = (
-  tasks: ReadonlyArray<Pick<TaskSummary, "number">>,
+  tasks: ReadonlyArray<Pick<TaskSummary, "number" | "numberPrefix">>,
   /** The CLI the session runs in: one that picks its own session id is told to link itself. */
   harness: AgentHarness | null = null,
 ): string =>
   `Let's plan ${taskNumberList(tasks)} from the ${BRAND.id} task board: call get_handoff_prompt(tasks: ` +
-  `[${tasks.map((task) => `"#${task.number}"`).join(", ")}], mode: "plan") on the ${BRAND.id} MCP server first and ` +
+  `[${tasks.map((task) => `"${taskLabel(task)}"`).join(", ")}], mode: "plan") on the ${BRAND.id} MCP server first and ` +
   `follow it. ${startedSessionLine(harness, planningSessionLabel(tasks), "every task")}`;
 
 /**
@@ -176,11 +177,11 @@ export function planTaskProblem(
   task: Pick<TaskSummary, "number" | "kind" | "archivedAt" | "status" | "progress"> &
     Partial<Pick<TaskSummary, "manual">>,
 ): string | null {
-  if (task.kind === "epic") return `#${task.number} is an epic: plan its tasks instead`;
-  if (task.manual) return `#${task.number} is a manual task, which needs no plan`;
-  if (task.archivedAt) return `#${task.number} is archived`;
-  if (task.status === "done") return `#${task.number} is done`;
-  if (task.status !== "backlog" && task.progress.total > 0) return `#${task.number} already has a plan`;
+  if (task.kind === "epic") return `${taskLabel(task)} is an epic: plan its tasks instead`;
+  if (task.manual) return `${taskLabel(task)} is a manual task, which needs no plan`;
+  if (task.archivedAt) return `${taskLabel(task)} is archived`;
+  if (task.status === "done") return `${taskLabel(task)} is done`;
+  if (task.status !== "backlog" && task.progress.total > 0) return `${taskLabel(task)} already has a plan`;
   return null;
 }
 

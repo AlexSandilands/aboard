@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   autopilotSessionName,
   BOARD_REVIEWER,
   epicBranchName,
@@ -1340,7 +1341,7 @@ const autopilot: Scenario = (s, opts) => {
       automation: "merge_epic_prs",
       candidate: {
         dedupeKey: `main-hold:${held.id}:seed`,
-        summary: `say why #${held.number} can't merge`,
+        summary: `say why ${taskLabel(held)} can't merge`,
         taskId: held.id,
       },
       dryRun: false,
@@ -1349,7 +1350,7 @@ const autopilot: Scenario = (s, opts) => {
       s.autopilot.start(run.id);
       s.autopilot.finish(run.id, {
         status: "skipped",
-        summary: `Ready to merge into main, but Autopilot won't merge #${held.number} by itself: it still needs an approving review. Merge it yourself, or fix that.`,
+        summary: `Ready to merge into main, but Autopilot won't merge ${taskLabel(held)} by itself: it still needs an approving review. Merge it yourself, or fix that.`,
         needsAttention: true,
       });
     }

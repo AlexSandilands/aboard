@@ -1,4 +1,4 @@
-import { LABELS_PER_TASK_MAX, type TaskStatus, type TaskSummary } from "@repo/contracts";
+import { taskLabel, LABELS_PER_TASK_MAX, type TaskStatus, type TaskSummary } from "@repo/contracts";
 
 // What the card menu's bulk actions do with several picked cards: which of them each action applies to, so items that
 // apply to none are disabled and the summary toast can say how many were skipped.
@@ -94,7 +94,7 @@ export function bulkLabelChoices(
 }
 
 /** `#14, #16, #26` */
-export const referenceList = (tasks: readonly TaskSummary[]): string => tasks.map((t) => `#${t.number}`).join(", ");
+export const referenceList = (tasks: readonly TaskSummary[]): string => tasks.map((t) => taskLabel(t)).join(", ");
 
 /** "3 tasks": the menu's heading and the toast's count. */
 export const taskCount = (n: number): string => `${n} task${n === 1 ? "" : "s"}`;

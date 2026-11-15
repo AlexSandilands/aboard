@@ -177,6 +177,18 @@ Tasks get a global, increasing `number`, shown as `#42`. It comes from the `coun
 counter is a high-water mark: numbers of deleted tasks are never reused, and a task in the trash keeps its number. Anywhere a task is referenced
 (REST `:id`, MCP `task`, `byTask`), a uuid, `#42` or `42` is accepted.
 
+A task made on a [connected machine](remote-machines.md#numbers-given-by-a-machine) while the board couldn't be
+reached is numbered by that machine: its prefix and its own counter, `#E7`, for good. The prefix is a second
+column (`number_prefix`, empty for the board's own numbers), unique together with `number`, so `#7` and `#E7` are
+two tasks and sorting stays numeric (`compareTaskNumbers`: the board's own first, then each prefix's). Such a task
+is referenced as `#E7`, `E7` or `e7`. Code never builds `#${task.number}` itself: `taskLabel(task)` prints a
+number, `parseTaskNumberRef` reads one, and an activity entry that names another task stores `taskNumberValue`
+(`42`, or `"E7"`), all in `packages/contracts/src/taskNumbers.ts`. A prefix may hold a digit, so `#E27` could be
+`E` 27 or `E2` 7: the first that is a task wins, shortest prefix first.
+
+A task a connected machine holds ([held tasks](remote-machines.md#held-tasks)) can't be archived, deleted, moved
+to another project or made an epic until it is taken back, and Autopilot doesn't start it.
+
 ### Ordering and moving between projects
 
 Cards are ordered within a lane (project and status) by a fractional-index `position`. Moves take

@@ -520,7 +520,13 @@ export const TaskImport = z.object({
 export type TaskImport = z.infer<typeof TaskImport>;
 
 /** Compact pointer to another task, e.g. the one that resolved this one. */
-export const TaskRef = z.object({ id: z.string(), number: z.number().int(), title: z.string() });
+export const TaskRef = z.object({
+  id: z.string(),
+  number: z.number().int(),
+  /** The machine prefix of a task made on a machine while the board couldn't be reached (`#E7`); absent or empty otherwise. */
+  numberPrefix: z.string().optional(),
+  title: z.string(),
+});
 export type TaskRef = z.infer<typeof TaskRef>;
 
 /** An epic's children counted by status. Archived children don't count; closed ones count as done. */
@@ -556,9 +562,23 @@ export const MovedTo = z.object({
 });
 export type MovedTo = z.infer<typeof MovedTo>;
 
+/** The machine holding a task (remote-machines.md#held-tasks), on the task's summary. */
+export const TaskHold = z.object({
+  machineId: z.string(),
+  machineName: z.string(),
+  since: IsoDate,
+  /** Edits made on the board that the machine hasn't taken yet: they show here already, and may still be refused. */
+  waiting: z.number().int().nonnegative(),
+});
+export type TaskHold = z.infer<typeof TaskHold>;
+
 export const TaskSummary = z.object({
   id: z.string(),
   number: z.number().int(),
+  /** The machine prefix of a task made on a machine while the board couldn't be reached (`#E7`); absent or empty otherwise. */
+  numberPrefix: z.string().optional(),
+  /** The connected machine that holds the task and orders its changes; null for a task the board holds itself. */
+  hold: TaskHold.nullable().optional(),
   projectId: z.string(),
   kind: TaskKind,
   /** The epic this task belongs to; null for loose tasks and for epics. */
@@ -895,6 +915,7 @@ export type DeleteTasksResult = z.infer<typeof DeleteTasksResult>;
 export const TrashedTask = z.object({
   id: z.string(),
   number: z.number().int(),
+  numberPrefix: z.string().optional(),
   title: z.string(),
   kind: TaskKind,
   projectId: z.string(),

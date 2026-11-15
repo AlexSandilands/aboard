@@ -76,7 +76,14 @@ export const RecurringRuleView = RecurringRule.extend({
   /** The first slot after `lastDueAt`; in the past when it is waiting for the next pass or is being skipped. */
   nextDueAt: z.string().nullable(),
   /** What the rule made last, for the row's "last task" line. */
-  lastTask: z.object({ number: z.number().int(), status: TaskStatus, archived: z.boolean() }).nullable(),
+  lastTask: z
+    .object({
+      number: z.number().int(),
+      numberPrefix: z.string().optional(),
+      status: TaskStatus,
+      archived: z.boolean(),
+    })
+    .nullable(),
 });
 export type RecurringRuleView = z.infer<typeof RecurringRuleView>;
 

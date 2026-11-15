@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type TaskStatus, type TaskSummary } from "@repo/contracts";
+import { taskLabel, TASK_STATUSES, type TaskStatus, type TaskSummary } from "@repo/contracts";
 
 /** What the dependency lines need of a task: its id, status and the ids on either end of its relations. */
 export type RelatedTask = Pick<TaskSummary, "id" | "status"> & {
@@ -15,7 +15,7 @@ export function openBlockers(task: Pick<TaskSummary, "blockedBy">) {
 export function blockedLabel(task: Pick<TaskSummary, "blocked" | "blockedBy" | "status">): string | null {
   if (!task.blocked || task.status === "done") return null;
   const open = openBlockers(task);
-  return open.length ? `Blocked by ${open.map((b) => `#${b.number}`).join(", ")}` : null;
+  return open.length ? `Blocked by ${open.map((b) => taskLabel(b)).join(", ")}` : null;
 }
 
 /** Which way a line runs from the card in focus: to the tasks it waits on, or to the tasks waiting on it. */

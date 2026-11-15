@@ -249,9 +249,9 @@ describe("activity.between", () => {
     // The second run came after the failed first one; the stranded run, after a success.
     expect(archive).toMatchObject({ total: 4, succeeded: 1, failed: 2, skipped: 1, retries: 1, gaveUp: 0 });
     expect(archive.failures).toEqual([
-      { task: { number: t.number, title: "Flaky" }, reason: "gh timed out", restarted: false },
+      { task: { number: t.number, numberPrefix: "", title: "Flaky" }, reason: "gh timed out", restarted: false },
       {
-        task: { number: t.number, title: "Flaky" },
+        task: { number: t.number, numberPrefix: "", title: "Flaky" },
         reason: "The board restarted while this run was going",
         restarted: true,
       },

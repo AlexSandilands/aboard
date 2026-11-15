@@ -29,6 +29,11 @@ and review integrations. How it fits together: [docs/architecture.md](../../docs
   token anywhere, and nothing returns `machine-tokens.json` through the API. The board's side is
   `integrations/machines/`: talk to a connected machine through `integrations.machines.request`, which uses the
   route that works and refuses a machine that isn't connected.
+- A task a connected machine holds is changed on that machine. Change tasks only through the service methods (they
+  are wrapped in `services/heldEdits.ts`, which queues the edit for the machine); a new method that changes a task
+  needs a route there, or its change is overwritten by the machine's next log entry. Print a task's number with
+  `taskLabel`, never `#${task.number}`: a machine numbers its own tasks `#E7`
+  ([remote machines](../../docs/features/remote-machines.md#held-tasks)).
 - MCP results are plain text. Tool descriptions are written for agents; read
   [docs/features/mcp.md](../../docs/features/mcp.md) before adding or changing a tool, and update
   `skills/aboard/` when the workflow changes (then `pnpm skill:embed`, which the installed copies sync from).
