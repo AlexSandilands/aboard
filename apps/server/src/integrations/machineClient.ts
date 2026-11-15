@@ -272,7 +272,12 @@ export function createMachineClient(deps: MachineClientDeps): MachineClient {
       const origin = await verify(target);
       const headers = new Headers(init.headers);
       headers.set("authorization", `Bearer ${stored.token}`);
-      const res = await send(origin, `${pathname}${search}`, { ...init, headers });
+      const res = await send(origin, `${pathname}${search}`, { ...init, headers }).catch((error: unknown) => {
+        // Not sent again here, since it may have arrived; but the next call asks afresh who answers where, and so
+        // moves on to the name's other addresses.
+        verified.delete(origin);
+        throw error;
+      });
       if (res.status === 401) {
         verified.delete(origin);
         throw new MachineClientError("revoked", "The machine no longer accepts this board; pair it again");

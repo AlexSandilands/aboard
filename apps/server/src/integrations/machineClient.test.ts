@@ -276,6 +276,35 @@ describe("where the board sends a token", { timeout: 30_000 }, () => {
     expect(session.machine.instanceId).toBe(runner.instanceId);
   });
 
+  it("forgets an address that stops answering, so the next call tries the name's others", async () => {
+    const [a, standby] = [await startRunner(), await listen(createServer((_req, res) => res.end("{}")))];
+    // One name, two addresses on one port; requests to the first reach A until it goes quiet.
+    let firstUp = true;
+    const routed: typeof fetch = (input, init) => {
+      const url = urlOf(input);
+      if (url.startsWith("http://127.0.0.1:1/")) {
+        return firstUp
+          ? fetch(url.replace("http://127.0.0.1:1", a.server.url), init)
+          : Promise.reject(new Error("down"));
+      }
+      return fetch(url.replace("http://127.0.0.2:1", standby), init);
+    };
+    const bridge = board({ fetch: routed, resolve: () => Promise.resolve(["127.0.0.1", "127.0.0.2"]) });
+    await bridge.client.pair("http://engine.test:1", a.code());
+    const target = { instanceId: a.instanceId, url: "http://engine.test:1" };
+    await bridge.client.session(target);
+
+    firstUp = false;
+    expect(await reasonOf(bridge.client.session(target))).toBe("unreachable");
+    bridge.sent.length = 0;
+    // The second address answers, as something that isn't the runner: it was asked, without the token.
+    expect(await reasonOf(bridge.client.session(target))).toBe("not-a-runner");
+    expect(bridge.sent.map((r) => [r.url, r.authorization])).toEqual([
+      ["http://127.0.0.1:1/machine/descriptor", null],
+      ["http://127.0.0.2:1/machine/descriptor", null],
+    ]);
+  });
+
   it("sends its token to machine API paths only, however the path is spelled", async () => {
     const runner = await startRunner();
     const bridge = board();
