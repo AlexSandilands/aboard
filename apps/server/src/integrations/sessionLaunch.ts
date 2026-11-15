@@ -50,6 +50,7 @@ import {
   remotePreflight,
   remoteSessionArgv,
   remoteSessionScript,
+  REMOTE_SCRIPT_MAX,
   runnerPortOf,
   sshRouteOf,
   tmuxSessionName,
@@ -365,10 +366,20 @@ export function createSessionLaunch(deps: {
       const run = there(cliArgv);
       return resolved.launch(run.argv, run.cwd, window ? { window } : {});
     };
+    /** Why the prompt's command doesn't fit where it runs, if it doesn't: tmux on a machine takes far less than here. */
+    const tooLong = (built: LaunchSpec): string | null =>
+      !fitsCommandLine(built, h.platform)
+        ? "The prompt is too long for the command line."
+        : remote &&
+            remoteSessionScript({ cwd, argv, tmuxName: remote.tmuxName, mcpUrl: remote.mcpUrl }).length >
+              REMOTE_SCRIPT_MAX
+          ? "The prompt is too long for tmux on the machine."
+          : null;
     try {
       spec = open(argv);
-      if (!fitsCommandLine(spec, h.platform) && !shortReason) {
-        shortReason = "The prompt is too long for the command line.";
+      const longReason = shortReason ? null : tooLong(spec);
+      if (longReason) {
+        shortReason = longReason;
         argv = argvFor(short());
         spec = open(argv);
       }
@@ -463,6 +474,7 @@ export function createSessionLaunch(deps: {
       harness: input.harness,
       sessionId,
       label,
+      tmux: tmuxName,
       workspace:
         workspace.mode === "new_worktree" ? { mode: "new_worktree", baseRef: workspace.baseRef } : { mode: "current" },
       actor,

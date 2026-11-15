@@ -212,6 +212,54 @@ describe("terminals for sessions on a machine", () => {
     expect(((await command.json()) as { command: string }).command).toContain("--fork-session");
   });
 
+  it("record the tmux session of a session that links itself, so it is found again", async () => {
+    const { board, runner, task, spawned, sync } = await withTerminal("checked\n");
+    const res = await board.request(`/api/tasks/${task.id}/sessions`, {
+      method: "POST",
+      json: { harness: "codex", mode: "work", prompt: "Go", model: null, workspace: { mode: "current" } },
+    });
+    const body = (await res.json()) as StartSessionResult;
+    expect(body).toMatchObject({ launched: true, linkId: null });
+    const tmux = /new-session -A -s ([\w-]+)/.exec(JSON.stringify(spawned[0]))![1]!;
+    // What the runner's link tool asks when the Codex session links itself from that folder.
+    expect(runner.integrations.runnerHost.interactive.tmuxFor("codex", body.cwd)).toBe(tmux);
+    expect(runner.integrations.runnerHost.interactive.tmuxFor("codex", body.cwd)).toBeNull();
+
+    const linked = runner.services.links.add(
+      task.id,
+      {
+        agentSession: {
+          harness: "codex",
+          sessionId: "1c2d3e4f-2a43-4c55-9d3a-6f2c1e7d8a90",
+          cwd: body.cwd,
+          machine: { id: runner.instanceId, name: "engine" },
+          tmux,
+        },
+      },
+      "codex",
+    );
+    await sync();
+    const command = await board.request(`/api/links/${linked.id}/resume-command?mode=resume`);
+    expect(((await command.json()) as { command: string }).command).toContain(`new-session -A -s ${tmux}`);
+  });
+
+  it("start with the short prompt when the full one is too long for tmux there", async () => {
+    const { board, task, spawned } = await withTerminal("checked\n");
+    const res = await board.request(`/api/tasks/${task.id}/sessions`, {
+      method: "POST",
+      json: {
+        harness: "claude-code",
+        mode: "work",
+        prompt: "Do this. ".repeat(2500),
+        model: null,
+        workspace: { mode: "current" },
+      },
+    });
+    const body = (await res.json()) as StartSessionResult;
+    expect(body).toMatchObject({ launched: true, shortReason: "The prompt is too long for tmux on the machine." });
+    expect(JSON.stringify(spawned[0]).length).toBeLessThan(16_000);
+  });
+
   it("ask before opening a session that runs outside tmux, as one here", async () => {
     const t = await withTerminal("checked\n");
     const added = t.runner.services.links.add(

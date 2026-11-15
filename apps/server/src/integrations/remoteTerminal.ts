@@ -65,9 +65,24 @@ export function loginShellQuote(value: string): string {
 const remoteSh = (script: string): string => `sh -lc ${loginShellQuote(script)}`;
 
 /**
- * The script that opens the session on the machine: attach to its tmux session when it is open, else make it running
- * the CLI in the session's folder. A shell takes over when the CLI exits, so what it last printed stays readable.
- * Double quotes are left out: they can't cross cmd.exe on a Windows board.
+ * The tmux session option set once the CLI in it has exited. The shell left behind keeps what the CLI printed
+ * readable, but opening the session again must run the CLI, not attach to that shell.
+ */
+const ENDED_OPTION = "@ended";
+
+/**
+ * The longest script the session's tmux command may come from. The tmux client refuses a command over its message
+ * size (16 KB) with "command too long", and the script carries it with a little around it; a longer prompt is replaced
+ * by the short one, as for a command line here.
+ */
+export const REMOTE_SCRIPT_MAX = 14_000;
+
+/**
+ * The script that opens the session on the machine: attach to its tmux session when the CLI still runs there, else
+ * (ending a tmux session whose CLI has exited) make it running the CLI in the session's folder. A shell takes over when
+ * the CLI exits, so what it last printed stays readable, and the session is marked as ended. A terminal type the
+ * machine has no terminfo for (kitty, Ghostty) would stop tmux, so it falls back to xterm-256color. Double quotes are
+ * left out: they can't cross cmd.exe on a Windows board.
  */
 export function remoteSessionScript(input: {
   cwd: string;
@@ -78,11 +93,16 @@ export function remoteSessionScript(input: {
 }): string {
   const [cli, ...args] = input.argv.map(shQuote);
   const mcp = input.mcpUrl ? ownMcpArgs(input.argv[0]!, input.mcpUrl) : null;
-  const inner = `${[cli, ...(mcp ? [mcp] : []), ...args].join(" ")}; exec \${SHELL:-/bin/sh} -l`;
+  const inner =
+    `${[cli, ...(mcp ? [mcp] : []), ...args].join(" ")}; ` +
+    `tmux set-option -q ${ENDED_OPTION} 1; exec \${SHELL:-/bin/sh} -l`;
+  const target = shQuote(`=${input.tmuxName}`);
   return [
     `PATH=${EXTRA_PATH}:$PATH; export PATH`,
     `command -v tmux >/dev/null 2>&1 || { echo tmux is not installed on this machine >&2; exit 3; }`,
+    `command -v infocmp >/dev/null 2>&1 && { infocmp $TERM >/dev/null 2>&1 || TERM=xterm-256color; export TERM; }`,
     `cd ${shQuote(input.cwd)} || exit 4`,
+    `tmux show-options -qv -t ${target} ${ENDED_OPTION} 2>/dev/null | grep -qx 1 && tmux kill-session -t ${target}`,
     `exec tmux new-session -A -s ${shQuote(input.tmuxName)} -c ${shQuote(input.cwd)} sh -c ${shQuote(inner)}`,
   ].join("; ");
 }
@@ -125,7 +145,7 @@ export function remoteSessionArgv(route: SshRoute, script: string): string[] {
 
 /** What the machine said before the session opened. */
 export interface RemotePreflight {
-  /** The session's tmux session is open there: opening it attaches to it. */
+  /** The CLI still runs in the session's tmux session there: opening it attaches to it. */
   open: boolean;
 }
 
@@ -146,7 +166,9 @@ export async function remotePreflight(
     `command -v tmux >/dev/null 2>&1 || echo no-tmux`,
     ...(check.cwd ? [`test -d ${shQuote(check.cwd)} || echo no-folder`] : []),
     `command -v ${shQuote(check.exe)} >/dev/null 2>&1 || echo no-cli`,
-    `tmux has-session -t ${shQuote(`=${check.tmuxName}`)} 2>/dev/null && echo open`,
+    // Open only while the CLI runs in it: once it has exited, the session's shell is all that is left.
+    `tmux has-session -t ${shQuote(`=${check.tmuxName}`)} 2>/dev/null && ` +
+      `{ tmux show-options -qv -t ${shQuote(`=${check.tmuxName}`)} ${ENDED_OPTION} | grep -qx 1 || echo open; }`,
     `echo checked`,
   ].join("; ");
   const child = spawn([...sshArgs(route), remoteSh(script)]);

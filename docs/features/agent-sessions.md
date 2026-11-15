@@ -352,12 +352,22 @@ closes or this machine sleeps; opening it again attaches to it (`integrations/re
   do, offering a T3 Code thread on the machine instead (`details: {t3: "offer"}`); ssh's own failure goes through
   `sshFailure`. Nothing is made on the machine before this passes.
 - **The command** is `ssh -t [-p <port>] -- <target> sh -lc '<script>'`. The script puts those folders on `PATH`, checks
-  tmux, `cd`s to the folder and runs `exec tmux new-session -A -s <brand>-<12 hex of the id> -c <folder> sh -c '<cli
-  …>; exec $SHELL -l'`: `-A` attaches when the tmux session exists, and a shell takes over when the CLI exits. The
+  tmux, falls back to `TERM=xterm-256color` when the machine has no terminfo for the terminal here (kitty, Ghostty),
+  `cd`s to the folder, ends the tmux session if its CLI has exited, and runs `exec tmux new-session -A -s <name> -c
+  <folder> sh -c '<cli …>; tmux set-option -q @ended 1; exec $SHELL -l'`: `-A` attaches when the tmux session exists,
+  and a shell takes over when the CLI exits, so its last words stay readable; `@ended` marks that, so opening it again
+  runs the CLI rather than showing that shell. The
   script is quoted so that the login shell there reads it the same whether it is a POSIX shell or fish
   (`loginShellQuote`), and has no double quote, which cmd.exe on a Windows board couldn't carry. Checked through sh,
   bash, fish and zsh.
-- **Resume** attaches when the tmux session is open, without the 409; a session running outside tmux (a headless run,
+- **The tmux session's name** is `<brand>-<12 hex of an id>`: the session's id, or for one that picks its own id
+  (Codex) the launch's. The machine records it on the link (`ref.tmux`, which only a runner sets): on the link it makes
+  for a board-started session, and, for one that links itself, on that link when it comes from the same harness and
+  folder within the hour (`tmuxFor`). Resume uses it, else the name from the session's id.
+- **The prompt** goes through tmux, whose client refuses a command over 16 KB, so a script over 14,000 characters
+  (`REMOTE_SCRIPT_MAX`) starts the session with the short prompt, as an over-long command line here does
+  ("The prompt is too long for tmux on the machine.").
+- **Resume** attaches when the CLI still runs in the tmux session, without the 409; a session running outside tmux (a headless run,
   or one started on the machine) gets the 409 as here. **Fork** gets a tmux session of its own. **Copy resume command**
   gives the ssh command. Headless runs' sessions work the same: their folder is the run's worktree on the machine.
 - **A new session** (`startOnMachine` in `sessionLaunch.ts`): after the check, `POST /machine/sessions` has the
@@ -373,8 +383,10 @@ closes or this machine sleeps; opening it again attaches to it (`integrations/re
   CLI relies on the user's config there.
 - The CLI that runs is the machine's own; the path set in Settings is this machine's.
 
-Not done: bringing back a named Windows Terminal window for a session on a machine (attaching does the same), and
-images.
+Not done: bringing back a named Windows Terminal window for a session on a machine (attaching does the same),
+images, and finding a fork again: a fork runs in a tmux session of its own, and if its agent links it, that link names
+no tmux session, so opening it starts another. tmux itself was not run in the tests: the scripts run against a
+stand-in `tmux` that answers as one would.
 
 ### Names
 

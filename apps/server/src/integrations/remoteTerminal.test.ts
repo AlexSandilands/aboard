@@ -1,6 +1,9 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn as spawnProcess } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { BRAND } from "@repo/contracts";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { SpawnSsh } from "./machines/ssh.ts";
 import {
   loginShellQuote,
@@ -14,6 +17,10 @@ import {
 } from "./remoteTerminal.ts";
 
 const posix = process.platform !== "win32";
+const dirs: string[] = [];
+afterEach(() => {
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 /** An ssh that prints `stdout` and exits with `code`, recording what it was asked to run. */
 function fakeSsh(stdout: string, code = 0, stderr = ""): { spawn: SpawnSsh; calls: string[][] } {
@@ -125,5 +132,70 @@ describe("asking the machine first", () => {
     await expect(
       remotePreflight(fakeSsh("", 255, "me@engine: Permission denied (publickey).").spawn, "engine", route, check),
     ).rejects.toThrow(/SSH couldn't log in to engine.*a T3 Code thread there doesn't need it/);
+  });
+});
+
+describe.runIf(posix)("the scripts, run against a stand-in tmux", () => {
+  /**
+   * A folder with a `tmux` that logs its arguments and answers as a server would with one tmux session whose CLI has
+   * `ended` or not, and an `ssh` that runs the remote command here with that folder first on PATH.
+   */
+  function machine(state: { session: boolean; ended: boolean }) {
+    const bin = mkdtempSync(join(tmpdir(), "remote-tmux-"));
+    dirs.push(bin);
+    const log = join(bin, "log");
+    writeFileSync(
+      join(bin, "tmux"),
+      [
+        "#!/bin/sh",
+        `echo "$*" >> ${log}`,
+        `case "$1" in`,
+        `  has-session) ${state.session ? "exit 0" : "exit 1"} ;;`,
+        `  show-options) ${state.ended ? "echo 1" : ":"} ;;`,
+        "esac",
+        "exit 0",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    writeFileSync(join(bin, "claude"), "#!/bin/sh\n", { mode: 0o755 });
+    const env = { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}`, HOME: bin };
+    const spawn: SpawnSsh = (args) => {
+      const child = spawnProcess("sh", ["-c", args.at(-1)!], { env });
+      const exit = new Promise<{ code: number | null }>((resolve) => child.once("close", (code) => resolve({ code })));
+      return {
+        onStdout: (listener) => void child.stdout.on("data", (b: Buffer) => listener(b.toString())),
+        onStderr: (listener) => void child.stderr.on("data", (b: Buffer) => listener(b.toString())),
+        exit,
+        kill: () => void child.kill(),
+      };
+    };
+    const calls = () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : []);
+    return { bin, env, spawn, calls };
+  }
+  const check = (cwd: string) => ({ cwd, harness: "claude-code" as const, exe: "claude", tmuxName: "app-abc" });
+
+  it("is open only while the CLI still runs in the tmux session", async () => {
+    const route = { target: "engine", port: null };
+    const running = machine({ session: true, ended: false });
+    await expect(remotePreflight(running.spawn, "engine", route, check(running.bin))).resolves.toEqual({ open: true });
+    const ended = machine({ session: true, ended: true });
+    await expect(remotePreflight(ended.spawn, "engine", route, check(ended.bin))).resolves.toEqual({ open: false });
+    const none = machine({ session: false, ended: false });
+    await expect(remotePreflight(none.spawn, "engine", route, check(none.bin))).resolves.toEqual({ open: false });
+  });
+
+  it("ends a tmux session whose CLI has exited before opening it again, and marks it when the CLI exits", () => {
+    const run = (state: { session: boolean; ended: boolean }) => {
+      const m = machine(state);
+      const script = remoteSessionScript({ cwd: m.bin, argv: ["claude", "--resume", "x"], tmuxName: "app-abc" });
+      execFileSync("sh", ["-c", script], { env: m.env });
+      return m.calls();
+    };
+    const ended = run({ session: true, ended: true });
+    expect(ended).toContain("kill-session -t =app-abc");
+    expect(ended.at(-1)).toMatch(
+      /^new-session -A -s app-abc -c .* sh -c claude --resume x; tmux set-option -q @ended 1;/,
+    );
+    expect(run({ session: true, ended: false })).not.toContain("kill-session -t =app-abc");
   });
 });

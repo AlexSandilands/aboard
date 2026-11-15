@@ -510,7 +510,9 @@ export function createAgentSessionsIntegration(deps: {
     }
     const route = sshRouteOf(machine.routes);
     if (!route) throw noSshRoute(machine.name);
-    const tmuxName = tmuxSessionName(mode === "fork" ? randomUUID() : ref.sessionId);
+    // The name the machine recorded when the board opened it there (a Codex session's isn't its id's); a fork is a new
+    // session in a tmux session of its own.
+    const tmuxName = mode === "fork" ? tmuxSessionName(randomUUID()) : (ref.tmux ?? tmuxSessionName(ref.sessionId));
     // The machine's own CLI, on its PATH: the path set here is this machine's.
     const argv = resumeArgv(ref, mode);
     const script = remoteSessionScript({

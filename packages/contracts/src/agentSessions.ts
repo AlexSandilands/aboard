@@ -44,6 +44,14 @@ export const AgentSessionRef = z.object({
    * harness's files are there, so that machine reads the session's status, title, usage and transcript.
    */
   machine: LinkMachine.optional(),
+  /**
+   * The tmux session it runs in on that machine, when the board started it there: Codex picks its own session id, so
+   * the name can't be told from the id. Only a runner sets it.
+   */
+  tmux: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,64}$/)
+    .optional(),
 });
 export type AgentSessionRef = z.infer<typeof AgentSessionRef>;
 
