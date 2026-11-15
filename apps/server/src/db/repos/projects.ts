@@ -21,6 +21,7 @@ interface ProjectRow {
   review_model_json: string | null;
   plan_skill_json: string | null;
   variables_json: string;
+  run_on: string | null;
   position: string;
   collapsed: number;
   archived_at: string | null;
@@ -40,6 +41,7 @@ const toProject = (r: ProjectRow): Project => ({
   planSkill: parseJson<PlanSkillRef>(r.plan_skill_json),
   // A row that no longer parses (a cap lowered later) reads as no overrides rather than breaking the board.
   variables: AutomationVariables.catch([]).parse(parseJson(r.variables_json) ?? []),
+  runOn: r.run_on,
   position: r.position,
   collapsed: r.collapsed !== 0,
   archivedAt: r.archived_at,
@@ -58,6 +60,7 @@ const toRow = (p: Project): ProjectRow => ({
   review_model_json: overrideValue(p.reviewModel) ? JSON.stringify(p.reviewModel) : null,
   plan_skill_json: p.planSkill ? JSON.stringify(p.planSkill) : null,
   variables_json: JSON.stringify(p.variables),
+  run_on: p.runOn ?? null,
   position: p.position,
   collapsed: p.collapsed ? 1 : 0,
   archived_at: p.archivedAt,

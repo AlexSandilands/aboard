@@ -67,6 +67,8 @@ export interface TaskRecord {
   movedTo: MovedTo | null;
   /** When it went to the trash; null for a live task. Trashed tasks are hidden from every query but the trash's. */
   deletedAt: string | null;
+  /** Where it runs: a connected machine's id or `here`; null follows its project (contracts runOn.ts). */
+  runOn: string | null;
 }
 
 interface TaskRow {
@@ -106,6 +108,7 @@ interface TaskRow {
   integration_merged_at: string | null;
   moved_to_json: string | null;
   deleted_at: string | null;
+  run_on: string | null;
 }
 
 const toRecord = (r: TaskRow): TaskRecord => ({
@@ -145,6 +148,7 @@ const toRecord = (r: TaskRow): TaskRecord => ({
   integrationMergedAt: r.integration_merged_at,
   movedTo: parseMovedTo(r.moved_to_json),
   deletedAt: r.deleted_at,
+  runOn: r.run_on,
 });
 
 const toRow = (t: TaskRecord): TaskRow => ({
@@ -184,6 +188,7 @@ const toRow = (t: TaskRecord): TaskRow => ({
   integration_merged_at: t.integrationMergedAt,
   moved_to_json: t.movedTo ? JSON.stringify(t.movedTo) : null,
   deleted_at: t.deletedAt,
+  run_on: t.runOn,
 });
 
 export interface TaskFilter {

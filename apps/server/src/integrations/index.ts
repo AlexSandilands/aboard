@@ -39,6 +39,7 @@ import { createBridgeChannel } from "./machines/bridgeChannel.ts";
 import { createCheckouts, type CloneRepo } from "./machines/checkouts.ts";
 import { createMachinesIntegration } from "./machines/index.ts";
 import { createMachineSync } from "./machines/sync.ts";
+import { handOverAtStart } from "./machines/startOn.ts";
 import { createMachineJobs } from "./machines/jobs.ts";
 import { createRemoteWork } from "./machines/remoteWork.ts";
 import { createRunnerInteractive } from "./machines/runnerInteractive.ts";
@@ -307,10 +308,16 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       },
       ...(overrides.log ? { log: overrides.log } : {}),
     });
-  // A board sends the agent work of a task a machine holds to that machine; a runner does what it is sent.
+  // A board sends the agent work of a task a machine holds to that machine; a runner does what it is sent. A task
+  // set to run on a machine is handed to it as it starts (remote-machines.md#choosing-the-machine).
   const runner: Runner = isRunner
     ? localRunner
-    : { start: (request, update) => remoteWork.runner(localRunner).start(request, update) };
+    : {
+        start: async (request, update) => {
+          await handOverAtStart(deps.services(), machineSync, request);
+          return remoteWork.runner(localRunner).start(request, update);
+        },
+      };
   // Each project folder's `origin`, cached: Review PRs reads it on every pass for other people's PRs.
   const repoUrls = createRepoUrls(overrides.autopilotGit ?? defaultRunGit);
   const autopilot = createAutopilotEngine({

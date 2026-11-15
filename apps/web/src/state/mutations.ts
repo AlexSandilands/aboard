@@ -165,6 +165,22 @@ export const useSetEpicDelivery = (epicId: string, opts?: MutationOpts) =>
       api<TaskDetail>(`/api/tasks/${enc(epicId)}/delivery`, { method: "PUT", body: { delivery } }),
     opts,
   );
+/** Sets where a task runs: a connected machine's id, `here`, or null to follow its project (contracts runOn.ts). */
+export const useSetRunOn = (taskId: string, opts?: MutationOpts) =>
+  useApiMutation(
+    (runOn: string | null) => api<TaskDetail>(`/api/tasks/${enc(taskId)}/run-on`, { method: "PUT", body: { runOn } }),
+    opts,
+  );
+/**
+ * Takes a started task back from the machine holding it. `force` doesn't wait for a machine that can't be reached,
+ * and loses what it changed since. The server refuses while a run for the task is going there; the caller shows why.
+ */
+export const usePullBack = (taskId: string, opts?: MutationOpts) =>
+  useApiMutation(
+    (force: boolean) =>
+      api<TaskDetail>(`/api/tasks/${enc(taskId)}/pull-back`, { method: "POST", body: force ? { force } : {} }),
+    opts,
+  );
 /**
  * Marks an integration epic merged into the default branch, for when no PR the board watches shows it. A move to Done is
  * how the server takes it, and only once all the epic's tasks are Done; the board updates from its event.

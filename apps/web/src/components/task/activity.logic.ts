@@ -286,6 +286,11 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
     }
     case "autopilot_run":
       return line("other", autopilotRunEventText(p));
+    case "run_on": {
+      const machine = str(p.machine);
+      if (!machine) return line("other", "set this to run where its project's tasks run");
+      return line("other", machine === "here" ? "set this to run on this machine" : `set this to run on ${machine}`);
+    }
     case "handed_over":
       return line("other", `handed this to ${str(p.machine) ?? "a machine"}, which orders its changes from here`);
     case "released": {

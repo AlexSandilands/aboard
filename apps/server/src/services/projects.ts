@@ -1,4 +1,4 @@
-import { normalizeWorkspaceKey, overrideValue, workspaceBasename, type Project } from "@repo/contracts";
+import { normalizeWorkspaceKey, overrideValue, RUN_HERE, workspaceBasename, type Project } from "@repo/contracts";
 import { generateKeyBetween, generateNKeysBetween } from "fractional-indexing";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -80,6 +80,16 @@ export const GENERAL_PROJECT_KEY = "generalProjectId";
 const GENERAL_TITLE = "General";
 
 /** Projects: lanes on the board, optionally bound to a workspace folder. */
+/**
+ * A machine choice as it is stored (contracts runOn.ts): a connected machine's id, or null for this machine. Throws
+ * VALIDATION for a machine the board doesn't have.
+ */
+export function machineChoice(repos: Core["repos"], runOn: string | null): string | null {
+  if (runOn === null || runOn === RUN_HERE) return null;
+  if (!repos.machines.get(runOn)) throw new AppError("VALIDATION", `No connected machine has the id ${runOn}`);
+  return runOn;
+}
+
 export function createProjectsService(
   core: Core,
   hooks: { onUnarchived?: (projectId: string) => void; onTasksDeleted?: (taskIds: readonly string[]) => void } = {},
@@ -220,6 +230,7 @@ export function createProjectsService(
           reviewModel: null,
           planSkill: null,
           variables: [],
+          runOn: null,
           position: nextPosition(),
           collapsed: false,
           archivedAt: null,
@@ -246,6 +257,7 @@ export function createProjectsService(
         if (input.reviewSkill !== undefined) next.reviewSkill = input.reviewSkill;
         if (input.reviewModel !== undefined) next.reviewModel = overrideValue(input.reviewModel);
         if (input.planSkill !== undefined) next.planSkill = input.planSkill;
+        if (input.runOn !== undefined) next.runOn = machineChoice(repos, input.runOn);
         // Which projects a custom automation still needs a variable in shows on its row.
         if (input.variables !== undefined) {
           next.variables = input.variables;

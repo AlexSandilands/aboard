@@ -15,6 +15,17 @@ A finished epic has no band: it is one card in the lane's Done cell, so it count
 counts and the collapsed preview below. Bands and that card share a frame that tells epics from task cards, and
 the task card's thread and session chips and start button ([epics.md](epics.md#on-the-board)).
 
+### Where a task runs, on the card and panel
+
+A task that runs on a connected machine ([remote-machines.md](remote-machines.md#choosing-the-machine)) shows the
+machine's prefix in its card's number, `E182`, on the full card and the compact line (`MachineNumber` in
+`components/task/RunOn.tsx`), instead of a badge: the top row is full on busy epic cards. Outlined: it will start there;
+tinted: the machine holds it; an amber dot: edits made here wait for the machine; greyed and struck through: the machine
+can't be reached. Its title says it in words. In the panel the chip beside Status (`RunOnChip`) picks the machine
+before the task starts and shows the hold after; under the header a callout says when the machine can't be reached.
+The panel's contents sit above the board's sticky column headers (`z-20`), which they cover when the window is
+narrower than the panel's minimum width.
+
 ### Card title height
 
 Full task cards reserve two lines for their titles (`min-h-[2lh]` alongside `line-clamp-2`).

@@ -839,6 +839,11 @@ export function renderTaskDetail(
     modelSettings?: ModelSettings;
     /** For a Done task: its epic's branch while its code is only there (epicBranchOf), so it isn't read as on main. */
     epicBranch?: string | null;
+    /**
+     * Where the task is set to run when it hasn't started and no machine holds it yet (services/runOn.ts): the
+     * connected machine's name and whose choice it is. Null or absent for this machine.
+     */
+    startsOn?: { machineName: string; source: "task" | "project" } | null;
   } = {},
 ): string {
   const lines: string[] = [];
@@ -868,7 +873,12 @@ export function renderTaskDetail(
         ? `; ${task.hold.waiting} ${task.hold.waiting === 1 ? "change" : "changes"} made on the board ${task.hold.waiting === 1 ? "is" : "are"} waiting for it and may still be refused`
         : "";
     lines.push(
-      `Held by: ${task.hold.machineName} (a connected machine that orders this task's changes; yours go through it${waiting})`,
+      `Held by: ${task.hold.machineName} (a connected machine that orders this task's changes; yours go through it${waiting}). It stays there until the user pulls it back`,
+    );
+  } else if (opts.startsOn) {
+    const whose = opts.startsOn.source === "task" ? "the user's choice" : "its project's default";
+    lines.push(
+      `Machine: ${opts.startsOn.machineName} (${whose}; Autopilot hands the task to it when it starts the task. Only the user changes where a task runs)`,
     );
   }
   if (task.autopilot !== null) lines.push(`Autopilot: flagged ${task.autopilot ? "on" : "off"}`);

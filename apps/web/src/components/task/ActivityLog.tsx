@@ -26,6 +26,7 @@ import { useAddNote } from "~/state/mutations";
 import { describeEvent, type ActivityIcon } from "./activity.logic";
 import { stepIndexLabels } from "./plan.logic";
 import { TaskSection } from "./TaskSection";
+import { EventWaitingMark } from "./RunOn";
 
 const ICON_CLASS = "size-3.5 text-muted-foreground/70";
 
@@ -54,6 +55,7 @@ export function ActivityLog({ task, projects }: { task: TaskDetail; projects: Re
   // Held here rather than in the input: collapsing the section unmounts the input, not this.
   const [draft, setDraft] = useState("");
   const taskLinks = usePanelTaskLinks();
+  const waiting = useMemo(() => new Set(task.hold?.waitingEvents ?? []), [task.hold?.waitingEvents]);
   const lines = useMemo(() => {
     const ctx = {
       steps: stepIndexLabels(task.phases),
@@ -78,13 +80,17 @@ export function ActivityLog({ task, projects }: { task: TaskDetail; projects: Re
               <span className="min-w-0 flex-1 truncate text-secondary-label">
                 <span className="font-medium text-foreground/80">{event.actor}</span> {line.text}
               </span>
-              <time
-                dateTime={event.at}
-                title={new Date(event.at).toLocaleString()}
-                className="shrink-0 text-2xs text-muted-foreground tabular-nums"
-              >
-                {formatElapsedDurationLabel(event.at)}
-              </time>
+              {task.hold && waiting.has(event.id) ? (
+                <EventWaitingMark machineName={task.hold.machineName} />
+              ) : (
+                <time
+                  dateTime={event.at}
+                  title={new Date(event.at).toLocaleString()}
+                  className="shrink-0 text-2xs text-muted-foreground tabular-nums"
+                >
+                  {formatElapsedDurationLabel(event.at)}
+                </time>
+              )}
             </div>
             {line.quote ? (
               <div className="mb-1 ms-6.5 border-l-2 border-border ps-2.5">

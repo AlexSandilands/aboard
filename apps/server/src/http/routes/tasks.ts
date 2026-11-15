@@ -1,4 +1,5 @@
 import {
+  SetRunOnInput,
   type AddLinkResult,
   AttentionDismissalInput,
   type DeleteTasksResult,
@@ -124,6 +125,21 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
       return c.json({
         deleted: services.tasks.delete([taskId(c)], { withTasks }, actorOf(c)),
       } satisfies DeleteTasksResult);
+    }),
+  );
+  // Taking a started task back from its machine, to carry on here (remote-machines.md#pulling-a-task-back).
+  app.post(
+    "/api/tasks/:id/pull-back",
+    handle(async (c) =>
+      c.json(await integrations.machineSync.pullBack(taskId(c), await parseBody(c, ReleaseInput), actorOf(c))),
+    ),
+  );
+  // Where the task runs (remote-machines.md#choosing-the-machine): set until it starts, by the user only.
+  app.put(
+    "/api/tasks/:id/run-on",
+    handle(async (c) => {
+      const { runOn } = await parseBody(c, SetRunOnInput);
+      return c.json(services.tasks.setRunOn(taskId(c), runOn, actorOf(c)));
     }),
   );
   app.put(

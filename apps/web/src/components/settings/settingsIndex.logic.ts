@@ -668,6 +668,12 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "The project's folder on disk, which agents work in and the board finds skills from.",
     ["workspace", "path", "directory", "repo", "root"],
   ),
+  draft(
+    "project.general.run-on",
+    "Runs on",
+    "Where this project's tasks run unless a task picks another machine. Tasks that have started stay where they are.",
+    ["machine", "remote", "runner", "default machine", "where it runs"],
+  ),
   draft("project.general.t3-project", "Linked T3 project", "Set when the project is imported from T3 Code.", [
     "t3 code",
     "import",
