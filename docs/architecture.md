@@ -38,9 +38,10 @@ data dir and the REST actor header (`ACTOR_HEADER`) are all derived from it.
 - Desktop: the Electron main process attaches to a server already on the port, or runs the esbuild
   bundle `apps/server/dist/server.mjs` in a `utilityProcess`.
 
-The server always binds `127.0.0.1`. Boot order is `apps/server/src/main.ts` → `startServer`
+The server binds `127.0.0.1`; only a runner told to with `brandEnv("BIND")=private` listens wider
+([ADR 0015](decisions/0015-machine-api-auth.md)). Boot order is `apps/server/src/main.ts` → `startServer`
 (`server.ts`) → `createContext` (`context.ts`: database, bus, integrations, services) → `createApp`
-(`app.ts`: guard, `/api/health`, SSE, REST, MCP). The pollers start only when enabled.
+(`app.ts`: guard, `/api/health`, the machine API, SSE, REST, MCP). The pollers start only when enabled.
 
 ## Configuration
 
@@ -49,13 +50,14 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 
 | Variable                  | Default                     | Meaning                                                            |
 | ------------------------- | --------------------------- | ------------------------------------------------------------------ |
-| `brandEnv("HOME")`        | `~/.<id>` (`~/.<id>-runner` for a runner) | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, `instance-id` (this board's id, see features/backup.md), `model-prices.json` (the last LiteLLM price list fetched, not backed up; features/token-usage.md), and `worktrees/` for Autopilot's headless runs |
+| `brandEnv("HOME")`        | `~/.<id>` (`~/.<id>-runner` for a runner) | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, `instance-id` (this board's id, see features/backup.md), `machine-tokens.json` (mode 0600: the tokens for the runners this board is paired with, never backed up; features/remote-machines.md), `model-prices.json` (the last LiteLLM price list fetched, not backed up; features/token-usage.md), and `worktrees/` for Autopilot's headless runs |
 | `brandEnv("PORT")`        | `4317` (`4318` for a runner) | Listen port. Also read by Vite's proxy and the desktop shell       |
 | `brandEnv("WEB_PORT")`    | `5317`                      | Vite's port. The guard allows it as an Origin                      |
 | `brandEnv("TOKEN")`       | none                        | Optional bearer token for `/api/*`, `/mcp` and `/events`           |
 | `brandEnv("WEB_DIST")`    | `apps/web/dist`             | Built web app to serve                                             |
 | `brandEnv("POLLERS")`     | on                          | `0` turns off the background pollers               |
 | `brandEnv("ROLE")`        | `board`                     | `runner` (or the `--runner` argument) starts the headless runner, which serves no web app (features/remote-machines.md) |
+| `brandEnv("BIND")`        | `loopback`                  | Runner only: `private` listens on every interface and serves peers on this machine, a LAN or the tailnet (features/remote-machines.md). A board refuses it |
 | `brandEnv("LAUNCHER")`    | none                        | Set by the headless release's launcher to its own path, for `service install` (features/remote-machines.md) |
 | `brandEnv("DEMO")`        | off                         | `1` registers `/api/demo` (`http/routes/demo.ts`), which sets PR checks and pretend Autopilot runs for recording the README demo. Only the isolated sandbox sets it |
 | `brandEnv("DEV_URL")`     | none                        | Desktop only: load this URL (Vite) and attach instead of spawning  |
@@ -73,7 +75,8 @@ Which model each operation runs on is one of them, `operationModels` (`ModelChoi
 
 ## The guard
 
-`apps/server/src/http/guard.ts` runs before every route ([ADR 0003](decisions/0003-localhost-guard.md)):
+`apps/server/src/http/guard.ts` runs before every route ([ADR 0003](decisions/0003-localhost-guard.md)). For
+everything but a runner's machine API:
 
 - **Host** must be `127.0.0.1`, `localhost` or `[::1]` (any port). This stops DNS rebinding.
 - **Origin**, when present, must be http(s) on a local host and on the server's port or Vite's (`WEB_PORT`, 5317).
@@ -85,6 +88,16 @@ Which model each operation runs on is one of them, `operationModels` (`ModelChoi
   runner for one headless run and sent as `Authorization: Bearer`; it opens only that run's tool set, bound to its
   target, and is revoked when the run ends ([ADR 0013](decisions/0013-board-served-run-tools.md)). The Host and
   Origin checks apply as everywhere.
+- **Peer:** the socket's address must be loopback. That is always so on a server bound to `127.0.0.1`; it matters
+  on a runner listening wider, where a Host header alone would prove nothing.
+
+A runner's machine API, `/machine/*`, is what a board on another machine calls
+([ADR 0015](decisions/0015-machine-api-auth.md), [remote machines](features/remote-machines.md#the-machine-api)):
+
+- **Origin** must be absent: a browser is never a client.
+- **Host** must be an IP address, a local name or a `*.ts.net` name.
+- **Token:** everything but `GET /machine/descriptor` and `POST /machine/pair` needs a paired board's token as
+  `Authorization: Bearer`, from loopback too. It opens nothing outside `/machine/`.
 
 ## How a change flows
 
@@ -134,6 +147,7 @@ ORM.
 | `task_relations`  | "Blocker blocks blocked" pairs, across projects; cascade on delete ([relations](features/relations.md))                       |
 | `task_labels`     | A task's labels, normalized; one row per task and label ([labels](features/labels.md))                                        |
 | `attention_dismissals` | Attention flags the user dismissed: task, reason key, the fingerprint of the state dismissed ([task lifecycle](features/task-lifecycle.md#dismissing-flags)) |
+| `machine_pairing_codes`, `machine_tokens` | A runner's pairing state: the one-time code not yet used and the paired board's token, both as SHA-256 hashes ([remote machines](features/remote-machines.md#pairing)). Not part of a backup |
 | `label_colors`    | Label colour overrides (a hue); labels without a row take a hue hashed from their name                                        |
 | `task_reviews`    | Local review rounds: round, cycle, status, reviewer, summary                                                                  |
 | `review_findings` | A round's findings: severity, location, status, resolution note                                                               |

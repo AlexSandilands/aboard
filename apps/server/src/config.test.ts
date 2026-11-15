@@ -41,4 +41,13 @@ describe("loadConfig", () => {
   it("refuses an unknown role rather than starting as a board", () => {
     expect(() => loadConfig(env({ [brandEnv("ROLE")]: "engine" }))).toThrow(/board or runner/);
   });
+
+  it("listens on this machine only, unless a runner is told to listen for a board elsewhere", () => {
+    expect(loadConfig(env()).bind).toBe("loopback");
+    expect(loadConfig(env(), ["--runner"]).bind).toBe("loopback");
+    expect(loadConfig(env({ [brandEnv("BIND")]: "private" }), ["--runner"]).bind).toBe("private");
+    // A board has no auth to put in front of the network.
+    expect(() => loadConfig(env({ [brandEnv("BIND")]: "private" }))).toThrow(/runner/);
+    expect(() => loadConfig(env({ [brandEnv("BIND")]: "0.0.0.0" }), ["--runner"])).toThrow(/loopback or private/);
+  });
 });

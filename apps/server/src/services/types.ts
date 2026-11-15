@@ -56,6 +56,7 @@ import type { DigestsService } from "./digests.ts";
 import type { StatsService } from "./stats.ts";
 import type { Effects } from "./core.ts";
 import type { AttentionService } from "./attention.ts";
+import type { MachineAuthService } from "./machineAuth.ts";
 import type { NotificationsService } from "./notifications.ts";
 import type { SkillSyncService } from "./skillSync.ts";
 import type { SocialService } from "./social.ts";
@@ -95,6 +96,7 @@ export interface Services {
   skillSync: SkillSyncService;
   attention: AttentionService;
   repoPrReviews: RepoPrReviewsService;
+  machineAuth: MachineAuthService;
 }
 
 export interface ProjectRef {

@@ -1,6 +1,6 @@
 # 0003 Localhost only, with an Origin check
 
-Status: Accepted
+Status: Accepted, amended by [0015](0015-machine-api-auth.md) for a runner's machine API
 
 ## Context
 

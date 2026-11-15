@@ -14,6 +14,9 @@ const USAGE = `Usage:
   ${BRAND.id}-server service install       run the runner as a background service that survives logout
   ${BRAND.id}-server service uninstall     stop and remove that service
   ${BRAND.id}-server service status        whether the service is installed, running and answering
+  ${BRAND.id}-server pair                  print a one-time code to pair this machine with a board
+  ${BRAND.id}-server pair list             the board this machine is paired with
+  ${BRAND.id}-server pair revoke <id>      unpair a board (--all: every board)
   ${BRAND.id}-server --version`;
 
 async function start(args: string[]): Promise<void> {
@@ -41,6 +44,9 @@ const args = process.argv.slice(2);
 if (args[0] === "service") {
   const { runServiceCommand } = await import("./service/cli.ts");
   process.exitCode = await runServiceCommand(args.slice(1));
+} else if (args[0] === "pair") {
+  const { runPairCommand } = await import("./pairCli.ts");
+  process.exitCode = runPairCommand(args.slice(1));
 } else if (args.includes("--version")) {
   console.log(BRAND.version);
 } else if (args.includes("--help") || args.includes("-h")) {

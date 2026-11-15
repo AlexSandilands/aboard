@@ -5,10 +5,18 @@ import { BRAND, DEFAULT_RUNNER_PORT, DEFAULT_SERVER_PORT, ServerRole, brandEnv }
 import type { SessionDirs } from "./integrations/agentSessions.ts";
 import { harnessHomesFrom, type HarnessHomes } from "./services/skillSync.ts";
 
+export type ServerBind = "loopback" | "private";
+
 export interface Config {
   /** `board`, or `runner`: the headless server on another machine, which serves no web app. */
   role: ServerRole;
   port: number;
+  /**
+   * Where the server listens. `loopback`: 127.0.0.1 only. `private`: every interface, serving only peers on this
+   * machine, a LAN or the tailnet, so a board elsewhere can reach a runner's machine API; a runner's option only
+   * (ADR 0015).
+   */
+  bind: ServerBind;
   /** The Vite dev server's port. It proxies browser requests with its own Origin, which the guard allows. */
   webPort: number;
   host: string;
@@ -64,6 +72,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: readonly 
   const parsedRole = ServerRole.safeParse(roleEnv || "board");
   if (!parsedRole.success) throw new Error(`${brandEnv("ROLE")} must be board or runner, not "${roleEnv}"`);
   const role = argv.includes("--runner") ? "runner" : parsedRole.data;
+  const bindEnv = env[brandEnv("BIND")] || "loopback";
+  if (bindEnv !== "loopback" && bindEnv !== "private") {
+    throw new Error(`${brandEnv("BIND")} must be loopback or private, not "${bindEnv}"`);
+  }
+  // A board has no machine API and no auth of its own, so nothing of it may be reachable from another machine.
+  if (bindEnv === "private" && role !== "runner") {
+    throw new Error(`${brandEnv("BIND")}=private is for a runner (--runner); a board listens on this machine only`);
+  }
   const homeDir = env[brandEnv("HOME")] ?? defaultHomeDir(role);
   // The sandbox points this at a throwaway folder, so installing skills from it never writes the real ~/.claude.
   const userHome = env[brandEnv("USER_HOME")] || homedir();
@@ -73,6 +89,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: readonly 
     port: Number(env[brandEnv("PORT")] ?? (role === "runner" ? DEFAULT_RUNNER_PORT : DEFAULT_SERVER_PORT)),
     webPort: Number(env[brandEnv("WEB_PORT")] ?? 5317),
     host: "127.0.0.1",
+    bind: bindEnv,
     homeDir,
     dbPath: join(homeDir, "data.sqlite"),
     token: env[brandEnv("TOKEN")] || null,

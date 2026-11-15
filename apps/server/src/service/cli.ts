@@ -52,7 +52,7 @@ export interface ServiceDeps {
 const READY_TIMEOUT_MS = 20_000;
 
 /** The variables the service keeps from the shell that installed it. */
-const KEPT_ENV = ["PATH", brandEnv("HOME"), brandEnv("PORT")];
+const KEPT_ENV = ["PATH", brandEnv("HOME"), brandEnv("PORT"), brandEnv("BIND")];
 
 function spec(deps: ServiceDeps, command: string[]): ServiceSpec {
   const environment: Record<string, string> = {};
