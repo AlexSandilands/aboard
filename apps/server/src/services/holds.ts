@@ -1,5 +1,7 @@
 import {
   ChangeLogFormatError,
+  isRetried,
+  unretiredKey,
   readChangeLogEntry,
   taskLabel,
   taskNumberValue,
@@ -131,6 +133,15 @@ export function createHoldsService(
     const task = repos.tasks.get(id);
     if (!task) throw notFound("Task", id);
     return task;
+  };
+
+  /** Gives a retried run its key back (the machine refused the retry), unless another run has taken it since. */
+  const unretire = (runId: string): void => {
+    const run = repos.autopilotRuns.get(runId);
+    if (!run || !isRetried(run.dedupeKey)) return;
+    const dedupeKey = unretiredKey(run.dedupeKey);
+    if (repos.autopilotRuns.exists(run.automation, dedupeKey, run.dryRun)) return;
+    repos.autopilotRuns.update({ ...run, dedupeKey, updatedAt: core.now().toISOString() });
   };
 
   /** Ends a hold inside a write, saying why in the task's activity. Its waiting edits become the task's own state. */
@@ -394,6 +405,8 @@ export function createHoldsService(
         if (!result.applied) {
           // What the board showed early is taken back; the machine's next entry puts the task as it is there.
           finishEdit(edit);
+          // A retry is the run's key, which no entry carries back: the run is put as it was.
+          if (edit.op === "autopilot.retry") unretire(String(edit.args[0]));
           fx.log(edit.taskId, BOARD_ACTOR, "edit_refused", { edit: edit.op, reason: result.error ?? "" });
           return;
         }

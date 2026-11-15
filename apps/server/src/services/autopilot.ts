@@ -257,7 +257,8 @@ export interface AutopilotService {
    * custom automations (pins as the machine's instance id), Pause all and the auto-pauses; with the projects a
    * scheduled automation pinned to it is on in, which the caller turns into what the machine clones.
    */
-  machineConfig(machineId: string): Omit<MachineAutopilotConfig, "revision" | "projects"> & {
+  machineConfig(machineId: string): Omit<MachineAutopilotConfig, "revision" | "projects" | "history"> & {
+    history: AutopilotRun[];
     pinnedProjects: string[];
   };
   /**
@@ -333,6 +334,11 @@ function keptReason(run: RunDeleteFacts, now: number): AutopilotKeptReason | nul
 }
 /** How long a Run now request waits for the engine before it is dropped. */
 export const RUN_REQUEST_TTL_MS = 60 * 60_000;
+
+/** How many of a pinned automation's runs per project go to its machine as history. */
+const PINNED_HISTORY = 200;
+/** How long a retry of a machine's task-less run keeps being sent to it, for a machine that is away a while. */
+const RETRY_SYNC_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** The dedupe key of a run a runner keeps for its board (see `adopt`). */
 const ADOPTED_PREFIX = "machine:";
@@ -1243,6 +1249,7 @@ export function createAutopilotService(
       const instanceOf = new Map(repos.machines.all().map((m) => [m.id, m.instanceId]));
       const custom = repos.autopilotCustom.all();
       const pinnedHere = custom.filter((c) => c.machineId === machineId).map((c) => `custom:${c.id}`);
+      const pinnedProjects = [...new Set(pinnedHere.flatMap((key) => enabledProjects(key)))];
       return {
         paused: loadAutopilotStatus(repos).paused,
         engine: { ...engine, ...limits },
@@ -1264,7 +1271,20 @@ export function createAutopilotService(
               .map((p) => [p.id, p.variables]),
           ),
         },
-        pinnedProjects: [...new Set(pinnedHere.flatMap((key) => enabledProjects(key)))],
+        pinnedProjects,
+        // What the pinned automations did here, so the machine doesn't do a slot or a check item again.
+        history: pinnedHere.flatMap((key) =>
+          pinnedProjects.flatMap((projectId) =>
+            repos.autopilotRuns
+              .forProjectAutomation(projectId, key, PINNED_HISTORY)
+              .filter((run) => !run.dryRun && run.finishedAt !== null && run.taskId === null)
+              .map(({ machine: _machine, ...run }) => run),
+          ),
+        ),
+        // The machine's own task-less runs retried here lately: it retires them too.
+        retried: repos.autopilotRuns
+          .retriedOnMachine(machineId, new Date(core.now().getTime() - RETRY_SYNC_MS).toISOString())
+          .map((run) => run.id),
       };
     },
     keepFromMachine(run, machine) {

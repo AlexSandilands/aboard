@@ -378,4 +378,76 @@ describe("Autopilot on a machine", () => {
     await sync();
     expect(board.integrations.autopilotSync.machines()).toMatchObject([{ synced: true, pauseDelivered: true }]);
   });
+
+  it("doesn't count the board's earlier runs against the machine's own caps", async () => {
+    const { board, runner, machine, first } = await setup();
+    const done = board.services.autopilot.record({
+      automation: AUTOPILOT_START_PLANNED,
+      candidate: { dedupeKey: "start:earlier", summary: "start", taskId: first.id },
+      dryRun: false,
+    })!;
+    board.services.autopilot.start(done.id);
+    board.services.autopilot.finish(done.id, { status: "failed", error: "cut short", costUsd: 4 });
+    await board.integrations.machineSync.handOver(first.id, machine.id, "user");
+    expect(runner.services.autopilot.hasRun(AUTOPILOT_START_PLANNED, "start:earlier", false)).toBe(true);
+    expect(runner.services.autopilot.usage([AUTOPILOT_START_PLANNED], new Date(0).toISOString())).toMatchObject({
+      started: 0,
+      spendUsd: 0,
+    });
+  });
+
+  it("puts a run back as it was when the machine refuses its retry", async () => {
+    const { board, machine, first, sync } = await setup();
+    await board.integrations.machineSync.handOver(first.id, machine.id, "user");
+    // A run the machine doesn't have (made on the board after the hand-over).
+    const later = board.services.autopilot.record({
+      automation: AUTOPILOT_START_PLANNED,
+      candidate: { dedupeKey: "start:later", summary: "start", taskId: first.id },
+      dryRun: false,
+    })!;
+    board.services.autopilot.finish(later.id, { status: "failed", error: "nope" });
+    board.services.autopilot.retry(later.id, "user");
+    await sync();
+    expect(board.services.autopilot.runsForTask(first.id).find((r) => r.id === later.id)?.dedupeKey).toBe(
+      "start:later",
+    );
+  });
+
+  it("moves a pinned automation's history with the pin, and its task-less retries", async () => {
+    const { board, runner, machine, first, project, sync } = await setup();
+    await board.integrations.machineSync.handOver(first.id, machine.id, "user");
+    const runnerProject = runner.services.tasks.summary(first.id).projectId;
+    const custom = board.services.customAutomations.create({
+      name: "Nightly",
+      trigger: { kind: "schedule", schedule: { kind: "hourly", everyHours: 1 } },
+      action: { kind: "shell", command: "echo hi" },
+      projectIds: [project.id],
+    });
+    const key = `custom:${custom.id}`;
+    board.services.autopilot.setScope("project", project.id, key, { mode: "on" });
+    // The board ran this slot before the pin.
+    const ran = board.services.autopilot.record({
+      automation: key,
+      candidate: { dedupeKey: `schedule:${project.id}:0900`, summary: "run", projectId: project.id },
+      dryRun: false,
+    })!;
+    board.services.autopilot.finish(ran.id, { status: "succeeded" });
+    board.services.customAutomations.setMachine(custom.id, machine.id);
+    await sync();
+    expect(runner.services.autopilot.hasRun(key, `schedule:${runnerProject}:0900`, false)).toBe(true);
+
+    // The machine's own run comes back under the board's id for the project, and a retry on the board reaches it.
+    const own = runner.services.autopilot.record({
+      automation: key,
+      candidate: { dedupeKey: `schedule:${runnerProject}:1000`, summary: "run", projectId: runnerProject },
+      dryRun: false,
+    })!;
+    runner.services.autopilot.finish(own.id, { status: "failed", error: "exit 1" });
+    await sync();
+    const kept = board.services.autopilot.runsForProject(project.id).find((r) => r.id === own.id)!;
+    expect(kept).toMatchObject({ dedupeKey: `schedule:${project.id}:1000`, machine: { name: "engine" } });
+    board.services.autopilot.retry(own.id, "user");
+    await sync();
+    expect(runner.services.autopilot.hasRun(key, `schedule:${runnerProject}:1000`, false)).toBe(false);
+  });
 });

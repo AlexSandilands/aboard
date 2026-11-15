@@ -769,9 +769,17 @@ on the next round. Models, review settings and providers go as before ([the boar
 
 **What Autopilot did before the hand-over** goes with the task: its finished real runs (`HandOverRequest.runs`), as
 history the machine's engine counts (a head already reviewed, Review PRs' rounds, Fix PRs' attempts) and doesn't send
-back. **Retry and Dismiss** on a run of a held task (the panel's, Run history's, `retry_autopilot_run`) are edits
-like any other (`autopilot.retry`, `autopilot.dismiss`): applied on the board at once and on the machine, where its
-engine then picks the work up again.
+back. The runner marks such history `machine: BOARD_HISTORY`, so its own limits and worktree clean-up leave it out. A
+scheduled automation pinned to the machine takes its history the same way, in the config (`history`), so a slot or a
+check item the board already did isn't done again there. Dedupe keys that name a project (`schedule:<project>:…`,
+`check:<project>:…`) travel in the board's project ids both ways: the runner swaps its own in when it logs a run, and
+the board's in when it takes history (`swapId`).
+
+**Retry and Dismiss** on a run of a held task (the panel's, Run history's, `retry_autopilot_run`) are edits like any
+other (`autopilot.retry`, `autopilot.dismiss`) when its machine runs Autopilot: applied on the board at once and on
+the machine, where its engine then picks the work up again. A retry the machine refuses (it doesn't have the run) gives
+the board's run its key back. A retry of a machine's task-less run (a pinned automation's) goes in the config
+(`retried`, for a week) and the runner retires the same run.
 
 **Runs on the machine** are its own: in its own `autopilot_runs`, counted against its own limits, headless and from
 origin (`asRunnerRequest`, as a job is). The runner logs each one as it is written (`run` entries, change log format 2),

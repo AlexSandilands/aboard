@@ -426,6 +426,12 @@ export const DEFERRAL_TEXT: Record<AutopilotRunDeferral, string> = {
 export const RunMachine = z.object({ id: z.string(), name: z.string() });
 export type RunMachine = z.infer<typeof RunMachine>;
 
+/**
+ * On a runner, what the board did before the machine took the work over (a held task's earlier runs, a pinned
+ * automation's): kept as history its engine counts, never its own, so its limits and clean-up leave it out.
+ */
+export const BOARD_HISTORY: RunMachine = { id: "board", name: "the board" };
+
 export const AutopilotRun = z.object({
   id: z.string(),
   automation: z.string(),

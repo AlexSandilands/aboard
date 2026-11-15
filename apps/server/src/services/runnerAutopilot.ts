@@ -1,12 +1,17 @@
-import type { AutopilotSetting } from "@repo/contracts";
 import {
+  BOARD_HISTORY,
   CustomAutomation,
+  isRetried,
   MachineAutopilotConfig,
+  RETRIED_PREFIX,
+  type AutopilotRun,
+  type AutopilotSetting,
   type CopiedProject,
   type MachineAutopilotAck,
 } from "@repo/contracts";
 import { AUTOPILOT_ENGINE_KEY, AUTOPILOT_PAUSED_KEY } from "./autopilotKeys.ts";
 import type { Core } from "./core.ts";
+import { swapId } from "./workingCopies.ts";
 
 // A runner's side of Autopilot on the machine (docs/features/remote-machines.md#autopilot-on-the-machine): the board
 // sends what its Autopilot is, and the runner takes it as its own, so the same engine runs here over the tasks it
@@ -31,7 +36,13 @@ export interface RunnerAutopilotService {
   revision(): string | null;
 }
 
-export function createRunnerAutopilotService(core: Core): RunnerAutopilotService {
+export function createRunnerAutopilotService(
+  core: Core,
+  deps: {
+    /** Logs one of this runner's own runs for the board, as the autopilot service does when it writes one. */
+    logRun?: (run: AutopilotRun) => void;
+  } = {},
+): RunnerAutopilotService {
   const { repos } = core;
 
   /** This runner's project for one of the board's ids; null when it has none. */
@@ -118,6 +129,28 @@ export function createRunnerAutopilotService(core: Core): RunnerAutopilotService
         if (JSON.stringify(variables) !== JSON.stringify(project.variables)) {
           repos.projects.update({ ...project, variables });
         }
+      }
+
+      // What a pinned automation did on the board: history this engine counts, with its keys in this runner's ids.
+      for (const run of config.history) {
+        const projectId = run.projectId ? projectFor(run.projectId) : null;
+        if (!projectId || !run.projectId || repos.autopilotRuns.get(run.id)) continue;
+        const dedupeKey = swapId(run.dedupeKey, run.projectId, projectId);
+        if (repos.autopilotRuns.exists(run.automation, dedupeKey, run.dryRun)) continue;
+        repos.autopilotRuns.insert({ ...run, taskId: null, projectId, dedupeKey, machine: BOARD_HISTORY });
+      }
+      // Its own task-less runs the board retried: retired here too, so the engine acts on the work again.
+      for (const id of config.retried) {
+        const run = repos.autopilotRuns.get(id);
+        if (!run || isRetried(run.dedupeKey) || run.machine) continue;
+        const retired: AutopilotRun = {
+          ...run,
+          dedupeKey: `${RETRIED_PREFIX}${run.id}:${run.dedupeKey}`,
+          needsAttention: false,
+          updatedAt: core.now().toISOString(),
+        };
+        repos.autopilotRuns.update(retired);
+        deps.logRun?.(retired);
       }
 
       repos.workingCopies.setState(STATE_KEY, JSON.stringify(config));

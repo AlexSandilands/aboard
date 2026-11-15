@@ -96,6 +96,8 @@ export interface ServiceDeps {
   modelPrices?: ModelPrices;
   /** `runner` for a server that holds tasks for a board (remote-machines.md); a board otherwise. */
   role?: "board" | "runner";
+  /** Whether a connected machine runs Autopilot for the tasks it holds (null until it has said). */
+  machineRunsAutopilot?: (machineId: string) => boolean | null;
   /** Called when an edit to a held task is queued for its machine, so it is sent at once. */
   onHeldEdit?: (machineId: string) => void;
   /** The repository a folder's `origin` names, read on the spot; a runner uses it for projects made there. */
@@ -262,7 +264,7 @@ export function createServices(deps: ServiceDeps): Services {
       resolve: (match) => void notifications.resolve(match),
     }),
     workingCopies,
-    runnerAutopilot: createRunnerAutopilotService(core),
+    runnerAutopilot: createRunnerAutopilotService(core, { logRun: (run) => workingCopies.logRun(run) }),
     repoPrReviews: createRepoPrReviewsService(core, { notifications }),
     autopilot: createAutopilotService(core, {
       automations,
@@ -309,6 +311,10 @@ export function createServices(deps: ServiceDeps): Services {
     }),
   };
   // Last, so every wrapper above is inside it: an edit to a held task is queued for its machine whoever makes it.
-  routeHeldEdits(core, all, { role, onQueued: (machineId) => deps.onHeldEdit?.(machineId) });
+  routeHeldEdits(core, all, {
+    role,
+    onQueued: (machineId) => deps.onHeldEdit?.(machineId),
+    ...(deps.machineRunsAutopilot ? { runsAutopilot: deps.machineRunsAutopilot } : {}),
+  });
   return all;
 }

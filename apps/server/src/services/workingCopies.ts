@@ -1,4 +1,5 @@
 import {
+  BOARD_HISTORY,
   CHANGE_LOG_FORMAT,
   taskLabel,
   type AutopilotRun,
@@ -399,7 +400,7 @@ export function createWorkingCopiesService(
           ) {
             continue;
           }
-          repos.autopilotRuns.insert({ ...run, taskId: saved.id, projectId: project.id, machine: null });
+          repos.autopilotRuns.insert({ ...run, taskId: saved.id, projectId: project.id, machine: BOARD_HISTORY });
         }
         copies.upsert({
           taskId: saved.id,
@@ -504,11 +505,15 @@ export function createWorkingCopiesService(
     logRun(run) {
       if (!deps.logs) return;
       const { machine: _machine, ...own } = run;
+      const boardId = run.projectId ? (copies.project(run.projectId)?.boardId ?? null) : null;
       core.write(() =>
         append("run", run.taskId ?? "", {
           run: {
             ...own,
-            projectId: run.projectId ? (copies.project(run.projectId)?.boardId ?? null) : null,
+            projectId: boardId,
+            // Keys that name a project (a scheduled slot, a check item) name the board's: the board then dedupes
+            // by them should the work come back to it.
+            dedupeKey: run.projectId && boardId ? swapId(run.dedupeKey, run.projectId, boardId) : run.dedupeKey,
           },
         }),
       );
@@ -558,6 +563,9 @@ export function createWorkingCopiesService(
     boardProjectOf: (projectId) => (projectId ? (copies.project(projectId)?.boardId ?? null) : null),
   };
 }
+
+/** A dedupe key with one project's id swapped for another's: keys travel between board and runner in the board's. */
+export const swapId = (key: string, from: string, to: string): string => key.split(from).join(to);
 
 /** The sentence a runner refuses a change to a task it only refers to with. */
 export const notHeldHere = (task: Pick<TaskRecord, "number" | "numberPrefix">): AppError =>

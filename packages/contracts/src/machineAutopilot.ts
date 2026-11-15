@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AutopilotEngineSettings, AutopilotSetting } from "./autopilot.ts";
+import { AutopilotEngineSettings, AutopilotRun, AutopilotSetting } from "./autopilot.ts";
 import { AutomationVariables } from "./automationVariables.ts";
 import { MachineConnection } from "./machines.ts";
 import { CopiedProject } from "./workingCopies.ts";
@@ -79,6 +79,16 @@ export const MachineAutopilotConfig = z.object({
   variables: z
     .object({ board: AutomationVariables, projects: z.record(z.string(), AutomationVariables) })
     .default({ board: [], projects: {} }),
+  /**
+   * What the scheduled automations pinned to the machine already did on the board, so a slot or a check item done
+   * there isn't done again after the pin. Dedupe keys name the board's project ids; the runner maps them to its own.
+   */
+  history: z.array(AutopilotRun).default([]),
+  /**
+   * The machine's own task-less runs (a pinned automation's) the board retried: the runner retires their keys too,
+   * so its engine acts on the work again. A held task's runs are retried through its edits instead.
+   */
+  retried: z.array(z.string()).default([]),
 });
 export type MachineAutopilotConfig = z.infer<typeof MachineAutopilotConfig>;
 

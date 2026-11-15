@@ -282,6 +282,17 @@ export function createAutopilotRunsRepo(sql: Sql) {
     update(run: AutopilotRun): void {
       sql.update("autopilot_runs", toRow(run));
     },
+    /** A machine's own task-less runs that were retried since `since` (by when the run last changed). */
+    retriedOnMachine(machineId: string, since: string): AutopilotRun[] {
+      return sql
+        .all<RunRow>(
+          `SELECT * FROM autopilot_runs WHERE machine_id = ? AND task_id IS NULL AND dedupe_key LIKE ? AND updated_at >= ?`,
+          machineId,
+          `${RETRIED_PREFIX}%`,
+          since,
+        )
+        .map(toRun);
+    },
     /** The run holding an automation's dedupe key, real or dry. */
     byKey(automation: string, dedupeKey: string, dryRun: boolean): AutopilotRun | null {
       const row = sql.get<RunRow>(

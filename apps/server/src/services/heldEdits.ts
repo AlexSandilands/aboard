@@ -38,6 +38,11 @@ export function routeHeldEdits(
     role: "board" | "runner";
     /** Called after an edit is queued, with its machine, so it is sent without waiting for the next poll. */
     onQueued: (machineId: string) => void;
+    /**
+     * Whether a machine runs Autopilot for the tasks it holds: only then are its runs retried and dismissed there. A
+     * runner from before that leaves its tasks' Autopilot to the board.
+     */
+    runsAutopilot?: (machineId: string) => boolean | null;
   },
 ): void {
   const { repos } = core;
@@ -57,7 +62,8 @@ export function routeHeldEdits(
    */
   const ofHeldRun = (args: unknown[]): string | null => {
     const taskId = repos.autopilotRuns.get(String(args[0]))?.taskId ?? null;
-    return taskId && repos.holds.get(taskId) ? taskId : null;
+    const hold = taskId ? repos.holds.get(taskId) : null;
+    return hold && deps.runsAutopilot?.(hold.machineId) !== false ? taskId : null;
   };
 
   type Wrapped = "tasks" | "plans" | "links" | "attention" | "reviews" | "autopilot";
