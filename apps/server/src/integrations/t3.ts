@@ -531,6 +531,13 @@ export function createT3Integration(deps: {
   fetch?: FetchFn;
   openSocket?: OpenSocket;
   log?: Logger;
+  /** Poll with no browser connected: a runner has none, and its board shows the status it reads. */
+  always?: boolean;
+  /**
+   * This machine, on a runner: a thread started here is linked with it (`ref.machine`), so the board knows the thread
+   * is in this machine's T3 Code and reaches it through this machine.
+   */
+  machine?: () => { id: string; name: string };
 }): T3Integration {
   const fetchFn: FetchFn = deps.fetch ?? ((input, init) => fetch(input, init));
   const log = deps.log ?? console;
@@ -943,14 +950,18 @@ export function createT3Integration(deps: {
     // A thread the user opens on finished work is to ask about it: the board must not hand it review messages meant
     // for the thread that did the work (see implementingThread).
     const followUp = followUpAsked && (ctx.task!.status === "review" || ctx.task!.status === "done");
-    const link = deps
-      .services()
-      .links.add(
-        taskId,
-        { t3Thread: { environmentId: ctx.environmentId, threadId } },
-        actor,
-        followUp ? { role: "followup" } : {},
-      );
+    const link = deps.services().links.add(
+      taskId,
+      {
+        t3Thread: {
+          environmentId: ctx.environmentId,
+          threadId,
+          ...(deps.machine ? { machine: deps.machine() } : {}),
+        },
+      },
+      actor,
+      followUp ? { role: "followup" } : {},
+    );
     // The images now belong to the task: backed up and deleted with it, and listed by get_task. After the link, so a
     // failure here can't leave a started thread unlinked; T3 has its own copy either way.
     if (input.attachmentIds?.length) {
@@ -1157,6 +1168,8 @@ export function createT3Integration(deps: {
     },
     async refresh(link) {
       if (link.kind !== "t3_thread") return false;
+      // A thread in a connected machine's T3 Code: that machine reads it, and its status comes with the task's changes.
+      if (link.ref.machine && link.ref.machine.id !== deps.machine?.().id) return true;
       await ensureDiscovered();
       if (!discovery.detected) throw new AppError("VALIDATION", "T3 Code is not running");
       if (link.ref.environmentId !== discovery.environmentId) {
@@ -1204,7 +1217,7 @@ export function createT3Integration(deps: {
       timers.push(setInterval(() => void discover(), DISCOVERY_INTERVAL_MS).unref());
       timers.push(
         setInterval(() => {
-          if (deps.bus.size > 0 && token()) void pollLive();
+          if ((deps.always || deps.bus.size > 0) && token()) void pollLive();
         }, LIVE_INTERVAL_MS).unref(),
       );
     },

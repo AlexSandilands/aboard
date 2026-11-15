@@ -23,6 +23,13 @@ export function trimTrailingSeparators(path: string): string {
   return /^[A-Za-z]:$/.test(trimmed) ? `${trimmed}${path[2]}` : trimmed;
 }
 
+/**
+ * The connected machine a session or T3 thread lives on (its instance id and name), when that isn't the board's own.
+ * Only a runner sets it, on what is linked there; the board then reaches the session or thread through that machine.
+ */
+export const LinkMachine = z.object({ id: z.string().min(1), name: z.string() });
+export type LinkMachine = z.infer<typeof LinkMachine>;
+
 export const AgentSessionRef = z.object({
   harness: AgentHarness,
   // The id goes into the resume command, so it must be exactly a UUID and nothing a shell could read more into.
@@ -36,7 +43,7 @@ export const AgentSessionRef = z.object({
    * The connected machine the session ran on (its instance id and name), when that isn't the board's own: `cwd` and the
    * harness's files are there, so that machine reads the session's status, title, usage and transcript.
    */
-  machine: z.object({ id: z.string().min(1), name: z.string() }).optional(),
+  machine: LinkMachine.optional(),
 });
 export type AgentSessionRef = z.infer<typeof AgentSessionRef>;
 

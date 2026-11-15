@@ -1,14 +1,20 @@
 import {
   ApiErrorBody,
   MACHINE_JOBS_PATH,
+  MACHINE_SESSIONS_PATH,
   MACHINE_SETTINGS_PATH,
+  MACHINE_T3_PATH,
   MACHINE_TRANSCRIPT_PATH,
   MachineJobState,
+  MachineSessionResult,
   machineAttachmentPath,
   machineJobPath,
   type AgentSessionRef,
+  type MachineCapability,
   type MachineJobKind,
   type MachineJobRequest,
+  type MachineSessionRequest,
+  type MachineT3Request,
   type TaskSummary,
 } from "@repo/contracts";
 import { readRunnerOptions } from "../../autopilot/runnerOptions.ts";
@@ -43,6 +49,18 @@ const RUN_GRACE_MS = 15 * 60_000;
 const COMMAND_GRACE_MS = 5 * 60_000;
 
 export interface RemoteWork {
+  /** The machine holding a task, or null when the board holds it. */
+  holder(taskId: string | null | undefined): { id: string; name: string } | null;
+  /**
+   * Has the machine holding the task act in its own T3 Code (`POST /machine/t3`) and answers what it said; null for a
+   * task the board holds. Throws an AppError with the machine's own sentence when it refuses.
+   */
+  t3(taskId: string, request: MachineT3Request): Promise<unknown> | null;
+  /** Has the machine holding the task make a CLI session's folder and link it; null for a task the board holds. */
+  prepareSession(
+    taskId: string,
+    request: MachineSessionRequest,
+  ): Promise<MachineSessionResult & { machine: { id: string; name: string } }> | null;
   /** `local`, except that agent work on a task a machine holds is done on that machine. */
   runner(local: Runner): Runner;
   /** Runs a custom automation's command on the machine holding its task; null for a task the board holds itself. */
@@ -112,6 +130,43 @@ export function createRemoteWork(deps: {
     const hold = taskId ? services().holds.get(taskId) : null;
     if (!hold) return null;
     return { id: hold.machineId, name: services().machines.get(hold.machineId).name };
+  };
+
+  /**
+   * One request that answers at once, for interactive work a dialog waits on. A machine that can't be reached, or
+   * runs a version without `capability`, is a CONFLICT saying so; a refusal carries the machine's own sentence.
+   */
+  const askNow = async (
+    machine: { id: string; name: string },
+    capability: MachineCapability,
+    what: string,
+    path: string,
+    body: unknown,
+  ): Promise<unknown> => {
+    if (deps.machines.can(machine.id, capability) === false) {
+      throw new AppError("CONFLICT", `${machine.name} runs a version that can't ${what}; update it first`);
+    }
+    let res: Response;
+    try {
+      // Long enough for T3 Code to make a worktree, or git to fetch before one.
+      res = await deps.machines.request(machine.id, path, json("POST", body), { timeoutMs: 90_000 });
+    } catch (error) {
+      throw new AppError("CONFLICT", `${machine.name} holds this task and can't be reached: ${messageOf(error)}`);
+    }
+    if (!res.ok) {
+      const refused = ApiErrorBody.safeParse(
+        await res
+          .clone()
+          .json()
+          .catch(() => null),
+      );
+      throw new AppError(
+        refused.success ? refused.data.error.code : "CONFLICT",
+        refused.success ? `On ${machine.name}: ${refused.data.error.message}` : await refusal(res, machine.name, what),
+        refused.success ? refused.data.error.details : undefined,
+      );
+    }
+    return res.json();
   };
 
   /**
@@ -305,6 +360,27 @@ export function createRemoteWork(deps: {
   };
 
   return {
+    holder: holderOf,
+
+    t3(taskId, request) {
+      const machine = holderOf(taskId);
+      if (!machine) return null;
+      return (async () => {
+        // The dialog's images: the machine uploads them to its T3 from its own copies.
+        if (request.op === "start") await sendImages(taskId, machine.id);
+        return askNow(machine, "t3", "start T3 Code threads", MACHINE_T3_PATH, request);
+      })();
+    },
+
+    prepareSession(taskId, request) {
+      const machine = holderOf(taskId);
+      if (!machine) return null;
+      return (async () => {
+        const answer = await askNow(machine, "sessions", "start sessions", MACHINE_SESSIONS_PATH, request);
+        return { ...MachineSessionResult.parse(answer), machine };
+      })();
+    },
+
     runner: (local) => ({
       start(request, update = () => {}) {
         const machine = holderOf(request.run.taskId);
