@@ -4,10 +4,7 @@ import { describeEvent, type ActivityContext } from "./activity.logic";
 import { describeLinkInput, threadStatusPresentation, ticketLinkHref } from "./links.logic";
 import { classifyLink, TICKET_SYSTEM_PRESETS } from "@repo/contracts";
 
-const JIRA = {
-  ...TICKET_SYSTEM_PRESETS[0]!.system,
-  linkTemplate: "https://jira.example.com/browse/{key}",
-};
+const JIRA = { ...TICKET_SYSTEM_PRESETS[0]!.system, linkTemplate: "https://jira.example.com/browse/{key}" };
 
 const ctx: ActivityContext = {
   steps: new Map([["s1", { label: "1.2", title: "Write migrations" }]]),
@@ -64,21 +61,13 @@ describe("describeEvent", () => {
       text: "suggested the deep model tier",
       quote: "Migration",
     });
-    expect(line({ tier: null, reason: null })).toMatchObject({
-      text: "cleared the suggested model",
-      quote: null,
-    });
+    expect(line({ tier: null, reason: null })).toMatchObject({ text: "cleared the suggested model", quote: null });
   });
 
   it("describes the local review loop", () => {
     const text = (type: string, payload: Record<string, unknown>) => describeEvent(event(type, payload), ctx);
     expect(text("review_opened", { round: 1, trigger: "move" }).text).toBe("opened review round 1 (moved to Review)");
-    expect(
-      text("review_submitted", {
-        round: 2,
-        findings: { blocking: 1, major: 0, nit: 2 },
-      }),
-    ).toMatchObject({
+    expect(text("review_submitted", { round: 2, findings: { blocking: 1, major: 0, nit: 2 } })).toMatchObject({
       icon: "review_findings",
       text: "reviewed round 2: 1 blocking, 2 nit",
     });
@@ -92,33 +81,17 @@ describe("describeEvent", () => {
       text: "dismissed a flag",
       quote: "Thread failed",
     });
-    expect(
-      text("attention_restored", {
-        flags: ["Thread failed", "#7 checks failing"],
-      }),
-    ).toMatchObject({
+    expect(text("attention_restored", { flags: ["Thread failed", "#7 checks failing"] })).toMatchObject({
       text: "restored 2 flags",
       quote: "Thread failed\n#7 checks failing",
     });
-    expect(
-      text("finding_resolved", {
-        finding: "R1.2",
-        status: "wont_fix",
-        note: "By design",
-      }),
-    ).toEqual({
+    expect(text("finding_resolved", { finding: "R1.2", status: "wont_fix", note: "By design" })).toEqual({
       icon: "review",
       text: "marked R1.2 won't fix",
       quote: "By design",
     });
     expect(text("finding_resolved", { finding: "R1.2", status: "open" }).text).toBe("reopened R1.2");
-    expect(
-      text("review_status", {
-        round: 1,
-        status: "failed",
-        error: "CLI not found",
-      }),
-    ).toMatchObject({
+    expect(text("review_status", { round: 1, status: "failed", error: "CLI not found" })).toMatchObject({
       icon: "step_blocked",
       quote: "CLI not found",
     });
@@ -143,43 +116,20 @@ describe("describeEvent", () => {
     expect(text("closed", { resolution: "completed", byTask: 4 })).toBe("closed this as done by #4");
     expect(text("closed", { resolution: "duplicate", byTask: 4 })).toBe("closed this as a duplicate of #4");
     expect(text("closed", { resolution: "wont_do" })).toBe("closed this as won't do");
-    expect(
-      text("status_changed", {
-        from: "done",
-        to: "backlog",
-        clearedResolution: "wont_do",
-      }),
-    ).toBe("reopened this and moved to Backlog");
-    expect(
-      text("status_changed", {
-        from: "review",
-        to: "done",
-        mergedPr: "acme/app#12",
-      }),
-    ).toBe("moved to Done when acme/app#12 merged");
+    expect(text("status_changed", { from: "done", to: "backlog", clearedResolution: "wont_do" })).toBe(
+      "reopened this and moved to Backlog",
+    );
+    expect(text("status_changed", { from: "review", to: "done", mergedPr: "acme/app#12" })).toBe(
+      "moved to Done when acme/app#12 merged",
+    );
   });
 
   it("names steps by their current index label, falling back to the logged title", () => {
     expect(
-      describeEvent(
-        event("step_updated", {
-          stepId: "s1",
-          title: "old",
-          from: "in_progress",
-          to: "done",
-        }),
-        ctx,
-      ).text,
+      describeEvent(event("step_updated", { stepId: "s1", title: "old", from: "in_progress", to: "done" }), ctx).text,
     ).toBe("completed 1.2 Write migrations");
     expect(
-      describeEvent(
-        event("step_updated", {
-          stepId: "gone",
-          title: "Old step",
-          to: "in_progress",
-        }),
-        ctx,
-      ).text,
+      describeEvent(event("step_updated", { stepId: "gone", title: "Old step", to: "in_progress" }), ctx).text,
     ).toBe("started Old step");
     expect(describeEvent(event("step_updated", { stepId: "s1", title: "x" }), ctx).text).toBe(
       "edited 1.2 Write migrations",
@@ -215,11 +165,7 @@ describe("describeEvent", () => {
   });
 
   it("falls back to the event name for unknown types", () => {
-    expect(describeEvent(event("something_new"), ctx)).toEqual({
-      icon: "other",
-      text: "something new",
-      quote: null,
-    });
+    expect(describeEvent(event("something_new"), ctx)).toEqual({ icon: "other", text: "something new", quote: null });
   });
 });
 
@@ -273,12 +219,9 @@ describe("a task a machine holds", () => {
   });
 
   it("gives the machine's reason for refusing a change made on the board", () => {
-    expect(
-      text("edit_refused", {
-        edit: "plans.updateStep",
-        reason: "Step not found",
-      }),
-    ).toBe("took back a change made here: the machine refused it (Step not found)");
+    expect(text("edit_refused", { edit: "plans.updateStep", reason: "Step not found" })).toBe(
+      "took back a change made here: the machine refused it (Step not found)",
+    );
   });
 
   it("names tasks a machine numbered", () => {

@@ -20,26 +20,17 @@ export function describeLinkInput(
   if (!link) return null;
   switch (link.kind) {
     case "pr":
-      return {
-        kind: "pr",
-        label: link.ref ? `Pull request ${link.ref.repo}#${link.ref.number}` : "Pull request",
-      };
+      return { kind: "pr", label: link.ref ? `Pull request ${link.ref.repo}#${link.ref.number}` : "Pull request" };
     case "ticket":
       return { kind: "ticket", label: ticketLabel(ticketSystems, link.ref) };
     case "t3_thread":
       return { kind: "t3_thread", label: "T3 Code thread" };
     case "issue":
-      return {
-        kind: "issue",
-        label: `GitHub issue ${link.ref.repo}#${link.ref.number}`,
-      };
+      return { kind: "issue", label: `GitHub issue ${link.ref.repo}#${link.ref.number}` };
     case "agent_session":
       return { kind: "agent_session", label: "Agent session" };
     case "url":
-      return {
-        kind: "url",
-        label: `Link to ${hostnameOf(link.url) ?? link.url}`,
-      };
+      return { kind: "url", label: `Link to ${hostnameOf(link.url) ?? link.url}` };
   }
 }
 
@@ -95,11 +86,7 @@ export function threadStatusPresentation(status: T3ThreadStatus): ThreadStatusPr
         dotClass: "bg-sky-500 dark:bg-sky-300/80",
       };
     case "waiting":
-      return {
-        label: "Waiting",
-        colorClass: "text-muted-foreground",
-        dotClass: "bg-muted-foreground",
-      };
+      return { label: "Waiting", colorClass: "text-muted-foreground", dotClass: "bg-muted-foreground" };
     case "input":
       return {
         label: "Awaiting Input",
@@ -193,12 +180,7 @@ export interface LinkGroups {
 /** A link that isn't a session: those have their own section. */
 export type PlainLink = Exclude<TaskLink, { kind: "t3_thread" | "agent_session" }>;
 
-const LINK_KIND_ORDER: Record<PlainLink["kind"], number> = {
-  pr: 0,
-  issue: 1,
-  ticket: 2,
-  url: 3,
-};
+const LINK_KIND_ORDER: Record<PlainLink["kind"], number> = { pr: 0, issue: 1, ticket: 2, url: 3 };
 
 const createdMs = (link: TaskLink) => {
   const ms = Date.parse(link.createdAt);
@@ -242,10 +224,7 @@ export function groupLinks(links: ReadonlyArray<TaskLink>): LinkGroups {
 /** The first rows of a group, and how many "Show N more" would reveal. */
 export function previewRows<T>(rows: ReadonlyArray<T>, expanded: boolean): { shown: T[]; hidden: number } {
   if (expanded || rows.length <= SESSION_PREVIEW_COUNT) return { shown: [...rows], hidden: 0 };
-  return {
-    shown: rows.slice(0, SESSION_PREVIEW_COUNT),
-    hidden: rows.length - SESSION_PREVIEW_COUNT,
-  };
+  return { shown: rows.slice(0, SESSION_PREVIEW_COUNT), hidden: rows.length - SESSION_PREVIEW_COUNT };
 }
 
 /** Model is only worth showing when the task's threads don't all use the same one. */

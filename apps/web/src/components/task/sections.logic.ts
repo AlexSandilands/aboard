@@ -62,10 +62,7 @@ export const SECTION_COLUMNS: Record<SectionId, SectionColumn> = {
   activity: "main",
 };
 
-export const SECTION_COLUMN_TITLES: Record<SectionColumn, string> = {
-  main: "Main column",
-  rail: "Side column",
-};
+export const SECTION_COLUMN_TITLES: Record<SectionColumn, string> = { main: "Main column", rail: "Side column" };
 
 export interface SectionLayout {
   order: SectionId[];
@@ -91,10 +88,7 @@ export function sectionsInColumn(
 }
 
 /** Sections added after others existed sit before the one they were split from in a saved order, not at the end. */
-const SECTION_ANCHORS: Partial<Record<SectionId, SectionId>> = {
-  sessions: "links",
-  usage: "links",
-};
+const SECTION_ANCHORS: Partial<Record<SectionId, SectionId>> = { sessions: "links", usage: "links" };
 
 export const isSectionId = (value: unknown): value is SectionId => SECTION_IDS.includes(value as SectionId);
 
@@ -280,26 +274,15 @@ export function firstLine(markdown: string | null): string | null {
 }
 
 /** Chips a rich summary shows before folding the rest into "+N". */
-export const SUMMARY_CHIP_LIMIT = {
-  labels: 3,
-  sessions: 4,
-  links: 3,
-  relations: 3,
-} as const;
+export const SUMMARY_CHIP_LIMIT = { labels: 3, sessions: 4, links: 3, relations: 3 } as const;
 
 /** The first `max` items and how many were left out, for a "+N" chip. */
 export function limitItems<T>(items: ReadonlyArray<T>, max: number): { shown: T[]; hidden: number } {
-  return {
-    shown: items.slice(0, max),
-    hidden: Math.max(0, items.length - max),
-  };
+  return { shown: items.slice(0, max), hidden: Math.max(0, items.length - max) };
 }
 
 /** The PRs a collapsed Links header shows, and how many links (more PRs or any other kind) it leaves out. */
-export function linkSummaryChips(links: ReadonlyArray<PlainLink>): {
-  prs: PrLink[];
-  rest: number;
-} {
+export function linkSummaryChips(links: ReadonlyArray<PlainLink>): { prs: PrLink[]; rest: number } {
   const { shown } = limitItems(
     links.filter((link): link is PrLink => link.kind === "pr"),
     SUMMARY_CHIP_LIMIT.links,
@@ -334,11 +317,7 @@ export function relationChipGroups(task: Pick<SectionTask, "blockedBy" | "blocks
     .toSorted((a, b) => Number(b.tone === "blocking") - Number(a.tone === "blocking"));
   return [
     { kind: "blockedBy" as const, label: "blocked by", chips: blockedBy },
-    {
-      kind: "blocks" as const,
-      label: "blocks",
-      chips: task.blocks.map((r) => chip(r, "neutral")),
-    },
+    { kind: "blocks" as const, label: "blocks", chips: task.blocks.map((r) => chip(r, "neutral")) },
   ].filter((group) => group.chips.length > 0);
 }
 

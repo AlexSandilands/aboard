@@ -61,9 +61,7 @@ const link = { id: "l", kind: "url", url: "https://example.com" } as TaskLink;
 const thread = { id: "t", kind: "t3_thread" } as TaskLink;
 const session = { id: "s", kind: "agent_session" } as TaskLink;
 const round = (statuses: Array<"open" | "fixed">) =>
-  ({
-    findings: statuses.map((status) => ({ status })),
-  }) as unknown as TaskReview;
+  ({ findings: statuses.map((status) => ({ status })) }) as unknown as TaskReview;
 const summary = (state: TaskReviewSummary["state"]): TaskReviewSummary => ({
   state,
   round: 1,
@@ -75,18 +73,11 @@ const summary = (state: TaskReviewSummary["state"]): TaskReviewSummary => ({
 
 describe("normalizeSectionLayout", () => {
   it("defaults everything when nothing is stored", () => {
-    expect(normalizeSectionLayout({})).toEqual({
-      order: [...SECTION_IDS],
-      hidden: [],
-      collapsed: {},
-      columns: {},
-    });
+    expect(normalizeSectionLayout({})).toEqual({ order: [...SECTION_IDS], hidden: [], collapsed: {}, columns: {} });
   });
 
   it("drops unknown and duplicate ids and appends missing sections", () => {
-    const layout = normalizeSectionLayout({
-      order: ["plan", "nope", "plan", 3, "activity"],
-    });
+    const layout = normalizeSectionLayout({ order: ["plan", "nope", "plan", 3, "activity"] });
     expect(layout.order).toEqual([
       "plan",
       "activity",
@@ -155,11 +146,7 @@ describe("normalizeSectionLayout", () => {
 
   it("drops the Automation section a saved layout still names: it is part of Autopilot now", () => {
     const saved = ["automation", "review", "plan", "sessions", "labels", "links", "relations", "autopilot", "details"];
-    const layout = normalizeSectionLayout({
-      order: saved,
-      hidden: ["automation"],
-      collapsed: { automation: true },
-    });
+    const layout = normalizeSectionLayout({ order: saved, hidden: ["automation"], collapsed: { automation: true } });
     expect(layout.order).toEqual([
       "review",
       "plan",
@@ -184,12 +171,7 @@ describe("normalizeSectionLayout", () => {
       "review",
     ]);
     // Once saved with Sessions, showing it again sticks.
-    expect(
-      normalizeSectionLayout({
-        order: ["sessions", ...order],
-        hidden: ["links"],
-      }).hidden,
-    ).toEqual(["links"]);
+    expect(normalizeSectionLayout({ order: ["sessions", ...order], hidden: ["links"] }).hidden).toEqual(["links"]);
   });
 
   it("collapses Sessions with Links in a layout saved before Sessions existed", () => {
@@ -201,12 +183,7 @@ describe("normalizeSectionLayout", () => {
     expect(normalizeSectionLayout({ order, collapsed: { links: false } }).collapsed.sessions).toBe(false);
     expect(normalizeSectionLayout({ order, collapsed: { plan: true } }).collapsed).toEqual({ plan: true });
     // Once saved with Sessions, its own choice stays.
-    expect(
-      normalizeSectionLayout({
-        order: ["sessions", ...order],
-        collapsed: { links: true },
-      }).collapsed,
-    ).toEqual({
+    expect(normalizeSectionLayout({ order: ["sessions", ...order], collapsed: { links: true } }).collapsed).toEqual({
       links: true,
     });
   });
@@ -262,13 +239,7 @@ describe("collapsedByDefault", () => {
     const flagged = task({
       kind: "epic",
       attention: [
-        {
-          kind: "autopilot",
-          severity: "warning",
-          message: "Merge epic PRs failed",
-          key: "autopilot",
-          fingerprint: "",
-        },
+        { kind: "autopilot", severity: "warning", message: "Merge epic PRs failed", key: "autopilot", fingerprint: "" },
       ],
     });
     expect(collapsedByDefault("autopilot", task({ kind: "epic" }))).toBe(true);
@@ -280,13 +251,7 @@ describe("collapsedByDefault", () => {
   it("says why Autopilot needs a look in its collapsed line", () => {
     const flagged = task({
       attention: [
-        {
-          kind: "autopilot",
-          severity: "warning",
-          message: "Start planned failed",
-          key: "autopilot",
-          fingerprint: "",
-        },
+        { kind: "autopilot", severity: "warning", message: "Start planned failed", key: "autopilot", fingerprint: "" },
       ],
     });
     expect(summarizeSection("autopilot", flagged)).toBe("Start planned failed");
@@ -299,13 +264,8 @@ describe("collapsedByDefault", () => {
 
 describe("withCollapseChoice", () => {
   it("saves a choice that differs from the default", () => {
-    expect(withCollapseChoice({}, "links", false, true)).toEqual({
-      links: false,
-    });
-    expect(withCollapseChoice({ plan: true }, "links", true, false)).toEqual({
-      plan: true,
-      links: true,
-    });
+    expect(withCollapseChoice({}, "links", false, true)).toEqual({ links: false });
+    expect(withCollapseChoice({ plan: true }, "links", true, false)).toEqual({ plan: true, links: true });
   });
 
   it("clears the choice when it matches the default", () => {
@@ -383,16 +343,8 @@ describe("summarizeSection", () => {
     expect(summarizeSection("sessions", task({ links: [link] }))).toBe("None");
     expect(summarizeSection("sessions", task({ links: [thread, session, link] }))).toBe("2");
     const attention = [
-      {
-        kind: "pr_checks_failing",
-        severity: "error",
-        message: "PR #4 checks failing",
-      },
-      {
-        kind: "session_needs_input",
-        severity: "warning",
-        message: "Needs input",
-      },
+      { kind: "pr_checks_failing", severity: "error", message: "PR #4 checks failing" },
+      { kind: "session_needs_input", severity: "warning", message: "Needs input" },
     ] as SectionTask["attention"];
     expect(summarizeSection("sessions", task({ links: [thread, link], attention }))).toBe("1 · Needs input");
   });
@@ -403,11 +355,7 @@ describe("summarizeSection", () => {
     expect(summarizeSection("links", task({ links: [link, link, thread] }))).toBe("2");
     const attention = [
       { kind: "blocked_step", severity: "warning", message: "Step blocked" },
-      {
-        kind: "pr_checks_failing",
-        severity: "error",
-        message: "PR #4 checks failing",
-      },
+      { kind: "pr_checks_failing", severity: "error", message: "PR #4 checks failing" },
     ] as SectionTask["attention"];
     expect(summarizeSection("links", task({ links: [link], attention }))).toBe("1 · PR #4 checks failing");
   });
@@ -419,13 +367,7 @@ describe("summarizeSection", () => {
     );
     expect(summarizeSection("relations", task({ blockedBy: [relation(5, "done")] }))).toBe("Unblocked");
     expect(
-      summarizeSection(
-        "relations",
-        task({
-          blockedBy: [relation(4, "review")],
-          blocks: [relation(8, "backlog")],
-        }),
-      ),
+      summarizeSection("relations", task({ blockedBy: [relation(4, "review")], blocks: [relation(8, "backlog")] })),
     ).toBe("blocked by #4 · blocks #8");
   });
 
@@ -443,12 +385,7 @@ describe("summarizeSection", () => {
       "May review · Reviewer deep",
     );
     expect(
-      summarizeSection(
-        "autopilot",
-        task({
-          reviewModel: { provider: "claude-code", model: "claude-opus-5-5" },
-        }),
-      ),
+      summarizeSection("autopilot", task({ reviewModel: { provider: "claude-code", model: "claude-opus-5-5" } })),
     ).toBe("Not automated · Reviewer claude-opus-5-5");
     // A task that sets nothing follows the board's Auto-review, as its chip does.
     expect(summarizeSection("autopilot", task(), NOW, true)).toBe("May review");
@@ -472,13 +409,7 @@ describe("summarizeSection", () => {
   it("plan", () => {
     expect(summarizeSection("plan", task())).toBe("No plan yet");
     expect(summarizeSection("plan", task({ progress: { done: 3, total: 3 } }))).toBe("3/3");
-    const currentStep = {
-      id: "s",
-      title: "Wire it up",
-      phaseTitle: "P",
-      status: "todo",
-      index: "2.1",
-    } as const;
+    const currentStep = { id: "s", title: "Wire it up", phaseTitle: "P", status: "todo", index: "2.1" } as const;
     expect(summarizeSection("plan", task({ progress: { done: 4, total: 10 }, currentStep }))).toBe(
       "4/10 · 2.1 Wire it up",
     );
@@ -495,23 +426,14 @@ describe("summarizeSection", () => {
     const events = [{ at: "2026-10-15T08:00:00Z" }, { at: "2026-10-15T10:00:00Z" }] as SectionTask["events"];
     expect(summarizeSection("activity", task({ events }), NOW)).toBe("2 · last 2h ago");
     expect(
-      summarizeSection(
-        "activity",
-        task({
-          events: [{ at: "2026-10-15T12:00:00Z" }] as SectionTask["events"],
-        }),
-        NOW,
-      ),
+      summarizeSection("activity", task({ events: [{ at: "2026-10-15T12:00:00Z" }] as SectionTask["events"] }), NOW),
     ).toBe("1 · last just now");
   });
 });
 
 describe("limitItems", () => {
   it("keeps the first items and counts the rest", () => {
-    expect(limitItems(["a", "b", "c", "d", "e"], 3)).toEqual({
-      shown: ["a", "b", "c"],
-      hidden: 2,
-    });
+    expect(limitItems(["a", "b", "c", "d", "e"], 3)).toEqual({ shown: ["a", "b", "c"], hidden: 2 });
   });
 
   it("hides nothing when everything fits", () => {
@@ -526,10 +448,7 @@ describe("relationChipGroups", () => {
   });
 
   it("colours blockers by whether they are done and lists open ones first", () => {
-    const [group] = relationChipGroups({
-      blockedBy: [relation(1, "done"), relation(2, "in_progress")],
-      blocks: [],
-    });
+    const [group] = relationChipGroups({ blockedBy: [relation(1, "done"), relation(2, "in_progress")], blocks: [] });
     expect(group?.kind).toBe("blockedBy");
     expect(group?.chips.map((c) => [c.number, c.tone])).toEqual([
       [2, "blocking"],
@@ -538,10 +457,7 @@ describe("relationChipGroups", () => {
   });
 
   it("lists what the task holds up as neutral, after the blockers", () => {
-    const groups = relationChipGroups({
-      blockedBy: [relation(1, "planned")],
-      blocks: [relation(9, "backlog")],
-    });
+    const groups = relationChipGroups({ blockedBy: [relation(1, "planned")], blocks: [relation(9, "backlog")] });
     expect(groups.map((g) => g.kind)).toEqual(["blockedBy", "blocks"]);
     expect(groups[1]?.chips).toEqual([{ id: "t9", number: 9, title: "Task 9", tone: "neutral" }]);
   });
@@ -552,10 +468,7 @@ describe("linkSummaryChips", () => {
   const jira = (id: string) => ({ id, kind: "ticket" }) as PlainLink;
 
   it("shows PRs and counts every other link as the rest", () => {
-    expect(linkSummaryChips([pr("a"), jira("b"), jira("c")])).toEqual({
-      prs: [pr("a")],
-      rest: 2,
-    });
+    expect(linkSummaryChips([pr("a"), jira("b"), jira("c")])).toEqual({ prs: [pr("a")], rest: 2 });
   });
 
   it("counts PRs past the cap as part of the rest", () => {
@@ -605,14 +518,7 @@ describe("section columns", () => {
 describe("section columns", () => {
   it("keeps a moved section's column and drops unknown ids, values and choices that match the default", () => {
     const layout = normalizeSectionLayout({
-      columns: {
-        plan: "rail",
-        usage: "main",
-        labels: "rail",
-        nope: "main",
-        links: "side",
-        details: 3,
-      },
+      columns: { plan: "rail", usage: "main", labels: "rail", nope: "main", links: "side", details: 3 },
     });
     expect(layout.columns).toEqual({ plan: "rail", usage: "main" });
   });
@@ -681,23 +587,15 @@ describe("section columns", () => {
   it("splits into two columns only while each has a shown section", () => {
     const layout = normalizeSectionLayout({});
     expect(splitsIntoColumns(layout)).toBe(true);
-    const railHidden = {
-      ...layout,
-      hidden: sectionsInColumn(layout.order, "rail"),
-    };
+    const railHidden = { ...layout, hidden: sectionsInColumn(layout.order, "rail") };
     expect(splitsIntoColumns(railHidden)).toBe(false);
-    const allInRail = normalizeSectionLayout({
-      columns: { plan: "rail", details: "rail", activity: "rail" },
-    });
+    const allInRail = normalizeSectionLayout({ columns: { plan: "rail", details: "rail", activity: "rail" } });
     expect(splitsIntoColumns(allInRail)).toBe(false);
     // An epic leaves Plan out: Plan alone in the rail leaves nothing to show there.
     const planAlone = normalizeSectionLayout({
       columns: Object.fromEntries(sectionsInColumn(SECTION_IDS, "rail").map((id) => [id, "main"])),
     });
-    const withPlan = {
-      ...planAlone,
-      columns: { ...planAlone.columns, plan: "rail" as const },
-    };
+    const withPlan = { ...planAlone, columns: { ...planAlone.columns, plan: "rail" as const } };
     expect(splitsIntoColumns(withPlan)).toBe(true);
     expect(splitsIntoColumns(withPlan, ["plan", "review"])).toBe(false);
   });

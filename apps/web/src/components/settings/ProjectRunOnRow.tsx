@@ -1,7 +1,7 @@
 import { RUN_HERE, type Machine, type Project } from "@repo/contracts";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { SETTINGS_TEXT_WIDTH, SettingsRow } from "~/components/settings/settingsLayout";
-import { machineOffline } from "~/components/task/runOn.logic";
+import { machineOffline, machineUsable } from "~/components/task/runOn.logic";
 import { useMachines } from "~/state/machines";
 import { useUpdateProject } from "~/state/mutations";
 
@@ -16,7 +16,8 @@ const NO_MACHINES: Machine[] = [];
 export function ProjectRunOnRow({ project }: { project: Project }) {
   const machines = useMachines().data?.machines ?? NO_MACHINES;
   const updateProject = useUpdateProject();
-  if (machines.length === 0 || !project.workspaceRoot) return null;
+  // As the task's own picker: only once a machine could take the project's tasks (canChooseRunOn).
+  if (!machines.some(machineUsable) || !project.workspaceRoot) return null;
   const known = machines.some((m) => m.id === project.runOn);
   const value = known && project.runOn ? project.runOn : HERE;
   const items = [

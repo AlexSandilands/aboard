@@ -90,8 +90,8 @@ describe("pulling a task back", () => {
 });
 
 describe("pulling a task back by force", () => {
-  it("doesn't wait for a run there, and says a queued run is queued", async () => {
-    const { board, machine, task } = await setup();
+  it("doesn't wait for a run on a machine that can't be reached, and says a queued run is queued", async () => {
+    const { board, machine, task, link } = await setup();
     board.services.tasks.setRunOn(task.id, machine.id, "user");
     await handOverAtStart(board.services, board.integrations.machineSync, runFor(task.id));
     board.services.autopilot.record({
@@ -102,6 +102,9 @@ describe("pulling a task back by force", () => {
     await expect(board.integrations.machineSync.pullBack(task.id, {}, "user")).rejects.toThrow(
       /Review PRs is queued for #\d+\. Pull it back once that finishes/,
     );
+    // While the machine answers, force doesn't skip the run: the machine is asked to give the task back.
+    await expect(board.integrations.machineSync.pullBack(task.id, { force: true }, "user")).rejects.toThrow(/queued/);
+    await link(false);
     const detail = await board.integrations.machineSync.pullBack(task.id, { force: true }, "user");
     expect(detail.hold ?? null).toBeNull();
     expect(detail.runOn).toBe(RUN_HERE);

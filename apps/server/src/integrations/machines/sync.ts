@@ -49,7 +49,7 @@ export type CallTool = (params: CallToolParams) => Promise<CallToolReply>;
 
 export interface MachineSyncDeps {
   services: () => Services;
-  machines: Pick<MachinesIntegration, "request">;
+  machines: Pick<MachinesIntegration, "request" | "list">;
   /** What a machine needs before it works on a task: the board's settings, and the task's images. */
   work?: Pick<RemoteWork, "syncSettings" | "sendImages" | "unpushed">;
   bus: EventBus;
@@ -154,11 +154,7 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
         // A runner that can read the request gives its verdict even on an edit it can't make sense of, with the
         // state logged. This one answered without one (a version from before edits): refused, not retried forever.
         const error = await refusal(res, "The machine");
-        services().holds.settleEdit(edit.id, {
-          applied: false,
-          error,
-          head: 0,
-        });
+        services().holds.settleEdit(edit.id, { applied: false, error, head: 0 });
       }
     }
   }
@@ -179,25 +175,13 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
     let reply: BridgeReply;
     try {
       if (request.method === "allocateNumber") {
-        reply = {
-          id: request.id,
-          ok: true,
-          result: { number: services().holds.allocateNumber() },
-        };
+        reply = { id: request.id, ok: true, result: { number: services().holds.allocateNumber() } };
       } else if (request.method === "callTool") {
         if (!callTool) throw new Error("This board can't run tools for a machine yet");
-        reply = {
-          id: request.id,
-          ok: true,
-          result: await callTool(CallToolParams.parse(request.params)),
-        };
+        reply = { id: request.id, ok: true, result: await callTool(CallToolParams.parse(request.params)) };
       } else {
         // A newer runner asking for something this board doesn't know: it falls back as if the board were away.
-        reply = {
-          id: request.id,
-          ok: false,
-          error: `This board doesn't know "${request.method}"`,
-        };
+        reply = { id: request.id, ok: false, error: `This board doesn't know "${request.method}"` };
       }
     } catch (error) {
       reply = { id: request.id, ok: false, error: messageOf(error) };
@@ -372,12 +356,15 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
       const task = services().tasks.summary(taskId);
       if (!hold) throw new AppError("VALIDATION", `${taskLabel(task)} isn't held by a machine`);
       const machine = services().machines.get(hold.machineId);
-      // A forced take-back is for a machine that can't be reached, where a run may hang for its whole grace period.
-      const going = opts.force
-        ? undefined
-        : services()
-            .autopilot.runsForTask(taskId, 20)
-            .find((run) => !run.dryRun && (run.status === "running" || run.status === "queued"));
+      // A forced take-back is for a machine that can't be reached, where a run may hang for its whole grace period;
+      // one that answers is asked to give the task back, so a run there is waited for either way.
+      const reachable = deps.machines.list().machines.find((m) => m.id === machine.id)?.connection === "connected";
+      const going =
+        opts.force && !reachable
+          ? undefined
+          : services()
+              .autopilot.runsForTask(taskId, 20)
+              .find((run) => !run.dryRun && (run.status === "running" || run.status === "queued"));
       if (going) {
         const title =
           services()

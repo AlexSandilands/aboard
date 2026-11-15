@@ -130,12 +130,7 @@ export function syncEpicStatus(repos: Repos, epicId: string, actor: string, fx: 
         ? { mergedPr: `${merge.pr.repo}#${merge.pr.number}` }
         : { markedMerged: true }
       : {};
-  fx.log(epicId, actor, "status_changed", {
-    from: epic.status,
-    to: status,
-    fromChildren: true,
-    ...mergedBy,
-  });
+  fx.log(epicId, actor, "status_changed", { from: epic.status, to: status, fromChildren: true, ...mergedBy });
   if (status === "done" && epic.attentionRequest) fx.log(epicId, actor, "attention_cleared", { finished: true });
 }
 
@@ -222,22 +217,14 @@ export function createTasksService(
       } else {
         // Left loose for good: restoring the epic doesn't take them back.
         repos.tasks.update({ ...child, parentId: null, updatedAt: at });
-        fx.log(child.id, actor, "epic_changed", {
-          from: task.number,
-          to: null,
-          epicDeleted: true,
-        });
+        fx.log(child.id, actor, "epic_changed", { from: task.number, to: null, epicDeleted: true });
       }
     }
     for (const id of neighbours) fx.task(id);
     for (const r of resolved) fx.task(r.id);
     if (task.resolvedByTaskId) fx.detail(task.resolvedByTaskId);
     if (task.parentId) {
-      fx.log(task.parentId, actor, "child_removed", {
-        task: taskNumberValue(task),
-        title: task.title,
-        deleted: true,
-      });
+      fx.log(task.parentId, actor, "child_removed", { task: taskNumberValue(task), title: task.title, deleted: true });
       syncEpic(task.parentId, actor, fx);
     }
     return stamped;
@@ -251,22 +238,14 @@ export function createTasksService(
     const epic = withEpic ?? (task.parentId ? repos.tasks.get(task.parentId) : null);
     const rejoin =
       epic !== null && epic.projectId === task.projectId && (withEpic !== null || epic.archivedAt === null);
-    const next: TaskRecord = {
-      ...task,
-      deletedAt: null,
-      updatedAt: at,
-      parentId: rejoin ? epic.id : null,
-    };
+    const next: TaskRecord = { ...task, deletedAt: null, updatedAt: at, parentId: rejoin ? epic.id : null };
     // Unarchived lanes are what positions are among; an archived task keeps its place, like unarchiving does.
     if (task.archivedAt === null) next.position = endOfLane(next);
     repos.tasks.update(next);
     fx.log(task.id, actor, "restored", withEpic ? { withEpic: withEpic.number } : {});
     if (task.parentId && !rejoin) {
       const from = repos.tasks.getAny(task.parentId);
-      fx.log(task.id, actor, "epic_changed", {
-        from: from?.number ?? null,
-        to: null,
-      });
+      fx.log(task.id, actor, "epic_changed", { from: from?.number ?? null, to: null });
     }
     // The detail of a task closed against it lists it again.
     if (task.resolvedByTaskId) fx.detail(task.resolvedByTaskId);
@@ -280,11 +259,7 @@ export function createTasksService(
       }
     }
     if (rejoin && !withEpic) {
-      fx.log(epic.id, actor, "child_added", {
-        task: taskNumberValue(task),
-        title: task.title,
-        restored: true,
-      });
+      fx.log(epic.id, actor, "child_added", { task: taskNumberValue(task), title: task.title, restored: true });
       syncEpic(epic.id, actor, fx);
     }
     if (task.kind === "epic") syncEpic(task.id, actor, fx);
@@ -302,10 +277,7 @@ export function createTasksService(
     }
     // Tasks closed against this one keep their resolution; their log records what they pointed at.
     for (const resolved of repos.tasks.resolvedBy([task.id])) {
-      fx.log(resolved.id, actor, "resolver_deleted", {
-        number: taskNumberValue(task),
-        title: task.title,
-      });
+      fx.log(resolved.id, actor, "resolver_deleted", { number: taskNumberValue(task), title: task.title });
     }
     // Tasks it blocks, or that block it, drop the relation with it; their logs say what went.
     deps.relations().noteDeletionIn(task, actor, fx);
@@ -391,11 +363,7 @@ export function createTasksService(
    */
   const archiveWithEpic = (epic: TaskRecord, tasks: TaskRecord[], actor: string, fx: Effects): void => {
     for (const task of tasks) {
-      repos.tasks.update({
-        ...task,
-        archivedAt: epic.archivedAt,
-        updatedAt: epic.updatedAt,
-      });
+      repos.tasks.update({ ...task, archivedAt: epic.archivedAt, updatedAt: epic.updatedAt });
       fx.log(task.id, actor, "archived", { withEpic: epic.number });
       fx.task(task.id);
     }
@@ -404,12 +372,7 @@ export function createTasksService(
   /** Unarchives the tasks that were archived with `epic` (see archiveWithEpic) as it comes back. */
   const unarchiveWithEpic = (epic: TaskRecord, archivedAt: string, actor: string, fx: Effects): void => {
     for (const task of repos.tasks.childrenOf([epic.id]).filter((c) => c.archivedAt === archivedAt)) {
-      const restored = {
-        ...task,
-        archivedAt: null,
-        movedTo: null,
-        updatedAt: epic.updatedAt,
-      };
+      const restored = { ...task, archivedAt: null, movedTo: null, updatedAt: epic.updatedAt };
       repos.tasks.update({ ...restored, position: endOfLane(restored) });
       fx.log(task.id, actor, "unarchived", { withEpic: epic.number });
       fx.task(task.id);
@@ -425,17 +388,9 @@ export function createTasksService(
   const unarchiveEpicFor = (task: TaskRecord, reopened: boolean, actor: string, fx: Effects): void => {
     const epic = task.parentId ? repos.tasks.get(task.parentId) : undefined;
     if (!epic || epic.archivedAt === null) return;
-    const restored = {
-      ...epic,
-      archivedAt: null,
-      movedTo: null,
-      updatedAt: nowIso(),
-    };
+    const restored = { ...epic, archivedAt: null, movedTo: null, updatedAt: nowIso() };
     repos.tasks.update({ ...restored, position: endOfLane(restored) });
-    fx.log(epic.id, actor, "unarchived", {
-      becauseTask: taskNumberValue(task),
-      reopened,
-    });
+    fx.log(epic.id, actor, "unarchived", { becauseTask: taskNumberValue(task), reopened });
   };
 
   /** Logs a task joining or leaving an epic on both sides. The caller saves the task and syncs both epics. */
@@ -446,20 +401,9 @@ export function createTasksService(
     actor: string,
     fx: Effects,
   ) => {
-    fx.log(task.id, actor, "epic_changed", {
-      from: from?.number ?? null,
-      to: to?.number ?? null,
-    });
-    if (from)
-      fx.log(from.id, actor, "child_removed", {
-        task: taskNumberValue(task),
-        title: task.title,
-      });
-    if (to)
-      fx.log(to.id, actor, "child_added", {
-        task: taskNumberValue(task),
-        title: task.title,
-      });
+    fx.log(task.id, actor, "epic_changed", { from: from?.number ?? null, to: to?.number ?? null });
+    if (from) fx.log(from.id, actor, "child_removed", { task: taskNumberValue(task), title: task.title });
+    if (to) fx.log(to.id, actor, "child_added", { task: taskNumberValue(task), title: task.title });
   };
 
   const service: TasksService = {
@@ -596,11 +540,7 @@ export function createTasksService(
             : undefined);
         const hasSteps = (plan?.phases ?? []).some((p) => p.steps.length > 0);
         const now = nowIso();
-        const numbering = opts.number ??
-          deps.numbering?.() ?? {
-            prefix: "",
-            number: repos.tasks.nextNumber(),
-          };
+        const numbering = opts.number ?? deps.numbering?.() ?? { prefix: "", number: repos.tasks.nextNumber() };
         const status = input.status ?? (input.plan && hasSteps ? "planned" : "backlog");
         if (status === "planned" && !hasSteps && !manual) {
           throw new AppError(
@@ -654,10 +594,7 @@ export function createTasksService(
           ...(epic ? { epic: epic.number } : {}),
         });
         if (epic) {
-          fx.log(epic.id, actor, "child_added", {
-            task: taskNumberValue(task),
-            title: task.title,
-          });
+          fx.log(epic.id, actor, "child_added", { task: taskNumberValue(task), title: task.title });
           syncEpic(epic.id, actor, fx);
         }
         const labels = input.labels ?? template?.labels;
@@ -665,9 +602,7 @@ export function createTasksService(
         if (plan) deps.plans().replacePlan(task, plan, actor, fx);
         if (input.blockedBy?.length) deps.relations().addBlockersIn(task.id, input.blockedBy, actor, fx);
         if (source) {
-          deps.links().service.add(task.id, { value: source.url }, actor, {
-            ticketSystem: opts.ticketSystem,
-          });
+          deps.links().service.add(task.id, { value: source.url }, actor, { ticketSystem: opts.ticketSystem });
           deps.imports().beginIn(task.id, source, input.sourceUrl!, fx);
         }
         for (const link of input.links ?? []) {
@@ -780,18 +715,8 @@ export function createTasksService(
           const round = manual ? repos.reviews.latest(id) : null;
           if (round && (round.status === "pending" || round.status === "running" || round.status === "stalled")) {
             const error = "The task became a manual task";
-            repos.reviews.update({
-              ...round,
-              status: "failed",
-              error,
-              updatedAt: now,
-              completedAt: now,
-            });
-            fx.log(id, actor, "review_status", {
-              round: round.round,
-              status: "failed",
-              error,
-            });
+            repos.reviews.update({ ...round, status: "failed", error, updatedAt: now, completedAt: now });
+            fx.log(id, actor, "review_status", { round: round.round, status: "failed", error });
           }
           // Agents and Autopilot leave a manual task alone, so its flags for them go.
           if (manual && current.autopilot !== null) {
@@ -831,10 +756,7 @@ export function createTasksService(
           const project = deps.projects.get(input.projectId!);
           next.projectId = project.id;
           next.position = endOfLane(next);
-          fx.log(id, actor, "moved_project", {
-            from: current.projectId,
-            to: project.id,
-          });
+          fx.log(id, actor, "moved_project", { from: current.projectId, to: project.id });
         }
         if (input.epicId && current.kind === "epic") {
           throw new AppError("VALIDATION", "Epics don't nest; an epic has no epic");
@@ -1010,14 +932,8 @@ export function createTasksService(
                   (open.length > 0 ? `; still open: ${open.map((c) => taskLabel(c)).join(", ")}` : "; it has none yet"),
               );
             }
-            repos.tasks.update({
-              ...current,
-              integrationMergedAt: nowIso(),
-              updatedAt: nowIso(),
-            });
-            fx.log(id, actor, "integration_marked_merged", {
-              branch: current.integrationBranch,
-            });
+            repos.tasks.update({ ...current, integrationMergedAt: nowIso(), updatedAt: nowIso() });
+            fx.log(id, actor, "integration_marked_merged", { branch: current.integrationBranch });
             syncEpic(id, actor, fx);
             return;
           }
