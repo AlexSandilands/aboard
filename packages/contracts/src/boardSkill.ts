@@ -20,7 +20,9 @@ project: pass \`general: true\` to \`add_to_backlog\` / \`create_task\` instead 
 path out never defaults to it, and work in a repo belongs in the repo's project.
 
 Tasks are referenced as \`#42\`, steps as \`"2.3"\` (phase 2, step 3). A task made on one of the user's connected
-machines while the board couldn't be reached carries that machine's prefix, \`#E7\`: use it as written.
+machines while the board couldn't be reached carries that machine's prefix, \`#E7\`: use it as written. A task
+can be set to run on one of those machines: \`get_task\` says \`Machine: <name>\` before it starts and \`Held by: <name>\`
+once it has. Only the user chooses or changes that, and pulls a task back; there is no tool for it.
 
 ## Workflow
 

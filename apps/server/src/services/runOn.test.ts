@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { RUN_HERE, type MachineRoute } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { AppError } from "../errors.ts";
+import { renderTaskDetail } from "../mcp/format.ts";
 import { createTestHarness } from "../test/harness.ts";
 
 // Where a task runs (remote-machines.md#choosing-the-machine): the task's choice, the project's default, and the lock.
@@ -66,5 +67,24 @@ describe("where a task runs", () => {
     expect(s.projects.update(project.id, { runOn: engine.id }).runOn).toBe(engine.id);
     expect(s.projects.update(project.id, { runOn: RUN_HERE }).runOn).toBeNull();
     expect(codeOf(() => s.projects.update(project.id, { runOn: "nope" }))).toBe("VALIDATION");
+  });
+});
+
+describe("where a task runs, in get_task", () => {
+  it("names the machine a task will start on, and that only the user changes it", () => {
+    const { s, task } = setup();
+    const detail = s.tasks.detail(task.id);
+    const text = renderTaskDetail(detail, undefined, { startsOn: { machineName: "engine", source: "project" } });
+    expect(text).toContain(
+      "Machine: engine (its project's default; Autopilot hands the task to it when it starts the task",
+    );
+    expect(text).toContain("Only the user changes where a task runs");
+    expect(renderTaskDetail(detail, undefined)).not.toContain("Machine:");
+  });
+
+  it("says a held task stays on its machine until the user pulls it back", () => {
+    const { s, task } = setup();
+    const held = { ...s.tasks.detail(task.id), hold: { machineId: "m", machineName: "engine", since: "", waiting: 0 } };
+    expect(renderTaskDetail(held, undefined)).toContain("It stays there until the user pulls it back");
   });
 });

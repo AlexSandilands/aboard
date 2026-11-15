@@ -13,6 +13,7 @@ import {
   type HandoffMode,
   type TaskStatus,
   type Project,
+  runOnLocked,
   type TaskDetail,
 } from "@repo/contracts";
 import { AppError } from "../../errors.ts";
@@ -45,6 +46,8 @@ import {
 } from "../shared.ts";
 import { openRoundPointer } from "./reviews.ts";
 import { renderActivity } from "../activityFormat.ts";
+import { taskRunsOn } from "../../services/runOn.ts";
+import type { Services } from "../../services/types.ts";
 
 const HOUR_MS = 3_600_000;
 
@@ -325,6 +328,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
           ticketSystems: services.settings.get().ticketSystems,
           modelSettings: services.settings.get(),
           epicBranch: epicBranchOf(services, task),
+          startsOn: startsOnOf(services, task),
           ...(task.kind === "epic" ? { childActivity: childActivity(services, task) } : {}),
         });
         return textResult(withOpenRoundPointer(detail, task));
@@ -461,3 +465,12 @@ ${prompt}
       }),
   );
 };
+
+/** Where a task that hasn't started is set to run, for get_task's Machine line; null for this machine. */
+function startsOnOf(services: Services, task: TaskDetail): { machineName: string; source: "task" | "project" } | null {
+  if (task.kind === "epic" || task.manual || task.hold || runOnLocked(task)) return null;
+  const where = taskRunsOn(services, task.id);
+  return where.machineName && where.source !== "board"
+    ? { machineName: where.machineName, source: where.source }
+    : null;
+}
