@@ -1,4 +1,5 @@
 import { BRAND, BRAND_REPOSITORY, brandEnv } from "./brand.ts";
+import { DEFAULT_RUNNER_PORT } from "./desktop.ts";
 
 // The headless server's release files and the script that installs a runner from them
 // (docs/features/remote-machines.md#installing-a-runner). Shared by the release build, which publishes the script,
@@ -155,19 +156,22 @@ fi
 "$bin/${launcher}" service install </dev/null || fail "The runner is installed in $root, but its service didn't start."
 
 step pair
+tailscale_ip=""
+if [ -n "$bind" ] && command -v tailscale >/dev/null 2>&1; then
+  tailscale_ip="$(tailscale ip -4 2>/dev/null </dev/null | head -n 1)" || tailscale_ip=""
+fi
 if [ "$porcelain" = 1 ]; then
-  tailscale_ip=""
-  if [ -n "$bind" ] && command -v tailscale >/dev/null 2>&1; then
-    tailscale_ip="$(tailscale ip -4 2>/dev/null </dev/null | head -n 1)" || tailscale_ip=""
-  fi
   printf '${RUNNER_INSTALL_RESULT_PREFIX}'
   "$bin/${launcher}" pair --json --tailscale-ip "$tailscale_ip" </dev/null
 else
   "$bin/${launcher}" pair </dev/null
-  if [ -n "$bind" ]; then
-    echo "In the board, add this machine by its Tailscale address and the port above, with that code."
+  if [ -z "$bind" ]; then
+    echo "The runner listens on this machine only. To pair it by this code, a board must reach it: run this script"
+    echo "again with --tailscale, or add the machine from the board over SSH instead."
+  elif [ -n "$tailscale_ip" ]; then
+    echo "In the board, add a machine by its pairing code, with the address http://$tailscale_ip:\${port:-${DEFAULT_RUNNER_PORT}} and that code."
   else
-    echo "In the board, add this machine with that code."
+    echo "In the board, add a machine by its pairing code, with this machine's Tailscale address, port \${port:-${DEFAULT_RUNNER_PORT}}, and that code."
   fi
 fi
 `;

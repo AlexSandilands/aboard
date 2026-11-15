@@ -63,3 +63,13 @@ export function createMachineSecrets(path: string): MachineSecrets {
     },
   };
 }
+
+/** Tokens held in memory only: an in-memory board (tests) has no data dir to keep the file in. */
+export function createMemoryMachineSecrets(): MachineSecrets {
+  const machines = new Map<string, StoredMachineToken>();
+  return {
+    get: (instanceId) => machines.get(instanceId) ?? null,
+    set: (instanceId, token) => void machines.set(instanceId, token),
+    remove: (instanceId) => machines.delete(instanceId),
+  };
+}

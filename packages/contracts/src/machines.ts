@@ -362,6 +362,8 @@ export type RequestMachineUpdateInput = z.infer<typeof RequestMachineUpdateInput
 /** `GET /api/machines`. */
 export const MachinesResponse = z.object({
   machines: z.array(Machine),
+  /** Installs over SSH that are running, or ended and not yet dismissed; newest first. */
+  installs: z.array(MachineInstall),
   /** The commands to run on a machine the board can't reach over SSH: they install the runner and print a pairing code. */
   installCommand: z.string(),
   installCommandTailscale: z.string(),

@@ -23,6 +23,18 @@ export function removeServerFile(homeDir: string): void {
   }
 }
 
+/** The port in `homeDir`'s server file, as the server there last wrote it; null when there is none. Not checked. */
+export function recordedServerPort(homeDir: string): number | null {
+  try {
+    const port = Number(
+      new URL(ServerFile.parse(JSON.parse(readFileSync(join(homeDir, SERVER_FILE), "utf8"))).url).port,
+    );
+    return Number.isInteger(port) && port > 0 ? port : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The URL of a server that is running on `homeDir`, or null. A file left by a crashed server doesn't count. */
 export async function runningServerUrl(homeDir: string): Promise<string | null> {
   return (await runningServer(homeDir))?.url ?? null;

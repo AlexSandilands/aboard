@@ -45,6 +45,11 @@ export interface Config {
   worktreesDir: string;
   /** Where pasted images are stored, one folder per task. */
   attachmentsDir: string;
+  /**
+   * Where the headless server's release files are, instead of GitHub (`brandEnv("RELEASE_URL")`): a board uses it to
+   * install and update machines, a runner to update itself. For trying those without publishing a release.
+   */
+  releaseUrl?: string | null;
   /** The last LiteLLM price list fetched, with its fetch time (integrations/modelPrices.ts). Not backed up. */
   modelPricesPath: string;
 }
@@ -106,6 +111,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: readonly 
     worktreesDir: join(homeDir, "worktrees"),
     attachmentsDir: join(homeDir, "attachments"),
     modelPricesPath: join(homeDir, "model-prices.json"),
+    releaseUrl: env[brandEnv("RELEASE_URL")] || null,
     sessionDirs: {
       claudeDir: env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"),
       copilotDir: env.COPILOT_HOME || join(homedir(), ".copilot"),

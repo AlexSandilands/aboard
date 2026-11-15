@@ -82,13 +82,19 @@ export interface MachineClient {
   /**
    * A request to a paired runner's machine API with the board's token. The token is sent only once the address has
    * answered, just now, as the runner it belongs to, on a compatible protocol. A 401 throws `revoked`; other
-   * statuses are the caller's to read.
+   * statuses are the caller's to read. `anyProtocol` drops the protocol check, for the one request that is how a
+   * mismatch ends: the update.
    */
-  request(target: MachineTarget, path: string, init?: RequestInit): Promise<Response>;
+  request(target: MachineTarget, path: string, init?: RequestInit, options?: MachineRequestOptions): Promise<Response>;
   /** What the runner says our token is good for: the check that a pairing still stands. */
   session(target: MachineTarget): Promise<MachineSession>;
   /** Unpairs: tells the runner to drop our token if it can be reached, and forgets it here either way. */
   unpair(target: MachineTarget): Promise<void>;
+}
+
+export interface MachineRequestOptions {
+  /** Send even to a runner on another protocol version. Only the update request may: its shape never changes. */
+  anyProtocol?: boolean;
 }
 
 const TIMEOUT_MS = 10_000;
@@ -109,7 +115,7 @@ export function createMachineClient(deps: MachineClientDeps): MachineClient {
   const resolve = deps.resolve ?? resolveAll;
   const now = deps.now ?? (() => new Date());
   /** Origin → the instance id it proved to be, and when. */
-  const verified = new Map<string, { instanceId: string; at: number }>();
+  const verified = new Map<string, { instanceId: string; at: number; compatible: boolean }>();
 
   /**
    * The origins to try, in order. https goes anywhere: the certificate vouches for the host and encrypts the path.
@@ -211,17 +217,25 @@ export function createMachineClient(deps: MachineClientDeps): MachineClient {
   }
 
   /** The origin for `target`, proved (now, or within `VERIFIED_FOR_MS`) to be that runner on our protocol. */
-  async function verify(target: MachineTarget): Promise<string> {
+  async function verify(target: MachineTarget, anyProtocol: boolean): Promise<string> {
     const fresh = (origin: string) => {
       const known = verified.get(origin);
-      return known?.instanceId === target.instanceId && now().getTime() - known.at < VERIFIED_FOR_MS;
+      return (
+        known?.instanceId === target.instanceId &&
+        (known.compatible || anyProtocol) &&
+        now().getTime() - known.at < VERIFIED_FOR_MS
+      );
     };
     const proved = (await originsOf(target.url)).find(fresh);
     if (proved) return proved;
     const { origin, descriptor } = await reach(target.url);
     requireMachine(descriptor, target.instanceId, origin);
-    requireCompatible(descriptor);
-    verified.set(origin, { instanceId: target.instanceId, at: now().getTime() });
+    if (!anyProtocol) requireCompatible(descriptor);
+    verified.set(origin, {
+      instanceId: target.instanceId,
+      at: now().getTime(),
+      compatible: machineProtocolCompatible(MACHINE_PROTOCOL_VERSION, descriptor.protocolVersion),
+    });
     return origin;
   }
 
@@ -261,7 +275,7 @@ export function createMachineClient(deps: MachineClientDeps): MachineClient {
       return { ...descriptor, paired: true };
     },
 
-    async request(target, path, init = {}) {
+    async request(target, path, init = {}, options = {}) {
       // As the runner will read it: `/machine/../api/board` is not a machine path, and a token goes to no other.
       const { pathname, search, host } = new URL(path, "http://machine.invalid");
       if (host !== "machine.invalid" || !pathname.startsWith("/machine/")) {
@@ -269,7 +283,7 @@ export function createMachineClient(deps: MachineClientDeps): MachineClient {
       }
       const stored = deps.secrets.get(target.instanceId);
       if (!stored) throw new MachineClientError("not-paired", "This board isn't paired with that machine");
-      const origin = await verify(target);
+      const origin = await verify(target, options.anyProtocol === true);
       const headers = new Headers(init.headers);
       headers.set("authorization", `Bearer ${stored.token}`);
       const res = await send(origin, `${pathname}${search}`, { ...init, headers }).catch((error: unknown) => {

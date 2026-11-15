@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { BRAND, MACHINE_PROTOCOL_VERSION, MachineDescriptor, MachineSession } from "@repo/contracts";
+import { BRAND, MACHINE_PROTOCOL_VERSION, MachineDescriptor, MachineSession, MachineStatus } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { createTestHarness } from "../test/harness.ts";
 
@@ -32,7 +32,7 @@ describe("machine descriptor", () => {
       version: BRAND.version,
       protocolVersion: MACHINE_PROTOCOL_VERSION,
       role: "runner",
-      capabilities: ["pairing"],
+      capabilities: ["pairing", "status", "update"],
       paired: false,
     });
   });
@@ -90,6 +90,40 @@ describe("pairing over the machine API", () => {
     const { token } = await pair();
     expect((await remote("/machine/session", { method: "DELETE", headers: bearer(token) })).status).toBe(204);
     expect((await remote("/machine/session", { headers: bearer(token) })).status).toBe(401);
+  });
+});
+
+describe("status and updates over the machine API", () => {
+  it("answers a paired board with the runner's status, and nobody else", async () => {
+    const { remote, pair, bearer } = runner({
+      integrations: { runnerHost: { logins: { find: () => null } } },
+    });
+    expect((await remote("/machine/status")).status).toBe(401);
+    const { token } = await pair();
+    const res = await remote("/machine/status", { headers: bearer(token) });
+    expect(MachineStatus.parse(await res.json())).toMatchObject({
+      version: BRAND.version,
+      runsInFlight: 0,
+      logins: [{ name: "claude", state: "missing" }, { name: "codex" }, { name: "gh" }, { name: "git" }],
+      update: { state: "idle" },
+      selfUpdate: false,
+    });
+  });
+
+  it("takes an update request only from its board, for a real version, and says when it can't update itself", async () => {
+    const { remote, pair, bearer } = runner();
+    const update = (headers: Record<string, string>, json: unknown) =>
+      remote("/machine/update", { method: "POST", headers, json });
+    expect((await update({}, { version: "9.9.9" })).status).toBe(401);
+    const { token } = await pair();
+    expect((await update(bearer(token), { version: "../../etc" })).status).toBe(400);
+    // A runner under test wasn't installed by the script and runs under no service.
+    const refused = await update(bearer(token), { version: "9.9.9" });
+    expect(refused.status).toBe(409);
+    expect(await refused.text()).toContain("install script");
+    // Its own version is nothing to do.
+    const same = await update(bearer(token), { version: BRAND.version });
+    expect(await same.json()).toMatchObject({ state: "idle" });
   });
 });
 

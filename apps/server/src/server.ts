@@ -16,6 +16,11 @@ export interface RunningServer {
   url: string;
   /** Stops pollers, closes the HTTP server (dropping open SSE streams) and the database. */
   close(): Promise<void>;
+  /**
+   * Registers what to do when a runner has updated itself and must be started again: the caller closes the server
+   * and exits so that its service restarts it (integrations/machines/selfUpdate.ts).
+   */
+  onRestart(restart: () => void): void;
 }
 
 /**
@@ -86,6 +91,7 @@ export async function startServer(config: Config): Promise<RunningServer> {
   return {
     port: runtime.port,
     url,
+    onRestart: (restart) => ctx.integrations.runnerHost.onRestart(restart),
     close() {
       closing ??= new Promise<void>((resolve) => {
         ctx.integrations.stop();

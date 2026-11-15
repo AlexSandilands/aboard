@@ -1,5 +1,6 @@
 import { BRAND } from "@repo/contracts";
 import { loadConfig } from "./config.ts";
+import { RESTART_EXIT_CODE } from "./integrations/machines/selfUpdate.ts";
 import { startServer } from "./server.ts";
 
 /** Set when running as an Electron utilityProcess; the desktop shell talks to us over it. */
@@ -26,12 +27,15 @@ async function start(args: string[]): Promise<void> {
   console.log(`[${BRAND.id}] listening on ${server.url}${role}  (data: ${config.homeDir})`);
   console.log(`[${BRAND.id}] MCP endpoint: ${server.url}/mcp`);
 
-  async function shutdown() {
+  async function shutdown(code = 0) {
     await server.close();
-    process.exit(0);
+    process.exit(code);
   }
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  // A runner that has put a new release in place exits with a failure code, which is what makes its service start
+  // it again, now on that release.
+  server.onRestart(() => void shutdown(RESTART_EXIT_CODE));
+  process.on("SIGINT", () => void shutdown());
+  process.on("SIGTERM", () => void shutdown());
 
   parentPort?.on("message", ({ data }) => {
     if (data === "shutdown") void shutdown();

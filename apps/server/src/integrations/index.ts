@@ -33,6 +33,12 @@ import type { RunAgent } from "./headlessAgent.ts";
 import type { RunImport } from "./headlessImport.ts";
 import type { RunHeadless } from "./headlessReview.ts";
 import { createIssueImporter } from "./issueImport.ts";
+import { createMachineClient } from "./machineClient.ts";
+import { createMachineSecrets, createMemoryMachineSecrets } from "./machineSecrets.ts";
+import { createMachinesIntegration } from "./machines/index.ts";
+import { createLoginDetector, type LoginProbes } from "./machines/logins.ts";
+import { createSelfUpdater, type SelfUpdateDeps } from "./machines/selfUpdate.ts";
+import { createRouteOpener, type TunnelDeps } from "./machines/tunnel.ts";
 import { createModelPriceService } from "./modelPrices.ts";
 import { createProviders, type ProviderProbes } from "./providers.ts";
 import { createReviewFallbacks } from "./reviewFallbacks.ts";
@@ -43,7 +49,7 @@ import { createSettingsAsker } from "./settingsAsk.ts";
 import { createT3Integration, type FetchFn } from "./t3.ts";
 import type { OpenSocket } from "./t3Rpc.ts";
 import { spawnTerminal, systemTerminalHost, type SpawnTerminal, type TerminalHost } from "./terminal.ts";
-import type { Integrations } from "./types.ts";
+import type { Integrations, RunnerHost } from "./types.ts";
 import type { Logger } from "./util.ts";
 import { AppError } from "../errors.ts";
 
@@ -52,8 +58,9 @@ export interface IntegrationDeps {
     Config,
     "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir" | "attachmentsDir" | "port" | "webPort"
   > &
-    Partial<Pick<Config, "token">> &
-    Partial<Pick<Config, "webDist">> & {
+    Partial<Pick<Config, "token" | "webDist" | "role" | "releaseUrl">> & {
+      /** `<data dir>/machine-tokens.json`; null keeps the tokens in memory (an in-memory board). */
+      machineSecretsPath?: string | null;
       /** This board's id (instance.ts), which owns its folder in the backup repo. */
       instanceId: string;
       /** Where the backup setup offers to keep the backup clone: `<data dir>/backup`. */
@@ -104,6 +111,10 @@ export interface IntegrationOverrides {
   runScript?: RunScript;
   /** The clock for notifications (retention, quiet hours; read by the services, see createContext). */
   now?: () => Date;
+  /** Reaching connected machines: `ssh`, the tunnel's ports, the network and name lookups. */
+  machines?: TunnelDeps & { fetch?: typeof fetch; resolve?: (hostname: string) => Promise<string[]> };
+  /** A runner's own checks and update: the programs it probes for logins, and what an update downloads and runs. */
+  runnerHost?: { logins?: Partial<LoginProbes>; update?: Partial<SelfUpdateDeps> };
   log?: Logger;
 }
 
@@ -286,6 +297,38 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.now ? { now: overrides.now } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const machineSecrets = deps.config.machineSecretsPath
+    ? createMachineSecrets(deps.config.machineSecretsPath)
+    : createMemoryMachineSecrets();
+  const machines = createMachinesIntegration({
+    services: deps.services,
+    bus: deps.bus,
+    secrets: machineSecrets,
+    client: createMachineClient({
+      secrets: machineSecrets,
+      board: () => ({ instanceId: deps.config.instanceId, name: deps.services().settings.get().machineName }),
+      ...(overrides.machines?.fetch ? { fetch: overrides.machines.fetch } : {}),
+      ...(overrides.machines?.resolve ? { resolve: overrides.machines.resolve } : {}),
+    }),
+    open: createRouteOpener(overrides.machines),
+    ...(overrides.machines?.spawn ? { spawnSsh: overrides.machines.spawn } : {}),
+    releaseUrl: deps.config.releaseUrl ?? null,
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
+  // What a runner answers its board with. Built in either role (it costs nothing until asked), used by a runner's.
+  let restartRunner: (() => void) | null = null;
+  const runnerHost: RunnerHost = {
+    logins: createLoginDetector(overrides.runnerHost?.logins),
+    updater: createSelfUpdater({
+      runsInFlight: () => deps.services().autopilot.status().active.length,
+      restart: () => restartRunner?.(),
+      ...(overrides.log ? { log: overrides.log } : {}),
+      ...overrides.runnerHost?.update,
+    }),
+    onRestart: (restart) => {
+      restartRunner = restart;
+    },
+  };
   let started = false;
   const usageSweep = createUsageSweep(() => deps.services().usage, overrides.log ?? console);
 
@@ -296,6 +339,8 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     prAgentHints: (pr) => hosts.agentHints(pr),
     runTools,
     modelPrices,
+    machines,
+    runnerHost,
     start() {
       if (!deps.config.pollers || started) return;
       started = true;
@@ -309,6 +354,8 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       worktrees.start();
       usageSweep.start();
       modelPrices.start();
+      // A runner connects to no machines: it is one.
+      if (deps.config.role !== "runner") machines.start();
       providers.seedFromDetection().catch((error: unknown) => {
         (overrides.log ?? console).warn(`[providers] couldn't add the providers detection found: ${messageOf(error)}`);
       });
@@ -325,6 +372,8 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       worktrees.stop();
       usageSweep.stop();
       modelPrices.stop();
+      machines.stop();
+      runnerHost.updater.stop();
     },
     t3ThreadUsage: (threadId) => t3.threadUsage(threadId),
     sessionTranscript: (taskId, input) => transcripts.read(taskId, input),
