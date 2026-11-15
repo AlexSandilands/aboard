@@ -113,7 +113,11 @@ describe("the runner install script", () => {
     expect(runnerInstallCommand("1.4.2")).toMatch(/^curl -fsSL https:\/\/.+\/v1\.4\.2\/install-runner\.sh \| sh$/);
     expect(runnerInstallCommand("1.4.2", { tailscale: true })).toMatch(/\| sh -s -- --tailscale$/);
     expect(runnerInstallCommand("1.4.2", { tailscale: true, baseUrl: "http://files.test/r" })).toBe(
-      "curl -fsSL http://files.test/r/install-runner.sh | sh -s -- --base-url 'http://files.test/r' --tailscale",
+      "curl -fsSL http://files.test/r/install-runner.sh | sh -s -- --base-url http://files.test/r --tailscale",
+    );
+    // A URL the shell would split or expand is one quoted word in both places.
+    expect(runnerInstallCommand("1.4.2", { baseUrl: "file:///tmp/my release" })).toBe(
+      "curl -fsSL 'file:///tmp/my release/install-runner.sh' | sh -s -- --base-url 'file:///tmp/my release'",
     );
   });
 });

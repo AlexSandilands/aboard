@@ -85,6 +85,14 @@ describe("the SSH install", () => {
     expect(log.join("\n")).not.toContain(pair.code);
   });
 
+  it("finds the result behind something printed before it on the same line", async () => {
+    const { result, log } = await install({
+      stdout: `Paired.${RUNNER_INSTALL_RESULT_PREFIX}${JSON.stringify(pair)}\n`,
+    });
+    expect(result).toEqual(pair);
+    expect(log).toEqual([]);
+  });
+
   it("drops a Tailscale address that isn't one", async () => {
     const { result } = await install({
       stdout: `${RUNNER_INSTALL_RESULT_PREFIX}${JSON.stringify({ ...pair, tailscaleIp: "evil.example.com/x" })}\n`,

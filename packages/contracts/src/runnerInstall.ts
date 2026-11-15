@@ -46,13 +46,16 @@ export function runnerInstallCommand(
   version: string,
   options: { tailscale?: boolean; /** The release files somewhere other than GitHub. */ baseUrl?: string | null } = {},
 ): string {
+  // One word to the shell, whatever the URL holds; a plain one stays as it is, so the usual command reads cleanly.
+  const word = (value: string) => (/^[\w@%+=:,./-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`);
   const base = options.baseUrl || serverReleaseBaseUrl(version) || "<release URL>";
   // The script must be told too, or it would download the tarball from GitHub.
   const args = [
-    ...(options.baseUrl ? ["--base-url", `'${options.baseUrl.replaceAll("'", "'\\''")}'`] : []),
+    ...(options.baseUrl ? ["--base-url", word(options.baseUrl)] : []),
     ...(options.tailscale ? ["--tailscale"] : []),
   ];
-  return `curl -fsSL ${base}/${RUNNER_INSTALL_SCRIPT} | sh${args.length > 0 ? ` -s -- ${args.join(" ")}` : ""}`;
+  const script = word(`${base}/${RUNNER_INSTALL_SCRIPT}`);
+  return `curl -fsSL ${script} | sh${args.length > 0 ? ` -s -- ${args.join(" ")}` : ""}`;
 }
 
 /**

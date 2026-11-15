@@ -147,6 +147,9 @@ describe.skipIf(process.platform === "win32")("a runner updating itself", () => 
   it("has nothing to do for the version it runs, and refuses when it wasn't installed by the script", () => {
     const { updater } = installed();
     expect(updater.request({ version: BRAND.version, now: false })).toMatchObject({ state: "idle" });
+    // Never back a version, whoever asks: a pre-release of the version it runs is older than it.
+    expect(() => updater.request({ version: `${BRAND.version}-rc.1`, now: true })).toThrow(/never moved back/);
+    expect(updater.state().state).toBe("idle");
     const byHand = createSelfUpdater({ env: {}, runsInFlight: () => 0, restart: () => {}, log: quiet });
     expect(byHand.available()).toBe(false);
     expect(() => byHand.request({ version: NEXT, now: true })).toThrow(AppError);

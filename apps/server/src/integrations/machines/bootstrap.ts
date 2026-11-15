@@ -78,10 +78,12 @@ export async function runSshInstall(
     hooks.onLog(text);
   };
   const line = (text: string) => {
-    if (text.startsWith(RUNNER_INSTALL_RESULT_PREFIX)) {
+    // Wherever it is in the line: something the remote printed without a newline may sit before it.
+    const at = text.indexOf(RUNNER_INSTALL_RESULT_PREFIX);
+    if (at >= 0) {
       let json: unknown = null;
       try {
-        json = JSON.parse(text.slice(RUNNER_INSTALL_RESULT_PREFIX.length));
+        json = JSON.parse(text.slice(at + RUNNER_INSTALL_RESULT_PREFIX.length));
       } catch {
         // Reported below as an install that ended without a code.
       }

@@ -201,7 +201,7 @@ export function AddMachineDialog({
                   </>
                 ) : (
                   <>
-                    <span>1. On the machine, start a runner of this version and make a code:</span>
+                    <span>1. On the machine, with a runner of this version running, make a code:</span>
                     <CommandSnippet command={`${SERVER_LAUNCHER_NAME} pair`} />
                     <span className="text-xs text-muted-foreground">
                       This board runs from source, so there is no release for an install command to download.
