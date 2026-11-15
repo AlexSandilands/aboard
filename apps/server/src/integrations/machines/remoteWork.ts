@@ -49,8 +49,11 @@ export interface RemoteWork {
   transcript(ref: AgentSessionRef, offset: number): Promise<TranscriptRead> | null;
   /** Sends the board's settings to a machine when they differ from what it was last sent. */
   syncSettings(machineId: string): Promise<void>;
-  /** Copies a task's pasted images to a machine, so the paths in its prompts resolve there. Never throws. */
-  sendImages(taskId: string, machineId: string): Promise<void>;
+  /**
+   * Copies a task's pasted images to a machine, so the paths in its prompts resolve there. Never throws. `again`
+   * sends them whatever was sent before: after a hand-over, since the machine drops a task's images with its copy.
+   */
+  sendImages(taskId: string, machineId: string, opts?: { again?: boolean }): Promise<void>;
   /**
    * What the machine can't see of a task's work: its branches in the board's checkout with commits that aren't on
    * origin, as a sentence; null when there are none (or no checkout to look in).
@@ -81,7 +84,10 @@ export function createRemoteWork(deps: {
   const services = () => deps.services();
   /** Per machine, the settings last sent, so they go only when they change. */
   const sentSettings = new Map<string, string>();
-  /** Images a machine has, as `<machine>:<image>`, so each is sent once while the board runs. */
+  /**
+   * Images a machine has, as `<machine>:<image>`, so the send before each run of one hold skips them. Only good for
+   * as long as the machine holds the task: a hand-over sends them all again.
+   */
   const sentImages = new Set<string>();
 
   const json = (method: string, body: unknown): RequestInit => ({
@@ -178,10 +184,12 @@ export function createRemoteWork(deps: {
 
   const syncSettings: RemoteWork["syncSettings"] = async (machineId) => {
     const settings = machineSettingsOf(services().settings.get());
-    const text = JSON.stringify(settings);
+    // With the version the machine was last seen on: one that was updated since (or reinstalled) is sent them again,
+    // whatever it was sent before.
+    const text = `${services().machines.get(machineId).version ?? ""}\n${JSON.stringify(settings)}`;
     if (sentSettings.get(machineId) === text) return;
     const res = await deps.machines.request(machineId, MACHINE_SETTINGS_PATH, json("PUT", { settings }));
-    // A machine from before this (a 404) works by its own settings until it is updated.
+    // A machine from before this (a 404) works by its own settings until it is updated, which changes its version.
     if (res.ok || res.status === 404) sentSettings.set(machineId, text);
   };
 
@@ -217,10 +225,10 @@ export function createRemoteWork(deps: {
     }
   };
 
-  const sendImages: RemoteWork["sendImages"] = async (taskId, machineId) => {
+  const sendImages: RemoteWork["sendImages"] = async (taskId, machineId, opts = {}) => {
     const s = services();
     for (const image of s.attachments.forTask(taskId)) {
-      if (sentImages.has(`${machineId}:${image.id}`)) continue;
+      if (!opts.again && sentImages.has(`${machineId}:${image.id}`)) continue;
       // One at a time, each on its own: a file that is gone, or a link that dropped, doesn't keep the rest back.
       try {
         const { bytes } = s.attachments.read(image.id);

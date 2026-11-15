@@ -231,7 +231,8 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
     } catch (error) {
       log.warn(`[machines] after handing over to ${machineName}: ${messageOf(error)}`);
     }
-    await deps.work?.sendImages(taskId, machineId);
+    // All of them: the machine dropped whatever it had of the task when it last gave it back.
+    await deps.work?.sendImages(taskId, machineId, { again: true });
   }
 
   const sleep = (ms: number) =>

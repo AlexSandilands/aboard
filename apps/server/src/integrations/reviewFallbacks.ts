@@ -68,8 +68,9 @@ export function createReviewFallbacks(deps: {
   t3: Pick<T3Integration, "sendToThread" | "threadWorkspace">;
   runHeadless?: RunHeadless;
   /**
-   * On a runner: the folder a task's change is in, which is the worktree its last session ran in (the project's own
-   * folder there is a clone nobody works in). Null when there is none to prefer.
+   * On a runner: the folder a task's change is in, which is the worktree its last session ran in. The project's own
+   * folder there is a clone nobody works in, so with this set a task with no such worktree is not reviewed: the
+   * round fails with the reason.
    */
   worktreeOf?: (task: TaskSummary) => string | null;
   /**
@@ -126,8 +127,16 @@ export function createReviewFallbacks(deps: {
     try {
       const project = s.projects.get(task.projectId);
       const workspace = thread ? await deps.t3.threadWorkspace(thread) : null;
-      const cwd = workspace?.worktreePath ?? deps.worktreeOf?.(task) ?? project.workspaceRoot;
-      if (!cwd) throw new Error(`${project.title} has no workspace folder to review in`);
+      // On a runner the project's own folder is a clone nobody works in, on the default branch: a reviewer there
+      // would find no change and pass the round unread. Without the task's worktree the round fails, saying so.
+      const cwd = workspace?.worktreePath ?? (deps.worktreeOf ? deps.worktreeOf(task) : project.workspaceRoot);
+      if (!cwd) {
+        throw new Error(
+          deps.worktreeOf
+            ? `${taskLabel(task)} has no worktree on this machine to review in: its work was done elsewhere, or its worktree was cleaned up`
+            : `${project.title} has no workspace folder to review in`,
+        );
+      }
       const settings = s.settings.get();
       const resolved = s.reviews.boardReviewerModel(task.id);
       // No provider that can run it: the round stalls with the reason, rather than running something else.

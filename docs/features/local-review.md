@@ -201,7 +201,9 @@ A task handed to a connected machine is reviewed there, where its change is
 ([remote machines](remote-machines.md#work-on-the-machine)). Its rounds and findings are part of what the machine
 holds, so they open on the machine by the board's settings (auto-review, the round limit, the reviewer model,
 which the board sends it), and the board shows them as they arrive. The machine's own watchdog runs these
-fallbacks, with the board reviewer working in the task's worktree there; the board's watchdog skips the task.
+fallbacks, with the board reviewer working in the task's worktree there (a task with no worktree on the machine
+fails its round with that reason instead of being reviewed in a clone that has no change); the board's watchdog
+skips the task.
 Run review, a finding resolved in the panel and `submit_review` on the board are passed on to the machine like any
 edit. A T3 thread is never nudged from the machine, which has none.
 

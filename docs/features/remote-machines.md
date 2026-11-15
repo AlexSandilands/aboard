@@ -686,14 +686,17 @@ machine reads too.
 **The board's settings.** A runner's own settings were never set by anyone, so the board sends the ones a machine
 works by (`MACHINE_SETTING_KEYS`): auto-review, the round limit, the board reviewer and its budget, the built-in
 review skill, the operation models, tiers and profiles, which providers are on, and ticket systems. They go with
-`PUT /machine/settings` before a hand-over and a run, and on the next poll after they change. Where each CLI is
+`PUT /machine/settings` before a hand-over and a run, and on the next poll after they change or after the machine
+turns up on another version (an update, a reinstall). Where each CLI is
 (`cliPath`) stays the machine's own, and a review skill kept in a file on the board isn't sent. A board's Autopilot
 agent defaults (budget, timeout) are resolved on the board and travel in the run's options.
 
 **Review rounds.** Rounds are part of the working copy, so they open where the rules run: an agent on the machine
 moving the task to Review opens round 1 there, by the board's auto-review setting. The runner's own watchdog
-(`reviewFallbacks`) picks up a round nobody ran and starts the board reviewer in the task's worktree there (the
-folder of its newest session that still exists; the project's clone otherwise). The board's watchdog leaves a held
+(`reviewFallbacks`) picks up a round nobody ran and starts the board reviewer in the task's worktree there: the
+folder of its newest session that ran on this machine and still exists. A task with none (its work was done on the
+board's machine, or the worktree was cleaned up) is not reviewed in the project's clone, which sits on the default
+branch and would show the reviewer no change: the round fails, saying the task has no worktree on the machine. The board's watchdog leaves a held
 task's rounds alone. What the board does to a round is an [edit](#edits-from-the-board).
 
 **Commands and scripts.** A custom automation's shell or script action for a held task is a job: it runs in the
@@ -722,7 +725,8 @@ back, for as long as the machine is connected.
 
 A task's pasted images are files in the board's data dir. After a hand-over, and again before each run, the board
 sends the ones the machine doesn't have (`PUT /machine/attachments/:id`); the runner keeps them under the board's
-ids in its own attachments folder. So the paths an agent is given there (`get_task`'s Images, the reviewer's
+ids in its own attachments folder, and drops them with the task's copy when the task is taken back, so every
+hand-over sends them all. So the paths an agent is given there (`get_task`'s Images, the reviewer's
 `--add-dir`) are the runner's own. Images attached on the machine stay there.
 
 ### Tools on a machine

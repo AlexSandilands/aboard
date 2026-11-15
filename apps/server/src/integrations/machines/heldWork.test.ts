@@ -85,6 +85,28 @@ describe("review rounds of a task a machine holds", () => {
     await here.idle();
     expect(asked).toEqual([]);
 
+    // With no worktree of the task on the machine there is nothing to read: the round fails rather than pass unread.
+    const nowhere = createReviewFallbacks({
+      services: () => runner.services,
+      t3: { sendToThread: () => Promise.resolve(), threadWorkspace: () => Promise.resolve(null) },
+      runHeadless: (request) => {
+        asked.push(request);
+        return Promise.resolve({ summary: "Clean", findings: [], costUsd: 0, usage: [] });
+      },
+      worktreeOf: () => null,
+      graceMs: 0,
+      agentGraceMs: 0,
+      log: { warn: () => {} },
+    });
+    await nowhere.tick();
+    await nowhere.idle();
+    expect(asked).toEqual([]);
+    expect(runner.services.reviews.list(task.id)[0]).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("has no worktree on this machine to review in"),
+    });
+    runner.services.reviews.openRound(task.id, { trigger: "manual", actor: "user", force: true });
+
     const there = reviewer(() => runner.services);
     await there.tick();
     await there.idle();
@@ -282,6 +304,24 @@ describe("what the board shows of work on a machine", () => {
     expect([...readFileSync(there[0]!.path)]).toEqual([...png]);
     // Not the board's folder: the machine's own.
     expect(there[0]!.path).not.toBe(board.services.attachments.forTask(task.id)[0]!.path);
+
+    // Taken back, the machine drops the task and its images; handed over again, it gets them again.
+    await board.integrations.machineSync.release(task.id, {}, "user");
+    expect(runner.services.attachments.forTask(task.id)).toEqual([]);
+    await board.integrations.machineSync.handOver(task.id, machine.id, "user");
+    expect(runner.services.attachments.forTask(task.id)).toMatchObject([{ id: image.id }]);
+  });
+
+  it("sends its settings again to a machine that was updated since", async () => {
+    const { board, runner, machine, sync } = await setup();
+    expect(runner.services.settings.get().autoReview).toBe(true);
+    // The machine's own settings went back to what they were (a reinstall), and it answers as a newer version.
+    runner.services.settings.update({ autoReview: false });
+    await sync();
+    expect(runner.services.settings.get().autoReview).toBe(false);
+    board.services.machines.observe(machine.id, { version: "9.9.9", protocolVersion: 1, platform: null, logins: null });
+    await sync();
+    expect(runner.services.settings.get().autoReview).toBe(true);
   });
 });
 
