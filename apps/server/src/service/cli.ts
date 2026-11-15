@@ -52,7 +52,7 @@ export interface ServiceDeps {
 const READY_TIMEOUT_MS = 20_000;
 
 /** The variables the service keeps from the shell that installed it. */
-const KEPT_ENV = ["PATH", brandEnv("HOME"), brandEnv("PORT"), brandEnv("BIND")];
+const KEPT_ENV = ["PATH", brandEnv("HOME"), brandEnv("PORT"), brandEnv("BIND"), brandEnv("RELEASE_URL")];
 
 function spec(deps: ServiceDeps, command: string[]): ServiceSpec {
   const environment: Record<string, string> = {};
@@ -60,6 +60,8 @@ function spec(deps: ServiceDeps, command: string[]): ServiceSpec {
     const value = deps.env[key];
     if (value) environment[key] = value;
   }
+  // How the runner knows a service will start it again when it exits to update (integrations/machines/selfUpdate.ts).
+  environment[brandEnv("SERVICE")] = "1";
   return { command: [...command, "--runner"], environment, logFile: join(deps.dataDir, "logs", "runner.log") };
 }
 

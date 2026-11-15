@@ -1,6 +1,7 @@
 import { BRAND } from "@repo/contracts";
 import { loadConfig, type Config } from "./config.ts";
 import { createContext } from "./context.ts";
+import { recordedServerPort } from "./serverFile.ts";
 import { PAIRING_CODE_TTL_MS, type MachineAuthService } from "./services/machineAuth.ts";
 
 // `<id>-server pair | pair list | pair revoke`: pairing a runner with a board, done on the runner itself
@@ -9,6 +10,7 @@ import { PAIRING_CODE_TTL_MS, type MachineAuthService } from "./services/machine
 
 export const PAIR_USAGE = `Usage:
   ${BRAND.id}-server pair                  print a one-time code to pair this machine with a board
+  ${BRAND.id}-server pair --json           the same as JSON, with the runner's port and id (the SSH install reads it)
   ${BRAND.id}-server pair list             the board this machine is paired with
   ${BRAND.id}-server pair revoke <id>      unpair: that board's token stops working at once
   ${BRAND.id}-server pair revoke --all     unpair every board and cancel any code not yet used`;
@@ -16,11 +18,21 @@ export const PAIR_USAGE = `Usage:
 interface PairDeps {
   auth: MachineAuthService;
   machineName: string;
+  instanceId: string;
+  /** The port the runner listens on: the one it recorded when it started, else the one configured. */
+  port: number;
   out: (line: string) => void;
 }
 
-function run(args: string[], { auth, machineName, out }: PairDeps): number {
+function run(args: string[], { auth, machineName, instanceId, port, out }: PairDeps): number {
   const [command, ...rest] = args;
+  // `--json [--tailscale-ip <address>]`: one line the board's SSH install parses (RunnerPairOutput). The address is
+  // passed in by the install script, which is what knows whether the runner was asked to listen on the tailnet.
+  if (command === "--json" && (rest.length === 0 || (rest.length === 2 && rest[0] === "--tailscale-ip"))) {
+    const { code } = auth.createPairingCode();
+    out(JSON.stringify({ code, port, instanceId, name: machineName, tailscaleIp: rest[1] || null }));
+    return 0;
+  }
   if (command === undefined) {
     const { code } = auth.createPairingCode();
     const [paired] = auth.pairings();
@@ -72,6 +84,8 @@ export function runPairCommand(
     return run(args, {
       auth: ctx.services.machineAuth,
       machineName: ctx.services.settings.get().machineName,
+      instanceId: ctx.instanceId,
+      port: recordedServerPort(config.homeDir) ?? config.port,
       out: options.out ?? console.log,
     });
   } finally {

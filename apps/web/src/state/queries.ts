@@ -102,6 +102,7 @@ export const queryKeys = {
   automationDrafts: ["automationDrafts"] as const,
   digests: ["digests"] as const,
   suggestions: ["suggestions"] as const,
+  machines: ["machines"] as const,
 };
 
 /** Marks a Where it runs save in flight, so the event stream doesn't refetch the switches between its writes. */
@@ -723,6 +724,10 @@ export function useBoardEvents() {
       }
       if (event.type === "suggestions.changed") {
         void queryClient.invalidateQueries({ queryKey: queryKeys.suggestions });
+      }
+      // A machine was added, changed or removed, or its connection or install moved on.
+      if (event.type === "machines.changed") {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.machines });
       }
       // Added, removed or switched elsewhere (another window, the migration's detection pass): the list follows, and
       // detection runs again since a new CLI path or provider changes what it checks.

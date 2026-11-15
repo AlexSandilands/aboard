@@ -703,6 +703,8 @@ export const BoardEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("providers.changed"), providers: ProviderSettings }),
   /** The whole board was replaced (restored from a backup); clients refetch everything. */
   z.object({ type: z.literal("board.reset") }),
+  /** A connected machine was added, changed or removed, or its connection changed; Settings refetches the list. */
+  z.object({ type: z.literal("machines.changed") }),
 ]);
 export type BoardEvent = z.infer<typeof BoardEvent>;
 

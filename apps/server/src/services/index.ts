@@ -31,6 +31,7 @@ import { createImportsService, type ImportsModule } from "./imports.ts";
 import { createLabelsService } from "./labels.ts";
 import { createLinksService, type LinksModule } from "./links.ts";
 import { createMachineAuthService } from "./machineAuth.ts";
+import { createMachinesService } from "./machines.ts";
 import { createNotificationsService } from "./notifications.ts";
 import { createPlans, type PlansModule } from "./plans.ts";
 import { createProjectsService } from "./projects.ts";
@@ -206,6 +207,7 @@ export function createServices(deps: ServiceDeps): Services {
     social: createSocialService(core, { resolveTask: (ref) => tasks.service.resolveId(ref) }),
     attention,
     machineAuth: createMachineAuthService(core),
+    machines: createMachinesService(core),
     repoPrReviews: createRepoPrReviewsService(core, { notifications }),
     autopilot: createAutopilotService(core, {
       automations,

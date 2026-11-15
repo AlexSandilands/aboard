@@ -59,6 +59,8 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 | `brandEnv("ROLE")`        | `board`                     | `runner` (or the `--runner` argument) starts the headless runner, which serves no web app (features/remote-machines.md) |
 | `brandEnv("BIND")`        | `loopback`                  | Runner only: `private` listens on every interface and serves peers on this machine, a LAN or the tailnet (features/remote-machines.md). A board refuses it |
 | `brandEnv("LAUNCHER")`    | none                        | Set by the headless release's launcher to its own path, for `service install` (features/remote-machines.md) |
+| `brandEnv("SERVICE")`     | none                        | `1` in the runner's service, set by `service install`: how a runner knows something will start it again when it exits to update (features/remote-machines.md) |
+| `brandEnv("RELEASE_URL")` | the GitHub release          | Where the headless server's release files are. A board installs and updates machines from it, a runner updates itself from it. For trying those without publishing a release (features/remote-machines.md) |
 | `brandEnv("DEMO")`        | off                         | `1` registers `/api/demo` (`http/routes/demo.ts`), which sets PR checks and pretend Autopilot runs for recording the README demo. Only the isolated sandbox sets it |
 | `brandEnv("DEV_URL")`     | none                        | Desktop only: load this URL (Vite) and attach instead of spawning  |
 | `brandEnv("USER_HOME")`   | the OS home folder          | Where global skills are read and installed (`.claude/skills`, …). The sandbox points it at its own folder, and then the board skills ignore `CLAUDE_CONFIG_DIR`, `COPILOT_HOME` and `CODEX_HOME` |
@@ -148,6 +150,7 @@ ORM.
 | `task_relations`  | "Blocker blocks blocked" pairs, across projects; cascade on delete ([relations](features/relations.md))                       |
 | `task_labels`     | A task's labels, normalized; one row per task and label ([labels](features/labels.md))                                        |
 | `attention_dismissals` | Attention flags the user dismissed: task, reason key, the fingerprint of the state dismissed ([task lifecycle](features/task-lifecycle.md#dismissing-flags)) |
+| `machines` | The machines a board is connected to: instance id, name, prefix, ordered routes and what each last said of itself ([remote machines](features/remote-machines.md#connecting-a-machine)). Not part of a backup; the token for each is in `machine-tokens.json` |
 | `machine_pairing_codes`, `machine_tokens` | A runner's pairing state: the one-time code not yet used and the paired board's token, both as SHA-256 hashes ([remote machines](features/remote-machines.md#pairing)). Not part of a backup |
 | `label_colors`    | Label colour overrides (a hue); labels without a row take a hue hashed from their name                                        |
 | `task_reviews`    | Local review rounds: round, cycle, status, reviewer, summary                                                                  |
