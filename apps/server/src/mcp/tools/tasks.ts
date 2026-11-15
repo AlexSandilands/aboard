@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  taskLabel,
   classifyLink,
   CloseTaskInput,
   isT3ThreadId,
@@ -205,11 +206,11 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor,
           ...(args.manual ? { manual: true } : {}),
           actor: actor(args.actor),
         });
-        const where = task.parent ? ` in epic #${task.parent.number}` : "";
+        const where = task.parent ? ` in epic ${taskLabel(task.parent)}` : "";
         const plan = task.progress.total ? ` with its ${task.progress.total}-step plan` : "";
         const from = template ? ` from template ${template.name}${plan}` : "";
         return textResult(
-          `${newProjectNotice(project, created, "this task")}Added #${task.number} "${task.title}" to Backlog in ${project.title}${where}${from}.${note}`,
+          `${newProjectNotice(project, created, "this task")}Added ${taskLabel(task)} "${task.title}" to Backlog in ${project.title}${where}${from}.${note}`,
         );
       }),
   );
@@ -281,7 +282,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor,
         return taskResult(
           services,
           task.id,
-          `${newProjectNotice(project, created, "this task")}Created task #${task.number} in ${project.title}.${note}`,
+          `${newProjectNotice(project, created, "this task")}Created task ${taskLabel(task)} in ${project.title}.${note}`,
           {
             planningHints: true,
           },
@@ -322,17 +323,18 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor,
         // Check every task first, so a bad reference doesn't leave a half-filled epic behind.
         const children = (args.tasks ?? []).map((ref) => services.tasks.summary(services.tasks.resolveId(ref)));
         for (const child of children) {
-          if (child.kind === "epic") throw new AppError("VALIDATION", `#${child.number} is an epic; epics don't nest`);
+          if (child.kind === "epic")
+            throw new AppError("VALIDATION", `${taskLabel(child)} is an epic; epics don't nest`);
           if (child.projectId !== project.id) {
             throw new AppError(
               "VALIDATION",
-              `#${child.number} is in another project; an epic's tasks share its project`,
+              `${taskLabel(child)} is in another project; an epic's tasks share its project`,
             );
           }
           if (child.parent) {
             throw new AppError(
               "VALIDATION",
-              `#${child.number} is already in epic #${child.parent.number}. To move it, call update_task(task, epic) after creating this epic.`,
+              `${taskLabel(child)} is already in epic ${taskLabel(child.parent)}. To move it, call update_task(task, epic) after creating this epic.`,
             );
           }
         }
@@ -348,8 +350,8 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor,
           children.map((c) => c.id),
           actor(args.actor),
         );
-        const added = children.length ? ` with ${children.map((c) => `#${c.number}`).join(", ")}` : "";
-        const headline = `${newProjectNotice(project, created, "this epic")}Created epic #${epic.number} in ${project.title}${added}.${note}`;
+        const added = children.length ? ` with ${children.map((c) => taskLabel(c)).join(", ")}` : "";
+        const headline = `${newProjectNotice(project, created, "this epic")}Created epic ${taskLabel(epic)} in ${project.title}${added}.${note}`;
         if (args.delivery) {
           try {
             await ctx.integrations.setEpicDelivery(epic.id, args.delivery, actor(args.actor));
@@ -402,10 +404,10 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor,
           // Entering Review with every PR already merged completes the task straight away.
           const moved =
             summary.kind === "epic"
-              ? `Marked #${summary.number}'s branch merged into the default branch; the epic is ${statusLabel(summary.status)}.`
+              ? `Marked ${taskLabel(summary)}'s branch merged into the default branch; the epic is ${statusLabel(summary.status)}.`
               : summary.status === args.status
-                ? `Moved #${summary.number} to ${statusLabel(summary.status)}.`
-                : `Moved #${summary.number} to ${statusLabel(args.status)}; its PRs are already merged, so it went on to ${statusLabel(summary.status)}.`;
+                ? `Moved ${taskLabel(summary)} to ${statusLabel(summary.status)}.`
+                : `Moved ${taskLabel(summary)} to ${statusLabel(args.status)}; its PRs are already merged, so it went on to ${statusLabel(summary.status)}.`;
           const review = summary.status === "review" ? openRoundInstructions(services, id) : null;
           // The PR was opened before the loop (the old order): it can be reviewed on GitHub while the loop runs.
           const early =
@@ -420,7 +422,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor,
           return taskResult(services, id, [moved, screenshots, early, review].filter(Boolean).join("\n\n"), {
             closing: summary.kind !== "epic" && summary.status === "done" && !wasDone,
             ...(summary.status === "in_progress" && args.status === "in_progress"
-              ? { selfLink: { harness: harnessOfClient(client()), label: `Implementing #${summary.number}` } }
+              ? { selfLink: { harness: harnessOfClient(client()), label: `Implementing ${taskLabel(summary)}` } }
               : {}),
           });
         },
@@ -455,7 +457,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor,
           { resolution: input.resolution, ...(byTaskId ? { byTaskId } : {}) },
           actor(args.actor),
         );
-        return taskResult(services, id, `Closed #${task.number} as ${resolutionText(task) ?? task.resolution}.`);
+        return taskResult(services, id, `Closed ${taskLabel(task)} as ${resolutionText(task) ?? task.resolution}.`);
       }),
   );
 
@@ -559,7 +561,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor,
         // After the other fields, so a refused switch (git, or tasks already started) leaves them saved and says why.
         if (args.delivery !== undefined) await ctx.integrations.setEpicDelivery(id, args.delivery, actor(args.actor));
         // Labels usually arrive after the plan is saved, so this is when a new ui label can ask for the capture step.
-        return taskResult(services, task.id, `Updated #${task.number}.`, { captureHint: args.labels !== undefined });
+        return taskResult(services, task.id, `Updated ${taskLabel(task)}.`, { captureHint: args.labels !== undefined });
       }),
   );
 
@@ -582,7 +584,7 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor,
         const id = services.tasks.resolveId(args.task);
         services.tasks.addNote(id, args.text, actor(args.actor));
         const summary = services.tasks.summary(id);
-        const added = `Note added to #${summary.number}.`;
+        const added = `Note added to ${taskLabel(summary)}.`;
         // Same gate as the social tools themselves (mcp/server.ts), and only once the work looks finished, so a
         // progress note mid-task isn't told the agent is done.
         if (!services.settings.get().socialNetwork) return textResult(added);
@@ -629,13 +631,15 @@ export const registerTaskTools: ToolRegistrar = (server, { services, ctx, actor,
           const { cleared, task } = services.attention.clear(id, actor(args.actor));
           return textResult(
             cleared
-              ? `Cleared the request for attention on #${task.number}.`
-              : `#${task.number} had no request for attention to clear.`,
+              ? `Cleared the request for attention on ${taskLabel(task)}.`
+              : `${taskLabel(task)} had no request for attention to clear.`,
           );
         }
         if (!args.message) throw new AppError("VALIDATION", "Pass a message saying what the user should look at.");
         const summary = services.attention.request(id, args.message, actor(args.actor));
-        return textResult(`Flagged #${summary.number} for the user. It shows under Needs attention until dismissed.`);
+        return textResult(
+          `Flagged ${taskLabel(summary)} for the user. It shows under Needs attention until dismissed.`,
+        );
       }),
   );
 };

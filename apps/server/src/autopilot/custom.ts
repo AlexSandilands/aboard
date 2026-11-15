@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   BRAND,
   capHandover,
   CHECK_FAILED_KEY_PREFIX,
@@ -510,7 +511,7 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
           const fresh = !services.autopilot.hasRun(customAutomationKey(custom.id), key, dry);
           return {
             dedupeKey: key,
-            summary: `${isAgent ? "start an agent on" : `run "${custom.name}" for`} #${task.number} (${what})`,
+            summary: `${isAgent ? "start an agent on" : `run "${custom.name}" for`} ${taskLabel(task)} (${what})`,
             taskId: task.id,
             data,
             ...(fresh && dry
@@ -639,7 +640,7 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
           ...(branch ? { workspace: { branch } } : {}),
         });
         const { result: _final, output: _output, ...patch } = result;
-        return { ...patch, summary: `Started an agent on #${task.number} for "${custom.name}"` };
+        return { ...patch, summary: `Started an agent on ${taskLabel(task)} for "${custom.name}"` };
       }
 
       if (!project?.workspaceRoot) {
@@ -647,7 +648,7 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
       }
       // A script's interpreter may be missing: that fails the run with a plain message, like a command that fails.
       const noun = action.kind === "script" ? "script" : "command";
-      const where = task ? ` for #${task.number}` : ` in ${project.title}`;
+      const where = task ? ` for ${taskLabel(task)}` : ` in ${project.title}`;
       const failed = (summary: string, error: string, base: { detail: string | null; exitCode: number | null }) => ({
         ...base,
         status: "failed" as const,

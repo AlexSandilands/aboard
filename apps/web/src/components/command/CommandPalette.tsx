@@ -1,5 +1,5 @@
 // View-stack command palette, modelled on T3 Code's CommandPalette (MIT) — see NOTICE.
-import { TASK_STATUSES, type Project, type T3ProjectCandidate, type TaskSummary } from "@repo/contracts";
+import { taskLabel, TASK_STATUSES, type Project, type T3ProjectCandidate, type TaskSummary } from "@repo/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
@@ -446,7 +446,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
           toastManager.add({
             type: "success",
             title: flow === "epic" ? "Epic created" : "Added to Backlog",
-            description: `#${task.number} ${task.title}${issue ? " · fetching details" : ""}${template ? ` · from ${template.name}` : ""}`,
+            description: `${taskLabel(task)} ${task.title}${issue ? " · fetching details" : ""}${template ? ` · from ${template.name}` : ""}`,
             actionProps: { children: "Open", onClick: () => openTask(task.id) },
           });
           if (keepOpen) {
@@ -502,7 +502,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
       value: `task:${task.id}`,
       title: task.title,
       searchTerms: taskSearchTerms(task, project?.title),
-      leading: <span className="shrink-0 font-mono text-muted-foreground text-xs tabular-nums">#{task.number}</span>,
+      leading: <span className="shrink-0 font-mono text-muted-foreground text-xs tabular-nums">{taskLabel(task)}</span>,
       description: [project?.title, STATUS_LABEL.get(task.status)].filter(Boolean).join(" · "),
       icon: project ? projectIcon(project) : <ListTodoIcon className={ITEM_ICON_CLASS} />,
       run: () => {
@@ -1025,7 +1025,7 @@ function PaletteBody({ intent }: { intent: PaletteIntent }) {
                 : view.flow === "planned"
                   ? "Opens the task with the plan editor"
                   : titleEpic
-                    ? `In epic #${titleEpic.number} ${titleEpic.title} · Shift+Enter to add another`
+                    ? `In epic ${taskLabel(titleEpic)} ${titleEpic.title} · Shift+Enter to add another`
                     : "Lands in Backlog · Shift+Enter to add another"
             }
           />

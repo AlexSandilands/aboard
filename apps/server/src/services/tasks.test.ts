@@ -607,7 +607,7 @@ describe("events", () => {
         ]),
       );
       expect(s.tasks.detail(shipped.id).resolves).toEqual([
-        { id: backlog.id, number: backlog.number, title: "Same thing", resolution: "completed" },
+        { id: backlog.id, number: backlog.number, numberPrefix: "", title: "Same thing", resolution: "completed" },
       ]);
     });
 

@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type TaskDetail } from "@repo/contracts";
+import { taskLabel, TASK_STATUSES, type TaskDetail } from "@repo/contracts";
 import type { ReactNode } from "react";
 import { ArchiveIcon, Maximize2Icon, Minimize2Icon, XIcon } from "lucide-react";
 
@@ -120,7 +120,7 @@ export function TaskPanelHeader({
   return (
     <header className={inWindow ? WINDOW_TOP_BAR_CLASS : PANEL_TOP_BAR_CLASS}>
       {inWindow ? null : <ClosePanelButton onClose={onClose} />}
-      <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">#{task.number}</span>
+      <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">{taskLabel(task)}</span>
       {task.kind === "epic" ? (
         // An epic's column follows its tasks, so there is nothing to pick.
         <Tooltip>

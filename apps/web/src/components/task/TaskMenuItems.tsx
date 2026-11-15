@@ -1,4 +1,4 @@
-import { type Project, type TaskDetail, type TaskSummary } from "@repo/contracts";
+import { taskLabel, type Project, type TaskDetail, type TaskSummary } from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArchiveIcon,
@@ -200,7 +200,7 @@ export function TaskMenuItems({
                 disabled={epic.id === task.parent?.id}
                 onClick={() => updateTask({ id: task.id, epicId: epic.id })}
               >
-                <span className="shrink-0 tabular-nums text-muted-foreground">#{epic.number}</span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">{taskLabel(epic)}</span>
                 <MenuItemLabel>{epic.title}</MenuItemLabel>
                 {epic.id === task.parent?.id ? <CheckIcon className="ms-auto size-3.5" /> : null}
               </MenuItem>

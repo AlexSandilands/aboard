@@ -72,7 +72,8 @@ const taskJson = (bundle: TaskBundle): string =>
   ].join("\n");
 
 export const taskFilePath = (task: BackupRow): string =>
-  `${TASKS_DIR}/${monthOf(task.created_at)}/task-${String(task.number)}.json`;
+  // A machine-numbered task (#E7) has its prefix in the name, so it never shares a file with the board's #7.
+  `${TASKS_DIR}/${monthOf(task.created_at)}/task-${String(task.number_prefix ?? "")}${String(task.number)}.json`;
 
 /**
  * Where an attachment's file is under an attachments folder, with "/" separators; null for a row whose ids aren't

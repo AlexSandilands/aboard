@@ -32,7 +32,7 @@ describe("machine descriptor", () => {
       version: BRAND.version,
       protocolVersion: MACHINE_PROTOCOL_VERSION,
       role: "runner",
-      capabilities: ["pairing", "status", "update"],
+      capabilities: ["pairing", "status", "update", "tasks"],
       paired: false,
     });
   });

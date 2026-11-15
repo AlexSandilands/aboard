@@ -19,7 +19,14 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { TASK_STATUSES, type BoardSnapshot, type Project, type TaskStatus, type TaskSummary } from "@repo/contracts";
+import {
+  taskLabel,
+  TASK_STATUSES,
+  type BoardSnapshot,
+  type Project,
+  type TaskStatus,
+  type TaskSummary,
+} from "@repo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowDownUpIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, LayoutGridIcon, RefreshCwIcon } from "lucide-react";
 import {
@@ -713,7 +720,7 @@ function BoardContent({ board, projectFilter }: { board: BoardSnapshot; projectF
   const announcements: Announcements = {
     onDragStart: ({ active }) => {
       const task = tasksById.get(String(active.id));
-      return task ? `Picked up #${task.number} in ${STATUS_LABEL[task.status]}.` : undefined;
+      return task ? `Picked up ${taskLabel(task)} in ${STATUS_LABEL[task.status]}.` : undefined;
     },
     onDragOver: ({ active, over }) => describeOver(active.id, over, tasksById, rowOf),
     onDragEnd: ({ active, over }) => {

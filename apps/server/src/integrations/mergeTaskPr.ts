@@ -1,4 +1,4 @@
-import { pickMergeMethod, type MergeMethod, type TaskSummary } from "@repo/contracts";
+import { taskLabel, pickMergeMethod, type MergeMethod, type TaskSummary } from "@repo/contracts";
 import { headSeenSince, isPrLink, notMergeable, type PrLink } from "../autopilot/mergeGate.ts";
 import { AppError } from "../errors.ts";
 import type { Services } from "../services/types.ts";
@@ -14,7 +14,7 @@ export interface MergeTaskPrResult {
 }
 
 const refuse = (task: TaskSummary, why: string) =>
-  new AppError("VALIDATION", `Didn't merge #${task.number}'s pull request: ${why}`);
+  new AppError("VALIDATION", `Didn't merge ${taskLabel(task)}'s pull request: ${why}`);
 
 /**
  * Where a task flagged for auto-merge stands, by the rules merge_task_pr and Merge ready PRs' Into main share:

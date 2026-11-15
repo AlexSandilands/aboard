@@ -1,4 +1,4 @@
-import { reviewBadgeLabel, type AttentionReason, type TaskDetail, type TaskRelation } from "@repo/contracts";
+import { taskLabel, reviewBadgeLabel, type AttentionReason, type TaskDetail, type TaskRelation } from "@repo/contracts";
 import { topAttention } from "~/components/board/board.logic";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { mayState } from "./automation.logic";
@@ -392,8 +392,8 @@ export function summarizeSection(
     case "relations": {
       const open = task.blockedBy.filter((b) => b.status !== "done");
       const parts = [
-        open.length ? `blocked by ${open.map((b) => `#${b.number}`).join(", ")}` : null,
-        task.blocks.length ? `blocks ${task.blocks.map((b) => `#${b.number}`).join(", ")}` : null,
+        open.length ? `blocked by ${open.map((b) => taskLabel(b)).join(", ")}` : null,
+        task.blocks.length ? `blocks ${task.blocks.map((b) => taskLabel(b)).join(", ")}` : null,
       ].filter((part) => part !== null);
       return parts.length ? parts.join(" · ") : task.blockedBy.length ? "Unblocked" : "None";
     }

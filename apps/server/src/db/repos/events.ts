@@ -22,6 +22,7 @@ const toEvent = (r: EventRow): TaskEvent => ({
 /** An activity entry with the task it is about, for reports over a period. */
 export interface PeriodEvent extends TaskEvent {
   number: number;
+  numberPrefix: string;
   title: string;
   projectId: string;
 }
@@ -53,6 +54,16 @@ export function createEventsRepo(sql: Sql) {
       );
       return { id: Number(result.lastInsertRowid), taskId, at, actor, type, payload };
     },
+    /** A task's entries after `afterId`, oldest first. */
+    after(taskId: string, afterId: number): TaskEvent[] {
+      return sql
+        .all<EventRow>("SELECT * FROM task_events WHERE task_id = ? AND id > ? ORDER BY id", taskId, afterId)
+        .map(toEvent);
+    },
+    /** The id of the newest entry of any task; 0 when there is none. */
+    lastId(): number {
+      return sql.get<{ id: number | null }>("SELECT MAX(id) AS id FROM task_events")?.id ?? 0;
+    },
     /** How many links of a kind were ever added to a task, removed ones included. */
     linksAdded(taskId: string, kind: string): number {
       return (
@@ -83,14 +94,20 @@ export function createEventsRepo(sql: Sql) {
     /** Events of these types at or after `from` and before `to`, oldest first, with their task's number, title and project. */
     between(types: readonly string[], from: string, to: string): PeriodEvent[] {
       return sql
-        .all<EventRow & { number: number; title: string; project_id: string }>(
-          `SELECT e.*, t.number, t.title, t.project_id FROM task_events e JOIN tasks t ON t.id = e.task_id
+        .all<EventRow & { number: number; number_prefix: string; title: string; project_id: string }>(
+          `SELECT e.*, t.number, t.number_prefix, t.title, t.project_id FROM task_events e JOIN tasks t ON t.id = e.task_id
            WHERE t.deleted_at IS NULL AND e.at >= ? AND e.at < ? AND e.type IN (SELECT value FROM json_each(?)) ORDER BY e.id`,
           from,
           to,
           jsonList(types),
         )
-        .map((r) => ({ ...toEvent(r), number: r.number, title: r.title, projectId: r.project_id }));
+        .map((r) => ({
+          ...toEvent(r),
+          number: r.number,
+          numberPrefix: r.number_prefix,
+          title: r.title,
+          projectId: r.project_id,
+        }));
     },
     /** Events of these types on these tasks, oldest first. */
     ofTypes(taskIds: readonly string[], types: readonly string[]): TaskEvent[] {

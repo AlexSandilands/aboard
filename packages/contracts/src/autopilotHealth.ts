@@ -1,3 +1,4 @@
+import { taskLabel } from "./taskNumbers.ts";
 import { z } from "zod";
 import {
   AUTOPILOT_ORCHESTRATE,
@@ -107,7 +108,7 @@ export interface AutomationHintInput {
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 const taskList = (tasks: ReadonlyArray<{ number: number }>): string => {
-  const refs = tasks.map((t) => `#${t.number}`);
+  const refs = tasks.map((t) => taskLabel(t));
   if (refs.length <= 3) return refs.length === 1 ? refs[0]! : `${refs.slice(0, -1).join(", ")} and ${refs.at(-1)}`;
   return `${refs.slice(0, 3).join(", ")}…`;
 };

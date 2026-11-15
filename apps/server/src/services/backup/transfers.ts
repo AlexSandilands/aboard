@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  taskLabel,
   TASK_BUNDLE_TABLES,
   transferFromRow,
   transferRow,
@@ -173,7 +174,7 @@ export function createTransferService(
       // An archived copy here (moved away earlier, or archived by hand) or one in the trash is replaced; a live one never is.
       const existing = repos.tasks.getAny(taskId);
       if (existing && existing.archivedAt === null && existing.deletedAt === null) {
-        throw new AppError("CONFLICT", `Already on this board as #${existing.number}`);
+        throw new AppError("CONFLICT", `Already on this board as ${taskLabel(existing)}`);
       }
       if (!repos.projects.get(targetProject)) throw new AppError("NOT_FOUND", `No project ${targetProject} here`);
       let closedAgainst: string[] = [];
@@ -298,7 +299,7 @@ export function createTransferService(
         if (options.mode === "move" && gone) {
           throw new AppError(
             "CONFLICT",
-            `${machine} already moved it to ${gone.machine} as #${gone.number}; move it from ${gone.machine}`,
+            `${machine} already moved it to ${gone.machine} as ${taskLabel(gone)}; move it from ${gone.machine}`,
           );
         }
         if (options.mode === "move" && busy.has(taskId)) {
@@ -414,10 +415,10 @@ export function createTransferService(
           kind: "backup_notice",
           taskId: task.id,
           title: twice
-            ? `#${task.number} was moved to both ${task.movedTo!.machine} and ${transfer.toMachine}`
-            : `#${task.number} moved to ${transfer.toMachine} with changes left here`,
+            ? `${taskLabel(task)} was moved to both ${task.movedTo!.machine} and ${transfer.toMachine}`
+            : `${taskLabel(task)} moved to ${transfer.toMachine} with changes left here`,
           body:
-            `#${task.number} "${task.title}" was moved to ${transfer.toMachine} as #${transfer.toNumber}, and archived ` +
+            `${taskLabel(task)} "${task.title}" was moved to ${transfer.toMachine} as #${transfer.toNumber}, and archived ` +
             "here. " +
             [
               changed ? "It changed here after the backup it was moved from, so those changes didn't go with it." : "",

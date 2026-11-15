@@ -17,7 +17,7 @@ import { cn } from "~/lib/utils";
 import { type AlertType, alertTypeOf, remarkAlerts } from "./alerts.logic";
 import { CodeBlock } from "./CodeBlock";
 import { MarkdownTable } from "./MarkdownTable";
-import { remarkTaskRefs, taskRefNumber } from "./taskRefs.logic";
+import { remarkTaskRefs, taskRefNumber, type TaskRefKey } from "./taskRefs.logic";
 
 type Plugins = NonNullable<Options["remarkPlugins"]>;
 
@@ -26,8 +26,8 @@ const remarkPlugins: Plugins = [remarkGfm, remarkAlerts];
 /** Makes "#N" in the text a link to that task; keep the object stable, or the Markdown is rebuilt each render. */
 export interface TaskLinks {
   /** Only numbers this accepts become links, so a "#5" that isn't a task stays text. */
-  isKnown: (number: number) => boolean;
-  onOpen: (number: number) => void;
+  isKnown: (number: TaskRefKey) => boolean;
+  onOpen: (number: TaskRefKey) => void;
 }
 
 // A context rather than a per-render `a` component, which would remount its links on every render.

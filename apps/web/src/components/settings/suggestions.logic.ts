@@ -97,15 +97,18 @@ export function foldDiff(lines: readonly DiffLine[], context = 3): DiffHunkLine[
 }
 
 export type Evidence =
-  | { kind: "task"; number: number; text: string }
+  | { kind: "task"; number: number | string; text: string }
   | { kind: "url"; url: string }
   | { kind: "text"; text: string };
 
 /** A piece of evidence: a task ref ("#42", "#42 slow review"), an http(s) URL, or a note. */
 export function parseEvidence(item: string): Evidence {
   const trimmed = item.trim();
-  const task = /^#(\d+)\b/.exec(trimmed);
-  if (task) return { kind: "task", number: Number(task[1]), text: trimmed };
+  const task = /^#([A-Za-z][A-Za-z0-9]{0,2})?(\d+)\b/.exec(trimmed);
+  // "#E7" is a task a machine numbered: its key is the text, as the task links carry it.
+  if (task) {
+    return { kind: "task", number: task[1] ? `${task[1].toUpperCase()}${task[2]}` : Number(task[2]), text: trimmed };
+  }
   if (/^https?:\/\/\S+$/i.test(trimmed)) return { kind: "url", url: trimmed };
   return { kind: "text", text: trimmed };
 }

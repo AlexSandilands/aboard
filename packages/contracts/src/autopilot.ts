@@ -1,3 +1,4 @@
+import { taskLabel } from "./taskNumbers.ts";
 import { z } from "zod";
 import { OperationId, OperationNeed, RunModelRecord } from "./operations.ts";
 import { T3RuntimeMode } from "./t3Launch.ts";
@@ -154,7 +155,7 @@ export const autopilotSessionName = (
 ): string => {
   const what = label?.trim();
   if (!task) return what ? `${AUTOPILOT_LABELLED_PREFIX}${what}` : AUTOPILOT_UNLABELLED_NAME;
-  const head = `#${task.number} ${shortTaskTitle(task.title)}`;
+  const head = `${taskLabel(task)} ${shortTaskTitle(task.title)}`;
   return what ? `${head}${AUTOPILOT_TASK_MARKER}${what}` : `${head} · Autopilot`;
 };
 

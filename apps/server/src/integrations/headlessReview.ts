@@ -76,7 +76,7 @@ export function headlessArgs(
 }
 
 export interface HeadlessPromptInput {
-  taskNumber: number;
+  taskNumber: number | string;
   round: number;
   /** The task as get_task renders it: description, plan, notes and earlier rounds' findings. */
   taskText: string;

@@ -1,4 +1,4 @@
-import { MovedTo, overrideValue, parseModelChoice, type ModelChoice } from "@repo/contracts";
+import { MovedTo, overrideValue, parseModelChoice, parseTaskNumberRef, type ModelChoice } from "@repo/contracts";
 import type {
   AttentionRequest,
   EpicDelivery,
@@ -20,6 +20,8 @@ const parseMovedTo = (json: string | null): MovedTo | null => {
 export interface TaskRecord {
   id: string;
   number: number;
+  /** '' for a task the board numbered; the prefix of the machine that numbered it otherwise (`#E7`). */
+  numberPrefix: string;
   projectId: string;
   kind: TaskKind;
   /** The epic this task belongs to. */
@@ -70,6 +72,7 @@ export interface TaskRecord {
 interface TaskRow {
   id: string;
   number: number;
+  number_prefix: string;
   project_id: string;
   kind: TaskKind;
   parent_id: string | null;
@@ -108,6 +111,7 @@ interface TaskRow {
 const toRecord = (r: TaskRow): TaskRecord => ({
   id: r.id,
   number: r.number,
+  numberPrefix: r.number_prefix,
   projectId: r.project_id,
   kind: r.kind,
   parentId: r.parent_id,
@@ -146,6 +150,7 @@ const toRecord = (r: TaskRow): TaskRecord => ({
 const toRow = (t: TaskRecord): TaskRow => ({
   id: t.id,
   number: t.number,
+  number_prefix: t.numberPrefix,
   project_id: t.projectId,
   kind: t.kind,
   parent_id: t.parentId,
@@ -203,14 +208,29 @@ export function createTasksRepo(sql: Sql) {
       const row = sql.get<TaskRow>("SELECT * FROM tasks WHERE id = ?", id);
       return row ? toRecord(row) : null;
     },
-    byNumber(n: number): TaskRecord | null {
-      const row = sql.get<TaskRow>("SELECT * FROM tasks WHERE number = ? AND deleted_at IS NULL", n);
+    byNumber(n: number, prefix = ""): TaskRecord | null {
+      const row = sql.get<TaskRow>(
+        "SELECT * FROM tasks WHERE number_prefix = ? AND number = ? AND deleted_at IS NULL",
+        prefix,
+        n,
+      );
       return row ? toRecord(row) : null;
     },
     /** The task with number `n` even when it is in the trash: numbers are never reused, so it still owns `n`. */
-    byNumberAny(n: number): TaskRecord | null {
-      const row = sql.get<TaskRow>("SELECT * FROM tasks WHERE number = ?", n);
+    byNumberAny(n: number, prefix = ""): TaskRecord | null {
+      const row = sql.get<TaskRow>("SELECT * FROM tasks WHERE number_prefix = ? AND number = ?", prefix, n);
       return row ? toRecord(row) : null;
+    },
+    /**
+     * The task a reference names by number (`#42`, `42`, `#E7`, `e7`), in the trash or not, or null when `ref` is no
+     * number or names no task. `E27` may be `E` 27 or `E2` 7: the first that is a task wins, shortest prefix first.
+     */
+    byNumberRefAny(ref: string): TaskRecord | null {
+      for (const { prefix, number } of parseTaskNumberRef(ref)) {
+        const task = this.byNumberAny(number, prefix);
+        if (task) return task;
+      }
+      return null;
     },
     getMany(ids: readonly string[]): TaskRecord[] {
       return sql
@@ -261,7 +281,7 @@ export function createTasksRepo(sql: Sql) {
       return sql
         .all<TaskRow>(
           `SELECT * FROM tasks WHERE resolved_by_task_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL
-           ORDER BY number`,
+           ORDER BY number_prefix, number`,
           jsonList(ids),
         )
         .map(toRecord);
@@ -302,6 +322,30 @@ export function createTasksRepo(sql: Sql) {
       return sql
         .all<TaskRow>("SELECT * FROM tasks WHERE deleted_at IS NOT NULL AND deleted_at < ? ORDER BY number", cutoff)
         .map(toRecord);
+    },
+    /** The highest number given out under a machine's prefix, as far as this database knows; 0 when none was. */
+    machineCounter(prefix: string): number {
+      return (
+        sql.get<{ value: number }>("SELECT value FROM counters WHERE name = ?", `machine_task_number:${prefix}`)
+          ?.value ?? 0
+      );
+    },
+    /** Raises a prefix's high-water mark to `value`; never lowers it. */
+    raiseMachineCounter(prefix: string, value: number): void {
+      sql.run(
+        `INSERT INTO counters (name, value) VALUES (?, ?)
+         ON CONFLICT (name) DO UPDATE SET value = max(value, excluded.value)`,
+        `machine_task_number:${prefix}`,
+        value,
+      );
+    },
+    /** Claims the next number under a machine's prefix, for a task made while the board can't be reached. */
+    nextMachineNumber(prefix: string): number {
+      this.raiseMachineCounter(prefix, 0);
+      return sql.get<{ value: number }>(
+        "UPDATE counters SET value = value + 1 WHERE name = ? RETURNING value",
+        `machine_task_number:${prefix}`,
+      )!.value;
     },
     /** Claims the next task number. Call inside the write that inserts the task, so a rollback releases it. */
     nextNumber(): number {

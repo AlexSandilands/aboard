@@ -1,4 +1,5 @@
 import {
+  compareTaskNumbers,
   deriveAttention,
   isBlocked,
   deriveReviewSummary,
@@ -8,6 +9,7 @@ import {
   epicBranchMerge,
   type PlanPhase,
   type PlanStep,
+  type TaskHold,
   type TaskRef,
   type TaskImport,
   type TaskRelation,
@@ -59,7 +61,7 @@ export function toTaskImport(record: ImportRecord | undefined): TaskImport | nul
 }
 
 export function taskRef(task: TaskRecord | undefined): TaskRef | null {
-  return task ? { id: task.id, number: task.number, title: task.title } : null;
+  return task ? { id: task.id, number: task.number, numberPrefix: task.numberPrefix, title: task.title } : null;
 }
 
 /** An integration epic's branch, for the epic itself and for its tasks; null otherwise. */
@@ -100,19 +102,40 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
   const toRelation = (id: string): TaskRelation | null => {
     const task = related.get(id);
     return task
-      ? { id: task.id, number: task.number, title: task.title, status: task.status, archived: task.archivedAt !== null }
+      ? {
+          id: task.id,
+          number: task.number,
+          numberPrefix: task.numberPrefix,
+          title: task.title,
+          status: task.status,
+          archived: task.archivedAt !== null,
+        }
       : null;
   };
   const relatedTasks = (relatedIds: string[]): TaskRelation[] =>
     relatedIds
       .map((id) => toRelation(id))
       .filter((t): t is TaskRelation => t !== null)
-      .sort((x, y) => x.number - y.number);
+      .sort(compareTaskNumbers);
   const importsByTask = repos.imports.forTasks(ids);
   const autopilotByTask = repos.autopilotRuns.attentionFor(ids);
   const dismissalsByTask = repos.attentionDismissals.forTasks(ids);
   const cleanPrReviewByTask = repos.autopilotRuns.cleanPrReviewTimes(ids);
   const { reviewMaxRounds } = loadSettings(repos);
+  const holds = repos.holds.forTasks(ids);
+  const waiting = holds.size > 0 ? repos.holds.waitingFor([...holds.keys()]) : new Map<string, number>();
+  const machines = new Map(holds.size > 0 ? repos.machines.all().map((m) => [m.id, m]) : []);
+
+  const holdOf = (taskId: string): TaskHold | null => {
+    const hold = holds.get(taskId);
+    if (!hold) return null;
+    return {
+      machineId: hold.machineId,
+      machineName: machines.get(hold.machineId)?.name ?? "a machine",
+      since: hold.heldAt,
+      waiting: waiting.get(taskId) ?? 0,
+    };
+  };
 
   for (const record of records) {
     const phases: PlanPhase[] = (phasesByTask.get(record.id) ?? []).map((phase) => ({
@@ -142,6 +165,8 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
     const summary: TaskSummary = {
       id: record.id,
       number: record.number,
+      numberPrefix: record.numberPrefix,
+      hold: holdOf(record.id),
       projectId: record.projectId,
       kind: record.kind,
       parent: taskRef(record.parentId ? referenced.get(record.parentId) : undefined),

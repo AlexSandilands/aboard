@@ -1,6 +1,6 @@
 // Pure helpers for the command palette. Path handling adapted from T3 Code's
 // client-runtime browse helpers (MIT) — see NOTICE.
-import { parseImportSource, type FsBrowseResult, type TicketSystem } from "@repo/contracts";
+import { taskLabel, parseImportSource, type FsBrowseResult, type TicketSystem } from "@repo/contracts";
 
 // ── Item filtering ───────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ export function taskSearchTerms(
   task: { number: number; title: string; labels?: ReadonlyArray<string> },
   projectTitle: string | undefined,
 ): string[] {
-  return [`#${task.number}`, String(task.number), task.title, projectTitle ?? "", ...(task.labels ?? [])];
+  return [taskLabel(task), String(task.number), task.title, projectTitle ?? "", ...(task.labels ?? [])];
 }
 
 // ── Path browsing ────────────────────────────────────────────────────────

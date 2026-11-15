@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   CUSTOM_COMMAND_MAX,
   CUSTOM_MINUTES_MAX,
   CUSTOM_MINUTES_MIN,
@@ -995,7 +996,7 @@ export function ReviewStep({
               <ul className="space-y-1 text-sm">
                 {due.tasks.map((t) => (
                   <li key={t.id} className="flex min-w-0 gap-1.5">
-                    <span className="shrink-0 text-muted-foreground">#{t.number}</span>
+                    <span className="shrink-0 text-muted-foreground">{taskLabel(t)}</span>
                     <span className="min-w-0 truncate">{t.title}</span>
                     <span className="shrink-0 text-muted-foreground">
                       · {projects.find((p) => p.id === t.projectId)?.title} · {timeInColumn(t, now)}
@@ -1010,7 +1011,7 @@ export function ReviewStep({
           ) : (
             <p className="text-sm text-muted-foreground">
               Nothing yet. It acts on what happens after it&apos;s switched on.
-              {sample ? ` The newest task it could act on is #${sample.number} ${sample.title}.` : ""}
+              {sample ? ` The newest task it could act on is ${taskLabel(sample)} ${sample.title}.` : ""}
             </p>
           )}
           {due.kind === "tasks" && due.tasks.length > 0 ? (
@@ -1029,7 +1030,7 @@ export function ReviewStep({
                 {checking
                   ? "The prompt an item's agent would start with. Nothing is started."
                   : sample
-                    ? `The prompt it would send for #${sample.number}. Nothing is started.`
+                    ? `The prompt it would send for ${taskLabel(sample)}. Nothing is started.`
                     : isSchedule
                       ? "The prompt it would send in the first project. Nothing is started."
                       : "No task on the board fits it yet, so there is no prompt to show."}
@@ -1045,8 +1046,8 @@ export function ReviewStep({
         ) : form.actionKind === "shell" ? (
           <Block>
             <span className="text-xs text-muted-foreground">
-              What it would run{sample ? ` for #${sample.number}` : ""}. A command can&apos;t be run from here: try it
-              in a terminal first.
+              What it would run{sample ? ` for ${taskLabel(sample)}` : ""}. A command can&apos;t be run from here: try
+              it in a terminal first.
             </span>
             <PreviewBlock>{preview ?? (result.ok ? "Nothing to preview." : result.error)}</PreviewBlock>
           </Block>

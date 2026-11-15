@@ -1,5 +1,6 @@
 import type { SQLInputValue } from "node:sqlite";
 import {
+  parseTaskNumberRef,
   AUTOPILOT_ACTOR,
   AUTOPILOT_ALL_RUNS,
   AUTOPILOT_REVIEW_PRS,
@@ -169,16 +170,17 @@ function filterClause(filter: AutopilotRunFilter): { where: string; params: SQLI
   if (filter.outcome) where.push(OUTCOME_CLAUSE[filter.outcome]);
   if (filter.q) {
     const like = likePattern(filter.q);
-    const taskNumber = /^#(\d+)$/.exec(filter.q);
+    // "#42" or "#E7": the runs of that task.
+    const taskNumber = filter.q.startsWith("#") ? (parseTaskNumberRef(filter.q)[0] ?? null) : null;
     where.push(
       `(r.id LIKE ? ESCAPE '\\' OR r.summary LIKE ? ESCAPE '\\'
         OR json_extract(r.output_json, '$.summary') LIKE ? ESCAPE '\\'
         OR json_extract(r.output_json, '$.handover') LIKE ? ESCAPE '\\'
         OR EXISTS (SELECT 1 FROM projects p WHERE p.id = r.project_id AND p.title LIKE ? ESCAPE '\\')
-        ${taskNumber ? "OR EXISTS (SELECT 1 FROM tasks t WHERE t.id = r.task_id AND t.number = ?)" : ""})`,
+        ${taskNumber ? "OR EXISTS (SELECT 1 FROM tasks t WHERE t.id = r.task_id AND t.number_prefix = ? AND t.number = ?)" : ""})`,
     );
     params.push(like, like, like, like, like);
-    if (taskNumber) params.push(Number(taskNumber[1]));
+    if (taskNumber) params.push(taskNumber.prefix, taskNumber.number);
   }
   return { where: where.length > 0 ? `WHERE ${where.join(" AND ")}` : "", params };
 }

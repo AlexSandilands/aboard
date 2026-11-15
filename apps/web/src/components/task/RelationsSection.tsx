@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type TaskDetail, type TaskRelation, type TaskSummary } from "@repo/contracts";
+import { taskLabel, TASK_STATUSES, type TaskDetail, type TaskRelation, type TaskSummary } from "@repo/contracts";
 import { PlusIcon, XIcon } from "lucide-react";
 import { useMemo, useState, type KeyboardEvent } from "react";
 
@@ -118,7 +118,7 @@ function RelationRow({
         onClick={() => onOpen(relation.id)}
         className="flex min-h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-start text-sm outline-none hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">#{relation.number}</span>
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{taskLabel(relation)}</span>
         <span className="min-w-0 truncate text-foreground/90">{relation.title}</span>
         <span className="ms-auto shrink-0 text-2xs text-muted-foreground">
           {STATUS_LABEL[relation.status]}
@@ -129,7 +129,7 @@ function RelationRow({
         variant="ghost-muted"
         size="icon-xs"
         className="shrink-0 opacity-0 group-hover/relation:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
-        aria-label={`Remove #${relation.number} ${relation.title}`}
+        aria-label={`Remove ${taskLabel(relation)} ${relation.title}`}
         onClick={() => onRemove(relation.id)}
       >
         <XIcon />
@@ -214,7 +214,7 @@ function AddRelationPopover({ task, side, onAdd }: { task: TaskDetail; side: Edg
                   onMouseEnter={() => setHighlight(index)}
                   onClick={() => add(option.id)}
                 >
-                  <span className="shrink-0 tabular-nums">#{option.number}</span>
+                  <span className="shrink-0 tabular-nums">{taskLabel(option)}</span>
                   <span className="min-w-0 truncate text-foreground/90">{option.title}</span>
                   <span className="ms-auto shrink-0 text-2xs">{STATUS_LABEL[option.status]}</span>
                 </button>

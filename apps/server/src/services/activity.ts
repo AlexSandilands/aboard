@@ -55,6 +55,8 @@ export function statusStays(createdAt: string, moves: readonly TaskEvent[], curr
 
 export interface ActivityTask {
   number: number;
+  /** The machine prefix of a task a machine numbered (`#E7`); absent or empty otherwise. */
+  numberPrefix?: string;
   title: string;
 }
 
@@ -202,7 +204,7 @@ export function createActivityService(
         if (!ref) {
           const task = repos.tasks.get(taskId);
           if (!task) return null;
-          ref = { number: task.number, title: task.title };
+          ref = { number: task.number, numberPrefix: task.numberPrefix, title: task.title };
           refs.set(taskId, ref);
           projectOf.set(taskId, task.projectId);
         }
@@ -249,6 +251,7 @@ export function createActivityService(
           .reduce((max, run) => Math.max(max, prReviewOutput(run)?.round ?? 0), 0);
         finished.push({
           number: task.number,
+          numberPrefix: task.numberPrefix,
           title: task.title,
           finishedAt: done.at,
           resolution: done.resolution,

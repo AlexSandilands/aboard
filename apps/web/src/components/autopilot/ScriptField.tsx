@@ -1,4 +1,10 @@
-import { CUSTOM_SCRIPT_MAX, type CustomScriptLanguage, type Project, type TaskSummary } from "@repo/contracts";
+import {
+  taskLabel,
+  CUSTOM_SCRIPT_MAX,
+  type CustomScriptLanguage,
+  type Project,
+  type TaskSummary,
+} from "@repo/contracts";
 import { CheckIcon, CopyIcon, FileUpIcon, PlayIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { Alert, AlertDescription } from "~/components/ui/alert";
@@ -259,7 +265,7 @@ export function ScriptTest({
                 value={withTask ? "task" : "none"}
                 items={[
                   { value: "none", label: "No task" },
-                  { value: "task", label: `#${sample.number} ${sample.title}` },
+                  { value: "task", label: `${taskLabel(sample)} ${sample.title}` },
                 ]}
                 onChange={(next) => setWithTask(next === "task")}
               />

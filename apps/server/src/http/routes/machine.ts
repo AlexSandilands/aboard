@@ -1,6 +1,14 @@
 import {
   BRAND,
+  BridgeReply,
+  ChangesQuery,
+  HandOverRequest,
+  HeldEditRequest,
+  MACHINE_CHANGES_PATH,
   MACHINE_DESCRIPTOR_PATH,
+  MACHINE_EDITS_PATH,
+  MACHINE_REPLIES_PATH,
+  MACHINE_TASKS_PATH,
   MACHINE_PAIR_PATH,
   MACHINE_PROTOCOL_VERSION,
   MACHINE_SESSION_PATH,
@@ -9,6 +17,7 @@ import {
   PairMachineInput,
   UpdateMachineRequest,
   serverPlatformOf,
+  type ChangesResponse,
   type MachineCapability,
   type MachineDescriptor,
   type MachineSession,
@@ -18,12 +27,12 @@ import {
 import type { Hono } from "hono";
 import type { AppContext } from "../../app.ts";
 import { machinePairingOf, peerAddress } from "../guard.ts";
-import { handle, noContent, parseBody } from "../respond.ts";
+import { handle, idParam, noContent, parseBody, parseQuery } from "../respond.ts";
 
 /** How long a status answer waits for the login checks, which start programs and may reach for the network. */
 const STATUS_LOGINS_WAIT_MS = 4_000;
 
-const CAPABILITIES: MachineCapability[] = ["pairing", "status", "update"];
+const CAPABILITIES: MachineCapability[] = ["pairing", "status", "update", "tasks"];
 
 /**
  * The machine API (docs/features/remote-machines.md#the-machine-api). Every server says who it is; the rest is a
@@ -95,5 +104,55 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
   app.post(
     MACHINE_UPDATE_PATH,
     handle(async (c) => c.json(updater.request(await parseBody(c, UpdateMachineRequest)))),
+  );
+
+  // Held tasks (docs/features/remote-machines.md#held-tasks): the board hands a task over, reads what changed, sends
+  // its own edits and takes the task back.
+  const { bridge, checkouts } = integrations.runnerHost;
+  const copies = services.workingCopies;
+  copies.onAppended(() => bridge.wake());
+
+  app.post(
+    MACHINE_TASKS_PATH,
+    handle(async (c) => {
+      const request = await parseBody(c, HandOverRequest);
+      // The first task of a project brings its repository here, which can take a while.
+      const project =
+        copies.projectFor(request.project) ??
+        copies.adoptProject(request.project, await checkouts.ensure(request.project));
+      return c.json(copies.accept(request, project));
+    }),
+  );
+  app.delete(
+    `${MACHINE_TASKS_PATH}/:id`,
+    handle((c) => c.json(copies.release(idParam(c)))),
+  );
+  // The board's poll: what it hasn't applied yet, and what this runner asks of it. Held open while there is neither.
+  app.get(
+    MACHINE_CHANGES_PATH,
+    handle(async (c) => {
+      const query = parseQuery(c, ChangesQuery);
+      if (query.prefix !== undefined) copies.setNumbering(query.prefix, query.counter ?? 0);
+      bridge.touch();
+      const read = (): ChangesResponse => ({ ...copies.changes(query.after, query.epoch), requests: bridge.take() });
+      let changes = read();
+      if (changes.entries.length === 0 && changes.requests.length === 0 && query.wait > 0) {
+        await bridge.wait(query.wait);
+        changes = read();
+        bridge.touch();
+      }
+      return c.json(changes);
+    }),
+  );
+  app.post(
+    MACHINE_EDITS_PATH,
+    handle(async (c) => c.json(copies.applyEdit(await parseBody(c, HeldEditRequest)))),
+  );
+  app.post(
+    MACHINE_REPLIES_PATH,
+    handle(async (c) => {
+      bridge.reply(await parseBody(c, BridgeReply));
+      return noContent(c);
+    }),
   );
 }

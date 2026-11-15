@@ -1,3 +1,4 @@
+import { taskLabel } from "@repo/contracts";
 import type { TaskSummary } from "@repo/contracts";
 import { z } from "zod";
 import { defineAutomation, type Candidate } from "../types.ts";
@@ -48,7 +49,7 @@ export const autoArchive = defineAutomation({
         .filter((t) => !hasUnmergedPr(t))
         .map((t): Candidate => ({
           dedupeKey: `archive:${t.id}:${t.statusChangedAt}`,
-          summary: `archive #${t.number} after ${config.days} days in Done`,
+          summary: `archive ${taskLabel(t)} after ${config.days} days in Done`,
           taskId: t.id,
         }));
       const epics = done
@@ -64,7 +65,7 @@ export const autoArchive = defineAutomation({
           return [
             {
               dedupeKey: `archive-epic:${epic.id}:${epic.statusChangedAt}`,
-              summary: `archive #${epic.number} with its ${tasksOf(children.length)} after ${days} days in Done`,
+              summary: `archive ${taskLabel(epic)} with its ${tasksOf(children.length)} after ${days} days in Done`,
               taskId: epic.id,
               data: { days },
             },

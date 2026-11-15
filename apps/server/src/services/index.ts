@@ -25,6 +25,9 @@ import { createAttachmentsService } from "./attachments.ts";
 import { createBackupService } from "./backup/index.ts";
 import { createBoardService } from "./board.ts";
 import { createCore } from "./core.ts";
+import { routeHeldEdits } from "./heldEdits.ts";
+import { createHoldsService } from "./holds.ts";
+import { createWorkingCopiesService } from "./workingCopies.ts";
 import { createCustomAutomationsService } from "./customAutomations.ts";
 import { createDigestsService } from "./digests.ts";
 import { createImportsService, type ImportsModule } from "./imports.ts";
@@ -81,6 +84,12 @@ export interface ServiceDeps {
   fetchThreadUsage?: (threadId: string) => Promise<T3ThreadUsage | null>;
   /** LiteLLM's fetched prices and where prices come from; the built-in table only when unset. */
   modelPrices?: ModelPrices;
+  /** `runner` for a server that holds tasks for a board (remote-machines.md); a board otherwise. */
+  role?: "board" | "runner";
+  /** Called when an edit to a held task is queued for its machine, so it is sent at once. */
+  onHeldEdit?: (machineId: string) => void;
+  /** The repository a folder's `origin` names, read on the spot; a runner uses it for projects made there. */
+  readRemote?: (workspaceRoot: string) => { remote: string; remoteUrl: string } | null;
 }
 
 /** Builds the service layer over one database. */
@@ -109,6 +118,14 @@ export function createServices(deps: ServiceDeps): Services {
   let reviews: ReviewsService | null = null;
   let imports: ImportsModule | null = null;
   let relations: RelationsModule | null = null;
+  let all: Services | null = null;
+  const role = deps.role ?? "board";
+  const workingCopies = createWorkingCopiesService(core, {
+    projects,
+    services: () => all!,
+    readRemote: deps.readRemote ?? (() => null),
+    logs: role === "runner",
+  });
   const tasks = createTasksService(core, {
     projects,
     plans: () => plans!,
@@ -121,6 +138,8 @@ export function createServices(deps: ServiceDeps): Services {
     relations: () => relations!,
     attachments,
     usage,
+    // A task made on a runner takes a number the board gave out, or the machine's own prefixed one.
+    ...(role === "runner" ? { numbering: () => workingCopies.nextNumber() } : {}),
   });
   relations = createRelations(core, { resolveId: (ref) => tasks.service.resolveId(ref), record: tasks.record });
   imports = createImportsService(core, { tasks: () => tasks.service, settings });
@@ -187,7 +206,7 @@ export function createServices(deps: ServiceDeps): Services {
   projects.update = rearmingVariables(updateProject, (_id, input) => input.variables !== undefined);
   settings.update = rearmingVariables(updateSettings, (input) => input.automationVariables !== undefined);
 
-  return {
+  all = {
     projects,
     tasks: tasks.service,
     plans: plans.service,
@@ -208,6 +227,8 @@ export function createServices(deps: ServiceDeps): Services {
     attention,
     machineAuth: createMachineAuthService(core),
     machines: createMachinesService(core),
+    holds: createHoldsService(core, { projects, detail: (id) => tasks.service.detail(id) }),
+    workingCopies,
     repoPrReviews: createRepoPrReviewsService(core, { notifications }),
     autopilot: createAutopilotService(core, {
       automations,
@@ -251,4 +272,7 @@ export function createServices(deps: ServiceDeps): Services {
       automationTitle: (key) => automationTitleOf(automations(), key),
     }),
   };
+  // Last, so every wrapper above is inside it: an edit to a held task is queued for its machine whoever makes it.
+  routeHeldEdits(core, all, { role, onQueued: (machineId) => deps.onHeldEdit?.(machineId) });
+  return all;
 }

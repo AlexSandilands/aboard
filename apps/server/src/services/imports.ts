@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   LABEL_MAX_LENGTH,
   LABELS_PER_TASK_MAX,
   normalizeLabel,
@@ -158,7 +159,7 @@ export function createImportsService(
       if (other) {
         const where =
           other.kind === "epic" ? "is an epic" : `is in epic #${repos.tasks.get(other.parentId!)?.number ?? "?"}`;
-        elsewhere.push(`${childSource.placeholder} (#${other.number} ${where})`);
+        elsewhere.push(`${childSource.placeholder} (${taskLabel(other)} ${where})`);
         continue;
       }
       created.push(

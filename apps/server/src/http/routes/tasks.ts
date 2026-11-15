@@ -5,9 +5,11 @@ import {
   TaskRefsInput,
   CloseTaskInput,
   CreateTaskInput,
+  HandOverInput,
   LinkInput,
   MoveTaskInput,
   PlanInput,
+  ReleaseInput,
   SetDeliveryInput,
   StartCustomHandoffInput,
   StartSessionInput,
@@ -55,6 +57,20 @@ export function registerTaskRoutes(app: Hono, { services, integrations }: AppCon
         }),
       );
     }),
+  );
+  // Handing a task to a connected machine and taking it back (remote-machines.md#held-tasks).
+  app.post(
+    "/api/tasks/:id/hold",
+    handle(async (c) => {
+      const { machineId } = await parseBody(c, HandOverInput);
+      return c.json(await integrations.machineSync.handOver(taskId(c), machineId, actorOf(c)));
+    }),
+  );
+  app.delete(
+    "/api/tasks/:id/hold",
+    handle(async (c) =>
+      c.json(await integrations.machineSync.release(taskId(c), await parseBody(c, ReleaseInput), actorOf(c))),
+    ),
   );
   app.post(
     "/api/tasks",

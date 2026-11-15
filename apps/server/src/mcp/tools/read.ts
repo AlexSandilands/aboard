@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  taskLabel,
   defaultHandoffMode,
   HANDOFF_MODES,
   handoffModeError,
@@ -117,7 +118,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
             lines.push(`  epic ${summaryLine(epic)}`);
           }
           for (const t of tasks.filter((task) => task.attention.length > 0)) {
-            lines.push(`  ! #${t.number} ${t.title}: ${t.attention.map((a) => a.message).join("; ")}`);
+            lines.push(`  ! ${taskLabel(t)} ${t.title}: ${t.attention.map((a) => a.message).join("; ")}`);
           }
         }
         if (hasProjectRef(args)) {
@@ -350,12 +351,12 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
           throw new AppError(
             "VALIDATION",
             epic.parent
-              ? `#${epic.number} is a task in epic #${epic.parent.number}; call epic_overview on that`
-              : `#${epic.number} is a task, not an epic; use get_task`,
+              ? `${taskLabel(epic)} is a task in epic ${taskLabel(epic.parent)}; call epic_overview on that`
+              : `${taskLabel(epic)} is a task, not an epic; use get_task`,
           );
         }
         const project = safeProject(services, epic.projectId);
-        const header = `Epic #${epic.number} ${epic.title} [${statusLabel(epic.status)}]  ·  ${projectLabel(project)}`;
+        const header = `Epic ${taskLabel(epic)} ${epic.title} [${statusLabel(epic.status)}]  ·  ${projectLabel(project)}`;
         const blocker = project ? t3LaunchBlocker(ctx, project) : "its project is missing";
         const t3 = blocker
           ? `T3 Code: not available (${blocker}). Start tasks as subagents or with prompts for the user.`
@@ -438,7 +439,7 @@ ${prompt}
           epicBranch: mode === "followup" ? epicBranchOf(services, task) : null,
         });
         const name = mode === "followup" ? "Follow-up" : `${mode[0]!.toUpperCase()}${mode.slice(1)}`;
-        const head = `${name} prompt for #${task.number}${subagent ? ", for a subagent" : ""}. Pass it on as it is:`;
+        const head = `${name} prompt for ${taskLabel(task)}${subagent ? ", for a subagent" : ""}. Pass it on as it is:`;
         // A subagent can't switch its own model, so the suggestion goes to the orchestrator that starts it.
         const model = subagent
           ? suggestedModelLine(

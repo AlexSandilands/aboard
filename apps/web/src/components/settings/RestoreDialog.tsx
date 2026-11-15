@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   RESTORE_CONFIRM_WORD,
   type BackupCommit,
   type BackupDiff,
@@ -197,7 +198,7 @@ function TasksTab({ diff, loading, source }: { diff: BackupDiff | undefined; loa
             <li key={task.taskId} className="flex items-start gap-2.5 px-3 py-2 text-xs">
               <input
                 type="checkbox"
-                aria-label={`Restore #${task.number}`}
+                aria-label={`Restore ${taskLabel(task)}`}
                 className="mt-0.5 size-3.5 shrink-0 cursor-pointer accent-primary"
                 checked={selected.has(task.number)}
                 disabled={!task.projectOnBoard || restore.isPending}
@@ -205,7 +206,7 @@ function TasksTab({ diff, loading, source }: { diff: BackupDiff | undefined; loa
               />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate">
-                  #{task.number} {task.title}
+                  {taskLabel(task)} {task.title}
                 </span>
                 <span className="text-muted-foreground">
                   {task.change === "missing" ? "Missing" : "Changed"} · {task.projectName ?? "Unknown project"}

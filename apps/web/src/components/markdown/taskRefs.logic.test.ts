@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { remarkTaskRefs, taskRefNumber, type MdNode } from "./taskRefs.logic";
 
 const text = (value: string): MdNode => ({ type: "text", value });
-const ref = (n: number): MdNode => ({ type: "link", url: `#task-${n}`, children: [text(`#${n}`)] });
-const run = (children: MdNode[], known: number[] = [42]) => {
+const ref = (n: number | string): MdNode => ({ type: "link", url: `#task-${n}`, children: [text(`#${n}`)] });
+const run = (children: MdNode[], known: Array<number | string> = [42]) => {
   const tree: MdNode = { type: "root", children };
   remarkTaskRefs((n) => known.includes(n))(tree);
   return tree.children;
@@ -48,6 +48,31 @@ describe("remarkTaskRefs", () => {
         { type: "paragraph", children: [text(value)] },
       ]);
     }
+  });
+});
+
+describe("a task a machine numbered", () => {
+  it("is linked by its prefix and number, in any case, and never taken for the board's own number", () => {
+    const linked = run([{ type: "paragraph", children: [text("See #E7 and #e7, not #7 or #E8.")] }], ["E7"]);
+    expect(linked).toEqual([
+      {
+        type: "paragraph",
+        children: [
+          text("See "),
+          ref("E7"),
+          text(" and "),
+          { type: "link", url: "#task-E7", children: [text("#e7")] },
+          text(", not #7 or #E8."),
+        ],
+      },
+    ]);
+    expect(taskRefNumber("#task-E7")).toBe("E7");
+    expect(taskRefNumber("#task-e7")).toBeNull();
+  });
+
+  it("leaves a colour or an anchor that only looks like one as text", () => {
+    const untouched = [{ type: "paragraph", children: [text("Use #fff or #abc123, see #section2.")] }];
+    expect(run(untouched, ["E7"])).toEqual(untouched);
   });
 });
 

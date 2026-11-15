@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   RECURRING_EVERY_DAYS_MAX,
   RECURRING_NAME_MAX,
   isoDate,
@@ -136,7 +137,7 @@ export function nextDueLabel(rule: RecurringRuleView, running: boolean, now: Dat
 export function lastTaskLabel(rule: Pick<RecurringRuleView, "lastTask">): string | null {
   const task = rule.lastTask;
   if (!task) return null;
-  return `#${task.number} ${task.archived ? "archived" : task.status === "done" ? "done" : "still open"}`;
+  return `${taskLabel(task)} ${task.archived ? "archived" : task.status === "done" ? "done" : "still open"}`;
 }
 
 /** An example rule: a template to create for the project, and the schedule to run it on. */

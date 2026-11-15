@@ -1,4 +1,5 @@
 import {
+  taskLabel,
   ATTENTION_AUTOPILOT_KEY,
   ATTENTION_REQUEST_KEY,
   type AttentionReason,
@@ -79,7 +80,7 @@ export function createAttentionService(
             if (summary.dismissedAttention.some((r) => r.key === key)) return null;
             throw new AppError(
               "CONFLICT",
-              `#${summary.number} has no such flag (any more), so there is nothing to dismiss`,
+              `${taskLabel(summary)} has no such flag (any more), so there is nothing to dismiss`,
             );
           });
     const standing = reasons.filter((r): r is AttentionReason => r !== null);
@@ -136,7 +137,7 @@ export function createAttentionService(
       core.write((fx) => {
         const task = deps.task(taskId);
         if (task.status === "done") {
-          throw new AppError("VALIDATION", `#${task.number} is done; a finished task doesn't ask for attention`);
+          throw new AppError("VALIDATION", `${taskLabel(task)} is done; a finished task doesn't ask for attention`);
         }
         const requestedAt = core.now().toISOString();
         repos.tasks.update({
@@ -149,8 +150,8 @@ export function createAttentionService(
         deps.notifications.notify({
           kind: "agent_request",
           taskId,
-          title: `Attention requested on #${task.number}`,
-          body: `#${task.number} ${task.title}\n${text}`,
+          title: `Attention requested on ${taskLabel(task)}`,
+          body: `${taskLabel(task)} ${task.title}\n${text}`,
           dedupeKey: `request:${taskId}:${requestedAt}`,
         });
       });

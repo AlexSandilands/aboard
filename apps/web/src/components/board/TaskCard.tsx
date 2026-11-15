@@ -1,3 +1,4 @@
+import { taskLabel } from "@repo/contracts";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Project, TaskSummary } from "@repo/contracts";
@@ -78,7 +79,7 @@ export const TaskCardContent = memo(function TaskCardContent({
   return (
     <div className="flex flex-col gap-1 px-2.5 py-2">
       <div className="flex h-5 min-w-0 items-center gap-1.5 text-xs">
-        <span className="shrink-0 font-mono tabular-nums text-muted-foreground/70">#{task.number}</span>
+        <span className="shrink-0 font-mono tabular-nums text-muted-foreground/70">{taskLabel(task)}</span>
         {ticketKey ? (
           <Badge variant="outline" size="sm">
             {ticketKey}
@@ -173,7 +174,7 @@ function CompactCardLine({
   const pr = cardLinks(task.links).find((link) => link.kind === "pr");
   return (
     <div className="flex h-7 min-w-0 items-center gap-1.5 px-2 text-xs">
-      <span className="shrink-0 font-mono tabular-nums text-muted-foreground/70">#{task.number}</span>
+      <span className="shrink-0 font-mono tabular-nums text-muted-foreground/70">{taskLabel(task)}</span>
       {project ? (
         <span title={project.title} className="flex shrink-0 items-center">
           <ProjectFavicon title={project.title} icon={project.icon} className="size-3.5" />
@@ -240,7 +241,7 @@ function CardLabels({ labels }: { labels: ReadonlyArray<string> }) {
  */
 function PriorityButton({ task }: { task: TaskSummary }) {
   const { mutate: updateTask, isPending } = useUpdateTask();
-  const label = task.priority ? `Remove priority from #${task.number}` : `Mark #${task.number} as priority`;
+  const label = task.priority ? `Remove priority from ${taskLabel(task)}` : `Mark ${taskLabel(task)} as priority`;
   return (
     <Tooltip>
       <TooltipTrigger
@@ -283,7 +284,7 @@ export function ArchiveButton({ task }: { task: TaskSummary }) {
             variant="ghost"
             size="icon-xs"
             className="-my-1 -me-1 size-6 shrink-0"
-            aria-label={`Archive #${task.number}`}
+            aria-label={`Archive ${taskLabel(task)}`}
             disabled={isPending}
             {...linkHandlers}
             onClick={(event) => {
@@ -310,8 +311,8 @@ function ResolutionChip({ task }: { task: TaskSummary }) {
   return (
     <button
       type="button"
-      title={`#${by.number} ${by.title}`}
-      aria-label={`${label}: open #${by.number} ${by.title}`}
+      title={`${taskLabel(by)} ${by.title}`}
+      aria-label={`${label}: open ${taskLabel(by)} ${by.title}`}
       className={cn(chipClassName, "font-normal")}
       {...linkHandlers}
       onClick={(event) => {
@@ -388,7 +389,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({
         // Restates dnd-kit's defaults so the card's semantics are visible statically.
         role="button"
         tabIndex={0}
-        aria-label={`#${task.number} ${task.title}${picked ? " (picked)" : ""}`}
+        aria-label={`${taskLabel(task)} ${task.title}${picked ? " (picked)" : ""}`}
         aria-current={selected || undefined}
         data-task-card={task.id}
         className={cn(

@@ -44,7 +44,7 @@ export function RunHistoryRow({
   automation: string;
   projectTitle: string | null;
   /** The run's task, when the board still has it. */
-  taskNumber: number | null;
+  taskNumber: number | string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Its automation paused itself in the run's project: a retry would only wait for Resume, so none is offered. */

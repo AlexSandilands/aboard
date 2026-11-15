@@ -6,6 +6,7 @@ import {
   type T3ThreadRef,
 } from "@repo/contracts";
 import { generateKeyBetween } from "fractional-indexing";
+import { randomUUID } from "node:crypto";
 import type { EventBus } from "../bus.ts";
 import { nowIso, parseJson, transaction, type Db } from "../db/database.ts";
 import type { Repos } from "../db/repos/index.ts";
@@ -38,6 +39,17 @@ export interface Effects {
   providers(): void;
   /** Appends a task_events row and marks the task's card changed. */
   log(taskId: string, actor: string, type: string, payload?: Record<string, unknown>): void;
+  /**
+   * Appends an activity entry that happened elsewhere, at its own time: what a machine holding the task logged
+   * (remote-machines.md#held-tasks). Otherwise as `log`.
+   */
+  replay(taskId: string, event: { at: string; actor: string; type: string; payload: Record<string, unknown> }): void;
+}
+
+/** What a write touched, for the hooks that run before it commits. */
+export interface WriteMarks {
+  /** Tasks whose card or detail was marked changed, deleted ones left out. */
+  tasks: readonly string[];
 }
 
 /** Log entries that can leave a task Done or archived (`status_changed`, `closed`, `archived`). */
@@ -71,6 +83,19 @@ export interface Core {
    * Nested calls join the outer write; nothing is published if the transaction throws.
    */
   write<T>(fn: (fx: Effects) => T): T;
+  /**
+   * An id for something a service makes (a step, a link). Random, except inside `withIds`, where the ids another
+   * machine gave the same things are handed out again, in order, so both name them the same.
+   */
+  newId(): string;
+  /** Runs `fn` and returns the ids `newId` gave out during it, in order. */
+  recordIds<T>(fn: () => T): { result: T; ids: string[] };
+  /** Runs `fn` with `newId` handing out `ids` in order, then random ones once they run out. */
+  withIds<T>(ids: readonly string[], fn: () => T): T;
+  /** Runs `hook` inside every outermost write, after its work and before it commits; a throw rolls the write back. */
+  beforeCommit(hook: (marks: WriteMarks, fx: Effects) => void): void;
+  /** Runs `hook` after every outermost write has committed and published. */
+  afterCommit(hook: () => void): void;
 }
 
 /** Builds the shared write/flush machinery used by every service. */
@@ -84,6 +109,10 @@ export function createCore(deps: {
   const { db, repos, bus } = deps;
   const now = deps.now ?? (() => new Date());
   let pending: Pending | null = null;
+  const beforeCommitHooks: Array<(marks: WriteMarks, fx: Effects) => void> = [];
+  const afterCommitHooks: Array<() => void> = [];
+  let recording: string[] | null = null;
+  let supplied: string[] | null = null;
   /** The unread count last published, to tell whether deleting tasks changed it. */
   let lastUnread = unreadNotifications(repos, now());
 
@@ -115,6 +144,12 @@ export function createCore(deps: {
       repos.events.append(taskId, nowIso(), actor, type, payload);
       if (FINISHING_EVENTS.has(type)) p.finishing.add(taskId);
       if (endQuietNotice(repos, taskId, actor, nowIso())) p.notificationsChanged = true;
+      p.tasks.add(taskId);
+    },
+    replay: (taskId, event) => {
+      repos.events.append(taskId, event.at, event.actor, event.type, event.payload);
+      if (FINISHING_EVENTS.has(event.type)) p.finishing.add(taskId);
+      if (endQuietNotice(repos, taskId, event.actor, event.at)) p.notificationsChanged = true;
       p.tasks.add(taskId);
     },
   });
@@ -252,7 +287,12 @@ export function createCore(deps: {
       let result: T;
       try {
         result = transaction(db, () => {
-          const value = fn(effectsFor(p));
+          const fx = effectsFor(p);
+          const value = fn(fx);
+          if (beforeCommitHooks.length > 0) {
+            const tasks = [...new Set([...p.tasks, ...p.details])].filter((id) => !p.deletedTasks.has(id));
+            for (const hook of beforeCommitHooks) hook({ tasks }, fx);
+          }
           readFinished(p);
           dropLapsedDismissals(p);
           return value;
@@ -261,8 +301,36 @@ export function createCore(deps: {
         pending = null;
       }
       flush(p);
+      for (const hook of afterCommitHooks) hook();
       return result;
     },
+    newId() {
+      const id = supplied?.shift() ?? randomUUID();
+      recording?.push(id);
+      return id;
+    },
+    recordIds(fn) {
+      const outer = recording;
+      const ids: string[] = [];
+      recording = ids;
+      try {
+        return { result: fn(), ids };
+      } finally {
+        recording = outer;
+        outer?.push(...ids);
+      }
+    },
+    withIds(ids, fn) {
+      const outer = supplied;
+      supplied = [...ids];
+      try {
+        return fn();
+      } finally {
+        supplied = outer;
+      }
+    },
+    beforeCommit: (hook) => void beforeCommitHooks.push(hook),
+    afterCommit: (hook) => void afterCommitHooks.push(hook),
   };
 }
 

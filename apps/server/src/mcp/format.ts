@@ -1,4 +1,6 @@
 import {
+  storedTaskNumber,
+  taskLabel,
   AGENT_HARNESSES,
   cacheReadShare,
   totalTokens,
@@ -69,7 +71,7 @@ export function statusLabel(status: TaskStatus): string {
 
 /** "done by #4", "duplicate of #4", "won't do"; null for open tasks. */
 export function resolutionText(task: Pick<TaskSummary, "resolution" | "resolvedBy">): string | null {
-  const by = task.resolvedBy ? ` #${task.resolvedBy.number}` : "";
+  const by = task.resolvedBy ? ` ${taskLabel(task.resolvedBy)}` : "";
   switch (task.resolution) {
     case "completed":
       return `done by${by || " another task"}`;
@@ -164,7 +166,7 @@ const openBlockers = (task: Pick<TaskSummary, "blockedBy">): TaskRelation[] =>
 
 /** "#79 Title [Done]", with "(archived)" for a blocker that has left the board. */
 const relationText = (r: TaskRelation): string =>
-  `#${r.number} ${r.title} [${statusLabel(r.status)}${r.archived ? ", archived" : ""}]`;
+  `${taskLabel(r)} ${r.title} [${statusLabel(r.status)}${r.archived ? ", archived" : ""}]`;
 
 /**
  * One line per task: "#42 Title [ui] — 3/7, at 2.1 Write tests · PR #12 open · ! 1 step blocked". An epic shows its
@@ -184,12 +186,12 @@ export function summaryLine(task: TaskSummary, opts: { inEpic?: boolean } = {}):
   } else if (task.status === "backlog" && !task.manual) {
     parts.push("no plan");
   }
-  if (task.parent && opts.inEpic !== false) parts.push(`in epic #${task.parent.number}`);
+  if (task.parent && opts.inEpic !== false) parts.push(`in epic ${taskLabel(task.parent)}`);
   if (task.dueDate) parts.push(`due ${task.dueDate}`);
   if (task.blocked)
     parts.push(
       `blocked by ${openBlockers(task)
-        .map((b) => `#${b.number}`)
+        .map((b) => taskLabel(b))
         .join(", ")}`,
     );
   const links = task.links.map(shortLink);
@@ -198,7 +200,7 @@ export function summaryLine(task: TaskSummary, opts: { inEpic?: boolean } = {}):
   if (task.attention.length) parts.push(`! ${task.attention.map((a) => a.message).join("; ")}`);
   const labels = task.labels.length ? ` ${task.labels.map((l) => `[${l}]`).join(" ")}` : "";
   const kind = task.kind === "epic" ? " [epic]" : task.manual ? " [manual]" : "";
-  return `#${task.number} ${task.title}${kind}${labels}${parts.length ? ` — ${parts.join(" · ")}` : ""}`;
+  return `${taskLabel(task)} ${task.title}${kind}${labels}${parts.length ? ` — ${parts.join(" · ")}` : ""}`;
 }
 
 /** Tasks grouped under status headings, in board column order. */
@@ -243,12 +245,13 @@ export function eventText(event: TaskEvent): string {
       if (p.markedMerged === true) what += " (branch marked merged into the default branch)";
       break;
     case "closed": {
-      const by = typeof p.byTask === "number" ? ` #${p.byTask}` : "";
+      const closer = storedTaskNumber(p.byTask);
+      const by = closer ? ` #${closer}` : "";
       what = `closed as ${str("resolution") ?? "?"}${by}`;
       break;
     }
     case "resolver_deleted":
-      what = `#${typeof p.number === "number" ? p.number : "?"} "${str("title") ?? "?"}", which closed this, was deleted`;
+      what = `#${storedTaskNumber(p.number) ?? "?"} "${str("title") ?? "?"}", which closed this, was deleted`;
       break;
     case "step_updated":
       what = `step "${str("title") ?? "?"}"${str("to") ? ` ${str("from") ?? "?"} -> ${str("to")}` : " edited"}`;
@@ -318,7 +321,7 @@ export function eventText(event: TaskEvent): string {
     case "blocker_removed":
     case "blocks_added":
     case "blocks_removed": {
-      const other = `#${typeof p.task === "number" ? p.task : "?"} ${str("title") ?? ""}`.trimEnd();
+      const other = `#${storedTaskNumber(p.task) ?? "?"} ${str("title") ?? ""}`.trimEnd();
       const text = {
         blocker_added: `now blocked by ${other}`,
         blocker_removed: `no longer blocked by ${other}`,
@@ -330,7 +333,7 @@ export function eventText(event: TaskEvent): string {
     }
     case "blocker_deleted":
     case "blocked_deleted": {
-      const other = `#${typeof p.task === "number" ? p.task : "?"} ${str("title") ?? ""}`.trimEnd();
+      const other = `#${storedTaskNumber(p.task) ?? "?"} ${str("title") ?? ""}`.trimEnd();
       what =
         event.type === "blocker_deleted"
           ? `${other}, which blocked this, was deleted`
@@ -339,7 +342,7 @@ export function eventText(event: TaskEvent): string {
     }
     case "child_added":
     case "child_removed": {
-      const child = `#${typeof p.task === "number" ? p.task : "?"} ${str("title") ?? ""}`.trimEnd();
+      const child = `#${storedTaskNumber(p.task) ?? "?"} ${str("title") ?? ""}`.trimEnd();
       what =
         event.type === "child_added" ? `task ${child} added` : `task ${child} ${p.deleted ? "deleted" : "removed"}`;
       break;
@@ -371,7 +374,7 @@ export function missingLinkHints(
   selfLinkHints = true,
 ): string[] {
   if (task.status === "done" || task.archivedAt) return [];
-  const ref = `"#${task.number}"`;
+  const ref = `"${taskLabel(task)}"`;
   const linked = new Set(task.links.flatMap((l) => (l.kind === "ticket" ? [`${l.ref.system}:${l.ref.key}`] : [])));
   // Only keys the configured systems recognise are hinted, as when linking. The board links title keys of a system
   // with autoLink itself, so a hint for one would tell an agent to restore a link someone removed.
@@ -440,7 +443,7 @@ export function labelHint(task: TaskDetail, labelsInUse: ReadonlyArray<LabelUsag
     : "No labels are in use yet; pick short type labels such as ui, backend, docs or bug.";
   return (
     `This task has no labels. Suggest 1-3 to the user. ${source} ` +
-    `Once they agree, call update_task(task: "#${task.number}", labels: [...]).`
+    `Once they agree, call update_task(task: "${taskLabel(task)}", labels: [...]).`
   );
 }
 
@@ -460,7 +463,7 @@ export function captureStepHint(task: TaskDetail): string | null {
   if (mentioned) return null;
   return (
     "This task is labelled ui, but no plan step asks for a screen capture. Add one with " +
-    `add_steps(task: "#${task.number}", steps: [{title: "Screen capture: ...", notes: "<the states to capture>"}]), ` +
+    `add_steps(task: "${taskLabel(task)}", steps: [{title: "Screen capture: ...", notes: "<the states to capture>"}]), ` +
     "and if the plan has a review or PR step, move it ahead of that with update_plan (move: {before}): " +
     "open the changed surface in a real browser in each state the change introduced (menus open, warnings showing, " +
     "narrow width where relevant), look at every screenshot, fix what is wrong, then attach them with " +
@@ -483,7 +486,7 @@ export function missingScreenshotsWarning(task: TaskDetail): string | null {
   return (
     "Warning: this task is labelled ui and no plan step has a screenshot attached. Open the changed surface in a real browser " +
     "in each state you introduced, look at your screenshots and fix anything wrong, then attach them with " +
-    `update_step(task: "#${task.number}", step, images: [absolute paths]) before you open the PR.`
+    `update_step(task: "${taskLabel(task)}", step, images: [absolute paths]) before you open the PR.`
   );
 }
 
@@ -494,7 +497,7 @@ export function suggestedModelHint(task: TaskDetail): string | null {
   }
   return (
     "This task has no suggested model. Judge how much reasoning implementing it needs and call " +
-    `update_task(task: "#${task.number}", suggestedModel: {tier: "light" | "standard" | "deep", reason}).`
+    `update_task(task: "${taskLabel(task)}", suggestedModel: {tier: "light" | "standard" | "deep", reason}).`
   );
 }
 
@@ -509,7 +512,7 @@ export function autopilotFlagHint(task: TaskDetail): string | null {
   return (
     "Autopilot's Start planned tasks is on for this task, and only starts tasks flagged for Autopilot. " +
     "Ask the user whether to flag this one, and never set it without their answer. Once they decide, call " +
-    `update_task(task: "#${task.number}", autopilot: "on" | "off"). Autopilot's own settings are the user's alone.`
+    `update_task(task: "${taskLabel(task)}", autopilot: "on" | "off"). Autopilot's own settings are the user's alone.`
   );
 }
 
@@ -532,12 +535,12 @@ export function socialBreakHint(): string {
  */
 export function deliveryHint(epic: { number: number }): string {
   return (
-    `Epic #${epic.number}'s tasks look like they build on each other. Ask the user how to deliver them, and never ` +
+    `Epic ${taskLabel(epic)}'s tasks look like they build on each other. Ask the user how to deliver them, and never ` +
     "choose without their answer. Pull requests to main (the default): each task opens a pull request to the default " +
     "branch, the user merges it, and a task waiting on it starts after that. Integration branch: the tasks start from " +
     "a branch of the epic's own and open their pull requests against it, Autopilot merges each one there once it is " +
     "reviewed and green, and the user merges the epic's single pull request into the default branch at the end. " +
-    `Once they decide, call update_task(task: "#${epic.number}", delivery: "integration" | "main").`
+    `Once they decide, call update_task(task: "${taskLabel(epic)}", delivery: "integration" | "main").`
   );
 }
 
@@ -557,7 +560,7 @@ const stepLabels = (phases: ReadonlyArray<PlanPhase>) =>
 export function progressHints(task: TaskDetail, now: number, opts: { closing?: boolean } = {}): string[] {
   // A manual task's plan, if it has one, is the user's checklist: nobody is reporting progress on it.
   if (task.kind === "epic" || task.manual || task.archivedAt || task.resolution || task.progress.total === 0) return [];
-  const ref = `"#${task.number}"`;
+  const ref = `"${taskLabel(task)}"`;
   const steps = stepLabels(task.phases);
   const open = steps.filter((s) => s.step.status !== "done" && s.step.status !== "skipped");
   const hints: string[] = [];
@@ -671,7 +674,7 @@ function reviewLines(task: TaskDetail): string[] {
   }
   const gating = [...earlier, ...latest.findings].filter((f) => f.status === "open" && isGatingSeverity(f.severity));
   if (gating.length) {
-    lines.push(`  Resolve each with resolve_finding(task: "#${task.number}", finding: "<label>", status, note).`);
+    lines.push(`  Resolve each with resolve_finding(task: "${taskLabel(task)}", finding: "<label>", status, note).`);
   }
   return lines;
 }
@@ -692,8 +695,8 @@ export function renderEpicChildren(
   const lines = [`Tasks (${epic.rollup ? describeEpicRollup(epic.rollup) : "none"}):`];
   if (epic.children.length === 0) {
     lines.push(
-      `  none yet. Create them with create_task or add_to_backlog (epic: "#${epic.number}"), or attach existing ` +
-        `tasks with update_task(task, epic: "#${epic.number}").`,
+      `  none yet. Create them with create_task or add_to_backlog (epic: "${taskLabel(epic)}"), or attach existing ` +
+        `tasks with update_task(task, epic: "${taskLabel(epic)}").`,
     );
     return lines.join("\n");
   }
@@ -841,9 +844,9 @@ export function renderTaskDetail(
   const lines: string[] = [];
   const epic = task.kind === "epic";
   const status = epic ? `Epic · ${statusLabel(task.status)}` : statusLabel(task.status);
-  lines.push(`#${task.number} ${task.title} [${status}]${task.archivedAt ? " (archived)" : ""}`);
+  lines.push(`${taskLabel(task)} ${task.title} [${status}]${task.archivedAt ? " (archived)" : ""}`);
   lines.push(`Project: ${projectLabel(project)}  ·  task id: ${task.id}`);
-  if (task.parent) lines.push(`Epic: #${task.parent.number} ${task.parent.title}`);
+  if (task.parent) lines.push(`Epic: ${taskLabel(task.parent)} ${task.parent.title}`);
   // A Done task's work is finished, so the "start from / open your PR against" advice no longer applies: while the
   // epic's branch is unmerged its code is only there, and after that it is on the default branch with the epic.
   const delivery = opts.epicBranch
@@ -884,14 +887,14 @@ export function renderTaskDetail(
   }
   if (task.resolves.length) {
     const resolved = task.resolves.map(
-      (r) => `#${r.number} ${r.title} (${r.resolution === "duplicate" ? "duplicate" : "done by this"})`,
+      (r) => `${taskLabel(r)} ${r.title} (${r.resolution === "duplicate" ? "duplicate" : "done by this"})`,
     );
     lines.push(`Also resolved: ${resolved.join("; ")}`);
   }
   if (task.blockedBy.length) {
     const wait = task.blocked
       ? ` (blocked until ${openBlockers(task)
-          .map((b) => `#${b.number}`)
+          .map((b) => taskLabel(b))
           .join(", ")} are Done)`
       : "";
     lines.push(`Blocked by: ${task.blockedBy.map(relationText).join("; ")}${wait}`);
@@ -951,7 +954,7 @@ export function renderTaskDetail(
   }
   if (reminder) {
     lines.push("", "Link your work:");
-    for (const line of selfLinkReminder({ task: `"#${task.number}"`, ...reminder })) lines.push(`- ${line}`);
+    for (const line of selfLinkReminder({ task: `"${taskLabel(task)}"`, ...reminder })) lines.push(`- ${line}`);
   }
   const progress = opts.progress
     ? progressHints(task, opts.progress.now, { closing: opts.progress.closing ?? false })

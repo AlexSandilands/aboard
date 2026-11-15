@@ -1,3 +1,4 @@
+import { taskLabel } from "./taskNumbers.ts";
 import { BRAND } from "./brand.ts";
 import { REVIEW_PR_STEP, type ReviewSkillRef } from "./reviews.ts";
 import type { TaskSummary } from "./schemas.ts";
@@ -86,9 +87,9 @@ const skillLines = (skill: ReviewSkillRef): string[] =>
 
 /** What the reviewer subagent (or the board's headless reviewer) is given. Read-only: it records, never edits. */
 export function reviewerBrief({ task, round, skill }: Pick<ReviewPromptInput, "task" | "round" | "skill">): string {
-  const ref = `"#${task.number}"`;
+  const ref = `"${taskLabel(task)}"`;
   return [
-    `Review task #${task.number} "${task.title}" from the ${BRAND.id} task board. This is review round ${round}.`,
+    `Review task ${taskLabel(task)} "${task.title}" from the ${BRAND.id} task board. This is review round ${round}.`,
     "",
     `- Call get_task(${ref}) on the ${BRAND.id} MCP server for what the change should do and for earlier rounds' findings and resolutions.`,
     "- Review the changes on the current branch, including uncommitted work. Don't edit any files.",
@@ -109,9 +110,9 @@ export function reviewFixInstructions({
   cycleRound,
   maxRounds,
 }: Omit<ReviewPromptInput, "skill">): string {
-  const ref = `"#${task.number}"`;
+  const ref = `"${taskLabel(task)}"`;
   return [
-    `Review round ${round} of task #${task.number} "${task.title}" found blocking or major issues. Before you open a pull request:`,
+    `Review round ${round} of task ${taskLabel(task)} "${task.title}" found blocking or major issues. Before you open a pull request:`,
     `1. Call get_task(${ref}) on the ${BRAND.id} MCP server and read the open findings.`,
     "2. Fix every open blocking and major finding (minor and nit too when cheap), then mark each with resolve_finding (status fixed, or wont_fix with a note saying why).",
     cycleRound < maxRounds
@@ -127,7 +128,7 @@ export function reviewFixInstructions({
  */
 export function reviewLoopInstructions(input: ReviewPromptInput): string {
   const { task, round, cycleRound, maxRounds } = input;
-  const ref = `"#${task.number}"`;
+  const ref = `"${taskLabel(task)}"`;
   const which = round === cycleRound ? `round ${round}` : `round ${round} (${cycleRound} of this review)`;
   return [
     `Local review is on for this task: ${which} is open, up to ${maxRounds} rounds. Run the review loop before you open a pull request:`,

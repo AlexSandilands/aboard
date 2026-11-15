@@ -1,3 +1,4 @@
+import { taskLabel } from "@repo/contracts";
 // Row styling adapted from T3 Code's SidebarThreadRow (Sidebar.tsx), MIT — see NOTICE.
 import type { AttentionReason, Project, TaskSummary } from "@repo/contracts";
 import { memo, useMemo, useState } from "react";
@@ -85,7 +86,7 @@ const AttentionRow = memo(function AttentionRow({
         role="button"
         tabIndex={0}
         aria-current={selected || undefined}
-        aria-label={`#${task.number} ${task.title}: ${reason.message}`}
+        aria-label={`${taskLabel(task)} ${task.title}: ${reason.message}`}
         className={cn(
           "group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           selected
@@ -122,7 +123,7 @@ const AttentionRow = memo(function AttentionRow({
                 selected ? "text-foreground" : "text-secondary-label/90",
               )}
             >
-              <span className="font-mono text-muted-foreground/70">#{task.number}</span> {task.title}
+              <span className="font-mono text-muted-foreground/70">{taskLabel(task)}</span> {task.title}
             </span>
           </div>
           <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs">
@@ -157,7 +158,7 @@ const ThreadAttentionRow = memo(function ThreadAttentionRow({
         role="button"
         tabIndex={0}
         aria-current={selected || undefined}
-        aria-label={`${item.title}, ${tasks.map((t) => `#${t.number}`).join(", ")}: ${reason.message}`}
+        aria-label={`${item.title}, ${tasks.map((t) => taskLabel(t)).join(", ")}: ${reason.message}`}
         className={cn(
           "group/sidebar-row relative w-full cursor-pointer overflow-hidden rounded-md text-left outline-none select-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           selected
@@ -211,7 +212,7 @@ const ThreadAttentionRow = memo(function ThreadAttentionRow({
                     onOpen(task.id);
                   }}
                 >
-                  #{task.number}
+                  {taskLabel(task)}
                 </button>
               ))}
             </span>

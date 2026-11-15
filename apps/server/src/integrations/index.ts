@@ -1,6 +1,6 @@
 import { createUsageSweep } from "./usageSweep.ts";
 import { randomUUID } from "node:crypto";
-import { epicBranchName, planningSessionLabel } from "@repo/contracts";
+import { taskLabel, epicBranchName, planningSessionLabel } from "@repo/contracts";
 import { createWorktreeCleanup } from "../autopilot/cleanup.ts";
 import { ensureEpicBranch } from "../autopilot/epicBranch.ts";
 import { createDigestGenerator } from "../autopilot/digest.ts";
@@ -35,7 +35,10 @@ import type { RunHeadless } from "./headlessReview.ts";
 import { createIssueImporter } from "./issueImport.ts";
 import { createMachineClient } from "./machineClient.ts";
 import { createMachineSecrets, createMemoryMachineSecrets } from "./machineSecrets.ts";
+import { createBridgeChannel } from "./machines/bridgeChannel.ts";
+import { createCheckouts, type CloneRepo } from "./machines/checkouts.ts";
 import { createMachinesIntegration } from "./machines/index.ts";
+import { createMachineSync } from "./machines/sync.ts";
 import { createLoginDetector, type LoginProbes } from "./machines/logins.ts";
 import { createSelfUpdater, type SelfUpdateDeps } from "./machines/selfUpdate.ts";
 import { createRouteOpener, type TunnelDeps } from "./machines/tunnel.ts";
@@ -61,6 +64,8 @@ export interface IntegrationDeps {
     Partial<Pick<Config, "token" | "webDist" | "role" | "releaseUrl">> & {
       /** `<data dir>/machine-tokens.json`; null keeps the tokens in memory (an in-memory board). */
       machineSecretsPath?: string | null;
+      /** `<data dir>/repos`: where a runner clones the board's projects. */
+      reposDir: string;
       /** This board's id (instance.ts), which owns its folder in the backup repo. */
       instanceId: string;
       /** Where the backup setup offers to keep the backup clone: `<data dir>/backup`. */
@@ -114,7 +119,9 @@ export interface IntegrationOverrides {
   /** Reaching connected machines: `ssh`, the tunnel's ports, the network and name lookups. */
   machines?: TunnelDeps & { fetch?: typeof fetch; resolve?: (hostname: string) => Promise<string[]> };
   /** A runner's own checks and update: the programs it probes for logins, and what an update downloads and runs. */
-  runnerHost?: { logins?: Partial<LoginProbes>; update?: Partial<SelfUpdateDeps> };
+  runnerHost?: { logins?: Partial<LoginProbes>; update?: Partial<SelfUpdateDeps>; clone?: CloneRepo };
+  /** The repository a folder's `origin` names, read on the spot (read by the services, see createContext). */
+  readRemote?: (workspaceRoot: string) => { remote: string; remoteUrl: string } | null;
   log?: Logger;
 }
 
@@ -317,7 +324,21 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   });
   // What a runner answers its board with. Built in either role (it costs nothing until asked), used by a runner's.
   let restartRunner: (() => void) | null = null;
+  const machineSync = createMachineSync({
+    services: deps.services,
+    machines,
+    bus: deps.bus,
+    runGit: overrides.runGit ?? defaultRunGit,
+    ...(overrides.now ? { now: overrides.now } : {}),
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
   const runnerHost: RunnerHost = {
+    bridge: createBridgeChannel(overrides.now ? { now: overrides.now } : {}),
+    checkouts: createCheckouts({
+      dir: deps.config.reposDir,
+      machineName: () => deps.services().settings.get().machineName,
+      ...(overrides.runnerHost?.clone ? { clone: overrides.runnerHost.clone } : {}),
+    }),
     logins: createLoginDetector(overrides.runnerHost?.logins),
     updater: createSelfUpdater({
       runsInFlight: () => deps.services().autopilot.status().active.length,
@@ -340,6 +361,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     runTools,
     modelPrices,
     machines,
+    machineSync,
     runnerHost,
     start() {
       if (!deps.config.pollers || started) return;
@@ -355,7 +377,10 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       usageSweep.start();
       modelPrices.start();
       // A runner connects to no machines: it is one.
-      if (deps.config.role !== "runner") machines.start();
+      if (deps.config.role !== "runner") {
+        machines.start();
+        machineSync.start();
+      }
       providers.seedFromDetection().catch((error: unknown) => {
         (overrides.log ?? console).warn(`[providers] couldn't add the providers detection found: ${messageOf(error)}`);
       });
@@ -373,6 +398,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       usageSweep.stop();
       modelPrices.stop();
       machines.stop();
+      machineSync.stop();
       runnerHost.updater.stop();
     },
     t3ThreadUsage: (threadId) => t3.threadUsage(threadId),
@@ -412,7 +438,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       const s = deps.services();
       const epic = s.tasks.summary(epicId);
       if (epic.kind !== "epic")
-        throw new AppError("VALIDATION", `#${epic.number} isn't an epic; only epics have a delivery`);
+        throw new AppError("VALIDATION", `${taskLabel(epic)} isn't an epic; only epics have a delivery`);
       if (delivery === "main") return s.tasks.setDelivery(epicId, "main", null, actor);
       // Already on it: nothing to make. A branch kept from an earlier switch is used again.
       if (epic.delivery === "integration" && epic.integrationBranch) return s.tasks.detail(epicId);

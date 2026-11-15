@@ -1,3 +1,4 @@
+import { taskLabel } from "@repo/contracts";
 import type { TaskSummary } from "@repo/contracts";
 import { EpicDeliveryControl } from "~/components/task/EpicDelivery";
 import { cn } from "~/lib/utils";
@@ -39,7 +40,7 @@ export function AutopilotEpicButton({
           render={
             <PopoverTrigger
               data-autopilot-state={state}
-              aria-label={`Autopilot for epic #${epic.number}: ${tooltip}`}
+              aria-label={`Autopilot for epic ${taskLabel(epic)}: ${tooltip}`}
               className={cn(
                 "autopilot-pill inline-flex size-5.5 shrink-0 cursor-pointer items-center justify-center rounded-full border outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                 PILL_CLASS_NAME[state],
@@ -53,7 +54,7 @@ export function AutopilotEpicButton({
         <TooltipPopup>{tooltip}</TooltipPopup>
       </Tooltip>
       <PopoverPopup align="end" width="lg" padding="compact">
-        <ScopePopover title={`epic #${epic.number}`} scope={{ kind: "epic", id: epic.id }} error={scope.error}>
+        <ScopePopover title={`epic ${taskLabel(epic)}`} scope={{ kind: "epic", id: epic.id }} error={scope.error}>
           {/* Integration delivery is what lets Autopilot carry an epic unattended, so it is chosen here too. */}
           <ScopeCard className="py-2">
             <EpicDeliveryControl epic={epic} />

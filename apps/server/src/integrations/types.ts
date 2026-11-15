@@ -52,7 +52,10 @@ import type { DigestStart } from "../autopilot/digest.ts";
 import type { RunToolsContext } from "../mcp/runTools.ts";
 import type { PrAgentHints } from "./gitHost.ts";
 import type { MachinesIntegration } from "./machines/index.ts";
+import type { BridgeChannel } from "./machines/bridgeChannel.ts";
+import type { Checkouts } from "./machines/checkouts.ts";
 import type { LoginDetector } from "./machines/logins.ts";
+import type { MachineSync } from "./machines/sync.ts";
 import type { SelfUpdater } from "./machines/selfUpdate.ts";
 import type { MergeTaskPrResult } from "./mergeTaskPr.ts";
 import type { SessionTranscript } from "./sessionTranscript.ts";
@@ -63,6 +66,10 @@ import type { TaskThreadInput, TaskThreadLaunch, ThreadLink } from "./t3.ts";
 export interface RunnerHost {
   logins: LoginDetector;
   updater: SelfUpdater;
+  /** How this runner asks its board something: carried back on the board's own polls. */
+  bridge: BridgeChannel;
+  /** This runner's clones of the board's projects. */
+  checkouts: Checkouts;
   /** Registers how the server is stopped so its service starts it again, after an update. */
   onRestart(restart: () => void): void;
 }
@@ -81,6 +88,8 @@ export interface Integrations {
   readonly machines: MachinesIntegration;
   /** What this server answers a board with when it is a runner. */
   readonly runnerHost: RunnerHost;
+  /** A board's hand-overs, replay and edit queue for the tasks its machines hold. */
+  readonly machineSync: MachineSync;
   /** Starts background discovery/pollers. */
   start(): void;
   stop(): void;

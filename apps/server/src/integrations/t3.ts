@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
+  taskLabel,
   BRAND,
   type ConnectT3Result,
   isT3ThreadId,
@@ -938,7 +939,7 @@ export function createT3Integration(deps: {
     followUpAsked = false,
   ): Promise<TaskLink> => {
     const ctx = await launchContext({ taskId });
-    const threadId = await launch(ctx, input, title ?? `#${ctx.task!.number} ${ctx.task!.title}`, taskId);
+    const threadId = await launch(ctx, input, title ?? `${taskLabel(ctx.task!)} ${ctx.task!.title}`, taskId);
     // A thread the user opens on finished work is to ask about it: the board must not hand it review messages meant
     // for the thread that did the work (see implementingThread).
     const followUp = followUpAsked && (ctx.task!.status === "review" || ctx.task!.status === "done");

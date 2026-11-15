@@ -1,4 +1,4 @@
-import { TASK_STATUSES, autopilotRunEventText, type TaskEvent } from "@repo/contracts";
+import { storedTaskNumber, TASK_STATUSES, autopilotRunEventText, type TaskEvent } from "@repo/contracts";
 
 export type ActivityIcon =
   | "created"
@@ -54,6 +54,8 @@ const LINK_KIND_LABEL: Record<string, string> = {
 
 const str = (value: unknown): string | null => (typeof value === "string" && value.length > 0 ? value : null);
 const num = (value: unknown): number | null => (typeof value === "number" ? value : null);
+/** Another task's number as an entry stored it: `42`, or `E7` for one a machine numbered. */
+const taskNum = storedTaskNumber;
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** Human sentence for one task event. Unknown types fall back to their name. */
@@ -83,7 +85,7 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       return line("status", str(p.clearedResolution) ? `reopened this and ${to}` : to);
     }
     case "closed": {
-      const by = num(p.byTask);
+      const by = taskNum(p.byTask);
       const text =
         str(p.resolution) === "wont_do"
           ? "closed this as won't do"
@@ -93,7 +95,7 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       return line("status", text);
     }
     case "resolver_deleted": {
-      const by = num(p.number);
+      const by = taskNum(p.number);
       return line("delete", `deleted ${by !== null ? `#${by}` : "the task"}, which closed this`);
     }
     case "updated": {
@@ -163,7 +165,7 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
     case "archived":
     case "unarchived": {
       const withEpic = num(p.withEpic);
-      const becauseTask = num(p.becauseTask);
+      const becauseTask = taskNum(p.becauseTask);
       if (becauseTask !== null) {
         return line("archive", `unarchived this because #${becauseTask} was ${p.reopened ? "reopened" : "unarchived"}`);
       }
@@ -232,7 +234,7 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
     case "blocks_removed":
     case "blocker_deleted":
     case "blocked_deleted": {
-      const other = num(p.task);
+      const other = taskNum(p.task);
       const task = `${other !== null ? `#${other}` : "a task"}${str(p.title) ? ` ${str(p.title)}` : ""}`;
       const text = {
         blocker_added: `made this blocked by ${task}`,

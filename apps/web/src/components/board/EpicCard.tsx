@@ -1,4 +1,4 @@
-import { describeEpicRollup, type TaskSummary } from "@repo/contracts";
+import { taskLabel, describeEpicRollup, type TaskSummary } from "@repo/contracts";
 import { ChevronRightIcon, GroupIcon } from "lucide-react";
 import { memo, useState } from "react";
 import { EpicBranchBadge } from "~/components/task/EpicDelivery";
@@ -53,7 +53,7 @@ export const EpicCard = memo(function EpicCard({
 
   return (
     <section
-      aria-label={`Epic #${epic.number} ${epic.title}`}
+      aria-label={`Epic ${taskLabel(epic)} ${epic.title}`}
       data-epic-card={epic.id}
       style={EPIC_ACCENT_BAR ? epicAccentStyle(epic.title) : undefined}
       className={cn(
@@ -74,7 +74,9 @@ export const EpicCard = memo(function EpicCard({
             variant="ghost-muted"
             size="icon-xs"
             aria-expanded={open}
-            aria-label={open ? `Hide the tasks of epic #${epic.number}` : `Show the tasks of epic #${epic.number}`}
+            aria-label={
+              open ? `Hide the tasks of epic ${taskLabel(epic)}` : `Show the tasks of epic ${taskLabel(epic)}`
+            }
             onClick={() => setOpen(!open)}
           >
             <ChevronRightIcon className={cn("size-3.5 transition-transform", open && "rotate-90")} />
@@ -91,7 +93,7 @@ export const EpicCard = memo(function EpicCard({
           >
             <span className="flex min-w-0 items-center gap-1.5">
               <GroupIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">#{epic.number}</span>
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{taskLabel(epic)}</span>
               <span className="min-w-0 truncate text-sm font-medium text-foreground/90">{epic.title}</span>
               {epic.archivedAt ? (
                 <Badge variant="secondary" size="sm">
@@ -130,7 +132,7 @@ export const EpicCard = memo(function EpicCard({
                 }}
                 onClick={(event) => openTask(task.id, event)}
               >
-                <span className="shrink-0 tabular-nums text-muted-foreground">#{task.number}</span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">{taskLabel(task)}</span>
                 <span className="min-w-0 truncate text-foreground/90">{task.title}</span>
               </button>
             </li>

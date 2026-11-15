@@ -1,3 +1,4 @@
+import { taskLabel } from "./taskNumbers.ts";
 import { z } from "zod";
 import { VARIABLE_NAME, variableHasValue } from "./automationVariables.ts";
 import { BRAND, brandEnv } from "./brand.ts";
@@ -799,11 +800,11 @@ export function customAgentPrompt(
   if (slots.length > 0) parts.push(slots.join("\n"));
   const context = task
     ? [
-        `Task #${task.number}: ${task.title} (${task.status})${values.project ? ` in ${values.project.name}` : ""}`,
+        `Task ${taskLabel(task)}: ${task.title} (${task.status})${values.project ? ` in ${values.project.name}` : ""}`,
         task.labels.length > 0 ? `Labels: ${task.labels.join(", ")}` : null,
         values.pr ? `Pull request: ${values.pr.url}` : null,
         description?.trim() ? `Description:\n${description.trim()}` : null,
-        `Call get_task("#${task.number}") on the ${BRAND.id} MCP server for its plan and activity.`,
+        `Call get_task("${taskLabel(task)}") on the ${BRAND.id} MCP server for its plan and activity.`,
       ]
     : [
         values.project ? `Project: ${values.project.name}` : null,

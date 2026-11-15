@@ -1,4 +1,6 @@
 import {
+  taskNumberValue,
+  taskLabel,
   AGENT_HARNESSES,
   customHandoffLabel,
   customHandoffModel,
@@ -129,7 +131,7 @@ function SessionLaunch({
           {preset ? <HandoffBadge name={preset.name} /> : null}
         </DialogTitle>
         <DialogDescription>
-          #{task.number} {task.title}
+          {taskLabel(task)} {task.title}
         </DialogDescription>
       </DialogHeader>
       <div className="px-6 pb-6">
@@ -432,7 +434,7 @@ function Composer({
             </span>
           ) : null}
           {options.namedWindow
-            ? `Opens in the Windows Terminal window ${taskWindowName(task.number)}${selfLinks ? "." : ", which the session's link brings back while it runs."}`
+            ? `Opens in the Windows Terminal window ${taskWindowName(taskNumberValue(task))}${selfLinks ? "." : ", which the session's link brings back while it runs."}`
             : "Opens in the terminal chosen in Settings → Integrations → Terminal."}
           {selfLinks
             ? ` ${harnessLabel(harness)} picks its own session id, so the session links itself to the task once it starts.`
