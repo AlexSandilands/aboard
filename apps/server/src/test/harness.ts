@@ -40,6 +40,8 @@ export function createTestHarness(
     /** `runner` builds the app a remote machine runs, with the machine API. */
     role?: Config["role"];
     bind?: Config["bind"];
+    /** Where release files are: with it, a board from source (version 0.0.0) can install and update machines. */
+    releaseUrl?: string;
   } = {},
 ) {
   const { integrations, ...config } = overrides;

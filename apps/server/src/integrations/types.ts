@@ -51,11 +51,22 @@ import type {
 import type { DigestStart } from "../autopilot/digest.ts";
 import type { RunToolsContext } from "../mcp/runTools.ts";
 import type { PrAgentHints } from "./gitHost.ts";
+import type { MachinesIntegration } from "./machines/index.ts";
+import type { LoginDetector } from "./machines/logins.ts";
+import type { SelfUpdater } from "./machines/selfUpdate.ts";
 import type { MergeTaskPrResult } from "./mergeTaskPr.ts";
 import type { SessionTranscript } from "./sessionTranscript.ts";
 import type { TaskThreadInput, TaskThreadLaunch, ThreadLink } from "./t3.ts";
 
 /** Optional external integrations (git hosts such as GitHub via gh, T3 Code). Every method degrades gracefully. */
+/** A runner's own state, for the machine API (docs/features/remote-machines.md#status-and-logins). */
+export interface RunnerHost {
+  logins: LoginDetector;
+  updater: SelfUpdater;
+  /** Registers how the server is stopped so its service starts it again, after an update. */
+  onRestart(restart: () => void): void;
+}
+
 export interface Integrations {
   t3Status(): T3IntegrationStatus;
   /** Each git host kind's CLI and sign-in, as last read. */
@@ -66,6 +77,10 @@ export interface Integrations {
   prAgentHints(pr: { host: string; repo: string; number: number }): PrAgentHints;
   /** Board-served run tools: the live run tokens and the git host their tools read (`/mcp/run`). */
   readonly runTools: RunToolsContext;
+  /** The machines this board is connected to: installing, pairing, their links and updates. */
+  readonly machines: MachinesIntegration;
+  /** What this server answers a board with when it is a runner. */
+  readonly runnerHost: RunnerHost;
   /** Starts background discovery/pollers. */
   start(): void;
   stop(): void;

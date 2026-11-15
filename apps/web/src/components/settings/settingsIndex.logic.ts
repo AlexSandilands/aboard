@@ -629,6 +629,13 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "What opening a session runs, for an example session in your home folder.",
     ["runs", "command line", "example"],
   ),
+  // Integrations › Machines
+  draft(
+    "integrations.machines.list",
+    "Machines",
+    "Other computers this board runs tasks on. The board installs a runner on each and keeps it on its own version.",
+    ["remote machine", "runner", "ssh", "tailscale", "add machine", "pairing code", "routes", "logins", "update"],
+  ),
   // Integrations › Model prices
   draft(
     "integrations.model-prices.fetch",

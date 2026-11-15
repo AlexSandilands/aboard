@@ -1,14 +1,15 @@
 # Remote machines
 
-Board tasks: #179, #180, in epic #178 (run tasks on another machine).
+Board tasks: #179, #180, #181, in epic #178 (run tasks on another machine).
 
 A task can be set to run on another machine: a server or a second computer the board connects to. That machine
 runs the same server as the board, started in the **runner** role: it serves no board or web app, holds the
 tasks sent to it, and runs their agents. This page covers the part that exists so far: the runner role, the
-release that puts the server on a machine with nothing installed, the background service that keeps it
-running, and how a board and a runner come to trust each other: identity, pairing, tokens and the machine API.
-Connecting a machine from the board, held tasks and remote runs aren't built yet; they are the later tasks of
-epic #178.
+release and the script that put the server on a machine with nothing installed, the background service that keeps
+it running, how a board and a runner come to trust each other (identity, pairing, tokens and the machine API), and
+how a board connects a machine: installing over SSH, routes, status, logins, updates and the Settings page that
+drives them. Held tasks and remote runs aren't built yet; they are the later work of epic #178. What a user does
+is in the [guide](../guide/remote-machines.md).
 
 ## How it works
 
@@ -72,11 +73,51 @@ into the service.
 
 `<id>-server --version` prints the version and `--help` the commands. Other arguments are refused.
 
-`pnpm server:package [platform...]` builds the tarballs into `apps/server/release/`: it bundles the server
+`pnpm server:package [platform...]` builds the tarballs into `apps/server/release/`, with `install-runner.sh` for
+that version beside them: it bundles the server
 (`apps/server/scripts/bundle.ts`), downloads Node from nodejs.org into `node_modules/.cache/node-runtime`, checks it
 against the pinned SHA-256, and packs. The release workflow's `server` job runs it
 ([releases](releases.md#the-workflow)). To bump Node, change `NODE_VERSION` and the three checksums from that
 release's `SHASUMS256.txt`.
+
+### Installing a runner
+
+`install-runner.sh` puts a runner on a machine and prints a pairing code. Each release carries its own, written by
+`runnerInstallScript(version)` (`packages/contracts/src/runnerInstall.ts`), so the names in it come from the brand
+and the version from the release. Run by hand:
+
+```sh
+curl -fsSL https://github.com/<owner>/<repo>/releases/download/v1.4.2/install-runner.sh | sh
+curl -fsSL …/install-runner.sh | sh -s -- --tailscale   # also reachable at the machine's Tailscale address
+```
+
+What it does, on Linux x64 or arm64 and macOS arm64, needing `curl` and `tar`:
+
+1. Takes the `PATH` of the user's login shell (`$SHELL -lic`). A command run over SSH gets a bare one, and the
+   service keeps the `PATH` it is installed with, which is where `claude`, `codex` and `gh` are found.
+2. Downloads the tarball for the machine's platform and `SHA256SUMS-server.txt` from the release, and stops unless
+   the tarball's SHA-256 is the one listed. A release already unpacked is not downloaded again.
+3. Unpacks it and links it:
+
+   ```text
+   ~/.local/share/<id>-server/
+     releases/<id>-server-<version>-<platform>/
+     current -> releases/<id>-server-<version>-<platform>
+   ~/.local/bin/<id>-server -> ~/.local/share/<id>-server/current/bin/<id>-server
+   ```
+
+   The service runs `~/.local/bin/<id>-server`, so an update only repoints `current`.
+
+4. Runs `<id>-server service install`, with `brandEnv("BIND")=private` for `--tailscale` and `brandEnv("PORT")` for
+   `--port`.
+5. Runs `<id>-server pair` and says what to type into the board.
+
+Other options: `--version <v>`, `--base-url <url>` (the release files somewhere else, `file://` included) and
+`--porcelain`, which the board's SSH install uses (reading stdout and stderr apart, so a warning the remote prints
+can't land inside one of these lines or carry the code into the install's log): the script then prints `@@step <name>` as it starts each step and
+ends with `@@pair ` and the JSON of `<id>-server pair --json` (the code, the runner's port, instance id and name, and
+its Tailscale address when `--tailscale` found one). Nothing in the script reads stdin, so it can be piped into `sh`.
+Running it again installs over what is there, which is also how a runner is updated by hand.
 
 ### The service
 
@@ -132,6 +173,8 @@ What a board says to a runner is under `/machine/`, apart from the board's own A
 | `POST /machine/pair`       | no    | Trades a pairing code for a token                                           |
 | `GET /machine/session`     | yes   | What the token is good for: the paired board, since when, and the descriptor |
 | `DELETE /machine/session`  | yes   | The board unpairing itself: its token stops working                         |
+| `GET /machine/status`      | yes   | Version, platform, runs in flight, logins, and where an update is ([below](#status-and-logins)) |
+| `POST /machine/update`     | yes   | The board asking the runner to update to a version ([below](#updates))      |
 
 ```json
 {
@@ -141,7 +184,7 @@ What a board says to a runner is under `/machine/`, apart from the board's own A
   "version": "1.4.2",
   "protocolVersion": 1,
   "role": "runner",
-  "capabilities": ["pairing"],
+  "capabilities": ["pairing", "status", "update"],
   "paired": false
 }
 ```
@@ -186,7 +229,8 @@ The board sends it to `POST /machine/pair` with its own instance id and name, an
   code. The same board pairing again (it lost its file) replaces its old token.
 
 On the runner, `<id>-server pair list` shows the paired board, when it paired and when its token was last used, and
-`<id>-server pair revoke <id>` (or `--all`, which also cancels a code not yet used) ends it at once. The `pair`
+`<id>-server pair revoke <id>` (or `--all`, which also cancels a code not yet used) ends it at once. `pair --json` makes a code and prints it as
+one line of JSON with the runner's port, instance id and name, for the install script. The `pair`
 commands use the runner's data dir, so run them with the `brandEnv("HOME")` the runner has, if any.
 
 ### The board's client
@@ -204,8 +248,183 @@ runner's instance id and one address for it, each call:
    the runner dropped the token (`revoked`).
 
 `pair(url, code)` does the same before sending the code, and stores the token only when the answer names the
-machine the descriptor did. `MachineClientError.reason` is what callers branch on. Nothing calls the client yet
-but its tests; connecting a machine from the board is the next task of the epic.
+machine the descriptor did. `MachineClientError.reason` is what callers branch on. `request` takes
+`{ anyProtocol: true }` to skip the protocol check, which only the update request uses.
+
+### Connecting a machine
+
+A board keeps the machines it is connected to in the `machines` table (`services/machines.ts`): the runner's
+instance id, a name, a prefix, its routes in order, and what it last said of itself (version, protocol version,
+platform, logins, when). The table is in no backup: which machines a board reaches, and how, belongs to the machine
+the board runs on. How each is reached right now is not stored; `integrations/machines/` holds it in memory and
+`GET /api/machines` returns both together.
+
+There are two ways in, and they end in the same paired state:
+
+- **Over SSH** (`POST /api/machines {via: "ssh", target}`): the board pipes the install script to
+  `ssh <target> sh -s -- --porcelain --version <its own version>`, opens a tunnel to the port the script reports,
+  pairs through it with the code and the instance id the script printed, stores the machine with the SSH route,
+  and connects. With `tailscale: true` the script is passed `--tailscale` and the address it reports becomes a second
+  route. The answer is an install (`MachineInstall`: six steps, each pending, running, done or failed, with the end
+  of what the remote printed); it stays in `GET /api/machines`' `installs` until dismissed
+  (`DELETE /api/machines/installs/:id`). The line with the pairing code never reaches that log.
+- **By a pairing code** (`POST /api/machines {via: "code", url, code}`): for a machine the board can't SSH to. The
+  user runs the install script there with `--tailscale` and gives the board the address and code it prints. The
+  board pairs at that address, which becomes the machine's route.
+
+`ssh` is the user's own, with their config, keys and agent. It runs with `BatchMode=yes`, so a login that needs a
+password or passphrase typed fails, and an unknown host key is not accepted: the user runs `ssh <target>` once
+themselves. `sshFailure` turns what ssh printed into a sentence saying which of those it was. The target is
+validated (`SshTarget`) and passed after `--`, so it can't be read as an option.
+
+Connecting a machine the board already knows (a reinstall, a new code) keeps it one machine with its name and
+prefix, and puts the route just used first. A prefix asked for that another machine holds is refused before
+anything is installed or a code is spent; one taken while an install ran is replaced by a suggested one, since the
+machine is paired by then. If storing a newly paired machine fails, its token is dropped again.
+
+**The prefix** is one to three capitals or digits starting with a letter, suggested from the name (`engine` → `E`,
+then `EN`, …) and unique among the board's machines. Tasks made on the machine while the board can't be reached
+will be numbered with it, so once one is (`machines.fixPrefix`, called by the later task that numbers them) it
+can't change. Until then `PATCH /api/machines/:id` changes it, the name and the routes.
+
+`DELETE /api/machines/:id` tells the runner to drop the board's token when it can be reached, forgets the token and
+the machine, and leaves the runner installed: `<id>-server service uninstall` on the machine removes it.
+
+A board run from source has version `0.0.0`, which no release carries, so it refuses an SSH install and asks for no
+updates, unless `brandEnv("RELEASE_URL")` names a folder or server holding the release files (what
+`pnpm server:package` writes into `apps/server/release/`); the install command the board shows then downloads from
+there and passes `--base-url`. With no release at all, the add dialog shows `<id>-server pair` in place of an
+install command that would 404.
+
+### The Machines page
+
+Settings → Integrations → Machines (`components/settings/machines/`) is `GET /api/machines` drawn as one card: a row
+per install that hasn't finished, then a row per machine. The list is refetched on `machines.changed`, which the
+server publishes on every change to a machine, its link or an install, so nothing on the page polls.
+
+- **A machine's row** is one line (`machineSummary`): a dot for its connection, name, prefix, the route in use and
+  runs in flight, then a badge for anything wrong (logins missing, an update waiting, running or failed) and its
+  version. It opens to a callout for a machine that isn't connected, then Version, Logins, Routes, and Name and
+  prefix with Remove.
+- **A row opens by itself** when the machine needs the user: unreachable, needs updating, unpaired, a login
+  missing or an update that failed. Once the user opens or closes a row, that choice holds until the page is left.
+- **Each callout carries its one action**: Try now (`/check`) for unreachable, a code field and Pair (`/pair`) for
+  unpaired. Needs updating has none: the update is under Version.
+- **Routes** are reordered with arrows, removed, and added as an address; every change saves the whole list
+  (`PATCH`), which restarts the machine's link. A failed route shows its reason and when it is tried next, counted
+  from when the list was read.
+- **Add machine** is a dialog with two tabs, one per way in. Over SSH closes as soon as the install has started,
+  and the install carries on as a row; a failed one has Try again, which reopens the dialog with the destination
+  filled in, and Dismiss. On a board with no release to install, the SSH tab says so and its button is off.
+- **Remove** asks in place, and says the runner stays installed and how to remove it.
+
+The server's sentences are shown as they are (`error`, a login's `detail`, an install's `error`), so what the
+user is told to do is written once, where the cause is known.
+
+### Routes
+
+A machine has an ordered list of routes (`MachineRoute`), the first being the one preferred:
+
+| Kind     | What it is                                                                                         |
+| -------- | -------------------------------------------------------------------------------------------------- |
+| `ssh`    | `ssh -N -L 127.0.0.1:<free port>:127.0.0.1:<runner port> <target>`: the runner stays on its own loopback and the board reaches it at a loopback port of its own |
+| `direct` | The runner's own URL: its Tailscale address or name over http, or an https URL                      |
+
+`integrations/machines/link.ts` is one machine's connection:
+
+- Routes are tried in order, and the first that answers **as the expected instance** is used. A route that
+  answers as another machine fails like one that doesn't answer.
+- A route that fails waits before its next try: 2s, 4s, 8s, doubling up to 5 minutes.
+- Every 30 seconds the route in use is checked, and every better route whose wait is over is tried again. When
+  one works the link moves back to it and closes the other.
+- A tunnel whose `ssh` exits is replaced at once, starting from the first route.
+- `POST /api/machines/:id/check` tries every route now, whatever their waits.
+
+What a machine's `connection` says:
+
+| Connection     | Meaning                                                                                       |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| `connected`    | Reachable, paired and on the board's protocol version                                         |
+| `connecting`   | No route has been tried yet                                                                   |
+| `unreachable`  | No route works now; they keep being retried. `error` is the first route's reason              |
+| `needs-update` | Reachable, on another protocol version ([below](#updates))                                    |
+| `unpaired`     | Reachable, but it no longer accepts the board's token. `POST /api/machines/:id/pair {code}` pairs again |
+
+`routeStates` has each route's own state (`active`, `standby`, `connecting`, `failed` with its error and next try).
+`integrations.machines.request(id, path)` is how the rest of the server talks to a machine: over the route in use,
+and only while it is `connected`.
+
+### Status and logins
+
+While a machine is connected the board reads `GET /machine/status` on every check and keeps the answer:
+
+```json
+{
+  "version": "1.4.2",
+  "platform": "linux-x64",
+  "runsInFlight": 0,
+  "logins": [
+    { "name": "claude", "state": "ok", "detail": null },
+    { "name": "codex", "state": "missing", "detail": "`codex` isn't on the runner's PATH." },
+    { "name": "gh", "state": "ok", "detail": null },
+    { "name": "git", "state": "logged-out", "detail": "git has no way to push to GitHub. Run `gh auth setup-git` on the machine, or add an SSH key to GitHub." }
+  ],
+  "update": { "state": "idle", "targetVersion": null, "error": null },
+  "selfUpdate": true
+}
+```
+
+A runner needs its own logins; the board only reports what is missing. `integrations/machines/logins.ts` checks
+them on the runner, with the service's `PATH`, at most once a minute:
+
+| Login    | How it is checked                                                                               |
+| -------- | ----------------------------------------------------------------------------------------------- |
+| `claude` | `claude auth status` exits 0                                                                    |
+| `codex`  | `codex login status` exits 0                                                                    |
+| `gh`     | `gh auth status` exits 0                                                                        |
+| `git`    | git has a credential helper (gh's counts only while gh is logged in), or `ssh -T git@github.com` is greeted |
+
+Each is `ok`, `logged-out`, `missing` (not on the `PATH`) or `unknown` (the check didn't finish), with a sentence
+saying what to run. The git check is about GitHub only, where the board's pull requests are. The checks start
+programs and one may reach for the network, so the status waits at most 4 seconds for them and otherwise answers
+with what was last known (`unknown` the first time); the check carries on for the next read.
+
+### Updates
+
+The board decides the version; a runner never updates by itself. After each check, a board whose own version is
+newer than the machine's sends `POST /machine/update {"version": "<the board's>", "now": false}`, and the runner
+(`integrations/machines/selfUpdate.ts`):
+
+1. waits while it has runs in flight, looking every 15 seconds (`waiting`). `"now": true`, from
+   `POST /api/machines/:id/update {"now": true}`, doesn't wait: the restart ends those runs;
+2. downloads the tarball for its own platform and the checksums from that version's release, and checks the
+   SHA-256 (`downloading`). The URL is built on the runner from the version; the request can't name one;
+3. unpacks it beside the running release and runs its launcher with `--version`, which must print the version
+   asked for;
+4. moves `current` over to it in one rename, deletes releases older than the one it is leaving, and exits with
+   code 75 (`restarting`). systemd (`Restart=on-failure`) and launchd (`KeepAlive` on a failed exit) start the
+   runner again, now through `current` on the new release.
+
+A failure anywhere before step 4 leaves the running version as it was and reports `failed` with the reason. The
+board doesn't ask again by itself after a failure; `POST /api/machines/:id/update` does. The answer to the request
+and `GET /machine/status` both carry where the update is (`MachineUpdateState`).
+
+Only a runner the install script installed, running as its service, can do this: the script's layout is what gives
+it a `current` to repoint, and `brandEnv("SERVICE")=1`, which `service install` sets, is how it knows something
+will start it again. Any other answers 409, and its machine shows `selfUpdate: false`.
+
+A machine **newer** than the board is left alone (`versionState: "newer"`): going back would run old code on a
+database the newer version has migrated. The board is the one to update. Every way in holds to it: the install
+script stops, before it downloads anything, when the runner already on the machine is newer than the version asked
+for (so a reinstall over SSH, or the script run by hand with an older `--version`, can't do it either); the board's
+`POST /api/machines/:id/update` answers 409 for a newer machine, and a runner answers 409 to a version older than
+its own.
+
+**Protocol mismatch.** A machine whose `protocolVersion` the board can't talk to (`machineProtocolCompatible`)
+keeps its route and gets the connection `needs-update`. Nothing is exchanged with it: its status isn't read and
+`machines.request` refuses. The runner carries on by itself. The one request still sent is the update, which is
+how the mismatch ends, so **`UpdateMachineRequest` and `MachineUpdateState` must stay readable by every version**:
+add optional fields, never change or remove one.
 
 ### Listening beyond loopback
 
@@ -255,6 +474,23 @@ epic test against.
 - **The launcher's own path in the service.** A service that names `<id>-server` through a stable symlink keeps
   working when the release behind the symlink changes, which updating a machine will rely on.
 
+- **One script for both ways of installing.** The board's SSH install pipes the script the release publishes, so
+  the path a user takes by hand and the one the board takes can't drift apart, and there is one layout to update.
+- **The script is generated, not a file in the repo.** It needs the product's name, its env var prefix and the
+  release URL, none of which may be hard-coded; `packaging/install-arch.sh` is a file and has a test holding its
+  copies to `package.json` instead.
+- **ssh never trusts a new host key for the user.** `StrictHostKeyChecking=accept-new` would make the first
+  install to a new machine work with no step by hand, and would also accept whatever answered at that name. The
+  board is about to send that machine a pairing code and run agents on it.
+- **Route state in memory, not in the table.** It changes every few seconds and means nothing after a restart.
+- **The runner exits to update; it doesn't restart its own service.** A failed exit code is what both service
+  managers already restart on, so there is no `systemctl` or `launchctl` call to get wrong from inside the service
+  being restarted.
+- **The runner checks the download against the release's own checksums.** They come from the same place as the
+  tarball, so this catches a broken download, not a compromised release; nothing the board could send would be
+  from anywhere else.
+- **No downgrades.** Migrations only go forward.
+
 - **A code made on the runner, not a link made by the board.** Whoever can log in to the machine already owns it,
   so that is who may pair it; a pairing request arriving over the network proves nothing. Writing the code
   straight into the database means even a tunnel to the runner's port can't make one.
@@ -278,6 +514,9 @@ epic test against.
 | SSH tunnels only, keeping the server loopback-only | Tailscale is a route from the start, and a tunnel dies with the session that opened it |
 | Mutual TLS between board and runner      | Certificates to issue, renew and trust on machines nobody administers; the transports in use already encrypt |
 | Binding to the Tailscale address only    | It doesn't exist until Tailscale is up, so a runner started at boot would fail; the peer filter gives the same reach |
+| Copying the tarball from the board over SSH | The board would need every platform's tarball, 45 MB each; the machine has to reach GitHub for updates anyway |
+| The board sends the checksum with the update request | The board would have to fetch the checksums for the runner's platform first, and it adds no trust: same source |
+| Rolling back when the new release fails to start | Needs a launcher that outlives the server and a database snapshot, as T3 Code's has; the previous release stays on disk for now |
 | One limit on wrong pairing codes for everyone | Any machine that could reach the runner could keep pairing refused by sending wrong codes |
 
 ## Code map
@@ -297,6 +536,17 @@ epic test against.
 | `apps/server/src/integrations/machineClient.ts` | The board's client: address rule, id and protocol checks, no redirects |
 | `apps/server/src/integrations/machineSecrets.ts` | The board's tokens file                                       |
 | `apps/server/src/service/definitions.ts` | The systemd unit and launchd plist                                   |
+| `packages/contracts/src/runnerInstall.ts` | The release's file names and URL, and the install script            |
+| `apps/server/src/services/machines.ts`  | The machines a board is connected to, as stored; prefixes            |
+| `apps/server/src/integrations/machines/index.ts` | Connecting, the install job, one link per machine, status and update requests |
+| `apps/server/src/integrations/machines/bootstrap.ts` | The install over SSH and what it prints                  |
+| `apps/server/src/integrations/machines/ssh.ts`, `tunnel.ts` | `ssh`'s arguments and failures; opening a route   |
+| `apps/server/src/integrations/machines/link.ts` | Route order, waits and moving back                           |
+| `apps/server/src/integrations/machines/logins.ts` | The runner's login checks                                  |
+| `apps/server/src/integrations/machines/selfUpdate.ts` | The runner updating itself                             |
+| `apps/server/src/http/routes/machines.ts` | `/api/machines`                                                    |
+| `apps/web/src/components/settings/machines/` | The Machines section, the add dialog and their logic            |
+| `apps/web/src/state/machines.ts`        | The machines query and its mutations                                  |
 | `apps/server/scripts/bundle.ts`         | The bundle, then the tarballs with `--tarballs`                       |
 | `apps/server/scripts/tarball.ts`        | The pinned Node, the launcher, the tarballs and their checksums       |
 | `apps/server/scripts/sandbox.ts`        | `--runner`                                                            |

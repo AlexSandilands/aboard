@@ -48,6 +48,7 @@ files under each app.
 - [Importing issues](guide/importing-issues.md): a task from a ticket or GitHub issue URL
 - [Connecting agents](guide/connect-agents.md): MCP setup and the shipped skills
 - [Local review](guide/local-review.md): turning on the review loop
+- [Connecting another machine](guide/remote-machines.md): adding a machine over SSH or by a pairing code, logins, routes, updates
 - [Autopilot](guide/autopilot.md): switching automations on, reviewing PRs, limits, pausing
 - [T3 Code](guide/t3-code.md): thread links, pairing, starting threads
 - [Configuration](guide/configuration.md): data folder, ports, access token, the desktop tray

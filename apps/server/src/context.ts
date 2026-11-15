@@ -6,6 +6,7 @@ import type { Config } from "./config.ts";
 import { openDatabase, type Db } from "./db/database.ts";
 import { instanceIdOf } from "./instance.ts";
 import { createIntegrations, type IntegrationOverrides } from "./integrations/index.ts";
+import { machineSecretsPath } from "./integrations/machineSecrets.ts";
 import { createServices } from "./services/index.ts";
 import type { Services } from "./services/types.ts";
 import type { AppContext } from "./app.ts";
@@ -16,7 +17,15 @@ export function createContext(
     Partial<
       Pick<
         Config,
-        "webDist" | "worktreesDir" | "attachmentsDir" | "harnessHomes" | "demo" | "modelPricesPath" | "role" | "bind"
+        | "webDist"
+        | "worktreesDir"
+        | "attachmentsDir"
+        | "harnessHomes"
+        | "demo"
+        | "modelPricesPath"
+        | "role"
+        | "bind"
+        | "releaseUrl"
       >
     > & {
       /** This board's id (instance.ts); read from the data dir unless set. An in-memory database gets a new one. */
@@ -45,6 +54,8 @@ export function createContext(
         attachmentsDir,
         instanceId,
         modelPricesPath,
+        // An in-memory board keeps its machine tokens in memory too.
+        machineSecretsPath: config.dbPath === ":memory:" ? null : machineSecretsPath(dirname(config.dbPath)),
         backupDefaultDir:
           config.dbPath === ":memory:" ? join(tmpdir(), "backup-test") : join(dirname(config.dbPath), "backup"),
       },

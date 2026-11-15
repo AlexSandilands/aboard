@@ -98,7 +98,8 @@ jobs:
         working-directory: apps/server/release
         run: |
           cat SHA256SUMS-server.txt
-          gh release upload "$TAG" ./*.tar.gz SHA256SUMS-server.txt --clobber
+          # install-runner.sh: what a machine runs to install this version by hand (the board prints the command).
+          gh release upload "$TAG" ./*.tar.gz SHA256SUMS-server.txt install-runner.sh --clobber
 
   pacman:
     needs: package

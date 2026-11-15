@@ -5,6 +5,7 @@ import { registerAutopilotRoutes } from "./routes/autopilot.ts";
 import { registerBackupRoutes } from "./routes/backup.ts";
 import { registerDemoRoutes } from "./routes/demo.ts";
 import { registerLabelRoutes } from "./routes/labels.ts";
+import { registerMachinesRoutes } from "./routes/machines.ts";
 import { registerNotificationRoutes } from "./routes/notifications.ts";
 import { registerSocialRoutes } from "./routes/social.ts";
 import { registerSkillSyncRoutes } from "./routes/skillSync.ts";
@@ -36,5 +37,6 @@ export function registerApiRoutes(app: Hono, ctx: AppContext): void {
   registerSocialRoutes(app, ctx);
   registerSuggestionRoutes(app, ctx);
   registerSkillSyncRoutes(app, ctx);
+  if (ctx.config.role !== "runner") registerMachinesRoutes(app, ctx);
   if (ctx.config.demo) registerDemoRoutes(app, ctx);
 }

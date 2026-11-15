@@ -10,7 +10,8 @@ import { cpSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { BRAND } from "../../../packages/contracts/src/brand.ts";
-import { SERVER_PLATFORMS, buildServerTarballs, isServerPlatform } from "./tarball.ts";
+import { SERVER_PLATFORMS, isServerPlatform } from "../../../packages/contracts/src/runnerInstall.ts";
+import { buildServerTarballs } from "./tarball.ts";
 
 // pnpm forwards a literal "--" when the caller used one to separate its own flags.
 const args = process.argv.slice(2).filter((arg) => arg !== "--");
