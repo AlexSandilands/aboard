@@ -107,6 +107,11 @@ export interface DesktopBridge {
 /** The ports the user's own board runs on (`pnpm dev`, the desktop app). A sandbox never uses them. */
 export const DEFAULT_SERVER_PORT = 4317;
 export const DEFAULT_WEB_PORT = 5317;
+/**
+ * A runner's port (docs/features/remote-machines.md). Not the board's, so a machine with the desktop app can run a
+ * runner too without either locking the other out.
+ */
+export const DEFAULT_RUNNER_PORT = 4318;
 
 /** What `pnpm sandbox --desktop` tells the shell about the sandbox it opens. */
 export interface DesktopSandbox {

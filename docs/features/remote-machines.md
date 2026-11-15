@@ -15,8 +15,16 @@ the later tasks of epic #178.
 
 `<id>-server --runner` (or `brandEnv("ROLE")=runner`) starts the server in the runner role. `loadConfig` sets
 `Config.role`, and a runner has no `webDist`, so nothing but the API, `/events` and `/mcp` is served: `/` is a 404.
-Everything else is the same server: the same database and migrations, the same data dir (`brandEnv("HOME")`,
-default `~/.<id>`), the same `127.0.0.1` binding and guard.
+Everything else is the same server: the same database and migrations, the same `127.0.0.1` binding and guard. A
+runner has its own defaults, so it can run on a machine that also has the desktop app without sharing its database
+or locking it out of its port:
+
+| Setting                       | Board     | Runner           |
+| ----------------------------- | --------- | ---------------- |
+| Data dir, `brandEnv("HOME")`  | `~/.<id>` | `~/.<id>-runner` |
+| Port, `brandEnv("PORT")`      | 4317      | 4318             |
+
+Either variable still overrides the default.
 
 `GET /api/health` reports the role:
 
@@ -76,7 +84,7 @@ A runner has to outlive the SSH session or terminal that started it, and the boa
 | OS    | What it installs                                                    | Keeps running                                             |
 | ----- | ------------------------------------------------------------------- | --------------------------------------------------------- |
 | Linux | a systemd user unit, `~/.config/systemd/user/<id>-runner.service`   | after logout and across reboots, with linger on           |
-| macOS | a launchd agent, `~/Library/LaunchAgents/<id>.runner.plist`         | while the user is logged in; it stops at logout           |
+| macOS | a launchd agent, `~/Library/LaunchAgents/<id>.runner.plist`         | while the user is logged in at the Mac's desktop; it stops at logout |
 
 Both run the launcher with `--runner` and restart it after a crash but not after a clean stop. The service gets
 `PATH` from the shell that installed it, so the runner finds `git`, `gh` and the agent CLIs, plus
@@ -88,7 +96,13 @@ systemd stops a user's services when their last session ends; when the user may 
 and prints the `sudo` command. On macOS it boots out any loaded agent and bootstraps the new one into
 `gui/<uid>`. Either way it then waits up to 20 seconds for a runner to answer on the data dir's `server.json`
 and prints its URL, or says where the log is: `journalctl --user -u <id>-runner.service` on Linux,
-`<data dir>/logs/runner.log` on macOS. If `systemctl` or `launchctl` fails, the file it wrote is removed again.
+`<data dir>/logs/runner.log` on macOS.
+
+Install refuses, changing nothing, when a runner started by hand already answers on the data dir (the service
+would fail to start behind it, while the wait found the other one), and on a Mac where the user has no desktop
+session: an SSH login alone has no `gui/<uid>` domain to load a LaunchAgent into, so log in at the Mac, or turn
+on automatic login, first. If `systemctl` or `launchctl` fails, install undoes what it did: a first install
+disables the unit and removes the file, a reinstall puts the previous file back and starts that service again.
 `install --dry-run` prints the file and the commands without running them.
 
 `uninstall` stops the service and removes the file; the data dir stays, and so does linger, which other

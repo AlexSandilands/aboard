@@ -21,6 +21,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   BRAND,
+  DEFAULT_RUNNER_PORT,
   DEFAULT_SERVER_PORT,
   DEFAULT_WEB_PORT,
   Health,
@@ -256,7 +257,8 @@ function freePort(taken: number[]): Promise<number> {
       const address = server.address();
       const port = typeof address === "object" && address ? address.port : 0;
       server.close(() => {
-        if ([DEFAULT_SERVER_PORT, DEFAULT_WEB_PORT, ...taken].includes(port)) resolvePort(freePort(taken));
+        if ([DEFAULT_SERVER_PORT, DEFAULT_WEB_PORT, DEFAULT_RUNNER_PORT, ...taken].includes(port))
+          resolvePort(freePort(taken));
         else resolvePort(port);
       });
     });

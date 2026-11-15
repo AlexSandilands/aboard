@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { BRAND, ServerRole, brandEnv } from "@repo/contracts";
+import { BRAND, DEFAULT_RUNNER_PORT, DEFAULT_SERVER_PORT, ServerRole, brandEnv } from "@repo/contracts";
 import type { SessionDirs } from "./integrations/agentSessions.ts";
 import { harnessHomesFrom, type HarnessHomes } from "./services/skillSync.ts";
 
@@ -50,19 +50,27 @@ export function boardUrlOf({
   return `http://127.0.0.1:${webDist && existsSync(webDist) ? port : webPort}`;
 }
 
+/**
+ * `~/.<id>`, or `~/.<id>-runner` for a runner: with its own data dir (and port), a runner beside a board on the same
+ * machine shares neither its database nor its port.
+ */
+export function defaultHomeDir(role: ServerRole, home = homedir()): string {
+  return join(home, role === "runner" ? `.${BRAND.id}-runner` : `.${BRAND.id}`);
+}
+
 /** Env vars are prefixed with the product id, e.g. `ABOARD_HOME`. `--runner` among `argv` picks the runner role. */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: readonly string[] = []): Config {
   const roleEnv = env[brandEnv("ROLE")];
   const parsedRole = ServerRole.safeParse(roleEnv || "board");
   if (!parsedRole.success) throw new Error(`${brandEnv("ROLE")} must be board or runner, not "${roleEnv}"`);
   const role = argv.includes("--runner") ? "runner" : parsedRole.data;
-  const homeDir = env[brandEnv("HOME")] ?? join(homedir(), `.${BRAND.id}`);
+  const homeDir = env[brandEnv("HOME")] ?? defaultHomeDir(role);
   // The sandbox points this at a throwaway folder, so installing skills from it never writes the real ~/.claude.
   const userHome = env[brandEnv("USER_HOME")] || homedir();
   mkdirSync(homeDir, { recursive: true });
   return {
     role,
-    port: Number(env[brandEnv("PORT")] ?? 4317),
+    port: Number(env[brandEnv("PORT")] ?? (role === "runner" ? DEFAULT_RUNNER_PORT : DEFAULT_SERVER_PORT)),
     webPort: Number(env[brandEnv("WEB_PORT")] ?? 5317),
     host: "127.0.0.1",
     homeDir,

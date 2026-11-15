@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync, existsSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import { BRAND, brandEnv } from "@repo/contracts";
@@ -40,6 +40,8 @@ export interface ServiceDeps {
   mkdir(path: string): void;
   removeFile(path: string): void;
   exists(path: string): boolean;
+  /** A file's contents, or null when it doesn't exist. */
+  readFile(path: string): string | null;
   /** The URL of the runner answering on the data dir, or null (none, or a board there). */
   runnerUrl(): Promise<string | null>;
   sleep(ms: number): Promise<void>;
@@ -94,6 +96,38 @@ function lingering(deps: ServiceDeps): boolean {
 
 const launchdTarget = (deps: ServiceDeps) => `gui/${deps.uid}`;
 
+/** Whether the service itself is running, as opposed to a runner someone started by hand. */
+function serviceRunning(deps: ServiceDeps): boolean {
+  if (deps.platform === "darwin") {
+    return deps.run("launchctl", ["print", `${launchdTarget(deps)}/${LAUNCHD_LABEL}`]).status === 0;
+  }
+  return deps.run("systemctl", ["--user", "is-active", SYSTEMD_UNIT]).stdout.trim() === "active";
+}
+
+/**
+ * Puts things back after a failed install: the service file that was there before (with its service started
+ * again), or none. Best effort: the error that got us here is what gets reported.
+ */
+function rollBack(deps: ServiceDeps, path: string, previous: string | null): void {
+  if (deps.platform === "darwin") {
+    if (previous === null) deps.removeFile(path);
+    else {
+      deps.writeFile(path, previous);
+      deps.run("launchctl", ["bootstrap", launchdTarget(deps), path]);
+    }
+    return;
+  }
+  if (previous === null) {
+    deps.run("systemctl", ["--user", "disable", SYSTEMD_UNIT]);
+    deps.removeFile(path);
+    deps.run("systemctl", ["--user", "daemon-reload"]);
+  } else {
+    deps.writeFile(path, previous);
+    deps.run("systemctl", ["--user", "daemon-reload"]);
+    deps.run("systemctl", ["--user", "restart", SYSTEMD_UNIT]);
+  }
+}
+
 async function install(deps: ServiceDeps, dryRun: boolean): Promise<number> {
   if (!deps.serverCommand) {
     throw new ServiceError(
@@ -117,6 +151,21 @@ async function install(deps: ServiceDeps, dryRun: boolean): Promise<number> {
     return 0;
   }
 
+  // A LaunchAgent lives in the user's desktop session, which an SSH login alone doesn't have.
+  if (deps.platform === "darwin" && deps.run("launchctl", ["print", launchdTarget(deps)]).status !== 0) {
+    throw new ServiceError(
+      `${deps.user} has no desktop session on this Mac, and the runner's LaunchAgent runs only in one. Log in at ` +
+        "the Mac (or turn on automatic login), then install again.",
+    );
+  }
+  // One started by hand would hold the port, and the service would fail to start behind it while the wait below
+  // found the other one answering.
+  const running = await deps.runnerUrl();
+  if (running && !serviceRunning(deps)) {
+    throw new ServiceError(`A runner is already running at ${running}, not as the service. Stop it, then install.`);
+  }
+
+  const previous = deps.readFile(file.path);
   deps.writeFile(file.path, file.contents);
   deps.out(`Wrote ${file.path}`);
   // launchd opens the log before the runner starts, and doesn't make its folder.
@@ -126,8 +175,9 @@ async function install(deps: ServiceDeps, dryRun: boolean): Promise<number> {
   try {
     for (const [command, args] of commands) must(deps, command, args);
   } catch (error) {
-    // Not left behind half set up, where `status` would call it installed.
-    deps.removeFile(file.path);
+    // Not left half set up, and a reinstall that failed leaves the service that worked before.
+    rollBack(deps, file.path, previous);
+    if (previous !== null && error instanceof ServiceError) error.message += "; the previous service was put back";
     throw error;
   }
 
@@ -259,6 +309,7 @@ function defaultDeps(): ServiceDeps {
     mkdir: (path) => mkdirSync(path, { recursive: true }),
     removeFile: (path) => rmSync(path, { force: true }),
     exists: existsSync,
+    readFile: (path) => (existsSync(path) ? readFileSync(path, "utf8") : null),
     runnerUrl: async () => {
       const running = await runningServer(dataDir);
       return running?.health.role === "runner" ? running.url : null;

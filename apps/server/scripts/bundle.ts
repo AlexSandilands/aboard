@@ -16,7 +16,7 @@ import { SERVER_PLATFORMS, buildServerTarballs, isServerPlatform } from "./tarba
 const args = process.argv.slice(2).filter((arg) => arg !== "--");
 const tarballs = args[0] === "--tarballs";
 const platforms = tarballs ? args.slice(1) : [];
-const unknown = (tarballs ? platforms : args).find((arg) => !isServerPlatform(arg));
+const unknown = tarballs ? platforms.find((arg) => !isServerPlatform(arg)) : args[0];
 if (unknown !== undefined) {
   console.error(`unknown argument "${unknown}" (--tarballs [${SERVER_PLATFORMS.join(" | ")} ...])`);
   process.exit(2);

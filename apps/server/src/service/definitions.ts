@@ -23,9 +23,13 @@ export interface ServiceFile {
   contents: string;
 }
 
-/** Quotes one word for a systemd `ExecStart=` or `Environment=` line; `%` would otherwise start a specifier. */
-function systemdQuote(value: string): string {
-  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("%", "%%")}"`;
+/**
+ * Quotes one word for a systemd `ExecStart=` or `Environment=` line; `%` would otherwise start a specifier. In
+ * `ExecStart=` systemd also expands `$VAR`, even in quotes, so there `$` is doubled too.
+ */
+function systemdQuote(value: string, execStart = false): string {
+  const escaped = value.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("%", "%%");
+  return `"${execStart ? escaped.replaceAll("$", "$$$$") : escaped}"`;
 }
 
 export function systemdUnit(spec: ServiceSpec, configHome: string): ServiceFile {
@@ -38,7 +42,7 @@ export function systemdUnit(spec: ServiceSpec, configHome: string): ServiceFile 
     "",
     "[Service]",
     "Type=simple",
-    `ExecStart=${spec.command.map(systemdQuote).join(" ")}`,
+    `ExecStart=${spec.command.map((word) => systemdQuote(word, true)).join(" ")}`,
     ...environment,
     // A crash restarts it; `service uninstall` (systemctl stop) doesn't.
     "Restart=on-failure",

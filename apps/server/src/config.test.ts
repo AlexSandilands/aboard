@@ -1,9 +1,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRAND, brandEnv } from "@repo/contracts";
+import { BRAND, DEFAULT_RUNNER_PORT, DEFAULT_SERVER_PORT, brandEnv } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadConfig } from "./config.ts";
+import { defaultHomeDir, loadConfig } from "./config.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -28,6 +28,14 @@ describe("loadConfig", () => {
       expect(config.role).toBe("runner");
       expect(config.webDist).toBeNull();
     }
+  });
+
+  it("gives a runner its own default data dir and port, so it can run beside a board", () => {
+    expect(defaultHomeDir("board", "/home/u")).toBe(join("/home/u", `.${BRAND.id}`));
+    expect(defaultHomeDir("runner", "/home/u")).toBe(join("/home/u", `.${BRAND.id}-runner`));
+    expect(loadConfig(env()).port).toBe(DEFAULT_SERVER_PORT);
+    expect(loadConfig(env(), ["--runner"]).port).toBe(DEFAULT_RUNNER_PORT);
+    expect(loadConfig(env({ [brandEnv("PORT")]: "5000" }), ["--runner"]).port).toBe(5000);
   });
 
   it("refuses an unknown role rather than starting as a board", () => {

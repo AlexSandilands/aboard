@@ -15,6 +15,8 @@ function fakeDeps(
   const files = new Map<string, string>();
   const commands: string[] = [];
   const lines: string[] = [];
+  // The runner answers once the service has been started.
+  let started = false;
   const deps: ServiceDeps = {
     platform: "linux",
     env: { PATH: "/usr/bin:/home/u/.local/bin", [brandEnv("PORT")]: "4400", [brandEnv("TOKEN")]: "secret" },
@@ -26,6 +28,7 @@ function fakeDeps(
     run: (command, args) => {
       const line = [command, ...args].join(" ");
       commands.push(line);
+      if (/^systemctl --user restart|^launchctl bootstrap/.test(line)) started = true;
       const answer = Object.entries(answers).find(([prefix]) => line.startsWith(prefix))?.[1];
       return { status: answer?.status ?? 0, stdout: answer?.stdout ?? "", stderr: answer?.stderr ?? "" };
     },
@@ -33,7 +36,8 @@ function fakeDeps(
     mkdir: () => {},
     removeFile: (path) => files.delete(path),
     exists: (path) => files.has(path),
-    runnerUrl: async () => "http://127.0.0.1:4400",
+    readFile: (path) => files.get(path) ?? null,
+    runnerUrl: async () => (started ? "http://127.0.0.1:4400" : null),
     sleep: async () => {},
     out: (line) => lines.push(line),
     ...rest,
@@ -54,6 +58,10 @@ describe("service definitions", () => {
     const unit = systemdUnit(spec, "/home/u/.config");
     expect(unit.path).toBe(unitPath);
     expect(unit.contents).toContain(`ExecStart="/opt/my \\"runner\\"/bin/x" "--runner"`);
+    // systemd expands $ in ExecStart, not in Environment.
+    const dollar = systemdUnit({ ...spec, command: ["/opt/$HOME/x"], environment: { A: "$b" } }, "/c");
+    expect(dollar.contents).toContain(`ExecStart="/opt/$$HOME/x"`);
+    expect(dollar.contents).toContain(`Environment="A=$b"`);
     expect(unit.contents).toContain(`Environment="PATH=/usr/bin:/a%%b"`);
     expect(unit.contents).toContain("WantedBy=default.target");
   });
@@ -105,6 +113,11 @@ describe("service install", () => {
     expect(await runServiceCommand(["install"], failing.deps)).toBe(1);
     expect(failing.lines.at(-1)).toContain("Failed to connect to bus");
     expect(failing.files.size).toBe(0);
+    // Enabled before the failure, so disabled again.
+    expect(failing.commands.slice(2)).toEqual([
+      `systemctl --user disable ${SYSTEMD_UNIT}`,
+      "systemctl --user daemon-reload",
+    ]);
 
     const silent = fakeDeps({ answers: { "loginctl show-user": { stdout: "yes" } }, runnerUrl: async () => null });
     const realNow = Date.now;
@@ -116,6 +129,30 @@ describe("service install", () => {
       Date.now = realNow;
     }
     expect(silent.lines.at(-1)).toContain(`journalctl --user -u ${SYSTEMD_UNIT}`);
+  });
+
+  it("puts the previous unit back when a reinstall fails", async () => {
+    const { deps, files, commands, lines } = fakeDeps({
+      answers: { "systemctl --user restart": { status: 1, stderr: "Job failed" } },
+    });
+    files.set(unitPath, "the old unit");
+    expect(await runServiceCommand(["install"], deps)).toBe(1);
+    expect(files.get(unitPath)).toBe("the old unit");
+    expect(commands.slice(-2)).toEqual(["systemctl --user daemon-reload", `systemctl --user restart ${SYSTEMD_UNIT}`]);
+    expect(lines.at(-1)).toContain("the previous service was put back");
+  });
+
+  it("refuses while a runner started by hand holds the port, but reinstalls over the service's own", async () => {
+    const byHand = fakeDeps({ runnerUrl: async () => "http://127.0.0.1:4400" });
+    expect(await runServiceCommand(["install"], byHand.deps)).toBe(1);
+    expect(byHand.files.size).toBe(0);
+    expect(byHand.lines.at(-1)).toContain("already running at http://127.0.0.1:4400");
+
+    const service = fakeDeps({
+      runnerUrl: async () => "http://127.0.0.1:4400",
+      answers: { "systemctl --user is-active": { stdout: "active\n" }, "loginctl show-user": { stdout: "yes" } },
+    });
+    expect(await runServiceCommand(["install"], service.deps)).toBe(0);
   });
 
   it("refuses without a command to start, as when run from source", async () => {
@@ -138,7 +175,22 @@ describe("service install", () => {
     expect(await runServiceCommand(["install"], deps)).toBe(0);
     const path = `/Users/u/Library/LaunchAgents/${LAUNCHD_LABEL}.plist`;
     expect(files.get(path)).toContain(`<string>${LAUNCHER}</string>`);
-    expect(commands).toEqual([`launchctl bootout gui/501/${LAUNCHD_LABEL}`, `launchctl bootstrap gui/501 ${path}`]);
+    expect(commands).toEqual([
+      "launchctl print gui/501",
+      `launchctl bootout gui/501/${LAUNCHD_LABEL}`,
+      `launchctl bootstrap gui/501 ${path}`,
+    ]);
+  });
+
+  it("explains that a LaunchAgent needs a desktop login when the Mac has none", async () => {
+    const { deps, files, lines } = fakeDeps({
+      platform: "darwin",
+      userHome: "/Users/u",
+      answers: { "launchctl print gui/501": { status: 113, stderr: "Could not find domain" } },
+    });
+    expect(await runServiceCommand(["install"], deps)).toBe(1);
+    expect(files.size).toBe(0);
+    expect(lines.at(-1)).toContain("no desktop session");
   });
 
   it("has no service on Windows", async () => {
@@ -163,6 +215,7 @@ describe("service uninstall and status", () => {
 
   it("reports the unit, linger and whether the runner answers", async () => {
     const { deps, files, lines } = fakeDeps({
+      runnerUrl: async () => "http://127.0.0.1:4400",
       answers: {
         "systemctl --user is-active": { stdout: "active\n" },
         "systemctl --user is-enabled": { stdout: "enabled\n" },
