@@ -336,10 +336,17 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
 
   function startInstall(input: Extract<ConnectMachineInput, { via: "ssh" }>): MachineInstall {
     // An install onto a machine already connected (found by its SSH destination) keeps that machine's prefix.
-    const reinstall = machines()
+    const known = machines()
       .list()
-      .some((m) => m.routes.some((r) => r.kind === "ssh" && r.target === input.target));
-    if (!reinstall) requireFreePrefix(input.prefix);
+      .find((m) => m.routes.some((r) => r.kind === "ssh" && r.target === input.target));
+    if (!known) requireFreePrefix(input.prefix);
+    // The install script refuses this too, on what is truly installed; this spares the SSH login when it is known.
+    if (known?.version && compareReleaseVersions(known.version, BRAND.version) > 0) {
+      throw new AppError(
+        "CONFLICT",
+        `${known.name} runs ${known.version}, newer than this board (${BRAND.version}). Update the board; a machine is never moved back a version.`,
+      );
+    }
     if (!releaseAvailable) {
       throw new AppError(
         "CONFLICT",

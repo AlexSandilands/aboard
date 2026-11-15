@@ -221,6 +221,21 @@ describe("connecting a machine over SSH", () => {
     expect(machines.list().machines).toEqual([]);
   });
 
+  it("is refused onto a machine already connected on a newer version than the board", async () => {
+    const { board, machines, ssh, reasonOf } = setup({ releaseUrl: "http://releases.test" });
+    const engine = board.services.machines.add({
+      instanceId: randomUUID(),
+      name: "engine",
+      routes: [{ kind: "ssh", target: "alex@engine", port: null, remotePort: RUNNER_PORT }],
+    });
+    board.services.machines.observe(engine.id, { version: "9.9.9", protocolVersion: MACHINE_PROTOCOL_VERSION });
+    expect(await reasonOf(machines.connect({ via: "ssh", target: "alex@engine", tailscale: false }))).toMatch(
+      /^CONFLICT: .*never moved back/,
+    );
+    expect(machines.list().installs).toEqual([]);
+    expect(ssh.tunnels).toBe(0);
+  });
+
   it("is refused on a board run from source, which has no release to install", async () => {
     const { machines, reasonOf } = setup();
     expect(machines.list().releaseAvailable).toBe(false);

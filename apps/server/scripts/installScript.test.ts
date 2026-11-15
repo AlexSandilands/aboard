@@ -36,7 +36,8 @@ function published(options: { tamper?: boolean } = {}) {
   const bind = brandEnv("BIND");
   writeFileSync(
     join(release, name, "bin", SERVER_LAUNCHER_NAME),
-    `#!/bin/sh\necho "$* bind=\${${bind}:-} path=$PATH" >> "$HOME/calls"\nif [ "$1" = pair ]; then echo '{"code":"N5PA"}'; fi\n`,
+    // It says which version it is, as the real launcher does, without counting that as a call.
+    `#!/bin/sh\nif [ "$1" = --version ]; then echo ${VERSION}; exit 0; fi\necho "$* bind=\${${bind}:-} path=$PATH" >> "$HOME/calls"\nif [ "$1" = pair ]; then echo '{"code":"N5PA"}'; fi\n`,
     { mode: 0o755 },
   );
   spawnSync("tar", ["-czf", join(release, `${name}.tar.gz`), "-C", release, name]);
@@ -91,6 +92,21 @@ describe.skipIf(platform === null)("install-runner.sh", () => {
     expect(again.stdout).toContain("run this script\nagain with --tailscale");
     expect(again.stdout).not.toContain("@@");
     expect(calls().trim().split("\n")).toHaveLength(4);
+  });
+
+  it("never moves a runner that is already there back a version", () => {
+    const { run, root, name, calls } = published();
+    expect(run().status).toBe(0);
+    const before = calls();
+    for (const older of ["9.9.8", "1.20.0", `${VERSION}-rc.1`]) {
+      const out = run("--version", older, "--porcelain");
+      expect([older, out.status]).toEqual([older, 1]);
+      expect(out.stderr).toContain(`is on ${VERSION}, newer than ${older}`);
+      // Refused before anything is downloaded or touched.
+      expect(out.stdout).not.toContain("@@step");
+    }
+    expect(readlinkSync(join(root, "current"))).toBe(`releases/${name}`);
+    expect(calls()).toBe(before);
   });
 
   it("installs nothing when the download doesn't match its checksum", () => {

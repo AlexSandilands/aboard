@@ -414,7 +414,9 @@ it a `current` to repoint, and `brandEnv("SERVICE")=1`, which `service install` 
 will start it again. Any other answers 409, and its machine shows `selfUpdate: false`.
 
 A machine **newer** than the board is left alone (`versionState: "newer"`): going back would run old code on a
-database the newer version has migrated. The board is the one to update. Both sides hold to it: the board's
+database the newer version has migrated. The board is the one to update. Every way in holds to it: the install
+script stops, before it downloads anything, when the runner already on the machine is newer than the version asked
+for (so a reinstall over SSH, or the script run by hand with an older `--version`, can't do it either); the board's
 `POST /api/machines/:id/update` answers 409 for a newer machine, and a runner answers 409 to a version older than
 its own.
 

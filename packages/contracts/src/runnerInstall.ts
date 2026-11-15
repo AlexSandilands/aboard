@@ -122,6 +122,26 @@ root="\${XDG_DATA_HOME:-$HOME/.local/share}/${launcher}"
 bin="$HOME/.local/bin"
 mkdir -p "$root/releases" "$bin"
 
+# Migrations only go forward: a runner already here on a newer version is never moved back, by a board or by hand.
+installed=""
+if [ -x "$root/current/bin/${launcher}" ]; then
+  installed="$("$root/current/bin/${launcher}" --version 2>/dev/null </dev/null | head -n 1)" || installed=""
+fi
+if [ -n "$installed" ] && [ "$installed" != "$version" ]; then
+  newer="$(awk -v a="$installed" -v b="$version" 'BEGIN {
+    split(a, x, "-"); split(b, y, "-"); split(x[1], p, "."); split(y[1], q, ".")
+    for (i = 1; i <= 3; i++) {
+      if (p[i] + 0 > q[i] + 0) { print 1; exit }
+      if (p[i] + 0 < q[i] + 0) { print 0; exit }
+    }
+    # The same numbers: a release is newer than its own pre-release.
+    if (x[2] == "" && y[2] != "") print 1; else print 0
+  }')"
+  if [ "$newer" = 1 ]; then
+    fail "The runner on this machine is on $installed, newer than $version, and a runner is never moved back a version. Update the board instead."
+  fi
+fi
+
 step download
 if [ -x "$root/releases/$name/bin/${launcher}" ]; then
   echo "${BRAND.name} runner $version is already downloaded."
