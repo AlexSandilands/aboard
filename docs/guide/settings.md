@@ -43,7 +43,7 @@ and a click tries again.
 | **Tasks**        | New tasks ([templates](templates.md), [issue import](importing-issues.md)), [Planning](using-the-board.md#planning-several-tasks-at-once) (planning skill), [Review](local-review.md), [Suggestions](#suggested-changes) |
 | **Agents**       | [Providers](#providers) (T3 Code, Claude Code, Codex and GitHub Copilot, once you add them: [connecting agents](connect-agents.md), [T3 Code](t3-code.md)), [Models](#models) (the Light, Standard and Deep tiers and custom models picked by a task label), Custom hand-offs (your own saved prompts for the hand-off menu: [using the board](using-the-board.md#custom-hand-offs)), Operations (the model each kind of run uses) |
 | **Autopilot**    | [Automations](autopilot.md#switching-automations-on) (status, Needs you, every automation and [your own](custom-automations.md) in one list), [Runs](autopilot.md#run-history), [Limits & safety](autopilot.md#limits) (caps, quiet hours, Preview everything, variables) |
-| **Integrations** | GitHub, Ticket systems, Terminal, Model prices |
+| **Integrations** | GitHub, Ticket systems, Terminal, [Machines](remote-machines.md), Model prices |
 | **Projects**     | General (name, icon, folder), This project's overrides, Danger zone, for the project chosen at the top |
 
 - **Projects → General → Choose icon → Image** lists the images already in the project's folder under **Found in

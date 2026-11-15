@@ -7,9 +7,9 @@ runs the same server as the board, started in the **runner** role: it serves no 
 tasks sent to it, and runs their agents. This page covers the part that exists so far: the runner role, the
 release and the script that put the server on a machine with nothing installed, the background service that keeps
 it running, how a board and a runner come to trust each other (identity, pairing, tokens and the machine API), and
-how a board connects a machine: installing over SSH, routes, status, logins and updates. All of that is the
-server's so far: the Settings page that drives it, held tasks and remote runs aren't built yet; they are the later
-work of epic #178.
+how a board connects a machine: installing over SSH, routes, status, logins, updates and the Settings page that
+drives them. Held tasks and remote runs aren't built yet; they are the later work of epic #178. What a user does
+is in the [guide](../guide/remote-machines.md).
 
 ## How it works
 
@@ -291,6 +291,31 @@ A board run from source has version `0.0.0`, which no release carries, so it ref
 updates, unless `brandEnv("RELEASE_URL")` names a folder or server holding the release files (what
 `pnpm server:package` writes into `apps/server/release/`).
 
+### The Machines page
+
+Settings → Integrations → Machines (`components/settings/machines/`) is `GET /api/machines` drawn as one card: a row
+per install that hasn't finished, then a row per machine. The list is refetched on `machines.changed`, which the
+server publishes on every change to a machine, its link or an install, so nothing on the page polls.
+
+- **A machine's row** is one line (`machineSummary`): a dot for its connection, name, prefix, the route in use and
+  runs in flight, then a badge for anything wrong (logins missing, an update waiting, running or failed) and its
+  version. It opens to a callout for a machine that isn't connected, then Version, Logins, Routes, and Name and
+  prefix with Remove.
+- **A row opens by itself** when the machine needs the user: unreachable, needs updating, unpaired, a login
+  missing or an update that failed. Once the user opens or closes a row, that choice holds until the page is left.
+- **Each callout carries its one action**: Try now (`/check`) for unreachable, a code field and Pair (`/pair`) for
+  unpaired. Needs updating has none: the update is under Version.
+- **Routes** are reordered with arrows, removed, and added as an address; every change saves the whole list
+  (`PATCH`), which restarts the machine's link. A failed route shows its reason and when it is tried next, counted
+  from when the list was read.
+- **Add machine** is a dialog with two tabs, one per way in. Over SSH closes as soon as the install has started,
+  and the install carries on as a row; a failed one has Try again, which reopens the dialog with the destination
+  filled in, and Dismiss. On a board with no release to install, the SSH tab says so and its button is off.
+- **Remove** asks in place, and says the runner stays installed and how to remove it.
+
+The server's sentences are shown as they are (`error`, a login's `detail`, an install's `error`), so what the
+user is told to do is written once, where the cause is known.
+
 ### Routes
 
 A machine has an ordered list of routes (`MachineRoute`), the first being the one preferred:
@@ -509,6 +534,8 @@ epic test against.
 | `apps/server/src/integrations/machines/logins.ts` | The runner's login checks                                  |
 | `apps/server/src/integrations/machines/selfUpdate.ts` | The runner updating itself                             |
 | `apps/server/src/http/routes/machines.ts` | `/api/machines`                                                    |
+| `apps/web/src/components/settings/machines/` | The Machines section, the add dialog and their logic            |
+| `apps/web/src/state/machines.ts`        | The machines query and its mutations                                  |
 | `apps/server/scripts/bundle.ts`         | The bundle, then the tarballs with `--tarballs`                       |
 | `apps/server/scripts/tarball.ts`        | The pinned Node, the launcher, the tarballs and their checksums       |
 | `apps/server/scripts/sandbox.ts`        | `--runner`                                                            |
