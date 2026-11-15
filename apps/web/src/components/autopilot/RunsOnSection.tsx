@@ -1,4 +1,4 @@
-import type { CustomAutomation } from "@repo/contracts";
+import { customAutomationKey, type CustomAutomation } from "@repo/contracts";
 import { DetailSection } from "~/components/settings/agents/SplitCard";
 import { SETTINGS_TEXT_WIDTH, SettingsRow } from "~/components/settings/settingsLayout";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
@@ -20,7 +20,7 @@ export function RunsOnSection({ custom }: { custom: CustomAutomation }) {
   return (
     <DetailSection title="Runs on">
       <SettingsRow
-        id={`autopilot.automations.custom:${custom.id}.runs-on`}
+        id={`autopilot.automations.${customAutomationKey(custom.id)}.runs-on`}
         title="Machine"
         description={
           <span className={description.tone === "warning" ? "text-warning-foreground" : undefined}>
