@@ -26,7 +26,9 @@ and review integrations. How it fits together: [docs/architecture.md](../../docs
 - The one exception is a runner's machine API, `/machine/*`, which a board on another machine calls with a paired
   token ([ADR 0015](../../docs/decisions/0015-machine-api-auth.md)). Register its routes in `http/routes/machine.ts`
   and let the guard check the token (`machinePairingOf(c)`). Only `integrations/machineClient.ts` sends a machine
-  token anywhere, and nothing returns `machine-tokens.json` through the API.
+  token anywhere, and nothing returns `machine-tokens.json` through the API. The board's side is
+  `integrations/machines/`: talk to a connected machine through `integrations.machines.request`, which uses the
+  route that works and refuses a machine that isn't connected.
 - MCP results are plain text. Tool descriptions are written for agents; read
   [docs/features/mcp.md](../../docs/features/mcp.md) before adding or changing a tool, and update
   `skills/aboard/` when the workflow changes (then `pnpm skill:embed`, which the installed copies sync from).

@@ -28,6 +28,7 @@ Publishing starts `.github/workflows/release.yml`. When it finishes, the release
 | `aboard-<version>.x86_64.rpm`                    | Fedora, openSUSE                                    |
 | `aboard-<version>-linux-x64.tar.gz`              | The unpacked app; the Arch package installs this    |
 | `aboard-server-<version>-<platform>.tar.gz`      | The headless server for a remote machine, with its own Node: `linux-x64`, `linux-arm64`, `darwin-arm64` ([remote machines](remote-machines.md)) |
+| `install-runner.sh`                              | Installs the headless server of this version on a machine as a runner, and prints a pairing code ([remote machines](remote-machines.md#installing-a-runner)) |
 | `SHA256SUMS-windows.txt`, `SHA256SUMS-linux.txt`, `SHA256SUMS-server.txt` | Checksums of the files above |
 | `Aboard-Setup-<version>.exe.blockmap`            | Lets the Windows updater fetch only changed blocks  |
 | `latest.yml`, `latest-linux.yml`                 | The update feed the installed app reads             |
@@ -75,8 +76,9 @@ is where the updater looks. It never uploads anything itself (`publish: "never"`
 
 `server` runs beside them on `ubuntu-latest`: it stamps the version, runs `pnpm server:package`, which bundles the
 server and builds one tarball per platform with a pinned Node runtime
-([remote machines](remote-machines.md#the-release)), and uploads them with `SHA256SUMS-server.txt`. The bundle is
-plain JavaScript, so one Linux runner builds the macOS tarball too.
+([remote machines](remote-machines.md#the-release)), and uploads them with `SHA256SUMS-server.txt` and
+`install-runner.sh`, which the same command writes for that version. The bundle is plain JavaScript, so one Linux
+runner builds the macOS tarball too.
 
 Once `package` has finished, `pacman` and `aur` update the Arch packages from the release's Linux tarball, each
 skipping with a notice when its secret is missing. The release itself is unaffected either way. They download that
