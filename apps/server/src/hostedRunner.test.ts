@@ -143,6 +143,18 @@ describe("a board that also runs tasks for another board", { timeout: 30_000 }, 
     await expect(fetch(`${on.url}/api/health`)).rejects.toThrow("fetch failed");
   });
 
+  it("gives its runner the board's T3 token, then and whenever it changes", async () => {
+    const a = await startBoard();
+    const on = await json<HostedRunnerStatus>(send(`${a.url}/api/runner`, "PATCH", { enabled: true }));
+    const runnerHasToken = async () =>
+      (await json<{ t3TokenSet: boolean }>(fetch(`${on.url}/api/settings`))).t3TokenSet;
+    expect(await runnerHasToken()).toBe(false);
+    await json(send(`${a.url}/api/settings`, "PATCH", { t3Token: "from-the-board" }));
+    expect(await runnerHasToken()).toBe(true);
+    await json(send(`${a.url}/api/settings`, "PATCH", { t3Token: null }));
+    expect(await runnerHasToken()).toBe(false);
+  });
+
   it("says why its runner couldn't start", async () => {
     const taken = await startBoard();
     const a = await startBoard({ hostedRunnerPort: taken.port });

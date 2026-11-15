@@ -2,6 +2,7 @@ import { BRAND, type HostedRunnerPairingCode, type UpdateHostedRunnerInput } fro
 import { useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
+import { ApiError } from "~/lib/api";
 import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import {
   useConfigureHostedRunner,
@@ -50,8 +51,12 @@ export function HostedRunnerSection() {
   const makeCode = useHostedRunnerPairingCode();
   const unpair = useUnpairHostedRunner();
   const [confirmUnpair, setConfirmUnpair] = useState(false);
-  // A change that would end runs in flight, waiting for the user to say so.
-  const [pending, setPending] = useState<UpdateHostedRunnerInput | null>(null);
+  // A change that would end runs in flight, waiting for the user to say so, with the question as it was asked: it
+  // stays until answered, even if the runs end meanwhile (forcing it then ends nothing).
+  const [pending, setPending] = useState<{
+    input: UpdateHostedRunnerInput;
+    warning: { text: string; action: string };
+  } | null>(null);
   const data = status.data;
 
   if (!data) {
@@ -67,10 +72,22 @@ export function HostedRunnerSection() {
   const code = running && !data.board ? makeCode.data : undefined;
   const change = (input: UpdateHostedRunnerInput) => {
     makeCode.reset();
-    if (runsWarning(data, input)) setPending(input);
-    else configure.mutate(input);
+    const asked = runsWarning(data, input);
+    if (asked) {
+      setPending({ input, warning: asked });
+      return;
+    }
+    configure.mutate(input, {
+      onError: (error) => {
+        // A run started since the status was read: ask, as if it had been known.
+        if (error instanceof ApiError && error.code === "CONFLICT") {
+          const action = input.enabled === false ? "Stop anyway" : "Restart anyway";
+          setPending({ input, warning: { text: error.message, action } });
+          void status.refetch();
+        }
+      },
+    });
   };
-  const warning = pending ? runsWarning(data, pending) : null;
   return (
     <SettingsSection title="This machine">
       <SettingsRow
@@ -94,9 +111,9 @@ export function HostedRunnerSection() {
           />
         }
       >
-        {pending && warning ? (
+        {pending ? (
           <div className="mt-3 flex flex-col gap-2 rounded-lg bg-warning/8 px-3 py-2.5 text-sm dark:bg-warning/16 @min-[32rem]/settings-row:flex-row @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-3">
-            <p className="min-w-0 flex-1">{warning.text}</p>
+            <p className="min-w-0 flex-1">{pending.warning.text}</p>
             <div className="flex gap-2">
               <Button size="xs" variant="ghost" onClick={() => setPending(null)}>
                 Cancel
@@ -105,9 +122,11 @@ export function HostedRunnerSection() {
                 size="xs"
                 variant="destructive-outline"
                 disabled={configure.isPending}
-                onClick={() => configure.mutate({ ...pending, force: true }, { onSettled: () => setPending(null) })}
+                onClick={() =>
+                  configure.mutate({ ...pending.input, force: true }, { onSettled: () => setPending(null) })
+                }
               >
-                {warning.action}
+                {pending.warning.action}
               </Button>
             </div>
           </div>

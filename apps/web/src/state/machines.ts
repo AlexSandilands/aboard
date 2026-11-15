@@ -12,7 +12,7 @@ import {
 } from "@repo/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastManager } from "~/components/ui/toast";
-import { api } from "~/lib/api";
+import { ApiError, api } from "~/lib/api";
 import { queryKeys } from "./queries";
 
 /*
@@ -107,7 +107,11 @@ export function useConfigureHostedRunner() {
     mutationFn: (input: UpdateHostedRunnerInput) =>
       api<HostedRunnerStatus>(HOSTED_RUNNER_PATH, { method: "PATCH", body: input }),
     onSuccess: (status) => queryClient.setQueryData(queryKeys.hostedRunner, status),
-    onError: failed("Couldn't change whether other machines run tasks here"),
+    // A refusal over runs in flight is a question the section asks itself, with Stop anyway.
+    onError: (error, input) =>
+      error instanceof ApiError && error.code === "CONFLICT" && !input.force
+        ? undefined
+        : failed("Couldn't change whether other machines run tasks here")(error),
   });
 }
 
