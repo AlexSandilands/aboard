@@ -1,6 +1,6 @@
 # Handing tasks to agents
 
-Board task: #9. Verified against T3 Code 0.0.46 (nightly, October 2026).
+Board tasks: #9, #185 (threads on a machine). Verified against T3 Code 0.0.46 (nightly, October 2026).
 
 The board tracks work, but the work itself happens in an agent harness: Claude Code, Copilot, T3 Code and
 similar. This document covers how a task on the board becomes a running agent session, and how that session
@@ -252,6 +252,16 @@ worktree default and "start new worktrees from origin" come from the same settin
 
 The thread is titled `#<number> <task title>`. Ctrl+Enter in the prompt sends it.
 
+**Where the task runs.** Once a machine is connected, the strip under the composer starts with the task's machine
+(**This machine**, or the machine's name), the same choice as the task panel's chip, saved onto the task
+([remote-machines.md](remote-machines.md#choosing-the-machine)). A task set to run on another machine can't start its
+work in a thread or session from here, which would run on this machine: Send is off and a note under the composer says
+to pick **This machine**. Planning (Plan with me, a planning session) is allowed, since it doesn't start the task; the
+note then says where it will start (`launchElsewhere` in `components/task/runOn.logic.ts`). A task a machine holds
+starts its thread or session on that machine ([remote-machines.md](remote-machines.md#interactive-work)), which the
+note says. The Claude Code /
+Codex / Copilot session dialog does the same in its strip. Not for an epic, a PR fix's branch, or a project.
+
 **Loading.** The options (models, refs, defaults) come from T3, so they take a moment. The prompt, the image button and
 **Plan with me** work straight away; the model, effort, access, workspace and branch controls show skeletons until the
 options arrive, and Send stays disabled. What you typed is kept. The choices are made from the options when they
@@ -294,6 +304,13 @@ own web client uses:
 4. On success, give the images to the task (they are then backed up, deleted with it and listed by `get_task`) and add
    a `t3_thread` link to it. The card shows the thread straight away, and the 20-second live status poll takes over
    from there. A Suggest epics or Plan tasks thread has no one task, so its images stay unclaimed.
+
+#### On a machine
+
+For a task a connected machine holds, the dialog, the launch and every message to the thread go to that machine's own
+T3 Code, through the machine ([remote machines](remote-machines.md#t3-code-on-the-machine)): the options are its T3's
+providers, models and branches, and the thread's link carries its T3's environment id and `ref.machine`. The board
+never reaches that T3 Code itself. Its token is set on the machine.
 
 ### Follow-up threads
 

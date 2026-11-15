@@ -149,6 +149,15 @@ describe("start planned tasks: eligibility", () => {
     expect(notStartable({ ...s.tasks.summary(manual.id), autopilot: true })).toBe("it's a manual task");
   });
 
+  it("starts a task a machine holds that is still in Planned, since its run goes to that machine", () => {
+    const { s, task } = setup();
+    const held = { ...s.tasks.summary(task("Held").id), autopilot: true };
+    const hold = { machineId: "m", machineName: "engine", since: new Date().toISOString(), waiting: 0 };
+    // A start that handed it over and then failed before the agent moved it: the next one goes to the machine again.
+    expect(notStartable({ ...held, hold })).toBeNull();
+    expect(notStartable({ ...held, hold, status: "in_progress" })).toBe("it's no longer in Planned");
+  });
+
   it("leaves a flagged task in a project with no folder, instead of failing a run for it", async () => {
     const { s, pass, runs, requests, project } = setup();
     const general = s.projects.create({ title: "General" });

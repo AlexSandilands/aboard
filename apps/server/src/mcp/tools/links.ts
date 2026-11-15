@@ -98,10 +98,17 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
                     // board it is shown on knows where the session's files are.
                     ctx.config.role === "runner"
                       ? {
-                          ...agentSession.data,
+                          ...withoutTmux(agentSession.data),
                           machine: { id: ctx.instanceId, name: services.settings.get().machineName },
+                          // A session the board opened here in tmux, that links itself (Codex): where to find it.
+                          ...tmuxOf(
+                            ctx.integrations.runnerHost.interactive.tmuxFor(
+                              agentSession.data.harness,
+                              agentSession.data.cwd,
+                            ),
+                          ),
                         }
-                      : agentSession.data,
+                      : withoutTmux(agentSession.data),
                 }
               : {}),
             ...(args.label ? { label: args.label } : {}),
@@ -158,3 +165,11 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
       }),
   );
 };
+
+/** Only the board and its machines say which tmux session a session is in, never the agent. */
+function withoutTmux<T extends { tmux?: string }>(ref: T): Omit<T, "tmux"> {
+  const { tmux: _tmux, ...rest } = ref;
+  return rest;
+}
+
+const tmuxOf = (tmux: string | null): { tmux?: string } => (tmux ? { tmux } : {});

@@ -1,7 +1,7 @@
 import { taskLabel } from "@repo/contracts";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { Project, TaskSummary } from "@repo/contracts";
+import type { Machine, Project, TaskSummary } from "@repo/contracts";
 import { ArchiveIcon, LockIcon, StarIcon } from "lucide-react";
 import { memo, useCallback, useRef, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { AutopilotBadge } from "~/components/autopilot/AutopilotBadge";
@@ -14,7 +14,9 @@ import { importPendingLabel } from "~/components/task/import.logic";
 import { dueDateLabel, dueStateClassName, dueStateOf, dueStateText } from "~/components/task/dueDate.logic";
 import { resolutionLabel } from "~/components/task/resolution.logic";
 import { OnEpicBranchChip } from "~/components/task/EpicDelivery";
-import { HoldBadge } from "~/components/task/HoldBadge";
+import { MachineNumber } from "~/components/task/RunOn";
+import { placementOf, type Placement } from "~/components/task/runOn.logic";
+import { useMachines } from "~/state/machines";
 import { Spinner } from "~/components/ui/spinner";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
@@ -34,6 +36,8 @@ import { ReviewBadge } from "~/components/review/ReviewBadge";
 import { usePrefetchTaskDetail } from "~/state/queries";
 import type { DragData } from "./dnd.logic";
 import { TaskProgressLine } from "./TaskProgress";
+
+const NO_MACHINES: Machine[] = [];
 
 /** Card surface: settings-group card with sidebar-row selection; attention adds a tinted ring. */
 export function taskCardClassName(task: TaskSummary, selected: boolean) {
@@ -66,6 +70,7 @@ export const TaskCardContent = memo(function TaskCardContent({
   const fetching = importPendingLabel(task);
   const ticketKey = ticketKeys(task)[0];
   const { t3, settings, projects } = useBoardContext();
+  const machines = useMachines().data?.machines ?? NO_MACHINES;
   const project = showProject ? projects.find((p) => p.id === task.projectId) : undefined;
   const handoff = showHandoffActions(task);
   const startT3 =
@@ -76,11 +81,19 @@ export const TaskCardContent = memo(function TaskCardContent({
       t3,
       settings,
     );
-  if (compact) return <CompactCardLine task={task} project={project} blocked={blocked} attention={attention} />;
+  const placement = placementOf(
+    task,
+    projects.find((p) => p.id === task.projectId),
+    machines,
+  );
+  if (compact)
+    return (
+      <CompactCardLine task={task} project={project} blocked={blocked} attention={attention} placement={placement} />
+    );
   return (
     <div className="flex flex-col gap-1 px-2.5 py-2">
       <div className="flex h-5 min-w-0 items-center gap-1.5 text-xs">
-        <span className="shrink-0 font-mono tabular-nums text-muted-foreground/70">{taskLabel(task)}</span>
+        <MachineNumber task={task} placement={placement} />
         {ticketKey ? (
           <Badge variant="outline" size="sm">
             {ticketKey}
@@ -104,7 +117,6 @@ export const TaskCardContent = memo(function TaskCardContent({
             Manual
           </Badge>
         ) : null}
-        <HoldBadge task={task} />
         <ResolutionChip task={task} />
         <OnEpicBranchChip task={task} />
         {task.review && !task.resolution ? <ReviewBadge summary={task.review} /> : null}
@@ -167,16 +179,18 @@ function CompactCardLine({
   project,
   blocked,
   attention,
+  placement,
 }: {
   task: TaskSummary;
   project: Project | undefined;
   blocked: string | null;
   attention: ReturnType<typeof topAttention>;
+  placement: Placement;
 }) {
   const pr = cardLinks(task.links).find((link) => link.kind === "pr");
   return (
     <div className="flex h-7 min-w-0 items-center gap-1.5 px-2 text-xs">
-      <span className="shrink-0 font-mono tabular-nums text-muted-foreground/70">{taskLabel(task)}</span>
+      <MachineNumber task={task} placement={placement} />
       {project ? (
         <span title={project.title} className="flex shrink-0 items-center">
           <ProjectFavicon title={project.title} icon={project.icon} className="size-3.5" />
@@ -184,7 +198,6 @@ function CompactCardLine({
         </span>
       ) : null}
       <span className="min-w-0 flex-1 truncate font-medium text-foreground/90">{task.title}</span>
-      <HoldBadge task={task} />
       <AutopilotBadge taskId={task.id} />
       {pr ? <PrStatusChip link={pr} /> : null}
       {blocked ? (

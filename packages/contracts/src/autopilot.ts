@@ -478,6 +478,7 @@ export const AutopilotActiveRun = AutopilotRun.pick({
   taskId: true,
   projectId: true,
   status: true,
+  machine: true,
 }).extend({
   /** The epic the run's task is in, so an epic's button can spin; not stored, read from the task. */
   epicId: z.string().nullable(),

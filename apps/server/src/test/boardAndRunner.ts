@@ -72,7 +72,6 @@ export async function createBoardAndRunner(options: PairOptions = {}) {
   const board = createTestHarness({
     integrations: {
       now: () => clock.now,
-      machines: { fetch: fetchFn },
       runGit: (args, cwd) =>
         Promise.resolve(
           args[0] === "remote" && remotes[cwd]
@@ -81,6 +80,7 @@ export async function createBoardAndRunner(options: PairOptions = {}) {
         ),
       log: { warn: () => {} },
       ...options.board,
+      machines: { ...options.board?.machines, fetch: fetchFn },
     },
   });
   const { machine } = await board.integrations.machines.connect({

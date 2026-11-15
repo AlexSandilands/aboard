@@ -1,6 +1,6 @@
 # Agent sessions
 
-Board tasks: #69, #115 (starting sessions), #96 (Codex sessions and models). Verified against Claude Code 2.1.301 and
+Board tasks: #69, #115 (starting sessions), #96 (Codex sessions and models), #185 (sessions on a machine). Verified against Claude Code 2.1.301 and
 Copilot CLI 1.0.85 on Windows (October 2026), and codex-cli 0.166.0 on Linux (November 2026).
 
 An agent in Claude Code, Codex or Copilot CLI links its own session to the task it works on, or the board starts a
@@ -117,8 +117,8 @@ polling until the server restarted.
 - A session that ran on a connected machine has that machine in its link (`ref.machine`: instance id and name),
   set by the runner's run or by `link` on a runner. Its files are there, so the board never reads it: the runner
   polls it (every 20 seconds, with no browser needed) and the snapshot arrives with the task's changes
-  ([remote machines](remote-machines.md#sessions-usage-and-transcripts)). Open in terminal refuses it with the
-  machine's name until terminals on a machine exist.
+  ([remote machines](remote-machines.md#sessions-usage-and-transcripts)). Open in terminal opens it there, over
+  ssh ([On a machine](#on-a-machine)).
 
 ### Opening a session
 
@@ -337,6 +337,57 @@ The terminal setting is resolved first, so one that can't run here is refused (4
 worktree made for a session whose terminal then didn't start stays, since the returned command runs in it, and the
 dialog closes so starting again doesn't quietly make a second one.
 
+### On a machine
+
+A session whose link names a connected machine, and every new session of a task a machine holds, runs on that
+machine. The terminal here runs `ssh -t` to it, and tmux there holds the session, so it keeps going when the terminal
+closes or this machine sleeps; opening it again attaches to it (`integrations/remoteTerminal.ts`).
+
+- **The way in** is the machine's SSH route (`ssh <target>`, with its port), else, for a machine reached over
+  Tailscale only, `ssh` to its tailnet address or `*.ts.net` name with the user's ssh config choosing the user. A
+  machine with neither is refused: "There's no SSH route to engine…".
+- **Asked first.** A BatchMode `ssh` (no prompts, 20 seconds) runs a short script on the machine: is tmux there, the
+  folder, the CLI on a login shell's `PATH` (with `~/.local/bin`, `~/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`
+  and `/usr/local/bin` added), and is the session's tmux session open. Each missing piece is a sentence with what to
+  do, offering a T3 Code thread on the machine instead (`details: {t3: "offer"}`); ssh's own failure goes through
+  `sshFailure`. Nothing is made on the machine before this passes.
+- **The command** is `ssh -t [-p <port>] -- <target> sh -lc '<script>'`. The script puts those folders on `PATH`, checks
+  tmux, falls back to `TERM=xterm-256color` when the machine has no terminfo for the terminal here (kitty, Ghostty),
+  `cd`s to the folder, ends the tmux session if its CLI has exited, and runs `exec tmux new-session -A -s <name> -c
+  <folder> sh -c '<cli …>; tmux set-option -q @ended 1; exec $SHELL -l'`: `-A` attaches when the tmux session exists,
+  and a shell takes over when the CLI exits, so its last words stay readable; `@ended` marks that, so opening it again
+  runs the CLI rather than showing that shell. The
+  script is quoted so that the login shell there reads it the same whether it is a POSIX shell or fish
+  (`loginShellQuote`), and has no double quote, which cmd.exe on a Windows board couldn't carry. Checked through sh,
+  bash, fish and zsh.
+- **The tmux session's name** is `<brand>-<12 hex of an id>`: the session's id, or for one that picks its own id
+  (Codex) the launch's. The machine records it on the link (`ref.tmux`, which only a runner sets): on the link it makes
+  for a board-started session, and, for one that links itself, on that link when it comes from the same harness and
+  folder within the hour (`tmuxFor`). Resume uses it, else the name from the session's id.
+- **The prompt** goes through tmux, whose client refuses a command over 16 KB, so a script over 14,000 characters
+  (`REMOTE_SCRIPT_MAX`) starts the session with the short prompt, as an over-long command line here does
+  ("The prompt is too long for tmux on the machine.").
+- **Resume** attaches when the CLI still runs in the tmux session, without the 409; a session running outside tmux (a headless run,
+  or one started on the machine) gets the 409 as here. **Fork** gets a tmux session of its own. **Copy resume command**
+  gives the ssh command. Headless runs' sessions work the same: their folder is the run's worktree on the machine.
+- **A new session** (`startOnMachine` in `sessionLaunch.ts`): after the check, `POST /machine/sessions` has the
+  machine make a worktree under its data dir from origin's copy of the chosen base, or use its checkout, and link the
+  session to its copy of the task with the machine named; the link reaches the board through the change log, and the
+  answer carries its id. The dialog says where it runs (`options.machine`), lists every CLI (the machine's is the one
+  checked) and no task worktrees, and has no image button: the CLI there can't open a path of this machine. A pasted
+  image, a task worktree or a PR's branch is refused.
+- **MCP.** A machine set up only as a runner may have no registration for its own MCP server, so the CLI is given it
+  on the command line, as headless runs there are: Claude Code's `--mcp-config` and Codex's
+  `-c mcp_servers.<id>.url`, at `http://127.0.0.1:<runner port>/mcp` (the port from the SSH route's `remotePort`, else
+  the direct route's). The value is decoded from base64 on the machine, so no double quote crosses the shells. Copilot
+  CLI relies on the user's config there.
+- The CLI that runs is the machine's own; the path set in Settings is this machine's.
+
+Not done: bringing back a named Windows Terminal window for a session on a machine (attaching does the same),
+images, and finding a fork again: a fork runs in a tmux session of its own, and if its agent links it, that link names
+no tmux session, so opening it starts another. tmux itself was not run in the tests: the scripts run against a
+stand-in `tmux` that answers as one would.
+
 ### Names
 
 A session's name is, in order:
@@ -479,6 +530,7 @@ drops an effort for a harness with no model. The effort goes everywhere the mode
 | --- | --- |
 | `packages/contracts/src/agentSessions.ts` | `AgentSessionRef`, snapshot, `AGENT_HARNESSES` and resume commands, `startedSessionLine` / `selfLinkLine`, `TerminalSetting`, REST shapes |
 | `apps/server/src/integrations/agentSessions.ts` | The status reader, process probe, poller (and the run-based state of Autopilot sessions), resume and terminal info |
+| `apps/server/src/integrations/remoteTerminal.ts` | A session on a machine: the ssh route, the tmux script and its quoting, the preflight, the runner's MCP on the command line (tested) |
 | `apps/server/src/integrations/terminal.ts` | Quoting (and `textArgument` for free text), Windows Terminal detection, the launch for each terminal and shell, named windows, spawning |
 | `packages/contracts/src/sessionLaunch.ts` | `CliModel`, launch options and input, `newSessionArgv`, `taskWindowName`, `sessionLabel` |
 | `packages/contracts/src/agentModels.ts`, `modelTiers.ts` | The scan's shape (`AgentModels`); `CliEffort`, `CLI_EFFORTS` and `cliEffort` on a tier |

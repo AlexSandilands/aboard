@@ -262,6 +262,7 @@ export function createServices(deps: ServiceDeps): Services {
       keepRun: (run, machine) => all!.autopilot.keepFromMachine(run, machine),
       notify: (input) => void notifications.notify(input),
       resolve: (match) => void notifications.resolve(match),
+      endMachineRuns: (machineId, error) => void all!.autopilot.endMachineRuns(machineId, error),
     }),
     workingCopies,
     runnerAutopilot: createRunnerAutopilotService(core, { logRun: (run) => workingCopies.logRun(run) }),

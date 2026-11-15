@@ -1,6 +1,6 @@
 # Remote machines
 
-Board tasks: #179, #180, #181, #12, #182, #184, in epic #178 (run tasks on another machine).
+Board tasks: #179, #180, #181, #12, #182, #183, #184, #185, in epic #178 (run tasks on another machine).
 
 A task can be set to run on another machine: a server or a second computer the board connects to. That machine
 runs the same server as the board, started in the **runner** role: it serves no board or web app, holds the
@@ -11,13 +11,13 @@ connects a machine (installing over SSH, routes, status, logins, updates and the
 and [held tasks](#held-tasks): handing a task to a machine, the change log the machine keeps and the board
 replays, the board's own edits to a held task, the numbers a machine gives the tasks it makes, and
 [work on the machine](#work-on-the-machine): the headless runs, review rounds and scripts of a held task, and how
-the board shows the sessions and tokens of work it can't see, and [Autopilot on the
+the board shows the sessions and tokens of work it can't see, [interactive work](#interactive-work): T3 Code
+threads in the machine's own T3 Code and CLI sessions opened over ssh in tmux there, and [Autopilot on the
 machine](#autopilot-on-the-machine): the machine's own engine running the board's automations over the tasks it
 holds, so a chain of tasks goes on while the board is off.
 
-Not built yet: choosing a machine for a task in the UI (a hand-over is an API call, `POST /api/tasks/:id/hold`), and
-T3 Code threads or terminals on the machine. An image attached on the machine isn't sent to the board. Those are the
-later tasks of epic #178. What a user does is in the [guide](../guide/remote-machines.md).
+Not built yet: connecting a machine's own T3 Code from the board (it is set up on the machine). An image attached on
+the machine isn't sent to the board. What a user does is in the [guide](../guide/remote-machines.md).
 
 ## How it works
 
@@ -193,6 +193,8 @@ What a board says to a runner is under `/machine/`, apart from the board's own A
 | `PUT /machine/settings`    | yes   | The board's settings the machine works by                                   |
 | `POST /machine/transcript` | yes   | A page of the transcript of a session that ran on the machine               |
 | `PUT /machine/attachments/:id` | yes | One of a held task's pasted images                                        |
+| `POST /machine/t3`         | yes   | The board acting in the machine's T3 Code for a held task ([below](#t3-code-on-the-machine)) |
+| `POST /machine/sessions`   | yes   | The folder and link of a CLI session the board opens there over ssh ([below](#terminals-on-the-machine)) |
 | `PUT /machine/autopilot`   | yes   | The board's Autopilot, for the machine's own engine ([below](#autopilot-on-the-machine)) |
 | `PUT /machine/references`  | yes   | The tasks held ones point at, as the board has them now                     |
 
@@ -472,7 +474,7 @@ The board owns every task. Handing one to a machine gives that machine a **worki
 place where changes to the task are ordered: an agent there changes the copy, the runner records each change in a
 log, and the board applies the log. While a machine holds a task, the board's `task_holds` row says so, and the
 task's summary carries `hold: {machineId, machineName, since, waiting}`, which the card and the panel show as
-`On <machine>` (`components/task/HoldBadge.tsx`).
+`On <machine>` (the panel's chip and the card's number, [below](#choosing-the-machine)).
 
 ```text
  board                                          runner
@@ -586,7 +588,10 @@ wrapper, in one write:
 2. queues it in `held_edits`: the method's name, its arguments, the ids it gave what it made (a step, a link), and
    the activity entries it wrote.
 
-`hold.waiting` counts the queued edits the machine hasn't answered, and the badge reads `On engine · 2 waiting`.
+`hold.waiting` counts the queued edits the machine hasn't answered, and the panel's chip reads `On engine · 2 waiting`.
+`hold.waitingSteps` (the steps an `updateStep` or `moveStep` edit names) and `hold.waitingEvents` (the activity those
+edits wrote here) let the panel mark them: a clock beside the step, and "waiting for engine" in place of the
+entry's age.
 The edits are sent in order (`POST /machine/edits`), straight away while the machine is connected, and before the
 next read of its log otherwise. The runner runs the same method with the same arguments, handing out the same ids
 (`core.withIds`), so an edit made later on the board can point at a step an earlier one added. Its outcome is a
@@ -605,6 +610,49 @@ What is the board's alone isn't sent: a card's place in its lane, and its epic.
 The methods passed on are the ones that change a task, its plan, its links, a request for attention and its review
 rounds (`reviews.openRound`, `submit`, `resolveFinding`): Run review or a finding resolved on the board happens on
 the machine, under the ids the board gave.
+
+### Choosing the machine
+
+Where a task runs is a property of the task (`packages/contracts/src/runOn.ts`): its own `runOn` (a connected
+machine's id, `here`, or null to follow its project), then its project's `runOn` (a machine's id, or null for this
+machine), then this machine. A machine the board no longer has counts as no choice. The server reads it in one place,
+`services/runOn.ts` `taskRunsOn`; the web app with `resolveRunOn` too (`components/task/runOn.logic.ts`).
+
+- **Setting it.** `PUT /api/tasks/:id/run-on {runOn}` (`tasks.setRunOn`, which logs `run_on`) and
+  `PATCH /api/projects/:id {runOn}`. Only the user sets it: no MCP tool does. An epic, a manual or archived task has
+  none, and an unknown machine is refused.
+- **Locked once started.** A task that left Backlog and Planned, or that a machine holds, keeps where it is (CONFLICT):
+  one that started here stays here, and one held stays held until it is pulled back.
+- **Handing over at start.** The board's runner is wrapped (`integrations/machines/startOn.ts` `handOverAtStart`):
+  a Start planned run of a task that resolves to a machine and isn't held hands it over first, as `autopilot`, and the
+  run then goes to the machine like every run of a held task. A hand-over that fails (the machine can't be reached,
+  can't clone the repository) fails the run with that reason; nothing starts here instead. Start planned is the one way
+  a task starts on a machine for now: before the hand-over, a thread or session from the hand-off window runs on this
+  machine, so the window refuses one that would start the work of a task set to run elsewhere. Planning it is allowed
+  (the task stays in Backlog or Planned). Once a machine holds the task, its threads and sessions start there
+  ([interactive work](#interactive-work)).
+- **What the board shows.** The task panel's chip beside Status picks the machine before the task starts ("Run on
+  engine", a menu of the project's default, this machine and each machine with how it is) and, once held, is the hold
+  ("On engine", "On engine · 2 waiting", "engine · offline") with Pull back in its popover. The hand-off window has the
+  same choice in the strip under the composer, and it saves onto the task. A card's number carries the machine's
+  prefix (`E182`): outlined for a task that will start there, tinted while held, with an amber dot while edits wait,
+  greyed and struck through while the machine can't be reached. Project settings › General has Runs on. All of it
+  shows only once a machine is connected and the project has a folder.
+- **A machine that can't be reached** greys the chip and the card's prefix, and the panel says since when, with Try
+  now (`POST /api/machines/:id/check`). It is not an attention flag: the agent there carries on.
+- **What agents see.** `get_task` says `Machine: engine (…)` for a task that will start on one, and `Held by: engine
+  (…)` once it has, and that only the user changes it.
+
+A task-less scheduled automation's own machine pin is #184's, with Autopilot on the machine: a job today needs a held
+task.
+
+### Pulling a task back
+
+`POST /api/tasks/:id/pull-back {force?}` (`machineSync.pullBack`) is the user's way to bring a started task here. It is
+refused (CONFLICT, naming the automation) while a run for the task is queued or going, so there is no agent on the
+machine to stop; runs push their own branch. Otherwise it takes the task back as below (with `force` for a machine that
+can't be reached, which the panel offers only then), sets the task to `here`, and fetches `origin` in the board's
+checkout so the branch the machine pushed is here. A fetch that fails is logged, not fatal.
 
 ### Taking a task back
 
@@ -721,8 +769,9 @@ id and name, set by the runner's run and by `link` on a runner's MCP.
 | Token usage         | The runner's usage readers and its runs' own output | Beside the state in each entry: `usage`, the task's rows whole |
 | Transcript          | On the runner, by session id and folder  | `POST /machine/transcript`, when `get_session_transcript` asks |
 
-The board never reads, polls or resumes a session whose link names another machine: Open in terminal answers that
-it ran on that machine. It stores the usage rows it is sent with `session_usage.machine_id`
+The board never reads or polls a session whose link names another machine, and opens it there over ssh
+([terminals](#terminals-on-the-machine)). A T3 Code thread started on the machine is the same: `ref.machine` on the
+thread, its status in the task's state, its tokens with the rest. It stores the usage rows it is sent with `session_usage.machine_id`
 ([token usage](token-usage.md#on-a-connected-machine)). A transcript can still be read after the task is taken
 back, for as long as the machine is connected.
 
@@ -786,7 +835,10 @@ origin (`asRunnerRequest`, as a job is). The runner logs each one as it is writt
 and the board keeps it under the same id with `machine_id` and `machine_name` set (`autopilot.keepFromMachine`). A run
 the board sent as a job isn't logged: the board has it. Such runs show "on engine" in the run history and the task's
 Autopilot section. The board's limits, `recover` and worktree cleanup leave them out, and the board counts each
-machine's runs apart (`usage(…, machineId)`). When the board had tried the same work before handing the task over
+machine's runs apart (`usage(…, machineId)`). Nor do the board's own one-at-a-time checks (a
+scheduled agent's slot, Merge ready PRs' repository) count them. When the machine is removed, or its log comes from a
+replaced database, the board ends the runs it still had going for it as failed, since nothing on the machine will
+(`autopilot.endMachineRuns`). When the board had tried the same work before handing the task over
 (the same automation and dedupe key), its run is retired as a retry retires one, so the machine's is kept.
 
 **Notifications** raised on the runner go to the board as `notice` entries, before the runner's own switches; the board
@@ -804,8 +856,7 @@ ready PRs run on the runner, as do their head-move checks in its clone. Before a
 integration epic gets its branch on origin if it isn't there (`ensureEpicBranch`, with the runner's own login).
 
 **Chains.** Handing over a task whose Autopilot flag is On also hands over what it blocks, and so on down, when those
-tasks resolve to the same machine (`MachineSyncDeps.machineFor`, to be filled by the choice of machine per task, #183;
-today nothing resolves to a machine, so only the task itself goes). A task that resolves to the board stays and waits
+tasks resolve to the same machine ([their machine](#choosing-the-machine), `taskRunsOn`, as `MachineSyncDeps.machineFor`). A task that resolves to the board stays and waits
 for it. A blocker the board holds that finishes there reaches the machine with the next round (`PUT /machine/references`,
 sent when the references of its held tasks change), so the machine starts what it blocked.
 
@@ -824,6 +875,44 @@ button name such machines.
 it in its clone of each project it is on in, its agent, command or script with the machine's logins. Only a scheduled
 automation is pinned: one on tasks runs wherever each task is. A machine that doesn't run Autopilot (a runner from before it) can't be
 picked, and one pinned before that was known runs on the board, as **Runs on** says.
+### Interactive work
+
+What the user starts from the board on a held task runs on the machine too. Both are synchronous requests the dialog
+waits on, unlike jobs, and both need a capability a runner from before this lacks (`t3`, `sessions`): an older one is
+refused with "update it first". The machine answers only for a task it holds.
+
+#### T3 Code on the machine
+
+A runner finds and talks to its own machine's T3 Code exactly as a board does (`integrations/t3.ts`, with the token
+set in the runner's settings). On a runner it polls with no browser connected, and every thread it starts or an agent
+links there carries `ref.machine`, so the board knows whose T3 Code it is in. The thread link is
+`t3code://threads/<that T3's environment id>/<thread>`, which opens in the user's T3 app wherever that environment is
+connected.
+
+On the board, `withMachineThreads` (`integrations/machines/remoteT3.ts`) wraps its T3 integration, so everything that
+acts on a task's thread reaches the right T3 Code without knowing there is a machine:
+
+| On the board                                              | For a held task                                                             |
+| --------------------------------------------------------- | --------------------------------------------------------------------------- |
+| The launch dialog's options, starting from it             | `POST /machine/t3 {op: "options" \| "start"}`; the dialog's images are sent first, as the task's, and claimed here once it starts |
+| A custom hand-off's thread (`launchTaskThread`)           | `{op: "launch"}`                                                            |
+| Messaging a thread with `ref.machine` (nudges, the review loop, `message_task_thread`) | `{op: "message", linkId}` to the machine that holds the task |
+| A thread's workspace, retrying its preparation            | Not known here: none, and "retry it there"                                  |
+
+After a start the board reads the machine's log at once (`pump`), so the link is on the board when the dialog's call
+returns. A refusal comes back as the machine's own sentence, prefixed "On engine:". The board's own T3 poll skips
+these threads (another environment), `refreshLink` leaves them to the machine, and their snapshot travels with the
+task's state like a session's (`taskState`). A thread whose task was taken back can't be messaged: only the machine
+talks to its T3 Code.
+
+#### Terminals on the machine
+
+A CLI session of a held task, and any session whose link names a machine, opens in a terminal on the board that runs
+`ssh -t` to the machine and tmux there ([agent sessions](agent-sessions.md#on-a-machine)). For a new one,
+`POST /machine/sessions {taskId, harness, sessionId, label, workspace}` has the runner make a worktree under its data
+dir from origin's copy of the base (or use its clone), link the session to its copy with the machine named, and answer
+the folder, branch and link id (`integrations/machines/runnerInteractive.ts`). The board checks over ssh first that
+tmux and the CLI are there, so a machine it can't open on makes no worktree.
 
 ### Tools on a machine
 
@@ -1043,12 +1132,21 @@ result line. Setting the board's own CLI path to `/bin/false` keeps the board fr
 | `packages/contracts/src/machineJobs.ts` | Jobs, the settings, transcript and image requests                    |
 | `apps/server/src/integrations/machines/remoteWork.ts` | The board's side: sending runs, commands and scripts, settings, images, the unpushed check, transcripts |
 | `apps/server/src/integrations/machines/runnerWork.ts` | The runner's side: what each job kind does, and taking the board's settings |
+| `apps/server/src/integrations/machines/runnerInteractive.ts` | The runner's side of interactive work: `POST /machine/t3` on its own T3 Code, `POST /machine/sessions` |
+| `apps/server/src/integrations/machines/remoteT3.ts` | The board's T3 Code with a held task's threads sent to its machine (`withMachineThreads`) |
+| `apps/server/src/integrations/remoteTerminal.ts` | A session on a machine: ssh route, tmux script, quoting, preflight (tested) |
 | `apps/server/src/integrations/machines/jobs.ts` | A runner's jobs in memory, and the errors that travel        |
 | `packages/contracts/src/machineAutopilot.ts` | What a board sends a machine of its Autopilot, limits, the settings page's view of each machine |
 | `apps/server/src/autopilot/placement.ts` | Which engine acts on which candidate: the board's or a machine's            |
 | `apps/server/src/integrations/machines/autopilotSync.ts` | The board sending its Autopilot to each machine, and what each has taken |
 | `apps/server/src/services/runnerAutopilot.ts` | A runner taking the board's Autopilot as its own                   |
 | `apps/server/src/http/routes/tasks.ts`  | `POST` and `DELETE /api/tasks/:id/hold`                              |
+| `apps/server/src/http/routes/tasks.ts`  | `POST` and `DELETE /api/tasks/:id/hold`, `POST …/pull-back`, `PUT …/run-on` |
+| `packages/contracts/src/runOn.ts`       | `RUN_HERE`, `resolveRunOn`, `runOnLocked`                             |
+| `apps/server/src/services/runOn.ts`     | `taskRunsOn`: where a task runs, read on the server                   |
+| `apps/server/src/integrations/machines/startOn.ts` | Handing a task to its machine when Start planned starts it  |
+| `apps/web/src/components/task/RunOn.tsx`, `runOn.logic.ts` | The panel's chip, the hand-off window's control, the card's number, the offline callout, the waiting marks |
+| `apps/web/src/components/settings/ProjectRunOnRow.tsx` | Project settings › Runs on                               |
 | `apps/server/src/test/boardAndRunner.ts` | A paired board and runner for tests, with a link that can be cut    |
 | `apps/web/src/components/settings/machines/` | The Machines section, the add dialog and their logic            |
 | `apps/web/src/state/machines.ts`        | The machines query and its mutations                                  |

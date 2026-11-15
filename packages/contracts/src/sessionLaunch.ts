@@ -83,6 +83,11 @@ export const SessionLaunchOptions = z.object({
     .nullable(),
   /** Whether sessions open in a Windows Terminal window named after the task (and can be brought back). */
   namedWindow: z.boolean(),
+  /**
+   * The connected machine holding the task, where its session runs: opened over ssh in tmux there, in a new worktree
+   * or that machine's checkout. Absent for a task the board holds, and from older servers.
+   */
+  machine: z.object({ name: z.string() }).nullish(),
 });
 export type SessionLaunchOptions = z.infer<typeof SessionLaunchOptions>;
 

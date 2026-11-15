@@ -32,6 +32,7 @@ import {
 } from "../settingsLayout";
 import { SettingsScroller, SettingsTopBar } from "../SettingsShell";
 import { useUnarchiveProject } from "../useArchivedProjects";
+import { ProjectRunOnRow } from "~/components/settings/ProjectRunOnRow";
 
 // The picker pulls in lucide's full icon index; load it only when someone picks an icon.
 const ProjectIconPickerDialog = lazy(() =>
@@ -214,6 +215,7 @@ function ProjectSections({ project }: { project: Project }) {
               />
             ) : null}
           </SettingsRow>
+          <ProjectRunOnRow project={project} />
           <SettingsRow
             id="project.general.t3-project"
             title="Linked T3 project"

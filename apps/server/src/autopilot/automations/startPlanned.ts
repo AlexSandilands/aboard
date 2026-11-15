@@ -77,8 +77,9 @@ export function notStartable(task: TaskSummary): string | null {
   if (task.archivedAt !== null) return "it's archived";
   if (task.status !== "planned") return "it's no longer in Planned";
   if (task.autopilot !== true) return "its Autopilot flag isn't On";
-  // A machine orders its changes and works on it there; starting it here too would be two agents on one task.
-  if (task.hold) return `${task.hold.machineName} holds it`;
+  // A machine holding a task that is still in Planned took it when a start went there and then didn't get going (the
+  // run failed, or the agent never moved it). Starting it again sends the run to that machine (remoteWork.runner), so it
+  // is startable like any other; once the agent has moved it, it is no longer in Planned.
   if (task.progress.total === 0) return "it has no plan";
   if (task.blocked) return "it's blocked by unfinished tasks";
   return null;

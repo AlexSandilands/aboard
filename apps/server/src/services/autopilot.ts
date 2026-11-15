@@ -104,12 +104,13 @@ export function loadAutopilotStatus(repos: Repos): AutopilotStatus {
     paused: repos.settings.all().get(AUTOPILOT_PAUSED_KEY) === true,
     active: repos.autopilotRuns
       .withStatus(AUTOPILOT_ACTIVE_STATUSES)
-      .map(({ id, automation, taskId, projectId, status }) => ({
+      .map(({ id, automation, taskId, projectId, status, machine }) => ({
         id,
         automation,
         taskId,
         projectId,
         status,
+        machine: machine ?? null,
         epicId: taskId ? epicOf(repos.tasks.get(taskId)) : null,
       })),
   };
@@ -246,6 +247,11 @@ export interface AutopilotService {
    * made here would. Its task's activity and notifications travel on their own.
    */
   keepFromMachine(run: AutopilotRun, machine: RunMachine): void;
+  /**
+   * Ends, as failed, the runs a machine's own Autopilot has going as the board last heard: the machine was removed, or
+   * its database replaced, so nothing will end them. Returns how many.
+   */
+  endMachineRuns(machineId: string, error: string): number;
   /** Says Autopilot changed without changing anything here: what a connected machine has of it did. */
   touch(): void;
   /** A connected machine's Autopilot limits: its own once set, else the board's (`own: false`). */
@@ -1221,6 +1227,30 @@ export function createAutopilotService(
     },
     machineLimits: (machineId) => machineLimitsOf(machineId),
     touch: () => core.write((fx) => fx.autopilot()),
+    endMachineRuns(machineId, error) {
+      const stranded = repos.autopilotRuns
+        .withStatus(AUTOPILOT_ACTIVE_STATUSES)
+        .filter((r) => r.machine?.id === machineId);
+      if (stranded.length === 0) return 0;
+      core.write((fx) => {
+        const at = nowIso();
+        for (const run of stranded) {
+          const failed: AutopilotRun = {
+            ...run,
+            status: "failed",
+            error,
+            needsAttention: run.taskId !== null,
+            finishedAt: at,
+            updatedAt: at,
+          };
+          repos.autopilotRuns.update(failed);
+          logRun(fx, failed);
+          notifyEnded(failed);
+        }
+        fx.autopilot();
+      });
+      return stranded.length;
+    },
     setMachineLimits(machineId, input) {
       const { reset, ...patch } = input;
       const current = machineLimitsOf(machineId).limits;

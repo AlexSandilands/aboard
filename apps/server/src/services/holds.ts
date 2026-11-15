@@ -119,6 +119,8 @@ export function createHoldsService(
     notify?: (input: NotifyInput) => void;
     /** Marks read what the machine marked read. */
     resolve?: (match: ResolveMatch) => void;
+    /** Ends a machine's runs the board has going, when nothing on the machine will end them any more. */
+    endMachineRuns?: (machineId: string, error: string) => void;
   },
 ): HoldsService {
   const { repos } = core;
@@ -358,6 +360,8 @@ export function createHoldsService(
           for (const hold of holds.forMachine(machineId)) {
             if (!response.held.includes(hold.taskId)) dropHold(hold.taskId, machine, BOARD_ACTOR, { lost: true }, fx);
           }
+          // The runs it had going are gone with its database: nothing will end them but this.
+          deps.endMachineRuns?.(machineId, `${machine.name}'s database was replaced before this run finished`);
         }
         let applied = 0;
         let error: string | null = null;

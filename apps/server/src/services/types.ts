@@ -194,6 +194,12 @@ export interface TasksService {
    */
   setDelivery(id: string, delivery: EpicDelivery, branch: string | null, actor: string): TaskDetail;
   /**
+   * Sets where the task runs (contracts runOn.ts): a connected machine's id, `here`, or null to follow its project.
+   * Only the user sets it. Refused (CONFLICT) once the task has started or while a machine holds it, and
+   * (VALIDATION) for an epic, a manual or archived task, or a machine the board doesn't have.
+   */
+  setRunOn(id: string, runOn: string | null, actor: string, opts?: { afterStart?: boolean }): TaskDetail;
+  /**
    * Status change and/or reorder. Throws PLAN_REQUIRED when leaving "backlog" without plan steps.
    * Moving a closed task out of Done clears its resolution. `because` adds fields to the status_changed event
    * payload, for automatic moves that should say why (e.g. `{ mergedPr: "owner/repo#12" }`); it cannot override

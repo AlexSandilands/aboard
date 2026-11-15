@@ -3,7 +3,13 @@ import { GitHostStatus } from "./gitHosts.ts";
 import { AutopilotStatus } from "./autopilot.ts";
 import { KeybindingOverrides } from "./keybindings.ts";
 import { LabelHue } from "./labels.ts";
-import { AgentSessionRef, AgentSessionSnapshot, TerminalOpenIn, TerminalSetting } from "./agentSessions.ts";
+import {
+  AgentSessionRef,
+  AgentSessionSnapshot,
+  LinkMachine,
+  TerminalOpenIn,
+  TerminalSetting,
+} from "./agentSessions.ts";
 import { AutomationVariables } from "./automationVariables.ts";
 import { BackupSettings, MachineName } from "./backup.ts";
 import { ModelChoice } from "./modelProfiles.ts";
@@ -156,6 +162,8 @@ export const Project = z.object({
   planSkill: PlanSkillRef.nullable(),
   /** Overrides of the board's automation variables in this project (effectiveVariables). */
   variables: AutomationVariables,
+  /** Where its tasks run unless a task says otherwise: a connected machine's id; null or `here` for this machine. */
+  runOn: z.string().nullable().optional(),
   position: z.string(),
   collapsed: z.boolean(),
   archivedAt: IsoDate.nullable(),
@@ -376,6 +384,11 @@ export function nextPrChanges(
 export const T3ThreadRef = z.object({
   environmentId: z.string().min(1),
   threadId: z.string().min(1),
+  /**
+   * The connected machine whose T3 Code the thread runs in, for a thread started there for a task it holds. The board
+   * never polls or messages such a thread itself: the machine does, and its status arrives with the task's changes.
+   */
+  machine: LinkMachine.optional(),
 });
 export type T3ThreadRef = z.infer<typeof T3ThreadRef>;
 
@@ -569,6 +582,10 @@ export const TaskHold = z.object({
   since: IsoDate,
   /** Edits made on the board that the machine hasn't taken yet: they show here already, and may still be refused. */
   waiting: z.number().int().nonnegative(),
+  /** The steps those edits change, so the panel can mark them as waiting. */
+  waitingSteps: z.array(z.string()).optional(),
+  /** The activity entries those edits wrote here, which read "waiting for <machine>" until the machine answers. */
+  waitingEvents: z.array(z.number().int()).optional(),
 });
 export type TaskHold = z.infer<typeof TaskHold>;
 
@@ -579,6 +596,8 @@ export const TaskSummary = z.object({
   numberPrefix: z.string().optional(),
   /** The connected machine that holds the task and orders its changes; null for a task the board holds itself. */
   hold: TaskHold.nullable().optional(),
+  /** Where the task is to run: a connected machine's id or `here`; null follows its project's default (runOn.ts). */
+  runOn: z.string().nullable().optional(),
   projectId: z.string(),
   kind: TaskKind,
   /** The epic this task belongs to; null for loose tasks and for epics. */
@@ -775,6 +794,8 @@ export const UpdateProjectInput = z.object({
   planSkill: PlanSkillRef.nullable().optional(),
   /** Replaces the project's automation variable overrides. */
   variables: AutomationVariables.optional(),
+  /** Where the project's tasks run unless a task says otherwise: a connected machine's id; null for this machine. */
+  runOn: z.string().trim().min(1).max(200).nullable().optional(),
 });
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInput>;
 

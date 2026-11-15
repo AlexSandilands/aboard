@@ -455,4 +455,45 @@ describe("Autopilot on a machine", () => {
     await sync();
     expect(runner.services.autopilot.hasRun(key, `schedule:${runnerProject}:1000`, false)).toBe(false);
   });
+
+  it("ends a machine's runs on the board when nothing on the machine will", async () => {
+    const { board, runner, machine, first, second, sync } = await setup();
+    await board.integrations.machineSync.handOver(first.id, machine.id, "user");
+    await board.integrations.machineSync.handOver(second.id, machine.id, "user");
+    const going = (taskId: string) => {
+      const run = runner.services.autopilot.record({
+        automation: AUTOPILOT_START_PLANNED,
+        candidate: { dedupeKey: `start:${taskId}:going`, summary: "start", taskId },
+        dryRun: false,
+      })!;
+      runner.services.autopilot.start(run.id);
+      return run.id;
+    };
+    const one = going(first.id);
+    await sync();
+    expect(board.services.autopilot.status().active.map((r) => r.id)).toEqual([one]);
+
+    // Its database replaced: the run is gone with it.
+    board.services.holds.apply(machine.id, { epoch: "another", head: 0, entries: [], held: [] });
+    expect(board.services.autopilot.runsForTask(first.id).find((r) => r.id === one)).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("database was replaced"),
+    });
+
+    // Removed: the same.
+    const other = board.services.autopilot.record({
+      automation: AUTOPILOT_START_PLANNED,
+      candidate: { dedupeKey: "start:other", summary: "start", taskId: second.id },
+      dryRun: false,
+    })!;
+    board.services.autopilot.keepFromMachine(
+      { ...other, id: "machine-going", dedupeKey: "start:machine-going", status: "running" },
+      { id: machine.id, name: "engine" },
+    );
+    await board.integrations.machines.remove(machine.id);
+    expect(board.services.autopilot.status().active.filter((r) => r.machine)).toEqual([]);
+    expect(board.services.autopilot.runsForTask(second.id).find((r) => r.id === "machine-going")?.error).toContain(
+      "engine was removed",
+    );
+  });
 });

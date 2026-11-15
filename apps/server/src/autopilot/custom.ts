@@ -412,7 +412,8 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
         isAgent && !checkScript
           ? services.autopilot
               .status()
-              .active.filter((r) => r.automation === customAutomationKey(custom.id))
+              // A machine's run holds its own slots, by its own limits, not the board's.
+              .active.filter((r) => r.automation === customAutomationKey(custom.id) && !r.machine)
               .map((r) => r.projectId)
           : [],
       );

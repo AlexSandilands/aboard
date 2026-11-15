@@ -1,5 +1,6 @@
 import type { UsageService } from "../services/usage.ts";
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -14,6 +15,7 @@ import {
   type AgentSessionSnapshot,
   type AgentSessionStatus,
   type AutopilotRun,
+  type MachineRoute,
   type ResumeCommand,
   type ResumeMode,
   type ResumeResult,
@@ -27,6 +29,16 @@ import { AppError } from "../errors.ts";
 import type { AutopilotService } from "../services/autopilot.ts";
 import type { LinksService, SettingsService } from "../services/types.ts";
 import { createTitleReader, tidy } from "./claudeSessionTitle.ts";
+import { spawnSsh, type SpawnSsh } from "./machines/ssh.ts";
+import {
+  noSshRoute,
+  remotePreflight,
+  remoteSessionArgv,
+  remoteSessionScript,
+  runnerPortOf,
+  sshRouteOf,
+  tmuxSessionName,
+} from "./remoteTerminal.ts";
 import { messageOf } from "./util.ts";
 import {
   copyCommand,
@@ -346,6 +358,13 @@ export function createAgentSessionsIntegration(deps: {
   machineId?: string;
   /** Poll with no browser connected: a runner has none, and its board shows what it reads. */
   always?: boolean;
+  /**
+   * A connected machine by its instance id: its name and routes, for opening a session that lives there over ssh. Null
+   * for a machine this board isn't connected to. A runner has none.
+   */
+  machine?: (instanceId: string) => { name: string; routes: MachineRoute[] } | null;
+  /** Runs `ssh` to ask a machine whether a session can open there. */
+  spawnSsh?: SpawnSsh;
   probe?: ProcessProbe;
   host?: () => TerminalHost;
   spawn?: SpawnTerminal;
@@ -475,6 +494,72 @@ export function createAgentSessionsIntegration(deps: {
     }
   };
 
+  /**
+   * How a session on a connected machine opens from here: ssh to the machine, then tmux there. Resuming attaches to
+   * the session's tmux session when it is open, and makes it otherwise; a fork is a new session, in a tmux session of
+   * its own. Throws with what to do when the board can't reach the machine with ssh.
+   */
+  const onMachine = (ref: AgentSessionRef, mode: ResumeMode) => {
+    const name = ref.machine?.name ?? "another machine";
+    const machine = ref.machine ? deps.machine?.(ref.machine.id) : null;
+    if (!machine) {
+      throw new AppError(
+        "CONFLICT",
+        `This session ran on ${name}, which this board isn't connected to, so it can't be opened from here. Open it there.`,
+      );
+    }
+    const route = sshRouteOf(machine.routes);
+    if (!route) throw noSshRoute(machine.name);
+    // The name the machine recorded when the board opened it there (a Codex session's isn't its id's); a fork is a new
+    // session in a tmux session of its own.
+    const tmuxName = mode === "fork" ? tmuxSessionName(randomUUID()) : (ref.tmux ?? tmuxSessionName(ref.sessionId));
+    // The machine's own CLI, on its PATH: the path set here is this machine's.
+    const argv = resumeArgv(ref, mode);
+    const script = remoteSessionScript({
+      cwd: ref.cwd,
+      argv,
+      tmuxName,
+      mcpUrl: `http://127.0.0.1:${runnerPortOf(machine.routes)}/mcp`,
+    });
+    return { machine, route, tmuxName, argv, command: remoteSessionArgv(route, script) };
+  };
+
+  const resumeOnMachine = async (
+    link: SessionLink,
+    ref: AgentSessionRef,
+    mode: ResumeMode,
+    force: boolean,
+  ): Promise<ResumeResult> => {
+    const there = onMachine(ref, mode);
+    const { resolved, error, host: h } = terminal();
+    const command = copyCommand(resolved?.shell ?? defaultShell(h.platform), there.command, deps.userHome);
+    const { open } = await remotePreflight(deps.spawnSsh ?? spawnSsh, there.machine.name, there.route, {
+      cwd: ref.cwd,
+      harness: ref.harness,
+      exe: there.argv[0]!,
+      tmuxName: there.tmuxName,
+    });
+    // Open in its tmux session: attaching shows it, and is no second writer. Running outside tmux (a headless run, or
+    // a session started on the machine itself) is asked about as a running session here is.
+    if (mode === "resume" && !force && !open && isRunningSession(link.snapshot?.status)) {
+      throw new AppError("CONFLICT", "The session is still running", link.snapshot);
+    }
+    if (!resolved) return { launched: false, command, error };
+    let spec: LaunchSpec;
+    try {
+      spec = resolved.launch(there.command, deps.userHome);
+    } catch (launchError) {
+      return { launched: false, command, error: messageOf(launchError) };
+    }
+    try {
+      await spawnFn(spec);
+      return { launched: true, command, error: null };
+    } catch (spawnError) {
+      log.warn(`[sessions] couldn't start ${displayLaunch(spec, h.platform)}: ${messageOf(spawnError)}`);
+      return { launched: false, command, error: `Couldn't start ${resolved.label}: ${messageOf(spawnError)}` };
+    }
+  };
+
   return {
     pollLive,
 
@@ -490,20 +575,19 @@ export function createAgentSessionsIntegration(deps: {
     },
 
     resumeCommand(linkId, mode) {
-      const { ref } = sessionOf(linkId, mode);
+      const { link, ref } = sessionOf(linkId, mode);
       const { resolved, host: h } = terminal();
+      if (!here(link)) {
+        const shell = resolved?.shell ?? defaultShell(h.platform);
+        return { command: copyCommand(shell, onMachine(ref, mode).command, deps.userHome), cwd: deps.userHome };
+      }
       return { command: copyFor(resolved, h, ref, mode), cwd: ref.cwd };
     },
 
     async resume(linkId, input) {
       const { mode, force } = ResumeSessionInputSchema.parse(input);
       const { link, ref } = sessionOf(linkId, mode);
-      if (!here(link)) {
-        throw new AppError(
-          "CONFLICT",
-          `This session ran on ${ref.machine?.name ?? "another machine"}, where its folder and history are. Open it there.`,
-        );
-      }
+      if (!here(link)) return resumeOnMachine(link, ref, mode, force);
       if (!isDirectory(ref.cwd)) throw new AppError("VALIDATION", `The session's folder no longer exists: ${ref.cwd}`);
       // Check now rather than trust the last poll: opening a running session twice makes two writers on one history.
       const snapshot = (await store([link])).get(sessionKey(ref));
