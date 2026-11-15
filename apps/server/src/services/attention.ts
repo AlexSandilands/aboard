@@ -90,7 +90,9 @@ export function createAttentionService(
       const hidden: string[] = [];
       for (const reason of standing) {
         if (reason.key === ATTENTION_REQUEST_KEY) {
-          clearRequest(fx, deps.task(taskId), actor);
+          // Through the service, not the helper: on a task a machine holds this is an edit the machine has to take,
+          // or its next log entry would put the request back (services/heldEdits.ts).
+          service.clear(taskId, actor);
           continue;
         }
         if (reason.key === ATTENTION_AUTOPILOT_KEY) {
@@ -125,7 +127,7 @@ export function createAttentionService(
     return deps.summary(taskId);
   };
 
-  return {
+  const service: AttentionService = {
     dismiss: (taskId, key, actor) => dismissReasons(taskId, [key], actor),
     dismissAll: (taskId, actor) => dismissReasons(taskId, "all", actor),
     restore: (taskId, key, actor) => restoreReasons(taskId, [key], actor),
@@ -163,4 +165,5 @@ export function createAttentionService(
       return { cleared, task: deps.summary(taskId) };
     },
   };
+  return service;
 }

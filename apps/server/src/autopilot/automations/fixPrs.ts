@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
+  taskNumberValue,
   taskLabel,
   AGENT_HARNESSES,
   AUTOPILOT_FIX_PRS,
@@ -309,7 +310,7 @@ export function fixPrompt({
   const url = prUrl(pr);
   const lines = [
     manual
-      ? `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task ${taskLabel(task)} "${task.title}". The user asked you to fix what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. ${harness && !AGENT_HARNESSES[harness].presetSessionId ? selfLinkLine(harness, sessionLabel("fix", task.number)) : `${BRAND.name} started this session and already linked it to the task, so don't link it yourself.`}`
+      ? `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task ${taskLabel(task)} "${task.title}". The user asked you to fix what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. ${harness && !AGENT_HARNESSES[harness].presetSessionId ? selfLinkLine(harness, sessionLabel("fix", taskNumberValue(task))) : `${BRAND.name} started this session and already linked it to the task, so don't link it yourself.`}`
       : `Fix pull request #${pr.number} "${pr.title}" (${url}), linked to ${BRAND.name} task ${taskLabel(task)} "${task.title}". ${BRAND.name} Autopilot sent you because of what is listed below, at head commit ${pr.headOid} of branch \`${pr.headRef}\`. This is ${budget === "conflicts" ? "conflict-only fix attempt" : budget === "comments" ? "review-comment fix attempt" : "fix attempt"} ${round} of at most ${maxRounds} on this PR.`,
     "",
     "## What needs fixing",

@@ -45,6 +45,17 @@ export function parseTaskNumberRef(ref: string): Array<{ prefix: string; number:
 export const compareTaskNumbers = (a: NumberedTask, b: NumberedTask): number =>
   (a.numberPrefix ?? "").localeCompare(b.numberPrefix ?? "") || a.number - b.number;
 
+/** A task's number where one value has to carry the prefix too: `42`, or `"E7"` (see `taskNumberValue`). */
+export type TaskNumberValue = number | string;
+
+/** The prefix and number a `TaskNumberValue` stands for, or null when it is neither. */
+export function readTaskNumberValue(value: unknown): { prefix: string; number: number } | null {
+  if (typeof value === "number") return Number.isInteger(value) && value > 0 ? { prefix: "", number: value } : null;
+  const match = typeof value === "string" ? /^([A-Z][A-Z0-9]{0,2}?)(\d+)$/.exec(value) : null;
+  // The same reading `parseTaskNumberRef` puts first: the shortest prefix.
+  return match ? { prefix: match[1]!, number: Number(match[2]) } : null;
+}
+
 /**
  * A task's number as an activity entry stored it (see `taskNumberValue`): `42` or `E7` as text, or null for anything
  * else. For rendering `#${...}` from a payload, which is untyped.

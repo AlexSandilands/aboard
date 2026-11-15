@@ -209,9 +209,16 @@ export const BackupCommit = z.object({
 export type BackupCommit = z.infer<typeof BackupCommit>;
 
 /** A task in a backup that the board doesn't have (`missing`), or has with other contents (`changed`). */
+/** A task's number in a backup: `42`, or `"E7"` for one a connected machine numbered (see `taskNumberValue`). */
+export const BackupTaskNumber = z.union([z.number().int().positive(), z.string().regex(/^[A-Z][A-Z0-9]{0,2}\d+$/)]);
+export type BackupTaskNumber = z.infer<typeof BackupTaskNumber>;
+
 export const BackupDiffTask = z.object({
-  /** Its number in the backup, which a restore takes unless another task holds it by now. */
-  number: z.number(),
+  /**
+   * Its number in the backup, which a restore takes unless another task holds it by now: `42`, or `"E7"` for one a
+   * connected machine numbered, so the two are never taken for each other.
+   */
+  number: BackupTaskNumber,
   taskId: z.string(),
   title: z.string(),
   status: z.string(),
@@ -243,7 +250,7 @@ export const BackupSource = z.object({
 export type BackupSource = z.infer<typeof BackupSource>;
 
 export const RestoreTasksInput = BackupSource.extend({
-  numbers: z.array(z.number().int().positive()).min(1),
+  numbers: z.array(BackupTaskNumber).min(1),
   /** Replace tasks that are still on the board. */
   force: z.boolean().optional(),
 });
@@ -253,10 +260,10 @@ export const RestoreTasksResult = z.object({
   results: z.array(
     z.object({
       /** The task's number in the backup. */
-      number: z.number(),
+      number: BackupTaskNumber,
       ok: z.boolean(),
       /** Its number on the board, when it restored. */
-      boardNumber: z.number().nullable(),
+      boardNumber: BackupTaskNumber.nullable(),
       error: z.string().nullable(),
     }),
   ),

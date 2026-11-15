@@ -1,3 +1,4 @@
+import { ATTENTION_REQUEST_KEY } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBoardAndRunner } from "../../test/boardAndRunner.ts";
 
@@ -315,6 +316,23 @@ describe("an edit made on the board to a held task", () => {
     expect(types(onBoard().events, "edit_refused")[0]?.payload).toMatchObject({
       reason: "This machine's version can't apply that edit; update it",
     });
+  });
+
+  it("passes on the dismissal of an agent's request, so the machine doesn't bring it back", async () => {
+    const { board, runner, task, onBoard, onRunner, sync, settle } = await setup();
+    runner.services.attention.request(task.id, "Look at the migration", "claude");
+    await sync();
+    expect(onBoard().attentionRequest?.message).toBe("Look at the migration");
+
+    board.services.attention.dismiss(task.id, ATTENTION_REQUEST_KEY, "user");
+    await settle();
+    await sync();
+    expect(onRunner().attentionRequest).toBeNull();
+    // Another change on the machine doesn't put it back.
+    runner.services.tasks.addNote(task.id, "Carrying on", "claude");
+    await sync();
+    expect(onBoard().attentionRequest).toBeNull();
+    expect(onBoard().hold?.waiting).toBe(0);
   });
 
   it("keeps what is the board's own to itself", async () => {

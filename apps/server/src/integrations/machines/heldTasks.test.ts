@@ -187,4 +187,25 @@ describe("a held task and backups", () => {
     });
     expect(() => other.services.tasks.detail(task.id)).toThrow(/not found/i);
   });
+
+  it("restores a machine-numbered task by its own number, never the board's task of the same digits", () => {
+    const h = createTestHarness();
+    const project = h.services.projects.create({ title: "App" });
+    const own = h.services.tasks.create({ projectId: project.id, title: "The board's #1" });
+    const made = h.services.tasks.create(
+      { projectId: project.id, title: "The machine's #E1" },
+      { number: { prefix: "E", number: 1 } },
+    );
+    expect(own.number).toBe(1);
+    const dump = h.services.backup.dump();
+    h.services.tasks.delete([made.id], {}, "user");
+    h.services.tasks.purge([made.id], "user");
+
+    expect(h.services.backup.diff(dump).tasks.map((t) => t.number)).toEqual(["E1"]);
+    expect(h.services.backup.restoreTask(dump, "E1", { actor: "user" })).toEqual({ taskId: made.id, number: "E1" });
+    expect(h.services.tasks.summary(made.id)).toMatchObject({ number: 1, numberPrefix: "E" });
+    expect(h.services.tasks.summary(own.id).title).toBe("The board's #1");
+    // And the other way round: the board's #1 is still on the board, so restoring it is refused.
+    expect(() => h.services.backup.restoreTask(dump, 1, { actor: "user" })).toThrow(/still on the board/);
+  });
 });

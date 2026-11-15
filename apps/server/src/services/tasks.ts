@@ -406,8 +406,9 @@ export function createTasksService(
   const service: TasksService = {
     summaries(query: TaskQuery = {}): TaskSummary[] {
       // On a runner, the tasks its held ones only point at aren't its tasks to list.
-      const roles = repos.workingCopies.forTasks(repos.tasks.list(query).map((t) => t.id));
-      const records = repos.tasks.list(query).filter((t) => roles.get(t.id)?.role !== "reference");
+      const listed = repos.tasks.list(query);
+      const roles = repos.workingCopies.forTasks(listed.map((t) => t.id));
+      const records = listed.filter((t) => roles.get(t.id)?.role !== "reference");
       // A filter, not a label list: no cap, and a term that normalises to nothing just matches nothing.
       const labels = query.labels?.length ? query.labels.map(normalizeLabel) : null;
       return [...assembleSummaries(repos, records).values()]

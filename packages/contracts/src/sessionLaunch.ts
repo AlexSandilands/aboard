@@ -139,7 +139,9 @@ export const taskWindowName = (taskNumber: number | string): string =>
  * A window name the board made, so nothing else reaches wt's `-w`: not a number (a window id) or one of wt's own
  * names (`new`, `last`).
  */
-export const isTaskWindowName = (name: string): boolean => name.length <= 80 && /^[A-Za-z][\w-]*-\d+$/.test(name);
+export const isTaskWindowName = (name: string): boolean =>
+  // The number may carry a machine's prefix: `aboard-E7`.
+  name.length <= 80 && /^[A-Za-z][\w-]*-(?:[A-Z][A-Z0-9]{0,2})?\d+$/.test(name);
 
 /** "Implementing #115" / "Planning #115": the label the board links a session it started with. */
 export const sessionLabel = (mode: StartSessionInput["mode"], taskNumber: number | string): string =>

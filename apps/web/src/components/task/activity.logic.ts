@@ -132,7 +132,7 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
       return line("project", title ? `moved to project ${title}` : "moved to another project");
     }
     case "restored": {
-      const from = num(p.backupNumber);
+      const from = taskNum(p.backupNumber);
       return line(
         "created",
         from !== null ? `restored this from a backup (as #${from})` : "restored this from a backup",
@@ -286,6 +286,21 @@ export function describeEvent(event: TaskEvent, ctx: ActivityContext): ActivityL
     }
     case "autopilot_run":
       return line("other", autopilotRunEventText(p));
+    case "handed_over":
+      return line("other", `handed this to ${str(p.machine) ?? "a machine"}, which orders its changes from here`);
+    case "released": {
+      const machine = str(p.machine) ?? "the machine";
+      if (p.forced === true) return line("other", `took this back from ${machine} without waiting for it`);
+      if (p.lost === true) return line("other", `took this back: ${machine} no longer has it`);
+      if (p.moved === true) return line("other", "took this back from its machine: it moved to another board");
+      return line("other", `took this back from ${machine}`);
+    }
+    case "edit_refused": {
+      const reason = str(p.reason);
+      return line("other", `took back a change made here: the machine refused it${reason ? ` (${reason})` : ""}`);
+    }
+    case "renumbered":
+      return line("other", `gave this a new number: #${taskNum(p.from) ?? "?"} was taken`);
     default:
       return line("other", event.type.replace(/[_.]+/g, " "));
   }

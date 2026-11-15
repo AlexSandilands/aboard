@@ -202,6 +202,8 @@ export function createTransferService(
       const task: BackupRow = {
         ...bundle.task,
         number,
+        // Its old number here keeps its prefix; a new one is this board's own, whatever numbered it over there.
+        number_prefix: existing ? existing.numberPrefix : "",
         project_id: targetProject,
         archived_at: null,
         moved_to_json: null,
