@@ -40,7 +40,8 @@ describe("seed scenarios", () => {
     "%s seeds a fresh data dir",
     (scenario) => {
       // The branches scenario is one task about its branches (and one without), not a board.
-      expect(seeded(scenario).tasks.length).toBeGreaterThan(scenario === "branches" ? 1 : 5);
+      // The branches scenario is one task about its branches (and one without), the machine one a few to hand over.
+      expect(seeded(scenario).tasks.length).toBeGreaterThan(scenario === "branches" || scenario === "machine" ? 1 : 5);
     },
     60_000,
   );

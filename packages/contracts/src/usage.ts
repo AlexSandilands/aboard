@@ -114,6 +114,8 @@ export const TaskUsageRow = z.object({
   costSource: CostSource,
   /** Tokens of models with no price, left out of costUsd. */
   unpricedTokens: Count,
+  /** The connected machine the session or run was on, by name, when it wasn't this board's own; null otherwise. */
+  machine: z.string().nullable().optional(),
   /** Other tasks that link the same session or thread, by number. */
   sharedWith: z.array(z.number().int()),
   /**

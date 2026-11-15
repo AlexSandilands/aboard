@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import {
   taskNumberValue,
@@ -29,6 +30,25 @@ export const REVIEW_WATCHDOG_INTERVAL_MS = 30_000;
 /** Thread states where the agent is busy (or waiting on the user), so its review may still come. */
 const BUSY = new Set(["working", "input", "approval"]);
 
+/**
+ * The folder a task's change is in on a runner: where its newest session that ran on this machine worked, when that
+ * folder is still there (its run's worktree). A session linked on the board names a folder of the board's machine,
+ * whatever happens to exist at that path here, so only this machine's own count.
+ */
+export function machineWorktreeOf(
+  task: Pick<TaskSummary, "links">,
+  instanceId: string,
+  exists: (path: string) => boolean = existsSync,
+): string | null {
+  return (
+    task.links
+      .filter((l) => l.kind === "agent_session")
+      .filter((l) => l.ref.machine?.id === instanceId)
+      .map((l) => l.ref.cwd)
+      .findLast((cwd) => exists(cwd)) ?? null
+  );
+}
+
 export interface ReviewFallbacks {
   /** One pass over pending rounds; resolves when any nudge is sent (not when a headless review ends). */
   tick(): Promise<void>;
@@ -47,6 +67,17 @@ export function createReviewFallbacks(deps: {
   services: () => Services;
   t3: Pick<T3Integration, "sendToThread" | "threadWorkspace">;
   runHeadless?: RunHeadless;
+  /**
+   * On a runner: the folder a task's change is in, which is the worktree its last session ran in. The project's own
+   * folder there is a clone nobody works in, so with this set a task with no such worktree is not reviewed: the
+   * round fails with the reason.
+   */
+  worktreeOf?: (task: TaskSummary) => string | null;
+  /**
+   * On a board: whether the machine holding a task reviews it there. A runner from before review rounds travelled
+   * doesn't, so its tasks keep the board's own watchdog. Unset, every machine does.
+   */
+  reviewsThere?: (machineId: string) => boolean;
   now?: () => number;
   graceMs?: number;
   agentGraceMs?: number;
@@ -96,8 +127,16 @@ export function createReviewFallbacks(deps: {
     try {
       const project = s.projects.get(task.projectId);
       const workspace = thread ? await deps.t3.threadWorkspace(thread) : null;
-      const cwd = workspace?.worktreePath ?? project.workspaceRoot;
-      if (!cwd) throw new Error(`${project.title} has no workspace folder to review in`);
+      // On a runner the project's own folder is a clone nobody works in, on the default branch: a reviewer there
+      // would find no change and pass the round unread. Without the task's worktree the round fails, saying so.
+      const cwd = workspace?.worktreePath ?? (deps.worktreeOf ? deps.worktreeOf(task) : project.workspaceRoot);
+      if (!cwd) {
+        throw new Error(
+          deps.worktreeOf
+            ? `${taskLabel(task)} has no worktree on this machine to review in: its work was done elsewhere, or its worktree was cleaned up`
+            : `${project.title} has no workspace folder to review in`,
+        );
+      }
       const settings = s.settings.get();
       const resolved = s.reviews.boardReviewerModel(task.id);
       // No provider that can run it: the round stalls with the reason, rather than running something else.
@@ -186,6 +225,8 @@ export function createReviewFallbacks(deps: {
     const task = s.tasks.summary(round.taskId);
     // A task turned manual while a round was pending has no change, and no agent, to chase.
     if (task.status !== "review" || task.archivedAt || task.manual) return;
+    // A task a machine holds is reviewed there, where its change is: its rounds arrive with the machine's log.
+    if (task.hold && (deps.reviewsThere?.(task.hold.machineId) ?? true)) return;
     const thread = implementingThread(task);
     if (thread?.snapshot && BUSY.has(thread.snapshot.status)) return;
     const userAsked = round.openedBy === "user" && !round.nudgedAt;
@@ -235,6 +276,9 @@ export function createReviewFallbacks(deps: {
       // A board review interrupted by a restart left its round running; let the chain pick it up again.
       const s = deps.services();
       for (const round of s.reviews.roundsWithStatus("running")) {
+        // A held task's round is running on its machine, which is the one to say otherwise.
+        const hold = s.holds.get(round.taskId);
+        if (hold && (deps.reviewsThere?.(hold.machineId) ?? true)) continue;
         s.reviews.setRoundStatus(round.id, "pending", {
           actor: BOARD_REVIEWER,
           error: "The board restarted mid-review",

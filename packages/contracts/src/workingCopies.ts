@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { AgentHarness } from "./agentSessions.ts";
 import { ModelChoice } from "./modelProfiles.ts";
 import { SuggestedModel } from "./modelTiers.ts";
+import { FindingSeverity, FindingStatus, ReviewRoundStatus, ReviewTrigger } from "./reviews.ts";
 import {
   AttentionRequest,
   DueDate,
@@ -84,6 +86,11 @@ export const CopiedLink = z.object({
   ref: z.string().nullable(),
   createdAt: z.string(),
   auto: z.boolean(),
+  /**
+   * An agent session's status and title as last read, as JSON text. Only for a session that ran on a machine (its
+   * ref names one): its files are there, so the board can't read them and takes the machine's word.
+   */
+  snapshot: z.string().nullable().optional(),
 });
 export type CopiedLink = z.infer<typeof CopiedLink>;
 
@@ -96,6 +103,70 @@ export const CopiedEvent = z.object({
 });
 export type CopiedEvent = z.infer<typeof CopiedEvent>;
 
+export const CopiedFinding = z.object({
+  id: z.string(),
+  position: z.number().int(),
+  severity: FindingSeverity,
+  file: z.string().nullable(),
+  line: z.number().int().nullable(),
+  title: z.string(),
+  body: z.string().nullable(),
+  suggestion: z.string().nullable(),
+  status: FindingStatus,
+  resolutionNote: z.string().nullable(),
+  resolvedBy: z.string().nullable(),
+  resolvedAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type CopiedFinding = z.infer<typeof CopiedFinding>;
+
+/** A local review round with its findings: opened and run where the task is held, shown on the board. */
+export const CopiedReview = z.object({
+  id: z.string(),
+  round: z.number().int(),
+  cycle: z.number().int(),
+  status: ReviewRoundStatus,
+  trigger: ReviewTrigger,
+  openedBy: z.string(),
+  reviewer: z.string().nullable(),
+  skill: z.string().nullable(),
+  headSha: z.string().nullable(),
+  summary: z.string().nullable(),
+  error: z.string().nullable(),
+  nudgedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  completedAt: z.string().nullable(),
+  findings: z.array(CopiedFinding),
+});
+export type CopiedReview = z.infer<typeof CopiedReview>;
+
+/**
+ * Tokens a session or a run on the machine used for the task: one stored bucket (a file of a session, a local day, a
+ * model), whole, so writing it twice changes nothing.
+ */
+export const CopiedUsage = z.object({
+  harness: AgentHarness,
+  sessionId: z.string(),
+  sourceFile: z.string(),
+  day: z.string(),
+  model: z.string(),
+  source: z.enum(["transcript", "run_output"]),
+  /** Set for a run's own usage (the reviewer's), which no session link leads to. */
+  ofTask: z.boolean(),
+  purpose: z.string().nullable(),
+  tokens: z.object({
+    input: z.number(),
+    output: z.number(),
+    cacheRead: z.number(),
+    cacheWrite5m: z.number(),
+    cacheWrite1h: z.number(),
+    requests: z.number().optional(),
+  }),
+  reportedCostUsd: z.number().nullable(),
+});
+export type CopiedUsage = z.infer<typeof CopiedUsage>;
+
 /** Everything of a task a runner orders: after each change, the whole of it. */
 export const TaskState = z.object({
   task: CopiedTaskFields,
@@ -105,6 +176,8 @@ export const TaskState = z.object({
   /** Ids of the tasks blocking this one, and of those it blocks. */
   blockedBy: z.array(z.string()),
   blocks: z.array(z.string()),
+  /** The task's review rounds. Absent from a version that kept them out of the copy: the reader then leaves its own. */
+  reviews: z.array(CopiedReview).optional(),
 });
 export type TaskState = z.infer<typeof TaskState>;
 
@@ -151,7 +224,12 @@ export type CopiedProject = z.infer<typeof CopiedProject>;
 export const ChangeLogKind = z.enum(["state", "created", "released"]);
 export type ChangeLogKind = z.infer<typeof ChangeLogKind>;
 
-const StatePayload = z.object({ state: TaskState, events: z.array(CopiedEvent) });
+const StatePayload = z.object({
+  state: TaskState,
+  events: z.array(CopiedEvent),
+  /** What the task's sessions and runs on the machine have used so far; absent when the entry says nothing of it. */
+  usage: z.array(CopiedUsage).optional(),
+});
 const CreatedPayload = StatePayload.extend({
   identity: TaskIdentity,
   project: CopiedProject,
@@ -319,6 +397,9 @@ export const HeldEditOp = z.enum([
   "links.unlink",
   "attention.request",
   "attention.clear",
+  "reviews.openRound",
+  "reviews.submit",
+  "reviews.resolveFinding",
 ]);
 export type HeldEditOp = z.infer<typeof HeldEditOp>;
 

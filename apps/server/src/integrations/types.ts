@@ -54,11 +54,14 @@ import type { PrAgentHints } from "./gitHost.ts";
 import type { MachinesIntegration } from "./machines/index.ts";
 import type { BridgeChannel } from "./machines/bridgeChannel.ts";
 import type { Checkouts } from "./machines/checkouts.ts";
+import type { MachineJobs } from "./machines/jobs.ts";
 import type { LoginDetector } from "./machines/logins.ts";
+import type { RemoteWork } from "./machines/remoteWork.ts";
+import type { RunnerWork } from "./machines/runnerWork.ts";
 import type { MachineSync } from "./machines/sync.ts";
 import type { SelfUpdater } from "./machines/selfUpdate.ts";
 import type { MergeTaskPrResult } from "./mergeTaskPr.ts";
-import type { SessionTranscript } from "./sessionTranscript.ts";
+import type { SessionTranscript, TranscriptRead } from "./sessionTranscript.ts";
 import type { TaskThreadInput, TaskThreadLaunch, ThreadLink } from "./t3.ts";
 
 /** Optional external integrations (git hosts such as GitHub via gh, T3 Code). Every method degrades gracefully. */
@@ -70,6 +73,14 @@ export interface RunnerHost {
   bridge: BridgeChannel;
   /** This runner's clones of the board's projects. */
   checkouts: Checkouts;
+  /** The work this runner is doing for its board on tasks it holds. */
+  jobs: MachineJobs;
+  work: RunnerWork;
+  /**
+   * What this runner is doing now: its runs (those the board sent are kept as its own while they go) and the
+   * commands and scripts the board started, which an update or a restart would cut short just the same.
+   */
+  workInFlight(): number;
   /** Registers how the server is stopped so its service starts it again, after an update. */
   onRestart(restart: () => void): void;
 }
@@ -90,6 +101,10 @@ export interface Integrations {
   readonly runnerHost: RunnerHost;
   /** A board's hand-overs, replay and edit queue for the tasks its machines hold. */
   readonly machineSync: MachineSync;
+  /** A board's work on its machines: runs, commands and transcripts for the tasks they hold. */
+  readonly remoteWork: RemoteWork;
+  /** A page of the transcript of a session on this machine, for the board a runner serves. */
+  readSessionTranscript(ref: { sessionId: string; cwd: string }, offset: number): Promise<TranscriptRead>;
   /** Starts background discovery/pollers. */
   start(): void;
   stop(): void;

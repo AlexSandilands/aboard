@@ -20,7 +20,7 @@ export const MACHINE_PAIR_PATH = "/machine/pair";
 export const MACHINE_SESSION_PATH = "/machine/session";
 
 /** What a runner can do, so a board never has to guess from its version. */
-export const MachineCapability = z.enum(["pairing", "status", "update", "tasks"]);
+export const MachineCapability = z.enum(["pairing", "status", "update", "tasks", "runs"]);
 export type MachineCapability = z.infer<typeof MachineCapability>;
 
 /**

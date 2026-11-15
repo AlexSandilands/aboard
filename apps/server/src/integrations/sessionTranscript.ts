@@ -21,7 +21,12 @@ export interface SessionTranscript {
   page: TranscriptPage;
 }
 
+/** One page of a session's transcript, read where its files are. */
+export type TranscriptRead = Pick<SessionTranscript, "stats" | "page">;
+
 export interface SessionTranscriptReader {
+  /** A page of the transcript of a session on this machine, found by its id and folder; for a board that asks. */
+  readSession(ref: Pick<AgentSessionRef, "sessionId" | "cwd">, offset: number): Promise<TranscriptRead>;
   /** The condensed transcript of one Claude Code session linked to the task, a page at a time. */
   read(
     taskId: string,
@@ -44,8 +49,31 @@ const describe = (link: SessionLink) =>
 export function createSessionTranscriptReader(deps: {
   services: () => Services;
   claudeDir: string;
+  /**
+   * Reads a session that ran on a connected machine, there: its files aren't on this one. Null when the machine is
+   * this one (a runner reading its own).
+   */
+  onMachine?: (ref: AgentSessionRef, offset: number) => Promise<TranscriptRead> | null;
 }): SessionTranscriptReader {
+  const readSession: SessionTranscriptReader["readSession"] = async (ref, offset) => {
+    const path = transcriptPath(deps.claudeDir, ref.sessionId, ref.cwd);
+    if (!path) {
+      throw new AppError(
+        "NOT_FOUND",
+        `No transcript for session ${ref.sessionId} was found on this machine (it may have run elsewhere, or been cleaned up).`,
+      );
+    }
+    // Each page reads and condenses the whole file again. No cache: a transcript is read a handful of times while an
+    // agent audits it, condensing streams the file, and a live session's transcript changes between pages anyway.
+    try {
+      const condensed = await condenseTranscriptFile(path);
+      return { stats: condensed.stats, page: pageEntries(condensed.entries, offset) };
+    } catch {
+      throw new AppError("NOT_FOUND", `The transcript of session ${ref.sessionId} couldn't be read.`);
+    }
+  };
   return {
+    readSession,
     async read(taskId, { session, offset }) {
       const task = deps.services().tasks.summary(taskId);
       const sessions = task.links.filter(
@@ -84,28 +112,15 @@ export function createSessionTranscriptReader(deps: {
       }
       if (!link) throw new AppError("INTERNAL", "No session chosen");
       const ref: AgentSessionRef = link.ref;
-      const path = transcriptPath(deps.claudeDir, ref.sessionId, ref.cwd);
-      if (!path) {
-        throw new AppError(
-          "NOT_FOUND",
-          `No transcript for session ${ref.sessionId} was found on this machine (it may have run elsewhere, or been cleaned up).`,
-        );
-      }
-      // Each page reads and condenses the whole file again. No cache: a transcript is read a handful of times while an
-      // agent audits it, condensing streams the file, and a live session's transcript changes between pages anyway.
-      let condensed;
-      try {
-        condensed = await condenseTranscriptFile(path);
-      } catch {
-        throw new AppError("NOT_FOUND", `The transcript of session ${ref.sessionId} couldn't be read.`);
-      }
+      const remote = ref.machine ? (deps.onMachine?.(ref, offset ?? 0) ?? null) : null;
+      const read = await (remote ?? readSession(ref, offset ?? 0));
       return {
         taskNumber: taskNumberValue(task),
         sessionId: ref.sessionId,
         label: link.label ?? null,
         ...(others.length ? { otherSessions: others } : {}),
-        stats: condensed.stats,
-        page: pageEntries(condensed.entries, offset ?? 0),
+        stats: read.stats,
+        page: read.page,
       };
     },
   };

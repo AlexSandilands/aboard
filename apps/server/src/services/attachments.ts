@@ -39,6 +39,11 @@ export interface AttachmentsService {
    * leading bytes. Every file is checked before any is stored, so one bad path attaches nothing.
    */
   uploadFromPaths(taskId: string, paths: readonly string[]): TaskAttachment[];
+  /**
+   * On a runner: keeps one of a held task's images under the board's id for it, so the paths the board's prompts name
+   * resolve here. Sent again, it changes nothing.
+   */
+  adopt(input: UploadInput & { id: string; taskId: string }): TaskAttachment;
   /** Deletes images and their files, for undoing an upload whose follow-up failed. */
   discard(ids: readonly string[]): void;
   /** The task's images with their absolute paths on disk, for agents that can open files. */
@@ -168,6 +173,37 @@ export function createAttachmentsService(core: Core, dir: string): AttachmentsSe
           throw error;
         }
         if (taskId) fx.detail(taskId);
+        return attachment;
+      });
+    },
+
+    adopt({ id, taskId, filename, mime, bytes }) {
+      const known = repos.attachments.get(id);
+      if (known) return known;
+      if (!attachmentExtension(mime) || !matchesMime(mime, bytes) || bytes.length > MAX_ATTACHMENT_BYTES) {
+        throw new AppError("VALIDATION", "Not an image the board could have stored");
+      }
+      return core.write((fx) => {
+        if (!repos.tasks.get(taskId)) throw notFound("Task", taskId);
+        const attachment: TaskAttachment = {
+          id,
+          taskId,
+          filename: filename.replace(/[\\/\r\n]/g, "_").slice(0, 200) || "image",
+          mime,
+          size: bytes.length,
+          createdAt: nowIso(),
+        };
+        const path = pathOf(attachment);
+        if (!path) throw new AppError("VALIDATION", "Not an image id the board could have given");
+        mkdirSync(join(path, ".."), { recursive: true });
+        writeFileSync(path, bytes);
+        try {
+          repos.attachments.insert(attachment);
+        } catch (error) {
+          rmSync(path, { force: true });
+          throw error;
+        }
+        fx.detail(taskId);
         return attachment;
       });
     },

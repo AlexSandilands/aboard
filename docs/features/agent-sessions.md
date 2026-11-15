@@ -114,6 +114,11 @@ polling until the server restarted.
   and the engine as the run ends, rather than waiting for the poll. Open in terminal and Fork work on a
   finished or failed session as on a stopped one.
 - `inApp` is set when Claude Code's `entrypoint` starts with `sdk` (T3 Code runs it through the Agent SDK).
+- A session that ran on a connected machine has that machine in its link (`ref.machine`: instance id and name),
+  set by the runner's run or by `link` on a runner. Its files are there, so the board never reads it: the runner
+  polls it (every 20 seconds, with no browser needed) and the snapshot arrives with the task's changes
+  ([remote machines](remote-machines.md#sessions-usage-and-transcripts)). Open in terminal refuses it with the
+  machine's name until terminals on a machine exist.
 
 ### Opening a session
 
@@ -382,6 +387,10 @@ redacted, then cut to the limit; a secret the first cut splits is the last run o
 dropped, or only its last 200 characters when that run is longer (a minified line). The session's label is redacted in the
 header and in error messages too. A transcript holds whatever the agent read, and the LLM gateway some users sit
 behind kills a session whose messages contain a credential-shaped string.
+
+A session that ran on a connected machine is read on that machine: the board picks the session as above and asks
+the machine for the page (`POST /machine/transcript`, by session id and folder), also after the task was taken
+back. A machine the board is no longer connected to, or can't reach, is an error saying so.
 
 ### On the card and in the panel
 

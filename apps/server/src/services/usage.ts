@@ -8,6 +8,7 @@ import {
   type PriceTable,
   totalTokens,
   type AgentHarness,
+  type CopiedUsage,
   type CostSource,
   type TaskLink,
   type TaskUsage,
@@ -88,6 +89,13 @@ export interface UsageService {
   prices(): PriceSource;
   /** Cost of rows in the board's price table and the user's overrides; null when the model has no price. */
   rowCost(row: Pick<UsageRow, "model" | "tokens" | "reportedCostUsd" | "source">): number | null;
+  /**
+   * On a runner: what the task's sessions and runs here have used, to send with its changes. The whole of it each
+   * time, so the board can write it over what it had.
+   */
+  copyOf(taskId: string): CopiedUsage[];
+  /** On a board, inside a write: keeps what a machine sent of a held task's usage, marked as that machine's. */
+  keepFromMachine(machineId: string, taskId: string, rows: readonly CopiedUsage[]): void;
   /** Stops the deferred card refreshes (shutdown, tests). */
   stop(): void;
 }
@@ -363,7 +371,16 @@ export function createUsageService(
   const buildRow = (
     base: Pick<
       TaskUsageRow,
-      "key" | "kind" | "harness" | "sessionId" | "linkId" | "label" | "threadTitle" | "purpose" | "sharedWith"
+      | "key"
+      | "kind"
+      | "harness"
+      | "sessionId"
+      | "linkId"
+      | "label"
+      | "threadTitle"
+      | "purpose"
+      | "sharedWith"
+      | "machine"
     >,
     rows: readonly UsageRow[],
     untracked: boolean,
@@ -460,6 +477,7 @@ export function createUsageService(
               label: link.label ?? link.snapshot?.title ?? null,
               threadTitle: null,
               purpose: null,
+              machine: link.ref.machine?.name ?? null,
               sharedWith: others(usage.tasksForSession(key)),
             },
             rows,
@@ -530,6 +548,9 @@ export function createUsageService(
             label: null,
             threadTitle: null,
             purpose: rows[0]!.purpose,
+            machine: rows[0]!.machineId
+              ? (repos.machines.get(rows[0]!.machineId)?.name ?? "a machine no longer connected")
+              : null,
             sharedWith: [],
           },
           rows,
@@ -553,7 +574,44 @@ export function createUsageService(
     };
   };
 
+  const copyOf: UsageService["copyOf"] = (taskId) => {
+    const ofTask = usage.rowsForTask(taskId);
+    const own = new Set(ofTask.map((r) => `${r.harness}:${r.sessionId}:${r.sourceFile}:${r.day}:${r.model}`));
+    const ofSessions = usage
+      .rowsForSessions(usage.linkedBy(taskId).sessions)
+      .filter((r) => !own.has(`${r.harness}:${r.sessionId}:${r.sourceFile}:${r.day}:${r.model}`));
+    const copy = (row: UsageRow, mine: boolean): CopiedUsage[] =>
+      // A T3 thread's own turns are the board's to read; a runner has none.
+      row.harness === "t3" || row.source === "t3_turn"
+        ? []
+        : [
+            {
+              harness: row.harness,
+              sessionId: row.sessionId,
+              sourceFile: row.sourceFile,
+              day: row.day,
+              model: row.model,
+              source: row.source,
+              ofTask: mine,
+              purpose: row.purpose,
+              tokens: row.tokens,
+              reportedCostUsd: row.reportedCostUsd,
+            },
+          ];
+    return [...ofTask.flatMap((r) => copy(r, true)), ...ofSessions.flatMap((r) => copy(r, false))];
+  };
+
+  const keepFromMachine: UsageService["keepFromMachine"] = (machineId, taskId, rows) => {
+    usage.replaceFromMachine(
+      machineId,
+      taskId,
+      rows.map((r) => ({ ...r, taskId: r.ofTask ? taskId : null })),
+    );
+  };
+
   return {
+    copyOf,
+    keepFromMachine,
     scanSession,
     scanThread,
     recordRun,

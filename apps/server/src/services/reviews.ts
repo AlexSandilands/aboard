@@ -12,7 +12,6 @@ import {
   type SeverityCounts,
   type TaskReview,
 } from "@repo/contracts";
-import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";
 import type { FindingRecord, ReviewRecord } from "../db/repos/reviews.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
@@ -171,7 +170,7 @@ export function createReviewsService(
       }
     }
     const round: ReviewRecord = {
-      id: randomUUID(),
+      id: core.newId(),
       taskId,
       round: (latest?.round ?? 0) + 1,
       cycle,
@@ -242,7 +241,7 @@ export function createReviewsService(
         const now = nowIso();
         input.findings.forEach((f, index) => {
           repos.reviews.insertFinding({
-            id: randomUUID(),
+            id: core.newId(),
             reviewId: round.id,
             taskId,
             round: round.round,

@@ -201,6 +201,15 @@ export function createReviewsRepo(sql: Sql) {
       sql.update("task_reviews", { ...toReviewRow(r) });
     },
 
+    /** Removes a round with its findings: only for a held task, whose rounds are the ones its machine has. */
+    delete(id: string): void {
+      sql.run("DELETE FROM review_findings WHERE review_id = ?", id);
+      sql.run("DELETE FROM task_reviews WHERE id = ?", id);
+    },
+    deleteFinding(id: string): void {
+      sql.run("DELETE FROM review_findings WHERE id = ?", id);
+    },
+
     finding(id: string): FindingRecord | null {
       const row = sql.get<FindingRow & { round: number }>(`${FINDINGS_SELECT} WHERE f.id = ?`, id);
       return row ? toFinding(row) : null;

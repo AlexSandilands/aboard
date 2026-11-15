@@ -209,7 +209,16 @@ export interface RunnerRequest {
    * the agent's pull request goes to when that isn't the default branch (an integration epic's): the session starts
    * from origin's copy of it, and the workspace note says to open the pull request against it.
    */
-  workspace?: { baseRef?: string | null; branch?: string | null; prBase?: string | null };
+  workspace?: {
+    baseRef?: string | null;
+    branch?: string | null;
+    prBase?: string | null;
+    /**
+     * Start from origin's copy of `baseRef` when it has one. Set for a run sent to a connected machine, whose clone has
+     * only what was pushed.
+     */
+    fromOrigin?: boolean;
+  };
   /**
    * A task-less headless run only (it has no worktree): the project's checkout, whose default branch the run is told
    * not to push to and is denied pushing to. The run itself works in an empty temporary folder, never here. Null (a

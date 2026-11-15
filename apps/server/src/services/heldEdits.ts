@@ -51,7 +51,7 @@ export function routeHeldEdits(
   const resolved = (refs: unknown): string[] =>
     Array.isArray(refs) ? refs.map((ref) => services.tasks.resolveId(String(ref))) : [];
 
-  const routes: { [K in "tasks" | "plans" | "links" | "attention"]: Record<string, Route> } = {
+  const routes: { [K in "tasks" | "plans" | "links" | "attention" | "reviews"]: Record<string, Route> } = {
     tasks: {
       update: {
         op: "tasks.update",
@@ -106,6 +106,13 @@ export function routeHeldEdits(
     attention: {
       request: { op: "attention.request", taskOf: first },
       clear: { op: "attention.clear", taskOf: first },
+    },
+    // A held task's rounds are opened and run where it is held; what the board's user or an agent here does to them
+    // (Run review, a finding resolved or submitted) is passed on like any edit.
+    reviews: {
+      openRound: { op: "reviews.openRound", taskOf: first },
+      submit: { op: "reviews.submit", taskOf: first },
+      resolveFinding: { op: "reviews.resolveFinding", taskOf: first },
     },
   };
 

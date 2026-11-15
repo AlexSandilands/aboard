@@ -33,6 +33,8 @@ export interface SeedOptions {
   workspaceRoot?: string;
   /** The data dir being seeded, for a scenario that needs files of its own (deleted with the sandbox). */
   dataDir?: string;
+  /** The data dir of the sandbox's runner (`--runner`), for a scenario that prepares something there. */
+  runnerDataDir?: string;
 }
 
 type Scenario = (s: Services, opts: SeedOptions) => void;
@@ -1555,7 +1557,69 @@ const branches: Scenario = (s, opts) => {
   addTask(s, project.id, { title: "A task with no branch yet", status: "planned" });
 };
 
+/** The repository of the `machine` seed, as its board's project names it: a URL a runner accepts, cloned by hand below. */
+export const MACHINE_SEED_REMOTE = "https://github.com/example/machine-demo.git";
+
+/**
+ * A board for trying work on a connected machine (`pnpm sandbox --runner --pollers --seed machine`): one project whose
+ * repository the sandbox's runner already has a clone of, a few planned tasks, and two custom automations in Preview:
+ * an agent when a task moves to In progress, and a script when it moves to Review. The project's `origin` is a made-up
+ * GitHub URL, which is what a runner clones by; the clone it would make is put in the runner's data dir here, pointing
+ * at a bare repository beside the board's, so fetches and pushes on the runner work with no network.
+ */
+const machine: Scenario = (s, opts) => {
+  if (!opts.dataDir) throw new Error("The machine seed needs the data dir for its repositories");
+  const origin = join(opts.dataDir, "machine-origin.git");
+  const repo = join(opts.dataDir, "machine-repo");
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync("git", ["-c", "user.name=Seed", "-c", "user.email=seed@example.com", ...args], {
+      cwd,
+      stdio: "ignore",
+    });
+  mkdirSync(origin, { recursive: true });
+  mkdirSync(repo, { recursive: true });
+  git(origin, "init", "--quiet", "--bare", "--initial-branch=main");
+  git(repo, "init", "--quiet", "--initial-branch=main");
+  writeFileSync(join(repo, "README.md"), "Work on a machine demo\n");
+  git(repo, "add", "README.md");
+  git(repo, "commit", "--quiet", "-m", "first");
+  git(repo, "remote", "add", "origin", origin);
+  git(repo, "push", "--quiet", "-u", "origin", "main");
+  // The sandbox's runner gets its clone of the project, as a hand-over would make it.
+  if (opts.runnerDataDir) {
+    const clone = join(opts.runnerDataDir, "repos", "github.com-example-machine-demo");
+    mkdirSync(dirname(clone), { recursive: true });
+    git(dirname(clone), "clone", "--quiet", origin, clone);
+    git(clone, "remote", "set-head", "origin", "main");
+  }
+  // What the board hands over is the repository's name on a host; its own fetches of it just find nothing new.
+  git(repo, "remote", "set-url", "origin", MACHINE_SEED_REMOTE);
+
+  const project = s.projects.create({ title: "Machine demo", workspaceRoot: repo });
+  for (const title of ["Add a changelog", "Tidy the README", "Add a licence file"]) {
+    addTask(s, project.id, { title, status: "planned" });
+  }
+  s.customAutomations.create({
+    name: "Work on it",
+    trigger: { kind: "status_change", to: "in_progress" },
+    projectIds: [project.id],
+    action: { kind: "agent", prompt: "Do task #{{task.number}}: {{task.title}}." },
+  });
+  s.customAutomations.create({
+    name: "Where am I",
+    trigger: { kind: "status_change", to: "review" },
+    projectIds: [project.id],
+    action: {
+      kind: "script",
+      language: "sh",
+      body: 'echo "ran in $PWD as $(whoami)"\ngit log --oneline -1\n',
+      timeoutSeconds: 30,
+    },
+  });
+};
+
 export const SCENARIOS = {
+  machine,
   branches,
   basic,
   review,
