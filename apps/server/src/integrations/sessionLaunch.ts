@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   taskNumberValue,
@@ -42,6 +43,18 @@ import type { Services } from "../services/types.ts";
 import type { RunGit } from "./backup.ts";
 import { remoteRepo } from "./gitRemote.ts";
 import { resolveExecutable } from "./claudeCli.ts";
+import type { RemoteWork } from "./machines/remoteWork.ts";
+import { spawnSsh, type SpawnSsh } from "./machines/ssh.ts";
+import {
+  noSshRoute,
+  remotePreflight,
+  remoteSessionArgv,
+  remoteSessionScript,
+  runnerPortOf,
+  sshRouteOf,
+  tmuxSessionName,
+  type SshRoute,
+} from "./remoteTerminal.ts";
 import { findWorktree, taskBranches, worktreesOf } from "./taskBranches.ts";
 import { messageOf } from "./util.ts";
 import {
@@ -84,7 +97,7 @@ export interface SessionLaunchIntegration {
   startPlanning(projectId: string, input: StartPlanningSessionInput, actor: string): Promise<StartSessionResult>;
 }
 
-type SessionServices = Pick<Services, "tasks" | "projects" | "links" | "settings" | "attachments">;
+type SessionServices = Pick<Services, "tasks" | "projects" | "links" | "settings" | "attachments" | "machines">;
 
 /** An image pasted into the launch dialog, where the CLI can open it. */
 type LaunchImage = { filename: string; path: string };
@@ -206,6 +219,10 @@ export function createSessionLaunch(deps: {
   worktreesDir: string;
   /** Refreshes a new session link's status, so the card shows it without waiting for the poll. */
   linked?: (linkId: string) => void;
+  /** The machine holding a task, which makes a session's folder and link there; a board's only. */
+  remote?: () => Pick<RemoteWork, "holder" | "prepareSession">;
+  /** Runs `ssh` to ask a machine whether a session can open there. */
+  spawnSsh?: SpawnSsh;
   log?: Logger;
 }): SessionLaunchIntegration {
   const log = deps.log ?? console;
@@ -258,12 +275,15 @@ export function createSessionLaunch(deps: {
     };
   };
 
-  /** The harness's CLI and a terminal to open it in, or why a session can't start. */
-  const prepare = (harnessId: AgentHarness) => {
+  /**
+   * The harness's CLI and a terminal to open it in, or why a session can't start. For a session on a machine the CLI
+   * is the machine's, found on its PATH there: neither the path set here nor this machine's install says anything.
+   */
+  const prepare = (harnessId: AgentHarness, onMachine = false) => {
     const settings = deps.services().settings.get();
     const h = deps.host();
     const cli = cliStatus(settings, harnessId, h);
-    if (!cli.available) {
+    if (!cli.available && !onMachine) {
       throw new AppError(
         "VALIDATION",
         `${AGENT_HARNESSES[harnessId].label} isn't installed: set its path in Settings → Integrations`,
@@ -271,7 +291,7 @@ export function createSessionLaunch(deps: {
     }
 
     // The configured path when one is set; the bare name otherwise, so the terminal's own PATH finds it.
-    const exe = configuredCli(settings, harnessId);
+    const exe = onMachine ? AGENT_HARNESSES[harnessId].cli : configuredCli(settings, harnessId);
     // Checked before any worktree is made, so a terminal that can't run leaves nothing behind.
     const resolved = terminal(settings, h);
     if (!("launch" in resolved)) throw new AppError("VALIDATION", `No terminal to open: ${resolved.error}`);
@@ -300,9 +320,25 @@ export function createSessionLaunch(deps: {
       short: (platform: NodeJS.Platform) => string;
       taskIds: readonly string[];
       actor: string;
+      /**
+       * A session on a connected machine: the terminal here runs ssh and tmux there, and the machine has already
+       * linked the session (`linkId`), since the task is its to change.
+       */
+      remote?: { route: SshRoute; tmuxName: string; mcpUrl: string; linkId: string | null };
     },
   ): Promise<StartSessionResult> => {
-    const { sessionId, cwd, label } = session;
+    const { sessionId, cwd, label, remote } = session;
+    /** The command the terminal runs, and the folder it opens in here. */
+    const there = (argv: string[]): { argv: string[]; cwd: string } =>
+      remote
+        ? {
+            argv: remoteSessionArgv(
+              remote.route,
+              remoteSessionScript({ cwd, argv, tmuxName: remote.tmuxName, mcpUrl: remote.mcpUrl }),
+            ),
+            cwd: homedir(),
+          }
+        : { argv, cwd };
     const argvFor = (prompt: string) => {
       const argv = newSessionArgv({
         harness,
@@ -325,20 +361,25 @@ export function createSessionLaunch(deps: {
     let argv = argvFor("value" in fitted ? fitted.value : short());
     let spec: LaunchSpec | null = null;
     let launchError: string | null = null;
+    const open = (cliArgv: string[]) => {
+      const run = there(cliArgv);
+      return resolved.launch(run.argv, run.cwd, window ? { window } : {});
+    };
     try {
-      spec = resolved.launch(argv, cwd, window ? { window } : {});
+      spec = open(argv);
       if (!fitsCommandLine(spec, h.platform) && !shortReason) {
         shortReason = "The prompt is too long for the command line.";
         argv = argvFor(short());
-        spec = resolved.launch(argv, cwd, window ? { window } : {});
+        spec = open(argv);
       }
     } catch (error) {
       // A folder this terminal can't be given safely: the command can still be run by hand.
       spec = null;
       launchError = messageOf(error);
     }
+    const pasted = there(argv);
     const result = {
-      command: copyCommand(resolved.shell, argv, cwd),
+      command: copyCommand(resolved.shell, pasted.argv, pasted.cwd),
       cwd,
       branch: session.branch,
       shortPrompt: shortReason ? argv.at(-1)! : null,
@@ -347,6 +388,7 @@ export function createSessionLaunch(deps: {
     // Linked whether or not the terminal starts: the prompt tells the agent the board linked it, and the command
     // to run by hand carries the same session id. Only a launched session has a window to bring back.
     const link = (opened: boolean): string | null => {
+      if (remote) return remote.linkId;
       if (!sessionId) return null;
       const ids = session.taskIds.map((taskId) => {
         const added = deps
@@ -376,6 +418,77 @@ export function createSessionLaunch(deps: {
       };
     }
     return { ...result, launched: true, error: null, linkId: link(true) };
+  };
+
+  /**
+   * A session for a task a connected machine holds: asked of the machine first (ssh, tmux, the CLI), so a machine it
+   * can't open on makes no worktree, then the machine makes the folder and links the session, then the terminal here
+   * opens it over ssh. Images aren't sent: the CLI there couldn't open a path of this machine's.
+   */
+  const startOnMachine = async (
+    task: TaskSummary,
+    input: StartSessionInput,
+    machine: { id: string; name: string },
+    actor: string,
+  ): Promise<StartSessionResult> => {
+    const record = deps.services().machines.get(machine.id);
+    const route = sshRouteOf(record.routes);
+    if (!route) throw noSshRoute(machine.name);
+    if (input.attachmentIds?.length) {
+      throw new AppError(
+        "VALIDATION",
+        `Images can't go with a session on ${machine.name} yet. Start it without them, or start a T3 Code thread there.`,
+      );
+    }
+    const { workspace } = input;
+    if (workspace.mode !== "new_worktree" && workspace.mode !== "current") {
+      throw new AppError(
+        "VALIDATION",
+        `${taskLabel(task)} runs on ${machine.name}: a session there starts in a new worktree or in its checkout of the project.`,
+      );
+    }
+    const ready = prepare(input.harness, true);
+    const effort = launchEffort(input.harness, input.effort);
+    const runId = randomUUID();
+    const sessionId = AGENT_HARNESSES[input.harness].presetSessionId ? runId : null;
+    const tmuxName = tmuxSessionName(runId);
+    await remotePreflight(deps.spawnSsh ?? spawnSsh, machine.name, route, {
+      harness: input.harness,
+      exe: ready.exe,
+      tmuxName,
+    });
+    const label = input.label ?? sessionLabel(input.mode, taskNumberValue(task));
+    const prepared = await deps.remote!().prepareSession(task.id, {
+      taskId: task.id,
+      harness: input.harness,
+      sessionId,
+      label,
+      workspace:
+        workspace.mode === "new_worktree" ? { mode: "new_worktree", baseRef: workspace.baseRef } : { mode: "current" },
+      actor,
+    })!;
+    return launch(ready, {
+      sessionId,
+      model: input.model,
+      effort,
+      prompt: input.prompt,
+      cwd: prepared.cwd,
+      branch: prepared.branch,
+      label,
+      windowTask: taskNumberValue(task),
+      short: (platform) =>
+        input.label
+          ? handoffShortPrompt(input.label, task, input.harness, platform)
+          : shortPrompt(input.mode, task, input.harness, platform),
+      taskIds: [task.id],
+      actor,
+      remote: {
+        route,
+        tmuxName,
+        mcpUrl: `http://127.0.0.1:${runnerPortOf(record.routes)}/mcp`,
+        linkId: prepared.linkId,
+      },
+    });
   };
 
   return {
@@ -440,6 +553,8 @@ export function createSessionLaunch(deps: {
       // An epic's session orchestrates its tasks; a task's does its own work.
       const modeError = handoffModeError(task, input.mode === "fix" ? "work" : input.mode);
       if (modeError) throw new AppError("VALIDATION", modeError);
+      const holder = deps.remote?.().holder(task.id);
+      if (holder) return startOnMachine(task, input, holder, actor);
       if (!root) throw new AppError("VALIDATION", "The task's project has no folder to start a session in");
       const ready = prepare(input.harness);
       const effort = launchEffort(input.harness, input.effort);

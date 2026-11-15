@@ -220,6 +220,11 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     userHome: deps.config.userHome,
     machineId: deps.config.instanceId,
     always: deps.config.role === "runner",
+    machine: (instanceId) => {
+      const record = deps.services().machines.byInstance(instanceId);
+      return record ? { name: record.name, routes: record.routes } : null;
+    },
+    ...(overrides.machines?.spawn ? { spawnSsh: overrides.machines.spawn } : {}),
     ...(overrides.processProbe ? { probe: overrides.processProbe } : {}),
     ...(overrides.terminalHost ? { host: overrides.terminalHost } : {}),
     ...(overrides.spawnTerminal ? { spawn: overrides.spawnTerminal } : {}),
@@ -240,6 +245,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     spawn: overrides.spawnTerminal ?? spawnTerminal,
     runGit: overrides.autopilotGit ?? defaultRunGit,
     worktreesDir: deps.config.worktreesDir,
+    // A runner holds no task for another machine; a board opens the sessions of the tasks its machines hold there.
+    ...(isRunner ? {} : { remote: () => remoteWork }),
+    ...(overrides.machines?.spawn ? { spawnSsh: overrides.machines.spawn } : {}),
     linked: (linkId) => {
       sessions.refresh(deps.services().links.get(linkId)).catch((error: unknown) => {
         (overrides.log ?? console).warn(`[sessions] couldn't refresh ${linkId}: ${messageOf(error)}`);
