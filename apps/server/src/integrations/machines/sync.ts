@@ -372,18 +372,22 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
       const task = services().tasks.summary(taskId);
       if (!hold) throw new AppError("VALIDATION", `${taskLabel(task)} isn't held by a machine`);
       const machine = services().machines.get(hold.machineId);
-      const going = services()
-        .autopilot.runsForTask(taskId, 20)
-        .find((run) => !run.dryRun && (run.status === "running" || run.status === "queued"));
+      // A forced take-back is for a machine that can't be reached, where a run may hang for its whole grace period.
+      const going = opts.force
+        ? undefined
+        : services()
+            .autopilot.runsForTask(taskId, 20)
+            .find((run) => !run.dryRun && (run.status === "running" || run.status === "queued"));
       if (going) {
         const title =
           services()
             .autopilot.automations()
             .find((a) => a.key === going.automation)?.title ?? "A run";
-        throw new AppError(
-          "CONFLICT",
-          `${title} is running on ${machine.name} for ${taskLabel(task)}. Pull it back once that finishes.`,
-        );
+        const what =
+          going.status === "queued"
+            ? `is queued for ${taskLabel(task)}`
+            : `is running on ${machine.name} for ${taskLabel(task)}`;
+        throw new AppError("CONFLICT", `${title} ${what}. Pull it back once that finishes.`);
       }
       await release(taskId, opts, actor);
       services().tasks.setRunOn(taskId, RUN_HERE, actor, { afterStart: true });

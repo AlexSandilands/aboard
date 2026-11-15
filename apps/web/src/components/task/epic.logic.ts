@@ -32,5 +32,9 @@ export function showOnBoardToggle(
   activeFilter: string | null,
 ): { label: string; pressed: boolean; next: string | null } {
   const pressed = activeFilter === epicId;
-  return { label: pressed ? "Showing on board" : "Show on board", pressed, next: pressed ? null : epicId };
+  return {
+    label: pressed ? "Showing on board" : "Show on board",
+    pressed,
+    next: pressed ? null : epicId,
+  };
 }

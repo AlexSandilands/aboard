@@ -4,8 +4,16 @@ import { automationUpdate, mayState } from "./automation.logic";
 describe("mayState", () => {
   it("reads Default as off for start and merge, and follows the board for review", () => {
     const none = { autopilot: null, autoReview: null, autoMerge: null };
-    expect(mayState(none, false)).toEqual({ start: false, review: false, merge: false });
-    expect(mayState(none, true)).toEqual({ start: false, review: true, merge: false });
+    expect(mayState(none, false)).toEqual({
+      start: false,
+      review: false,
+      merge: false,
+    });
+    expect(mayState(none, true)).toEqual({
+      start: false,
+      review: true,
+      merge: false,
+    });
   });
 
   it("shows an explicit On as on and an explicit Off as off", () => {
@@ -42,7 +50,11 @@ describe("automationUpdate", () => {
       reviewModel: { tier: "deep" },
     });
     expect(automationUpdate({ setting: "reviewModel", model: null }, false)).toEqual({ reviewModel: null });
-    expect(automationUpdate({ setting: "priority", on: true }, false)).toEqual({ priority: true });
-    expect(automationUpdate({ setting: "manual", on: true }, false)).toEqual({ manual: true });
+    expect(automationUpdate({ setting: "priority", on: true }, false)).toEqual({
+      priority: true,
+    });
+    expect(automationUpdate({ setting: "manual", on: true }, false)).toEqual({
+      manual: true,
+    });
   });
 });

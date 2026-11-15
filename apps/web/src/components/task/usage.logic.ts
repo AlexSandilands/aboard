@@ -52,7 +52,12 @@ export function tokenMix(t: TokenUsage): Array<{ key: TokenKind; label: string; 
     cacheRead: t.cacheRead,
     cacheWrite: t.cacheWrite5m + t.cacheWrite1h,
   };
-  return TOKEN_KINDS.map(({ key, label }) => ({ key, label, tokens: of[key], share: all > 0 ? of[key] / all : 0 }));
+  return TOKEN_KINDS.map(({ key, label }) => ({
+    key,
+    label,
+    tokens: of[key],
+    share: all > 0 ? of[key] / all : 0,
+  }));
 }
 
 /** Rounds shares to whole percents that add up to 100, for the legend. */

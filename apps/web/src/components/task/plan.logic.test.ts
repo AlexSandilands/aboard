@@ -30,7 +30,12 @@ function step(id: string, phaseId: string, status: StepStatus = "todo"): PlanSte
 }
 
 function phase(id: string, steps: Array<[string, StepStatus?]>): PlanPhase {
-  return { id, title: id, position: id, steps: steps.map(([s, status]) => step(s, id, status)) };
+  return {
+    id,
+    title: id,
+    position: id,
+    steps: steps.map(([s, status]) => step(s, id, status)),
+  };
 }
 
 function detail(phases: PlanPhase[]): TaskDetail {
@@ -165,9 +170,21 @@ describe("moveStepInOrder", () => {
 describe("placementOf", () => {
   it("reports the phase and neighbours for the move API", () => {
     const order: StepOrder = { a: ["a1", "a2", "a3"], b: ["x"] };
-    expect(placementOf(order, "a2")).toEqual({ phaseId: "a", beforeId: "a3", afterId: "a1" });
-    expect(placementOf(order, "a1")).toEqual({ phaseId: "a", beforeId: "a2", afterId: null });
-    expect(placementOf(order, "x")).toEqual({ phaseId: "b", beforeId: null, afterId: null });
+    expect(placementOf(order, "a2")).toEqual({
+      phaseId: "a",
+      beforeId: "a3",
+      afterId: "a1",
+    });
+    expect(placementOf(order, "a1")).toEqual({
+      phaseId: "a",
+      beforeId: "a2",
+      afterId: null,
+    });
+    expect(placementOf(order, "x")).toEqual({
+      phaseId: "b",
+      beforeId: null,
+      afterId: null,
+    });
     expect(placementOf(order, "nope")).toBeNull();
   });
 
@@ -219,7 +236,9 @@ describe("planInputFromOutline", () => {
         },
         { key: "4", title: "Empty", steps: [{ key: "5", title: "" }] },
       ]),
-    ).toEqual({ phases: [{ id: "p1", title: "Build", steps: [{ id: "s1", title: "One" }] }] });
+    ).toEqual({
+      phases: [{ id: "p1", title: "Build", steps: [{ id: "s1", title: "One" }] }],
+    });
   });
 
   it("sends status only for new steps so live progress is never overwritten", () => {

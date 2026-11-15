@@ -1,11 +1,11 @@
-import type { Machine, Project } from "@repo/contracts";
+import { RUN_HERE, type Machine, type Project } from "@repo/contracts";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { SETTINGS_TEXT_WIDTH, SettingsRow } from "~/components/settings/settingsLayout";
 import { machineOffline } from "~/components/task/runOn.logic";
 import { useMachines } from "~/state/machines";
 import { useUpdateProject } from "~/state/mutations";
 
-const HERE = "here";
+const HERE = RUN_HERE;
 const NO_MACHINES: Machine[] = [];
 
 /**
@@ -38,7 +38,10 @@ export function ProjectRunOnRow({ project }: { project: Project }) {
           value={value}
           onValueChange={(next) => {
             if (next === null || next === value) return;
-            updateProject.mutate({ id: project.id, runOn: next === HERE ? null : next });
+            updateProject.mutate({
+              id: project.id,
+              runOn: next === HERE ? null : next,
+            });
           }}
         >
           <SelectTrigger size="sm" className={SETTINGS_TEXT_WIDTH} aria-label="Runs on">

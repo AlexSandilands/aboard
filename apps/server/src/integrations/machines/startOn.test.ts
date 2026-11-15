@@ -88,3 +88,22 @@ describe("pulling a task back", () => {
     expect(taskRunsOn(board.services, task.id)).toMatchObject({ machineId: null, source: "task" });
   });
 });
+
+describe("pulling a task back by force", () => {
+  it("doesn't wait for a run there, and says a queued run is queued", async () => {
+    const { board, machine, task } = await setup();
+    board.services.tasks.setRunOn(task.id, machine.id, "user");
+    await handOverAtStart(board.services, board.integrations.machineSync, runFor(task.id));
+    board.services.autopilot.record({
+      automation: AUTOPILOT_REVIEW_PRS,
+      candidate: { dedupeKey: "review:2", summary: "review PR #2", taskId: task.id },
+      dryRun: false,
+    });
+    await expect(board.integrations.machineSync.pullBack(task.id, {}, "user")).rejects.toThrow(
+      /Review PRs is queued for #\d+\. Pull it back once that finishes/,
+    );
+    const detail = await board.integrations.machineSync.pullBack(task.id, { force: true }, "user");
+    expect(detail.hold ?? null).toBeNull();
+    expect(detail.runOn).toBe(RUN_HERE);
+  });
+});

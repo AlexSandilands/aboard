@@ -23,7 +23,12 @@ const thread = (id: string, snapshot: Partial<T3ThreadSnapshot> | null, createdA
   snapshot: snapshot ? { title: id, status: "done", ...snapshot } : null,
 });
 
-const url = (id: string): TaskLink => ({ ...base, id, kind: "url", url: `https://example.com/${id}` });
+const url = (id: string): TaskLink => ({
+  ...base,
+  id,
+  kind: "url",
+  url: `https://example.com/${id}`,
+});
 
 const pr = (id: string): TaskLink => ({
   ...base,
@@ -41,12 +46,22 @@ const issue = (id: string): TaskLink => ({
   ref: { host: "github.com", repo: "o/r", number: 1 },
   snapshot: null,
 });
-const jira = (id: string): TaskLink => ({ ...base, id, kind: "ticket", url: id, ref: { system: "jira", key: id } });
+const jira = (id: string): TaskLink => ({
+  ...base,
+  id,
+  kind: "ticket",
+  url: id,
+  ref: { system: "jira", key: id },
+});
 
 const SESSION_ID = "b76a4a91-3196-48df-a421-9a32d5ac9978";
 const session = (
   id: string,
-  opts: { createdAt?: string; harness?: "claude-code" | "copilot-cli"; label?: string | null } = {},
+  opts: {
+    createdAt?: string;
+    harness?: "claude-code" | "copilot-cli";
+    label?: string | null;
+  } = {},
 ): TaskLink => ({
   ...base,
   id,
@@ -54,7 +69,11 @@ const session = (
   url: `agent-session://${id}`,
   label: opts.label ?? null,
   createdAt: opts.createdAt ?? "",
-  ref: { harness: opts.harness ?? "claude-code", sessionId: SESSION_ID, cwd: "/work/code" },
+  ref: {
+    harness: opts.harness ?? "claude-code",
+    sessionId: SESSION_ID,
+    cwd: "/work/code",
+  },
   snapshot: null,
 });
 
@@ -108,7 +127,12 @@ describe("threadModelsDiffer", () => {
 });
 
 describe("threadDetails", () => {
-  const snapshot: T3ThreadSnapshot = { title: "x", status: "done", branch: "feat/x", model: "m1" };
+  const snapshot: T3ThreadSnapshot = {
+    title: "x",
+    status: "done",
+    branch: "feat/x",
+    model: "m1",
+  };
 
   it("lists branch, and model when asked", () => {
     expect(threadDetails(snapshot, { showModel: false })).toEqual(["feat/x"]);
@@ -133,7 +157,10 @@ describe("adding a pasted T3 thread id", () => {
   const t3 = { environmentId: "env-1", origin: "http://127.0.0.1:3773" };
 
   it("previews a thread when T3 is detected", () => {
-    expect(describeLinkInput(classifyLink(id, { t3 }))).toEqual({ kind: "t3_thread", label: "T3 Code thread" });
+    expect(describeLinkInput(classifyLink(id, { t3 }))).toEqual({
+      kind: "t3_thread",
+      label: "T3 Code thread",
+    });
     expect(describeLinkInput(classifyLink(id, { t3: { environmentId: null, origin: null } }))).toBeNull();
   });
 
@@ -158,9 +185,15 @@ describe("groupLinks", () => {
 
   it("puts threads first in attention order, then sessions newest first", () => {
     const groups = groupLinks([
-      session("old", { createdAt: "2026-01-01T00:00:00Z", harness: "copilot-cli" }),
+      session("old", {
+        createdAt: "2026-01-01T00:00:00Z",
+        harness: "copilot-cli",
+      }),
       thread("done", { status: "done" }),
-      session("new", { createdAt: "2026-01-02T00:00:00Z", harness: "copilot-cli" }),
+      session("new", {
+        createdAt: "2026-01-02T00:00:00Z",
+        harness: "copilot-cli",
+      }),
       thread("input", { status: "input" }),
     ]);
     expect(groups.sessionRows.map((row) => row.id)).toEqual(["input", "done", "new", "old"]);
@@ -266,11 +299,17 @@ describe("previewRows", () => {
   const rows = ["a", "b", "c", "d", "e"];
 
   it("shows everything up to three rows", () => {
-    expect(previewRows(rows.slice(0, 3), false)).toEqual({ shown: ["a", "b", "c"], hidden: 0 });
+    expect(previewRows(rows.slice(0, 3), false)).toEqual({
+      shown: ["a", "b", "c"],
+      hidden: 0,
+    });
   });
 
   it("shows the first three and counts the rest", () => {
-    expect(previewRows(rows, false)).toEqual({ shown: ["a", "b", "c"], hidden: 2 });
+    expect(previewRows(rows, false)).toEqual({
+      shown: ["a", "b", "c"],
+      hidden: 2,
+    });
   });
 
   it("shows everything once expanded", () => {

@@ -1,6 +1,14 @@
 import type { Machine, TaskHold } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { canChooseRunOn, heldLabel, placementOf, placementTitle, runOnOptions, type Placement } from "./runOn.logic";
+import {
+  canChooseRunOn,
+  heldLabel,
+  machineNumberParts,
+  placementOf,
+  placementTitle,
+  runOnOptions,
+  type Placement,
+} from "./runOn.logic";
 
 const machine = (id: string, connection: Machine["connection"] = "connected") => ({
   id,
@@ -32,7 +40,10 @@ const hold = (waiting: number, machineId = "engine"): TaskHold => ({
 describe("placementOf", () => {
   it("is here unless the task, then its project, names a machine", () => {
     expect(placementOf(task(), project, machines)).toEqual({ state: "here" });
-    expect(placementOf(task({ runOn: "engine" }), project, machines)).toEqual({ state: "will", machine: engine });
+    expect(placementOf(task({ runOn: "engine" }), project, machines)).toEqual({
+      state: "will",
+      machine: engine,
+    });
     expect(placementOf(task(), { ...project, runOn: "engine" }, machines)).toEqual({ state: "will", machine: engine });
     expect(placementOf(task({ runOn: "here" }), { ...project, runOn: "engine" }, machines)).toEqual({ state: "here" });
   });
@@ -54,10 +65,14 @@ describe("placementOf", () => {
 
 describe("the chip's words", () => {
   const held = (waiting: number, offline = false) =>
-    ({ state: "held", machineId: "engine", machineName: "engine", machine: engine, waiting, offline }) as Extract<
-      Placement,
-      { state: "held" }
-    >;
+    ({
+      state: "held",
+      machineId: "engine",
+      machineName: "engine",
+      machine: engine,
+      waiting,
+      offline,
+    }) as Extract<Placement, { state: "held" }>;
 
   it("says where the task is, how many edits wait, and that a machine is offline", () => {
     expect(heldLabel(held(0))).toBe("On engine");
@@ -80,14 +95,47 @@ describe("choosing the machine", () => {
     expect(canChooseRunOn(task({ kind: "epic" }), project, machines)).toBe(false);
     expect(canChooseRunOn(task({ manual: true }), project, machines)).toBe(false);
     expect(canChooseRunOn(task({ status: "review" }), project, machines)).toBe(false);
+    // A machine that has to be paired again or updated first can't take it.
+    expect(canChooseRunOn(task(), project, [machine("old", "needs-update"), machine("gone", "unpaired")])).toBe(false);
+    expect(canChooseRunOn(task(), project, [studio])).toBe(true);
   });
 
   it("lists the project's default, this machine, then each machine, off where it can't be reached", () => {
     expect(runOnOptions({ ...project, runOn: "engine" }, machines)).toMatchObject([
-      { value: null, label: "Project default", detail: "engine", disabled: false },
+      {
+        value: null,
+        label: "Project default",
+        detail: "engine",
+        disabled: false,
+      },
       { value: "here", label: "This machine", disabled: false },
       { value: "engine", detail: "Connected", disabled: false },
       { value: "studio", detail: "Can't be reached", disabled: true },
     ]);
+  });
+});
+
+describe("machineNumberParts", () => {
+  const will = { state: "will", machine: engine } as const;
+  const heldBy = (machineId: string) =>
+    ({
+      state: "held",
+      machineId,
+      machineName: machineId,
+      machine: machines.find((m) => m.id === machineId),
+      waiting: 0,
+      offline: false,
+    }) as const;
+
+  it("puts the machine's letter before the board's number", () => {
+    expect(machineNumberParts({ number: 182, numberPrefix: "" }, will)).toEqual({ letter: "E", rest: "182" });
+  });
+
+  it("keeps a machine-made number whole, without the same letter twice", () => {
+    expect(machineNumberParts({ number: 7, numberPrefix: "E" }, heldBy("engine"))).toEqual({ letter: "", rest: "#E7" });
+    expect(machineNumberParts({ number: 7, numberPrefix: "E" }, heldBy("studio"))).toEqual({
+      letter: "S",
+      rest: "#E7",
+    });
   });
 });

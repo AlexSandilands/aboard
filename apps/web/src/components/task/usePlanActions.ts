@@ -72,7 +72,11 @@ export function usePlanActions(taskId: string) {
         mutateMoveStep({ stepId, ...placement }, { onError });
       },
       addStep(phaseId: string, title: string, afterStepId?: string) {
-        mutateAddSteps({ phaseId, steps: [{ title }], ...(afterStepId ? { afterStepId } : {}) });
+        mutateAddSteps({
+          phaseId,
+          steps: [{ title }],
+          ...(afterStepId ? { afterStepId } : {}),
+        });
       },
       addPhase(title: string, afterPhaseId?: string, onSuccess?: () => void) {
         mutateAddPhase({ taskId, title, ...(afterPhaseId ? { afterPhaseId } : {}) }, { onSuccess });

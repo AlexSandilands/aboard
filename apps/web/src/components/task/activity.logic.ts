@@ -42,7 +42,10 @@ const FIELD_LABEL: Record<string, string> = {
   reviewModel: "reviewer model",
   autopilot: "Autopilot flag",
 };
-const FINDING_STATUS_LABEL: Record<string, string> = { fixed: "fixed", wont_fix: "won't fix" };
+const FINDING_STATUS_LABEL: Record<string, string> = {
+  fixed: "fixed",
+  wont_fix: "won't fix",
+};
 const LINK_KIND_LABEL: Record<string, string> = {
   pr: "a pull request",
   ticket: "a ticket",

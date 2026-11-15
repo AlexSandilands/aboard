@@ -6,9 +6,21 @@ import type { ModelChoice } from "@repo/contracts";
  */
 export type MayFlag = "start" | "review" | "merge";
 
-export const MAY_FLAGS: ReadonlyArray<{ flag: MayFlag; label: string; hint: string }> = [
-  { flag: "start", label: "start it", hint: "Start planned tasks may start this task once it is planned" },
-  { flag: "review", label: "review it", hint: "Open a local review round when the task moves to Review" },
+export const MAY_FLAGS: ReadonlyArray<{
+  flag: MayFlag;
+  label: string;
+  hint: string;
+}> = [
+  {
+    flag: "start",
+    label: "start it",
+    hint: "Start planned tasks may start this task once it is planned",
+  },
+  {
+    flag: "review",
+    label: "review it",
+    hint: "Open a local review round when the task moves to Review",
+  },
   {
     flag: "merge",
     label: "merge it",
@@ -21,10 +33,18 @@ export const MAY_FLAGS: ReadonlyArray<{ flag: MayFlag; label: string; hint: stri
  * Review follows the board's Auto-review setting while the task doesn't say.
  */
 export function mayState(
-  task: { autopilot: boolean | null; autoReview: boolean | null; autoMerge: boolean | null },
+  task: {
+    autopilot: boolean | null;
+    autoReview: boolean | null;
+    autoMerge: boolean | null;
+  },
   globalReview: boolean,
 ): Record<MayFlag, boolean> {
-  return { start: task.autopilot === true, review: task.autoReview ?? globalReview, merge: task.autoMerge === true };
+  return {
+    start: task.autopilot === true,
+    review: task.autoReview ?? globalReview,
+    merge: task.autoMerge === true,
+  };
 }
 
 /** The update a change in the Autopilot section sends, so each control writes its own field. */

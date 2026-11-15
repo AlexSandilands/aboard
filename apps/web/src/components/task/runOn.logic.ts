@@ -1,4 +1,12 @@
-import { RUN_HERE, resolveRunOn, runOnLocked, type Machine, type Project, type TaskSummary } from "@repo/contracts";
+import {
+  RUN_HERE,
+  resolveRunOn,
+  runOnLocked,
+  taskNumberText,
+  type Machine,
+  type Project,
+  type TaskSummary,
+} from "@repo/contracts";
 
 // Where a task runs, as the card, the task panel and the hand-off window show it
 // (docs/features/remote-machines.md#choosing-the-machine).
@@ -51,16 +59,21 @@ export function placementOf(
   return machine ? { state: "will", machine } : { state: "here" };
 }
 
+/** A machine a task can be set to run on: paired, and on a version that can take it (it may be away for now). */
+export function machineUsable(machine: Pick<Machine, "connection">): boolean {
+  return machine.connection !== "unpaired" && machine.connection !== "needs-update";
+}
+
 /**
  * Whether the task's machine can be chosen: a code task that hasn't started, in a project with a folder (a repository a
- * machine can clone), on a board with a machine connected to it.
+ * machine can clone), on a board with a usable machine.
  */
 export function canChooseRunOn(
   task: RunOnTask,
   project: RunOnProject | undefined,
-  machines: readonly unknown[],
+  machines: ReadonlyArray<Pick<Machine, "connection">>,
 ): boolean {
-  if (machines.length === 0 || !project?.workspaceRoot) return false;
+  if (!machines.some(machineUsable) || !project?.workspaceRoot) return false;
   if (task.kind === "epic" || task.manual || task.archivedAt) return false;
   return !runOnLocked(task);
 }
@@ -93,7 +106,12 @@ export function runOnOptions(project: RunOnProject | undefined, machines: readon
       detail: fallback ? fallback.name : "This machine",
       disabled: false,
     },
-    { value: RUN_HERE, label: "This machine", detail: "Where the board runs", disabled: false },
+    {
+      value: RUN_HERE,
+      label: "This machine",
+      detail: "Where the board runs",
+      disabled: false,
+    },
     ...machines.map((machine) => ({
       value: machine.id,
       label: machine.name,
@@ -102,6 +120,24 @@ export function runOnOptions(project: RunOnProject | undefined, machines: readon
       machine,
     })),
   ];
+}
+
+/**
+ * The card's number with the machine's letter in front: `E` and `182` for #182. A task a machine numbered while the
+ * board was away already reads `#E7`, so it keeps that whole, and gets the letter only when another machine has it:
+ * the pill never reads like a different task's number.
+ */
+export function machineNumberParts(
+  task: Pick<TaskSummary, "number" | "numberPrefix">,
+  placement: Exclude<Placement, { state: "here" }>,
+): { letter: string; rest: string } {
+  const letter =
+    placement.state === "will"
+      ? placement.machine.prefix
+      : (placement.machine?.prefix ?? placement.machineName.slice(0, 1).toUpperCase());
+  if (!task.numberPrefix) return { letter, rest: String(task.number) };
+  const own = `#${taskNumberText(task)}`;
+  return task.numberPrefix === letter ? { letter: "", rest: own } : { letter, rest: own };
 }
 
 /** The chip before the task starts: "Run on engine", or "Run on this machine". */

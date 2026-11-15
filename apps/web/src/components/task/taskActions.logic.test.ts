@@ -8,7 +8,12 @@ import {
   togglePin,
 } from "./taskActions.logic";
 
-const open = { resolution: null, archivedAt: null, status: "in_progress", kind: "task" } as const;
+const open = {
+  resolution: null,
+  archivedAt: null,
+  status: "in_progress",
+  kind: "task",
+} as const;
 
 describe("normalizePins", () => {
   it("keeps menu order and drops duplicates and unknown ids", () => {
@@ -55,23 +60,40 @@ describe("pinnedButtons", () => {
   });
   it("leaves archive to the top bar on unarchived done tasks", () => {
     expect(pinnedButtons(["archive"], { ...open, status: "done" })).toEqual([]);
-    expect(pinnedButtons(["archive"], { ...open, status: "done", archivedAt: "2026-10-14T00:00:00Z" })).toEqual([
-      "archive",
-    ]);
+    expect(
+      pinnedButtons(["archive"], {
+        ...open,
+        status: "done",
+        archivedAt: "2026-10-14T00:00:00Z",
+      }),
+    ).toEqual(["archive"]);
     expect(pinnedButtons(["archive"], open)).toEqual(["archive"]);
   });
 });
 
 describe("migrateTaskPanelPrefs", () => {
   it("pins jump on top of the pins saved before it existed, in menu order", () => {
-    expect(migrateTaskPanelPrefs({ pinnedActions: ["copy-link", "plan"], sections: { hidden: ["plan"] } }, 0)).toEqual({
+    expect(
+      migrateTaskPanelPrefs(
+        {
+          pinnedActions: ["copy-link", "plan"],
+          sections: { hidden: ["plan"] },
+        },
+        0,
+      ),
+    ).toEqual({
       pinnedActions: ["jump", "plan", "copy-link"],
       sections: { hidden: ["plan"] },
     });
-    expect(migrateTaskPanelPrefs({ pinnedActions: [] }, 0)).toEqual({ pinnedActions: ["jump"] });
+    expect(migrateTaskPanelPrefs({ pinnedActions: [] }, 0)).toEqual({
+      pinnedActions: ["jump"],
+    });
   });
   it("copes with a save that has no pins or isn't an object", () => {
-    expect(migrateTaskPanelPrefs({ sections: {} }, 0)).toEqual({ sections: {}, pinnedActions: ["jump"] });
+    expect(migrateTaskPanelPrefs({ sections: {} }, 0)).toEqual({
+      sections: {},
+      pinnedActions: ["jump"],
+    });
     expect(migrateTaskPanelPrefs(null, 0)).toEqual({ pinnedActions: ["jump"] });
   });
   it("leaves a current save alone, so an unpinned jump stays unpinned", () => {

@@ -28,6 +28,7 @@ import {
   runOnLabel,
   runOnOptions,
   sinceText,
+  machineNumberParts,
   type Placement,
   type RunOnOption,
 } from "./runOn.logic";
@@ -55,7 +56,11 @@ export function useRunOn(task: RunOnTask, projectOverride?: Pick<Project, "works
   };
 }
 
-const MACHINE_ICON = { here: LaptopIcon, machine: ServerIcon, project: SparklesIcon } as const;
+const MACHINE_ICON = {
+  here: LaptopIcon,
+  machine: ServerIcon,
+  project: SparklesIcon,
+} as const;
 
 function OptionIcon({ option, selected }: { option: RunOnOption; selected: boolean }) {
   if (selected) return <CheckIcon className="size-4 text-primary" />;
@@ -245,7 +250,9 @@ function HeldChip({ task, placement }: { task: RunOnTask; placement: Extract<Pla
             <PullBackAction
               disabledReason={
                 run
-                  ? `Autopilot is running on ${placement.machineName} for this task. Pull it back once that finishes.`
+                  ? run.status === "queued"
+                    ? "Autopilot has a run queued for this task. Pull it back once that finishes."
+                    : `Autopilot is running on ${placement.machineName} for this task. Pull it back once that finishes.`
                   : placement.offline
                     ? `${placement.machineName} has to be reached to give the task back with its last changes.`
                     : null
@@ -254,7 +261,8 @@ function HeldChip({ task, placement }: { task: RunOnTask; placement: Extract<Pla
             >
               Pull back to this machine…
             </PullBackAction>
-            {placement.offline && !run ? (
+            {/* Also while a run hangs there: it can, for up to its grace period, on a machine that can't be reached. */}
+            {placement.offline ? (
               <PullBackAction danger disabledReason={null} onClick={() => setConfirm("force")}>
                 Take back without {placement.machineName}…
               </PullBackAction>
@@ -353,8 +361,7 @@ export function MachineNumber({ task, placement }: { task: RunOnTask; placement:
   if (placement.state === "here") {
     return <span className="shrink-0 font-mono tabular-nums text-muted-foreground/70">{number}</span>;
   }
-  const machine = placement.state === "will" ? placement.machine : placement.machine;
-  const prefix = machine?.prefix ?? (placement.state === "held" ? placement.machineName.slice(0, 1).toUpperCase() : "");
+  const { letter, rest } = machineNumberParts(task, placement);
   const offline = placement.state === "held" && placement.offline;
   const waiting = placement.state === "held" && placement.waiting > 0 && !offline;
   return (
@@ -370,8 +377,8 @@ export function MachineNumber({ task, placement }: { task: RunOnTask; placement:
             : "bg-violet-500/14 text-foreground/80",
       )}
     >
-      <b className={cn("font-bold", offline ? "line-through" : "text-violet-700 dark:text-violet-300")}>{prefix}</b>
-      {number.slice(1)}
+      <b className={cn("font-bold", offline ? "line-through" : "text-violet-700 dark:text-violet-300")}>{letter}</b>
+      {rest}
       {waiting ? (
         <span aria-hidden className="absolute -end-1 -top-1 size-1.5 rounded-full bg-warning ring-2 ring-card" />
       ) : null}
@@ -405,7 +412,10 @@ export function MachineOfflineCallout({ placement }: { placement: Placement }) {
 }
 
 /** The steps that edits made here, still waiting for the machine holding the task, change (TaskHold.waitingSteps). */
-const WaitingStepsContext = createContext<{ steps: ReadonlySet<string>; machineName: string } | null>(null);
+const WaitingStepsContext = createContext<{
+  steps: ReadonlySet<string>;
+  machineName: string;
+} | null>(null);
 
 export function WaitingStepsProvider({ task, children }: { task: Pick<TaskSummary, "hold">; children: ReactNode }) {
   const steps = task.hold?.waitingSteps;

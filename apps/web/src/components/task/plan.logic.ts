@@ -122,7 +122,11 @@ export function placementOf(order: StepOrder, stepId: string): StepPlacement | n
   if (!phaseId) return null;
   const ids = order[phaseId]!;
   const index = ids.indexOf(stepId);
-  return { phaseId, beforeId: ids[index + 1] ?? null, afterId: ids[index - 1] ?? null };
+  return {
+    phaseId,
+    beforeId: ids[index + 1] ?? null,
+    afterId: ids[index - 1] ?? null,
+  };
 }
 
 /** True when the step's phase and neighbours are unchanged between two orders. */
@@ -154,7 +158,10 @@ export function patchStep(
     detail,
     detail.phases.map((phase) =>
       phase.steps.some((s) => s.id === stepId)
-        ? { ...phase, steps: phase.steps.map((s) => (s.id === stepId ? { ...s, ...patch } : s)) }
+        ? {
+            ...phase,
+            steps: phase.steps.map((s) => (s.id === stepId ? { ...s, ...patch } : s)),
+          }
         : phase,
     ),
   );
@@ -163,12 +170,18 @@ export function patchStep(
 export function removeStep(detail: TaskDetail, stepId: string): TaskDetail {
   return withPhases(
     detail,
-    detail.phases.map((phase) => ({ ...phase, steps: phase.steps.filter((s) => s.id !== stepId) })),
+    detail.phases.map((phase) => ({
+      ...phase,
+      steps: phase.steps.filter((s) => s.id !== stepId),
+    })),
   );
 }
 
 export function patchPhase(detail: TaskDetail, phaseId: string, patch: { title: string }): TaskDetail {
-  return { ...detail, phases: detail.phases.map((p) => (p.id === phaseId ? { ...p, ...patch } : p)) };
+  return {
+    ...detail,
+    phases: detail.phases.map((p) => (p.id === phaseId ? { ...p, ...patch } : p)),
+  };
 }
 
 export function removePhase(detail: TaskDetail, phaseId: string): TaskDetail {
@@ -220,7 +233,12 @@ export function outlineFromPhases(phases: ReadonlyArray<PlanPhase>): OutlinePhas
     key: nextOutlineKey(),
     id: phase.id,
     title: phase.title,
-    steps: phase.steps.map((step) => ({ key: nextOutlineKey(), id: step.id, title: step.title, status: step.status })),
+    steps: phase.steps.map((step) => ({
+      key: nextOutlineKey(),
+      id: step.id,
+      title: step.title,
+      status: step.status,
+    })),
   }));
 }
 
