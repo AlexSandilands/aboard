@@ -61,41 +61,41 @@ Read the doc for the area before changing it, and update it in the same PR when 
 rules for docs, ADRs and templates are in [docs/README.md](docs/README.md); add new docs to its index
 and to this table.
 
-| Changing…                                                      | Read                                                                                |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Anything cross-cutting: request flow, tables, env vars, guard  | [docs/architecture.md](docs/architecture.md) and [docs/decisions/](docs/decisions/) |
-| Statuses, closing, archiving, deleting, numbering              | [docs/features/task-lifecycle.md](docs/features/task-lifecycle.md)                  |
-| Plans, steps, the current step, Markdown plans                 | [docs/features/plans.md](docs/features/plans.md)                                    |
-| Epics: grouping tasks, derived status, bands, epic tools       | [docs/features/epics.md](docs/features/epics.md)                                    |
-| Blocks / blocked by, the card lock, dependency lines           | [docs/features/relations.md](docs/features/relations.md)                            |
-| MCP tools, their descriptions or results; the shipped skill    | [docs/features/mcp.md](docs/features/mcp.md)                                        |
-| Task templates: fields, placeholders, creating from one        | [docs/features/templates.md](docs/features/templates.md)                            |
-| SSE, the board reducer, mutations                              | [docs/features/live-sync.md](docs/features/live-sync.md)                            |
-| Labels: normalizing, colours, filters, the MCP hint            | [docs/features/labels.md](docs/features/labels.md)                                  |
-| Column collapse, panel sections, card links, the settings page | [docs/features/board-layout.md](docs/features/board-layout.md)                      |
-| Themes, contrast, glass, panel animations, fonts               | [docs/features/appearance.md](docs/features/appearance.md)                          |
-| Board filters, URL params, saved views                         | [docs/features/saved-views.md](docs/features/saved-views.md)                        |
-| PR links, the GitHub poller and merging                        | [docs/features/github-prs.md](docs/features/github-prs.md)                          |
-| Ticket systems: ticket links, key patterns, presets            | [docs/features/ticket-systems.md](docs/features/ticket-systems.md)                  |
-| Creating tasks from ticket or GitHub issue URLs                | [docs/features/issue-import.md](docs/features/issue-import.md)                      |
-| The hand-off menu (copy prompt, new T3 thread), T3 RPC client  | [docs/features/agent-handoff.md](docs/features/agent-handoff.md)                    |
-| Agent session links, their status, the terminal launcher       | [docs/features/agent-sessions.md](docs/features/agent-sessions.md), ADRs 0009, 0010 |
-| Local review rounds, findings, the board reviewer              | [docs/features/local-review.md](docs/features/local-review.md)                      |
-| The Electron shell                                             | [docs/features/desktop.md](docs/features/desktop.md)                                |
-| The runner role, the headless server tarball, its service      | [docs/features/remote-machines.md](docs/features/remote-machines.md)                |
-| Rulesets, required checks, CI job names, Dependabot            | [docs/features/github-setup.md](docs/features/github-setup.md)                      |
-| Notifications: the inbox, pop-ups, badges, their producers     | [docs/features/notifications.md](docs/features/notifications.md)                    |
-| Backup, restore, the dump format, the git backup               | [docs/features/backup.md](docs/features/backup.md)                                  |
-| Pasted images: upload, storage, the pill, backups              | [docs/features/attachments.md](docs/features/attachments.md)                        |
-| The rich Markdown editor, its round trip and fallback          | [docs/features/rich-editor.md](docs/features/rich-editor.md)                        |
-| Autopilot: automations, scopes, limits, runs, pause            | [docs/features/autopilot.md](docs/features/autopilot.md) and ADR 0008               |
-| Suggested changes to prompts and skills, accepting them        | [docs/features/suggestions.md](docs/features/suggestions.md)                        |
-| Stats: the weekly trends API, its series and their definitions | [docs/features/stats.md](docs/features/stats.md)                                    |
-| Token usage: readers, prices, the Usage section, cost series   | [docs/features/token-usage.md](docs/features/token-usage.md)                        |
-| The hidden social network: its tools, feed and art sandbox     | [docs/features/social.md](docs/features/social.md)                                  |
-| What users can do, how to install, configure or connect agents | [docs/guide/](docs/guide/) (user-facing) and `README.md`                            |
-| UI styles and primitives                                       | [docs/reference/style.md](docs/reference/style.md)                                  |
-| Proposals to replace the stack (a Rust or native rewrite)      | [docs/research/rust-gpui-rewrite.md](docs/research/rust-gpui-rewrite.md)            |
+| Changing…                                                          | Read                                                                                |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| Anything cross-cutting: request flow, tables, env vars, guard      | [docs/architecture.md](docs/architecture.md) and [docs/decisions/](docs/decisions/) |
+| Statuses, closing, archiving, deleting, numbering                  | [docs/features/task-lifecycle.md](docs/features/task-lifecycle.md)                  |
+| Plans, steps, the current step, Markdown plans                     | [docs/features/plans.md](docs/features/plans.md)                                    |
+| Epics: grouping tasks, derived status, bands, epic tools           | [docs/features/epics.md](docs/features/epics.md)                                    |
+| Blocks / blocked by, the card lock, dependency lines               | [docs/features/relations.md](docs/features/relations.md)                            |
+| MCP tools, their descriptions or results; the shipped skill        | [docs/features/mcp.md](docs/features/mcp.md)                                        |
+| Task templates: fields, placeholders, creating from one            | [docs/features/templates.md](docs/features/templates.md)                            |
+| SSE, the board reducer, mutations                                  | [docs/features/live-sync.md](docs/features/live-sync.md)                            |
+| Labels: normalizing, colours, filters, the MCP hint                | [docs/features/labels.md](docs/features/labels.md)                                  |
+| Column collapse, panel sections, card links, the settings page     | [docs/features/board-layout.md](docs/features/board-layout.md)                      |
+| Themes, contrast, glass, panel animations, fonts                   | [docs/features/appearance.md](docs/features/appearance.md)                          |
+| Board filters, URL params, saved views                             | [docs/features/saved-views.md](docs/features/saved-views.md)                        |
+| PR links, the GitHub poller and merging                            | [docs/features/github-prs.md](docs/features/github-prs.md)                          |
+| Ticket systems: ticket links, key patterns, presets                | [docs/features/ticket-systems.md](docs/features/ticket-systems.md)                  |
+| Creating tasks from ticket or GitHub issue URLs                    | [docs/features/issue-import.md](docs/features/issue-import.md)                      |
+| The hand-off menu (copy prompt, new T3 thread), T3 RPC client      | [docs/features/agent-handoff.md](docs/features/agent-handoff.md)                    |
+| Agent session links, their status, the terminal launcher           | [docs/features/agent-sessions.md](docs/features/agent-sessions.md), ADRs 0009, 0010 |
+| Local review rounds, findings, the board reviewer                  | [docs/features/local-review.md](docs/features/local-review.md)                      |
+| The Electron shell                                                 | [docs/features/desktop.md](docs/features/desktop.md)                                |
+| The runner role, its tarball and service, pairing, the machine API | [docs/features/remote-machines.md](docs/features/remote-machines.md), ADR 0015      |
+| Rulesets, required checks, CI job names, Dependabot                | [docs/features/github-setup.md](docs/features/github-setup.md)                      |
+| Notifications: the inbox, pop-ups, badges, their producers         | [docs/features/notifications.md](docs/features/notifications.md)                    |
+| Backup, restore, the dump format, the git backup                   | [docs/features/backup.md](docs/features/backup.md)                                  |
+| Pasted images: upload, storage, the pill, backups                  | [docs/features/attachments.md](docs/features/attachments.md)                        |
+| The rich Markdown editor, its round trip and fallback              | [docs/features/rich-editor.md](docs/features/rich-editor.md)                        |
+| Autopilot: automations, scopes, limits, runs, pause                | [docs/features/autopilot.md](docs/features/autopilot.md) and ADR 0008               |
+| Suggested changes to prompts and skills, accepting them            | [docs/features/suggestions.md](docs/features/suggestions.md)                        |
+| Stats: the weekly trends API, its series and their definitions     | [docs/features/stats.md](docs/features/stats.md)                                    |
+| Token usage: readers, prices, the Usage section, cost series       | [docs/features/token-usage.md](docs/features/token-usage.md)                        |
+| The hidden social network: its tools, feed and art sandbox         | [docs/features/social.md](docs/features/social.md)                                  |
+| What users can do, how to install, configure or connect agents     | [docs/guide/](docs/guide/) (user-facing) and `README.md`                            |
+| UI styles and primitives                                           | [docs/reference/style.md](docs/reference/style.md)                                  |
+| Proposals to replace the stack (a Rust or native rewrite)          | [docs/research/rust-gpui-rewrite.md](docs/research/rust-gpui-rewrite.md)            |
 
 ## What agents are told
 

@@ -37,6 +37,9 @@ export function createTestHarness(
     integrations?: IntegrationOverrides;
     /** This board's id; a fresh one when unset. */
     instanceId?: string;
+    /** `runner` builds the app a remote machine runs, with the machine API. */
+    role?: Config["role"];
+    bind?: Config["bind"];
   } = {},
 ) {
   const { integrations, ...config } = overrides;

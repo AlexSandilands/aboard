@@ -5,6 +5,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { createApp } from "./app.ts";
 import type { Config } from "./config.ts";
 import { createContext } from "./context.ts";
+import { acceptsPeer } from "./http/addresses.ts";
 import { removeServerFile, writeServerFile } from "./serverFile.ts";
 
 const TRASH_PURGE_INTERVAL_MS = 60 * 60 * 1000;
@@ -33,10 +34,27 @@ export async function startServer(config: Config): Promise<RunningServer> {
     app.get("*", serveStatic({ root: runtime.webDist, path: "index.html" }));
   }
 
-  const server = await new Promise<Server>((resolve, reject) => {
-    const s = serve({ fetch: app.fetch, port: runtime.port, hostname: runtime.host }, () => resolve(s as Server));
-    s.once("error", reject);
-  }).catch((error: unknown) => {
+  const listen = (hostname: string) =>
+    new Promise<Server>((resolve, reject) => {
+      const s = serve({ fetch: app.fetch, port: runtime.port, hostname }, () => resolve(s as Server));
+      s.once("error", reject);
+      // Dropped before a byte is read: a peer from the public internet gets no answer, not even a 403.
+      if (runtime.bind === "private") {
+        s.on("connection", (socket) => {
+          if (!acceptsPeer(socket)) socket.destroy();
+        });
+      }
+    });
+  // `private` listens on every interface, IPv6 too (a tailnet name resolves to both); `runtime.host` stays the
+  // address local clients are told (server.json). A machine with IPv6 switched off gets IPv4 alone.
+  const server = await (
+    runtime.bind === "private"
+      ? listen("::").catch((error: NodeJS.ErrnoException) => {
+          if (error.code !== "EAFNOSUPPORT" && error.code !== "EADDRNOTAVAIL") throw error;
+          return listen("0.0.0.0");
+        })
+      : listen(runtime.host)
+  ).catch((error: unknown) => {
     ctx.db.close();
     throw error;
   });

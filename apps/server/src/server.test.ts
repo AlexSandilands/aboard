@@ -21,6 +21,7 @@ function testConfig(overrides: Partial<Config> = {}): Config {
     port: 0,
     webPort: 5317,
     host: "127.0.0.1",
+    bind: "loopback",
     homeDir,
     dbPath: join(homeDir, "data.sqlite"),
     token: null,
