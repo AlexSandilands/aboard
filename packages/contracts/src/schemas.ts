@@ -156,6 +156,8 @@ export const Project = z.object({
   planSkill: PlanSkillRef.nullable(),
   /** Overrides of the board's automation variables in this project (effectiveVariables). */
   variables: AutomationVariables,
+  /** Where its tasks run unless a task says otherwise: a connected machine's id; null or `here` for this machine. */
+  runOn: z.string().nullable().optional(),
   position: z.string(),
   collapsed: z.boolean(),
   archivedAt: IsoDate.nullable(),
@@ -569,6 +571,10 @@ export const TaskHold = z.object({
   since: IsoDate,
   /** Edits made on the board that the machine hasn't taken yet: they show here already, and may still be refused. */
   waiting: z.number().int().nonnegative(),
+  /** The steps those edits change, so the panel can mark them as waiting. */
+  waitingSteps: z.array(z.string()).optional(),
+  /** The activity entries those edits wrote here, which read "waiting for <machine>" until the machine answers. */
+  waitingEvents: z.array(z.number().int()).optional(),
 });
 export type TaskHold = z.infer<typeof TaskHold>;
 
@@ -579,6 +585,8 @@ export const TaskSummary = z.object({
   numberPrefix: z.string().optional(),
   /** The connected machine that holds the task and orders its changes; null for a task the board holds itself. */
   hold: TaskHold.nullable().optional(),
+  /** Where the task is to run: a connected machine's id or `here`; null follows its project's default (runOn.ts). */
+  runOn: z.string().nullable().optional(),
   projectId: z.string(),
   kind: TaskKind,
   /** The epic this task belongs to; null for loose tasks and for epics. */
@@ -775,6 +783,8 @@ export const UpdateProjectInput = z.object({
   planSkill: PlanSkillRef.nullable().optional(),
   /** Replaces the project's automation variable overrides. */
   variables: AutomationVariables.optional(),
+  /** Where the project's tasks run unless a task says otherwise: a connected machine's id; null for this machine. */
+  runOn: z.string().trim().min(1).max(200).nullable().optional(),
 });
 export type UpdateProjectInput = z.infer<typeof UpdateProjectInput>;
 

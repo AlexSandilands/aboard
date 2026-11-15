@@ -1,4 +1,5 @@
 import {
+  RUN_HERE,
   ApiErrorBody,
   CallToolParams,
   ChangesResponse,
@@ -65,6 +66,12 @@ export interface MachineSync {
    * doesn't wait for a machine it can't reach, and what that machine changed since is lost.
    */
   release(taskId: string, opts: { force?: boolean }, actor: string): Promise<TaskDetail>;
+  /**
+   * The user taking a started task back to this machine (remote-machines.md#pulling-a-task-back): refused (CONFLICT)
+   * while a run for it is going there; otherwise the task is released (by force, when asked, for a machine that
+   * can't be reached), set to run here from now on, and its branches fetched into the board's checkout.
+   */
+  pullBack(taskId: string, opts: { force?: boolean }, actor: string): Promise<TaskDetail>;
   /**
    * One round with a machine: sends the edits waiting for it, reads its log (holding the read open up to `wait`
    * ms), applies it and answers what it asked. Throws when the machine can't be reached.
@@ -147,7 +154,11 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
         // A runner that can read the request gives its verdict even on an edit it can't make sense of, with the
         // state logged. This one answered without one (a version from before edits): refused, not retried forever.
         const error = await refusal(res, "The machine");
-        services().holds.settleEdit(edit.id, { applied: false, error, head: 0 });
+        services().holds.settleEdit(edit.id, {
+          applied: false,
+          error,
+          head: 0,
+        });
       }
     }
   }
@@ -168,13 +179,25 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
     let reply: BridgeReply;
     try {
       if (request.method === "allocateNumber") {
-        reply = { id: request.id, ok: true, result: { number: services().holds.allocateNumber() } };
+        reply = {
+          id: request.id,
+          ok: true,
+          result: { number: services().holds.allocateNumber() },
+        };
       } else if (request.method === "callTool") {
         if (!callTool) throw new Error("This board can't run tools for a machine yet");
-        reply = { id: request.id, ok: true, result: await callTool(CallToolParams.parse(request.params)) };
+        reply = {
+          id: request.id,
+          ok: true,
+          result: await callTool(CallToolParams.parse(request.params)),
+        };
       } else {
         // A newer runner asking for something this board doesn't know: it falls back as if the board were away.
-        reply = { id: request.id, ok: false, error: `This board doesn't know "${request.method}"` };
+        reply = {
+          id: request.id,
+          ok: false,
+          error: `This board doesn't know "${request.method}"`,
+        };
       }
     } catch (error) {
       reply = { id: request.id, ok: false, error: messageOf(error) };
@@ -283,6 +306,39 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
     if (event.type === "machines.changed") startLoops();
   });
 
+  const release = async (taskId: string, opts: { force?: boolean }, actor: string): Promise<TaskDetail> => {
+    const hold = services().holds.get(taskId);
+    const task = services().tasks.summary(taskId);
+    if (!hold) throw new AppError("VALIDATION", `${taskLabel(task)} isn't held by a machine`);
+    const machine = services().machines.get(hold.machineId);
+    if (opts.force) {
+      services().holds.forceRelease(taskId, actor);
+      await deps.machines.request(machine.id, machineTaskPath(taskId), { method: "DELETE" }).catch(() => {});
+      return services().tasks.detail(taskId);
+    }
+    try {
+      // Edits made here go first, so they are in what the machine gives back.
+      await sendInOrder(machine.id);
+      const res = await deps.machines.request(machine.id, machineTaskPath(taskId), { method: "DELETE" });
+      if (!res.ok) throw new AppError("CONFLICT", await refusal(res, machine.name));
+      // The release is the log's last entry: every read that leaves more to read doesn't count.
+      for (let read = 0; read < RELEASE_READS && services().holds.get(taskId); read++) {
+        let result = await pump(machine.id);
+        while (result.more && !result.error) result = await pump(machine.id);
+      }
+    } catch (error) {
+      throw new AppError(
+        "CONFLICT",
+        `${taskLabel(task)} couldn't be taken back from ${machine.name}: ${messageOf(error)} ` +
+          "Taking it back by force doesn't wait for the machine, and loses what it changed since it was last reached.",
+      );
+    }
+    if (services().holds.get(taskId)) {
+      throw new AppError("CONFLICT", `${machine.name} hasn't given ${taskLabel(task)} back yet; try again`);
+    }
+    return services().tasks.detail(taskId);
+  };
+
   return {
     async handOver(taskId, machineId, actor) {
       const task = services().tasks.summary(taskId);
@@ -311,38 +367,41 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
       }
     },
 
-    async release(taskId, opts, actor) {
+    async pullBack(taskId, opts, actor) {
       const hold = services().holds.get(taskId);
       const task = services().tasks.summary(taskId);
       if (!hold) throw new AppError("VALIDATION", `${taskLabel(task)} isn't held by a machine`);
       const machine = services().machines.get(hold.machineId);
-      if (opts.force) {
-        services().holds.forceRelease(taskId, actor);
-        await deps.machines.request(machine.id, machineTaskPath(taskId), { method: "DELETE" }).catch(() => {});
-        return services().tasks.detail(taskId);
-      }
-      try {
-        // Edits made here go first, so they are in what the machine gives back.
-        await sendInOrder(machine.id);
-        const res = await deps.machines.request(machine.id, machineTaskPath(taskId), { method: "DELETE" });
-        if (!res.ok) throw new AppError("CONFLICT", await refusal(res, machine.name));
-        // The release is the log's last entry: every read that leaves more to read doesn't count.
-        for (let read = 0; read < RELEASE_READS && services().holds.get(taskId); read++) {
-          let result = await pump(machine.id);
-          while (result.more && !result.error) result = await pump(machine.id);
-        }
-      } catch (error) {
+      const going = services()
+        .autopilot.runsForTask(taskId, 20)
+        .find((run) => !run.dryRun && (run.status === "running" || run.status === "queued"));
+      if (going) {
+        const title =
+          services()
+            .autopilot.automations()
+            .find((a) => a.key === going.automation)?.title ?? "A run";
         throw new AppError(
           "CONFLICT",
-          `${taskLabel(task)} couldn't be taken back from ${machine.name}: ${messageOf(error)} ` +
-            "Taking it back by force doesn't wait for the machine, and loses what it changed since it was last reached.",
+          `${title} is running on ${machine.name} for ${taskLabel(task)}. Pull it back once that finishes.`,
         );
       }
-      if (services().holds.get(taskId)) {
-        throw new AppError("CONFLICT", `${machine.name} hasn't given ${taskLabel(task)} back yet; try again`);
+      await release(taskId, opts, actor);
+      services().tasks.setRunOn(taskId, RUN_HERE, actor, { afterStart: true });
+      // What the machine pushed, so the task's branch is here to carry on from. Not fatal: a fetch can be done later.
+      const root = services().projects.get(task.projectId).workspaceRoot;
+      if (root) {
+        const fetched = await deps.runGit(["fetch", "origin", "--prune"], root).catch((error: unknown) => ({
+          code: 1,
+          stdout: "",
+          stderr: messageOf(error),
+        }));
+        if (fetched.code !== 0)
+          log.warn(`Couldn't fetch ${root} after pulling ${taskLabel(task)} back: ${fetched.stderr}`);
       }
       return services().tasks.detail(taskId);
     },
+
+    release,
 
     pump,
 

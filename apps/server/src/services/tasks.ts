@@ -18,6 +18,8 @@ import {
   type PlanInput,
   type TaskDetail,
   type TaskSummary,
+  RUN_HERE,
+  runOnLocked,
 } from "@repo/contracts";
 import { randomUUID } from "node:crypto";
 import { nowIso } from "../db/database.ts";
@@ -26,6 +28,7 @@ import { toLink } from "../db/repos/links.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
 import { AppError, deletedError, notFound, planRequired } from "../errors.ts";
 import { positionAmong, type Core, type Effects } from "./core.ts";
+import { machineChoice } from "./projects.ts";
 import { withSuggestedModel, type PlansModule } from "./plans.ts";
 import { assembleSummaries, taskRef, type AssembledTask } from "./summaries.ts";
 import type { AttachmentsService } from "./attachments.ts";
@@ -580,6 +583,7 @@ export function createTasksService(
           integrationMergedAt: null,
           movedTo: null,
           deletedAt: null,
+          runOn: null,
         };
         repos.tasks.insert(task);
         fx.log(task.id, actor, "created", {
@@ -836,6 +840,34 @@ export function createTasksService(
         if (changed.length > 0) fx.log(id, actor, "updated", { fields: changed });
         if (changed.includes("title")) linkTitleKeys(id, next.title, actor, current.title);
         fx.task(id);
+      });
+      return service.detail(id);
+    },
+
+    setRunOn(id, runOn, actor, opts = {}) {
+      core.write((fx) => {
+        const current = record(id);
+        const label = taskLabel(current);
+        if (current.kind === "epic")
+          throw new AppError("VALIDATION", `${label} is an epic; its tasks each run somewhere`);
+        if (current.manual) throw new AppError("VALIDATION", `${label} is a manual task; nothing runs it`);
+        if (current.archivedAt) throw new AppError("VALIDATION", `${label} is archived`);
+        const hold = repos.holds.get(id);
+        // A task pulled back from its machine stays here (`afterStart`); otherwise a started task keeps its place.
+        if (hold || (!opts.afterStart && runOnLocked({ status: current.status, hold }))) {
+          const where = hold ? (repos.machines.get(hold.machineId)?.name ?? "a machine") : "this machine";
+          throw new AppError(
+            "CONFLICT",
+            `${label} has started on ${where}, and stays there` +
+              (hold ? `: pull it back to change where it runs` : `; move it back to Planned to choose again`),
+          );
+        }
+        const next = runOn === null || runOn === RUN_HERE ? runOn : machineChoice(repos, runOn);
+        if (next === current.runOn) return;
+        repos.tasks.update({ ...current, runOn: next, updatedAt: nowIso() });
+        fx.log(id, actor, "run_on", {
+          machine: next === null ? null : next === RUN_HERE ? RUN_HERE : repos.machines.get(next)!.name,
+        });
       });
       return service.detail(id);
     },

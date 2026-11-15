@@ -23,6 +23,9 @@ import type { FindingRecord, ReviewRecord } from "../db/repos/reviews.ts";
 import type { TaskRecord } from "../db/repos/tasks.ts";
 import { loadSettings } from "./settings.ts";
 
+/** Held edits whose first argument is the step they change. */
+const STEP_EDITS: ReadonlySet<string> = new Set(["plans.updateStep", "plans.moveStep"]);
+
 export interface AssembledTask {
   record: TaskRecord;
   summary: TaskSummary;
@@ -129,11 +132,19 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
   const holdOf = (taskId: string): TaskHold | null => {
     const hold = holds.get(taskId);
     if (!hold) return null;
+    const count = waiting.get(taskId) ?? 0;
+    // What the waiting edits touched, so the panel can mark them; the steps an edit names come first in its arguments.
+    const open = count > 0 ? repos.holds.editsForTask(taskId).filter((edit) => edit.settledHead === null) : [];
+    const steps = open.flatMap((edit) =>
+      STEP_EDITS.has(edit.op) && typeof edit.args[0] === "string" ? [edit.args[0]] : [],
+    );
     return {
       machineId: hold.machineId,
       machineName: machines.get(hold.machineId)?.name ?? "a machine",
       since: hold.heldAt,
-      waiting: waiting.get(taskId) ?? 0,
+      waiting: count,
+      waitingSteps: [...new Set(steps)],
+      waitingEvents: open.flatMap((edit) => edit.eventIds),
     };
   };
 
@@ -167,6 +178,7 @@ export function assembleSummaries(repos: Repos, records: readonly TaskRecord[]):
       number: record.number,
       numberPrefix: record.numberPrefix,
       hold: holdOf(record.id),
+      runOn: record.runOn,
       projectId: record.projectId,
       kind: record.kind,
       parent: taskRef(record.parentId ? referenced.get(record.parentId) : undefined),

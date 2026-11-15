@@ -303,5 +303,6 @@ export function blankTask(
     integrationMergedAt: null,
     movedTo: null,
     deletedAt: null,
+    runOn: null,
   };
 }
