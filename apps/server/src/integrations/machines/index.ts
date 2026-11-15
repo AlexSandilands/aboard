@@ -472,6 +472,8 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
       else deps.secrets.remove(machine.instanceId);
       entry?.link.close();
       live.delete(id);
+      // Its tasks come back to the board as the board last saw them: nothing will ever read its log again.
+      for (const hold of deps.services().holds.forMachine(id)) deps.services().holds.forceRelease(hold.taskId, "user");
       machines().remove(id);
       changed();
     },

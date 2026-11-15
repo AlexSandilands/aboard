@@ -111,6 +111,9 @@ export function createTransferService(
            UNION
            SELECT task_id AS id FROM task_links
              WHERE kind = 'agent_session' AND json_extract(snapshot_json, '$.status') IN ('busy', 'idle', 'running')
+           UNION
+           -- Held by a connected machine: it orders the task's changes, so another board can't take it over.
+           SELECT task_id AS id FROM task_holds
            ORDER BY id`,
         )
         .all() as Array<{ id: string }>
@@ -305,7 +308,7 @@ export function createTransferService(
         if (options.mode === "move" && busy.has(taskId)) {
           throw new AppError(
             "CONFLICT",
-            `An agent session or Autopilot run was going on it at ${machine}'s last backup; copy it, or move it once that's done`,
+            `An agent session or Autopilot run was going on it, or a machine held it, at ${machine}'s last backup; copy it, or move it once that's done`,
           );
         }
         const sourceProject = String(bundle.task.project_id);
@@ -380,6 +383,12 @@ export function createTransferService(
       const twice = task.movedTo !== null;
       const changed = !twice && task.updatedAt > transfer.sourceUpdatedAt;
       const busy = busyTaskIds().includes(task.id);
+      // Moved away while a machine here held it (handed over after the backup the other board read): the hold ends,
+      // and what the machine changes from now on is not this board's.
+      if (repos.holds.delete(task.id)) {
+        for (const edit of repos.holds.editsForTask(task.id)) repos.holds.deleteEdit(edit.id);
+        fx.log(task.id, actor, "released", { moved: true });
+      }
       // Its open tasks stay here, loose: an archived epic would hide them while they still claim it.
       if (task.kind === "epic") {
         for (const child of repos.tasks.childrenOf([task.id]).filter((c) => c.archivedAt === null)) {

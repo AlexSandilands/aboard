@@ -21,7 +21,7 @@ export const taskLabel = (task: NumberedTask): string => `#${taskNumberText(task
 export const taskNumberValue = (task: NumberedTask): number | string =>
   task.numberPrefix ? taskNumberText(task) : task.number;
 
-const NUMBER_REF = /^#?([A-Za-z][A-Za-z0-9]{0,2})?(\d+)$/;
+const MACHINE_PREFIX = /^[A-Z][A-Z0-9]{0,2}$/;
 
 /**
  * The numbers a reference may mean: `#42` and `42` are one; `#E7` and `e7` are one. A prefix may hold digits, so
@@ -29,17 +29,16 @@ const NUMBER_REF = /^#?([A-Za-z][A-Za-z0-9]{0,2})?(\d+)$/;
  * task. Empty for anything else (a uuid).
  */
 export function parseTaskNumberRef(ref: string): Array<{ prefix: string; number: number }> {
-  const match = NUMBER_REF.exec(ref.trim());
-  if (!match) return [];
-  const prefix = (match[1] ?? "").toUpperCase();
-  const digits = match[2]!;
-  const candidates = [{ prefix, number: Number(digits) }];
-  if (prefix === "") return candidates;
-  // Digits that may belong to the prefix: at most what brings it to three characters, leaving one for the number.
-  for (let take = 1; take < digits.length && prefix.length + take <= 3; take++) {
-    candidates.push({ prefix: prefix + digits.slice(0, take), number: Number(digits.slice(take)) });
+  const text = ref.trim().replace(/^#/, "").toUpperCase();
+  const candidates: Array<{ prefix: string; number: number }> = [];
+  for (let split = 0; split <= 3 && split < text.length; split++) {
+    const prefix = text.slice(0, split);
+    const digits = text.slice(split);
+    if ((split > 0 && !MACHINE_PREFIX.test(prefix)) || !/^\d+$/.test(digits)) continue;
+    const number = Number(digits);
+    if (Number.isSafeInteger(number)) candidates.push({ prefix, number });
   }
-  return candidates.filter((c) => Number.isSafeInteger(c.number));
+  return candidates;
 }
 
 /** Orders tasks by number: the board's own first, then each prefix's. */

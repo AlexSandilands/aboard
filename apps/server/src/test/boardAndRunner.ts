@@ -21,7 +21,12 @@ export interface PairOptions {
  */
 export async function createBoardAndRunner(options: PairOptions = {}) {
   const clock = { now: new Date("2026-01-05T10:00:00.000Z") };
-  const net = { up: true, sent: [] as Array<{ path: string; method: string }> };
+  const net = {
+    up: true,
+    /** How many of the runner's next answers are lost on the way back, after the runner has acted on the request. */
+    loseAnswers: 0,
+    sent: [] as Array<{ path: string; method: string }>,
+  };
   const cloned: Array<{ url: string; dir: string }> = [];
   const runner = createTestHarness({
     role: "runner",
@@ -52,6 +57,10 @@ export async function createBoardAndRunner(options: PairOptions = {}) {
     });
     // The link went down while the runner was answering: the answer is lost.
     if (!net.up) throw new TypeError("fetch failed");
+    if (net.loseAnswers > 0 && url.pathname !== "/machine/descriptor") {
+      net.loseAnswers -= 1;
+      throw new TypeError("fetch failed");
+    }
     return res;
   }) as typeof fetch;
 

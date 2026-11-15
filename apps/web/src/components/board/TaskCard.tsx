@@ -14,6 +14,7 @@ import { importPendingLabel } from "~/components/task/import.logic";
 import { dueDateLabel, dueStateClassName, dueStateOf, dueStateText } from "~/components/task/dueDate.logic";
 import { resolutionLabel } from "~/components/task/resolution.logic";
 import { OnEpicBranchChip } from "~/components/task/EpicDelivery";
+import { HoldBadge } from "~/components/task/HoldBadge";
 import { Spinner } from "~/components/ui/spinner";
 import { formatElapsedDurationLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
@@ -103,6 +104,7 @@ export const TaskCardContent = memo(function TaskCardContent({
             Manual
           </Badge>
         ) : null}
+        <HoldBadge task={task} />
         <ResolutionChip task={task} />
         <OnEpicBranchChip task={task} />
         {task.review && !task.resolution ? <ReviewBadge summary={task.review} /> : null}
@@ -182,6 +184,7 @@ function CompactCardLine({
         </span>
       ) : null}
       <span className="min-w-0 flex-1 truncate font-medium text-foreground/90">{task.title}</span>
+      <HoldBadge task={task} />
       <AutopilotBadge taskId={task.id} />
       {pr ? <PrStatusChip link={pr} /> : null}
       {blocked ? (

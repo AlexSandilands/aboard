@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createBoardAndRunner } from "../../test/boardAndRunner.ts";
+import { createTestHarness } from "../../test/harness.ts";
 
 const stops: Array<() => void> = [];
 afterEach(() => {
@@ -119,5 +120,44 @@ describe("handing a task to a machine", () => {
     await expect(handOver(manual.id)).rejects.toThrow(/manual task/);
     await handOver(task.id);
     await expect(handOver(task.id)).rejects.toThrow(/already held by engine/);
+  });
+});
+
+describe("a held task and backups", () => {
+  it("leaves who holds it out of the backup, so a restore brings back a task the board holds itself", async () => {
+    const { board, machine, task } = await setup();
+    await board.integrations.machineSync.handOver(task.id, machine.id, "user");
+    board.services.tasks.addNote(task.id, "Waiting for the machine", "user");
+
+    const dump = board.services.backup.dump();
+    const text = JSON.stringify(dump);
+    expect(text).not.toContain(machine.id);
+    expect(text).not.toContain("task_holds");
+    expect(text).not.toContain("held_edits");
+    expect(dump.tasks.find((b) => b.task.id === task.id)?.task).not.toHaveProperty("hold");
+  });
+
+  it("can't be moved to another board while a machine holds it", async () => {
+    const { board, machine, project, task } = await setup();
+    await board.integrations.machineSync.handOver(task.id, machine.id, "user");
+    expect(board.services.backup.busyTaskIds()).toContain(task.id);
+
+    const other = createTestHarness();
+    const there = other.services.projects.create({ title: "App" });
+    const [moved] = other.services.backup.importTasks(board.services.backup.dump(), [task.id], {
+      mode: "move",
+      projectMap: { [project.id]: there.id },
+      source: { folder: "desk", instanceId: board.instanceId },
+      machineName: "laptop",
+      info: { remotes: {}, busyTaskIds: board.services.backup.busyTaskIds() },
+      remotes: new Map(),
+      attachmentsFrom: null,
+      actor: "user",
+    });
+    expect(moved).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/or a machine held it, at desk's last backup/),
+    });
+    expect(() => other.services.tasks.detail(task.id)).toThrow(/not found/i);
   });
 });
