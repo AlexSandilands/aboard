@@ -646,9 +646,10 @@ twice starts one job. Jobs are in memory:
 
 - A runner that restarted answers `unknown`, and the board fails the run with "<machine> restarted while this was
   going". That is today's behaviour for a board's own restart; there is still no cancel.
-- A machine the board can't reach is asked again (2 seconds, doubling to 30) until the run's own timeout plus 15
-  minutes has passed. The job goes on there meanwhile, and what the agent does to the task arrives through the log
-  either way.
+- A machine the board can't reach is asked again (2 seconds, doubling to 30) until it has been silent for 15
+  minutes (5 for a command or a script), counted from its last answer and not from when the job began: a link that
+  drops late in a long run costs nothing. The job goes on there meanwhile, and what the agent does to the task
+  arrives through the log either way. The run's own timeout is kept on the machine, which stops the agent.
 - A board that restarts mid-run fails its run as it does a local one, and flags it: the job on the machine finishes
   unobserved. A Review PRs or Fix PRs run, which a board otherwise redoes after a restart, is not redone for a held
   task, since a second agent would work on the same branch beside the first.

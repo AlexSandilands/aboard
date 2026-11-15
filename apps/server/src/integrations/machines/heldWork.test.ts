@@ -407,9 +407,37 @@ describe("a job the board reads on a machine", () => {
     await expect(remote.script(script(task.id))).rejects.toThrow(
       "engine couldn't be reached, so what became of this is unknown: fetch failed",
     );
-    // Backing off to half a minute, for the script's second plus the five minutes of grace.
+    // Backing off to half a minute, for the five minutes of grace.
     expect(Math.max(...waits)).toBe(30_000);
-    expect(waits.reduce((sum, ms) => sum + ms, 0)).toBeLessThanOrEqual(301_000);
+    expect(waits.reduce((sum, ms) => sum + ms, 0)).toBeLessThanOrEqual(300_000);
+  });
+
+  it("counts the silence from the machine's last answer, however long the job has been going", async () => {
+    const { remote, link, waits, clock, task } = await work({
+      runner: {
+        runScript: () =>
+          Promise.resolve({
+            exitCode: 0,
+            output: "late\n",
+            stdout: "late\n",
+            stderr: "",
+            timedOut: false,
+            stdoutTruncated: false,
+          }),
+      },
+    });
+    let reads = 0;
+    link.respond = (path, init) => {
+      if (init?.method || !path.startsWith("/machine/jobs/")) return null;
+      reads += 1;
+      if (reads > 1) return null;
+      // The job has been going for two hours, far past its own second and the grace, when the link drops.
+      clock.now += 2 * 60 * 60_000;
+      link.down = 3;
+      return answer({ id: "x", state: "running", updates: [] });
+    };
+    expect(await remote.script(script(task.id))).toMatchObject({ exitCode: 0, output: "late\n" });
+    expect(waits).toEqual([2_000, 4_000, 8_000]);
   });
 
   it("fails a job the machine no longer knows: it restarted", async () => {

@@ -35,7 +35,10 @@ const JOB_WAIT_MS = 8_000;
 const JOB_MARGIN_MS = 10_000;
 const RETRY_MIN_MS = 2_000;
 const RETRY_MAX_MS = 30_000;
-/** On top of a run's own timeout: how long the board keeps asking a machine it can't reach before it fails the run. */
+/**
+ * How long the board keeps asking a machine that stopped answering before it fails the run, counted from the
+ * machine's last answer. The run's own timeout is the machine's to keep: it stops the agent there.
+ */
 const RUN_GRACE_MS = 15 * 60_000;
 const COMMAND_GRACE_MS = 5 * 60_000;
 
@@ -112,20 +115,21 @@ export function createRemoteWork(deps: {
   };
 
   /**
-   * Starts a job on a machine and reads it to its end. A machine that can't be reached is asked again until
-   * `budgetMs` has passed: the job goes on there meanwhile. One that restarted has forgotten the job, which fails.
+   * Starts a job on a machine and reads it to its end. A machine that can't be reached is asked again until it has
+   * been silent for `graceMs`: the job goes on there meanwhile, however long it has been going, so a link that drops
+   * late in a long run costs nothing. One that restarted has forgotten the job, which fails.
    */
   async function runJob(
     machine: { id: string; name: string },
     job: MachineJobRequest,
-    budgetMs: number,
+    graceMs: number,
     onUpdate: (patch: Record<string, unknown>) => void = () => {},
   ): Promise<unknown> {
     // Said before anything is sent: a runner from before work on a machine would only answer 404.
     if (deps.machines.can(machine.id, "runs") === false) {
       throw new Error(`${machine.name} runs a version that can't run things for a task; update it first`);
     }
-    const deadline = now() + budgetMs;
+    let lastAnswer = now();
     let delay = RETRY_MIN_MS;
     /** One request, tried again while the machine can't be reached. An answer that isn't a job's state throws. */
     const ask = async (path: string, init: RequestInit | undefined, timeoutMs: number): Promise<MachineJobState> => {
@@ -134,7 +138,7 @@ export function createRemoteWork(deps: {
         try {
           res = await deps.machines.request(machine.id, path, init, { timeoutMs });
         } catch (error) {
-          if (now() + delay > deadline) {
+          if (now() + delay - lastAnswer > graceMs) {
             throw new Error(
               `${machine.name} couldn't be reached, so what became of this is unknown: ${messageOf(error)}`,
               { cause: error },
@@ -145,6 +149,7 @@ export function createRemoteWork(deps: {
           continue;
         }
         delay = RETRY_MIN_MS;
+        lastAnswer = now();
         if (!res.ok) throw new Error(await refusal(res, machine.name, "run things for a task"));
         return MachineJobState.parse(await res.json());
       }
@@ -281,7 +286,7 @@ export function createRemoteWork(deps: {
         // The board's own defaults resolved here: the machine has none of the board's Autopilot settings.
         params: { request: { ...sent, options: { ...request.options, ...options, runner: "headless" } } },
       },
-      options.timeoutMinutes * 60_000 + RUN_GRACE_MS,
+      RUN_GRACE_MS,
       (patch) => update(withNotes(patch)),
     )) as Awaited<ReturnType<Runner["start"]>>;
     return withNotes(result) as typeof result;
@@ -295,7 +300,7 @@ export function createRemoteWork(deps: {
     return runJob(
       machine,
       { id: jobId(kind), kind, taskId, params: { request: rest } },
-      request.timeoutMs + COMMAND_GRACE_MS,
+      COMMAND_GRACE_MS,
     ) as Promise<T>;
   };
 
