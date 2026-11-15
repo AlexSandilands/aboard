@@ -14,7 +14,8 @@ replays, the board's own edits to a held task, and the numbers a machine gives t
 Not built yet: choosing a machine for a task in the UI (a hand-over is an API call, `POST /api/tasks/:id/hold`),
 and running anything on the machine (headless runs, review rounds, scripts). Review rounds and pasted images of a
 held task are not part of its working copy: a round opened on the machine stays there, and an image attached there
-isn't sent to the board. Those are the later tasks of epic #178. What a user does is in the
+isn't sent to the board. Nor are notifications: what an agent on a machine does to a held task changes the card
+(its request for attention shows as a flag) but raises no inbox entry or pop-up on the board. Those are the later tasks of epic #178. What a user does is in the
 [guide](../guide/remote-machines.md).
 
 ## How it works
