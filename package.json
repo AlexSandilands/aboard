@@ -21,6 +21,7 @@
     "backup": "pnpm --filter @repo/server backup",
     "desktop:build": "pnpm build && pnpm --filter @repo/server bundle && pnpm --filter @repo/desktop build",
     "desktop:package": "pnpm desktop:build && pnpm --filter @repo/desktop package",
+    "server:package": "pnpm --filter @repo/server bundle --tarballs",
     "test": "pnpm -r --no-bail --workspace-concurrency=1 test && vitest run --dir scripts",
     "typecheck": "pnpm -r typecheck && tsc -p scripts",
     "lint": "oxlint --deny-warnings",

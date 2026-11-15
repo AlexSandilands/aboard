@@ -55,6 +55,8 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 | `brandEnv("TOKEN")`       | none                        | Optional bearer token for `/api/*`, `/mcp` and `/events`           |
 | `brandEnv("WEB_DIST")`    | `apps/web/dist`             | Built web app to serve                                             |
 | `brandEnv("POLLERS")`     | on                          | `0` turns off the background pollers               |
+| `brandEnv("ROLE")`        | `board`                     | `runner` (or the `--runner` argument) starts the headless runner, which serves no web app (features/remote-machines.md) |
+| `brandEnv("LAUNCHER")`    | none                        | Set by the headless release's launcher to its own path, for `service install` (features/remote-machines.md) |
 | `brandEnv("DEMO")`        | off                         | `1` registers `/api/demo` (`http/routes/demo.ts`), which sets PR checks and pretend Autopilot runs for recording the README demo. Only the isolated sandbox sets it |
 | `brandEnv("DEV_URL")`     | none                        | Desktop only: load this URL (Vite) and attach instead of spawning  |
 | `brandEnv("USER_HOME")`   | the OS home folder          | Where global skills are read and installed (`.claude/skills`, …). The sandbox points it at its own folder, and then the board skills ignore `CLAUDE_CONFIG_DIR`, `COPILOT_HOME` and `CODEX_HOME` |

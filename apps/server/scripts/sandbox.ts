@@ -4,6 +4,7 @@
  *
  *   pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|autopilot|crowded|branches|none]   isolated: own server, temp data dir, seeded (default)
  *   pnpm sandbox --desktop                            also opens the Electron shell on the sandbox (isolated only)
+ *   pnpm sandbox --runner                             also runs a second server in the runner role, as a remote machine would
  *   pnpm sandbox --prod                               serves a production build instead of Vite's dev server (no hot reload)
  *   pnpm sandbox --live                               Vite only, on the real server's data (writes are rejected)
  *   pnpm sandbox status                               prints the running sandbox's ready line
@@ -18,7 +19,15 @@ import { connect, createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BRAND, DEFAULT_SERVER_PORT, DEFAULT_WEB_PORT, brandEnv, desktopSandboxEnv } from "@repo/contracts";
+import {
+  BRAND,
+  DEFAULT_SERVER_PORT,
+  DEFAULT_WEB_PORT,
+  Health,
+  brandEnv,
+  desktopSandboxEnv,
+  type ServerRole,
+} from "@repo/contracts";
 
 const READY_PREFIX = "SANDBOX_READY";
 const isWindows = process.platform === "win32";
@@ -47,6 +56,8 @@ interface SandboxState {
   prod?: boolean;
   /** The Electron shell `--desktop` opened on this sandbox; stopping the sandbox closes it. */
   desktop?: { pid: number; startedAt: number };
+  /** The second server `--runner` started in the runner role, with a data dir of its own. */
+  runner?: { url: string; port: number; home: string };
 }
 
 function fail(message: string): never {
@@ -192,6 +203,7 @@ async function cleanUp(state: SandboxState): Promise<void> {
   for (const pid of pids) killTree(pid);
   await waitForExit(pids);
   const ports = state.mode === "live" ? [state.webPort] : [state.serverPort, state.webPort];
+  if (state.runner) ports.push(state.runner.port);
   const busy = await waitForPortsClosed(ports);
   if (busy.length > 0) {
     // Something else holds them now; this sandbox didn't start it, so leave it alone.
@@ -265,7 +277,11 @@ async function waitFor(url: string, check: (res: Response) => Promise<boolean>, 
   throw new Error(`${what} did not answer at ${url}`);
 }
 
-const isOurHealth = async (res: Response) => res.ok && ((await res.json()) as { id?: string }).id === BRAND.id;
+const isOurs = (role: ServerRole) => async (res: Response) => {
+  const health = Health.safeParse(res.ok ? await res.json() : null);
+  return health.success && health.data.id === BRAND.id && health.data.role === role;
+};
+const isOurHealth = isOurs("board");
 
 function run(name: string, args: string[], cwd: string, env: NodeJS.ProcessEnv): ChildProcess {
   const child = spawn(process.execPath, args, {
@@ -329,25 +345,29 @@ function parseArgs(argv: string[], isScenarioName: (name: string) => boolean) {
   const live = argv.includes("--live");
   const desktop = argv.includes("--desktop");
   const prod = argv.includes("--prod");
+  const runner = argv.includes("--runner");
   const seedIndex = argv.indexOf("--seed");
   const seed = seedIndex >= 0 ? argv[seedIndex + 1] : "basic";
   const unknown = argv.find(
-    (arg, i) => !["--live", "--desktop", "--prod", "--seed"].includes(arg) && !(seedIndex >= 0 && i === seedIndex + 1),
+    (arg, i) =>
+      !["--live", "--desktop", "--prod", "--runner", "--seed"].includes(arg) &&
+      !(seedIndex >= 0 && i === seedIndex + 1),
   );
   if (unknown !== undefined) {
-    fail(`unknown argument "${unknown}" (stop, status, or flags: --seed <name>, --live, --desktop, --prod)`);
+    fail(`unknown argument "${unknown}" (stop, status, or flags: --seed <name>, --live, --desktop, --prod, --runner)`);
   }
   if (live && desktop) fail("--desktop has no effect with --live: the shell must never attach to the real board");
+  if (live && runner) fail("--runner needs the isolated sandbox: a runner beside the real board would share nothing");
   if (!seed || (seed !== "none" && !isScenarioName(seed)))
     fail(`unknown seed "${seed}" (basic, review, threads, showcase, social, stats, dense, autopilot, crowded, none)`);
   if (live && seedIndex >= 0) fail("--seed has no effect with --live, which shows the real board");
-  return { live, seed, desktop, prod };
+  return { live, seed, desktop, prod, runner };
 }
 
 async function start(argv: string[]): Promise<void> {
   // Loaded here so `status` and `stop` don't open SQLite (and print its experimental warning).
   const { isScenarioName, seedDatabase } = await import("../src/dev/seeds.ts");
-  const { live, seed, desktop, prod } = parseArgs(argv, isScenarioName);
+  const { live, seed, desktop, prod, runner } = parseArgs(argv, isScenarioName);
   const existing = readState();
   if (existing && ownedPids(existing).includes(existing.pid)) {
     // Same checkout: hand back the running one instead of a port clash. A dev sandbox hot-reloads its edits; a
@@ -358,9 +378,11 @@ async function start(argv: string[]): Promise<void> {
           `run \`pnpm sandbox stop\` first for a ${prod ? "production" : "dev"} one`,
       );
     }
+    if (runner && !existing.runner)
+      fail("the running sandbox has no runner; run `pnpm sandbox stop` first, then --runner");
     console.log(
       `[sandbox] already running (${existing.mode}${existing.prod ? ", production build" : ""}` +
-        `${existing.seed ? `, seed ${existing.seed}` : ""}); run \`pnpm sandbox stop\` first for a fresh one`,
+        `${existing.seed ? `, seed ${existing.seed}` : ""}${existing.runner ? ", with a runner" : ""}); run \`pnpm sandbox stop\` first for a fresh one`,
     );
     console.log(`${READY_PREFIX} ${JSON.stringify(existing)}`);
     if (desktop) await openDesktop(existing).catch((error: Error) => fail(error.message));
@@ -374,6 +396,7 @@ async function start(argv: string[]): Promise<void> {
   const realServerPort = Number(process.env[brandEnv("PORT")] ?? DEFAULT_SERVER_PORT);
   const serverPort = live ? realServerPort : await freePort([]);
   const webPort = await freePort([serverPort]);
+  const runnerPort = runner ? await freePort([serverPort, webPort]) : null;
   const serverUrl = `http://127.0.0.1:${serverPort}`;
   const url = `http://127.0.0.1:${webPort}/`;
 
@@ -470,6 +493,27 @@ async function start(argv: string[]): Promise<void> {
       // Absolute paths put this checkout in each child's command line, which `ownedPids` checks.
       run("server", [tsxBin, "watch", "--clear-screen=false", join(serverDir, "src", "main.ts")], serverDir, env),
     );
+    if (runnerPort !== null) {
+      // The machine a task would run on: the same server in the runner role, sharing nothing with the board above.
+      const runnerHome = join(home, "runner");
+      const runnerEnv: NodeJS.ProcessEnv = {
+        ...env,
+        [brandEnv("PORT")]: String(runnerPort),
+        [brandEnv("HOME")]: join(runnerHome, "data"),
+        [brandEnv("USER_HOME")]: join(runnerHome, "user"),
+        [brandEnv("ROLE")]: "runner",
+      };
+      delete runnerEnv[brandEnv("DEMO")];
+      delete runnerEnv[brandEnv("WEB_DIST")];
+      children.push(
+        run(
+          "runner",
+          [tsxBin, "watch", "--clear-screen=false", join(serverDir, "src", "main.ts"), "--runner"],
+          serverDir,
+          runnerEnv,
+        ),
+      );
+    }
   }
 
   if (prod) {
@@ -494,6 +538,9 @@ async function start(argv: string[]): Promise<void> {
     startedAt: Date.now(),
     seed: live ? null : seed,
     ...(prod ? { prod } : {}),
+    ...(runnerPort !== null
+      ? { runner: { url: `http://127.0.0.1:${runnerPort}`, port: runnerPort, home: join(home, "runner") } }
+      : {}),
     url,
     serverPort,
     webPort,
@@ -503,6 +550,7 @@ async function start(argv: string[]): Promise<void> {
 
   try {
     if (!live) await waitFor(`${serverUrl}/api/health`, isOurHealth, "the sandbox server");
+    if (state.runner) await waitFor(`${state.runner.url}/api/health`, isOurs("runner"), "the sandbox runner");
     await waitFor(url, async (res) => res.ok, "Vite");
     // Through Vite's proxy too, so the ready line means the board can actually load its data.
     await waitFor(`http://127.0.0.1:${webPort}/api/health`, isOurHealth, "Vite's proxy");
@@ -513,6 +561,7 @@ async function start(argv: string[]): Promise<void> {
   }
   console.log(`${READY_PREFIX} ${JSON.stringify(state)}`);
   console.log(`[sandbox] open ${url}  ·  stop with \`pnpm sandbox stop\` (or Ctrl+C)`);
+  if (state.runner) console.log(`[sandbox] runner at ${state.runner.url} (data in ${state.runner.home})`);
   // The board itself is fine without the shell, so a failed launch is reported but doesn't stop it.
   if (desktop) await openDesktop(state).catch((error: Error) => console.error(`[sandbox] ${error.message}`));
 }
@@ -526,4 +575,4 @@ else if (command === "status") {
   else console.log("[sandbox] no sandbox running");
 } else if (command === undefined || command.startsWith("--"))
   await start(command === undefined ? [] : [command, ...rest]);
-else fail(`unknown command "${command}" (stop, status, or flags: --seed <name>, --live, --desktop, --prod)`);
+else fail(`unknown command "${command}" (stop, status, or flags: --seed <name>, --live, --desktop, --prod, --runner)`);

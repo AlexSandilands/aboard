@@ -9,20 +9,45 @@ interface ParentPort {
 }
 const parentPort = (process as { parentPort?: ParentPort }).parentPort;
 
-const config = loadConfig();
-const server = await startServer(config);
-console.log(`[${BRAND.id}] listening on ${server.url}  (data: ${config.homeDir})`);
-console.log(`[${BRAND.id}] MCP endpoint: ${server.url}/mcp`);
+const USAGE = `Usage:
+  ${BRAND.id}-server [--runner]           start the server (--runner: the headless runner role, no web app)
+  ${BRAND.id}-server service install       run the runner as a background service that survives logout
+  ${BRAND.id}-server service uninstall     stop and remove that service
+  ${BRAND.id}-server service status        whether the service is installed, running and answering
+  ${BRAND.id}-server --version`;
 
-async function shutdown() {
-  await server.close();
-  process.exit(0);
+async function start(args: string[]): Promise<void> {
+  const config = loadConfig(process.env, args);
+  const server = await startServer(config);
+  const role = config.role === "runner" ? " as a runner" : "";
+  console.log(`[${BRAND.id}] listening on ${server.url}${role}  (data: ${config.homeDir})`);
+  console.log(`[${BRAND.id}] MCP endpoint: ${server.url}/mcp`);
+
+  async function shutdown() {
+    await server.close();
+    process.exit(0);
+  }
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
+  parentPort?.on("message", ({ data }) => {
+    if (data === "shutdown") void shutdown();
+  });
+  // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Electron MessagePortMain, not window.postMessage
+  parentPort?.postMessage({ type: "ready", url: server.url });
 }
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
 
-parentPort?.on("message", ({ data }) => {
-  if (data === "shutdown") void shutdown();
-});
-// oxlint-disable-next-line unicorn/require-post-message-target-origin -- Electron MessagePortMain, not window.postMessage
-parentPort?.postMessage({ type: "ready", url: server.url });
+const args = process.argv.slice(2);
+if (args[0] === "service") {
+  const { runServiceCommand } = await import("./service/cli.ts");
+  process.exitCode = await runServiceCommand(args.slice(1));
+} else if (args.includes("--version")) {
+  console.log(BRAND.version);
+} else if (args.includes("--help") || args.includes("-h")) {
+  console.log(USAGE);
+} else if (args.every((arg) => arg === "--runner")) {
+  await start(args);
+} else {
+  console.error(`Unknown arguments: ${args.join(" ")}\n\n${USAGE}`);
+  process.exitCode = 2;
+}

@@ -7,7 +7,7 @@ describe("app", () => {
     const h = createTestHarness();
     const res = await h.request("/api/health");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, id: BRAND.id, version: BRAND.version });
+    expect(await res.json()).toEqual({ ok: true, id: BRAND.id, version: BRAND.version, role: "board" });
     const tables = h.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>;
     expect(tables.map((t) => t.name)).toEqual(
       expect.arrayContaining(["projects", "tasks", "plan_steps", "task_links"]),

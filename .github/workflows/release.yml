@@ -1,7 +1,8 @@
 name: Release
 
 # Publishing a release on GitHub starts this: give it a new semver tag (v1.4.2) and let GitHub
-# generate the notes. It builds the Windows installer and the Linux packages, attaches them to the release, then
+# generate the notes. It builds the Windows installer, the Linux packages and the headless server's tarballs (for
+# remote machines, docs/features/remote-machines.md), attaches them to the release, then
 # updates the pacman repo (the `pacman` release) and the AUR package. To rebuild a release's files, run it by hand
 # with the release's tag.
 # How it fits together: docs/features/releases.md.
@@ -75,6 +76,30 @@ jobs:
           # The feed last: an installed app that reads it must find the files it names already there.
           gh release upload "$TAG" ${{ matrix.feed }} --clobber
 
+  # The headless server for remote machines: a tarball per platform with its own Node runtime. The bundle is plain
+  # JavaScript, so one Linux runner builds them all; only the Node binary inside differs.
+  server:
+    if: github.event.release.tag_name != 'pacman'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Stamp the version
+        run: node scripts/release-version.ts "$TAG"
+      - run: pnpm server:package
+      - name: Attach to the release
+        working-directory: apps/server/release
+        run: |
+          cat SHA256SUMS-server.txt
+          gh release upload "$TAG" ./*.tar.gz SHA256SUMS-server.txt --clobber
+
   pacman:
     needs: package
     runs-on: ubuntu-latest
@@ -109,8 +134,10 @@ jobs:
         run: |
           version=$(node scripts/release-version.ts "$TAG")
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          gh release download "$TAG" --pattern '*-linux-x64.tar.gz' --dir "$RUNNER_TEMP"
-          .github/scripts/pacman-repo.sh "$version" "$RUNNER_TEMP"/*-linux-x64.tar.gz "$RUNNER_TEMP/pacman"
+          # By its full name: the headless server's tarball (<id>-server-<version>-linux-x64) ends the same way.
+          tarball="$(node -p 'require("./package.json").name')-$version-linux-x64.tar.gz"
+          gh release download "$TAG" --pattern "$tarball" --dir "$RUNNER_TEMP"
+          .github/scripts/pacman-repo.sh "$version" "$RUNNER_TEMP/$tarball" "$RUNNER_TEMP/pacman"
       - name: Publish to the pacman release
         if: steps.key.outputs.skip != 'true'
         run: |
@@ -170,8 +197,10 @@ jobs:
           pkgname=$(node -p 'require("./package.json").name')-bin
           author=$(node -p 'require("./package.json").author')
 
-          gh release download "$TAG" --pattern '*-linux-x64.tar.gz' --dir "$RUNNER_TEMP"
-          sha256=$(sha256sum "$RUNNER_TEMP"/*-linux-x64.tar.gz | cut -d' ' -f1)
+          # By its full name: the headless server's tarball (<id>-server-<version>-linux-x64) ends the same way.
+          tarball="$(node -p 'require("./package.json").name')-$version-linux-x64.tar.gz"
+          gh release download "$TAG" --pattern "$tarball" --dir "$RUNNER_TEMP"
+          sha256=$(sha256sum "$RUNNER_TEMP/$tarball" | cut -d' ' -f1)
 
           # The AUR's host key, pinned: it matches the fingerprint published on https://aur.archlinux.org.
           mkdir -p ~/.ssh
