@@ -44,6 +44,8 @@ interface RunRow {
   started_at: string | null;
   finished_at: string | null;
   updated_at: string;
+  machine_id: string | null;
+  machine_name: string | null;
 }
 
 const toRun = (r: RunRow): AutopilotRun => ({
@@ -72,6 +74,7 @@ const toRun = (r: RunRow): AutopilotRun => ({
   startedAt: r.started_at,
   finishedAt: r.finished_at,
   updatedAt: r.updated_at,
+  machine: r.machine_id ? { id: r.machine_id, name: r.machine_name ?? "" } : null,
 });
 
 const toRow = (r: AutopilotRun) => ({
@@ -100,6 +103,8 @@ const toRow = (r: AutopilotRun) => ({
   started_at: r.startedAt,
   finished_at: r.finishedAt,
   updated_at: r.updatedAt,
+  machine_id: r.machine?.id ?? null,
+  machine_name: r.machine?.name ?? null,
 });
 
 /** What a hand delete weighs about a run before it goes (see the service's `deleteRuns`). */
@@ -147,7 +152,10 @@ const OUTCOME_CLAUSE: Record<NonNullable<AutopilotRunFilter["outcome"]>, string>
 };
 
 /** The WHERE clause and bindings for a history filter (runs are aliased `r`). */
-function filterClause(filter: AutopilotRunFilter): { where: string; params: SQLInputValue[] } {
+function filterClause(filter: AutopilotRunFilter): {
+  where: string;
+  params: SQLInputValue[];
+} {
   const where: string[] = [];
   const params: SQLInputValue[] = [];
   if (filter.automation !== AUTOPILOT_ALL_RUNS) {
@@ -182,7 +190,10 @@ function filterClause(filter: AutopilotRunFilter): { where: string; params: SQLI
     params.push(like, like, like, like, like);
     if (taskNumber) params.push(taskNumber.prefix, taskNumber.number);
   }
-  return { where: where.length > 0 ? `WHERE ${where.join(" AND ")}` : "", params };
+  return {
+    where: where.length > 0 ? `WHERE ${where.join(" AND ")}` : "",
+    params,
+  };
 }
 
 /** Typed access to autopilot_runs, the engine's history. */
@@ -212,7 +223,10 @@ export function createAutopilotRunsRepo(sql: Sql) {
         limit + 1,
       );
       const page = rows.slice(0, limit);
-      return { runs: page.map(toRun), nextCursor: rows.length > limit ? encodeCursor(page[page.length - 1]!) : null };
+      return {
+        runs: page.map(toRun),
+        nextCursor: rows.length > limit ? encodeCursor(page[page.length - 1]!) : null,
+      };
     },
     /** The ids of every run matching the filter. */
     idsMatching(filter: AutopilotRunFilter): string[] {
@@ -389,8 +403,9 @@ export function createAutopilotRunsRepo(sql: Sql) {
     finishedWithWorktree(): AutopilotRun[] {
       return sql
         .all<RunRow>(
+          // A run replayed from a machine has its worktree there: that machine cleans it up.
           `SELECT * FROM autopilot_runs WHERE runner = 'headless' AND worktree_path IS NOT NULL
-           AND finished_at IS NOT NULL ORDER BY finished_at, id`,
+           AND finished_at IS NOT NULL AND machine_id IS NULL ORDER BY finished_at, id`,
         )
         .map(toRun);
     },
@@ -408,9 +423,10 @@ export function createAutopilotRunsRepo(sql: Sql) {
     },
     /**
      * Real runs of these automations that started at or after `since`, leaving out the ones that start no agent: Fix
-     * PRs give-ups and thread resolving, and failed check scripts, retried or not.
+     * PRs give-ups and thread resolving, and failed check scripts, retried or not. Only the runs made where
+     * `machineId` says: null for this server's own, a machine's id for the runs replayed from it.
      */
-    startedSince(automations: readonly string[], since: string): number {
+    startedSince(automations: readonly string[], since: string, machineId: string | null = null): number {
       // A retried run's key is `retried:<id>:<key>`, and an id has no colon.
       const noAgent = [FIX_GAVE_UP_KEY_PREFIX, FIX_RESOLVE_KEY_PREFIX, CHECK_FAILED_KEY_PREFIX].flatMap((prefix) => [
         `${prefix}%`,
@@ -418,27 +434,40 @@ export function createAutopilotRunsRepo(sql: Sql) {
       ]);
       return (
         sql.get<{ n: number }>(
-          `SELECT COUNT(*) AS n FROM autopilot_runs WHERE dry_run = 0 AND started_at >= ?
+          `SELECT COUNT(*) AS n FROM autopilot_runs WHERE dry_run = 0 AND started_at >= ? AND machine_id IS ?
            AND automation IN (SELECT value FROM json_each(?))
            ${noAgent.map(() => "AND dedupe_key NOT LIKE ?").join(" ")}`,
           since,
+          machineId,
           jsonList(automations),
           ...noAgent,
         )?.n ?? 0
       );
     },
-    /** What real runs created at or after `since` cost, in USD. */
-    spendSince(since: string): number {
+    /**
+     * What real runs created at or after `since` cost, in USD. Like `startedSince`, only the runs made where
+     * `machineId` says: null for this server's own, a machine's id for the runs replayed from it.
+     */
+    spendSince(since: string, machineId: string | null = null): number {
       return (
         sql.get<{ total: number | null }>(
-          "SELECT SUM(cost_usd) AS total FROM autopilot_runs WHERE dry_run = 0 AND created_at >= ?",
+          "SELECT SUM(cost_usd) AS total FROM autopilot_runs WHERE dry_run = 0 AND created_at >= ? AND machine_id IS ?",
           since,
+          machineId,
         )?.total ?? 0
       );
     },
     /** Each automation's latest real finished run: its status and when it finished. */
-    latestFinished(): { automation: string; status: AutopilotRunStatus; at: string }[] {
-      return sql.all<{ automation: string; status: AutopilotRunStatus; at: string }>(
+    latestFinished(): {
+      automation: string;
+      status: AutopilotRunStatus;
+      at: string;
+    }[] {
+      return sql.all<{
+        automation: string;
+        status: AutopilotRunStatus;
+        at: string;
+      }>(
         `SELECT automation, status, finished_at AS at FROM (
            SELECT automation, status, finished_at,
              ROW_NUMBER() OVER (PARTITION BY automation ORDER BY finished_at DESC, rowid DESC) AS n

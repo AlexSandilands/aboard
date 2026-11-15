@@ -35,6 +35,7 @@ import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import { useResumeAutoPause } from "~/state/autopilotRunHistory";
 import { useCustomAutomations, useDismissAutomationDraft } from "~/state/customAutomations";
+import { useAutopilotMachines } from "~/state/autopilotMachines";
 import { useDismissAutopilotRun, useRetryAutopilotRun, useSetAutopilotPaused } from "~/state/mutations";
 import { useAutopilotOverview, useAutopilotProjectScopes, useBoard } from "~/state/queries";
 import { useBoardAutomations } from "./AutomationRows";
@@ -45,6 +46,7 @@ import { QuickSetup, type QuickSetupState } from "./QuickSetup";
 import { AutomationsSplit, customOf, type ListedAutomation } from "./AutomationsSplit";
 import { HINT_ICONS, useApplyHint, type HintTarget } from "./HealthSections";
 import { pausedForRun } from "./health.logic";
+import { pauseDeliveryText } from "./machines.logic";
 
 type Tab = "automations" | "runs" | "limits";
 
@@ -61,7 +63,10 @@ export function AutopilotTabs({ current }: { current: Tab }) {
     if (tab === current) return;
     if (tab === "automations") void navigate({ to: "/settings/$group", params: { group: "autopilot" } });
     else if (tab === "runs") {
-      void navigate({ to: "/settings/autopilot/runs/$automation", params: { automation: AUTOPILOT_ALL_RUNS } });
+      void navigate({
+        to: "/settings/autopilot/runs/$automation",
+        params: { automation: AUTOPILOT_ALL_RUNS },
+      });
     } else void navigate({ to: "/settings/autopilot/limits" });
   };
   return (
@@ -132,7 +137,10 @@ export function AutopilotAutomationsTab() {
   const quickSetup: QuickSetupState = {
     automations: overview.data?.automations ?? [],
     board: items.map((item) => item.entry),
-    projects: projects.map((p, i) => ({ title: p.title, entries: scopes[i]?.data ?? [] })),
+    projects: projects.map((p, i) => ({
+      title: p.title,
+      entries: scopes[i]?.data ?? [],
+    })),
   };
   // Not known until every project's scope has loaded: before that a project's own switch would be missed.
   const nothingOn = scopes.every((s) => s.data) && !listed.some((i) => !isOffEverywhere(i.reach));
@@ -178,7 +186,12 @@ export function AutopilotAutomationsTab() {
         params: { customId: custom.id },
         state: FROM_SETTINGS_LIST,
       });
-    } else void navigate({ to: "/settings/$group", params: { group: "autopilot" }, search: { automation: key } });
+    } else
+      void navigate({
+        to: "/settings/$group",
+        params: { group: "autopilot" },
+        search: { automation: key },
+      });
   }
 }
 
@@ -190,6 +203,8 @@ function StatusStrip({ overview, anyOn }: { overview: AutopilotOverview; anyOn: 
   const setPaused = useSetAutopilotPaused();
   const openSettings = useOpenSettings();
   const { paused } = overview;
+  // A machine running its own Autopilot that Pause all (or Resume) hasn't reached yet.
+  const delivery = pauseDeliveryText(useAutopilotMachines().data ?? [], paused);
   // Under Preview everything the automations only record what they would do, so the strip mustn't say they run.
   const state = paused
     ? "Paused: no new runs start"
@@ -226,6 +241,7 @@ function StatusStrip({ overview, anyOn }: { overview: AutopilotOverview; anyOn: 
           Limits
         </Button>
       </span>
+      {delivery ? <span className="basis-full text-xs text-warning-foreground">{delivery}</span> : null}
     </SettingsGroup>
   );
 }
@@ -274,7 +290,12 @@ function NeedsYou({
                 size="xs"
                 variant="outline"
                 disabled={resume.isPending}
-                onClick={() => resume.mutate({ automation: pause.automation, projectId: pause.projectId })}
+                onClick={() =>
+                  resume.mutate({
+                    automation: pause.automation,
+                    projectId: pause.projectId,
+                  })
+                }
               >
                 Resume
               </Button>

@@ -56,6 +56,11 @@ export interface PrPoller {
 export function createPrPoller(deps: {
   services: () => PrPollerServices;
   hosts: GitHosts;
+  /**
+   * Whether a task's PRs are another server's to poll: a machine that holds the task and runs its Autopilot polls them
+   * with its own login, and sends what it read with the task, so there is one writer.
+   */
+  polledElsewhere?: (taskId: string) => boolean;
   log?: PollLogger;
 }): PrPoller {
   const { hosts } = deps;
@@ -121,7 +126,12 @@ export function createPrPoller(deps: {
     const groups = new Map<string, { host: GitHost; name: string; repo: string; links: RefPrLink[] }>();
     for (const { link, host } of links) {
       const key = `${link.ref.host}\n${link.ref.repo.toLowerCase()}`;
-      const group = groups.get(key) ?? { host, name: link.ref.host, repo: link.ref.repo, links: [] };
+      const group = groups.get(key) ?? {
+        host,
+        name: link.ref.host,
+        repo: link.ref.repo,
+        links: [],
+      };
       group.links.push(link);
       groups.set(key, group);
     }
@@ -167,6 +177,7 @@ export function createPrPoller(deps: {
     const links = services.links.listByKind("pr").flatMap((l) => {
       if (l.kind !== "pr" || l.ref === null) return [];
       const host = hosts.forHost(l.ref.host);
+      if (deps.polledElsewhere?.(l.taskId)) return [];
       return host && host.status().authenticated && host.reaches(l.ref.host) ? [{ link: l as RefPrLink, host }] : [];
     });
     const ids = new Set(links.map((l) => l.link.id));

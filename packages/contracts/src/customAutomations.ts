@@ -54,7 +54,11 @@ export type CustomSchedule = z.infer<typeof CustomSchedule>;
 /** What a custom automation watches for. Every kind but `schedule` is about one task. */
 export const CustomTrigger = z.discriminatedUnion("kind", [
   /** A task moved into `to`, from `from` when set. */
-  z.object({ kind: z.literal("status_change"), to: TaskStatus, from: TaskStatus.nullable().default(null) }),
+  z.object({
+    kind: z.literal("status_change"),
+    to: TaskStatus,
+    from: TaskStatus.nullable().default(null),
+  }),
   /** Something happened on a pull request linked to the task. */
   z.object({ kind: z.literal("pr_event"), event: CustomPrEvent }),
   /** A time; once per project in scope, with no task. */
@@ -245,6 +249,11 @@ export const CustomAutomation = z.object({
    * by `epicArmKey(epicId)` for an epic whose own setting switched it on.
    */
   armedProjects: z.record(z.string(), z.string()).default({}),
+  /**
+   * The connected machine a scheduled automation runs on (remote-machines.md#autopilot-on-the-machine): its id in the
+   * board's machines, or on a runner the instance id of the runner it is pinned to. Null or absent: the board.
+   */
+  machineId: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -262,7 +271,12 @@ export const epicArmKey = (epicId: string): string => `epic:${epicId}`;
  */
 export function customArmedAt(
   custom: Pick<CustomAutomation, "armedAt" | "armedProjects">,
-  scope: { projectId: string; epicId?: string | null; epicOwnSetting?: boolean; joinedAt?: string | null },
+  scope: {
+    projectId: string;
+    epicId?: string | null;
+    epicOwnSetting?: boolean;
+    joinedAt?: string | null;
+  },
 ): string {
   const { projectId, epicId, epicOwnSetting, joinedAt } = scope;
   const times = [
@@ -289,7 +303,12 @@ export type CreateCustomAutomationInput = z.input<typeof CreateCustomAutomationI
 export const UpdateCustomAutomationInput = z
   .object({
     ...Definition,
-    filters: z.object({ labels: CustomFilters.shape.labels.removeDefault(), epicTasks: z.boolean() }).partial(),
+    filters: z
+      .object({
+        labels: CustomFilters.shape.labels.removeDefault(),
+        epicTasks: z.boolean(),
+      })
+      .partial(),
   })
   .partial();
 export type UpdateCustomAutomationInput = z.input<typeof UpdateCustomAutomationInput>;
@@ -302,7 +321,12 @@ export interface CustomValues {
   task?: { id: string; number: number; title: string; status: string } | null;
   pr?: { url: string } | null;
   /** `repoUrl` is `https://<host>/<repo>` from the folder's `origin`, empty without one. */
-  project?: { id?: string; name: string; path: string | null; repoUrl?: string } | null;
+  project?: {
+    id?: string;
+    name: string;
+    path: string | null;
+    repoUrl?: string;
+  } | null;
   /** The automation's declared inputs by name: `{{inputs.<name>}}`, `<PREFIX>_INPUT_<NAME>` and stdin's `inputs`. */
   inputs?: Record<string, string>;
   /** The variables in effect in the project (effectiveVariables): `{{vars.<name>}}`, `<PREFIX>_VAR_<NAME>`, stdin's `vars`. */
@@ -313,20 +337,60 @@ export interface CustomValues {
 
 /** Each value a prompt can name as `{{key}}` and a shell command reads as `$<env>`. */
 export const CUSTOM_PLACEHOLDERS = [
-  { key: "task.number", env: "TASK_NUMBER", label: "Task number", read: (v: CustomValues) => v.task?.number },
-  { key: "task.title", env: "TASK_TITLE", label: "Task title", read: (v: CustomValues) => v.task?.title },
-  { key: "task.id", env: "TASK_ID", label: "Task id", read: (v: CustomValues) => v.task?.id },
-  { key: "task.status", env: "TASK_STATUS", label: "Task status", read: (v: CustomValues) => v.task?.status },
-  { key: "pr.url", env: "PR_URL", label: "Pull request URL", read: (v: CustomValues) => v.pr?.url },
-  { key: "project.name", env: "PROJECT_NAME", label: "Project name", read: (v: CustomValues) => v.project?.name },
-  { key: "project.path", env: "PROJECT_PATH", label: "Project folder", read: (v: CustomValues) => v.project?.path },
+  {
+    key: "task.number",
+    env: "TASK_NUMBER",
+    label: "Task number",
+    read: (v: CustomValues) => v.task?.number,
+  },
+  {
+    key: "task.title",
+    env: "TASK_TITLE",
+    label: "Task title",
+    read: (v: CustomValues) => v.task?.title,
+  },
+  {
+    key: "task.id",
+    env: "TASK_ID",
+    label: "Task id",
+    read: (v: CustomValues) => v.task?.id,
+  },
+  {
+    key: "task.status",
+    env: "TASK_STATUS",
+    label: "Task status",
+    read: (v: CustomValues) => v.task?.status,
+  },
+  {
+    key: "pr.url",
+    env: "PR_URL",
+    label: "Pull request URL",
+    read: (v: CustomValues) => v.pr?.url,
+  },
+  {
+    key: "project.name",
+    env: "PROJECT_NAME",
+    label: "Project name",
+    read: (v: CustomValues) => v.project?.name,
+  },
+  {
+    key: "project.path",
+    env: "PROJECT_PATH",
+    label: "Project folder",
+    read: (v: CustomValues) => v.project?.path,
+  },
   {
     key: "project.repo_url",
     env: "PROJECT_REPO_URL",
     label: "Repository URL",
     read: (v: CustomValues) => v.project?.repoUrl,
   },
-  { key: "automation.name", env: "AUTOMATION", label: "Automation name", read: (v: CustomValues) => v.automation },
+  {
+    key: "automation.name",
+    env: "AUTOMATION",
+    label: "Automation name",
+    read: (v: CustomValues) => v.automation,
+  },
 ] as const;
 
 const PLACEHOLDER = /\{\{\s*([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*)\s*\}\}/gi;
@@ -427,7 +491,12 @@ export function describeScriptRun(script: Pick<CustomScript, "language" | "body"
  */
 export function customScriptContext(values: CustomValues): {
   automation: string;
-  project: { id?: string; name: string; path: string | null; repoUrl: string } | null;
+  project: {
+    id?: string;
+    name: string;
+    path: string | null;
+    repoUrl: string;
+  } | null;
   inputs: Record<string, string>;
   vars: Record<string, string>;
   task: NonNullable<CustomValues["task"]> | null;
@@ -484,7 +553,11 @@ export interface CheckFailure {
 }
 
 export type CheckOutput =
-  | { ok: true; items: CheckItem[]; /** Items past CHECK_ITEMS_MAX, left out. */ dropped: number }
+  | {
+      ok: true;
+      items: CheckItem[];
+      /** Items past CHECK_ITEMS_MAX, left out. */ dropped: number;
+    }
   | { ok: false; error: string };
 
 /**
@@ -502,7 +575,11 @@ export function parseCheckOutput(stdout: string): CheckOutput {
     const line = raw.trim();
     if (!line) continue;
     const where = `Line ${i + 1}`;
-    if (line.length > CHECK_LINE_MAX) return { ok: false, error: `${where} is over ${CHECK_LINE_MAX} characters` };
+    if (line.length > CHECK_LINE_MAX)
+      return {
+        ok: false,
+        error: `${where} is over ${CHECK_LINE_MAX} characters`,
+      };
     let value: unknown;
     try {
       value = JSON.parse(line);
@@ -514,9 +591,16 @@ export function parseCheckOutput(stdout: string): CheckOutput {
     }
     const key = (value as Record<string, unknown>).key;
     if (typeof key !== "string" || key.trim() === "") {
-      return { ok: false, error: `${where} has no "key", or it isn't a non-empty string` };
+      return {
+        ok: false,
+        error: `${where} has no "key", or it isn't a non-empty string`,
+      };
     }
-    if (key.length > CHECK_KEY_MAX) return { ok: false, error: `${where}'s key is over ${CHECK_KEY_MAX} characters` };
+    if (key.length > CHECK_KEY_MAX)
+      return {
+        ok: false,
+        error: `${where}'s key is over ${CHECK_KEY_MAX} characters`,
+      };
     // The key names the agent's session and run, so it stays on one line.
     // oxlint-disable-next-line no-control-regex -- matching control characters is the point
     if (/[\u0000-\u001f\u007f]/.test(key)) return { ok: false, error: `${where}'s key has a control character` };
@@ -619,12 +703,28 @@ export function customValues(
   const pr = task ? prOfTask(task, data.prLinkId) : null;
   return {
     automation: def.name,
-    ...(def.action ? { inputs: Object.fromEntries(def.action.inputs.map((i) => [i.name, i.value])) } : {}),
+    ...(def.action
+      ? {
+          inputs: Object.fromEntries(def.action.inputs.map((i) => [i.name, i.value])),
+        }
+      : {}),
     vars: scope.vars ?? {},
-    task: task ? { id: task.id, number: task.number, title: task.title, status: task.status } : null,
+    task: task
+      ? {
+          id: task.id,
+          number: task.number,
+          title: task.title,
+          status: task.status,
+        }
+      : null,
     pr: pr ? { url: pr.url } : null,
     project: project
-      ? { id: project.id, name: project.title, path: project.workspaceRoot, repoUrl: scope.repoUrl ?? "" }
+      ? {
+          id: project.id,
+          name: project.title,
+          path: project.workspaceRoot,
+          repoUrl: scope.repoUrl ?? "",
+        }
       : null,
     ...(data.item ? { item: data.item } : {}),
   };
@@ -754,7 +854,10 @@ export type ScheduledAgentAnswer = z.infer<typeof ScheduledAgentAnswer>;
 export const SCHEDULED_AGENT_OUTPUT_SCHEMA = {
   type: "object",
   properties: {
-    summary: { type: "string", description: "One or two sentences: what this run did and found." },
+    summary: {
+      type: "string",
+      description: "One or two sentences: what this run did and found.",
+    },
     handover: {
       type: "string",
       description: `What the next run needs to know, at most ${HANDOVER_MAX_CHARS} characters: items you are holding or waiting on, what you triggered, keys already triaged or skipped. Not a log. Empty when there is nothing to pass on.`,
@@ -764,7 +867,9 @@ export const SCHEDULED_AGENT_OUTPUT_SCHEMA = {
 } as const;
 
 /** What a finished scheduled agent run leaves on its run (`run.output`): the next run of it reads the handover. */
-export const ScheduledAgentRunOutput = ScheduledAgentAnswer.extend({ kind: z.literal("scheduled_agent") });
+export const ScheduledAgentRunOutput = ScheduledAgentAnswer.extend({
+  kind: z.literal("scheduled_agent"),
+});
 export type ScheduledAgentRunOutput = z.infer<typeof ScheduledAgentRunOutput>;
 
 /** Cuts a handover to the cap, saying so, so the agent that reads it knows the end is missing. */

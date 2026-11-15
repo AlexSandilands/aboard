@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { AgentHarness } from "./agentSessions.ts";
+import { AutopilotRun } from "./autopilot.ts";
 import { ModelChoice } from "./modelProfiles.ts";
 import { SuggestedModel } from "./modelTiers.ts";
 import { FindingSeverity, FindingStatus, ReviewRoundStatus, ReviewTrigger } from "./reviews.ts";
+import { NotificationKind } from "./notifications.ts";
 import {
   AttentionRequest,
   DueDate,
@@ -22,6 +24,11 @@ export const MACHINE_TASKS_PATH = "/machine/tasks";
 export const MACHINE_CHANGES_PATH = "/machine/changes";
 export const MACHINE_EDITS_PATH = "/machine/edits";
 export const MACHINE_REPLIES_PATH = "/machine/replies";
+/**
+ * `PUT`: the tasks the held ones point at, as the board has them now: a blocker finishing on the board is what lets
+ * the machine's Autopilot start the task it blocked.
+ */
+export const MACHINE_REFERENCES_PATH = "/machine/references";
 /** `DELETE`: the board taking a task back. */
 export const machineTaskPath = (taskId: string): string => `${MACHINE_TASKS_PATH}/${encodeURIComponent(taskId)}`;
 
@@ -30,7 +37,7 @@ export const machineTaskPath = (taskId: string): string => `${MACHINE_TASKS_PATH
  * so **a board reads every format ever written**: raising this needs an upgrader in `CHANGE_LOG_UPGRADERS` from the
  * format before, and the old format's test fixture stays (`workingCopies.test.ts`).
  */
-export const CHANGE_LOG_FORMAT = 1;
+export const CHANGE_LOG_FORMAT = 2;
 
 /** The task's own fields a runner orders changes to. What the board keeps to itself is in remote-machines.md. */
 export const CopiedTaskFields = z.object({
@@ -221,7 +228,7 @@ export const CopiedProject = z.object({
 });
 export type CopiedProject = z.infer<typeof CopiedProject>;
 
-export const ChangeLogKind = z.enum(["state", "created", "released"]);
+export const ChangeLogKind = z.enum(["state", "created", "released", "run", "notice"]);
 export type ChangeLogKind = z.infer<typeof ChangeLogKind>;
 
 const StatePayload = z.object({
@@ -238,14 +245,47 @@ const CreatedPayload = StatePayload.extend({
   references: z.array(TaskReference),
 });
 
+/**
+ * A run the machine's own Autopilot made (format 2), whole as it stands after the change: the board keeps it under
+ * the same id, tagged with the machine. `projectId` is the board's id for the project.
+ */
+const RunPayload = z.object({ run: AutopilotRun });
+
+/** A notification the machine raised (format 2): the board raises it in its own inbox, by its own switches. */
+const NoticePayload = z.object({
+  notice: z.object({
+    kind: NotificationKind,
+    taskId: z.string().nullable(),
+    title: z.string(),
+    body: z.string(),
+    dedupeKey: z.string(),
+  }),
+});
+
 /** A log entry in the current format. */
 export const ChangeLogEntry = z.discriminatedUnion("kind", [
   /** The task as it is after a change, with the activity the change logged. */
   z.object({ kind: z.literal("state"), ...entryBase(), payload: StatePayload }),
   /** A task made on the runner: the board creates it, held by that machine. */
-  z.object({ kind: z.literal("created"), ...entryBase(), payload: CreatedPayload }),
+  z.object({
+    kind: z.literal("created"),
+    ...entryBase(),
+    payload: CreatedPayload,
+  }),
   /** The task's last state as the runner gives it back; the board holds it again once this is applied. */
-  z.object({ kind: z.literal("released"), ...entryBase(), payload: StatePayload }),
+  z.object({
+    kind: z.literal("released"),
+    ...entryBase(),
+    payload: StatePayload,
+  }),
+  /** A run of the machine's Autopilot, as it now stands. `taskId` is its task's, or "" for a run with none. */
+  z.object({ kind: z.literal("run"), ...entryBase(), payload: RunPayload }),
+  /** A notification the machine raised. `taskId` as for a run. */
+  z.object({
+    kind: z.literal("notice"),
+    ...entryBase(),
+    payload: NoticePayload,
+  }),
 ]);
 export type ChangeLogEntry = z.infer<typeof ChangeLogEntry>;
 
@@ -273,7 +313,10 @@ export type StoredChangeLogEntry = z.infer<typeof StoredChangeLogEntry>;
  * One step per format: `CHANGE_LOG_UPGRADERS[n]` turns a stored entry of format `n` into format `n + 1`. Never
  * remove one: a runner that was offline for a week still sends the old format.
  */
-export const CHANGE_LOG_UPGRADERS: Readonly<Record<number, (entry: StoredChangeLogEntry) => StoredChangeLogEntry>> = {};
+export const CHANGE_LOG_UPGRADERS: Readonly<Record<number, (entry: StoredChangeLogEntry) => StoredChangeLogEntry>> = {
+  // Format 2 added the `run` and `notice` kinds; the kinds format 1 had are unchanged.
+  1: (entry) => entry,
+};
 
 export class ChangeLogFormatError extends Error {
   constructor(message: string) {
@@ -317,6 +360,12 @@ export const HandOverRequest = z.object({
 });
 export type HandOverRequest = z.infer<typeof HandOverRequest>;
 
+/** `PUT /machine/references`. */
+export const ReferencesUpdate = z.object({
+  references: z.array(TaskReference),
+});
+export type ReferencesUpdate = z.infer<typeof ReferencesUpdate>;
+
 /** The runner's log position: what the board has applied once it reaches `head`. */
 export const LogPosition = z.object({ head: z.number().int().nonnegative() });
 export type LogPosition = z.infer<typeof LogPosition>;
@@ -349,7 +398,10 @@ export const CallToolParams = z.object({
 });
 export type CallToolParams = z.infer<typeof CallToolParams>;
 
-export const CallToolReply = z.object({ text: z.string(), isError: z.boolean() });
+export const CallToolReply = z.object({
+  text: z.string(),
+  isError: z.boolean(),
+});
 export type CallToolReply = z.infer<typeof CallToolReply>;
 
 /** `GET /machine/changes?after=<id>&wait=<ms>`: the query. */

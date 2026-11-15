@@ -10,11 +10,24 @@ function runner(overrides: Parameters<typeof createTestHarness>[0] = {}) {
   const bridge = { instanceId: randomUUID(), name: "bridge" };
   /** A request as a board on the tailnet sends it: the runner's address as Host, no Origin. */
   const remote = (path: string, init: Parameters<typeof h.request>[1] = {}) =>
-    h.request(path, { ...init, headers: { host: TAILNET_HOST, ...(init.headers as Record<string, string>) } });
+    h.request(path, {
+      ...init,
+      headers: {
+        host: TAILNET_HOST,
+        ...(init.headers as Record<string, string>),
+      },
+    });
   const pair = async () => {
     const { code } = h.services.machineAuth.createPairingCode();
-    const res = await remote("/machine/pair", { method: "POST", json: { code, board: bridge } });
-    return (await res.json()) as { token: string; tokenId: string; instanceId: string };
+    const res = await remote("/machine/pair", {
+      method: "POST",
+      json: { code, board: bridge },
+    });
+    return (await res.json()) as {
+      token: string;
+      tokenId: string;
+      instanceId: string;
+    };
   };
   const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
   return { h, bridge, remote, pair, bearer };
@@ -32,7 +45,7 @@ describe("machine descriptor", () => {
       version: BRAND.version,
       protocolVersion: MACHINE_PROTOCOL_VERSION,
       role: "runner",
-      capabilities: ["pairing", "status", "update", "tasks", "runs"],
+      capabilities: ["pairing", "status", "update", "tasks", "runs", "autopilot"],
       paired: false,
     });
   });
@@ -40,8 +53,17 @@ describe("machine descriptor", () => {
   it("is served by a board too, to this machine only, and a board has no other machine route", async () => {
     const h = createTestHarness();
     const local = await h.request("/machine/descriptor");
-    expect(MachineDescriptor.parse(await local.json())).toMatchObject({ role: "board", capabilities: [] });
-    expect((await h.request("/machine/descriptor", { headers: { host: TAILNET_HOST } })).status).toBe(403);
+    expect(MachineDescriptor.parse(await local.json())).toMatchObject({
+      role: "board",
+      capabilities: [],
+    });
+    expect(
+      (
+        await h.request("/machine/descriptor", {
+          headers: { host: TAILNET_HOST },
+        })
+      ).status,
+    ).toBe(403);
     expect((await h.request("/machine/session")).status).toBe(404);
     const code = h.services.machineAuth.createPairingCode().code;
     const pair = await h.request("/machine/pair", {
@@ -70,7 +92,10 @@ describe("pairing over the machine API", () => {
     const { h, remote, pair } = runner();
     const wrong = await remote("/machine/pair", {
       method: "POST",
-      json: { code: "AAAA-AAAA-AAAA", board: { instanceId: randomUUID(), name: "x" } },
+      json: {
+        code: "AAAA-AAAA-AAAA",
+        board: { instanceId: randomUUID(), name: "x" },
+      },
     });
     expect(wrong.status).toBe(400);
     await pair();
@@ -88,7 +113,14 @@ describe("pairing over the machine API", () => {
   it("lets the board unpair itself, after which its token is refused", async () => {
     const { remote, pair, bearer } = runner();
     const { token } = await pair();
-    expect((await remote("/machine/session", { method: "DELETE", headers: bearer(token) })).status).toBe(204);
+    expect(
+      (
+        await remote("/machine/session", {
+          method: "DELETE",
+          headers: bearer(token),
+        })
+      ).status,
+    ).toBe(204);
     expect((await remote("/machine/session", { headers: bearer(token) })).status).toBe(401);
   });
 });
@@ -138,7 +170,13 @@ describe("the guard on a runner", () => {
       // Not in the URL, where logs and proxies would keep it.
       expect([path, (await remote(`${path}?token=${token}`)).status]).toEqual([path, 401]);
     }
-    expect((await remote("/machine/anything-added-later", { headers: bearer(token) })).status).toBe(404);
+    expect(
+      (
+        await remote("/machine/anything-added-later", {
+          headers: bearer(token),
+        })
+      ).status,
+    ).toBe(404);
   });
 
   it("revoking on the runner locks the board out at once", async () => {
@@ -191,11 +229,23 @@ describe("the guard on a runner", () => {
       }
       expect((await h.request("/machine/descriptor", { headers: forwarded })).status).toBe(200);
       expect((await h.request("/machine/session", { headers: forwarded })).status).toBe(401);
-      expect((await h.request("/machine/session", { headers: { ...forwarded, ...bearer(token) } })).status).toBe(200);
+      expect(
+        (
+          await h.request("/machine/session", {
+            headers: { ...forwarded, ...bearer(token) },
+          })
+        ).status,
+      ).toBe(200);
     }
     // A board is not behind this rule: ADR 0003 stands for it as it was.
     const board = createTestHarness();
-    expect((await board.request("/api/health", { headers: { "x-forwarded-for": "203.0.113.9" } })).status).toBe(200);
+    expect(
+      (
+        await board.request("/api/health", {
+          headers: { "x-forwarded-for": "203.0.113.9" },
+        })
+      ).status,
+    ).toBe(200);
   });
 
   it("listening beyond loopback, refuses local-only routes when it can't see that the peer is local", async () => {

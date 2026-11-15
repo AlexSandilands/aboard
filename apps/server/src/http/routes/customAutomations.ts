@@ -12,6 +12,7 @@ import {
   type CustomAction,
 } from "@repo/contracts";
 import type { Context, Hono } from "hono";
+import { z } from "zod";
 import type { AppContext } from "../../app.ts";
 import { AppError } from "../../errors.ts";
 import { installSkill, readInstalledSkill } from "../../skills.ts";
@@ -61,6 +62,14 @@ export function registerCustomAutomationRoutes(app: Hono, { services, config }: 
   );
   // A shared file (docs/features/autopilot.md#sharing-automations): the definition without the sharer's projects, epic and slot
   // tools, and the skill it names when that is one of the user's own.
+  // Where a scheduled automation runs: the board, or a connected machine (remote-machines.md#autopilot-on-the-machine).
+  app.put(
+    "/api/autopilot/custom/:id/machine",
+    handle(async (c) => {
+      const { machineId } = await parseBody(c, z.object({ machineId: z.string().min(1).nullable() }));
+      return c.json(custom.setMachine(idParam(c), machineId));
+    }),
+  );
   app.get(
     "/api/autopilot/custom/:id/export",
     handle((c) => {

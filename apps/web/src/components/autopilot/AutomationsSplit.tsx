@@ -127,6 +127,7 @@ import { RecurringRulesByProject } from "~/components/recurring/RecurringSection
 import { RunHistoryLink } from "./RunHistoryLink";
 import { useWhere } from "./useWhere";
 import { ownSettingsLabel } from "./where.logic";
+import { RunsOnSection } from "./RunsOnSection";
 import { WhereItRuns } from "./WhereItRuns";
 
 const BUILTIN_ICONS: Record<string, LucideIcon> = {
@@ -293,7 +294,10 @@ export function AutomationsSplit({
   rejected: number;
 }) {
   const navigate = useNavigate();
-  const requested = useSearch({ strict: false, select: (search) => search.automation });
+  const requested = useSearch({
+    strict: false,
+    select: (search) => search.automation,
+  });
   const [adding, setAdding] = useState(false);
   const autoPaused = useAutopilotOverview().data?.autoPaused ?? [];
   const groups = groupAutomations(items);
@@ -485,7 +489,11 @@ function AutomationDetail({
   const mixed = !switchless && switchState(reach) === "mixed";
   const checkScript = hasCheckScript(custom);
   const editCustom = (id: string) =>
-    void navigate({ to: "/settings/autopilot/custom/$customId", params: { customId: id }, state: FROM_SETTINGS_LIST });
+    void navigate({
+      to: "/settings/autopilot/custom/$customId",
+      params: { customId: id },
+      state: FROM_SETTINGS_LIST,
+    });
   const field = (f: (typeof automation.fields)[number]) => (
     <AutomationField
       key={f.key}
@@ -536,7 +544,9 @@ function AutomationDetail({
             <AskToChange
               automation={automation}
               custom={custom}
-              sentence={automationSentence(automation, entry.effectiveConfig, { custom })}
+              sentence={automationSentence(automation, entry.effectiveConfig, {
+                custom,
+              })}
             />
             {custom ? <CustomActions custom={custom} /> : null}
           </>
@@ -622,6 +632,7 @@ function AutomationDetail({
       {switchless ? null : (
         <WhereItRuns automation={automation} everywhereMode={restoreMode(entry, lastRun !== undefined)} />
       )}
+      {custom?.trigger.kind === "schedule" ? <RunsOnSection custom={custom} /> : null}
       {automation.key === AUTOPILOT_ORCHESTRATE ? (
         <p className="px-3 text-xs text-muted-foreground sm:px-4">
           Each lane&apos;s pill also shows Orchestrate&apos;s next check and has Run now.

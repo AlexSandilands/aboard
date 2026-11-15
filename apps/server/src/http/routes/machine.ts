@@ -8,6 +8,8 @@ import {
   MACHINE_DESCRIPTOR_PATH,
   MACHINE_EDITS_PATH,
   MACHINE_REPLIES_PATH,
+  MACHINE_REFERENCES_PATH,
+  ReferencesUpdate,
   MACHINE_TASKS_PATH,
   MACHINE_PAIR_PATH,
   MACHINE_PROTOCOL_VERSION,
@@ -19,6 +21,8 @@ import {
   MACHINE_SETTINGS_PATH,
   MACHINE_TRANSCRIPT_PATH,
   MAX_ATTACHMENT_BYTES,
+  MACHINE_AUTOPILOT_PATH,
+  MachineAutopilotConfig,
   MachineJobQuery,
   MachineJobRequest,
   MachineSettingsInput,
@@ -27,6 +31,8 @@ import {
   UpdateMachineRequest,
   serverPlatformOf,
   type ChangesResponse,
+  type CopiedProject,
+  type MachineAutopilotAck,
   type MachineCapability,
   type MachineDescriptor,
   type MachineSession,
@@ -44,7 +50,7 @@ import { errorResponse, handle, idParam, noContent, parseBody, parseQuery } from
 /** How long a status answer waits for the login checks, which start programs and may reach for the network. */
 const STATUS_LOGINS_WAIT_MS = 4_000;
 
-const CAPABILITIES: MachineCapability[] = ["pairing", "status", "update", "tasks", "runs"];
+const CAPABILITIES: MachineCapability[] = ["pairing", "status", "update", "tasks", "runs", "autopilot"];
 
 /**
  * The machine API (docs/features/remote-machines.md#the-machine-api). Every server says who it is; the rest is a
@@ -83,7 +89,12 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
     MACHINE_SESSION_PATH,
     handle((c) => {
       const { tokenId, board, pairedAt } = machinePairingOf(c);
-      return c.json({ tokenId, board, pairedAt, machine: descriptor() } satisfies MachineSession);
+      return c.json({
+        tokenId,
+        board,
+        pairedAt,
+        machine: descriptor(),
+      } satisfies MachineSession);
     }),
   );
   // The board unpairing itself: its token stops working at once.
@@ -129,10 +140,20 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
     handle(async (c) => {
       const request = await parseBody(c, HandOverRequest);
       // The first task of a project brings its repository here, which can take a while.
-      const project =
-        copies.projectFor(request.project) ??
-        copies.adoptProject(request.project, await checkouts.ensure(request.project));
-      return c.json(copies.accept(request, project));
+      const known = copies.projectFor(request.project);
+      const project = known ?? copies.adoptProject(request.project, await checkouts.ensure(request.project));
+      const position = copies.accept(request, project);
+      // A project new here gets the board's Autopilot switches for it now.
+      if (!known) services.runnerAutopilot.reapply();
+      return c.json(position);
+    }),
+  );
+  // The tasks held ones point at, as the board has them now (a blocker finished there).
+  app.put(
+    MACHINE_REFERENCES_PATH,
+    handle(async (c) => {
+      copies.refreshReferences((await parseBody(c, ReferencesUpdate)).references);
+      return noContent(c);
     }),
   );
   app.delete(
@@ -146,7 +167,10 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
       const query = parseQuery(c, ChangesQuery);
       if (query.prefix !== undefined) copies.setNumbering(query.prefix, query.counter ?? 0);
       bridge.touch();
-      const read = (): ChangesResponse => ({ ...copies.changes(query.after, query.epoch), requests: bridge.take() });
+      const read = (): ChangesResponse => ({
+        ...copies.changes(query.after, query.epoch),
+        requests: bridge.take(),
+      });
       let changes = read();
       if (changes.entries.length === 0 && changes.requests.length === 0 && query.wait > 0) {
         await bridge.wait(query.wait);
@@ -189,6 +213,29 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
     handle((c) => {
       jobs.forget(idParam(c));
       return noContent(c);
+    }),
+  );
+  // The board's Autopilot, which this machine runs over the tasks it holds (remote-machines.md#autopilot-on-the-machine).
+  const cloning = new Set<string>();
+  /** Clones a project a pinned automation runs in, in the background, then gives it its switches. */
+  const adoptForAutopilot = async (project: CopiedProject): Promise<void> => {
+    if (cloning.has(project.id)) return;
+    cloning.add(project.id);
+    try {
+      if (!copies.projectFor(project)) copies.adoptProject(project, await checkouts.ensure(project));
+      services.runnerAutopilot.reapply();
+    } catch (error) {
+      console.warn(`[machines] couldn't clone ${project.title} for a pinned automation: ${String(error)}`);
+    } finally {
+      cloning.delete(project.id);
+    }
+  };
+  app.put(
+    MACHINE_AUTOPILOT_PATH,
+    handle(async (c) => {
+      const { revision, missing } = services.runnerAutopilot.apply(await parseBody(c, MachineAutopilotConfig));
+      for (const project of missing) void adoptForAutopilot(project);
+      return c.json({ revision } satisfies MachineAutopilotAck);
     }),
   );
   // The board's settings this machine works by: which model reviews, how many rounds, whether a move opens one.

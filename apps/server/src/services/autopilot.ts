@@ -42,6 +42,12 @@ import {
   type AutopilotOverview,
   type AutopilotRun,
   type AutopilotRunPage,
+  type RunMachine,
+  type AutopilotLimits,
+  type MachineAutopilotConfig,
+  type UpdateAutopilotLimitsInput,
+  AutopilotLimits as AutopilotLimitsSchema,
+  limitsOf,
   type AutopilotModeRow,
   type AutopilotScopeEntry,
   type AutopilotScopeKind,
@@ -83,7 +89,10 @@ export function loadAutopilotEngine(repos: Repos): AutopilotEngineSettings {
   const parsed = AutopilotEngineSettings.safeParse({
     ...DEFAULT_AUTOPILOT_ENGINE,
     ...stored,
-    agentDefaults: { ...DEFAULT_AUTOPILOT_ENGINE.agentDefaults, ...agentDefaults },
+    agentDefaults: {
+      ...DEFAULT_AUTOPILOT_ENGINE.agentDefaults,
+      ...agentDefaults,
+    },
   });
   return parsed.success ? parsed.data : DEFAULT_AUTOPILOT_ENGINE;
 }
@@ -225,7 +234,35 @@ export interface AutopilotService {
   /** Finished headless runs that made a worktree, oldest first. */
   finishedWithWorktree(): AutopilotRun[];
   /** Real agent runs started and spend since `since`, and agent runs going now. */
-  usage(agentAutomations: readonly string[], since: string): { started: number; spendUsd: number; active: number };
+  /**
+   * Agent runs started and spent since `since`, and agent runs going now: this server's own, or with `machineId` the
+   * ones replayed from that machine, so each machine's limits count only its own runs.
+   */
+  usage(
+    agentAutomations: readonly string[],
+    since: string,
+    machineId?: string | null,
+  ): { started: number; spendUsd: number; active: number };
+  /**
+   * On a board: keeps a run a machine's own Autopilot made, as the machine's log says it stands, under its id and
+   * tagged with the machine. A run that newly failed counts toward pausing its automation in the project, as one
+   * made here would. Its task's activity and notifications travel on their own.
+   */
+  keepFromMachine(run: AutopilotRun, machine: RunMachine): void;
+  /** Says Autopilot changed without changing anything here: what a connected machine has of it did. */
+  touch(): void;
+  /** A connected machine's Autopilot limits: its own once set, else the board's (`own: false`). */
+  machineLimits(machineId: string): { limits: AutopilotLimits; own: boolean };
+  /** Sets a machine's limits, partially over what it has now; `reset` goes back to the board's. */
+  setMachineLimits(machineId: string, input: UpdateAutopilotLimitsInput): { limits: AutopilotLimits; own: boolean };
+  /**
+   * What a connected machine runs Autopilot by: the board's switches, engine settings with the machine's limits,
+   * custom automations (pins as the machine's instance id), Pause all and the auto-pauses; with the projects a
+   * scheduled automation pinned to it is on in, which the caller turns into what the machine clones.
+   */
+  machineConfig(machineId: string): Omit<MachineAutopilotConfig, "revision" | "projects"> & {
+    pinnedProjects: string[];
+  };
   /**
    * Records a candidate as a run: queued, or skipped with "Would …" in dry-run. Null when the dedupe key already
    * has one (another pass got there first).
@@ -326,6 +363,16 @@ export function createAutopilotService(
     onEpicOwnSetting?: (automation: string, epicIds: readonly string[]) => void;
     /** Planned tasks in these projects, for Start planned's hint about tasks nobody flagged. */
     plannedTasks?: (projectIds: readonly string[]) => readonly TaskSummary[];
+    /**
+     * On a runner: one of its own runs was written (made, started, updated, ended), inside the write, so the board
+     * gets it through the log. Not called for a run the board sent here (`adopt`): the board has that one.
+     */
+    runWritten?: (run: AutopilotRun) => void;
+    /**
+     * Whether failures in a row pause an automation here. A runner leaves it to its board, which counts the runs it
+     * replays and sends the pause back with its settings, so there is one place the user resumes it.
+     */
+    autoPause?: boolean;
   },
 ): AutopilotService {
   const { repos } = core;
@@ -462,7 +509,10 @@ export function createAutopilotService(
       const epic = repos.tasks.get(epicId);
       if (!epic || !countsAsScope(epic.id, epic.projectId)) continue;
       const resolved = resolveAutopilot(chainFor(all, automation.key, epic.projectId, epic.id));
-      states.set(epicId, { on: resolved.enabled, live: resolved.enabled && !resolved.preview });
+      states.set(epicId, {
+        on: resolved.enabled,
+        live: resolved.enabled && !resolved.preview,
+      });
     }
     return states;
   };
@@ -531,9 +581,15 @@ export function createAutopilotService(
         (o.error ?? "").startsWith(BOARD_RESTARTED_ERROR),
     );
 
+  /** Tells a runner's log about one of its own runs, inside the write that changed it. */
+  const written = (run: AutopilotRun) => {
+    if (!run.dedupeKey.startsWith(ADOPTED_PREFIX)) deps.runWritten?.(run);
+  };
+
   const save = (run: AutopilotRun, opts: { log?: boolean } = {}): AutopilotRun => {
     core.write((fx) => {
       repos.autopilotRuns.update(run);
+      written(run);
       if (opts.log) logRun(fx, run);
       // The card's attention reason may change with the run.
       else if (run.taskId) fx.task(run.taskId);
@@ -562,21 +618,21 @@ export function createAutopilotService(
     return automation.needs(on);
   };
 
-  const usage = (agentAutomations: readonly string[], since: string) => {
+  const usage = (agentAutomations: readonly string[], since: string, machineId: string | null = null) => {
     const agents = new Set(agentAutomations);
     return {
-      started: repos.autopilotRuns.startedSince(agentAutomations, since),
-      spendUsd: repos.autopilotRuns.spendSince(since),
-      active: repos.autopilotRuns
-        .withStatus(AUTOPILOT_ACTIVE_STATUSES)
-        .filter(
-          (r) =>
-            !r.dryRun &&
-            agents.has(r.automation) &&
-            !r.dedupeKey.startsWith(FIX_GAVE_UP_KEY_PREFIX) &&
-            !r.dedupeKey.startsWith(FIX_RESOLVE_KEY_PREFIX) &&
-            !r.dedupeKey.startsWith(CHECK_FAILED_KEY_PREFIX),
-        ).length,
+      started: repos.autopilotRuns.startedSince(agentAutomations, since, machineId),
+      spendUsd: repos.autopilotRuns.spendSince(since, machineId),
+      active: repos.autopilotRuns.withStatus(AUTOPILOT_ACTIVE_STATUSES).filter(
+        (r) =>
+          // Each machine's limits count its own runs: one replayed from a machine is that machine's.
+          (r.machine?.id ?? null) === machineId &&
+          !r.dryRun &&
+          agents.has(r.automation) &&
+          !r.dedupeKey.startsWith(FIX_GAVE_UP_KEY_PREFIX) &&
+          !r.dedupeKey.startsWith(FIX_RESOLVE_KEY_PREFIX) &&
+          !r.dedupeKey.startsWith(CHECK_FAILED_KEY_PREFIX),
+      ).length,
     };
   };
 
@@ -611,14 +667,24 @@ export function createAutopilotService(
         draftId: d.id,
         name: d.bundle.name,
         replaces: d.replaces
-          ? { id: d.replaces, name: repos.autopilotCustom.get(d.replaces)?.name ?? d.bundle.name }
+          ? {
+              id: d.replaces,
+              name: repos.autopilotCustom.get(d.replaces)?.name ?? d.bundle.name,
+            }
           : null,
         createdBy: d.createdBy,
         createdAt: d.createdAt,
       }));
     const setup = described.flatMap((a): AutopilotNeed[] =>
       a.blocked || a.needs
-        ? [{ kind: "setup", automation: a.key, title: a.title, reason: (a.blocked ?? a.needs)! }]
+        ? [
+            {
+              kind: "setup",
+              automation: a.key,
+              title: a.title,
+              reason: (a.blocked ?? a.needs)!,
+            },
+          ]
         : [],
     );
     // Other people's PRs Review PRs found clean that only the user can approve, while it still reviews them there: a row
@@ -674,7 +740,10 @@ export function createAutopilotService(
       spendUsd: real.reduce((sum, r) => sum + (r.costUsd ?? 0), 0),
       wouldRun: runs.length - real.length,
       gaveUp: { review: gaveUp("review"), comments: gaveUp("comments") },
-      lastGaveUp: { review: gaveUpRuns("review")[0]?.id ?? null, comments: gaveUpRuns("comments")[0]?.id ?? null },
+      lastGaveUp: {
+        review: gaveUpRuns("review")[0]?.id ?? null,
+        comments: gaveUpRuns("comments")[0]?.id ?? null,
+      },
       days: days.map((day, i) => {
         const end = days[i + 1]?.toISOString() ?? "\uffff";
         const start = day.toISOString();
@@ -774,7 +843,7 @@ export function createAutopilotService(
    * a row (since it was last resumed), pauses the automation in that project and tells the user.
    */
   const autoPauseAfter = (run: AutopilotRun) => {
-    if (run.dryRun || !run.projectId) return;
+    if (deps.autoPause === false || run.dryRun || !run.projectId) return;
     const current = repos.autopilotAutoPauses.get(run.automation, run.projectId);
     if (current?.pausedAt) return;
     const streak = failureStreak(
@@ -797,6 +866,12 @@ export function createAutopilotService(
       body: `${reason}\nIt stays paused there until you resume it in Settings → Autopilot.`,
       dedupeKey: `autopilot-paused:${run.automation}:${run.projectId}:${at}`,
     });
+  };
+
+  const machineLimitsOf = (machineId: string): { limits: AutopilotLimits; own: boolean } => {
+    if (!repos.machines.get(machineId)) throw new AppError("NOT_FOUND", `Machine ${machineId} not found`);
+    const own = repos.machines.autopilotLimits(machineId);
+    return own ? { limits: own, own: true } : { limits: limitsOf(loadAutopilotEngine(repos)), own: false };
   };
 
   return {
@@ -866,7 +941,12 @@ export function createAutopilotService(
       return repos.autopilotSettings
         .all()
         .filter((s) => s.mode !== "inherit")
-        .map((s) => ({ scopeKind: s.scopeKind, scopeId: s.scopeId, automation: s.automation, mode: s.mode }));
+        .map((s) => ({
+          scopeKind: s.scopeKind,
+          scopeId: s.scopeId,
+          automation: s.automation,
+          mode: s.mode,
+        }));
     },
     setScope(kind, id, key, input, projectId) {
       const scopeId = checkScope(kind, id, projectId);
@@ -981,7 +1061,9 @@ export function createAutopilotService(
       }
       core.write((fx) => {
         repos.autopilotAutoPauses.resume(automation, projectId, nowIso());
-        deps.notifications.resolve({ keyPrefix: `autopilot-paused:${automation}:${projectId}:` });
+        deps.notifications.resolve({
+          keyPrefix: `autopilot-paused:${automation}:${projectId}:`,
+        });
         fx.autopilot();
       });
       // Like lifting Pause all: what keeps its own schedule doesn't catch up on what passed while paused.
@@ -993,7 +1075,10 @@ export function createAutopilotService(
       return page;
     },
     deleteRuns({ ids, filter, preview = false }) {
-      const weigh = (): { deletable: string[]; kept: Map<AutopilotKeptReason, number> } => {
+      const weigh = (): {
+        deletable: string[];
+        kept: Map<AutopilotKeptReason, number>;
+      } => {
         const asked = ids ?? repos.autopilotRuns.idsMatching(filter!);
         const now = Date.now();
         const deletable: string[] = [];
@@ -1068,6 +1153,7 @@ export function createAutopilotService(
       return core.write((fx) => {
         if (repos.autopilotRuns.exists(automation, candidate.dedupeKey, dryRun)) return null;
         repos.autopilotRuns.insert(run);
+        written(run);
         if (dryRun) logRun(fx, run);
         fx.autopilot();
         return run;
@@ -1156,6 +1242,70 @@ export function createAutopilotService(
       if (finished.status === "failed") autoPauseAfter(finished);
       return finished;
     },
+    machineLimits: (machineId) => machineLimitsOf(machineId),
+    touch: () => core.write((fx) => fx.autopilot()),
+    setMachineLimits(machineId, input) {
+      const { reset, ...patch } = input;
+      const current = machineLimitsOf(machineId).limits;
+      if (reset) {
+        core.write((fx) => {
+          repos.machines.setAutopilotLimits(machineId, null);
+          fx.autopilot();
+        });
+        return machineLimitsOf(machineId);
+      }
+      const next = AutopilotLimitsSchema.safeParse({
+        ...current,
+        ...patch,
+        quietHours: { ...current.quietHours, ...patch.quietHours },
+      });
+      if (!next.success) throw new AppError("VALIDATION", "Invalid Autopilot limits", next.error.issues);
+      core.write((fx) => {
+        repos.machines.setAutopilotLimits(machineId, next.data);
+        fx.autopilot();
+      });
+      return { limits: next.data, own: true };
+    },
+    machineConfig(machineId) {
+      const engine = loadAutopilotEngine(repos);
+      const { limits } = machineLimitsOf(machineId);
+      const instanceOf = new Map(repos.machines.all().map((m) => [m.id, m.instanceId]));
+      const custom = repos.autopilotCustom.all();
+      const pinnedHere = custom.filter((c) => c.machineId === machineId).map((c) => `custom:${c.id}`);
+      return {
+        paused: loadAutopilotStatus(repos).paused,
+        engine: { ...engine, ...limits },
+        settings: repos.autopilotSettings.all(),
+        custom: custom.map((c) => ({
+          ...c,
+          machineId: c.machineId ? (instanceOf.get(c.machineId) ?? null) : null,
+        })),
+        autoPaused: repos.autopilotAutoPauses
+          .paused()
+          .map((p) => ({ automation: p.automation, projectId: p.projectId })),
+        pinnedProjects: [...new Set(pinnedHere.flatMap((key) => enabledProjects(key)))],
+      };
+    },
+    keepFromMachine(run, machine) {
+      const kept = core.write((fx) => {
+        const before = repos.autopilotRuns.get(run.id);
+        // A run is the board's own when it has no machine: one with the same id here was never this machine's.
+        if (before && before.machine?.id !== machine.id) return null;
+        const taskId = run.taskId && repos.tasks.get(run.taskId) ? run.taskId : null;
+        const projectId = run.projectId && repos.projects.get(run.projectId) ? run.projectId : null;
+        const next: AutopilotRun = { ...run, taskId, projectId, machine };
+        if (before) repos.autopilotRuns.update(next);
+        else if (repos.autopilotRuns.exists(run.automation, run.dedupeKey, run.dryRun)) return null;
+        else repos.autopilotRuns.insert(next);
+        if (taskId) fx.task(taskId);
+        fx.autopilot();
+        return {
+          next,
+          newlyFailed: next.status === "failed" && before?.status !== "failed",
+        };
+      });
+      if (kept?.newlyFailed) autoPauseAfter(kept.next);
+    },
     adopt(run, projectId) {
       const at = nowIso();
       const adopted: AutopilotRun = {
@@ -1196,7 +1346,8 @@ export function createAutopilotService(
       });
     },
     recover() {
-      const stranded = repos.autopilotRuns.withStatus(AUTOPILOT_ACTIVE_STATUSES);
+      // A run replayed from a machine is that machine's to end: its restart wasn't this one.
+      const stranded = repos.autopilotRuns.withStatus(AUTOPILOT_ACTIVE_STATUSES).filter((r) => !r.machine);
       if (stranded.length === 0) return 0;
       const strandedIds = new Set(stranded.map((r) => r.id));
       core.write((fx) => {
@@ -1205,7 +1356,13 @@ export function createAutopilotService(
           const error = `${BOARD_RESTARTED_ERROR} while this run was going`;
           // A run the board sent here is the board's to report: it fails it when this runner no longer knows the job.
           if (run.dedupeKey.startsWith(ADOPTED_PREFIX)) {
-            repos.autopilotRuns.update({ ...run, status: "failed", error, finishedAt: at, updatedAt: at });
+            repos.autopilotRuns.update({
+              ...run,
+              status: "failed",
+              error,
+              finishedAt: at,
+              updatedAt: at,
+            });
             continue;
           }
           // Only the PR automations are handed back (their keys follow the PR's head, so the engine re-checks that
@@ -1227,7 +1384,7 @@ export function createAutopilotService(
             ) &&
             !restartedBefore(run)
           ) {
-            repos.autopilotRuns.update({
+            const retired: AutopilotRun = {
               ...run,
               status: "failed",
               error,
@@ -1235,7 +1392,9 @@ export function createAutopilotService(
               needsAttention: false,
               finishedAt: at,
               updatedAt: at,
-            });
+            };
+            repos.autopilotRuns.update(retired);
+            written(retired);
             if (run.taskId) {
               fx.log(run.taskId, AUTOPILOT_ACTOR, "autopilot_run", {
                 automation: run.automation,
@@ -1258,6 +1417,7 @@ export function createAutopilotService(
             updatedAt: at,
           };
           repos.autopilotRuns.update(failed);
+          written(failed);
           logRun(fx, failed);
           notifyEnded(failed);
         }

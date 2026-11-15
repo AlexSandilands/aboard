@@ -1,6 +1,8 @@
 import {
   CHANGE_LOG_FORMAT,
   taskLabel,
+  type AutopilotRun,
+  type NotifyInput,
   type ChangesResponse,
   type CopiedProject,
   type CopiedUsage,
@@ -76,6 +78,20 @@ export interface WorkingCopiesService {
   nextNumber(): { prefix: string; number: number };
   /** Calls `listener` after each write that added to the log. */
   onAppended(listener: () => void): void;
+  /**
+   * Logs a run of this machine's own Autopilot as it now stands, inside the write that changed it, under the board's
+   * id for its project. Nothing on a board.
+   */
+  logRun(run: AutopilotRun): void;
+  /**
+   * Brings the tasks held ones point at up to date with the board, those this runner already has as references;
+   * one that changed column is marked changed, so the engine looks at what it blocks.
+   */
+  refreshReferences(references: readonly TaskReference[]): void;
+  /** Logs a notification raised here, for the board's inbox. Nothing on a board. */
+  logNotice(input: NotifyInput): void;
+  /** The board's id for one of this runner's projects, else null (a project made here the board hasn't named). */
+  boardProjectOf(projectId: string | null): string | null;
 }
 
 export function createWorkingCopiesService(
@@ -109,7 +125,13 @@ export function createWorkingCopiesService(
   };
 
   const append = (kind: string, taskId: string, payload: unknown): void => {
-    copies.append({ version: CHANGE_LOG_FORMAT, kind, taskId, at: core.now().toISOString(), payload });
+    copies.append({
+      version: CHANGE_LOG_FORMAT,
+      kind,
+      taskId,
+      at: core.now().toISOString(),
+      payload,
+    });
     appended = true;
   };
 
@@ -120,7 +142,12 @@ export function createWorkingCopiesService(
     if (!mapping) {
       // A project made here (an agent's own folder): the board finds its own by the repository.
       const found = project.workspaceRoot ? deps.readRemote(project.workspaceRoot) : null;
-      mapping = { projectId, boardId: null, remote: found?.remote ?? null, remoteUrl: found?.remoteUrl ?? null };
+      mapping = {
+        projectId,
+        boardId: null,
+        remote: found?.remote ?? null,
+        remoteUrl: found?.remoteUrl ?? null,
+      };
       copies.setProject(mapping);
     }
     return {
@@ -130,6 +157,9 @@ export function createWorkingCopiesService(
       remoteUrl: mapping.remoteUrl,
     };
   };
+
+  /** A held task's state as this runner logs it: with what it read of the task's pull requests. */
+  const stateOf = (task: TaskRecord): TaskState => readTaskState(repos, task, { prSnapshots: true });
 
   /** What was last logged of a task, as one text: a write that leaves it the same logs nothing. */
   const loggedText = (state: TaskState, usage: readonly CopiedUsage[]): string =>
@@ -143,7 +173,7 @@ export function createWorkingCopiesService(
       if (copy?.role === "reference") continue;
       const task = repos.tasks.getAny(id);
       if (!task) continue;
-      const state = readTaskState(repos, task);
+      const state = stateOf(task);
       const usage = deps.usageOf(id);
       const json = loggedText(state, usage);
       const events = repos.events.after(id, copy?.lastEventId ?? 0);
@@ -205,7 +235,13 @@ export function createWorkingCopiesService(
           position: positionAmong(repos.tasks.lane(projectId, ref.status), {}),
         });
       }
-      copies.upsert({ taskId: ref.id, role: "reference", lastEventId: 0, loggedState: null, createdAt: now });
+      copies.upsert({
+        taskId: ref.id,
+        role: "reference",
+        lastEventId: 0,
+        loggedState: null,
+        createdAt: now,
+      });
     }
   };
 
@@ -342,7 +378,12 @@ export function createWorkingCopiesService(
         if (!existing) repos.tasks.insert(base);
         const saved = writeTaskState(
           repos,
-          { ...base, projectId: project.id, parentId: epic?.kind === "epic" ? epic.id : null, deletedAt: null },
+          {
+            ...base,
+            projectId: project.id,
+            parentId: epic?.kind === "epic" ? epic.id : null,
+            deletedAt: null,
+          },
           state,
           { blocks: true, actor: BOARD_ACTOR },
         );
@@ -356,7 +397,7 @@ export function createWorkingCopiesService(
           taskId: saved.id,
           role: "held",
           lastEventId: repos.events.lastId(),
-          loggedState: loggedText(readTaskState(repos, saved), deps.usageOf(saved.id)),
+          loggedState: loggedText(stateOf(saved), deps.usageOf(saved.id)),
           createdAt: now,
         });
         fx.task(saved.id);
@@ -371,7 +412,7 @@ export function createWorkingCopiesService(
         if (copy?.role !== "held" || !task) return;
         const events = repos.events.after(taskId, copy.lastEventId);
         append("released", taskId, {
-          state: readTaskState(repos, task),
+          state: stateOf(task),
           events: events.map(copiedEvent),
           usage: deps.usageOf(taskId),
         });
@@ -446,6 +487,53 @@ export function createWorkingCopiesService(
     },
 
     onAppended: (listener) => void listeners.push(listener),
+
+    logRun(run) {
+      if (!deps.logs) return;
+      const { machine: _machine, ...own } = run;
+      core.write(() =>
+        append("run", run.taskId ?? "", {
+          run: {
+            ...own,
+            projectId: run.projectId ? (copies.project(run.projectId)?.boardId ?? null) : null,
+          },
+        }),
+      );
+    },
+
+    refreshReferences(references) {
+      core.write((fx) => {
+        for (const ref of references) {
+          if (copies.get(ref.id)?.role !== "reference") continue;
+          const before = repos.tasks.getAny(ref.id);
+          if (!before) continue;
+          upsertReferences([ref], before.projectId);
+          if (before.status !== ref.status || before.title !== ref.title) fx.task(ref.id);
+          // The tasks it blocks see their blocker change.
+          for (const r of repos.relations.allFor([ref.id])) if (r.blockerId === ref.id) fx.task(r.blockedId);
+        }
+      });
+    },
+
+    logNotice(input) {
+      if (!deps.logs) return;
+      const taskId = input.taskId ?? null;
+      // Only what the board has: a notification about a task made here and not yet on the board, or about nothing
+      // held, still goes, and the board shows it without a task.
+      core.write(() =>
+        append("notice", taskId ?? "", {
+          notice: {
+            kind: input.kind,
+            taskId,
+            title: input.title,
+            body: input.body,
+            dedupeKey: input.dedupeKey,
+          },
+        }),
+      );
+    },
+
+    boardProjectOf: (projectId) => (projectId ? (copies.project(projectId)?.boardId ?? null) : null),
   };
 }
 

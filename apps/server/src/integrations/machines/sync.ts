@@ -6,6 +6,7 @@ import {
   MACHINE_CHANGES_PATH,
   MACHINE_EDITS_PATH,
   MACHINE_REPLIES_PATH,
+  MACHINE_REFERENCES_PATH,
   LogPosition,
   MACHINE_TASKS_PATH,
   machineTaskPath,
@@ -15,6 +16,7 @@ import {
   type CallToolReply,
   type HeldEditRequest,
   type TaskDetail,
+  type TaskSummary,
 } from "@repo/contracts";
 import type { EventBus } from "../../bus.ts";
 import { AppError } from "../../errors.ts";
@@ -51,14 +53,25 @@ export interface MachineSyncDeps {
   machines: Pick<MachinesIntegration, "request">;
   /** What a machine needs before it works on a task: the board's settings, and the task's images. */
   work?: Pick<RemoteWork, "syncSettings" | "sendImages" | "unpushed">;
+  /** Sends a machine the board's Autopilot when it changed, so it runs the tasks it holds by it. */
+  autopilot?: { sync(machineId: string): Promise<void> };
   bus: EventBus;
   runGit: RunGit;
+  /**
+   * The machine a task not held yet would run on: its own choice, else its project's default, else this board
+   * (null). Dependents of a flagged task handed to a machine that resolve to the same one go with it.
+   */
+  machineFor?: (taskId: string) => string | null;
   now?: () => Date;
   log?: Logger;
 }
 
 export interface MachineSync {
-  /** Hands a task to a connected machine, which then orders every change to it. */
+  /**
+   * Hands a task to a connected machine, which then orders every change to it. A task flagged for Autopilot takes
+   * the tasks it blocks (and theirs) that resolve to the same machine along, so the machine can start each when its
+   * blockers finish while the board is off.
+   */
   handOver(taskId: string, machineId: string, actor: string): Promise<TaskDetail>;
   /**
    * Takes a task back. The machine gives it up and its last changes are applied first; with `force` the board
@@ -90,6 +103,8 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
   const sending = new Map<string, Promise<void>>();
   const loops = new Set<string>();
   let remotes: { at: number; byRemote: Map<string, string> } | null = null;
+  /** Per machine, the references it was last sent, as text, so they go only when they change. */
+  const sentReferences = new Map<string, string>();
   /** Per machine, the log position replay is stuck at, once it has been reported. */
   const unreadable = new Map<string, number>();
 
@@ -147,7 +162,11 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
         // A runner that can read the request gives its verdict even on an edit it can't make sense of, with the
         // state logged. This one answered without one (a version from before edits): refused, not retried forever.
         const error = await refusal(res, "The machine");
-        services().holds.settleEdit(edit.id, { applied: false, error, head: 0 });
+        services().holds.settleEdit(edit.id, {
+          applied: false,
+          error,
+          head: 0,
+        });
       }
     }
   }
@@ -168,13 +187,25 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
     let reply: BridgeReply;
     try {
       if (request.method === "allocateNumber") {
-        reply = { id: request.id, ok: true, result: { number: services().holds.allocateNumber() } };
+        reply = {
+          id: request.id,
+          ok: true,
+          result: { number: services().holds.allocateNumber() },
+        };
       } else if (request.method === "callTool") {
         if (!callTool) throw new Error("This board can't run tools for a machine yet");
-        reply = { id: request.id, ok: true, result: await callTool(CallToolParams.parse(request.params)) };
+        reply = {
+          id: request.id,
+          ok: true,
+          result: await callTool(CallToolParams.parse(request.params)),
+        };
       } else {
         // A newer runner asking for something this board doesn't know: it falls back as if the board were away.
-        reply = { id: request.id, ok: false, error: `This board doesn't know "${request.method}"` };
+        reply = {
+          id: request.id,
+          ok: false,
+          error: `This board doesn't know "${request.method}"`,
+        };
       }
     } catch (error) {
       reply = { id: request.id, ok: false, error: messageOf(error) };
@@ -182,10 +213,29 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
     await deps.machines.request(machineId, MACHINE_REPLIES_PATH, json(reply));
   }
 
+  /**
+   * Sends the machine the tasks its held ones point at when they changed here: a blocker the board holds that
+   * finished is what lets the machine's Autopilot start what it blocked, the board away or not afterwards.
+   */
+  async function syncReferences(machineId: string): Promise<void> {
+    const references = services().holds.referencesFor(machineId);
+    const text = JSON.stringify(references);
+    if (sentReferences.get(machineId) === text) return;
+    const res = await deps.machines.request(machineId, MACHINE_REFERENCES_PATH, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ references }),
+    });
+    // A machine from before this (a 404) refreshes them only at hand-over and with edits, as it did.
+    if (res.ok || res.status === 404) sentReferences.set(machineId, text);
+  }
+
   async function pump(machineId: string, opts: { wait?: number } = {}): Promise<ApplyResult> {
     // Sent when they changed since the last round: rules run on the machine by them (whether a move opens a review).
     await deps.work?.syncSettings(machineId).catch(() => {});
+    await deps.autopilot?.sync(machineId).catch(() => {});
     await sendInOrder(machineId);
+    await syncReferences(machineId).catch(() => {});
     const position = services().holds.position(machineId);
     const wait = opts.wait ?? 0;
     const query = new URLSearchParams({
@@ -283,32 +333,81 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
     if (event.type === "machines.changed") startLoops();
   });
 
+  /**
+   * After a flagged task went to a machine: what it blocks, and so on down, that resolves to the same machine goes
+   * too. A task that resolves elsewhere (the board) stays and waits there; what it blocks isn't followed through it.
+   */
+  async function handOverDependents(taskId: string, machineId: string, actor: string): Promise<void> {
+    const seen = new Set([taskId]);
+    const queue = [taskId];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      let blocks: readonly { id: string }[];
+      try {
+        blocks = services().tasks.summary(id).blocks;
+      } catch {
+        continue;
+      }
+      for (const { id: depId } of blocks) {
+        if (seen.has(depId)) continue;
+        seen.add(depId);
+        let dep: TaskSummary;
+        try {
+          dep = services().tasks.summary(depId);
+        } catch {
+          continue;
+        }
+        if (dep.kind === "epic" || dep.manual || dep.archivedAt !== null || dep.status === "done") continue;
+        if (dep.hold) {
+          // Already there: what it blocks may still have to follow.
+          if (dep.hold.machineId === machineId) queue.push(dep.id);
+          continue;
+        }
+        if ((deps.machineFor?.(dep.id) ?? null) !== machineId) continue;
+        try {
+          await handOverOne(dep.id, machineId, actor);
+          queue.push(dep.id);
+        } catch (error) {
+          log.warn(`[machines] couldn't hand ${taskLabel(dep)} over with what blocks it: ${messageOf(error)}`);
+        }
+      }
+    }
+  }
+
+  async function handOverOne(taskId: string, machineId: string, actor: string): Promise<TaskDetail> {
+    const task = services().tasks.summary(taskId);
+    const project = services().projects.get(task.projectId);
+    const machine = services().machines.get(machineId);
+    const request = services().holds.prepare(taskId, machineId, await remoteOf(project.workspaceRoot));
+    handing.add(taskId);
+    try {
+      await deps.work?.syncSettings(machineId);
+      // Its Autopilot runs the task by the board's switches from the moment it has it.
+      await deps.autopilot?.sync(machineId).catch(() => {});
+      const res = await deps.machines.request(machineId, MACHINE_TASKS_PATH, json(request), {
+        timeoutMs: HAND_OVER_TIMEOUT_MS,
+      });
+      if (!res.ok) throw new AppError("CONFLICT", await refusal(res, machine.name));
+      try {
+        const { head } = LogPosition.parse(await res.json());
+        const detail = services().holds.confirm(taskId, machineId, request.state, head, actor);
+        await afterHandOver(taskId, machine.id, machine.name);
+        return detail;
+      } catch (error) {
+        // The machine has a copy the board won't follow: it gives it up again.
+        await deps.machines.request(machineId, machineTaskPath(taskId), { method: "DELETE" }).catch(() => {});
+        throw error;
+      }
+    } finally {
+      handing.delete(taskId);
+    }
+  }
+
   return {
     async handOver(taskId, machineId, actor) {
-      const task = services().tasks.summary(taskId);
-      const project = services().projects.get(task.projectId);
-      const machine = services().machines.get(machineId);
-      const request = services().holds.prepare(taskId, machineId, await remoteOf(project.workspaceRoot));
-      handing.add(taskId);
-      try {
-        await deps.work?.syncSettings(machineId);
-        const res = await deps.machines.request(machineId, MACHINE_TASKS_PATH, json(request), {
-          timeoutMs: HAND_OVER_TIMEOUT_MS,
-        });
-        if (!res.ok) throw new AppError("CONFLICT", await refusal(res, machine.name));
-        try {
-          const { head } = LogPosition.parse(await res.json());
-          const detail = services().holds.confirm(taskId, machineId, request.state, head, actor);
-          await afterHandOver(taskId, machine.id, machine.name);
-          return detail;
-        } catch (error) {
-          // The machine has a copy the board won't follow: it gives it up again.
-          await deps.machines.request(machineId, machineTaskPath(taskId), { method: "DELETE" }).catch(() => {});
-          throw error;
-        }
-      } finally {
-        handing.delete(taskId);
-      }
+      const detail = await handOverOne(taskId, machineId, actor);
+      if (detail.autopilot === true) await handOverDependents(taskId, machineId, actor);
+      return detail;
     },
 
     async release(taskId, opts, actor) {

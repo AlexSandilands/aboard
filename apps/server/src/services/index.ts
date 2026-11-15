@@ -6,9 +6,11 @@ import {
   customAutomationId,
   effectiveVariables,
   epicArmKey,
+  type NotifyInput,
   type T3IntegrationStatus,
 } from "@repo/contracts";
 import type { EventBus } from "../bus.ts";
+import { createRunnerAutopilotService } from "./runnerAutopilot.ts";
 import type { Db } from "../db/database.ts";
 import { createRepos } from "../db/repos/index.ts";
 import { AUTOMATIONS } from "../autopilot/automations/index.ts";
@@ -106,7 +108,11 @@ export function createServices(deps: ServiceDeps): Services {
   const attachments = createAttachmentsService(core, deps.attachmentsDir);
   const builtIn = deps.automations ?? AUTOMATIONS;
   const settings = createSettingsService(core);
-  const notifications = createNotificationsService(core);
+  // A runner passes what it raises to its board; bound once the working copies, which log it, exist.
+  let raised: ((input: NotifyInput) => void) | null = null;
+  const notifications = createNotificationsService(core, {
+    raised: (input) => raised?.(input),
+  });
   // Recurring rules are built after the projects they belong to; an unarchived project starts them from now.
   let restartRecurring: ((projectIds: readonly string[]) => void) | null = null;
   const projects = createProjectsService(core, {
@@ -115,7 +121,10 @@ export function createServices(deps: ServiceDeps): Services {
   });
   const labels = createLabelsService(core);
   const usage = createUsageService(core, {
-    dirs: deps.usageDirs ?? { claudeDir: join(deps.userHome, ".claude"), codexHome: join(deps.userHome, ".codex") },
+    dirs: deps.usageDirs ?? {
+      claudeDir: join(deps.userHome, ".claude"),
+      codexHome: join(deps.userHome, ".codex"),
+    },
     ...(deps.fetchThreadUsage ? { fetchThread: deps.fetchThreadUsage } : {}),
     ...(deps.modelPrices ? { modelPrices: deps.modelPrices } : {}),
   });
@@ -135,6 +144,7 @@ export function createServices(deps: ServiceDeps): Services {
     logs: role === "runner",
     usageOf: (taskId) => usage.copyOf(taskId),
   });
+  if (role === "runner") raised = (input) => workingCopies.logNotice(input);
   const tasks = createTasksService(core, {
     projects,
     plans: () => plans!,
@@ -150,9 +160,18 @@ export function createServices(deps: ServiceDeps): Services {
     // A task made on a runner takes a number the board gave out, or the machine's own prefixed one.
     ...(role === "runner" ? { numbering: () => workingCopies.nextNumber() } : {}),
   });
-  relations = createRelations(core, { resolveId: (ref) => tasks.service.resolveId(ref), record: tasks.record });
-  imports = createImportsService(core, { tasks: () => tasks.service, settings });
-  plans = createPlans(core, { task: tasks.record, detail: (id) => tasks.service.detail(id) });
+  relations = createRelations(core, {
+    resolveId: (ref) => tasks.service.resolveId(ref),
+    record: tasks.record,
+  });
+  imports = createImportsService(core, {
+    tasks: () => tasks.service,
+    settings,
+  });
+  plans = createPlans(core, {
+    task: tasks.record,
+    detail: (id) => tasks.service.detail(id),
+  });
   links = createLinksService(core, {
     task: tasks.record,
     tasks: tasks.service,
@@ -168,7 +187,11 @@ export function createServices(deps: ServiceDeps): Services {
     notifications,
   });
 
-  const recurring = createRecurringService(core, { projects, templates, tasks: tasks.service });
+  const recurring = createRecurringService(core, {
+    projects,
+    templates,
+    tasks: tasks.service,
+  });
   restartRecurring = (ids) => recurring.restart(ids);
   const runShell = deps.runShell ?? runShellCommand;
   const runScriptFile = deps.runScript ?? runScript;
@@ -191,11 +214,15 @@ export function createServices(deps: ServiceDeps): Services {
   // Read on every call, so a custom automation's edit applies from the next pass.
   const automations = () => [
     ...builtIn,
-    ...customAutomations
-      .list()
-      .map((c) =>
-        customAutomation(c, { runShell: taskShell, runScript: taskScript, checkRuns, repoUrl, boardVariables }),
-      ),
+    ...customAutomations.list().map((c) =>
+      customAutomation(c, {
+        runShell: taskShell,
+        runScript: taskScript,
+        checkRuns,
+        repoUrl,
+        boardVariables,
+      }),
+    ),
   ];
 
   // A project that gets the last variable an automation needs starts it afresh there, rather than acting on everything
@@ -237,7 +264,9 @@ export function createServices(deps: ServiceDeps): Services {
     }),
     templates,
     notifications,
-    social: createSocialService(core, { resolveTask: (ref) => tasks.service.resolveId(ref) }),
+    social: createSocialService(core, {
+      resolveTask: (ref) => tasks.service.resolveId(ref),
+    }),
     attention,
     machineAuth: createMachineAuthService(core),
     machines: createMachinesService(core),
@@ -245,8 +274,11 @@ export function createServices(deps: ServiceDeps): Services {
       projects,
       detail: (id) => tasks.service.detail(id),
       keepUsage: (machineId, taskId, rows) => usage.keepFromMachine(machineId, taskId, rows),
+      keepRun: (run, machine) => all!.autopilot.keepFromMachine(run, machine),
+      notify: (input) => void notifications.notify(input),
     }),
     workingCopies,
+    runnerAutopilot: createRunnerAutopilotService(core),
     repoPrReviews: createRepoPrReviewsService(core, { notifications }),
     autopilot: createAutopilotService(core, {
       automations,
@@ -268,6 +300,8 @@ export function createServices(deps: ServiceDeps): Services {
       },
       plannedTasks: (projectIds) =>
         projectIds.flatMap((projectId) => tasks.service.summaries({ projectId, status: "planned" })),
+      // A runner's own runs go to its board through the log; its board counts failures and pauses.
+      ...(role === "runner" ? { runWritten: (run) => workingCopies.logRun(run), autoPause: false } : {}),
     }),
     recurring,
     customAutomations,
@@ -278,12 +312,18 @@ export function createServices(deps: ServiceDeps): Services {
       notifications,
       userHome: deps.userHome,
     }),
-    skillSync: createSkillSyncService(core, { userHome: deps.userHome, harnessHomes: deps.harnessHomes }),
+    skillSync: createSkillSyncService(core, {
+      userHome: deps.userHome,
+      harnessHomes: deps.harnessHomes,
+    }),
     activity: createActivityService(core, {
       automationTitle: (key) => automationTitleOf(automations(), key),
       usage,
     }),
-    stats: createStatsService(core, { runGit: deps.runGit ?? defaultRunGit, usage }),
+    stats: createStatsService(core, {
+      runGit: deps.runGit ?? defaultRunGit,
+      usage,
+    }),
     usage,
     digests: createDigestsService(core, {
       notifications,
@@ -291,6 +331,9 @@ export function createServices(deps: ServiceDeps): Services {
     }),
   };
   // Last, so every wrapper above is inside it: an edit to a held task is queued for its machine whoever makes it.
-  routeHeldEdits(core, all, { role, onQueued: (machineId) => deps.onHeldEdit?.(machineId) });
+  routeHeldEdits(core, all, {
+    role,
+    onQueued: (machineId) => deps.onHeldEdit?.(machineId),
+  });
   return all;
 }

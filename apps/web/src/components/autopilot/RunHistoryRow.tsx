@@ -12,6 +12,15 @@ import { useBoard } from "~/state/queries";
 import { formatCost, runStatusLabel, runStatusVariant, scheduledAnswerOf } from "./autopilot.logic";
 import { runSessionLink, shortSessionId, threadLinkLabel } from "./runHistory.logic";
 
+/** Where a run a connected machine's Autopilot made ran, beside its automation. */
+export function RunMachineBadge({ name }: { name: string }) {
+  return (
+    <Badge variant="outline" size="sm" title={`Ran on ${name}, by its own Autopilot`}>
+      on {name}
+    </Badge>
+  );
+}
+
 /** Web URLs and T3 Code deep links; a runner's thread URL is shown as a link only if it is one of those. */
 const isOpenable = (url: string) => isWebUrl(url) || url.startsWith("t3code://");
 
@@ -97,6 +106,7 @@ export function RunHistoryRow({
               </Badge>
               <span className="min-w-0 truncate font-medium text-foreground">{automation}</span>
               {where ? <span className="min-w-0 truncate text-muted-foreground">· {where}</span> : null}
+              {run.machine ? <RunMachineBadge name={run.machine.name} /> : null}
             </span>
             {run.error ? (
               <span className="text-destructive-foreground [overflow-wrap:anywhere]">{run.error}</span>
@@ -130,6 +140,7 @@ function RunDetail({ run, summary, cost }: { run: AutopilotRun; summary: string;
   if (cost) rows.push(["Cost", cost]);
   if (model) rows.push(["Model", model]);
   if (run.runner) rows.push(["Runner", run.runner]);
+  if (run.machine) rows.push(["Machine", `${run.machine.name}, by its own Autopilot`]);
   if (run.threadUrl && isOpenable(run.threadUrl)) {
     rows.push([
       "Thread",

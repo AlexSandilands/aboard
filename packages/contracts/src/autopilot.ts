@@ -170,9 +170,14 @@ export const resolvedModeLabel = (resolved: Pick<ResolvedAutopilot, "enabled" | 
 
 /** "Inherit (On from board)": how the UI labels an inherit switch. */
 export function describeInherited(
-  resolved: Pick<ResolvedAutopilot, "enabled" | "source"> & { preview?: boolean },
+  resolved: Pick<ResolvedAutopilot, "enabled" | "source"> & {
+    preview?: boolean;
+  },
 ): string {
-  const state = resolvedModeLabel({ enabled: resolved.enabled, preview: resolved.preview ?? false });
+  const state = resolvedModeLabel({
+    enabled: resolved.enabled,
+    preview: resolved.preview ?? false,
+  });
   return resolved.source === "default" ? `Inherit (${state} by default)` : `Inherit (${state} from ${resolved.source})`;
 }
 
@@ -268,7 +273,10 @@ export const AutomationGroup = z.enum(["ship", "prs", "upkeep", "yours"]);
 export type AutomationGroup = z.infer<typeof AutomationGroup>;
 
 /** The list's headings, in the order the groups are listed. */
-export const AUTOMATION_GROUPS: ReadonlyArray<{ value: AutomationGroup; label: string }> = [
+export const AUTOMATION_GROUPS: ReadonlyArray<{
+  value: AutomationGroup;
+  label: string;
+}> = [
   { value: "ship", label: "Ship work" },
   { value: "prs", label: "Pull requests" },
   { value: "upkeep", label: "Upkeep" },
@@ -327,10 +335,22 @@ export const RunnerChoice = z.enum(["auto", "t3", "headless"]);
 export type RunnerChoice = z.infer<typeof RunnerChoice>;
 
 /** The runner choices as the settings list them; `short` is for one-line summaries. */
-export const RUNNER_CHOICES: ReadonlyArray<{ value: RunnerChoice; label: string; short: string }> = [
-  { value: "auto", label: "Auto (T3 Code when connected, else headless)", short: "Auto" },
+export const RUNNER_CHOICES: ReadonlyArray<{
+  value: RunnerChoice;
+  label: string;
+  short: string;
+}> = [
+  {
+    value: "auto",
+    label: "Auto (T3 Code when connected, else headless)",
+    short: "Auto",
+  },
   { value: "t3", label: "T3 Code only", short: "T3 Code" },
-  { value: "headless", label: "Headless only (a CLI in a worktree)", short: "Headless" },
+  {
+    value: "headless",
+    label: "Headless only (a CLI in a worktree)",
+    short: "Headless",
+  },
 ];
 
 /**
@@ -373,7 +393,11 @@ export const AutopilotEngineSettings = z.object({
   /** Spend on agent runs per day, in USD; null is no cap. */
   dailySpendCapUsd: z.number().positive().max(10_000).nullable(),
   /** No agent runs start between `start` and `end` (local time, may wrap midnight) while on. Equal times are no window. */
-  quietHours: z.object({ enabled: z.boolean(), start: ClockTime, end: ClockTime }),
+  quietHours: z.object({
+    enabled: z.boolean(),
+    start: ClockTime,
+    end: ClockTime,
+  }),
   /** Preview everything: every automation records what would run, as skipped runs, and does nothing. */
   dryRun: z.boolean(),
   /** Days a finished headless run's worktree is kept when its PR hasn't merged; clean ones are then removed. */
@@ -418,7 +442,13 @@ export function inQuietHours(quiet: AutopilotEngineSettings["quietHours"], minut
 export const AutopilotRunDeferral = z.enum(["head_moved"]);
 export type AutopilotRunDeferral = z.infer<typeof AutopilotRunDeferral>;
 
-export const DEFERRAL_TEXT: Record<AutopilotRunDeferral, string> = { head_moved: "head moved" };
+export const DEFERRAL_TEXT: Record<AutopilotRunDeferral, string> = {
+  head_moved: "head moved",
+};
+
+/** Where a run ran: the board's machine it was replayed from (remote-machines.md#autopilot-on-the-machine). */
+export const RunMachine = z.object({ id: z.string(), name: z.string() });
+export type RunMachine = z.infer<typeof RunMachine>;
 
 export const AutopilotRun = z.object({
   id: z.string(),
@@ -454,6 +484,8 @@ export const AutopilotRun = z.object({
   startedAt: z.string().nullable(),
   finishedAt: z.string().nullable(),
   updatedAt: z.string(),
+  /** The connected machine whose Autopilot made the run; absent or null for a run made here. */
+  machine: RunMachine.nullable().optional(),
 });
 export type AutopilotRun = z.infer<typeof AutopilotRun>;
 
@@ -491,11 +523,24 @@ export type AutopilotAutoPause = z.infer<typeof AutopilotAutoPause>;
 /** What a hint's one click does. */
 export const AutopilotHintAction = z.discriminatedUnion("kind", [
   /** Sets one config key of the automation at the board scope, keeping the rest of the board's own config. */
-  z.object({ kind: z.literal("board_config"), label: z.string(), key: z.string(), value: z.unknown() }),
+  z.object({
+    kind: z.literal("board_config"),
+    label: z.string(),
+    key: z.string(),
+    value: z.unknown(),
+  }),
   /** Flags these tasks for Autopilot. */
-  z.object({ kind: z.literal("flag_tasks"), label: z.string(), taskIds: z.array(z.string()).min(1) }),
+  z.object({
+    kind: z.literal("flag_tasks"),
+    label: z.string(),
+    taskIds: z.array(z.string()).min(1),
+  }),
   /** Hands an agent the failures to look into: copies this prompt. */
-  z.object({ kind: z.literal("ask_agent"), label: z.string(), prompt: z.string() }),
+  z.object({
+    kind: z.literal("ask_agent"),
+    label: z.string(),
+    prompt: z.string(),
+  }),
   /** Opens Limits & safety. */
   z.object({ kind: z.literal("open_limits"), label: z.string() }),
 ]);
@@ -581,7 +626,13 @@ export const AutopilotOverview = z.object({
   /** Tuning hints not dismissed, for Needs you and each automation's detail. */
   hints: z.array(AutopilotHint),
   /** Each automation's latest real run that has finished, for its row in the list; none for one that never ran. */
-  lastRuns: z.array(z.object({ automation: z.string(), status: AutopilotRunStatus, at: z.string() })),
+  lastRuns: z.array(
+    z.object({
+      automation: z.string(),
+      status: AutopilotRunStatus,
+      at: z.string(),
+    }),
+  ),
   /** Each automation's dry runs ("would …") over the last 7 days, for its Preview hint; none for one with none. */
   previewRuns: z.array(z.object({ automation: z.string(), count: z.number().int() })),
 });

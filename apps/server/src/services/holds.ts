@@ -6,10 +6,14 @@ import {
   type ChangeLogEntry,
   type ChangesResponse,
   type CopiedEvent,
+  type AutopilotRun,
   type CopiedUsage,
   type HandOverRequest,
+  type NotifyInput,
+  type RunMachine,
   type HeldEditResult,
   type TaskDetail,
+  type TaskReference,
   type TaskState,
 } from "@repo/contracts";
 import type { HeldEditRecord, HoldRecord } from "../db/repos/holds.ts";
@@ -87,6 +91,8 @@ export interface HoldsService {
   ): ApplyResult;
   /** The machine's edits that haven't reached it, in the order they were made. */
   pendingEdits(machineId: string): HeldEditRecord[];
+  /** The tasks the machine's held ones point at that it doesn't hold, as they stand here. */
+  referencesFor(machineId: string): TaskReference[];
   /** Records the machine's answer to an edit: taken, or refused as the task stands there. */
   settleEdit(editId: string, result: HeldEditResult): void;
   /** The next of the board's own task numbers, for a task a machine is making. */
@@ -102,6 +108,10 @@ export function createHoldsService(
     detail: (id: string) => TaskDetail;
     /** Keeps what a machine read of a held task's token usage, inside the write that applies its entry. */
     keepUsage: (machineId: string, taskId: string, rows: readonly CopiedUsage[]) => void;
+    /** Keeps a run the machine's own Autopilot made, inside the write that applies its entry. */
+    keepRun?: (run: AutopilotRun, machine: RunMachine) => void;
+    /** Raises a notification the machine raised, by this board's switches. */
+    notify?: (input: NotifyInput) => void;
   },
 ): HoldsService {
   const { repos } = core;
@@ -140,7 +150,11 @@ export function createHoldsService(
   /** Writes a machine's state of a task over the board's, with the activity the machine logged. */
   const applyState = (
     task: TaskRecord,
-    payload: { state: TaskState; events: CopiedEvent[]; usage?: CopiedUsage[] | undefined },
+    payload: {
+      state: TaskState;
+      events: CopiedEvent[];
+      usage?: CopiedUsage[] | undefined;
+    },
     entryId: number,
     machine: MachineRecord,
     fx: Effects,
@@ -149,7 +163,9 @@ export function createHoldsService(
     const lane = repos.tasks.lane(task.projectId, payload.state.task.status).filter((t) => t.id !== task.id);
     // The lane is the board's: a task that changed column goes to the end of its new one.
     const base = statusChanged ? { ...task, position: positionAmong(lane, {}) } : task;
-    const saved = writeTaskState(repos, base, payload.state, { actor: machine.name });
+    const saved = writeTaskState(repos, base, payload.state, {
+      actor: machine.name,
+    });
     for (const edit of holds.editsForTask(task.id)) {
       if (edit.settledHead !== null && edit.settledHead <= entryId) finishEdit(edit);
     }
@@ -197,12 +213,23 @@ export function createHoldsService(
       position: positionAmong(repos.tasks.lane(project.id, state.task.status), {}),
     };
     repos.tasks.insert(task);
-    holds.insert({ taskId: task.id, machineId: machine.id, heldAt: at, afterLogId: 0 });
+    holds.insert({
+      taskId: task.id,
+      machineId: machine.id,
+      heldAt: at,
+      afterLogId: 0,
+    });
     applyState(task, entry.payload, entry.id, machine, fx);
     if (taken)
-      fx.log(task.id, BOARD_ACTOR, "renumbered", { from: `${prefix}${identity.number}`, machine: machine.name });
+      fx.log(task.id, BOARD_ACTOR, "renumbered", {
+        from: `${prefix}${identity.number}`,
+        machine: machine.name,
+      });
     if (parentId) {
-      fx.log(parentId, machine.name, "child_added", { task: taskNumberValue(task), title: task.title });
+      fx.log(parentId, machine.name, "child_added", {
+        task: taskNumberValue(task),
+        title: task.title,
+      });
       syncEpicStatus(repos, parentId, machine.name, fx);
     }
   };
@@ -213,6 +240,18 @@ export function createHoldsService(
     projectByRemote: ReadonlyMap<string, string>,
     fx: Effects,
   ): void => {
+    // A machine's runs and notifications are history and news, not the task's state: whoever holds the task now,
+    // and whether or not it is still held, they are the board's to keep.
+    if (entry.kind === "run")
+      return deps.keepRun?.(entry.payload.run, {
+        id: machine.id,
+        name: machine.name,
+      });
+    if (entry.kind === "notice") {
+      const { notice } = entry.payload;
+      const taskId = notice.taskId && repos.tasks.get(notice.taskId) ? notice.taskId : null;
+      return deps.notify?.({ ...notice, taskId });
+    }
     const task = repos.tasks.getAny(entry.taskId);
     const hold = holds.get(entry.taskId);
     // Entries from before this hold began (the task was taken back by force, then handed over again) are skipped
@@ -271,7 +310,12 @@ export function createHoldsService(
         if (JSON.stringify(readTaskState(repos, task)) !== JSON.stringify(sent)) {
           throw new AppError("CONFLICT", `${taskLabel(task)} changed while it was being handed over; try again`);
         }
-        holds.insert({ taskId, machineId, heldAt: core.now().toISOString(), afterLogId: head });
+        holds.insert({
+          taskId,
+          machineId,
+          heldAt: core.now().toISOString(),
+          afterLogId: head,
+        });
         fx.log(taskId, actor, "handed_over", { machine: machine.name });
       });
       return deps.detail(taskId);
@@ -327,16 +371,39 @@ export function createHoldsService(
           cursor = stored.id;
           applied += 1;
         }
-        holds.setSync({ machineId, epoch: response.epoch, appliedLogId: cursor });
+        holds.setSync({
+          machineId,
+          epoch: response.epoch,
+          appliedLogId: cursor,
+        });
         // Only once the whole log is read: a task made on the machine has no hold here until its `created` entry is
         // applied, and that entry may be past what this answer carried or past one that couldn't be read.
         const caughtUp = error === null && cursor >= response.head;
         const stray = caughtUp ? response.held.filter((id) => holds.get(id)?.machineId !== machineId) : [];
-        return { applied, appliedLogId: cursor, stray, error, more: error === null && cursor < response.head };
+        return {
+          applied,
+          appliedLogId: cursor,
+          stray,
+          error,
+          more: error === null && cursor < response.head,
+        };
       });
     },
 
     pendingEdits: (machineId) => holds.editsForMachine(machineId).filter((e) => e.settledHead === null),
+
+    referencesFor(machineId) {
+      const held = holds.forMachine(machineId).map((h) => h.taskId);
+      const heldSet = new Set(held);
+      const ids = new Set<string>();
+      for (const task of repos.tasks.getMany(held)) {
+        for (const id of referencedIds(task, readTaskState(repos, task))) if (!heldSet.has(id)) ids.add(id);
+      }
+      return repos.tasks
+        .getMany([...ids])
+        .map(referenceOf)
+        .toSorted((a, b) => a.id.localeCompare(b.id));
+    },
 
     settleEdit(editId, result) {
       core.write((fx) => {
@@ -345,7 +412,10 @@ export function createHoldsService(
         if (!result.applied) {
           // What the board showed early is taken back; the machine's next entry puts the task as it is there.
           finishEdit(edit);
-          fx.log(edit.taskId, BOARD_ACTOR, "edit_refused", { edit: edit.op, reason: result.error ?? "" });
+          fx.log(edit.taskId, BOARD_ACTOR, "edit_refused", {
+            edit: edit.op,
+            reason: result.error ?? "",
+          });
           return;
         }
         // The entry with the outcome may have been applied already, on the poll that was waiting meanwhile.

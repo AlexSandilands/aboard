@@ -64,6 +64,7 @@ export * from "./usage.ts";
 export * from "./modelPricing.ts";
 export * from "./machines.ts";
 export * from "./machineJobs.ts";
+export * from "./machineAutopilot.ts";
 export * from "./taskNumbers.ts";
 export * from "./workingCopies.ts";
 export * from "./runnerInstall.ts";

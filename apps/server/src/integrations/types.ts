@@ -58,6 +58,7 @@ import type { MachineJobs } from "./machines/jobs.ts";
 import type { LoginDetector } from "./machines/logins.ts";
 import type { RemoteWork } from "./machines/remoteWork.ts";
 import type { RunnerWork } from "./machines/runnerWork.ts";
+import type { AutopilotSync } from "./machines/autopilotSync.ts";
 import type { MachineSync } from "./machines/sync.ts";
 import type { SelfUpdater } from "./machines/selfUpdate.ts";
 import type { MergeTaskPrResult } from "./mergeTaskPr.ts";
@@ -101,6 +102,8 @@ export interface Integrations {
   readonly runnerHost: RunnerHost;
   /** A board's hand-overs, replay and edit queue for the tasks its machines hold. */
   readonly machineSync: MachineSync;
+  /** The board's Autopilot sent to the machines that run their own, and what each has of it. */
+  readonly autopilotSync: AutopilotSync;
   /** A board's work on its machines: runs, commands and transcripts for the tasks they hold. */
   readonly remoteWork: RemoteWork;
   /** A page of the transcript of a session on this machine, for the board a runner serves. */

@@ -35,7 +35,11 @@ const fieldsOf = (task: TaskRecord): CopiedTaskFields => ({
 });
 
 /** The task's state as it stands in this database. */
-export function readTaskState(repos: Repos, task: TaskRecord): TaskState {
+/**
+ * `prSnapshots`: a runner's state carries what it read of the task's pull requests too, since its Autopilot polls
+ * them and the board leaves them alone while the machine holds the task (remote-machines.md#autopilot-on-the-machine).
+ */
+export function readTaskState(repos: Repos, task: TaskRecord, opts: { prSnapshots?: boolean } = {}): TaskState {
   const steps = repos.plans.stepsFor([task.id]);
   const phases: CopiedPhase[] = repos.plans.phasesFor([task.id]).map((phase) => ({
     id: phase.id,
@@ -70,7 +74,7 @@ export function readTaskState(repos: Repos, task: TaskRecord): TaskState {
       createdAt: row.created_at,
       auto: row.auto !== 0,
       // A session on a machine is read there, so what was read goes with the task; any other link each side reads.
-      ...(onMachine(row) ? { snapshot: row.snapshot_json } : {}),
+      ...(onMachine(row) || (opts.prSnapshots && row.kind === "pr") ? { snapshot: row.snapshot_json } : {}),
     })),
     blockedBy: relations.filter((r) => r.blockedId === task.id).map((r) => r.blockerId),
     blocks: relations.filter((r) => r.blockerId === task.id).map((r) => r.blockedId),
@@ -102,7 +106,12 @@ function writeReviews(repos: Repos, taskId: string, reviews: readonly CopiedRevi
     if (haveRounds.has(round.id)) repos.reviews.update(record);
     else repos.reviews.insert(record);
     for (const finding of findings) {
-      const row = { ...finding, taskId, reviewId: round.id, round: round.round };
+      const row = {
+        ...finding,
+        taskId,
+        reviewId: round.id,
+        round: round.round,
+      };
       if (haveFindings.has(finding.id)) repos.reviews.updateFinding(row);
       else repos.reviews.insertFinding(row);
     }
@@ -187,7 +196,12 @@ export function writeTaskState(
   const haveSteps = new Map(repos.plans.stepsFor([task.id]).map((s) => [s.id, s]));
   const havePhases = new Map(repos.plans.phasesFor([task.id]).map((p) => [p.id, p]));
   for (const phase of state.phases) {
-    const record = { id: phase.id, taskId: task.id, title: phase.title, position: phase.position };
+    const record = {
+      id: phase.id,
+      taskId: task.id,
+      title: phase.title,
+      position: phase.position,
+    };
     const stamps = { createdAt: phase.createdAt, updatedAt: phase.updatedAt };
     if (havePhases.has(phase.id)) repos.plans.updatePhase({ ...record, ...stamps });
     else repos.plans.insertPhase({ ...record, ...stamps });

@@ -1,4 +1,4 @@
-import { MachineLogin, MachineRoute } from "@repo/contracts";
+import { AutopilotLimits, MachineLogin, MachineRoute } from "@repo/contracts";
 import { z } from "zod";
 import { parseJson } from "../database.ts";
 import type { Sql } from "./sql.ts";
@@ -87,6 +87,18 @@ export function createMachinesRepo(sql: Sql) {
     },
     update(machine: MachineRecord): void {
       sql.update("machines", { ...rowOf(machine) });
+    },
+    /** The machine's own Autopilot limits; null while it goes by the board's (or for one a later version shaped). */
+    autopilotLimits(id: string): AutopilotLimits | null {
+      const row = sql.get<{ v: string | null }>("SELECT autopilot_limits_json AS v FROM machines WHERE id = ?", id);
+      return AutopilotLimits.safeParse(parseJson(row?.v ?? null)).data ?? null;
+    },
+    setAutopilotLimits(id: string, limits: AutopilotLimits | null): void {
+      sql.run(
+        "UPDATE machines SET autopilot_limits_json = ? WHERE id = ?",
+        limits === null ? null : JSON.stringify(limits),
+        id,
+      );
     },
     /** How many rows went. */
     delete(id: string): number {

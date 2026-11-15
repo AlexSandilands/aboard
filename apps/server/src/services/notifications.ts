@@ -59,7 +59,16 @@ export interface NotificationsService {
   resolve(match: { keyPrefix: string } | { taskId: string; kind: NotificationKind }): number;
 }
 
-export function createNotificationsService(core: Core): NotificationsService {
+export function createNotificationsService(
+  core: Core,
+  deps: {
+    /**
+     * Every notification asked for, before this server's own switches decide: a runner passes them to its board,
+     * whose switches are the ones that count (remote-machines.md#autopilot-on-the-machine).
+     */
+    raised?: (input: NotifyInput) => void;
+  } = {},
+): NotificationsService {
   const { repos } = core;
 
   const list: NotificationsService["list"] = (opts = {}) => {
@@ -77,6 +86,7 @@ export function createNotificationsService(core: Core): NotificationsService {
 
   return {
     notify(input) {
+      deps.raised?.(input);
       const settings = loadSettings(repos).notifications;
       if (!settings.kinds[input.kind]) return null;
       return core.write((fx) => {

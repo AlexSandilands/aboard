@@ -60,6 +60,7 @@ import type { MachineAuthService } from "./machineAuth.ts";
 import type { MachinesService } from "./machines.ts";
 import type { HoldsService } from "./holds.ts";
 import type { WorkingCopiesService } from "./workingCopies.ts";
+import type { RunnerAutopilotService } from "./runnerAutopilot.ts";
 import type { NotificationsService } from "./notifications.ts";
 import type { SkillSyncService } from "./skillSync.ts";
 import type { SocialService } from "./social.ts";
@@ -106,6 +107,8 @@ export interface Services {
   holds: HoldsService;
   /** A runner's side: the working copies it holds and their change log. */
   workingCopies: WorkingCopiesService;
+  /** A runner's Autopilot, as its board sends it (remote-machines.md#autopilot-on-the-machine). */
+  runnerAutopilot: RunnerAutopilotService;
 }
 
 export interface ProjectRef {
@@ -411,7 +414,11 @@ export interface ReviewsService {
   setRoundStatus(
     reviewId: string,
     status: Exclude<ReviewRoundStatus, "submitted">,
-    opts: { actor: string; error?: string; from?: ReadonlyArray<ReviewRoundStatus> },
+    opts: {
+      actor: string;
+      error?: string;
+      from?: ReadonlyArray<ReviewRoundStatus>;
+    },
   ): TaskReview | null;
 }
 

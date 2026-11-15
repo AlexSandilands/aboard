@@ -121,7 +121,8 @@ export function workingAgents(services: Services, now: Date): number {
     const run = services.autopilot
       .runsForTask(task.id, 20)
       .find((r) => r.automation === AUTOPILOT_START_PLANNED && !r.dryRun && r.status !== "queued");
-    return run ? t3RunWorking(task, run, at) : false;
+    // A run a machine's Autopilot made takes that machine's room, not this server's.
+    return run && !run.machine ? t3RunWorking(task, run, at) : false;
   }).length;
 }
 
@@ -246,7 +247,11 @@ export const startPlanned = defineAutomation({
   act: async (candidate, { services, runner, run, config, boardUrl }) => {
     const task = services.tasks.summary(candidate.taskId!);
     const reason = notStartable(task);
-    if (reason) return { status: "skipped", summary: `Skipped ${taskLabel(task)}: ${reason}` };
+    if (reason)
+      return {
+        status: "skipped",
+        summary: `Skipped ${taskLabel(task)}: ${reason}`,
+      };
 
     const prompt = [
       taskHandoffPrompt({ task, boardUrl, mode: "work", linkedThread: true }),
@@ -278,7 +283,10 @@ export const startPlanned = defineAutomation({
       });
     } catch (error) {
       if (error instanceof RunAbandonedError) {
-        return { status: "skipped", summary: `Skipped ${taskLabel(task)}: ${error.message}` };
+        return {
+          status: "skipped",
+          summary: `Skipped ${taskLabel(task)}: ${error.message}`,
+        };
       }
       // A headless run only ends when the agent does: one that hit its budget or timeout did start.
       const begun = services.tasks.summary(task.id).status !== "planned";
