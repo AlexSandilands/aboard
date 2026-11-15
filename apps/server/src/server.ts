@@ -84,6 +84,8 @@ export async function startServer(config: Config): Promise<RunningServer> {
   ctx.services.skillSync.syncAll();
   if (runtime.pollers) ctx.integrations.start();
   ctx.integrations.resumeImports();
+  // Not a poller: it is how a task a machine holds stays the board's, so it runs whether or not the pollers do.
+  if (runtime.role !== "runner") ctx.integrations.machineSync.start();
   const url = `http://${runtime.host}:${runtime.port}`;
   writeServerFile(runtime.homeDir, url);
 
