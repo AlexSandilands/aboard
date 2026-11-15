@@ -1277,13 +1277,16 @@ export function createAutopilotService(
           pinnedProjects.flatMap((projectId) =>
             repos.autopilotRuns
               .forProjectAutomation(projectId, key, PINNED_HISTORY)
+              // Its own runs it has: sending them would change the config after every run.
               .filter((run) => !run.dryRun && run.finishedAt !== null && run.taskId === null)
+              .filter((run) => run.machine?.id !== machineId)
               .map(({ machine: _machine, ...run }) => run),
           ),
         ),
-        // The machine's own task-less runs retried here lately: it retires them too.
+        // Task-less runs of the automations pinned to it retried here lately, its own or the history it was sent: it
+        // retires them too, so its engine acts on the work again.
         retried: repos.autopilotRuns
-          .retriedOnMachine(machineId, new Date(core.now().getTime() - RETRY_SYNC_MS).toISOString())
+          .retriedTaskless(pinnedHere, new Date(core.now().getTime() - RETRY_SYNC_MS).toISOString())
           .map((run) => run.id),
       };
     },

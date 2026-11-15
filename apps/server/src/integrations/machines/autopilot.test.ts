@@ -431,10 +431,14 @@ describe("Autopilot on a machine", () => {
       candidate: { dedupeKey: `schedule:${project.id}:0900`, summary: "run", projectId: project.id },
       dryRun: false,
     })!;
-    board.services.autopilot.finish(ran.id, { status: "succeeded" });
+    board.services.autopilot.finish(ran.id, { status: "failed", error: "exit 2" });
     board.services.customAutomations.setMachine(custom.id, machine.id);
     await sync();
     expect(runner.services.autopilot.hasRun(key, `schedule:${runnerProject}:0900`, false)).toBe(true);
+    // A retry of what the board did before the pin, which the machine has as history, reaches it.
+    board.services.autopilot.retry(ran.id, "user");
+    await sync();
+    expect(runner.services.autopilot.hasRun(key, `schedule:${runnerProject}:0900`, false)).toBe(false);
 
     // The machine's own run comes back under the board's id for the project, and a retry on the board reaches it.
     const own = runner.services.autopilot.record({

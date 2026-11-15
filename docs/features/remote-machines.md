@@ -778,8 +778,8 @@ the board's in when it takes history (`swapId`).
 **Retry and Dismiss** on a run of a held task (the panel's, Run history's, `retry_autopilot_run`) are edits like any
 other (`autopilot.retry`, `autopilot.dismiss`) when its machine runs Autopilot: applied on the board at once and on
 the machine, where its engine then picks the work up again. A retry the machine refuses (it doesn't have the run) gives
-the board's run its key back. A retry of a machine's task-less run (a pinned automation's) goes in the config
-(`retried`, for a week) and the runner retires the same run.
+the board's run its key back. A retry of a pinned automation's task-less run (the machine's own, or one from before the pin it has as
+history) goes in the config (`retried`, for a week) and the runner retires the same run.
 
 **Runs on the machine** are its own: in its own `autopilot_runs`, counted against its own limits, headless and from
 origin (`asRunnerRequest`, as a job is). The runner logs each one as it is written (`run` entries, change log format 2),

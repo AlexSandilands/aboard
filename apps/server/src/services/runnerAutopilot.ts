@@ -139,10 +139,10 @@ export function createRunnerAutopilotService(
         if (repos.autopilotRuns.exists(run.automation, dedupeKey, run.dryRun)) continue;
         repos.autopilotRuns.insert({ ...run, taskId: null, projectId, dedupeKey, machine: BOARD_HISTORY });
       }
-      // Its own task-less runs the board retried: retired here too, so the engine acts on the work again.
+      // Task-less runs the board retried (its own, or history it sent): retired here too, so the engine acts again.
       for (const id of config.retried) {
         const run = repos.autopilotRuns.get(id);
-        if (!run || isRetried(run.dedupeKey) || run.machine) continue;
+        if (!run || isRetried(run.dedupeKey)) continue;
         const retired: AutopilotRun = {
           ...run,
           dedupeKey: `${RETRIED_PREFIX}${run.id}:${run.dedupeKey}`,
@@ -150,7 +150,8 @@ export function createRunnerAutopilotService(
           updatedAt: core.now().toISOString(),
         };
         repos.autopilotRuns.update(retired);
-        deps.logRun?.(retired);
+        // History the board sent is the board's already; only this runner's own goes back.
+        if (!run.machine) deps.logRun?.(retired);
       }
 
       repos.workingCopies.setState(STATE_KEY, JSON.stringify(config));

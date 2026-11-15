@@ -85,8 +85,9 @@ export const MachineAutopilotConfig = z.object({
    */
   history: z.array(AutopilotRun).default([]),
   /**
-   * The machine's own task-less runs (a pinned automation's) the board retried: the runner retires their keys too,
-   * so its engine acts on the work again. A held task's runs are retried through its edits instead.
+   * Task-less runs of the automations pinned to the machine that the board retried (the machine's own, or history it
+   * was sent): the runner retires their keys too, so its engine acts on the work again. A held task's runs are
+   * retried through its edits instead.
    */
   retried: z.array(z.string()).default([]),
 });
