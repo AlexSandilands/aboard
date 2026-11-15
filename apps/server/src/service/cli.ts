@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
-import { dirname, join } from "node:path";
+// POSIX paths whatever the host: services exist only on Linux and macOS, and tests run on Windows too.
+import { dirname, join } from "node:path/posix";
 import { BRAND, DEFAULT_RUNNER_PORT, brandEnv } from "@repo/contracts";
 import { defaultHomeDir } from "../config.ts";
 import { runningServer } from "../serverFile.ts";

@@ -1,4 +1,5 @@
-import { join } from "node:path";
+// POSIX paths whatever the host: the service exists only on Linux and macOS, and tests build them anywhere.
+import { join } from "node:path/posix";
 import { BRAND } from "@repo/contracts";
 
 // The runner's background service: what gets written where, for each OS (docs/features/remote-machines.md#the-service).
