@@ -17,6 +17,8 @@ export const SHELL_OUTPUT_TAIL = 4_000;
 export interface ShellRequest {
   command: string;
   cwd: string;
+  /** The task it runs for, when it has one: a task a connected machine holds runs there, in that machine's checkout. */
+  taskId?: string | null;
   /** Added to the server's environment, after the board's own variables are taken out. */
   env: Record<string, string>;
   timeoutMs: number;

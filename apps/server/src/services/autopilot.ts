@@ -251,6 +251,14 @@ export interface AutopilotService {
   /** Ends a run with the action's result, logging it on the task. */
   finish(runId: string, result: ActionResult): AutopilotRun;
   /**
+   * On a runner: keeps a run its board started and sent here, under the board's id, as running. It is the board's run:
+   * nothing here logs it on the task, flags it or notifies anyone, since the board does when it ends. Kept so the
+   * runner counts it as in flight, finds its session, and cleans up its worktree later.
+   */
+  adopt(run: AutopilotRun, projectId: string | null): AutopilotRun;
+  /** Ends an adopted run, as quietly as it was kept. */
+  settle(runId: string, status: "succeeded" | "failed", patch: RunPatch & { error?: string | null }): void;
+  /**
    * Ends the runs a restart left queued or running as failed. A Review PRs or Fix PRs run is retried once, as by
    * `retry` (its key retired, no flag), so the engine redoes the work; a run whose work a restart already cut short
    * is flagged instead, which stops a loop when the run itself restarts the board. Any other run is flagged, since
@@ -291,6 +299,9 @@ function keptReason(run: RunDeleteFacts, now: number): AutopilotKeptReason | nul
 }
 /** How long a Run now request waits for the engine before it is dropped. */
 export const RUN_REQUEST_TTL_MS = 60 * 60_000;
+
+/** The dedupe key of a run a runner keeps for its board (see `adopt`). */
+const ADOPTED_PREFIX = "machine:";
 
 /** The automations whose run a restart cut short is retried once (see `recover`). */
 const RETRIED_AFTER_RESTART: ReadonlySet<string> = new Set([AUTOPILOT_REVIEW_PRS, AUTOPILOT_FIX_PRS]);
@@ -1145,6 +1156,45 @@ export function createAutopilotService(
       if (finished.status === "failed") autoPauseAfter(finished);
       return finished;
     },
+    adopt(run, projectId) {
+      const at = nowIso();
+      const adopted: AutopilotRun = {
+        ...run,
+        projectId,
+        // The board's key is the board's: a run it retries arrives under a new id with the same key.
+        dedupeKey: `${ADOPTED_PREFIX}${run.id}`,
+        status: "running",
+        dryRun: false,
+        error: null,
+        needsAttention: false,
+        dismissedAt: null,
+        finishedAt: null,
+        startedAt: run.startedAt ?? at,
+        updatedAt: at,
+      };
+      core.write((fx) => {
+        if (repos.autopilotRuns.get(run.id)) repos.autopilotRuns.update(adopted);
+        else repos.autopilotRuns.insert(adopted);
+        fx.autopilot();
+      });
+      return adopted;
+    },
+    settle(runId, status, patch) {
+      const at = nowIso();
+      core.write((fx) => {
+        const run = repos.autopilotRuns.get(runId);
+        if (!run) return;
+        repos.autopilotRuns.update({
+          ...run,
+          ...patch,
+          error: patch.error ?? null,
+          status,
+          finishedAt: at,
+          updatedAt: at,
+        });
+        fx.autopilot();
+      });
+    },
     recover() {
       const stranded = repos.autopilotRuns.withStatus(AUTOPILOT_ACTIVE_STATUSES);
       if (stranded.length === 0) return 0;
@@ -1153,6 +1203,11 @@ export function createAutopilotService(
         const at = nowIso();
         for (const run of stranded) {
           const error = `${BOARD_RESTARTED_ERROR} while this run was going`;
+          // A run the board sent here is the board's to report: it fails it when this runner no longer knows the job.
+          if (run.dedupeKey.startsWith(ADOPTED_PREFIX)) {
+            repos.autopilotRuns.update({ ...run, status: "failed", error, finishedAt: at, updatedAt: at });
+            continue;
+          }
           // Only the PR automations are handed back (their keys follow the PR's head, so the engine re-checks that
           // the work is still needed; a Fix PRs run killed after its agent pushed may leave a second session to push
           // again, within its attempt cap). An agent launch (Start planned, Orchestrate) may have started something

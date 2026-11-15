@@ -339,6 +339,13 @@ export function createAgentSessionsIntegration(deps: {
   bus: Pick<EventBus, "size">;
   dirs: SessionDirs;
   userHome: string;
+  /**
+   * This server's own id. A session whose link names another machine ran there: its files and its process aren't
+   * here, so nothing here reads or resumes it, and its status comes with that machine's changes to the task.
+   */
+  machineId?: string;
+  /** Poll with no browser connected: a runner has none, and its board shows what it reads. */
+  always?: boolean;
   probe?: ProcessProbe;
   host?: () => TerminalHost;
   spawn?: SpawnTerminal;
@@ -351,11 +358,14 @@ export function createAgentSessionsIntegration(deps: {
   let polling: Promise<void> | null = null;
   let timer: NodeJS.Timeout | null = null;
 
+  /** Whether the session is on this machine. */
+  const here = (link: SessionLink): boolean => !link.ref.machine || link.ref.machine.id === deps.machineId;
+
   const sessionLinks = (): SessionLink[] =>
     deps
       .services()
       .links.listByKind("agent_session")
-      .filter((l): l is SessionLink => l.kind === "agent_session");
+      .filter((l): l is SessionLink => l.kind === "agent_session" && here(l));
 
   /**
    * Reads and stores each link's status. A session Autopilot ran takes it from the run: working while the run goes,
@@ -470,7 +480,7 @@ export function createAgentSessionsIntegration(deps: {
 
     async refresh(link) {
       if (link.kind !== "agent_session") return false;
-      await store([link]);
+      if (here(link)) await store([link]);
       return true;
     },
 
@@ -488,6 +498,12 @@ export function createAgentSessionsIntegration(deps: {
     async resume(linkId, input) {
       const { mode, force } = ResumeSessionInputSchema.parse(input);
       const { link, ref } = sessionOf(linkId, mode);
+      if (!here(link)) {
+        throw new AppError(
+          "CONFLICT",
+          `This session ran on ${ref.machine?.name ?? "another machine"}, where its folder and history are. Open it there.`,
+        );
+      }
       if (!isDirectory(ref.cwd)) throw new AppError("VALIDATION", `The session's folder no longer exists: ${ref.cwd}`);
       // Check now rather than trust the last poll: opening a running session twice makes two writers on one history.
       const snapshot = (await store([link])).get(sessionKey(ref));
@@ -559,7 +575,7 @@ export function createAgentSessionsIntegration(deps: {
     start() {
       if (timer) return;
       timer = setInterval(() => {
-        if (deps.bus.size > 0) void pollLive();
+        if (deps.always || deps.bus.size > 0) void pollLive();
       }, SESSION_INTERVAL_MS).unref();
     },
 

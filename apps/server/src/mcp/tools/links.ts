@@ -91,7 +91,19 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
           .resolveLinkInput({
             ...(args.value ? { value: args.value } : {}),
             ...(args.t3Thread ? { t3Thread: args.t3Thread } : {}),
-            ...(agentSession?.success ? { agentSession: agentSession.data } : {}),
+            ...(agentSession?.success
+              ? {
+                  agentSession:
+                    // An agent on a runner links a session that is on this machine: the link says which, so the
+                    // board it is shown on knows where the session's files are.
+                    ctx.config.role === "runner"
+                      ? {
+                          ...agentSession.data,
+                          machine: { id: ctx.instanceId, name: services.settings.get().machineName },
+                        }
+                      : agentSession.data,
+                }
+              : {}),
             ...(args.label ? { label: args.label } : {}),
           })
           .catch((error: unknown) => {

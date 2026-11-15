@@ -14,6 +14,15 @@ import {
   MACHINE_SESSION_PATH,
   MACHINE_STATUS_PATH,
   MACHINE_UPDATE_PATH,
+  MACHINE_ATTACHMENTS_PATH,
+  MACHINE_JOBS_PATH,
+  MACHINE_SETTINGS_PATH,
+  MACHINE_TRANSCRIPT_PATH,
+  MAX_ATTACHMENT_BYTES,
+  MachineJobQuery,
+  MachineJobRequest,
+  MachineSettingsInput,
+  MachineTranscriptRequest,
   PairMachineInput,
   UpdateMachineRequest,
   serverPlatformOf,
@@ -25,15 +34,17 @@ import {
   type PairMachineResult,
 } from "@repo/contracts";
 import type { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import type { AppContext } from "../../app.ts";
 import { machinePairingOf, peerAddress } from "../guard.ts";
-import { handle, idParam, noContent, parseBody, parseQuery } from "../respond.ts";
+import { AppError } from "../../errors.ts";
+import { errorResponse, handle, idParam, noContent, parseBody, parseQuery } from "../respond.ts";
 
 /** How long a status answer waits for the login checks, which start programs and may reach for the network. */
 const STATUS_LOGINS_WAIT_MS = 4_000;
 
-const CAPABILITIES: MachineCapability[] = ["pairing", "status", "update", "tasks"];
+const CAPABILITIES: MachineCapability[] = ["pairing", "status", "update", "tasks", "runs"];
 
 /**
  * The machine API (docs/features/remote-machines.md#the-machine-api). Every server says who it is; the rest is a
@@ -92,6 +103,7 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
       c.json({
         version: BRAND.version,
         platform: serverPlatformOf(process.platform, process.arch) ?? `${process.platform}-${process.arch}`,
+        // Runs the board sent here are kept as this runner's own runs while they go.
         runsInFlight: services.autopilot.status().active.length,
         // Well inside the board's request timeout: a slow check answers with what was last known.
         logins: await logins.loginsWithin(STATUS_LOGINS_WAIT_MS),
@@ -157,6 +169,66 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
           ? copies.applyEdit(edit.data)
           : copies.refuseEdit(raw.id, raw.taskId, "This machine's version can't apply that edit; update it"),
       );
+    }),
+  );
+  // Work on a held task (docs/features/remote-machines.md#work-on-the-machine): the board starts a run, a command
+  // or a script here and reads it until it ends.
+  const { jobs, work } = integrations.runnerHost;
+  app.post(
+    MACHINE_JOBS_PATH,
+    handle(async (c) => c.json(work.start(await parseBody(c, MachineJobRequest)))),
+  );
+  app.get(
+    `${MACHINE_JOBS_PATH}/:id`,
+    handle(async (c) => {
+      const { after, wait } = parseQuery(c, MachineJobQuery);
+      return c.json(await jobs.read(idParam(c), after, wait));
+    }),
+  );
+  app.delete(
+    `${MACHINE_JOBS_PATH}/:id`,
+    handle((c) => {
+      jobs.forget(idParam(c));
+      return noContent(c);
+    }),
+  );
+  // The board's settings this machine works by: which model reviews, how many rounds, whether a move opens one.
+  app.put(
+    MACHINE_SETTINGS_PATH,
+    handle(async (c) => {
+      work.applySettings((await parseBody(c, MachineSettingsInput)).settings);
+      return noContent(c);
+    }),
+  );
+  // A session that ran here, read where its files are. Found under the harness's own folder by its id, never by a
+  // path the request names.
+  app.post(
+    MACHINE_TRANSCRIPT_PATH,
+    handle(async (c) => {
+      const { sessionId, cwd, offset } = await parseBody(c, MachineTranscriptRequest);
+      return c.json(await integrations.readSessionTranscript({ sessionId, cwd }, offset));
+    }),
+  );
+  // One of a held task's pasted images, so the paths in the board's prompts resolve here.
+  app.put(
+    `${MACHINE_ATTACHMENTS_PATH}/:id`,
+    bodyLimit({
+      maxSize: MAX_ATTACHMENT_BYTES,
+      onError: (c) => errorResponse(c, new AppError("VALIDATION", "The image is too large")),
+    }),
+    handle(async (c) => {
+      const { taskId, filename } = parseQuery(
+        c,
+        z.object({ taskId: z.string().min(1), filename: z.string().max(200) }),
+      );
+      services.attachments.adopt({
+        id: idParam(c),
+        taskId,
+        filename,
+        mime: (c.req.header("content-type") ?? "").split(";")[0]!.trim().toLowerCase(),
+        bytes: new Uint8Array(await c.req.arrayBuffer()),
+      });
+      return noContent(c);
     }),
   );
   app.post(

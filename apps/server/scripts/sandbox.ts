@@ -2,9 +2,10 @@
  * `pnpm sandbox`: runs this checkout's board on its own ports so a change can be tried in the browser
  * without touching the board the user runs from main.
  *
- *   pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|autopilot|crowded|branches|none]   isolated: own server, temp data dir, seeded (default)
+ *   pnpm sandbox [--seed basic|review|threads|showcase|social|stats|dense|autopilot|crowded|branches|machine|none]   isolated: own server, temp data dir, seeded (default)
  *   pnpm sandbox --desktop                            also opens the Electron shell on the sandbox (isolated only)
  *   pnpm sandbox --runner                             also runs a second server in the runner role, as a remote machine would
+ *   pnpm sandbox --pollers                            leaves the background work on: Autopilot's engine, the review watchdog, session status
  *   pnpm sandbox --prod                               serves a production build instead of Vite's dev server (no hot reload)
  *   pnpm sandbox --live                               Vite only, on the real server's data (writes are rejected)
  *   pnpm sandbox status                               prints the running sandbox's ready line
@@ -348,28 +349,34 @@ function parseArgs(argv: string[], isScenarioName: (name: string) => boolean) {
   const desktop = argv.includes("--desktop");
   const prod = argv.includes("--prod");
   const runner = argv.includes("--runner");
+  const pollers = argv.includes("--pollers");
   const seedIndex = argv.indexOf("--seed");
   const seed = seedIndex >= 0 ? argv[seedIndex + 1] : "basic";
   const unknown = argv.find(
     (arg, i) =>
-      !["--live", "--desktop", "--prod", "--runner", "--seed"].includes(arg) &&
+      !["--live", "--desktop", "--prod", "--runner", "--pollers", "--seed"].includes(arg) &&
       !(seedIndex >= 0 && i === seedIndex + 1),
   );
   if (unknown !== undefined) {
-    fail(`unknown argument "${unknown}" (stop, status, or flags: --seed <name>, --live, --desktop, --prod, --runner)`);
+    fail(
+      `unknown argument "${unknown}" (stop, status, or flags: --seed <name>, --live, --desktop, --prod, --runner, --pollers)`,
+    );
   }
   if (live && desktop) fail("--desktop has no effect with --live: the shell must never attach to the real board");
   if (live && runner) fail("--runner needs the isolated sandbox: a runner beside the real board would share nothing");
   if (!seed || (seed !== "none" && !isScenarioName(seed)))
-    fail(`unknown seed "${seed}" (basic, review, threads, showcase, social, stats, dense, autopilot, crowded, none)`);
+    fail(
+      `unknown seed "${seed}" (basic, review, threads, showcase, social, stats, dense, autopilot, crowded, branches, machine, none)`,
+    );
   if (live && seedIndex >= 0) fail("--seed has no effect with --live, which shows the real board");
-  return { live, seed, desktop, prod, runner };
+  if (live && pollers) fail("--pollers has no effect with --live: the real server runs its own");
+  return { live, seed, desktop, prod, runner, pollers };
 }
 
 async function start(argv: string[]): Promise<void> {
   // Loaded here so `status` and `stop` don't open SQLite (and print its experimental warning).
   const { isScenarioName, seedDatabase } = await import("../src/dev/seeds.ts");
-  const { live, seed, desktop, prod, runner } = parseArgs(argv, isScenarioName);
+  const { live, seed, desktop, prod, runner, pollers } = parseArgs(argv, isScenarioName);
   const existing = readState();
   if (existing && ownedPids(existing).includes(existing.pid)) {
     // Same checkout: hand back the running one instead of a port clash. A dev sandbox hot-reloads its edits; a
@@ -473,10 +480,16 @@ async function start(argv: string[]): Promise<void> {
     const dataDir = join(home, "data");
     mkdirSync(dataDir, { recursive: true });
     if (seed !== "none" && isScenarioName(seed)) {
-      seedDatabase(join(dataDir, "data.sqlite"), seed, { workspaceRoot: resolve(repoRoot) });
+      seedDatabase(join(dataDir, "data.sqlite"), seed, {
+        workspaceRoot: resolve(repoRoot),
+        ...(runner ? { runnerDataDir: join(home, "runner", "data") } : {}),
+      });
     }
     env[brandEnv("HOME")] = dataDir;
-    env[brandEnv("POLLERS")] = "0";
+    // `--pollers` leaves the background work on (Autopilot's engine, the review watchdog, session status), for trying
+    // what only they do; it all stays in the sandbox's own data dirs.
+    if (!pollers) env[brandEnv("POLLERS")] = "0";
+    else delete env[brandEnv("POLLERS")];
     // With the pollers off, /api/demo stands in for them so the README demo can show PR checks and Autopilot runs.
     env[brandEnv("DEMO")] = "1";
     // A folder that doesn't exist: no T3 Code install is detected, so nothing reaches the user's T3 threads.
@@ -577,4 +590,7 @@ else if (command === "status") {
   else console.log("[sandbox] no sandbox running");
 } else if (command === undefined || command.startsWith("--"))
   await start(command === undefined ? [] : [command, ...rest]);
-else fail(`unknown command "${command}" (stop, status, or flags: --seed <name>, --live, --desktop, --prod, --runner)`);
+else
+  fail(
+    `unknown command "${command}" (stop, status, or flags: --seed <name>, --live, --desktop, --prod, --runner, --pollers)`,
+  );

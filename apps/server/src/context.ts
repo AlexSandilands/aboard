@@ -102,6 +102,10 @@ export function createContext(
     modelPrices: () => integrations.modelPrices.current(),
     role: config.role ?? "board",
     onHeldEdit: (machineId) => integrations.machineSync.flush(machineId),
+    heldWork: {
+      shell: (request) => integrations.remoteWork.shell(request),
+      script: (request) => integrations.remoteWork.script(request),
+    },
     readRemote: overrides.readRemote ?? readRemote,
     ...(overrides.now ? { now: overrides.now } : {}),
     ...(overrides.automations ? { automations: overrides.automations } : {}),

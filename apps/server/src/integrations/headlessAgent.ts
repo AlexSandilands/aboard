@@ -149,6 +149,12 @@ export interface AgentArgsInput {
    * serves only those its operation may use.
    */
   runTools?: { url: string; configPath: string };
+  /**
+   * On a runner, for a run that keeps the user's servers: this server's own MCP endpoint, and an MCP config file
+   * naming it, added on top. The CLI on a machine set up only as a runner has no registration for it. `token` says the
+   * config carries a token, which a CLI given only the URL (Codex) can't send.
+   */
+  ownMcp?: { url: string; configPath: string; token: boolean };
 }
 
 /**
@@ -208,6 +214,7 @@ export function agentArgs(input: AgentArgsInput): string[] {
   const mcpConfigs = [
     ...(runTools ? [runTools.configPath] : []),
     ...(lockedDown && input.boardMcpConfig ? [input.boardMcpConfig] : []),
+    ...(!lockedDown && !isolated && !none && input.ownMcp ? [input.ownMcp.configPath] : []),
   ];
   return [
     "-p",

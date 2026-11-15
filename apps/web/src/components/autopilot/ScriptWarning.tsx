@@ -2,6 +2,28 @@ import { TriangleAlertIcon } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
+import { useMachines } from "~/state/machines";
+
+/** "engine", "engine or forge": the machines this board is connected to, for a sentence. */
+function machineNames(names: readonly string[]): string {
+  return names.length <= 2 ? names.join(" or ") : `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
+}
+
+/**
+ * Where else the code runs, on a board with connected machines: a task one of them holds runs it there, as the user
+ * the runner runs as. Nothing on a board with none.
+ */
+function OnMachinesNote({ className }: { className?: string }) {
+  const names = (useMachines().data?.machines ?? []).map((m) => m.name);
+  if (names.length === 0) return null;
+  return (
+    <p className={className}>
+      <span className="font-medium text-foreground">On {machineNames(names)}:</span> for a task that machine holds, it
+      runs there instead, in the machine&apos;s own clone, as the user its runner runs as and with that user&apos;s
+      logins.
+    </p>
+  );
+}
 
 /**
  * The orange notice for an automation that runs a script (an action or an agent's check), as the allowed-tools one is
@@ -23,6 +45,7 @@ export function ScriptWarning({ children }: { children?: ReactNode }) {
           Text a script reads from GitHub (a comment, a slash command, a title) comes from anyone who can comment, so
           check who wrote it before acting on it.
         </p>
+        <OnMachinesNote />
         {children}
       </AlertDescription>
     </Alert>
@@ -70,6 +93,7 @@ export function RunsAsYouBadge({ kind }: { kind: "command" | "script" }) {
             <code className="font-mono">gh</code> or <code className="font-mono">git</code>, approve or merge pull
             requests. Text from GitHub can come from anyone who can comment, so check who wrote it.
           </p>
+          <OnMachinesNote className="text-muted-foreground" />
           {kind === "command" ? (
             <p className="text-muted-foreground">
               <span className="font-medium text-foreground">Windows:</span> let the program read the variable itself

@@ -1,5 +1,6 @@
 import { createUsageSweep } from "./usageSweep.ts";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { taskLabel, epicBranchName, planningSessionLabel } from "@repo/contracts";
 import { createWorktreeCleanup } from "../autopilot/cleanup.ts";
 import { ensureEpicBranch } from "../autopilot/epicBranch.ts";
@@ -39,6 +40,11 @@ import { createBridgeChannel } from "./machines/bridgeChannel.ts";
 import { createCheckouts, type CloneRepo } from "./machines/checkouts.ts";
 import { createMachinesIntegration } from "./machines/index.ts";
 import { createMachineSync } from "./machines/sync.ts";
+import { createMachineJobs } from "./machines/jobs.ts";
+import { createRemoteWork } from "./machines/remoteWork.ts";
+import { createRunnerWork } from "./machines/runnerWork.ts";
+import { runScript } from "./scriptRunner.ts";
+import { runShellCommand } from "./shellCommand.ts";
 import { createLoginDetector, type LoginProbes } from "./machines/logins.ts";
 import { createSelfUpdater, type SelfUpdateDeps } from "./machines/selfUpdate.ts";
 import { createRouteOpener, type TunnelDeps } from "./machines/tunnel.ts";
@@ -157,6 +163,16 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   const reviews = createReviewFallbacks({
     services: deps.services,
     t3,
+    ...(deps.config.role === "runner"
+      ? {
+          // The newest session of the task that ran in a folder still there: its run's worktree.
+          worktreeOf: (task) =>
+            task.links
+              .filter((l) => l.kind === "agent_session")
+              .map((l) => l.ref.cwd)
+              .findLast((cwd) => existsSync(cwd)) ?? null,
+        }
+      : {}),
     ...(overrides.runHeadless ? { runHeadless: overrides.runHeadless } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
@@ -190,14 +206,22 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     bus: deps.bus,
     dirs: deps.config.sessionDirs,
     userHome: deps.config.userHome,
+    machineId: deps.config.instanceId,
+    always: deps.config.role === "runner",
     ...(overrides.processProbe ? { probe: overrides.processProbe } : {}),
     ...(overrides.terminalHost ? { host: overrides.terminalHost } : {}),
     ...(overrides.spawnTerminal ? { spawn: overrides.spawnTerminal } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const isRunner = deps.config.role === "runner";
+  // Built once the machines are (below); only called after that.
+  let remoteWork!: ReturnType<typeof createRemoteWork>;
   const transcripts = createSessionTranscriptReader({
     services: deps.services,
     claudeDir: deps.config.sessionDirs.claudeDir,
+    // A session that ran on a connected machine is read there; a runner's own are read here.
+    onMachine: (ref, offset) =>
+      isRunner || ref.machine?.id === deps.config.instanceId ? null : remoteWork.transcript(ref, offset),
   });
   const sessionLaunch = createSessionLaunch({
     services: deps.services,
@@ -244,7 +268,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   };
   // One `git fetch` per repository at a time, across the runner's worktrees and the engine's own reads.
   const repoGate = createRepoGate();
-  const runner =
+  const localRunner =
     overrides.autopilotRunner ??
     createAutopilotRunner({
       services: deps.services,
@@ -255,6 +279,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       ...(overrides.runAgent ? { runAgent: overrides.runAgent } : {}),
       sessionLinked: refreshSession,
       boardMcp: () => ({ url: `http://127.0.0.1:${deps.config.port}/mcp`, token: deps.config.token ?? null }),
+      ...(isRunner
+        ? { machine: () => ({ id: deps.config.instanceId, name: deps.services().settings.get().machineName }) }
+        : {}),
       runTools: {
         mint: (runId, scope, ttlMs) => {
           const { token, revoke } = runTools.tokens.mint(runId, scope, ttlMs);
@@ -263,6 +290,10 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       },
       ...(overrides.log ? { log: overrides.log } : {}),
     });
+  // A board sends the agent work of a task a machine holds to that machine; a runner does what it is sent.
+  const runner: Runner = isRunner
+    ? localRunner
+    : { start: (request, update) => remoteWork.runner(localRunner).start(request, update) };
   // Each project folder's `origin`, cached: Review PRs reads it on every pass for other people's PRs.
   const repoUrls = createRepoUrls(overrides.autopilotGit ?? defaultRunGit);
   const autopilot = createAutopilotEngine({
@@ -322,17 +353,36 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     releaseUrl: deps.config.releaseUrl ?? null,
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  remoteWork = createRemoteWork({
+    services: deps.services,
+    machines,
+    runGit: overrides.runGit ?? defaultRunGit,
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
   // What a runner answers its board with. Built in either role (it costs nothing until asked), used by a runner's.
   let restartRunner: (() => void) | null = null;
   const machineSync = createMachineSync({
     services: deps.services,
     machines,
+    work: remoteWork,
     bus: deps.bus,
     runGit: overrides.runGit ?? defaultRunGit,
     ...(overrides.now ? { now: overrides.now } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  const jobs = createMachineJobs();
   const runnerHost: RunnerHost = {
+    jobs,
+    work: createRunnerWork({
+      services: deps.services,
+      jobs,
+      runner: localRunner,
+      // The session's state follows its run, which ended without the harness's files changing.
+      runEnded: refreshSession,
+      runShell: overrides.runShell ?? runShellCommand,
+      runScript: overrides.runScript ?? runScript,
+      ...(overrides.log ? { log: overrides.log } : {}),
+    }),
     bridge: createBridgeChannel(overrides.now ? { now: overrides.now } : {}),
     checkouts: createCheckouts({
       dir: deps.config.reposDir,
@@ -363,6 +413,8 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     machines,
     machineSync,
     runnerHost,
+    remoteWork,
+    readSessionTranscript: (ref, offset) => transcripts.readSession(ref, offset),
     start() {
       if (!deps.config.pollers || started) return;
       started = true;

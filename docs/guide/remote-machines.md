@@ -94,6 +94,18 @@ is: **On engine**.
   machine can't be reached the badge counts what is waiting, **On engine · 2 waiting**, and those changes are
   applied when it is back, after whatever happened there meanwhile. A change the machine can't apply any more (you
   checked off a step the agent had deleted) is taken back, and the task's activity says so.
+- **Autopilot's runs for the task happen on the machine**: the agent works in a worktree there, from what is on
+  GitHub, with the machine's own logins. Push the task's branch before you hand it over; the board tells you when a
+  branch of the task has commits that aren't pushed, since the machine can't see them. A run there is always
+  headless, even where an automation is set to T3 Code.
+- **Reviews happen there too.** Review rounds open and the board's reviewer runs on the machine, by your review
+  settings; the findings show in the task's panel as usual, and Run review or resolving a finding on the board
+  reaches the machine.
+- **A custom automation's command or script** for the task runs on the machine, in its copy of the project, as the
+  user the runner runs as. The run says "on engine".
+- **Sessions and tokens** of work on the machine show on the task: a session's status, its tokens (marked "on
+  engine" in Usage) and, for agents, its transcript. Opening such a session in a terminal isn't possible from the
+  board yet.
 - **Some things wait until the task is back on the board**: archiving it, deleting it, moving it to another
   project, and moving it to another board.
 - **A task made on the machine while the board can't be reached** gets the machine's prefix in its number, like

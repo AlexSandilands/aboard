@@ -1,6 +1,6 @@
 # Remote machines
 
-Board tasks: #179, #180, #181, #12, in epic #178 (run tasks on another machine).
+Board tasks: #179, #180, #181, #12, #182, in epic #178 (run tasks on another machine).
 
 A task can be set to run on another machine: a server or a second computer the board connects to. That machine
 runs the same server as the board, started in the **runner** role: it serves no board or web app, holds the
@@ -9,13 +9,15 @@ script that put the server on a machine with nothing installed, the background s
 a board and a runner come to trust each other (identity, pairing, tokens and the machine API), how a board
 connects a machine (installing over SSH, routes, status, logins, updates and the Settings page that drives them),
 and [held tasks](#held-tasks): handing a task to a machine, the change log the machine keeps and the board
-replays, the board's own edits to a held task, and the numbers a machine gives the tasks it makes.
+replays, the board's own edits to a held task, the numbers a machine gives the tasks it makes, and
+[work on the machine](#work-on-the-machine): the headless runs, review rounds and scripts of a held task, and how
+the board shows the sessions and tokens of work it can't see.
 
 Not built yet: choosing a machine for a task in the UI (a hand-over is an API call, `POST /api/tasks/:id/hold`),
-and running anything on the machine (headless runs, review rounds, scripts). Review rounds and pasted images of a
-held task are not part of its working copy: a round opened on the machine stays there, and an image attached there
-isn't sent to the board. Nor are notifications: what an agent on a machine does to a held task changes the card
-(its request for attention shows as a flag) but raises no inbox entry or pop-up on the board. Those are the later tasks of epic #178. What a user does is in the
+Autopilot's engine running on the machine by itself (a board starts every run), and T3 Code threads or terminals
+on the machine. An image attached on the machine isn't sent to the board. Nor are notifications: what an agent on a
+machine does to a held task changes the card (its request for attention shows as a flag) but raises no inbox entry
+or pop-up on the board. Those are the later tasks of epic #178. What a user does is in the
 [guide](../guide/remote-machines.md).
 
 ## How it works
@@ -187,6 +189,11 @@ What a board says to a runner is under `/machine/`, apart from the board's own A
 | `GET /machine/changes`     | yes   | The board's poll: the log entries it hasn't applied, and what the runner asks of it |
 | `POST /machine/edits`      | yes   | An edit made on the board to a task the runner holds                        |
 | `POST /machine/replies`    | yes   | The board's answer to something the runner asked                            |
+| `POST /machine/jobs`       | yes   | The board starting work on a held task: a run, a command, a script ([below](#work-on-the-machine)) |
+| `GET /machine/jobs/:id`    | yes   | The board reading a job until it ends; `DELETE` once it has the outcome      |
+| `PUT /machine/settings`    | yes   | The board's settings the machine works by                                   |
+| `POST /machine/transcript` | yes   | A page of the transcript of a session that ran on the machine               |
+| `PUT /machine/attachments/:id` | yes | One of a held task's pasted images                                        |
 
 ```json
 {
@@ -196,7 +203,7 @@ What a board says to a runner is under `/machine/`, apart from the board's own A
   "version": "1.4.2",
   "protocolVersion": 1,
   "role": "runner",
-  "capabilities": ["pairing", "status", "update", "tasks"],
+  "capabilities": ["pairing", "status", "update", "tasks", "runs"],
   "paired": false
 }
 ```
@@ -486,13 +493,14 @@ task is no longer as it was sent (its whole state is compared: a link added mean
 
 **What the copy carries**, and so what the machine orders: title, description, plan context, status, resolution,
 the flags (Autopilot, auto-merge, auto-review, reviewer model, priority, manual), due date, an agent's request for
-attention, the suggested model, labels, the plan, links (without what a poller read of them: each side polls for
-itself) and the tasks blocking it. **What stays the board's**: the task's project, its epic, its place in the lane,
+attention, the suggested model, labels, the plan, its review rounds with their findings, links (without what a
+poller read of them: each side polls for itself, except a session that ran on the machine, whose status is the
+machine's to read) and the tasks blocking it. **What stays the board's**: the task's project, its epic, its place in the lane,
 archiving and deleting. A held task can't be archived (by itself, with its epic, or by Autopilot's Auto-archive),
 deleted, moved to another project or made an epic, and its project can't be archived or deleted, until it is taken
 back; its epic and its place in the lane change on the
-board without the machine hearing of it. Review rounds and pasted images are in neither list: see the top of this
-page.
+board without the machine hearing of it. Pasted images are sent beside the copy
+([below](#images)); token usage travels with the log's entries, not in the state.
 
 **Tasks it points at.** A held task's epic, its blockers, the tasks it blocks and the one it was closed against
 come along as **references**: task rows on the runner with the number, title, status and (for an epic) the
@@ -510,7 +518,7 @@ entry is **the task's whole state after the change**, plus the activity entries 
 
 | Kind       | When                                           | Carries                                                    |
 | ---------- | ---------------------------------------------- | ---------------------------------------------------------- |
-| `state`    | A held task changed                            | The state and the new activity                             |
+| `state`    | A held task changed                            | The state, the new activity, and what its sessions and runs there have used |
 | `created`  | A task was made on the runner                  | Its identity, project and references too; it is held at once |
 | `released` | The board took the task back                   | The last state; the runner drops its copy with this entry  |
 
@@ -591,6 +599,10 @@ edit queued when the runner failed (a 5xx) and refuses it otherwise.
 
 What is the board's alone isn't sent: a card's place in its lane, and its epic.
 
+The methods passed on are the ones that change a task, its plan, its links, a request for attention and its review
+rounds (`reviews.openRound`, `submit`, `resolveFinding`): Run review or a finding resolved on the board happens on
+the machine, under the ids the board gave.
+
 ### Taking a task back
 
 `DELETE /api/tasks/:id/hold` sends the edits still waiting, then asks the runner to release. The runner appends
@@ -612,6 +624,101 @@ take for an option or a command), and the folder's name comes from the URL itsel
 git@github.com:acme/app.git: fatal: Could not read from remote repository."), and nothing is handed over. A
 project with no repository becomes a project with no folder. A task made on the runner names its project the same
 way, which is how the board finds its own.
+
+### Work on the machine
+
+A task a machine holds is worked on there. The board decides what runs (its Autopilot engine, its automations, its
+settings); the machine does it, with the code a board runs locally.
+
+```text
+ board                                                    runner
+ engine: a run for a held task
+   └─ remoteWork.runner ──POST /machine/jobs {run}──► jobs: started in the background
+        │ ◄──GET /machine/jobs/:id?after&wait── updates (session, worktree, model), then the result
+        ▼
+   the board's run row                                createAutopilotRunner: worktree, push guard, run tokens, CLI
+```
+
+**Jobs.** `POST /machine/jobs` takes `{id, kind, taskId, params}` and answers at once; the work goes on in the
+background (`integrations/machines/jobs.ts`). The board reads `GET /machine/jobs/:id?after=<seq>&wait=<ms>`, held
+open up to 8 seconds while nothing is new, until the job is `done` or `failed`, then deletes it. The same id sent
+twice starts one job. Jobs are in memory:
+
+- A runner that restarted answers `unknown`, and the board fails the run with "<machine> restarted while this was
+  going". That is today's behaviour for a board's own restart; there is still no cancel.
+- A machine the board can't reach is asked again (2 seconds, doubling to 30) until the run's own timeout plus 15
+  minutes has passed. The job goes on there meanwhile, and what the agent does to the task arrives through the log
+  either way.
+- A board that restarts mid-run fails its run as it does a local one; the job on the machine finishes unobserved.
+
+| Kind     | What runs                                                                                          |
+| -------- | -------------------------------------------------------------------------------------------------- |
+| `run`    | A headless agent run: the `RunnerRequest` the board's runner would have taken                      |
+| `shell`  | A custom automation's command, in the machine's clone of the project                               |
+| `script` | A custom automation's script, the same way                                                         |
+
+**Runs.** The board's runner is wrapped (`remoteWork.runner`): a request whose task is held goes to its machine,
+anything else (a task the board holds, a run with no task, a nudge into a T3 thread) runs here. On the machine
+`runnerWork` hands it to the same `createAutopilotRunner`, so the worktree is under the runner's data dir
+(`<data dir>/worktrees`), with the push guard and, for a run that has them, run tools minted and served by the
+runner itself. Three things differ from a run on a board:
+
+- It is always headless. An automation set to T3 Code still runs, and its detail says "Ran headless on engine".
+- It starts from origin's copy of its base, after a fetch: the default branch, the epic's integration branch
+  (`prBase`) or the base the automation named, by the rules a board uses. Nothing names `origin/main`.
+- The agent gets the runner's own MCP endpoint (`http://127.0.0.1:<runner port>/mcp`) on top of the CLI's own
+  servers, since a machine set up only as a runner has no registration for it.
+
+The runner keeps the run in its own `autopilot_runs` under the board's id while it goes (`autopilot.adopt`), so it
+counts in `runsInFlight`, its session's status follows it, and the worktree cleanup finds it later. It logs nothing
+on the task and flags nothing: the board's run does.
+
+**Unpushed commits.** A machine has what is on origin. Before a run, and at hand-over, the board looks in its own
+checkout for the task's branches (`taskBranches`, plus the branch or base the run names) with commits no branch of
+origin has, and says so: on the run's detail, and as a note on the task at hand-over, which the agent on the
+machine reads too.
+
+**The board's settings.** A runner's own settings were never set by anyone, so the board sends the ones a machine
+works by (`MACHINE_SETTING_KEYS`): auto-review, the round limit, the board reviewer and its budget, the built-in
+review skill, the operation models, tiers and profiles, which providers are on, and ticket systems. They go with
+`PUT /machine/settings` before a hand-over and a run, and on the next poll after they change. Where each CLI is
+(`cliPath`) stays the machine's own, and a review skill kept in a file on the board isn't sent. A board's Autopilot
+agent defaults (budget, timeout) are resolved on the board and travel in the run's options.
+
+**Review rounds.** Rounds are part of the working copy, so they open where the rules run: an agent on the machine
+moving the task to Review opens round 1 there, by the board's auto-review setting. The runner's own watchdog
+(`reviewFallbacks`) picks up a round nobody ran and starts the board reviewer in the task's worktree there (the
+folder of its newest session that still exists; the project's clone otherwise). The board's watchdog leaves a held
+task's rounds alone. What the board does to a round is an [edit](#edits-from-the-board).
+
+**Commands and scripts.** A custom automation's shell or script action for a held task is a job: it runs in the
+machine's clone of the project (not a task's worktree, as on a board it runs in the project's folder), as the user
+the runner runs as, with the values in its environment as on a board. The run's summary ends in `on <machine>`, and
+the builder's Runs-as-you badge and the script warning name the connected machines. A check script has no task (it
+runs once per project), so it runs on the board.
+
+#### Sessions, usage and transcripts
+
+A session's files are on the machine it ran on. A link made there says so: `ref.machine` is the runner's instance
+id and name, set by the runner's run and by `link` on a runner's MCP.
+
+| What                | Where it is read                         | How the board gets it                                          |
+| ------------------- | ---------------------------------------- | -------------------------------------------------------------- |
+| Status and title    | The runner's session poll, which runs with no browser connected | In the task's state: `links[].snapshot`       |
+| Token usage         | The runner's usage readers and its runs' own output | Beside the state in each entry: `usage`, the task's rows whole |
+| Transcript          | On the runner, by session id and folder  | `POST /machine/transcript`, when `get_session_transcript` asks |
+
+The board never reads, polls or resumes a session whose link names another machine: Open in terminal answers that
+it ran on that machine. It stores the usage rows it is sent with `session_usage.machine_id`
+([token usage](token-usage.md#on-a-connected-machine)). A transcript can still be read after the task is taken
+back, for as long as the machine is connected.
+
+#### Images
+
+A task's pasted images are files in the board's data dir. After a hand-over, and again before each run, the board
+sends the ones the machine doesn't have (`PUT /machine/attachments/:id`); the runner keeps them under the board's
+ids in its own attachments folder. So the paths an agent is given there (`get_task`'s Images, the reviewer's
+`--add-dir`) are the runner's own. Images attached on the machine stay there.
 
 ### Tools on a machine
 
@@ -657,7 +764,11 @@ where the old one stopped. The first prefixed task to arrive fixes the machine's
 ### Running a runner while developing
 
 `pnpm sandbox --runner` starts a second server in the runner role beside the sandbox's board, on its own free
-port, with its own data dir and user home under the sandbox's temp folder. The `SANDBOX_READY` line carries
+port, with its own data dir and user home under the sandbox's temp folder. Add `--pollers --seed machine` to try
+work on it: the pollers (Autopilot's engine on the board, the review watchdog and session status on the runner) are
+otherwise off in a sandbox, and the seed gives the board a project whose repository the runner already has a clone
+of, with an agent automation and a script automation to switch on. For an agent without a real one, set a stand-in
+script as the provider's CLI path in the runner's settings (`PATCH <runner.url>/api/settings`). The `SANDBOX_READY` line carries
 `runner: {url, port, home}`, and `pnpm sandbox stop` stops it with the rest
 ([sandbox skill](../../.claude/skills/sandbox/SKILL.md)). To pair with it, make a code on its data dir from
 `apps/server`: `<ID>_HOME=<runner.home>/data node --import tsx src/main.ts pair --json`, then
@@ -700,6 +811,17 @@ change the task on the runner meanwhile.
   to it, or a credential for it.
 - **Held tasks live in the runner's own tables.** A separate store would have needed every tool rewritten against
   it; under the board's ids in the ordinary tables, the tools and services are the ones a board runs.
+- **A job the board reads, not a request it holds open.** A run takes an hour and the link may drop in between; a
+  job that outlives the request, read in short polls, survives that, and the same polling client already exists.
+- **Jobs in memory.** A runner's restart ends its agents anyway, so a stored job would only be a record of work that
+  is gone. The board fails the run with the reason, as it does its own after a restart.
+- **The board's settings are sent, not asked for.** Rules run on the machine while the board is away (a move to
+  Review opens a round), so the machine needs them beforehand; asking the board at that moment would not work.
+- **Review rounds in the state, usage beside it.** Rounds are edited from both sides, so they travel both ways with
+  the task. Usage is read on the machine only: in the state, a hand-over would have sent the board's own rows there
+  and got them back marked as the machine's.
+- **A session link names its machine.** After the task is taken back the link is all that is left to say where the
+  session's files are; the hold is gone by then.
 - **A held task counts as busy for another board.** The list a board publishes with its backup already stops a
   move of a task with work going on; nothing else about a hold is written anywhere a backup reaches.
 
@@ -750,6 +872,8 @@ change the task on the runner meanwhile.
 | The board proxying every edit to the machine and waiting | A card that can't be touched while its machine is off; the service layer would have to become asynchronous |
 | A WebSocket or SSE stream from the runner | A second kind of connection to authenticate, time out and keep alive, for a latency a long poll already gives |
 | The runner calling the board | The board would need an address the runner can reach and a credential for it; it has neither |
+| A run's progress as log entries | The log is a task's state; a run that fails before touching the task has none to write, and a run is the board's record, not the task's |
+| Syncing every setting to the runner | Most are about the board's own machine (terminal, CLI paths, backup); only what work on a task reads is sent |
 | Renumbering a machine's tasks when the board sees them | A number in a commit, a branch or a note would point at another task |
 | One limit on wrong pairing codes for everyone | Any machine that could reach the runner could keep pairing refused by sending wrong codes |
 
@@ -789,6 +913,10 @@ change the task on the runner meanwhile.
 | `apps/server/src/integrations/machines/bridgeChannel.ts` | A runner's questions to its board                      |
 | `apps/server/src/integrations/machines/checkouts.ts` | A runner's clones of the board's projects                  |
 | `apps/server/src/mcp/runnerTools.ts`    | The tools on a runner: what runs here, what is passed on, what is refused |
+| `packages/contracts/src/machineJobs.ts` | Jobs, the settings, transcript and image requests                    |
+| `apps/server/src/integrations/machines/remoteWork.ts` | The board's side: sending runs, commands and scripts, settings, images, the unpushed check, transcripts |
+| `apps/server/src/integrations/machines/runnerWork.ts` | The runner's side: what each job kind does, and taking the board's settings |
+| `apps/server/src/integrations/machines/jobs.ts` | A runner's jobs in memory, and the errors that travel        |
 | `apps/server/src/http/routes/tasks.ts`  | `POST` and `DELETE /api/tasks/:id/hold`                              |
 | `apps/server/src/test/boardAndRunner.ts` | A paired board and runner for tests, with a link that can be cut    |
 | `apps/web/src/components/settings/machines/` | The Machines section, the add dialog and their logic            |

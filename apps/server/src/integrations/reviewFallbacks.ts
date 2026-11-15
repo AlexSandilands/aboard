@@ -47,6 +47,11 @@ export function createReviewFallbacks(deps: {
   services: () => Services;
   t3: Pick<T3Integration, "sendToThread" | "threadWorkspace">;
   runHeadless?: RunHeadless;
+  /**
+   * On a runner: the folder a task's change is in, which is the worktree its last session ran in (the project's own
+   * folder there is a clone nobody works in). Null when there is none to prefer.
+   */
+  worktreeOf?: (task: TaskSummary) => string | null;
   now?: () => number;
   graceMs?: number;
   agentGraceMs?: number;
@@ -96,7 +101,7 @@ export function createReviewFallbacks(deps: {
     try {
       const project = s.projects.get(task.projectId);
       const workspace = thread ? await deps.t3.threadWorkspace(thread) : null;
-      const cwd = workspace?.worktreePath ?? project.workspaceRoot;
+      const cwd = workspace?.worktreePath ?? deps.worktreeOf?.(task) ?? project.workspaceRoot;
       if (!cwd) throw new Error(`${project.title} has no workspace folder to review in`);
       const settings = s.settings.get();
       const resolved = s.reviews.boardReviewerModel(task.id);
@@ -186,6 +191,8 @@ export function createReviewFallbacks(deps: {
     const task = s.tasks.summary(round.taskId);
     // A task turned manual while a round was pending has no change, and no agent, to chase.
     if (task.status !== "review" || task.archivedAt || task.manual) return;
+    // A task a machine holds is reviewed there, where its change is: its rounds arrive with the machine's log.
+    if (task.hold) return;
     const thread = implementingThread(task);
     if (thread?.snapshot && BUSY.has(thread.snapshot.status)) return;
     const userAsked = round.openedBy === "user" && !round.nudgedAt;
@@ -235,6 +242,8 @@ export function createReviewFallbacks(deps: {
       // A board review interrupted by a restart left its round running; let the chain pick it up again.
       const s = deps.services();
       for (const round of s.reviews.roundsWithStatus("running")) {
+        // A held task's round is running on its machine, which is the one to say otherwise.
+        if (s.holds.get(round.taskId)) continue;
         s.reviews.setRoundStatus(round.id, "pending", {
           actor: BOARD_REVIEWER,
           error: "The board restarted mid-review",

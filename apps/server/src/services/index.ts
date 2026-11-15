@@ -16,8 +16,8 @@ import { createCheckRuns, customAutomation } from "../autopilot/custom.ts";
 import type { Automation } from "../autopilot/types.ts";
 import { defaultRunGit, type RunGit } from "../integrations/backup.ts";
 import { createRepoUrls } from "../integrations/gitRemote.ts";
-import { runScript, type RunScript } from "../integrations/scriptRunner.ts";
-import { runShellCommand, type RunShell } from "../integrations/shellCommand.ts";
+import { runScript, type RunScript, type ScriptRequest, type ScriptResult } from "../integrations/scriptRunner.ts";
+import { runShellCommand, type RunShell, type ShellRequest, type ShellResult } from "../integrations/shellCommand.ts";
 import { createActivityService } from "./activity.ts";
 import { createAttentionService } from "./attention.ts";
 import { createAutopilotService } from "./autopilot.ts";
@@ -63,6 +63,14 @@ export interface ServiceDeps {
   /** The built-in Autopilot catalogue; tests swap in their own. Custom automations are added to it. */
   automations?: readonly Automation[];
   /** Runs custom automations' shell commands; tests swap in a fake. */
+  /**
+   * Runs a command or a script on the machine that holds its task; null for a task the board holds itself (or a
+   * request with no task), which then runs here.
+   */
+  heldWork?: {
+    shell(request: ShellRequest): Promise<ShellResult> | null;
+    script(request: ScriptRequest): Promise<ScriptResult> | null;
+  };
   runShell?: RunShell;
   /** Runs custom automations' scripts; tests swap in a fake. */
   runScript?: RunScript;
@@ -125,6 +133,7 @@ export function createServices(deps: ServiceDeps): Services {
     services: () => all!,
     readRemote: deps.readRemote ?? (() => null),
     logs: role === "runner",
+    usageOf: (taskId) => usage.copyOf(taskId),
   });
   const tasks = createTasksService(core, {
     projects,
@@ -163,6 +172,9 @@ export function createServices(deps: ServiceDeps): Services {
   restartRecurring = (ids) => recurring.restart(ids);
   const runShell = deps.runShell ?? runShellCommand;
   const runScriptFile = deps.runScript ?? runScript;
+  // A custom automation's command or script for a task a machine holds runs on that machine.
+  const taskShell: RunShell = (request) => deps.heldWork?.shell(request) ?? runShell(request);
+  const taskScript: RunScript = (request) => deps.heldWork?.script(request) ?? runScriptFile(request);
   // One cache for the server's life: custom automations read each project's repository URL on every pass.
   const repoUrl = createRepoUrls(deps.runGit ?? defaultRunGit);
   const boardVariables = () => settings.get().automationVariables;
@@ -181,7 +193,9 @@ export function createServices(deps: ServiceDeps): Services {
     ...builtIn,
     ...customAutomations
       .list()
-      .map((c) => customAutomation(c, { runShell, runScript: runScriptFile, checkRuns, repoUrl, boardVariables })),
+      .map((c) =>
+        customAutomation(c, { runShell: taskShell, runScript: taskScript, checkRuns, repoUrl, boardVariables }),
+      ),
   ];
 
   // A project that gets the last variable an automation needs starts it afresh there, rather than acting on everything
@@ -227,7 +241,11 @@ export function createServices(deps: ServiceDeps): Services {
     attention,
     machineAuth: createMachineAuthService(core),
     machines: createMachinesService(core),
-    holds: createHoldsService(core, { projects, detail: (id) => tasks.service.detail(id) }),
+    holds: createHoldsService(core, {
+      projects,
+      detail: (id) => tasks.service.detail(id),
+      keepUsage: (machineId, taskId, rows) => usage.keepFromMachine(machineId, taskId, rows),
+    }),
     workingCopies,
     repoPrReviews: createRepoPrReviewsService(core, { notifications }),
     autopilot: createAutopilotService(core, {

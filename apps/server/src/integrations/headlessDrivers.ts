@@ -69,6 +69,11 @@ export function codexArgs(input: AgentArgsInput): string[] {
     ...(input.model ? ["--model", input.model] : []),
     ...(input.effort ? ["-c", `model_reasoning_effort=${input.effort}`] : []),
     ...(input.runTools ? codexRunToolsArgs(input.runTools.url, { configIgnored: isolated }) : []),
+    // On a runner: this server's own endpoint, over whatever the user's config says of it. Codex is given only the
+    // URL, so one that needs a token is left to the user's config.
+    ...(input.ownMcp && !input.ownMcp.token && !isolated && !input.runTools
+      ? ["-c", `mcp_servers.${BRAND.id}.url=${JSON.stringify(input.ownMcp.url)}`]
+      : []),
     "-",
   ];
 }

@@ -1,0 +1,283 @@
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { claudeProjectSlug } from "../claudeSessionTitle.ts";
+import { createReviewFallbacks } from "../reviewFallbacks.ts";
+import type { RunHeadless } from "../headlessReview.ts";
+
+type HeadlessRequest = Parameters<RunHeadless>[0];
+import { createBoardAndRunner } from "../../test/boardAndRunner.ts";
+
+const stops: Array<() => void> = [];
+afterEach(() => {
+  for (const stop of stops.splice(0)) stop();
+});
+
+async function setup(options: Parameters<typeof createBoardAndRunner>[0] = {}) {
+  const pair = await createBoardAndRunner(options);
+  stops.push(pair.stop);
+  const { board, machine } = pair;
+  board.services.settings.update({
+    autoReview: true,
+    headlessReviewEnabled: true,
+    providers: [{ id: "claude-code", enabled: true }],
+  });
+  const project = board.services.projects.create({ title: "App", workspaceRoot: "/work/app" });
+  const task = board.services.tasks.create({
+    projectId: project.id,
+    title: "Ship the thing",
+    plan: { phases: [{ title: "Build", steps: [{ title: "Write it" }] }] },
+  });
+  await board.integrations.machineSync.handOver(task.id, machine.id, "user");
+  return { ...pair, project, task };
+}
+
+/** The agent on the machine finishes its one step and moves the task to Review. */
+function finishThere(
+  runner: Awaited<ReturnType<typeof setup>>["runner"],
+  task: { id: string; phases: Array<{ steps: Array<{ id: string }> }> },
+) {
+  runner.services.tasks.move(task.id, { status: "in_progress" }, "claude");
+  runner.services.plans.updateStep(task.phases[0]!.steps[0]!.id, { status: "done" }, "claude");
+  runner.services.tasks.move(task.id, { status: "review" }, "claude");
+}
+
+describe("review rounds of a task a machine holds", () => {
+  it("open on the machine by the board's settings and show on the board", async () => {
+    const { board, runner, task, sync } = await setup();
+    finishThere(runner, task);
+    await sync();
+
+    const rounds = board.services.reviews.list(task.id);
+    expect(rounds).toMatchObject([{ round: 1, status: "pending", trigger: "move", openedBy: "claude" }]);
+    expect(rounds[0]!.id).toBe(runner.services.reviews.list(task.id)[0]!.id);
+    expect(board.services.tasks.summary(task.id).review).toMatchObject({ round: 1 });
+  });
+
+  it("are run by the machine's reviewer, in the worktree there, and never by the board's", async () => {
+    const { board, runner, task, sync } = await setup();
+    finishThere(runner, task);
+    await sync();
+
+    const asked: HeadlessRequest[] = [];
+    const findings = [{ severity: "major" as const, title: "Unchecked input", file: "src/a.ts", line: 3 }];
+    const reviewer = (services: () => typeof board.services) =>
+      createReviewFallbacks({
+        services,
+        t3: { sendToThread: () => Promise.resolve(), threadWorkspace: () => Promise.resolve(null) },
+        runHeadless: (request) => {
+          asked.push(request);
+          return Promise.resolve({ summary: "One problem", findings, costUsd: 0.2, usage: [] });
+        },
+        worktreeOf: () => "/data/worktrees/app/1-abcd",
+        graceMs: 0,
+        agentGraceMs: 0,
+        log: { warn: () => {} },
+      });
+
+    // The board's watchdog leaves a held task's round alone.
+    const here = reviewer(() => board.services);
+    await here.tick();
+    await here.idle();
+    expect(asked).toEqual([]);
+
+    const there = reviewer(() => runner.services);
+    await there.tick();
+    await there.idle();
+    expect(runner.services.reviews.list(task.id)[0]).toMatchObject({ error: null });
+    expect(asked.map((r) => r.cwd)).toEqual(["/data/worktrees/app/1-abcd"]);
+
+    await sync();
+    const [round] = board.services.reviews.list(task.id);
+    expect(round).toMatchObject({ status: "submitted", reviewer: "board reviewer" });
+    expect(round!.findings).toMatchObject([
+      { label: "R1.1", severity: "major", title: "Unchecked input", status: "open" },
+    ]);
+    expect(board.services.tasks.summary(task.id).review?.open.major).toBe(1);
+  });
+
+  it("take what the board does to them: a finding resolved here is resolved there, under the same ids", async () => {
+    const { board, runner, task, sync } = await setup();
+    finishThere(runner, task);
+    runner.services.reviews.submit(
+      task.id,
+      { findings: [{ severity: "major", title: "Unchecked input" }], summary: "One problem" },
+      "reviewer",
+    );
+    await sync();
+
+    board.services.reviews.resolveFinding(task.id, "R1.1", { status: "fixed", note: "Checked now" }, "user");
+    // Shown at once on the board, and waiting for the machine.
+    expect(board.services.reviews.list(task.id)[0]!.findings[0]).toMatchObject({ status: "fixed" });
+    expect(board.services.tasks.summary(task.id).hold?.waiting).toBe(1);
+    await sync();
+    await sync();
+
+    const there = runner.services.reviews.list(task.id);
+    expect(there[0]!.findings[0]).toMatchObject({ status: "fixed", resolutionNote: "Checked now", resolvedBy: "user" });
+    // The last gating finding resolved opens the next round, on the machine; the board has the same one.
+    expect(there.map((r) => r.round)).toEqual([1, 2]);
+    const here = board.services.reviews.list(task.id);
+    expect(here.map((r) => r.id)).toEqual(there.map((r) => r.id));
+    expect(board.services.tasks.summary(task.id).hold?.waiting).toBe(0);
+  });
+
+  it("go with the task when it is handed over, and come back with it", async () => {
+    const pair = await createBoardAndRunner();
+    stops.push(pair.stop);
+    const { board, runner, machine } = pair;
+    const project = board.services.projects.create({ title: "App", workspaceRoot: "/work/app" });
+    const task = board.services.tasks.create({
+      projectId: project.id,
+      title: "Reviewed before",
+      plan: { phases: [{ title: "Build", steps: [{ title: "Write it" }] }] },
+    });
+    board.services.reviews.submit(task.id, { findings: [{ severity: "minor", title: "Naming" }] }, "reviewer");
+    await board.integrations.machineSync.handOver(task.id, machine.id, "user");
+
+    expect(runner.services.reviews.list(task.id)).toMatchObject([{ round: 1, findings: [{ title: "Naming" }] }]);
+    runner.services.reviews.resolveFinding(task.id, "R1.1", { status: "fixed" }, "claude");
+    await board.integrations.machineSync.release(task.id, {}, "user");
+    expect(board.services.reviews.list(task.id)[0]!.findings[0]).toMatchObject({ status: "fixed" });
+  });
+});
+
+describe("what the board shows of work on a machine", () => {
+  const SESSION = "11111111-2222-4333-8444-555555555555";
+
+  it("takes a session's status and title from the machine it ran on, and doesn't read them itself", async () => {
+    const { board, runner, task, sync } = await setup();
+    const there = runner.services.links.add(
+      task.id,
+      {
+        agentSession: {
+          harness: "claude-code",
+          sessionId: SESSION,
+          cwd: "/data/worktrees/app/1-abcd",
+          machine: { id: runner.instanceId, name: "engine" },
+        },
+        label: "Implementing",
+      },
+      "claude",
+    );
+    runner.services.links.setSnapshot(there.id, { status: "busy", inApp: false, title: "Fixing the parser" });
+    await sync();
+
+    const link = () => board.services.tasks.summary(task.id).links.find((l) => l.id === there.id);
+    expect(link()).toMatchObject({ snapshot: { status: "busy", title: "Fixing the parser" } });
+    // The board's own poll finds no such session on this machine, and leaves what the machine said.
+    await board.integrations.refreshLink(there.id);
+    expect(link()).toMatchObject({ snapshot: { status: "busy" } });
+    await expect(board.integrations.resumeSession(there.id, { mode: "resume" })).rejects.toThrow(
+      "This session ran on engine",
+    );
+
+    runner.services.links.setSnapshot(there.id, {
+      status: "finished",
+      inApp: false,
+      endedAt: "2026-01-05T11:00:00.000Z",
+    });
+    await sync();
+    expect(link()).toMatchObject({ snapshot: { status: "finished" } });
+  });
+
+  it("counts the tokens used on the machine under the task, named as that machine's", async () => {
+    const { board, runner, task, sync } = await setup();
+    runner.services.usage.recordRun({
+      harness: "claude-code",
+      sessionId: null,
+      runId: `review-${task.id}-1`,
+      taskId: task.id,
+      purpose: "review",
+      model: "claude-haiku-4-5",
+      usage: [
+        {
+          model: "claude-haiku-4-5",
+          tokens: { input: 1200, output: 300, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 },
+        },
+      ],
+      costUsd: 0.02,
+      at: "2026-01-05T10:30:00.000Z",
+    });
+    runner.services.tasks.addNote(task.id, "Reviewed", "board reviewer");
+    await sync();
+    // The same entry again changes nothing.
+    await sync();
+
+    const usage = board.services.usage.taskUsage(task.id);
+    expect(usage?.rows).toMatchObject([
+      { kind: "run", purpose: "review", machine: "engine", tokens: { input: 1200, output: 300 }, costUsd: 0.02 },
+    ]);
+    // What the board read itself says no machine.
+    expect(runner.services.usage.taskUsage(task.id)?.rows[0]?.machine ?? null).toBeNull();
+  });
+
+  it("reads a session's transcript on the machine it ran on, while the task is held and after", async () => {
+    const claudeDir = mkdtempSync(join(tmpdir(), "machine-transcripts-"));
+    stops.push(() => rmSync(claudeDir, { recursive: true, force: true }));
+    const cwd = "/data/worktrees/app/1-abcd";
+    const folder = join(claudeDir, "projects", claudeProjectSlug(cwd));
+    mkdirSync(folder, { recursive: true });
+    const entry = {
+      type: "user",
+      timestamp: "2026-01-01T10:00:00.000Z",
+      message: { role: "user", content: "Fix the parser" },
+    };
+    writeFileSync(join(folder, `${SESSION}.jsonl`), `${JSON.stringify(entry)}\n`);
+    const { board, runner, task, machine, sync, link } = await setup({
+      runnerSessionDirs: { claudeDir, copilotDir: join(claudeDir, "copilot") },
+    });
+    runner.services.links.add(
+      task.id,
+      {
+        agentSession: {
+          harness: "claude-code",
+          sessionId: SESSION,
+          cwd,
+          machine: { id: runner.instanceId, name: "engine" },
+        },
+        label: "Implementing",
+      },
+      "claude",
+    );
+    await sync();
+
+    const read = await board.integrations.sessionTranscript(task.id, {});
+    expect(read).toMatchObject({ sessionId: SESSION, label: "Implementing" });
+    expect(JSON.stringify(read.page)).toContain("Fix the parser");
+    // The machine itself reads its own.
+    expect(JSON.stringify((await runner.integrations.sessionTranscript(task.id, {})).page)).toContain("Fix the parser");
+
+    await board.integrations.machineSync.release(task.id, {}, "user");
+    expect(JSON.stringify((await board.integrations.sessionTranscript(task.id, {})).page)).toContain("Fix the parser");
+    await link(false);
+    await expect(board.integrations.sessionTranscript(task.id, {})).rejects.toThrow(
+      "ran on engine, which can't be reached",
+    );
+    void machine;
+  });
+
+  it("has the task's pasted images on the machine, under the paths its prompts name", async () => {
+    const pair = await createBoardAndRunner();
+    stops.push(pair.stop);
+    const { board, runner, machine } = pair;
+    const project = board.services.projects.create({ title: "App", workspaceRoot: "/work/app" });
+    const task = board.services.tasks.create({ projectId: project.id, title: "With a screenshot" });
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    const image = board.services.attachments.upload({
+      taskId: task.id,
+      filename: "bug.png",
+      mime: "image/png",
+      bytes: png,
+    });
+    await board.integrations.machineSync.handOver(task.id, machine.id, "user");
+
+    const there = runner.services.attachments.forTask(task.id);
+    expect(there).toMatchObject([{ id: image.id, filename: "bug.png", mime: "image/png" }]);
+    expect(existsSync(there[0]!.path)).toBe(true);
+    expect([...readFileSync(there[0]!.path)]).toEqual([...png]);
+    // Not the board's folder: the machine's own.
+    expect(there[0]!.path).not.toBe(board.services.attachments.forTask(task.id)[0]!.path);
+  });
+});
