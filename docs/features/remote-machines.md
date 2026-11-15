@@ -1,6 +1,6 @@
 # Remote machines
 
-Board tasks: #179, #180, #181, #12, #182, in epic #178 (run tasks on another machine).
+Board tasks: #179, #180, #181, #12, #182, #185, in epic #178 (run tasks on another machine).
 
 A task can be set to run on another machine: a server or a second computer the board connects to. That machine
 runs the same server as the board, started in the **runner** role: it serves no board or web app, holds the
@@ -11,11 +11,12 @@ connects a machine (installing over SSH, routes, status, logins, updates and the
 and [held tasks](#held-tasks): handing a task to a machine, the change log the machine keeps and the board
 replays, the board's own edits to a held task, the numbers a machine gives the tasks it makes, and
 [work on the machine](#work-on-the-machine): the headless runs, review rounds and scripts of a held task, and how
-the board shows the sessions and tokens of work it can't see.
+the board shows the sessions and tokens of work it can't see, and [interactive work](#interactive-work): T3 Code
+threads in the machine's own T3 Code and CLI sessions opened over ssh in tmux there.
 
 Not built yet: choosing a machine for a task in the UI (a hand-over is an API call, `POST /api/tasks/:id/hold`),
-Autopilot's engine running on the machine by itself (a board starts every run), and T3 Code threads or terminals
-on the machine. An image attached on the machine isn't sent to the board. Nor are notifications: what an agent on a
+Autopilot's engine running on the machine by itself (a board starts every run), and connecting a machine's own T3 Code
+from the board (it is set up on the machine). An image attached on the machine isn't sent to the board. Nor are notifications: what an agent on a
 machine does to a held task changes the card (its request for attention shows as a flag) but raises no inbox entry
 or pop-up on the board. Those are the later tasks of epic #178. What a user does is in the
 [guide](../guide/remote-machines.md).
@@ -194,6 +195,8 @@ What a board says to a runner is under `/machine/`, apart from the board's own A
 | `PUT /machine/settings`    | yes   | The board's settings the machine works by                                   |
 | `POST /machine/transcript` | yes   | A page of the transcript of a session that ran on the machine               |
 | `PUT /machine/attachments/:id` | yes | One of a held task's pasted images                                        |
+| `POST /machine/t3`         | yes   | The board acting in the machine's T3 Code for a held task ([below](#t3-code-on-the-machine)) |
+| `POST /machine/sessions`   | yes   | The folder and link of a CLI session the board opens there over ssh ([below](#terminals-on-the-machine)) |
 
 ```json
 {
@@ -717,8 +720,9 @@ id and name, set by the runner's run and by `link` on a runner's MCP.
 | Token usage         | The runner's usage readers and its runs' own output | Beside the state in each entry: `usage`, the task's rows whole |
 | Transcript          | On the runner, by session id and folder  | `POST /machine/transcript`, when `get_session_transcript` asks |
 
-The board never reads, polls or resumes a session whose link names another machine: Open in terminal answers that
-it ran on that machine. It stores the usage rows it is sent with `session_usage.machine_id`
+The board never reads or polls a session whose link names another machine, and opens it there over ssh
+([terminals](#terminals-on-the-machine)). A T3 Code thread started on the machine is the same: `ref.machine` on the
+thread, its status in the task's state, its tokens with the rest. It stores the usage rows it is sent with `session_usage.machine_id`
 ([token usage](token-usage.md#on-a-connected-machine)). A transcript can still be read after the task is taken
 back, for as long as the machine is connected.
 
@@ -729,6 +733,45 @@ sends the ones the machine doesn't have (`PUT /machine/attachments/:id`); the ru
 ids in its own attachments folder, and drops them with the task's copy when the task is taken back, so every
 hand-over sends them all. So the paths an agent is given there (`get_task`'s Images, the reviewer's
 `--add-dir`) are the runner's own. Images attached on the machine stay there.
+
+### Interactive work
+
+What the user starts from the board on a held task runs on the machine too. Both are synchronous requests the dialog
+waits on, unlike jobs, and both need a capability a runner from before this lacks (`t3`, `sessions`): an older one is
+refused with "update it first". The machine answers only for a task it holds.
+
+#### T3 Code on the machine
+
+A runner finds and talks to its own machine's T3 Code exactly as a board does (`integrations/t3.ts`, with the token
+set in the runner's settings). On a runner it polls with no browser connected, and every thread it starts or an agent
+links there carries `ref.machine`, so the board knows whose T3 Code it is in. The thread link is
+`t3code://threads/<that T3's environment id>/<thread>`, which opens in the user's T3 app wherever that environment is
+connected.
+
+On the board, `withMachineThreads` (`integrations/machines/remoteT3.ts`) wraps its T3 integration, so everything that
+acts on a task's thread reaches the right T3 Code without knowing there is a machine:
+
+| On the board                                              | For a held task                                                             |
+| --------------------------------------------------------- | --------------------------------------------------------------------------- |
+| The launch dialog's options, starting from it             | `POST /machine/t3 {op: "options" \| "start"}`; the dialog's images are sent first |
+| A custom hand-off's thread (`launchTaskThread`)           | `{op: "launch"}`                                                            |
+| Messaging a thread with `ref.machine` (nudges, the review loop, `message_task_thread`) | `{op: "message", linkId}` to the machine that holds the task |
+| A thread's workspace, retrying its preparation            | Not known here: none, and "retry it there"                                  |
+
+After a start the board reads the machine's log at once (`pump`), so the link is on the board when the dialog's call
+returns. A refusal comes back as the machine's own sentence, prefixed "On engine:". The board's own T3 poll skips
+these threads (another environment), `refreshLink` leaves them to the machine, and their snapshot travels with the
+task's state like a session's (`taskState`). A thread whose task was taken back can't be messaged: only the machine
+talks to its T3 Code.
+
+#### Terminals on the machine
+
+A CLI session of a held task, and any session whose link names a machine, opens in a terminal on the board that runs
+`ssh -t` to the machine and tmux there ([agent sessions](agent-sessions.md#on-a-machine)). For a new one,
+`POST /machine/sessions {taskId, harness, sessionId, label, workspace}` has the runner make a worktree under its data
+dir from origin's copy of the base (or use its clone), link the session to its copy with the machine named, and answer
+the folder, branch and link id (`integrations/machines/runnerInteractive.ts`). The board checks over ssh first that
+tmux and the CLI are there, so a machine it can't open on makes no worktree.
 
 ### Tools on a machine
 
@@ -926,6 +969,9 @@ change the task on the runner meanwhile.
 | `packages/contracts/src/machineJobs.ts` | Jobs, the settings, transcript and image requests                    |
 | `apps/server/src/integrations/machines/remoteWork.ts` | The board's side: sending runs, commands and scripts, settings, images, the unpushed check, transcripts |
 | `apps/server/src/integrations/machines/runnerWork.ts` | The runner's side: what each job kind does, and taking the board's settings |
+| `apps/server/src/integrations/machines/runnerInteractive.ts` | The runner's side of interactive work: `POST /machine/t3` on its own T3 Code, `POST /machine/sessions` |
+| `apps/server/src/integrations/machines/remoteT3.ts` | The board's T3 Code with a held task's threads sent to its machine (`withMachineThreads`) |
+| `apps/server/src/integrations/remoteTerminal.ts` | A session on a machine: ssh route, tmux script, quoting, preflight (tested) |
 | `apps/server/src/integrations/machines/jobs.ts` | A runner's jobs in memory, and the errors that travel        |
 | `apps/server/src/http/routes/tasks.ts`  | `POST` and `DELETE /api/tasks/:id/hold`                              |
 | `apps/server/src/test/boardAndRunner.ts` | A paired board and runner for tests, with a link that can be cut    |

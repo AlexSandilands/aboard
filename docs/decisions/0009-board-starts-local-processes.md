@@ -1,7 +1,7 @@
 # 0009 The board may start a terminal, from a stored link only
 
 Status: Accepted; extended by [0010](0010-board-starts-new-sessions.md), which lets the user start new sessions with a
-prompt and lets the board bring back a window it named
+prompt and lets the board bring back a window it named, and amended for sessions on a connected machine (below)
 
 ## Context
 
@@ -44,3 +44,22 @@ page could try to send through the user's browser.
 - Out of scope: focusing a window that already shows the session (no reliable way across terminals), and
   resuming sessions of harnesses that run in an editor (VS Code agent mode).
 - The terminal setting is machine-specific, so it isn't exported in backups.
+
+## Amendment: sessions on a connected machine (#185)
+
+A session whose link names a connected machine (`ref.machine`) has its folder and history there. **Open in terminal**
+then runs `ssh -t [-p <port>] -- <target> sh -lc '<script>'` in the terminal here, and the script attaches to the
+session's tmux session on the machine (`<brand>-<id>`, named from the session id) or makes it, running the resume or
+fork command in the session's folder (`integrations/remoteTerminal.ts`).
+
+- **Still from the stored link alone.** The target and port come from the machine's routes as the board stored them
+  (its SSH route, else a tailnet address or `*.ts.net` name of a direct route, both checked as an `SshTarget`), the
+  folder and id from the link. The request still carries only the mode and `force`.
+- **One more shell parses it: the user's login shell on the machine.** Each argv element is POSIX-quoted inside the
+  script, and the script is quoted so that a POSIX shell and fish read it the same (`loginShellQuote`: `'` and `\`
+  written outside the quotes). The script has no double quote, so it crosses cmd.exe on a Windows board as 0009's
+  tokens do.
+- **Asked first.** A BatchMode `ssh` asks the machine whether tmux, the folder and the CLI are there and whether the
+  tmux session is open. An open one is attached to, which is no second writer; a running session outside tmux is a
+  409 as here.
+- **The machine's own CLI runs**, found on a login shell's PATH there; the path set in Settings is this machine's.

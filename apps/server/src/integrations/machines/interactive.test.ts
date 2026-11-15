@@ -166,6 +166,8 @@ describe("terminals for sessions on a machine", () => {
 
   it("start a new session over ssh in tmux, linked on the machine", async () => {
     const { board, task, spawned, sshCalls, sync } = await withTerminal("checked\n");
+    const options = await board.request(`/api/tasks/${task.id}/session-launch-options`);
+    expect(await options.json()).toMatchObject({ machine: { name: "engine" }, taskBranches: [] });
     const res = await board.request(`/api/tasks/${task.id}/sessions`, {
       method: "POST",
       json: { harness: "claude-code", mode: "work", prompt: "Go", model: null, workspace: { mode: "current" } },

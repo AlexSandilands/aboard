@@ -516,13 +516,18 @@ export function createSessionLaunch(deps: {
       const cliEffort = (harness: AgentHarness) =>
         typed(harness) ? cliEffortFor(harness, typed(harness)?.effort) : profileCliEffort(profile, harness);
       const resolved = terminal(settings, h);
+      // A task a machine holds runs its session there: the CLI is that machine's (checked before it opens), and the
+      // worktrees of this machine's checkout aren't there.
+      const holder = deps.remote?.().holder(task.id) ?? null;
       return {
-        clis: LAUNCHABLE_HARNESSES.map((harness) => cliStatus(settings, harness, h)),
+        clis: LAUNCHABLE_HARNESSES.map((harness) =>
+          holder ? { harness, available: true, path: null } : cliStatus(settings, harness, h),
+        ),
         workspaceRoot: root,
         isRepo,
         branches,
         defaultBaseRef,
-        taskBranches: await taskBranches({ task, root, defaultBranch, runGit: deps.runGit, worktrees }),
+        taskBranches: holder ? [] : await taskBranches({ task, root, defaultBranch, runGit: deps.runGit, worktrees }),
         models: {
           "claude-code": cliModel("claude-code"),
           codex: cliModel("codex"),
@@ -538,6 +543,7 @@ export function createSessionLaunch(deps: {
           ? { name: profile.name, source: model.source === "label" ? "label" : "tier", label: model.label }
           : null,
         namedWindow: "launch" in resolved && resolved.focus !== undefined,
+        machine: holder ? { name: holder.name } : null,
       };
     },
 
