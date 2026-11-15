@@ -65,6 +65,12 @@ The single-file form (`export --file`) is the same `BoardDump` as one JSON docum
   backup can't bring them back.
 - **Automation drafts** (`autopilot_drafts`, [autopilot](autopilot.md#drafts)) are a hand-off from an agent that
   expires; only importing one makes it the user's, as a custom automation, which is backed up.
+- **Which machine holds a task** ([remote machines](remote-machines.md#held-tasks)): `task_holds`, the position in
+  each machine's log (`machine_sync`) and the edits waiting for a machine (`held_edits`), like the `machines` table
+  itself, belong to this board and that machine. The dump lists its tables by name, so none of them is in it, and a
+  runner's working copies and change log aren't either. A held task is backed up as the board last saw it; restored,
+  it is a task the board holds itself. The counters are in the dump, so the highest number each machine's prefix
+  reached (`machine_task_number:<prefix>`) survives a restore.
 - **A link's `snapshot_json`, `synced_at` and `pr_changes_json`** are the GitHub and T3 pollers' cache, rewritten on
   every poll (`pr_changes_json` is when each PR state began, for Autopilot's custom PR triggers).
   Dumping them would make every scheduled run a commit; the pollers refill them after a restore.
@@ -276,7 +282,8 @@ from; running tasks on another machine is #12.
   restored from this one shares them), then the same repo, then the same title. `machine.json` is written by each
   run beside the dump: its projects' origins (`git remote get-url origin` in each `workspaceRoot` that exists,
   `normalizeRemote`d so SSH and HTTPS forms match) and `busyTaskIds`, tasks with a queued or running Autopilot run
-  or a running agent session. Neither is in the dump (runs and link snapshots aren't backed up), which is why the
+  or a running agent session, and tasks a connected machine holds (a move of one is refused like any busy task's:
+  the machine orders its changes; a move that arrives anyway ends the hold). Neither is in the dump (runs and link snapshots aren't backed up), which is why the
   file exists; it is not part of `BoardDump`.
 - **Import.** `POST /api/backup/import-tasks` (`machine`, `taskIds`, `mode`, `projectMap`) runs
   `backup.importTasks`, each task in its own write (epics first, so a task picked with its epic goes back into it):

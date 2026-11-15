@@ -20,8 +20,13 @@ const defaultClone: CloneRepo = (url, dir) =>
     execFile(
       "git",
       ["clone", "--", url, dir],
-      // A missing credential fails instead of waiting for input nobody will type.
-      { timeout: CLONE_TIMEOUT_MS, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" }, maxBuffer: 16 * 1024 * 1024 },
+      // A missing credential fails instead of waiting for input nobody will type, and only the transports a
+      // repository is cloned over are allowed: the URL came from another machine, and `ext::` runs a command.
+      {
+        timeout: CLONE_TIMEOUT_MS,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_ALLOW_PROTOCOL: "https:http:ssh:git" },
+        maxBuffer: 16 * 1024 * 1024,
+      },
       (error, stdout, stderr) => {
         const code = error ? (typeof error.code === "number" ? error.code : 1) : 0;
         resolve({ code, stdout, stderr: stderr || (error?.message ?? "") });
@@ -63,6 +68,10 @@ export function createCheckouts(deps: {
     ensure(project) {
       if (!project.remoteUrl) return Promise.resolve(null);
       const url = project.remoteUrl;
+      // Only what names a repository on a host: nothing git would read as an option, a path here or a command.
+      if (remoteIdentity(url) === null || /^[-\s]|::/.test(url)) {
+        return Promise.reject(new AppError("VALIDATION", `${url} isn't a repository URL this machine can clone`));
+      }
       const dir = folderOf(project);
       if (existsSync(join(dir, ".git"))) return Promise.resolve(dir);
       const running = cloning.get(dir);

@@ -1,15 +1,21 @@
 # Remote machines
 
-Board tasks: #179, #180, #181, in epic #178 (run tasks on another machine).
+Board tasks: #179, #180, #181, #12, in epic #178 (run tasks on another machine).
 
 A task can be set to run on another machine: a server or a second computer the board connects to. That machine
 runs the same server as the board, started in the **runner** role: it serves no board or web app, holds the
-tasks sent to it, and runs their agents. This page covers the part that exists so far: the runner role, the
-release and the script that put the server on a machine with nothing installed, the background service that keeps
-it running, how a board and a runner come to trust each other (identity, pairing, tokens and the machine API), and
-how a board connects a machine: installing over SSH, routes, status, logins, updates and the Settings page that
-drives them. Held tasks and remote runs aren't built yet; they are the later work of epic #178. What a user does
-is in the [guide](../guide/remote-machines.md).
+tasks sent to it, and runs their agents. This page covers what exists so far: the runner role, the release and the
+script that put the server on a machine with nothing installed, the background service that keeps it running, how
+a board and a runner come to trust each other (identity, pairing, tokens and the machine API), how a board
+connects a machine (installing over SSH, routes, status, logins, updates and the Settings page that drives them),
+and [held tasks](#held-tasks): handing a task to a machine, the change log the machine keeps and the board
+replays, the board's own edits to a held task, and the numbers a machine gives the tasks it makes.
+
+Not built yet: choosing a machine for a task in the UI (a hand-over is an API call, `POST /api/tasks/:id/hold`),
+and running anything on the machine (headless runs, review rounds, scripts). Review rounds and pasted images of a
+held task are not part of its working copy: a round opened on the machine stays there, and an image attached there
+isn't sent to the board. Those are the later tasks of epic #178. What a user does is in the
+[guide](../guide/remote-machines.md).
 
 ## How it works
 
@@ -175,6 +181,11 @@ What a board says to a runner is under `/machine/`, apart from the board's own A
 | `DELETE /machine/session`  | yes   | The board unpairing itself: its token stops working                         |
 | `GET /machine/status`      | yes   | Version, platform, runs in flight, logins, and where an update is ([below](#status-and-logins)) |
 | `POST /machine/update`     | yes   | The board asking the runner to update to a version ([below](#updates))      |
+| `POST /machine/tasks`      | yes   | The board handing a task over ([held tasks](#held-tasks))                   |
+| `DELETE /machine/tasks/:id` | yes  | The board taking a task back                                                |
+| `GET /machine/changes`     | yes   | The board's poll: the log entries it hasn't applied, and what the runner asks of it |
+| `POST /machine/edits`      | yes   | An edit made on the board to a task the runner holds                        |
+| `POST /machine/replies`    | yes   | The board's answer to something the runner asked                            |
 
 ```json
 {
@@ -184,7 +195,7 @@ What a board says to a runner is under `/machine/`, apart from the board's own A
   "version": "1.4.2",
   "protocolVersion": 1,
   "role": "runner",
-  "capabilities": ["pairing", "status", "update"],
+  "capabilities": ["pairing", "status", "update", "tasks"],
   "paired": false
 }
 ```
@@ -446,14 +457,203 @@ runner's local API, open to whoever reaches the proxy. The guard refuses such re
 forwarding header (`Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`, `X-Real-IP`), which most proxies add, but a
 proxy that adds none is not caught.
 
+### Held tasks
+
+The board owns every task. Handing one to a machine gives that machine a **working copy** and makes it the one
+place where changes to the task are ordered: an agent there changes the copy, the runner records each change in a
+log, and the board applies the log. While a machine holds a task, the board's `task_holds` row says so, and the
+task's summary carries `hold: {machineId, machineName, since, waiting}`, which the card and the panel show as
+`On <machine>` (`components/task/HoldBadge.tsx`).
+
+```text
+ board                                          runner
+ POST /api/tasks/:id/hold ──POST /machine/tasks──► working copy (the task's own rows, the board's ids)
+                                                        │ an agent's tool call, or an edit the board sent
+                                                        ▼
+ services/holds.apply ◄──GET /machine/changes── change_log: one entry per write, in order
+        │ one write, events published                   ▲
+        ▼                                               │
+ browsers (SSE)          edit on the board ──POST /machine/edits──┘
+```
+
+A hand-over (`integrations/machines/sync.ts` `handOver`) sends the task's identity (id, number, kind, who made
+it), its state, its last 50 activity entries (so an agent on the machine reads the same handover notes), its
+project, and the tasks it points at. The runner stores it in its ordinary tables under the board's ids
+(`services/workingCopies.ts` `accept`), so every service and tool works on it as on a board; `working_copies`
+says which task rows are held. The board records the hold only after the runner has answered, and refuses when the
+task changed meanwhile. An epic, a manual task and an archived task can't be handed over.
+
+**What the copy carries**, and so what the machine orders: title, description, plan context, status, resolution,
+the flags (Autopilot, auto-merge, auto-review, reviewer model, priority, manual), due date, an agent's request for
+attention, the suggested model, labels, the plan, links (without what a poller read of them: each side polls for
+itself) and the tasks blocking it. **What stays the board's**: the task's project, its epic, its place in the lane,
+archiving and deleting. A held task can't be archived, deleted, moved to another project or made an epic, and its
+project can't be archived or deleted, until it is taken back; its epic and its place in the lane change on the
+board without the machine hearing of it. Review rounds and pasted images are in neither list: see the top of this
+page.
+
+**Tasks it points at.** A held task's epic, its blockers, the tasks it blocks and the one it was closed against
+come along as **references**: task rows on the runner with the number, title, status and (for an epic) the
+delivery and integration branch, marked `reference` in `working_copies`. They are there so the held task reads
+right (`Delivery: start from epic/…`, `Blocked by #41`), are left out of the runner's lists, and can't be changed
+there. They are as the board had them at hand-over, or at the last edit that named them; an epic's status on a
+runner is the board's word, never derived from the few tasks held there. A reference no held task points at any
+more is dropped.
+
+### The change log
+
+On a runner, every write that touches a held task appends one entry to `change_log` before it commits
+(`core.beforeCommit`, `services/workingCopies.ts` `logChanges`), so a change and its entry are one transaction. An
+entry is **the task's whole state after the change**, plus the activity entries the change wrote:
+
+| Kind       | When                                           | Carries                                                    |
+| ---------- | ---------------------------------------------- | ---------------------------------------------------------- |
+| `state`    | A held task changed                            | The state and the new activity                             |
+| `created`  | A task was made on the runner                  | Its identity, project and references too; it is held at once |
+| `released` | The board took the task back                   | The last state; the runner drops its copy with this entry  |
+
+A write that changed nothing logs nothing (the state last logged is kept beside the copy). Entry ids are the
+runner's own counter. `epoch` names the log: a random id made with the runner's database, so a board can tell a
+runner whose database was replaced, whose ids start again.
+
+### The log's format
+
+Every entry carries the format it was written in (`CHANGE_LOG_FORMAT`, `packages/contracts/src/workingCopies.ts`).
+A runner can hold days of entries while the board updates itself, so **a board reads every format ever written**:
+
+- Raising `CHANGE_LOG_FORMAT` needs a function in `CHANGE_LOG_UPGRADERS` that turns the format before into the new
+  one, and a new entry in `packages/contracts/src/fixtures/changeLogFormats.ts` with entries as the new format
+  stores them. `readChangeLogEntry` runs the upgraders in a chain.
+- A fixture is never edited or removed, and an upgrader is never removed. `workingCopies.test.ts` fails when a
+  format has no fixture or no upgrader, and reads every fixture as the current format.
+- A field added without raising the format must be optional: unknown fields are dropped when read.
+- The other way round (a runner updated before its board) is refused, not guessed at: replay stops at the first
+  entry in a format newer than the board knows, keeps its position, and carries on once the board is updated.
+
+### Replay
+
+The board reads each machine's log with `GET /machine/changes?after=<last id applied>&wait=<ms>`
+(`integrations/machines/sync.ts`). The runner holds the request open up to `wait` (8 seconds) while it has nothing
+to say, and answers the moment the log grows, so a change is on the board within that request. The same read is
+the catch-up: after the board was off, or the link was down, it asks from where it stopped and gets everything
+since, 200 entries at a time. The loop runs for every connected machine whether or not the pollers do.
+
+`services/holds.ts` `apply` takes one answer in one write:
+
+- Entries are applied in id order. Each writes the state over the board's rows (`services/taskState.ts`), appends
+  the activity as it was logged there (its time and actor), moves the card to the end of its new lane when the
+  status changed, re-derives the task's epic, and marks the task changed, so browsers get the same `task.upserted`
+  a local change sends ([live sync](live-sync.md)). The board doesn't re-run the rules: the runner ran the same
+  code when it made the change.
+- **An entry is applied once.** The position (`machine_sync.applied_log_id`) is written in the same transaction
+  as the entries, and an entry at or before it is skipped. So an answer that arrives twice, or a read repeated
+  after the connection dropped halfway, changes nothing. A state is also the same whichever way it is written, so
+  an entry applied twice would leave the task as it was.
+- The runner drops entries from its log once the board asks for what comes after them.
+- A `created` entry makes the board's task under the runner's id and number, held by that machine. Its project is
+  the board's by id, else by repository ([below](#projects-on-a-machine)), else General.
+- An answer from another `epoch` starts again from the beginning, and gives back the tasks the runner no longer
+  lists as held (`released`, `lost: true`).
+- An entry for a task the board doesn't have that machine holding is skipped, and the runner is told to drop the
+  task: it was taken back by force.
+
+### Edits from the board
+
+Whoever changes a held task on the board (the web app, an agent over MCP, a poller finishing a merged PR) goes
+through the service layer, and `services/heldEdits.ts` wraps the methods that change a task. For a held task the
+wrapper, in one write:
+
+1. applies the edit on the board, so the card shows it at once;
+2. queues it in `held_edits`: the method's name, its arguments, the ids it gave what it made (a step, a link), and
+   the activity entries it wrote.
+
+`hold.waiting` counts the queued edits the machine hasn't answered, and the badge reads `On engine · 2 waiting`.
+The edits are sent in order (`POST /machine/edits`), straight away while the machine is connected, and before the
+next read of its log otherwise. The runner runs the same method with the same arguments, handing out the same ids
+(`core.withIds`), so an edit made later on the board can point at a step an earlier one added. Its outcome is a
+log entry like any other, and when the board applies it the queued edit goes, with the activity the board wrote
+for it: the machine's entries are the ones kept.
+
+The machine's order wins. What an agent did while the link was down is already in its log, so the board's edits
+land after it. An edit the runner refuses as the task stands there (the step it checks off was deleted) is taken
+back: the board logs `edit_refused` with the reason, and the runner logs the state all the same, which puts the
+card back. One sent twice is applied once (`applied_edits`).
+
+What is the board's alone isn't sent: a card's place in its lane, and its epic.
+
+### Taking a task back
+
+`DELETE /api/tasks/:id/hold` sends the edits still waiting, then asks the runner to release. The runner appends
+`released` with the last state, turns its copy into a reference (or drops it, when no held task points at it), and
+the board ends the hold when it applies that entry, after everything before it. With `{"force": true}` the board
+doesn't wait: the hold ends at once, the queued edits stay as the task's state, and whatever the machine changed
+since it was last read is lost; the machine drops its copy when it is next reached. Removing a machine takes back
+its tasks by force. A held task is in the `busyTaskIds` its board publishes with its backup, so another board
+won't [move it](backup.md#moving-tasks-between-machines).
+
+### Projects on a machine
+
+A project is the repository its `origin` names, never a path: the board's folder means nothing on the machine. A
+hand-over carries the project's id, title, `origin` URL and `host/owner/repo`. The runner looks its own project
+up by the board's id, then by repository (`copied_projects`); when it has none it clones the URL into
+`<data dir>/repos/<host-owner-repo>` (`integrations/machines/checkouts.ts`) with the machine's own git credentials,
+and makes its project there. A clone that fails refuses the hand-over with git's reason ("engine can't clone
+git@github.com:acme/app.git: fatal: Could not read from remote repository."), and nothing is handed over. A
+project with no repository becomes a project with no folder. A task made on the runner names its project the same
+way, which is how the board finds its own.
+
+### Tools on a machine
+
+Agents on a runner call `127.0.0.1` as on a board, and get the same tools. `mcp/runnerTools.ts` looks at each call
+first:
+
+| The call                                                          | What happens                                                    |
+| ----------------------------------------------------------------- | --------------------------------------------------------------- |
+| Reads or changes a task the machine holds                         | Runs here: the copy is the newest there is                      |
+| Reads something else (`RUNNER_READ_TOOLS`: a task not held, a list, an overview) | Passed to the board, and its answer returned     |
+| The same while the board can't be reached                         | A task not held: an error saying so. A list: only what is held here, and a line saying that |
+| Changes a task the machine doesn't hold                           | Refused: it is changed on the board                             |
+| `add_to_backlog`, `create_task`                                   | Runs here; the task is held by this machine from the start      |
+| `create_epic`, merging, threads, Autopilot, suggestions, transcripts | Refused: those are the board's                               |
+
+A folder in a call passed on (`workspacePath`) is replaced by the board's id for that project. The board runs only
+the read tools for a machine (`createMachineToolCaller`), through its own `/mcp` endpoint, so the answer is the one
+an agent on the board would get. The runner's server instructions end with a paragraph saying all this
+(`RUNNER_INSTRUCTIONS`).
+
+### Asking the board
+
+A runner never dials out: the board may be behind a NAT, or reach it only through an SSH tunnel. So what a runner
+asks of its board (`integrations/machines/bridgeChannel.ts`: a number for a new task, a tool call) waits until the
+board's next poll of the log, which returns at once when there is a question, and the answer comes back as
+`POST /machine/replies`. The board counts as reachable while it polled within the last 20 seconds; a question
+unanswered after 15 fails as if the board were away.
+
+### Numbers given by a machine
+
+A task's number never changes. A task made on a runner while the board is reachable asks the board for the next
+of its own numbers. One made while the board is away takes the machine's prefix and the runner's own counter:
+`#E7`. The prefix and the number are two fields (`tasks.number_prefix`, `number`), unique together, so sorting and
+lookups stay numeric; `taskLabel` (`packages/contracts/src/taskNumbers.ts`) is how every place prints one, and
+`#E7`, `E7`, `e7` and the uuid all name the task wherever a task is referenced
+([numbering](task-lifecycle.md#numbering)).
+
+On every poll the board tells the runner its prefix and the highest number it has seen under it
+(`counters`: `machine_task_number:<prefix>`), and the runner never numbers below that. The mark is kept by prefix,
+not by machine, so a machine reinstalled with an empty data dir and connected under its old prefix carries on
+where the old one stopped. The first prefixed task to arrive fixes the machine's prefix (`prefixFixed`).
+
 ### Running a runner while developing
 
 `pnpm sandbox --runner` starts a second server in the runner role beside the sandbox's board, on its own free
 port, with its own data dir and user home under the sandbox's temp folder. The `SANDBOX_READY` line carries
 `runner: {url, port, home}`, and `pnpm sandbox stop` stops it with the rest
 ([sandbox skill](../../.claude/skills/sandbox/SKILL.md)). To pair with it, make a code on its data dir from
-`apps/server`: `<ID>_HOME=<runner.home>/data node --import tsx src/main.ts pair`. Two roles on one machine is what the later tasks of the
-epic test against.
+`apps/server`: `<ID>_HOME=<runner.home>/data node --import tsx src/main.ts pair --json`, then
+`POST /api/machines {"via": "code", "url": "<runner.url>", "code": "<code>"}` on the board. A task is handed over
+with `POST /api/tasks/:id/hold {"machineId": "<id>"}`; an agent on the runner is `POST <runner.url>/mcp`. To see the
+board catch up, stop its process (`kill -STOP <pid>`, then `-CONT`) or touch a server file so it restarts, and
+change the task on the runner meanwhile.
 
 ## Decisions
 
@@ -473,6 +673,24 @@ epic test against.
   documented.
 - **The launcher's own path in the service.** A service that names `<id>-server` through a stable symlink keeps
   working when the release behind the symlink changes, which updating a machine will rely on.
+
+- **The log holds states, not operations** ([ADR 0016](../decisions/0016-held-tasks-single-writer.md)). An entry is the task after the change, so applying it is the same
+  whichever state the board was in and however often it arrives, and the two sides need not agree on ids or
+  clocks. Replaying operations through the board's services would run every rule twice (a review round opened on
+  both sides, a PR-merged move made twice) and break on the first id the two sides generated differently. The cost
+  is that an entry is the whole task: a few kilobytes a change, dropped once applied.
+- **The board shows its own edit before the machine has it.** The service layer is synchronous and the machine is
+  a network away, so the edit is applied and queued in one write and settled by the machine's log. The alternative,
+  holding every edit until the machine answers, would freeze the card of a task whose machine is off.
+- **A long poll, not a stream.** The board's client already sends requests with a token to a verified address and
+  a timeout; a read held open for 8 seconds reuses all of it, works through an SSH tunnel and a proxy alike, and is
+  the catch-up and the live feed in one. A change still arrives within the request.
+- **The runner's questions ride on the board's poll.** Nothing on the runner needs the board's address, a route
+  to it, or a credential for it.
+- **Held tasks live in the runner's own tables.** A separate store would have needed every tool rewritten against
+  it; under the board's ids in the ordinary tables, the tools and services are the ones a board runs.
+- **A held task counts as busy for another board.** The list a board publishes with its backup already stops a
+  move of a task with work going on; nothing else about a hold is written anywhere a backup reaches.
 
 - **One script for both ways of installing.** The board's SSH install pipes the script the release publishes, so
   the path a user takes by hand and the one the board takes can't drift apart, and there is one layout to update.
@@ -517,6 +735,11 @@ epic test against.
 | Copying the tarball from the board over SSH | The board would need every platform's tarball, 45 MB each; the machine has to reach GitHub for updates anyway |
 | The board sends the checksum with the update request | The board would have to fetch the checksums for the runner's platform first, and it adds no trust: same source |
 | Rolling back when the new release fails to start | Needs a launcher that outlives the server and a database snapshot, as T3 Code's has; the previous release stays on disk for now |
+| Replaying operations (the service call and its arguments) on the board | Rules run on both sides, and ids and times differ between them; a state is the same wherever it is written |
+| The board proxying every edit to the machine and waiting | A card that can't be touched while its machine is off; the service layer would have to become asynchronous |
+| A WebSocket or SSE stream from the runner | A second kind of connection to authenticate, time out and keep alive, for a latency a long poll already gives |
+| The runner calling the board | The board would need an address the runner can reach and a credential for it; it has neither |
+| Renumbering a machine's tasks when the board sees them | A number in a commit, a branch or a note would point at another task |
 | One limit on wrong pairing codes for everyone | Any machine that could reach the runner could keep pairing refused by sending wrong codes |
 
 ## Code map
@@ -545,6 +768,18 @@ epic test against.
 | `apps/server/src/integrations/machines/logins.ts` | The runner's login checks                                  |
 | `apps/server/src/integrations/machines/selfUpdate.ts` | The runner updating itself                             |
 | `apps/server/src/http/routes/machines.ts` | `/api/machines`                                                    |
+| `packages/contracts/src/workingCopies.ts` | The log entry formats, `readChangeLogEntry`, and what a board and a runner exchange about a held task |
+| `packages/contracts/src/taskNumbers.ts` | `taskLabel`, `parseTaskNumberRef`: a number with a machine's prefix  |
+| `apps/server/src/services/workingCopies.ts` | A runner's working copies and change log: taking a task, logging, releasing, applying the board's edits |
+| `apps/server/src/services/holds.ts`     | A board's holds: preparing a hand-over, applying log entries, settling edits |
+| `apps/server/src/services/heldEdits.ts` | The wrapper that queues edits to a held task, and what a held task refuses |
+| `apps/server/src/services/taskState.ts` | Reading a task's state out of a database and writing it into one     |
+| `apps/server/src/integrations/machines/sync.ts` | Hand-over, release, the poll loop, sending edits, answering the runner |
+| `apps/server/src/integrations/machines/bridgeChannel.ts` | A runner's questions to its board                      |
+| `apps/server/src/integrations/machines/checkouts.ts` | A runner's clones of the board's projects                  |
+| `apps/server/src/mcp/runnerTools.ts`    | The tools on a runner: what runs here, what is passed on, what is refused |
+| `apps/server/src/http/routes/tasks.ts`  | `POST` and `DELETE /api/tasks/:id/hold`                              |
+| `apps/server/src/test/boardAndRunner.ts` | A paired board and runner for tests, with a link that can be cut    |
 | `apps/web/src/components/settings/machines/` | The Machines section, the add dialog and their logic            |
 | `apps/web/src/state/machines.ts`        | The machines query and its mutations                                  |
 | `apps/server/scripts/bundle.ts`         | The bundle, then the tarballs with `--tarballs`                       |

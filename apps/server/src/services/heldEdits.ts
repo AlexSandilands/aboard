@@ -194,10 +194,10 @@ export function routeHeldEdits(
   const { tasks, projects, holds } = services;
   const deleteTasks = tasks.delete.bind(tasks);
   tasks.delete = (ids, opts, actor) => {
-    holds.assertNotHeld(
-      ids.map((ref) => tasks.resolveId(ref)),
-      "deleted",
-    );
+    const picked = ids.map((ref) => tasks.resolveId(ref));
+    // An epic deleted with its tasks takes them to the trash too.
+    const withThem = opts.withTasks ? repos.tasks.childrenOf(picked).map((child) => child.id) : [];
+    holds.assertNotHeld([...picked, ...withThem], "deleted");
     return deleteTasks(ids, opts, actor);
   };
   const makeEpic = tasks.makeEpic.bind(tasks);

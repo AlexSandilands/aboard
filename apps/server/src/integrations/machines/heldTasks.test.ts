@@ -111,6 +111,20 @@ describe("handing a task to a machine", () => {
     expect(runner.services.workingCopies.role(task.id)).toBeNull();
   });
 
+  it("clones nothing from a URL that isn't a repository on a host", async () => {
+    const { board, runner, machine, task, cloned } = await setup({ remotes: { "/work/app": "ext::sh@evil:run" } });
+    await expect(board.integrations.machineSync.handOver(task.id, machine.id, "user")).rejects.toThrow(
+      "ext::sh@evil:run isn't a repository URL this machine can clone",
+    );
+    expect(cloned).toEqual([]);
+    expect(runner.services.workingCopies.role(task.id)).toBeNull();
+    const project = { id: "p", title: "P", remote: "evil/run" };
+    const { checkouts } = runner.integrations.runnerHost;
+    await expect(checkouts.ensure({ ...project, remoteUrl: "--upload-pack=x@evil:run" })).rejects.toThrow(
+      /isn't a repository URL/,
+    );
+  });
+
   it("refuses what can't be handed over", async () => {
     const { board, machine, project, task } = await setup();
     const epic = board.services.tasks.create({ projectId: project.id, title: "Big", kind: "epic" });
