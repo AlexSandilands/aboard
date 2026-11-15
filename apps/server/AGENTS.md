@@ -23,6 +23,10 @@ and review integrations. How it fits together: [docs/architecture.md](../../docs
 - Schema changes are new numbered files in `db/migrations/`. Never edit a shipped migration.
 - The server binds `127.0.0.1` only. Keep the Host/Origin guard in `http/guard.ts` intact
   ([ADR 0003](../../docs/decisions/0003-localhost-guard.md)).
+- The one exception is a runner's machine API, `/machine/*`, which a board on another machine calls with a paired
+  token ([ADR 0015](../../docs/decisions/0015-machine-api-auth.md)). Register its routes in `http/routes/machine.ts`
+  and let the guard check the token (`machinePairingOf(c)`). Only `integrations/machineClient.ts` sends a machine
+  token anywhere, and nothing returns `machine-tokens.json` through the API.
 - MCP results are plain text. Tool descriptions are written for agents; read
   [docs/features/mcp.md](../../docs/features/mcp.md) before adding or changing a tool, and update
   `skills/aboard/` when the workflow changes (then `pnpm skill:embed`, which the installed copies sync from).
@@ -32,7 +36,8 @@ and review integrations. How it fits together: [docs/architecture.md](../../docs
   under `concurrently` on Windows, an inherited idle stdin pipe hangs the server before it listens.
   `scripts/bundle.ts` builds `dist/server.mjs` for the desktop app, and with `--tarballs` the headless server
   release for remote machines (`scripts/tarball.ts`, [remote machines](../../docs/features/remote-machines.md)).
-- `--runner` starts the runner role, which serves no web app; `/api/health` reports the role. Code that only a
+- `--runner` starts the runner role, which serves no web app; `/api/health` reports the role, and `pair` makes its
+  pairing codes. Code that only a
   board should run checks `config.role`.
 
 ## Tests

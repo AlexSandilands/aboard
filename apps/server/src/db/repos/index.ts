@@ -12,6 +12,7 @@ import { createEventsRepo } from "./events.ts";
 import { createImportsRepo } from "./imports.ts";
 import { createLabelsRepo } from "./labels.ts";
 import { createLinksRepo } from "./links.ts";
+import { createMachineAuthRepo } from "./machineAuth.ts";
 import { createNotificationsRepo } from "./notifications.ts";
 import { createPlansRepo } from "./plans.ts";
 import { createProjectsRepo } from "./projects.ts";
@@ -55,6 +56,7 @@ export function createRepos(db: Db) {
     suggestions: createSuggestionsRepo(sql),
     repoPrReviews: createRepoPrReviewsRepo(sql),
     sessionUsage: createSessionUsageRepo(sql),
+    machineAuth: createMachineAuthRepo(sql),
   };
 }
 export type Repos = ReturnType<typeof createRepos>;

@@ -8,10 +8,14 @@ import { registerSse } from "./sse.ts";
 import { registerApiRoutes } from "./http/routes.ts";
 import { registerMcp } from "./mcp/server.ts";
 import { registerRunMcp } from "./mcp/runTools.ts";
-import { localGuard } from "./http/guard.ts";
+import { guard } from "./http/guard.ts";
+import { registerMachineRoutes } from "./http/routes/machine.ts";
 
 export interface AppContext {
-  config: Pick<Config, "port" | "webPort" | "token" | "userHome"> & Partial<Pick<Config, "webDist" | "demo" | "role">>;
+  config: Pick<Config, "port" | "webPort" | "token" | "userHome"> &
+    Partial<Pick<Config, "webDist" | "demo" | "role" | "bind">>;
+  /** This server's identity (instance.ts), which the machine descriptor reports. */
+  instanceId: string;
   bus: EventBus;
   services: Services;
   integrations: Integrations;
@@ -20,11 +24,12 @@ export interface AppContext {
 /** Composes the HTTP app. Exported separately from main.ts so tests can drive it via app.request(). */
 export function createApp(ctx: AppContext): Hono {
   const app = new Hono();
-  app.use("*", localGuard(ctx.config));
+  app.use("*", guard({ config: ctx.config, verifyMachineToken: (token) => ctx.services.machineAuth.verify(token) }));
   app.get("/api/health", (c) =>
     c.json({ ok: true, id: BRAND.id, version: BRAND.version, role: ctx.config.role ?? "board" } satisfies Health),
   );
   registerSse(app, ctx.bus);
+  registerMachineRoutes(app, ctx);
   registerApiRoutes(app, ctx);
   registerMcp(app, ctx);
   registerRunMcp(app, () => ctx.integrations.runTools);
