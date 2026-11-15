@@ -1,5 +1,5 @@
 // Pure helpers for Settings › Integrations › Machines: what a machine's closed row says, and the sentences in it.
-import type { Machine, MachineLogin, MachineRoute } from "@repo/contracts";
+import { BRAND, type Machine, type MachineLogin, type MachineRoute } from "@repo/contracts";
 import type { StatusTone } from "../settingsLayout";
 
 export type BadgeTone = "success" | "warning" | "error" | "info";
@@ -134,7 +134,9 @@ export function versionLine(machine: Machine, boardVersion: string): VersionLine
   if (machine.versionState === "same") {
     return {
       badge: null,
-      text: `${version}, the same as this board. Updates follow the board by themselves.`,
+      text: machine.updatesWithApp
+        ? `${version}, the same as this board. It runs inside ${BRAND.name} on ${machine.name} and updates with it.`
+        : `${version}, the same as this board. Updates follow the board by themselves.`,
       action: null,
     };
   }
@@ -146,6 +148,14 @@ export function versionLine(machine: Machine, boardVersion: string): VersionLine
     };
   }
   if (machine.versionState === "older") {
+    // Part of the app on that machine, which keeps itself up to date: only updating the app there moves it.
+    if (machine.updatesWithApp) {
+      return {
+        badge: { tone: "warning", label: "Behind this board" },
+        text: `${version}; this board is ${boardVersion}. It runs inside ${BRAND.name} on ${machine.name}, which updates itself: update ${BRAND.name} there.`,
+        action: null,
+      };
+    }
     if (machine.selfUpdate === false) {
       return {
         badge: { tone: "warning", label: "Behind this board" },

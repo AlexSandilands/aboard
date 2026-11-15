@@ -87,6 +87,8 @@ interface Live {
   update: MachineUpdateState | null;
   /** What the runner said it can do when it last answered; null until it has. */
   capabilities: readonly string[] | null;
+  /** Whether it said it updates with the app it is part of, when it last answered. */
+  updatesWithApp: boolean;
 }
 
 const MAX_INSTALLS = 10;
@@ -141,6 +143,7 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
       logins: record.logins,
       runsInFlight: entry?.status?.runsInFlight ?? null,
       selfUpdate: entry?.status?.selfUpdate ?? null,
+      updatesWithApp: entry?.updatesWithApp ?? false,
       update: update && update.state !== "idle" ? update : null,
       versionState: order === null ? null : order < 0 ? "older" : order > 0 ? "newer" : "same",
       lastSeenAt: record.lastSeenAt,
@@ -210,6 +213,7 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
     if (!entry || !machine) return;
     const { descriptor } = found;
     entry.capabilities = descriptor.capabilities;
+    entry.updatesWithApp = descriptor.updatesWithApp;
     let status: MachineStatus | null = null;
     if (found.state === "connected" && descriptor.capabilities.includes("status")) {
       try {
@@ -236,6 +240,8 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
       behind &&
       found.state !== "unpaired" &&
       descriptor.capabilities.includes("update") &&
+      // Part of the app on that machine, which updates it: it is reported as behind, never moved from here.
+      !descriptor.updatesWithApp &&
       status?.selfUpdate !== false &&
       // Asked already: a connected runner reports how it goes in its status. One on another protocol is asked
       // again, which is how its answer is read; a failed update waits for the user to retry it.
@@ -251,6 +257,7 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
     const entry: Live = {
       status: null,
       capabilities: live.get(machine.id)?.capabilities ?? null,
+      updatesWithApp: live.get(machine.id)?.updatesWithApp ?? false,
       update: live.get(machine.id)?.update ?? null,
       link: createMachineLink({
         routes: machine.routes,
@@ -517,6 +524,12 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
         throw new AppError(
           "CONFLICT",
           `${machine.name} runs ${machine.version}, newer than this board (${BRAND.version}). Update the board; a machine is never moved back a version.`,
+        );
+      }
+      if (entry.updatesWithApp) {
+        throw new AppError(
+          "CONFLICT",
+          `${machine.name} runs tasks inside ${BRAND.name} there, which updates itself: update ${BRAND.name} on ${machine.name}.`,
         );
       }
       await sendUpdate(machine, reachableUrl(machine, entry), now);

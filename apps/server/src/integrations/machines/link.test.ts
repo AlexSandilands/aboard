@@ -13,6 +13,7 @@ const descriptor: MachineDescriptor = {
   role: "runner",
   capabilities: [],
   paired: true,
+  updatesWithApp: false,
 };
 const connected: LinkProbe = { state: "connected", descriptor };
 

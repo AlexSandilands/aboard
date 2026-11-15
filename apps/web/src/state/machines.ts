@@ -1,11 +1,16 @@
-import type {
-  ConnectMachineInput,
-  ConnectMachineResult,
-  Machine,
-  MachinesResponse,
-  UpdateMachineInput,
+import {
+  HOSTED_RUNNER_PAIRING_PATH,
+  HOSTED_RUNNER_PATH,
+  type ConnectMachineInput,
+  type ConnectMachineResult,
+  type HostedRunnerPairingCode,
+  type HostedRunnerStatus,
+  type UpdateHostedRunnerInput,
+  type Machine,
+  type MachinesResponse,
+  type UpdateMachineInput,
 } from "@repo/contracts";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastManager } from "~/components/ui/toast";
 import { api } from "~/lib/api";
 import { queryKeys } from "./queries";
@@ -80,5 +85,45 @@ export function useRequestMachineUpdate() {
     mutationFn: ({ id, now }: { id: string; now: boolean }) =>
       api<Machine>(`/api/machines/${enc(id)}/update`, { method: "POST", body: { now } }),
     onError: failed("Couldn't ask the machine to update"),
+  });
+}
+
+// --- This board's own runner, for another board (docs/features/remote-machines.md#a-board-that-is-also-a-runner) ---
+
+/** While the runner is on, the board pairing with it shows up without a reload: nothing publishes that here. */
+const HOSTED_RUNNER_REFETCH_MS = 5_000;
+
+export function useHostedRunner() {
+  return useQuery({
+    queryKey: queryKeys.hostedRunner,
+    queryFn: ({ signal }) => api<HostedRunnerStatus>(HOSTED_RUNNER_PATH, { signal }),
+    refetchInterval: (query) => (query.state.data?.enabled ? HOSTED_RUNNER_REFETCH_MS : false),
+  });
+}
+
+export function useConfigureHostedRunner() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateHostedRunnerInput) =>
+      api<HostedRunnerStatus>(HOSTED_RUNNER_PATH, { method: "PATCH", body: input }),
+    onSuccess: (status) => queryClient.setQueryData(queryKeys.hostedRunner, status),
+    onError: failed("Couldn't change whether other machines run tasks here"),
+  });
+}
+
+/** A one-time code for another board; it is shown here once and never kept. */
+export function useHostedRunnerPairingCode() {
+  return useMutation({
+    mutationFn: () => api<HostedRunnerPairingCode>(HOSTED_RUNNER_PAIRING_PATH, { method: "POST" }),
+    onError: failed("Couldn't make a pairing code"),
+  });
+}
+
+export function useUnpairHostedRunner() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<HostedRunnerStatus>(HOSTED_RUNNER_PAIRING_PATH, { method: "DELETE" }),
+    onSuccess: (status) => queryClient.setQueryData(queryKeys.hostedRunner, status),
+    onError: failed("Couldn't unpair the board"),
   });
 }

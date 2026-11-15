@@ -72,7 +72,7 @@ export interface IntegrationDeps {
     Config,
     "t3Home" | "pollers" | "sessionDirs" | "userHome" | "worktreesDir" | "attachmentsDir" | "port" | "webPort"
   > &
-    Partial<Pick<Config, "token" | "webDist" | "role" | "releaseUrl">> & {
+    Partial<Pick<Config, "token" | "webDist" | "role" | "releaseUrl" | "hostedBy">> & {
       /** `<data dir>/machine-tokens.json`; null keeps the tokens in memory (an in-memory board). */
       machineSecretsPath?: string | null;
       /** `<data dir>/repos`: where a runner clones the board's projects. */
@@ -473,6 +473,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     logins: createLoginDetector(overrides.runnerHost?.logins),
     updater: createSelfUpdater({
       runsInFlight: workInFlight,
+      ...(deps.config.hostedBy ? { withApp: true } : {}),
       restart: () => restartRunner?.(),
       ...(overrides.log ? { log: overrides.log } : {}),
       ...overrides.runnerHost?.update,

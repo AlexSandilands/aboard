@@ -35,7 +35,7 @@ function release(parent: string, version: string, says = version): string {
 }
 
 /** A runner as the install script leaves it, on the running version, and a release server holding `NEXT`. */
-function installed(options: { says?: string; tamper?: boolean } = {}) {
+function installed(options: { says?: string; tamper?: boolean; withApp?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), `${BRAND.id}-update-`));
   dirs.push(dir);
   const root = join(dir, "share");
@@ -73,6 +73,7 @@ function installed(options: { says?: string; tamper?: boolean } = {}) {
     runsInFlight: () => runs,
     restart,
     log: quiet,
+    ...(options.withApp ? { withApp: true } : {}),
   });
   return {
     root,
@@ -153,5 +154,12 @@ describe.skipIf(process.platform === "win32")("a runner updating itself", () => 
     const byHand = createSelfUpdater({ env: {}, runsInFlight: () => 0, restart: () => {}, log: quiet });
     expect(byHand.available()).toBe(false);
     expect(() => byHand.request({ version: NEXT, now: true })).toThrow(AppError);
+  });
+
+  it("never updates a runner that is part of a board's app, even one installed by the script", () => {
+    const { updater: withApp, restart } = installed({ withApp: true });
+    expect(withApp.available()).toBe(false);
+    expect(() => withApp.request({ version: NEXT, now: true })).toThrow(/updates with it/);
+    expect(restart).not.toHaveBeenCalled();
   });
 });

@@ -52,6 +52,16 @@ export const RUNNER_INSTRUCTIONS =
   "board's. Link your own session or T3 Code thread with link as usual: the link records that it is on this " +
   "machine, so the board opens it here.";
 
+/**
+ * Appended to a board's instructions while it also runs tasks for another board (hostedRunner.ts): agents working for
+ * either call this one server.
+ */
+export const HOSTED_RUNNER_INSTRUCTIONS =
+  "\n- This machine also runs tasks for another board. A task it holds for that board is read and changed through " +
+  "this same server: name it as usual and the call goes to that board's copy, as does any call with a " +
+  "workspacePath in one of its worktrees. Its tasks never appear in this board's lists. When a task number is used " +
+  "by both boards, the call is refused with both tasks' ids: call again with the id of the one you mean.";
+
 type Args = Record<string, unknown>;
 
 /** The task references a call names, wherever a tool takes them. */

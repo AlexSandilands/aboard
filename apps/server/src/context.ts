@@ -40,6 +40,7 @@ export function createContext(
         | "role"
         | "bind"
         | "releaseUrl"
+        | "hostedBy"
       >
     > & {
       /** This board's id (instance.ts); read from the data dir unless set. An in-memory database gets a new one. */

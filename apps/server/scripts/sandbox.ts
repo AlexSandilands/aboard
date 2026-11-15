@@ -60,6 +60,11 @@ interface SandboxState {
   desktop?: { pid: number; startedAt: number };
   /** The second server `--runner` started in the runner role, with a data dir of its own. */
   runner?: { url: string; port: number; home: string };
+  /**
+   * Where the board's own runner listens once Settings lets other machines run tasks here (hostedRunner.ts): a free
+   * port, never the user's 4318.
+   */
+  hostedRunnerPort?: number;
 }
 
 function fail(message: string): never {
@@ -406,6 +411,7 @@ async function start(argv: string[]): Promise<void> {
   const serverPort = live ? realServerPort : await freePort([]);
   const webPort = await freePort([serverPort]);
   const runnerPort = runner ? await freePort([serverPort, webPort]) : null;
+  const hostedRunnerPort = live ? null : await freePort([serverPort, webPort, ...(runnerPort ? [runnerPort] : [])]);
   const serverUrl = `http://127.0.0.1:${serverPort}`;
   const url = `http://127.0.0.1:${webPort}/`;
 
@@ -416,6 +422,8 @@ async function start(argv: string[]): Promise<void> {
   delete env[brandEnv("USER_HOME")];
   env[brandEnv("PORT")] = String(serverPort);
   env[brandEnv("WEB_PORT")] = String(webPort);
+  if (hostedRunnerPort !== null) env[brandEnv("RUNNER_PORT")] = String(hostedRunnerPort);
+  else delete env[brandEnv("RUNNER_PORT")];
 
   const children: ChildProcess[] = [];
   let stopping = false;
@@ -556,6 +564,7 @@ async function start(argv: string[]): Promise<void> {
     ...(runnerPort !== null
       ? { runner: { url: `http://127.0.0.1:${runnerPort}`, port: runnerPort, home: join(home, "runner") } }
       : {}),
+    ...(hostedRunnerPort !== null ? { hostedRunnerPort } : {}),
     url,
     serverPort,
     webPort,

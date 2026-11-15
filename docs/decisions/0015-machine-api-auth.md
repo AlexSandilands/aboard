@@ -1,6 +1,6 @@
 # 0015 A runner's machine API takes paired tokens, and may listen beyond loopback
 
-Status: Accepted
+Status: Accepted, amended by [0017](0017-board-hosts-a-runner.md) for a board that hosts a runner
 
 Amends [0003](0003-localhost-guard.md), which stays the rule for everything else.
 

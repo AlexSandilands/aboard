@@ -10,15 +10,19 @@ import { createMachineToolCaller, registerMcp } from "./mcp/server.ts";
 import { registerRunMcp } from "./mcp/runTools.ts";
 import { guard } from "./http/guard.ts";
 import { registerMachineRoutes } from "./http/routes/machine.ts";
+import { registerHostedRunnerForwarding } from "./http/hostedForward.ts";
+import type { HostedRunner } from "./hostedRunner.ts";
 
 export interface AppContext {
   config: Pick<Config, "port" | "webPort" | "token" | "userHome"> &
-    Partial<Pick<Config, "webDist" | "demo" | "role" | "bind">>;
+    Partial<Pick<Config, "webDist" | "demo" | "role" | "bind" | "hostedBy">>;
   /** This server's identity (instance.ts), which the machine descriptor reports. */
   instanceId: string;
   bus: EventBus;
   services: Services;
   integrations: Integrations;
+  /** A board's: the runner it hosts for another board when the user lets other machines run tasks here. */
+  hostedRunner?: HostedRunner;
 }
 
 /** Composes the HTTP app. Exported separately from main.ts so tests can drive it via app.request(). */
@@ -28,6 +32,8 @@ export function createApp(ctx: AppContext): Hono {
   app.get("/api/health", (c) =>
     c.json({ ok: true, id: BRAND.id, version: BRAND.version, role: ctx.config.role ?? "board" } satisfies Health),
   );
+  // Before the routes: a task the hosted runner holds is the runner's to answer for.
+  if (ctx.hostedRunner) registerHostedRunnerForwarding(app, ctx.hostedRunner);
   registerSse(app, ctx.bus);
   registerMachineRoutes(app, ctx);
   registerApiRoutes(app, ctx);

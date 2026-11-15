@@ -76,6 +76,8 @@ the machine does so once its runs have finished. **Update now** doesn't wait, wh
 - If an update fails, the machine stays on the version it had, the row says why, and **Try again** asks once more.
 - A machine that is _newer_ than the board is left alone. Update the board instead.
 - A runner you installed some other way than the two above can't update itself. Run the install command on it again.
+- A machine that [runs tasks inside its own app](#let-this-machine-run-another-boards-tasks) updates when that app
+  does. If it falls behind, the row says so: update the app on that machine.
 
 ### Name and prefix
 
@@ -170,6 +172,26 @@ Pulling back needs the machine, so its last changes come with the task. While it
 offers **Take back without engine…**, which brings the task back at once and loses what the machine did since the
 board last heard from it (commits it pushed are kept).
 
+## Let this machine run another board's tasks
+
+A computer with its own board, a laptop say, can also be a machine another board runs tasks on, without installing
+anything else. Its own board and the other board's tasks stay apart: they never appear on its board.
+
+1. On this computer, open **Settings → Integrations → Machines** and switch on **Let other machines run tasks here**
+   under **This machine**. In the desktop app, the tray's **Run tasks for another board…** opens it.
+2. If the other board reaches this computer over Tailscale, also switch on **Reachable over Tailscale**. Over SSH,
+   leave it off.
+3. Click **Make pairing code**. On the other board, choose **Add machine → By pairing code** and enter the address
+   and the code shown here.
+
+Once paired, the row says which board it works for and how many of its tasks it holds. **Unpair** ends it; the
+tasks it holds stay on this computer until that board takes them back. It works for one board at a time, and can't
+pair with its own.
+
+Agents on this computer use the same board address for both boards' tasks. The board passes on a call about the
+other board's task by itself. If both boards have a task with the same number, the call is refused and both tasks'
+ids are listed: the agent calls again with the one it means.
+
 ## Removing a machine
 
 Open the machine and click **Remove machine…**. The board unpairs from it and forgets it. Tasks it held come back
@@ -183,6 +205,7 @@ aboard-server service uninstall
 ## Good to know
 
 - The list of machines and their routes belongs to this computer. It isn't part of a backup.
+- The runner a board lets other machines use is part of that app: it stops when the app quits, and updates with it.
 - On macOS the runner runs while you are logged in at the Mac's desktop and stops when you log out.
 - A board run from source (not an installed release) can't install over SSH, because there is no release of its
   version to download. Pair with a runner you started yourself instead.
