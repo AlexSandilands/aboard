@@ -36,6 +36,7 @@ const machine = (over: Partial<Machine> = {}): Machine => ({
   ],
   runsInFlight: 0,
   selfUpdate: true,
+  updatesWithApp: false,
   update: null,
   versionState: "same",
   lastSeenAt: "2026-11-15T10:00:00.000Z",
@@ -130,6 +131,14 @@ describe("the version line", () => {
     expect(byHand.action).toBeNull();
     expect(byHand.text).toContain("install command");
     expect(versionLine(machine({ versionState: "older" }), "1.5.0").action).toMatchObject({ label: "Update" });
+  });
+
+  it("sends the user to the app for a machine that runs tasks inside it", () => {
+    const behind = versionLine(machine({ versionState: "older", updatesWithApp: true }), "1.5.0");
+    expect(behind.action).toBeNull();
+    expect(behind.text).toContain("update");
+    expect(behind.text).toContain("on engine");
+    expect(versionLine(machine({ updatesWithApp: true }), "1.4.2").text).toContain("updates with it");
   });
 });
 

@@ -68,13 +68,18 @@ export function migrate(db: Db, upTo?: string): void {
 /** First line of a migration that must run with foreign keys off. */
 const FOREIGN_KEYS_OFF = "-- migrate: foreign_keys off";
 
-let depth = 0;
+/**
+ * How deep each database is in nested transactions. Per database: a board hosting a runner has two in one process
+ * (hostedRunner.ts), and a write to one must never think it is inside the other's transaction.
+ */
+const depths = new WeakMap<Db, number>();
 
 /** Runs `fn` in a transaction. Nested calls join the outer transaction. */
 export function transaction<T>(db: Db, fn: () => T): T {
+  const depth = depths.get(db) ?? 0;
   if (depth > 0) return fn();
   db.exec("BEGIN IMMEDIATE");
-  depth += 1;
+  depths.set(db, 1);
   try {
     const result = fn();
     db.exec("COMMIT");
@@ -83,7 +88,7 @@ export function transaction<T>(db: Db, fn: () => T): T {
     db.exec("ROLLBACK");
     throw error;
   } finally {
-    depth -= 1;
+    depths.delete(db);
   }
 }
 

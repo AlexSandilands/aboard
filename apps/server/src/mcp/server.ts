@@ -12,7 +12,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { AppContext } from "../app.ts";
 import type { CallTool } from "../integrations/machines/sync.ts";
-import { RUNNER_INSTRUCTIONS, RUNNER_READ_TOOLS, guardRunnerTools } from "./runnerTools.ts";
+import { routeMcpCall } from "../http/hostedForward.ts";
+import { HOSTED_RUNNER_INSTRUCTIONS, RUNNER_INSTRUCTIONS, RUNNER_READ_TOOLS, guardRunnerTools } from "./runnerTools.ts";
 import type { ToolContext } from "./shared.ts";
 import { registerAutopilotTools } from "./tools/autopilot.ts";
 import { registerReadTools } from "./tools/read.ts";
@@ -72,7 +73,13 @@ function createMcpServer(ctx: AppContext, request: Request): McpServer {
   const runner = ctx.config.role === "runner";
   const server = new McpServer(
     { name: BRAND.id, version: "0.1.0" },
-    { instructions: runner ? `${INSTRUCTIONS}${RUNNER_INSTRUCTIONS}` : INSTRUCTIONS },
+    {
+      instructions: runner
+        ? `${INSTRUCTIONS}${RUNNER_INSTRUCTIONS}`
+        : ctx.hostedRunner?.running()
+          ? `${INSTRUCTIONS}${HOSTED_RUNNER_INSTRUCTIONS}`
+          : INSTRUCTIONS,
+    },
   );
   const fallbackActor = actorFromUserAgent(request.headers.get("user-agent"));
   // A caller that sends the actor header is pinned to it, whatever `actor` argument its agent passes (apart from
@@ -149,6 +156,9 @@ export function createMachineToolCaller(app: Hono, ctx: AppContext): CallTool {
  */
 export function registerMcp(app: Hono, ctx: AppContext): void {
   app.post("/mcp", async (c) => {
+    // A call about a task this machine holds for another board is that board's runner's (hostedRunner.ts).
+    const elsewhere = ctx.hostedRunner ? await routeMcpCall(ctx.hostedRunner, c.req.raw) : null;
+    if (elsewhere) return elsewhere;
     const server = createMcpServer(ctx, c.req.raw);
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

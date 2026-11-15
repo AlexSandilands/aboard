@@ -1,6 +1,6 @@
 # Remote machines
 
-Board tasks: #179, #180, #181, #12, #182, #183, #184, #185, in epic #178 (run tasks on another machine).
+Board tasks: #179, #180, #181, #12, #182, #183, #184, #185, #188, in epic #178 (run tasks on another machine).
 
 A task can be set to run on another machine: a server or a second computer the board connects to. That machine
 runs the same server as the board, started in the **runner** role: it serves no board or web app, holds the
@@ -14,7 +14,9 @@ replays, the board's own edits to a held task, the numbers a machine gives the t
 the board shows the sessions and tokens of work it can't see, [interactive work](#interactive-work): T3 Code
 threads in the machine's own T3 Code and CLI sessions opened over ssh in tmux there, and [Autopilot on the
 machine](#autopilot-on-the-machine): the machine's own engine running the board's automations over the tasks it
-holds, so a chain of tasks goes on while the board is off.
+holds, so a chain of tasks goes on while the board is off, and [a board that is also a
+runner](#a-board-that-is-also-a-runner): one install, a laptop say, with its own board that another board can run
+tasks on.
 
 Not built yet: connecting a machine's own T3 Code from the board (it is set up on the machine). An image attached on
 the machine isn't sent to the board. What a user does is in the [guide](../guide/remote-machines.md).
@@ -207,7 +209,8 @@ What a board says to a runner is under `/machine/`, apart from the board's own A
   "protocolVersion": 1,
   "role": "runner",
   "capabilities": ["pairing", "status", "update", "tasks", "runs", "autopilot"],
-  "paired": false
+  "paired": false,
+  "updatesWithApp": false
 }
 ```
 
@@ -215,6 +218,8 @@ What a board says to a runner is under `/machine/`, apart from the board's own A
 `MACHINE_PROTOCOL_VERSION`: a board and a runner exchange anything beyond the descriptor and pairing only when
 `machineProtocolCompatible` says so, whatever their app versions. Raise it when a change would make an older peer
 misread a newer one. `capabilities` lists what the runner can do; a board drops the ones it doesn't know.
+`updatesWithApp` is true for a runner a board hosts ([below](#a-board-that-is-also-a-runner)), which no board updates;
+a runner from before it leaves it out, which reads as false.
 
 The guard treats `/machine/*` on a runner by its own rules ([architecture](../architecture.md#the-guard),
 [ADR 0015](../decisions/0015-machine-api-auth.md)): no `Origin` at all, a `Host` that is an address, a local name
@@ -430,6 +435,10 @@ newer than the machine's sends `POST /machine/update {"version": "<the board's>"
 A failure anywhere before step 4 leaves the running version as it was and reports `failed` with the reason. The
 board doesn't ask again by itself after a failure; `POST /api/machines/:id/update` does. The answer to the request
 and `GET /machine/status` both carry where the update is (`MachineUpdateState`).
+
+A runner a board hosts ([below](#a-board-that-is-also-a-runner)) is never asked: its descriptor says it updates with
+the app it is part of, the board's Version line says to update that app, and it answers 409 if asked anyway. On a
+protocol mismatch it is `needs-update` like any machine, with nothing exchanged, until the app there is updated.
 
 Only a runner the install script installed, running as its service, can do this: the script's layout is what gives
 it a `current` to repoint, and `brandEnv("SERVICE")=1`, which `service install` sets, is how it knows something
@@ -955,6 +964,66 @@ On every poll the board tells the runner its prefix and the highest number it ha
 not by machine, so a machine reinstalled with an empty data dir and connected under its old prefix carries on
 where the old one stopped. The first prefixed task to arrive fixes the machine's prefix (`prefixFixed`).
 
+### A board that is also a runner
+
+One install can play both roles: a laptop with its own board can also run tasks for another board
+([ADR 0017](../decisions/0017-board-hosts-a-runner.md)). Settings › Integrations › Machines › This machine has the
+switch, **Let other machines run tasks here**, off by default. It is stored in the board's settings as
+`hostedRunner` (`{enabled, bind}`), which no backup exports: it belongs to the machine.
+
+**A second server in the same process** (`apps/server/src/hostedRunner.ts`). Turning the switch on calls
+`startServer` again with `hostedRunnerConfig` (`config.ts`): the runner role, data dir `<board data dir>/runner`, port
+`brandEnv("RUNNER_PORT")` (4318 by default), the board's token, and `hostedBy` set to the board's instance id. It is
+an ordinary runner with its own database, instance id, pairing codes, tokens, worktrees, clones, change log and
+Autopilot engine, so everything above holds for it unchanged, and nothing it holds is in the board's tables,
+backups, stats or notifications. What differs:
+
+- it starts and stops with the board (and with the switch), and comes back on at the board's next start when left on;
+- it won't pair with the board that hosts it (409), and serves one other board like any runner;
+- it reports `updatesWithApp` and never updates itself ([updates](#updates));
+- it doesn't install the board skills (the board installs the same ones), and takes the board's T3 token, at its
+  start and whenever the board's changes, since both talk to the one T3 Code on the machine;
+- a start that fails (its port taken, by a standalone runner say) is kept as `failed` with the reason, which Settings
+  shows; the board runs on.
+
+**Where it listens.** On loopback, which an SSH tunnel from the other board needs. **Reachable over Tailscale**
+(`bind: "private"`) restarts it listening as `brandEnv("BIND")=private` does ([above](#listening-beyond-loopback)).
+Only the runner's listener changes: the board's own stays on `127.0.0.1` with its own guard.
+
+Turning the switch off, or changing where it listens, stops or restarts the runner, which ends the runs it has going
+for the other board. `PATCH /api/runner` refuses that (CONFLICT) while it has runs in flight, unless `force` is set;
+Settings asks first ("2 runs for desk are going here…", **Stop anyway**).
+
+**Pairing.** `POST /api/runner/pairing` makes a code in the runner's database and answers it with the addresses to
+give the other board (the tailnet one when it listens there, and its loopback URL for a tunnel's far end). The other
+board pairs **By pairing code**. It is a request to the board's local API, which any process on the machine can
+make, as a login there can run `pair`. `DELETE /api/runner/pairing` unpairs the board it works for; the tasks it
+holds stay in its data dir. `GET /api/runner` (`HostedRunnerStatus`) is what Settings shows: off, starting, failed,
+not paired, or the board it works for with what it holds and runs; `PATCH /api/runner` sets the switch and the bind.
+The desktop tray's **Run tasks for another board…** opens that row ([desktop](desktop.md#window-and-tray)).
+
+**One address for agents.** Agents on the machine, whichever board their task is on, call the board's
+`127.0.0.1` MCP. The runner's own headless runs are given the runner's address, but a T3 Code thread or a CLI session
+opened there for a held task uses whatever the user's MCP config names. So the board's `/mcp` looks at each tool call
+first (`routeMcpCall` in `http/hostedForward.ts`) and hands it to the runner over loopback when it names:
+
+| What the call names                                                        | Goes to                                |
+| -------------------------------------------------------------------------- | -------------------------------------- |
+| A folder (`workspacePath`, a session's `cwd`) in the runner's data dir, or a worktree of one of its clones wherever it is (T3 Code makes a thread's in its own folder) | The runner, whatever else it names |
+| A task (`task`, `epic`, `tasks`) only the runner has, held or one it refers to | The runner                         |
+| A task number both have, whether the runner holds its task or only refers to it | Refused, with both tasks' titles and ids |
+| Tasks of both boards                                                       | Refused: one call per board            |
+| A `projectId` only the runner has                                          | The runner                             |
+| Anything else (a list, an overview, a task only the board has)             | The board                              |
+
+The runner then treats the call as one from an agent on it ([tools on a machine](#tools-on-a-machine)), so a read of
+a task it doesn't hold is passed to its board. While the runner runs, the board's server instructions end with
+`HOSTED_RUNNER_INSTRUCTIONS`, so agents know to pass an id when a number is refused. REST `/api/tasks/:ref…` is
+handed on the same way for a task only the runner has, and a number both boards use is refused there too (409, both
+ids), unless a browser sent it (an `Origin`, `Sec-Fetch-Site` or
+`Sec-Fetch-Dest` header, which every browser request has and a script's doesn't): a browser on the board only ever
+sees the board's tasks.
+
 ### Running a runner while developing
 
 `pnpm sandbox --runner` starts a second server in the runner role beside the sandbox's board, on its own free
@@ -966,7 +1035,10 @@ script as the provider's CLI path in the runner's settings (`PATCH <runner.url>/
 `runner: {url, port, home}`, and `pnpm sandbox stop` stops it with the rest
 ([sandbox skill](../../.claude/skills/sandbox/SKILL.md)). To pair with it, make a code on its data dir from
 `apps/server`: `<ID>_HOME=<runner.home>/data node --import tsx src/main.ts pair --json`, then
-`POST /api/machines {"via": "code", "url": "<runner.url>", "code": "<code>"}` on the board. A task is handed over
+`POST /api/machines {"via": "code", "url": "<runner.url>", "code": "<code>"}` on the board. The sandbox's board also
+gets a free `brandEnv("RUNNER_PORT")` (`hostedRunnerPort` in its ready line), so turning on **Let other machines run
+tasks here** there never takes 4318; to try it, pair a second board started by hand with its own `brandEnv("HOME")`
+and ports. A task is handed over
 with `POST /api/tasks/:id/hold {"machineId": "<id>"}`; an agent on the runner is `POST <runner.url>/mcp`. To see the
 board catch up, stop its process (`kill -STOP <pid>`, then `-CONT`) or touch a server file so it restarts, and
 change the task on the runner meanwhile.
@@ -1091,6 +1163,9 @@ result line. Setting the board's own CLI path to `/bin/false` keeps the board fr
 | Syncing only the switches a held task needs | A task handed over later, or a scheduled automation pinned there, would find none until the next sync |
 | Runs as part of the task's state | A task-less run (a pinned automation) has no task, and a run's every update would rewrite the task |
 | The runner pausing automations by itself | The user couldn't resume it from the board, and the board wouldn't show it |
+| A runner role inside the board's own services, one database for both | Every query would need to tell the two boards' rows apart, and one missed would show another board's task here |
+| A second runner program (the release's tarball) beside the desktop app | A second updater, service and version to keep in step on a machine already running the app |
+| Routing an agent by the MCP session it opened | The endpoint is stateless, and a T3 Code thread or a CLI session gives no hint of whose task it is beyond what it names |
 | One limit on wrong pairing codes for everyone | Any machine that could reach the runner could keep pairing refused by sending wrong codes |
 
 ## Code map
@@ -1152,5 +1227,8 @@ result line. Setting the board's own CLI path to `/bin/false` keeps the board fr
 | `apps/web/src/state/machines.ts`        | The machines query and its mutations                                  |
 | `apps/server/scripts/bundle.ts`         | The bundle, then the tarballs with `--tarballs`                       |
 | `apps/server/scripts/tarball.ts`        | The pinned Node, the launcher, the tarballs and their checksums       |
-| `apps/server/scripts/sandbox.ts`        | `--runner`                                                            |
+| `apps/server/scripts/sandbox.ts`        | `--runner`; the board's free `brandEnv("RUNNER_PORT")`                |
+| `apps/server/src/hostedRunner.ts`       | A board's own runner: starting it, its status and pairing, which store a call belongs to |
+| `apps/server/src/http/hostedForward.ts` | Handing the board's MCP and REST calls about the hosted runner's tasks to it |
+| `apps/web/src/components/settings/machines/HostedRunnerSection.tsx`, `hostedRunner.logic.ts` | Settings' This machine |
 | `.github/workflows/release.yml`         | The `server` job                                                      |

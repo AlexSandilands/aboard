@@ -50,6 +50,11 @@ export const MachineDescriptor = z.object({
   capabilities: z.array(z.string()).transform((list) => list.filter((c) => MachineCapability.safeParse(c).success)),
   /** Whether a board is paired with it. A runner serves one board, so a paired one refuses any other. */
   paired: z.boolean(),
+  /**
+   * A runner that is part of a board's own install on that machine (a desktop app that lets other machines run tasks
+   * there): it updates with that app, so a board never asks it to. Missing from runners before it, which are false.
+   */
+  updatesWithApp: z.boolean().default(false),
 });
 export type MachineDescriptor = z.infer<typeof MachineDescriptor>;
 
@@ -275,6 +280,8 @@ export const Machine = z.object({
   logins: z.array(MachineLogin).nullable(),
   runsInFlight: z.number().int().nullable(),
   selfUpdate: z.boolean().nullable(),
+  /** Part of the board install on that machine, which updates it (MachineDescriptor.updatesWithApp); never asked to. */
+  updatesWithApp: z.boolean(),
   /** The update this board asked for, as the runner last reported it; null when none was asked. */
   update: MachineUpdateState.nullable(),
   /** `older`: the board will update it. `newer`: the board is the one behind. Null when not known. */
@@ -380,3 +387,63 @@ export const MachinesResponse = z.object({
   releaseAvailable: z.boolean(),
 });
 export type MachinesResponse = z.infer<typeof MachinesResponse>;
+
+// --- A board that also runs tasks for another board (docs/features/remote-machines.md#a-board-that-is-also-a-runner) ---
+
+export const HOSTED_RUNNER_PATH = "/api/runner";
+export const HOSTED_RUNNER_PAIRING_PATH = "/api/runner/pairing";
+
+/** Where the hosted runner listens: this machine only (enough for an SSH tunnel), or the tailnet and LAN too. */
+export const HostedRunnerBind = z.enum(["loopback", "private"]);
+export type HostedRunnerBind = z.infer<typeof HostedRunnerBind>;
+
+/** "Let other machines run tasks here": stored in this board's settings, never backed up (it is this machine's). */
+export const HostedRunnerSetting = z.object({
+  enabled: z.boolean().default(false),
+  bind: HostedRunnerBind.default("loopback"),
+});
+export type HostedRunnerSetting = z.infer<typeof HostedRunnerSetting>;
+
+/** `GET /api/runner`: the runner this board hosts for another board, and who it works for. */
+export const HostedRunnerStatus = z.object({
+  enabled: z.boolean(),
+  bind: HostedRunnerBind,
+  /** `failed`: it was on and couldn't start (its port taken, say); `error` says why. */
+  state: z.enum(["off", "starting", "running", "failed"]),
+  error: z.string().nullable(),
+  port: z.number().int(),
+  /** The runner's own address on this machine, for an SSH tunnel's far end; null unless running. */
+  url: z.string().nullable(),
+  /** Its address on the tailnet, when it listens beyond loopback and this machine has one. */
+  tailscaleUrl: z.string().nullable(),
+  /** The runner's identity, which another board pairs with; null until it has started once. */
+  instanceId: z.uuid().nullable(),
+  name: z.string().nullable(),
+  /** The board it works for; null until one has paired. */
+  board: PairedBoard.extend({ pairedAt: z.string(), lastUsedAt: z.string().nullable() }).nullable(),
+  /** Tasks it holds for that board, which never appear on this one. */
+  heldTasks: z.number().int().nonnegative(),
+  runsInFlight: z.number().int().nonnegative(),
+});
+export type HostedRunnerStatus = z.infer<typeof HostedRunnerStatus>;
+
+/**
+ * `PATCH /api/runner`. Turning it off stops the runner; what it holds stays in its data dir for when it is back.
+ * Stopping or restarting it (a new bind) with runs in flight ends them, so that is refused unless `force` is set.
+ */
+export const UpdateHostedRunnerInput = z.object({
+  enabled: z.boolean().optional(),
+  bind: HostedRunnerBind.optional(),
+  force: z.boolean().optional(),
+});
+export type UpdateHostedRunnerInput = z.infer<typeof UpdateHostedRunnerInput>;
+
+/** `POST /api/runner/pairing`: a one-time code for another board's Add machine → By pairing code. */
+export const HostedRunnerPairingCode = z.object({
+  code: z.string(),
+  expiresAt: z.string(),
+  /** The addresses to give that board with it: the tailnet one when there is one, else this machine's own. */
+  url: z.string(),
+  tailscaleUrl: z.string().nullable(),
+});
+export type HostedRunnerPairingCode = z.infer<typeof HostedRunnerPairingCode>;

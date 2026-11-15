@@ -43,6 +43,12 @@ The server binds `127.0.0.1`; only a runner told to with `brandEnv("BIND")=priva
 (`server.ts`) → `createContext` (`context.ts`: database, bus, integrations, services) → `createApp`
 (`app.ts`: guard, `/api/health`, the machine API, SSE, REST, MCP). The pollers start only when enabled.
 
+A board may also run tasks for another board: with Settings' "Let other machines run tasks here" on, `startServer`
+starts a second server in the runner role in the same process (`hostedRunner.ts`), on `brandEnv("RUNNER_PORT")`
+with its own data dir under the board's, and the board's `/mcp` hands it the calls about the tasks it holds
+([ADR 0017](decisions/0017-board-hosts-a-runner.md),
+[remote machines](features/remote-machines.md#a-board-that-is-also-a-runner)).
+
 ## Configuration
 
 Read once in `apps/server/src/config.ts`. Names are built with `brandEnv(KEY)`, which upper-cases the
@@ -50,13 +56,14 @@ brand id and adds the key (`brandEnv("PORT")` is `<ID>_PORT`).
 
 | Variable                  | Default                     | Meaning                                                            |
 | ------------------------- | --------------------------- | ------------------------------------------------------------------ |
-| `brandEnv("HOME")`        | `~/.<id>` (`~/.<id>-runner` for a runner) | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, `instance-id` (this board's id, see features/backup.md), `machine-tokens.json` (mode 0600: the tokens for the runners this board is paired with, never backed up; features/remote-machines.md), `model-prices.json` (the last LiteLLM price list fetched, not backed up; features/token-usage.md), `worktrees/` for Autopilot's headless runs, and on a runner `repos/`, its clones of the board's projects (features/remote-machines.md#projects-on-a-machine) |
+| `brandEnv("HOME")`        | `~/.<id>` (`~/.<id>-runner` for a runner) | Data dir. Holds `data.sqlite` (plus its WAL files), `server.json` while a server runs, `instance-id` (this board's id, see features/backup.md), `machine-tokens.json` (mode 0600: the tokens for the runners this board is paired with, never backed up; features/remote-machines.md), `model-prices.json` (the last LiteLLM price list fetched, not backed up; features/token-usage.md), `worktrees/` for Autopilot's headless runs, on a runner `repos/`, its clones of the board's projects (features/remote-machines.md#projects-on-a-machine), and on a board that lets other machines run tasks here `runner/`, that runner's own data dir of the same shape |
 | `brandEnv("PORT")`        | `4317` (`4318` for a runner) | Listen port. Also read by Vite's proxy and the desktop shell       |
 | `brandEnv("WEB_PORT")`    | `5317`                      | Vite's port. The guard allows it as an Origin                      |
 | `brandEnv("TOKEN")`       | none                        | Optional bearer token for `/api/*`, `/mcp` and `/events`           |
 | `brandEnv("WEB_DIST")`    | `apps/web/dist`             | Built web app to serve                                             |
 | `brandEnv("POLLERS")`     | on                          | `0` turns off the background pollers               |
 | `brandEnv("ROLE")`        | `board`                     | `runner` (or the `--runner` argument) starts the headless runner, which serves no web app (features/remote-machines.md) |
+| `brandEnv("RUNNER_PORT")` | `4318`                      | Board only: where the runner it hosts for another board listens, once Settings turns it on (features/remote-machines.md#a-board-that-is-also-a-runner). The sandbox gives it a free port |
 | `brandEnv("BIND")`        | `loopback`                  | Runner only: `private` listens on every interface and serves peers on this machine, a LAN or the tailnet (features/remote-machines.md). A board refuses it |
 | `brandEnv("LAUNCHER")`    | none                        | Set by the headless release's launcher to its own path, for `service install` (features/remote-machines.md) |
 | `brandEnv("SERVICE")`     | none                        | `1` in the runner's service, set by `service install`: how a runner knows something will start it again when it exits to update (features/remote-machines.md) |
@@ -93,6 +100,10 @@ everything but a runner's machine API:
 - **Peer:** the socket's address must be loopback. That is always so on a server bound to `127.0.0.1`; it matters
   on a runner listening wider, where a Host header alone would prove nothing. A runner also refuses a request with
   a forwarding header (`X-Forwarded-For` and the like): a proxy on its machine forwarded it for someone else.
+
+On a board that hosts a runner, a request the guard let through that names a task the runner holds (a tool call on
+`/mcp`, or `/api/tasks/:ref` without an Origin) is sent on to the runner over loopback, where its own guard checks
+it again (`http/hostedForward.ts`, [ADR 0017](decisions/0017-board-hosts-a-runner.md)).
 
 A runner's machine API, `/machine/*`, is what a board on another machine calls
 ([ADR 0015](decisions/0015-machine-api-auth.md), [remote machines](features/remote-machines.md#the-machine-api)):

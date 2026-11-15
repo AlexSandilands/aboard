@@ -636,6 +636,24 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Other computers this board runs tasks on. The board installs a runner on each and keeps it on its own version.",
     ["remote machine", "runner", "ssh", "tailscale", "add machine", "pairing code", "routes", "logins", "update"],
   ),
+  draft(
+    "integrations.machines.runner",
+    "Let other machines run tasks here",
+    "Another board pairs with this machine and runs its tasks here, beside this board's own. Its tasks never appear on this board.",
+    ["runner", "this machine", "laptop", "another board", "host", "run tasks here", "pair"],
+  ),
+  draft(
+    "integrations.machines.runner-tailscale",
+    "Reachable over Tailscale",
+    "Also answer on this machine's network addresses, for a board that reaches it over Tailscale.",
+    ["tailscale", "tailnet", "network", "listen", "bind"],
+  ),
+  draft(
+    "integrations.machines.runner-pairing",
+    "Pair a board",
+    "Make a one-time code for the board that will run tasks on this machine, or unpair the one it works for.",
+    ["pairing code", "pair", "unpair", "another board", "code"],
+  ),
   // Integrations › Model prices
   draft(
     "integrations.model-prices.fetch",

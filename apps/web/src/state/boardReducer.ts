@@ -46,6 +46,7 @@ export function applyBoardEvent(board: BoardSnapshot, event: BoardEvent): BoardS
     case "providers.changed":
     // Connected machines are Settings' own list; useBoardEvents refetches it.
     case "machines.changed":
+    case "runner.changed":
     // A restore replaced the whole board; useBoardEvents refetches everything, the snapshot included.
     case "board.reset":
       return board;

@@ -349,6 +349,27 @@ function showWindow(): void {
   window.focus();
 }
 
+/** Settings › Integrations › Machines' row for letting another board run tasks here, with its pairing code. */
+const RUNNER_SETTINGS_TARGET = "integrations.machines.runner";
+/** How long a page that has just loaded gets to start listening before it is told where to go. */
+const PAGE_LISTENING_MS = 1_500;
+
+/** Shows the window at a settings target, as clicking one of the shell's own notifications does. */
+function openSettingsAt(target: string): void {
+  const loading = !window || window.webContents.isLoading();
+  showWindow();
+  const open = () =>
+    window?.webContents.send(NOTIFICATION_CLICK_CHANNEL, {
+      id: `settings-${target}`,
+      title: "",
+      body: "",
+      taskId: null,
+      settingsTarget: target,
+    } satisfies DesktopNotification);
+  if (!loading) open();
+  else window?.webContents.once("did-finish-load", () => setTimeout(open, PAGE_LISTENING_MS));
+}
+
 /** Starts hidden, so a start at login stays in the tray. */
 const startAtLogin = loginItem([HIDDEN_ARG]);
 
@@ -373,6 +394,12 @@ function buildTrayMenu(): Menu {
       enabled: server !== null,
       // The API server's URL even in dev, where the window shows the Vite server instead.
       click: () => server && clipboard.writeText(withToken(`${server.url}/mcp`, "query")),
+    },
+    {
+      label: "Run tasks for another board…",
+      icon: menuIcon("server", dark),
+      enabled: server !== null,
+      click: () => openSettingsAt(RUNNER_SETTINGS_TARGET),
     },
     { type: "separator" },
     {

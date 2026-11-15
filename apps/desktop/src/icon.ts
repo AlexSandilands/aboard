@@ -25,6 +25,7 @@ export type MenuIconName =
   | "square"
   | "square-check"
   | "search"
+  | "server"
   | "download"
   | "rocket"
   | "external-link";

@@ -415,6 +415,32 @@ describe("a connected machine", () => {
     expect(asked()).toBe(false);
   });
 
+  it("that runs inside the app on its machine is reported as behind, on any protocol, and never asked to update", async () => {
+    const { machines, connectByCode, net, reasonOf } = setup({ releaseUrl: "http://releases.test" });
+    const id = (await connectByCode()).machine!.id;
+    const asked = () => net.sent.some((s) => s.path === MACHINE_UPDATE_PATH);
+    // A board's own runner (hostedRunner.ts) on an older protocol: the app it is part of updates it.
+    net.descriptor = (d) => ({
+      ...d,
+      version: "0.0.0-old",
+      protocolVersion: MACHINE_PROTOCOL_VERSION + 1,
+      updatesWithApp: true,
+    });
+    expect(await machines.check(id)).toMatchObject({
+      connection: "needs-update",
+      versionState: "older",
+      updatesWithApp: true,
+      update: null,
+    });
+    expect(asked()).toBe(false);
+    expect(await reasonOf(machines.requestUpdate(id, true))).toMatch(/^CONFLICT: .*update .* on engine/);
+    expect(asked()).toBe(false);
+    // The same protocol, behind: still left to the app.
+    net.descriptor = (d) => ({ ...d, version: "0.0.0-old", updatesWithApp: true });
+    expect(await machines.check(id)).toMatchObject({ connection: "connected", versionState: "older" });
+    expect(asked()).toBe(false);
+  });
+
   it("is renamed, re-prefixed and re-routed, and removing it unpairs the runner", async () => {
     const { machines, connectByCode, runner } = setup();
     const id = (await connectByCode()).machine!.id;

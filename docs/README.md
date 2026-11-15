@@ -106,6 +106,7 @@ files under each app.
 - [0014 Git hosts sit behind a GitHost registry](decisions/0014-git-hosts.md)
 - [0015 A runner's machine API takes paired tokens, and may listen beyond loopback](decisions/0015-machine-api-auth.md)
 - [0016 A machine that holds a task orders its changes, and its log holds states](decisions/0016-held-tasks-single-writer.md)
+- [0017 A board may host a runner in its own process, with a store of its own](decisions/0017-board-hosts-a-runner.md)
 
 ### Reference
 

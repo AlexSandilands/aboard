@@ -36,11 +36,17 @@ last 40 lines in a dialog.
 
 An unexpected exit after startup shows an error and quits the app.
 
+The same process runs the runner that lets another board run tasks on this machine, when Settings turns it on
+([remote machines](remote-machines.md#a-board-that-is-also-a-runner)): it is part of the app, starts and stops with
+its server (Restart server restarts both), and updates when the app does. A board elsewhere never updates it.
+
 ### Window and tray
 
 - Closing the window hides it to the tray, so agents keep their MCP endpoint. **Quit** in the tray stops
   an owned server first.
-- The tray menu: Open, **Copy MCP URL** (with `?token=` when set), **Tray icon**, **Start at login**
+- The tray menu: Open, **Copy MCP URL** (with `?token=` when set), **Run tasks for another board…** (shows the
+  window at Settings' "Let other machines run tasks here", where the pairing code is made: `openSettingsAt`, which
+  sends the page the same message a click on one of the shell's own notifications does), **Tray icon**, **Start at login**
   (packaged only; starts hidden), **Check for updates automatically**, the update item ([updates](#updates)),
   **Restart server**, Quit. Every item has an icon. On Linux Start at login is a
   plain item whose icon is a ticked or empty square, because Qt menus put a real checkbox in a column left of the

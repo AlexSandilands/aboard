@@ -79,6 +79,7 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
     role,
     capabilities: role === "runner" ? CAPABILITIES : [],
     paired: services.machineAuth.paired(),
+    updatesWithApp: Boolean(config.hostedBy),
   });
 
   app.get(
@@ -90,7 +91,12 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
   app.post(
     MACHINE_PAIR_PATH,
     handle(async (c) => {
-      const { token, tokenId } = services.machineAuth.pair(await parseBody(c, PairMachineInput), peerAddress(c));
+      const input = await parseBody(c, PairMachineInput);
+      // A runner a board hosts works for other boards: the one it runs inside has the tasks already.
+      if (config.hostedBy && input.board.instanceId === config.hostedBy) {
+        throw new AppError("CONFLICT", "This is the board's own machine: its tasks already run here.");
+      }
+      const { token, tokenId } = services.machineAuth.pair(input, peerAddress(c));
       // The one response that carries a token; nothing may keep it.
       c.header("cache-control", "no-store");
       return c.json({ token, tokenId, instanceId } satisfies PairMachineResult);
