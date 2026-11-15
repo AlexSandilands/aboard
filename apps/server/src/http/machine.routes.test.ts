@@ -146,6 +146,24 @@ describe("the guard on a runner", () => {
     expect((await remote("/machine/session", { headers: bearer("board-secret") })).status).toBe(401);
   });
 
+  it("refuses what a proxy on its machine forwards to anything but the machine API", async () => {
+    const { h, pair, bearer } = runner();
+    const { token } = await pair();
+    // A reverse proxy's requests come from loopback with a local Host, so only its own headers give it away.
+    for (const header of ["x-forwarded-for", "forwarded", "x-real-ip", "x-forwarded-host"]) {
+      const forwarded = { [header]: "203.0.113.9" };
+      for (const path of ["/api/board", "/api/health", "/events", "/mcp"]) {
+        expect([header, path, (await h.request(path, { headers: forwarded })).status]).toEqual([header, path, 403]);
+      }
+      expect((await h.request("/machine/descriptor", { headers: forwarded })).status).toBe(200);
+      expect((await h.request("/machine/session", { headers: forwarded })).status).toBe(401);
+      expect((await h.request("/machine/session", { headers: { ...forwarded, ...bearer(token) } })).status).toBe(200);
+    }
+    // A board is not behind this rule: ADR 0003 stands for it as it was.
+    const board = createTestHarness();
+    expect((await board.request("/api/health", { headers: { "x-forwarded-for": "203.0.113.9" } })).status).toBe(200);
+  });
+
   it("listening beyond loopback, refuses local-only routes when it can't see that the peer is local", async () => {
     const { h } = runner({ bind: "private" });
     // No socket here, so no peer address: a Host header alone must not be enough.

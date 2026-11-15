@@ -8,7 +8,7 @@ import type { Core } from "./core.ts";
 
 /** How long a pairing code works. Long enough to type it into the board, short enough that a leaked one is stale. */
 export const PAIRING_CODE_TTL_MS = 10 * 60 * 1000;
-/** Wrong codes allowed per minute before every exchange is refused for the rest of it. */
+/** Wrong codes one address may send per minute before its exchanges are refused for the rest of it. */
 const MAX_FAILURES_PER_MINUTE = 10;
 const FAILURE_WINDOW_MS = 60 * 1000;
 /** `last_used_at` is for the user to read, so it is written at most this often. */
@@ -45,10 +45,11 @@ export interface MachineAuthService {
   createPairingCode(): { code: string; expiresAt: string };
   /**
    * Exchanges a pairing code for a token, returned this once. A board pairing again replaces its earlier token.
-   * Throws VALIDATION for a code that is wrong, used or expired (or after too many wrong ones), and CONFLICT when
-   * another board is paired: a runner serves one board, and the code stays usable by the board that is.
+   * Throws VALIDATION for a code that is wrong, used or expired (or after too many wrong ones from `peer`, the
+   * address asking), and CONFLICT when another board is paired: a runner serves one board, and the code stays
+   * usable by the board that is.
    */
-  pair(input: PairMachineInput): { token: string; tokenId: string };
+  pair(input: PairMachineInput, peer?: string | null): { token: string; tokenId: string };
   /** The pairing a token belongs to, or null for one that is malformed, unknown or revoked. */
   verify(token: string): MachinePairing | null;
   pairings(): MachinePairing[];
@@ -62,8 +63,11 @@ export interface MachineAuthService {
 
 export function createMachineAuthService(core: Pick<Core, "repos" | "now" | "write">): MachineAuthService {
   const repo = core.repos.machineAuth;
-  /** When recent wrong codes were tried. In memory: a restart forgives them, which costs an attacker a restart. */
-  let failures: number[] = [];
+  /**
+   * When each address last sent wrong codes, so one that guesses can't shut out the board with the right code.
+   * Everyone behind a tunnel or proxy is one address. In memory: a restart forgives them all.
+   */
+  const failures = new Map<string, number[]>();
 
   const pairingOf = (t: {
     id: string;
@@ -90,15 +94,20 @@ export function createMachineAuthService(core: Pick<Core, "repos" | "now" | "wri
       return { code: code.replace(/(.{4})(?=.)/g, "$1-"), expiresAt };
     },
 
-    pair({ code, board }) {
+    pair({ code, board }, peer) {
       const now = core.now();
-      failures = failures.filter((at) => at > now.getTime() - FAILURE_WINDOW_MS);
-      if (failures.length >= MAX_FAILURES_PER_MINUTE) {
+      for (const [address, times] of failures) {
+        const recent = times.filter((at) => at > now.getTime() - FAILURE_WINDOW_MS);
+        if (recent.length > 0) failures.set(address, recent);
+        else failures.delete(address);
+      }
+      const from = peer ?? "";
+      if ((failures.get(from)?.length ?? 0) >= MAX_FAILURES_PER_MINUTE) {
         throw new AppError("VALIDATION", "Too many wrong pairing codes. Wait a minute and try again.");
       }
       return core.write(() => {
         if (!repo.takeCode(sha256(normalizeCode(code)), now.toISOString())) {
-          failures.push(now.getTime());
+          failures.set(from, [...(failures.get(from) ?? []), now.getTime()]);
           throw new AppError("VALIDATION", "That pairing code is wrong, already used or expired.");
         }
         const other = repo.tokens().find((t) => t.boardInstanceId !== board.instanceId);

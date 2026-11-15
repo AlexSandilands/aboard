@@ -33,17 +33,18 @@ has to listen on an address other machines reach, and once it does, three things
   a `Host` that isn't an IP address, a local name or a `*.ts.net` name. A route added under `/machine/` is covered
   without doing anything.
 - **Everything else stays local.** `/api/*`, `/mcp`, `/events` and the rest keep 0003's Host and Origin rules, and
-  are refused to any peer whose socket address isn't loopback. A machine token opens none of them, and the
+  are refused to any peer whose socket address isn't loopback, and to any request a proxy forwarded (one carrying
+  `Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host` or `X-Real-IP`). A machine token opens none of them, and the
   optional `brandEnv("TOKEN")` opens nothing under `/machine/`.
 - **Pairing starts on the runner.** `<id>-server pair` writes a one-time code (59 bits, ten minutes, stored
   hashed) into the runner's database. No request can make one. `POST /machine/pair` trades the code for a token;
-  ten wrong codes in a minute refuse all exchanges for the rest of it.
+  ten wrong codes in a minute from one address refuse that address for the rest of it.
 - **Tokens are 256 random bits, stored as a SHA-256 hash on the runner** (`machine_tokens`) and listed and revoked
   there with `pair list` and `pair revoke`. The board keeps its copy in `<data dir>/machine-tokens.json`, mode 0600:
   not in `settings`, so not in a backup, a restore or any response to the browser.
 - **One board per runner.** A paired runner refuses another board's code with a conflict; the same board pairing
   again replaces its token.
-- **`brandEnv("BIND")=private` makes a runner listen on every interface**, and drop, before reading anything, any
+- **`brandEnv("BIND")=private` makes a runner listen on every interface**, IPv4 and IPv6, and drop, before reading anything, any
   connection whose local or remote address isn't loopback, a private range or the tailnet
   (`apps/server/src/http/addresses.ts`). Loopback stays the default; an SSH tunnel needs nothing else.
 - **The board's client is the one place a code or token leaves the machine**
@@ -67,8 +68,12 @@ has to listen on an address other machines reach, and once it does, three things
   would count its neighbours as tailnet peers. Tokens are still required of them.
 - There are still no accounts or scopes: a paired board may do anything the machine API offers. A second kind of
   client (a phone view, epic #178's backlog) needs scopes first.
-- The limit on wrong pairing codes is one counter for everyone, so a machine that can reach the runner can keep
-  pairing refused by sending wrong codes. It can't pair, and pairing is rare; `BIND` back to loopback ends it.
+- https to a runner means a reverse proxy on its machine, whose every client arrives from loopback. The guard
+  refuses what such a proxy forwards outside `/machine/` when the proxy marks it with a forwarding header, as most
+  do. One that adds none (nginx by default) is not caught: a proxy must forward `/machine/` and nothing else, or
+  the runner's local API is open to whoever reaches the proxy.
+- The limit on wrong pairing codes is per address, and everyone behind one tunnel or proxy is one address: a
+  client there sending wrong codes keeps the others from pairing while it does.
 - Revoking is immediate and final; there is no expiry or rotation. A leaked token works until `pair revoke`.
 - New machine routes must be registered under `/machine/` on the runner role, and must not read the token
   themselves: `machinePairingOf(c)` gives the pairing the guard accepted.

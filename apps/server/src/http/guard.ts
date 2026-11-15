@@ -30,7 +30,7 @@ const forbidden = (c: Context, message: string) => c.json({ error: { code: "VALI
 const unauthorized = (c: Context) => c.json({ error: { code: "VALIDATION", message: "Unauthorized" } }, 401);
 
 /** The address of the socket a request came in on, or null where there is none (`app.request` in tests). */
-function peerAddress(c: Context): string | null {
+export function peerAddress(c: Context): string | null {
   const env = c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined;
   return env?.incoming?.socket?.remoteAddress ?? null;
 }
@@ -48,6 +48,9 @@ function isMachineHost(hostHeader: string): boolean {
   const host = hostname(hostHeader);
   return LOCAL_HOSTS.has(host) || isIP(host.replace(/^\[(.*)\]$/, "$1")) !== 0 || host.endsWith(".ts.net");
 }
+
+/** Headers a reverse proxy adds for the client it forwards; nothing calling a server on its own machine sends them. */
+const PROXY_HEADERS = ["forwarded", "x-forwarded-for", "x-forwarded-host", "x-real-ip"];
 
 const pairings = new WeakMap<Request, MachinePairing>();
 
@@ -68,8 +71,9 @@ export interface GuardOptions {
  * The guard every request passes (ADRs 0003 and 0015).
  *
  * Everything but a runner's machine API is local only: it rejects non-local Host headers (DNS rebinding), browser
- * requests from any origin other than this server or the Vite dev server, and, on a runner listening beyond
- * loopback, any peer that isn't this machine; a Host header alone proves nothing there. It enforces the optional
+ * requests from any origin other than this server or the Vite dev server, and, on a runner, any peer that isn't
+ * this machine, whether it connected itself or a proxy forwarded it; a Host header alone proves nothing there. It
+ * enforces the optional
  * bearer token on /api, /mcp and /events. `/mcp/run` (run tools) is not behind the board's token: a run's own token is
  * the credential, so an agent reading untrusted text never holds the board's.
  *
@@ -99,6 +103,11 @@ export function guard({ config, verifyMachineToken }: GuardOptions): MiddlewareH
     // Bound to loopback, the kernel only delivers local peers. Bound wider, a peer we can't see is not let in.
     const local = peer === null ? (config.bind ?? "loopback") === "loopback" : addressKind(peer) === "loopback";
     if (!local) return forbidden(c, "Forbidden peer");
+    // A proxy on a runner's machine (for https) makes every one of its clients a loopback peer. Only the machine
+    // API is for them, so a request it forwarded to anything else is refused, as its sender would have been.
+    if (config.role === "runner" && PROXY_HEADERS.some((name) => c.req.header(name) !== undefined)) {
+      return forbidden(c, "Forbidden peer");
+    }
     if (host && !LOCAL_HOSTS.has(hostname(host))) return forbidden(c, "Forbidden host");
     if (origin && !isAllowedOrigin(origin, config)) return forbidden(c, "Forbidden origin");
     if (config.token && (path.startsWith("/api/") || path === "/mcp" || path === "/events") && path !== "/api/health") {

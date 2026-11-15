@@ -76,6 +76,16 @@ describe("machine pairing", () => {
     expect(auth.pair({ code, board: board() }).token).toBeTruthy();
   });
 
+  it("counts wrong codes per address, so one that guesses can't shut out the board with the right code", () => {
+    const { auth } = setup();
+    const { code } = auth.createPairingCode();
+    for (let i = 0; i < 10; i++) {
+      expect(codeOf(() => auth.pair({ code: "AAAA-AAAA-AAAA", board: board() }, "100.70.0.9"))).toBe("VALIDATION");
+    }
+    expect(() => auth.pair({ code, board: board() }, "100.70.0.9")).toThrow(/Too many/);
+    expect(auth.pair({ code, board: board() }, "100.70.0.2").token).toBeTruthy();
+  });
+
   it("refuses a second board, without spending the code", () => {
     const { auth } = setup();
     const bridge = board("bridge");

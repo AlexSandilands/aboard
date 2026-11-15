@@ -180,8 +180,8 @@ The board sends it to `POST /machine/pair` with its own instance id and name, an
 - The runner keeps the token's id and the SHA-256 of its secret (`machine_tokens`). The board keeps the token in
   `<data dir>/machine-tokens.json`, readable by the user only, keyed by the runner's instance id
   (`integrations/machineSecrets.ts`). It is not a setting, so it is in no backup and no response to the browser.
-- A wrong, used or expired code is a 400. After ten wrong codes in a minute every exchange is refused until the
-  minute is over.
+- A wrong, used or expired code is a 400. After ten wrong codes in a minute from one address, that address is
+  refused until the minute is over.
 - **One board per runner.** A runner paired with one board answers another's code with a 409 and doesn't spend the
   code. The same board pairing again (it lost its file) replaces its old token.
 
@@ -195,8 +195,9 @@ commands use the runner's data dir, so run them with the `brandEnv("HOME")` the 
 runner's instance id and one address for it, each call:
 
 1. **Checks the address.** `https` goes anywhere. Plain `http` goes only to loopback (an SSH tunnel) or a
-   Tailscale address, where the path is already encrypted; a host name is resolved and the address used, so what
-   was checked is what is connected to. A LAN or public address over plain http is refused with nothing sent.
+   Tailscale address, where the path is already encrypted; a host name is resolved and its addresses used, IPv4
+   first and the next one when one doesn't answer, so what was checked is what is connected to. A LAN or public
+   address over plain http is refused with nothing sent.
 2. **Reads the descriptor** and stops unless it is a runner of ours with the expected instance id (`wrong-machine`)
    on a compatible protocol (`protocol-mismatch`). An answer is trusted for 30 seconds before it is asked again.
 3. **Sends the request with the token.** A redirect is never followed and counts as "not a runner". A 401 means
@@ -209,7 +210,8 @@ but its tests; connecting a machine from the board is the next task of the epic.
 ### Listening beyond loopback
 
 A runner listens on `127.0.0.1`, which is all an SSH tunnel needs. For a board that reaches it over Tailscale,
-`brandEnv("BIND")=private` makes it listen on every interface (`service install` keeps the variable). Then:
+`brandEnv("BIND")=private` makes it listen on every interface, IPv4 and IPv6 (`service install` keeps the
+variable). Then:
 
 - a connection is dropped before anything is read unless both its ends are loopback, a private range or the
   tailnet (`acceptsPeer` in `http/addresses.ts`), so a forwarded port or a public address reaches nothing;
@@ -218,6 +220,12 @@ A runner listens on `127.0.0.1`, which is all an SSH tunnel needs. For a board t
 - `server.json` and the service still name `127.0.0.1`, so local tools and agents on the machine are unaffected.
 
 A board refuses to start with it.
+
+To reach a runner over `https`, put a reverse proxy in front of it that forwards **only paths under `/machine/`**.
+Everything a proxy on the machine forwards arrives from loopback, so anything else it passed on would be the
+runner's local API, open to whoever reaches the proxy. The guard refuses such requests when they carry a
+forwarding header (`Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`, `X-Real-IP`), which most proxies add, but a
+proxy that adds none is not caught.
 
 ### Running a runner while developing
 
@@ -270,6 +278,7 @@ epic test against.
 | SSH tunnels only, keeping the server loopback-only | Tailscale is a route from the start, and a tunnel dies with the session that opened it |
 | Mutual TLS between board and runner      | Certificates to issue, renew and trust on machines nobody administers; the transports in use already encrypt |
 | Binding to the Tailscale address only    | It doesn't exist until Tailscale is up, so a runner started at boot would fail; the peer filter gives the same reach |
+| One limit on wrong pairing codes for everyone | Any machine that could reach the runner could keep pairing refused by sending wrong codes |
 
 ## Code map
 

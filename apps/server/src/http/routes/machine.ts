@@ -12,7 +12,7 @@ import {
 } from "@repo/contracts";
 import type { Hono } from "hono";
 import type { AppContext } from "../../app.ts";
-import { machinePairingOf } from "../guard.ts";
+import { machinePairingOf, peerAddress } from "../guard.ts";
 import { handle, noContent, parseBody } from "../respond.ts";
 
 const CAPABILITIES: MachineCapability[] = ["pairing"];
@@ -44,7 +44,7 @@ export function registerMachineRoutes(app: Hono, { services, config, instanceId 
   app.post(
     MACHINE_PAIR_PATH,
     handle(async (c) => {
-      const { token, tokenId } = services.machineAuth.pair(await parseBody(c, PairMachineInput));
+      const { token, tokenId } = services.machineAuth.pair(await parseBody(c, PairMachineInput), peerAddress(c));
       // The one response that carries a token; nothing may keep it.
       c.header("cache-control", "no-store");
       return c.json({ token, tokenId, instanceId } satisfies PairMachineResult);

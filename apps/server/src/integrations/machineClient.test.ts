@@ -266,6 +266,34 @@ describe("where the board sends a token", { timeout: 30_000 }, () => {
     expect(reached).toBe(0);
   });
 
+  it("tries a name's next address when the first doesn't answer", async () => {
+    const runner = await startRunner();
+    const port = new URL(runner.server.url).port;
+    // 127.0.0.2 is loopback with nothing listening; the runner is on 127.0.0.1.
+    const bridge = board({ resolve: () => Promise.resolve(["127.0.0.2", "127.0.0.1"]) });
+    await bridge.client.pair(`http://engine.test:${port}`, runner.code());
+    const session = await bridge.client.session({ instanceId: runner.instanceId, url: `http://engine.test:${port}` });
+    expect(session.machine.instanceId).toBe(runner.instanceId);
+  });
+
+  it("sends its token to machine API paths only, however the path is spelled", async () => {
+    const runner = await startRunner();
+    const bridge = board();
+    await bridge.client.pair(runner.server.url, runner.code());
+    const target = { instanceId: runner.instanceId, url: runner.server.url };
+    bridge.sent.length = 0;
+    for (const path of [
+      "/api/board",
+      "/machine/../api/board",
+      "/machine/%2e%2e/api/board",
+      "//evil.example/machine/x",
+    ]) {
+      await expect(bridge.client.request(target, path)).rejects.toThrow(/not a machine API path/);
+    }
+    expect(bridge.sent).toEqual([]);
+    expect((await bridge.client.request(target, "/machine/session?x=1")).status).toBe(200);
+  });
+
   it("says so when the address is a board, something else, or nothing", async () => {
     const boardServer = await startServer(config({ role: "board" }));
     cleanups.push(() => boardServer.close());
@@ -305,6 +333,13 @@ describe("where the board sends a token", { timeout: 30_000 }, () => {
     expect(await tried("https://engine.example.com")).toEqual([
       "unreachable",
       "https://engine.example.com/machine/descriptor",
+    ]);
+    // A tailnet name has an IPv6 address too, and may list it first; every runner listens on IPv4.
+    names["engine.tail1234.ts.net"] = ["fd7a:115c:a1e0::1", "100.101.102.103"];
+    await tried("http://engine.tail1234.ts.net:4318");
+    expect(bridge.sent.map((r) => r.url)).toEqual([
+      "http://100.101.102.103:4318/machine/descriptor",
+      "http://[fd7a:115c:a1e0::1]:4318/machine/descriptor",
     ]);
     // A LAN or the internet over plain http: nothing is sent at all.
     for (const url of [

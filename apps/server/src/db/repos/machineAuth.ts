@@ -46,9 +46,6 @@ export function createMachineAuthRepo(sql: Sql) {
       );
       return row !== undefined && row.expires_at > now;
     },
-    deleteExpiredCodes(now: string): void {
-      sql.run("DELETE FROM machine_pairing_codes WHERE expires_at <= ?", now);
-    },
     deleteCodes(): void {
       sql.run("DELETE FROM machine_pairing_codes");
     },

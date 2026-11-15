@@ -89,7 +89,8 @@ everything but a runner's machine API:
   target, and is revoked when the run ends ([ADR 0013](decisions/0013-board-served-run-tools.md)). The Host and
   Origin checks apply as everywhere.
 - **Peer:** the socket's address must be loopback. That is always so on a server bound to `127.0.0.1`; it matters
-  on a runner listening wider, where a Host header alone would prove nothing.
+  on a runner listening wider, where a Host header alone would prove nothing. A runner also refuses a request with
+  a forwarding header (`X-Forwarded-For` and the like): a proxy on its machine forwarded it for someone else.
 
 A runner's machine API, `/machine/*`, is what a board on another machine calls
 ([ADR 0015](decisions/0015-machine-api-auth.md), [remote machines](features/remote-machines.md#the-machine-api)):

@@ -1,7 +1,8 @@
 -- A runner's pairing state (docs/features/remote-machines.md#pairing). Neither table is part of a backup, and neither
 -- holds a secret: codes and tokens are stored as SHA-256 hashes, and the board keeps its token in a file of its own.
 
--- One-time codes that `<id>-server pair` prints. A code is deleted when it is used or has expired.
+-- The one-time code `<id>-server pair` printed last. Its row goes when it is used, replaced by a newer code or
+-- revoked; an expired one is refused and stays until then.
 CREATE TABLE machine_pairing_codes (
   code_hash TEXT PRIMARY KEY,
   created_at TEXT NOT NULL,

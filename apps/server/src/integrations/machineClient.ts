@@ -112,11 +112,12 @@ export function createMachineClient(deps: MachineClientDeps): MachineClient {
   const verified = new Map<string, { instanceId: string; at: number }>();
 
   /**
-   * The origin to talk to. https goes anywhere: the certificate vouches for the host and encrypts the path. Plain
-   * http goes only to loopback (an SSH tunnel) or the tailnet (WireGuard), by IP address: a name is resolved here
-   * and the address used, so what was checked is what is connected to.
+   * The origins to try, in order. https goes anywhere: the certificate vouches for the host and encrypts the path.
+   * Plain http goes only to loopback (an SSH tunnel) or the tailnet (WireGuard), by IP address: a name is resolved
+   * here and its addresses used, so what was checked is what is connected to. IPv4 first: every runner listens on
+   * it, and a tailnet name resolves to an IPv6 address too.
    */
-  async function originOf(url: string): Promise<string> {
+  async function originsOf(url: string): Promise<string[]> {
     let parsed: URL;
     try {
       parsed = new URL(url);
@@ -126,7 +127,7 @@ export function createMachineClient(deps: MachineClientDeps): MachineClient {
     if (parsed.username || parsed.password) {
       throw new MachineClientError("insecure-address", "A machine's URL can't carry a user name or password");
     }
-    if (parsed.protocol === "https:") return parsed.origin;
+    if (parsed.protocol === "https:") return [parsed.origin];
     if (parsed.protocol !== "http:") {
       throw new MachineClientError("insecure-address", `A machine's URL is http or https, not ${parsed.protocol}`);
     }
@@ -141,15 +142,16 @@ export function createMachineClient(deps: MachineClientDeps): MachineClient {
         throw new MachineClientError("unreachable", `Can't find ${host}`);
       }
     }
-    const address = addresses[0];
-    if (!address || !addresses.every(safeForPlainHttp)) {
+    if (addresses.length === 0 || !addresses.every(safeForPlainHttp)) {
       throw new MachineClientError(
         "insecure-address",
         `${host} isn't on this machine or the tailnet, so plain http to it could be read on the way. ` +
           "Use its Tailscale address, an SSH tunnel or https.",
       );
     }
-    return `http://${isIP(address) === 6 ? `[${address}]` : address}:${parsed.port || "80"}`;
+    return [...new Set(addresses)]
+      .toSorted((a, b) => isIP(a) - isIP(b))
+      .map((address) => `http://${isIP(address) === 6 ? `[${address}]` : address}:${parsed.port || "80"}`);
   }
 
   /** One request, never following a redirect: a redirect would carry what we send to an address nobody checked. */
@@ -193,12 +195,30 @@ export function createMachineClient(deps: MachineClientDeps): MachineClient {
     );
   }
 
+  /** The first of `url`'s origins that answers, and who it says it is. */
+  async function reach(url: string): Promise<{ origin: string; descriptor: MachineDescriptor }> {
+    const origins = await originsOf(url);
+    for (const [i, origin] of origins.entries()) {
+      try {
+        return { origin, descriptor: await describeOrigin(origin) };
+      } catch (error) {
+        // Only silence moves on to the next address; an answer, right or wrong, is the answer.
+        const last = i === origins.length - 1;
+        if (last || !(error instanceof MachineClientError) || error.reason !== "unreachable") throw error;
+      }
+    }
+    throw new MachineClientError("unreachable", `Nothing answers at ${url}`);
+  }
+
   /** The origin for `target`, proved (now, or within `VERIFIED_FOR_MS`) to be that runner on our protocol. */
   async function verify(target: MachineTarget): Promise<string> {
-    const origin = await originOf(target.url);
-    const known = verified.get(origin);
-    if (known?.instanceId === target.instanceId && now().getTime() - known.at < VERIFIED_FOR_MS) return origin;
-    const descriptor = await describeOrigin(origin);
+    const fresh = (origin: string) => {
+      const known = verified.get(origin);
+      return known?.instanceId === target.instanceId && now().getTime() - known.at < VERIFIED_FOR_MS;
+    };
+    const proved = (await originsOf(target.url)).find(fresh);
+    if (proved) return proved;
+    const { origin, descriptor } = await reach(target.url);
     requireMachine(descriptor, target.instanceId, origin);
     requireCompatible(descriptor);
     verified.set(origin, { instanceId: target.instanceId, at: now().getTime() });
@@ -212,12 +232,11 @@ export function createMachineClient(deps: MachineClientDeps): MachineClient {
 
   const client: MachineClient = {
     async describe(url) {
-      return describeOrigin(await originOf(url));
+      return (await reach(url)).descriptor;
     },
 
     async pair(url, code, expectedInstanceId) {
-      const origin = await originOf(url);
-      const descriptor = await describeOrigin(origin);
+      const { origin, descriptor } = await reach(url);
       if (expectedInstanceId) requireMachine(descriptor, expectedInstanceId, origin);
       requireCompatible(descriptor);
       const input: PairMachineInput = { code, board: deps.board() };
@@ -243,13 +262,17 @@ export function createMachineClient(deps: MachineClientDeps): MachineClient {
     },
 
     async request(target, path, init = {}) {
-      if (!path.startsWith("/machine/")) throw new Error(`${path} is not a machine API path`);
+      // As the runner will read it: `/machine/../api/board` is not a machine path, and a token goes to no other.
+      const { pathname, search, host } = new URL(path, "http://machine.invalid");
+      if (host !== "machine.invalid" || !pathname.startsWith("/machine/")) {
+        throw new Error(`${path} is not a machine API path`);
+      }
       const stored = deps.secrets.get(target.instanceId);
       if (!stored) throw new MachineClientError("not-paired", "This board isn't paired with that machine");
       const origin = await verify(target);
       const headers = new Headers(init.headers);
       headers.set("authorization", `Bearer ${stored.token}`);
-      const res = await send(origin, path, { ...init, headers });
+      const res = await send(origin, `${pathname}${search}`, { ...init, headers });
       if (res.status === 401) {
         verified.delete(origin);
         throw new MachineClientError("revoked", "The machine no longer accepts this board; pair it again");

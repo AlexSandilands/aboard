@@ -17,6 +17,8 @@ describe("addressKind", () => {
       "172.31.255.1": "private",
       "192.168.1.20": "private",
       "::ffff:192.168.1.20": "private",
+      "::ffff:100.101.102.103": "tailnet",
+      "::ffff:8.8.8.8": "public",
       "fd12:3456:789a::1": "private",
       "100.63.255.255": "public",
       "100.128.0.1": "public",
@@ -45,6 +47,8 @@ describe("acceptsPeer", () => {
     // A cloud VM or a port forward: the local end looks private, the client is anyone.
     expect(acceptsPeer({ localAddress: "10.0.0.4", remoteAddress: "203.0.113.9" })).toBe(false);
     expect(acceptsPeer({ localAddress: "203.0.113.9", remoteAddress: "10.0.0.4" })).toBe(false);
+    // As a dual-stack listener reports IPv4 peers.
+    expect(acceptsPeer({ localAddress: "::ffff:10.0.0.4", remoteAddress: "::ffff:203.0.113.9" })).toBe(false);
     expect(acceptsPeer({ localAddress: "10.0.0.4" })).toBe(false);
     expect(acceptsPeer({})).toBe(false);
   });
