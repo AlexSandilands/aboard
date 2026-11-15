@@ -405,12 +405,13 @@ describe("Autopilot on a machine", () => {
       candidate: { dedupeKey: "start:later", summary: "start", taskId: first.id },
       dryRun: false,
     })!;
-    board.services.autopilot.finish(later.id, { status: "failed", error: "nope" });
+    board.services.autopilot.finish(later.id, { status: "failed", error: "nope", needsAttention: true });
     board.services.autopilot.retry(later.id, "user");
     await sync();
-    expect(board.services.autopilot.runsForTask(first.id).find((r) => r.id === later.id)?.dedupeKey).toBe(
-      "start:later",
-    );
+    expect(board.services.autopilot.runsForTask(first.id).find((r) => r.id === later.id)).toMatchObject({
+      dedupeKey: "start:later",
+      needsAttention: true,
+    });
   });
 
   it("moves a pinned automation's history with the pin, and its task-less retries", async () => {

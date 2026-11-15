@@ -141,7 +141,9 @@ export function createHoldsService(
     if (!run || !isRetried(run.dedupeKey)) return;
     const dedupeKey = unretiredKey(run.dedupeKey);
     if (repos.autopilotRuns.exists(run.automation, dedupeKey, run.dryRun)) return;
-    repos.autopilotRuns.update({ ...run, dedupeKey, updatedAt: core.now().toISOString() });
+    // A failed run on a task was flagged until the retry lifted it; nothing redoes it now, so the flag stands again.
+    const needsAttention = run.needsAttention || (run.status === "failed" && run.taskId !== null && !run.dismissedAt);
+    repos.autopilotRuns.update({ ...run, dedupeKey, needsAttention, updatedAt: core.now().toISOString() });
   };
 
   /** Ends a hold inside a write, saying why in the task's activity. Its waiting edits become the task's own state. */
