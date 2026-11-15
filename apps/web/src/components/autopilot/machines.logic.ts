@@ -56,7 +56,8 @@ export function machineLimitsNote(machine: AutopilotMachine): {
  * before. Empty when every machine has it.
  */
 export function pauseNotDelivered(machines: readonly AutopilotMachine[]): AutopilotMachine[] {
-  return limitMachines(machines).filter((m) => !m.pauseDelivered);
+  // Unknown (not heard from since the board started) isn't said to be behind: it may well have it.
+  return limitMachines(machines).filter((m) => m.pauseDelivered === false);
 }
 
 /** The sentence beside Pause all for the machines it hasn't reached; null when it has reached them all. */
@@ -88,6 +89,12 @@ export function runsOnDescription(
       tone: "warning",
       text: "Its machine was removed, so this board runs it.",
     };
+  if (machine.runsAutopilot === false) {
+    return {
+      tone: "warning",
+      text: `${machine.name} runs a version from before Autopilot ran on machines, so this board runs it until ${machine.name} is updated.`,
+    };
+  }
   if (machine.connection !== "connected") {
     return {
       tone: "warning",

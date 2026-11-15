@@ -10,13 +10,14 @@ import { limitMachines, runsOnDescription } from "./machines.logic";
  * there, the board on or off (remote-machines.md#autopilot-on-the-machine). Shown once there is a machine to pick.
  */
 export function RunsOnSection({ custom }: { custom: CustomAutomation }) {
-  const machines = limitMachines(useAutopilotMachines().data ?? []);
+  const all = useAutopilotMachines().data ?? [];
+  const machines = limitMachines(all);
   const setMachine = useSetAutomationMachine(custom.id);
   const pinned = custom.machineId ?? null;
   if (machines.length === 0 && !pinned) return null;
   const options = [{ value: "board", label: "This board" }, ...machines.map((m) => ({ value: m.id, label: m.name }))];
   const value = pinned ?? "board";
-  const description = runsOnDescription(pinned, machines);
+  const description = runsOnDescription(pinned, all);
   return (
     <DetailSection title="Runs on">
       <SettingsRow

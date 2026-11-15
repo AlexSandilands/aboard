@@ -71,11 +71,7 @@ const RunParams = z.object({
   }),
 });
 const ShellParams = z.object({
-  request: z.object({
-    command: z.string(),
-    env: z.record(z.string(), z.string()),
-    timeoutMs: z.number().positive(),
-  }),
+  request: z.object({ command: z.string(), env: z.record(z.string(), z.string()), timeoutMs: z.number().positive() }),
 });
 const ScriptParams = z.object({
   request: z.object({
@@ -152,11 +148,7 @@ export function createRunnerWork(deps: {
 
   const shell: JobHandler = (job) => {
     const { request } = ShellParams.parse(job.params);
-    return deps.runShell({
-      ...request,
-      cwd: checkoutOf(job.taskId),
-      taskId: job.taskId,
-    } satisfies ShellRequest);
+    return deps.runShell({ ...request, cwd: checkoutOf(job.taskId), taskId: job.taskId } satisfies ShellRequest);
   };
 
   const script: JobHandler = (job) => {

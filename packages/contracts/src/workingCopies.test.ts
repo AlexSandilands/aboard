@@ -52,27 +52,20 @@ describe("the change log's format", () => {
           entry.kind === "run"
             ? entry.payload.run.id
             : entry.kind === "notice"
-              ? entry.payload.notice.dedupeKey
+              ? "notice" in entry.payload
+                ? entry.payload.notice.dedupeKey
+                : JSON.stringify(entry.payload.resolve)
               : entry.payload.state.task.title;
         expect(carried).toEqual(expect.any(String));
       }
     }
     const made = readChangeLogEntry(fixtures.get(1)![1]!);
-    expect(made.kind === "created" && made.payload.identity).toMatchObject({
-      numberPrefix: "E",
-      number: 7,
-    });
+    expect(made.kind === "created" && made.payload.identity).toMatchObject({ numberPrefix: "E", number: 7 });
   });
 
   it("ignores what a newer writer of the same format added", () => {
     const stored = fixtures.get(CHANGE_LOG_FORMAT)![0]!;
-    const withMore = {
-      ...stored,
-      payload: {
-        ...(stored.payload as Record<string, unknown>),
-        somethingNew: true,
-      },
-    };
+    const withMore = { ...stored, payload: { ...(stored.payload as Record<string, unknown>), somethingNew: true } };
     expect(readChangeLogEntry(withMore)).toEqual(readChangeLogEntry(stored));
   });
 

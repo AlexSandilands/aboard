@@ -24,6 +24,11 @@ const PUSH_DEBOUNCE_MS = 500;
 export interface AutopilotSync {
   /** Sends a machine the board's Autopilot, unless it already has it. Throws when the machine can't be reached. */
   sync(machineId: string): Promise<void>;
+  /**
+   * Takes the machine's word for what it has (with each read of its log): after the board restarted, or the machine's
+   * database was replaced, that is what counts, not what the board last sent.
+   */
+  observe(machineId: string, held: { revision: string | null; paused: boolean } | undefined): void;
   /** What each connected machine has of the board's Autopilot, its limits and its runs, for the settings page. */
   machines(): AutopilotMachine[];
   /** Sends every machine what changed, soon; on Autopilot's own changes. */
@@ -122,6 +127,17 @@ export function createAutopilotSync(deps: {
   return {
     sync,
 
+    observe(machineId, held) {
+      if (!held) return;
+      const had = taken.get(machineId);
+      if (held.revision === null) taken.delete(machineId);
+      else if (had?.revision !== held.revision || had.paused !== held.paused) {
+        taken.set(machineId, { revision: held.revision, paused: held.paused });
+      } else return;
+      // The settings page says whether it arrived.
+      services().autopilot.touch();
+    },
+
     machines() {
       const s = services();
       const paused = s.autopilot.status().paused;
@@ -145,7 +161,7 @@ export function createAutopilotSync(deps: {
           ownLimits: own,
           // Unknown until worked out once (the next round of its log does): not synced until then.
           synced: had !== undefined && latest.get(machine.id) === had.revision,
-          pauseDelivered: had?.paused === paused,
+          pauseDelivered: had ? had.paused === paused : null,
           activeRuns: usage.active,
           runsToday: usage.started,
         };

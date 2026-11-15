@@ -145,10 +145,7 @@ export type UpdateMachineRequest = z.infer<typeof UpdateMachineRequest>;
 export function compareReleaseVersions(a: string, b: string): number {
   const parse = (v: string) => {
     const [core = "", pre] = v.split("-", 2);
-    return {
-      parts: core.split(".").map((n) => Number(n) || 0),
-      pre: pre ?? null,
-    };
+    return { parts: core.split(".").map((n) => Number(n) || 0), pre: pre ?? null };
   };
   const left = parse(a);
   const right = parse(b);
@@ -309,10 +306,7 @@ export const MachineInstallStepKey = z.enum(["login", "download", "verify", "ser
 export type MachineInstallStepKey = z.infer<typeof MachineInstallStepKey>;
 
 /** The steps of an SSH install, in order, with what each is called while it runs. */
-export const MACHINE_INSTALL_STEPS: ReadonlyArray<{
-  key: MachineInstallStepKey;
-  label: string;
-}> = [
+export const MACHINE_INSTALL_STEPS: ReadonlyArray<{ key: MachineInstallStepKey; label: string }> = [
   { key: "login", label: "Log in over SSH" },
   { key: "download", label: "Download the runner" },
   { key: "verify", label: "Check the download" },
@@ -358,15 +352,11 @@ export const UpdateMachineInput = z.object({
 export type UpdateMachineInput = z.infer<typeof UpdateMachineInput>;
 
 /** `POST /api/machines/:id/pair`: pair again with a machine that dropped this board, by a new code from it. */
-export const RepairMachineInput = z.object({
-  code: z.string().trim().min(1).max(64),
-});
+export const RepairMachineInput = z.object({ code: z.string().trim().min(1).max(64) });
 export type RepairMachineInput = z.infer<typeof RepairMachineInput>;
 
 /** `POST /api/machines/:id/update`. `now` doesn't wait for the machine's runs to end. */
-export const RequestMachineUpdateInput = z.object({
-  now: z.boolean().default(false),
-});
+export const RequestMachineUpdateInput = z.object({ now: z.boolean().default(false) });
 export type RequestMachineUpdateInput = z.infer<typeof RequestMachineUpdateInput>;
 
 /** `GET /api/machines`. */

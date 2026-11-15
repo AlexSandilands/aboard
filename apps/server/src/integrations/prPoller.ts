@@ -126,12 +126,7 @@ export function createPrPoller(deps: {
     const groups = new Map<string, { host: GitHost; name: string; repo: string; links: RefPrLink[] }>();
     for (const { link, host } of links) {
       const key = `${link.ref.host}\n${link.ref.repo.toLowerCase()}`;
-      const group = groups.get(key) ?? {
-        host,
-        name: link.ref.host,
-        repo: link.ref.repo,
-        links: [],
-      };
+      const group = groups.get(key) ?? { host, name: link.ref.host, repo: link.ref.repo, links: [] };
       group.links.push(link);
       groups.set(key, group);
     }

@@ -179,10 +179,7 @@ export function createAutopilotEngine(deps: {
     const withEpicLive = s.autopilot.projectsWithEpicOn(automation, true);
     const projects = s.projects
       .list()
-      .map((project) => ({
-        project,
-        resolved: s.autopilot.resolve(automation, project.id),
-      }))
+      .map((project) => ({ project, resolved: s.autopilot.resolve(automation, project.id) }))
       .flatMap(({ project, resolved }) =>
         (resolved.enabled || withEpicOn.has(project.id)) &&
         resolved.config &&
@@ -230,11 +227,7 @@ export function createAutopilotEngine(deps: {
       // A task's run belongs to the task's project and epic, whatever the check said, so their switches apply.
       let epicId: string | null = null;
       if (candidate.taskId) {
-        let task: {
-          projectId: string;
-          kind: string;
-          parent: { id: string } | null;
-        };
+        let task: { projectId: string; kind: string; parent: { id: string } | null };
         try {
           task = s.tasks.summary(candidate.taskId);
         } catch {
@@ -256,13 +249,7 @@ export function createAutopilotEngine(deps: {
       // Preview everything, or Preview where this candidate's task (or project, or the board) resolves.
       if (engine.dryRun || resolved.preview) {
         if (!s.autopilot.hasRun(automation.key, candidate.dedupeKey, true)) {
-          self(() =>
-            s.autopilot.record({
-              automation: automation.key,
-              candidate,
-              dryRun: true,
-            }),
-          );
+          self(() => s.autopilot.record({ automation: automation.key, candidate, dryRun: true }));
         }
         continue;
       }
@@ -270,13 +257,7 @@ export function createAutopilotEngine(deps: {
       // Held candidates aren't recorded: a later pass picks them up once there is room.
       if (automation.needsAgent && !candidate.startsNoAgent && agentHold(s, engine, at)) continue;
       if (automation.background && !automation.needsAgent && background >= AUTOPILOT_BACKGROUND_MAX) continue;
-      const run = self(() =>
-        s.autopilot.record({
-          automation: automation.key,
-          candidate,
-          dryRun: false,
-        }),
-      );
+      const run = self(() => s.autopilot.record({ automation: automation.key, candidate, dryRun: false }));
       if (!run) continue;
       const done = launch(automation, run, candidate, config);
       // Quick board changes run one after another; agent runs and slow actions (shell commands, digests) go on in

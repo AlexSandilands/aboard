@@ -54,7 +54,11 @@ export interface MachineSyncDeps {
   /** What a machine needs before it works on a task: the board's settings, and the task's images. */
   work?: Pick<RemoteWork, "syncSettings" | "sendImages" | "unpushed">;
   /** Sends a machine the board's Autopilot when it changed, so it runs the tasks it holds by it. */
-  autopilot?: { sync(machineId: string): Promise<void> };
+  autopilot?: {
+    sync(machineId: string): Promise<void>;
+    /** What the machine says it has of the board's Autopilot, read with its log. */
+    observe(machineId: string, held: ChangesResponse["autopilot"]): void;
+  };
   bus: EventBus;
   runGit: RunGit;
   /**
@@ -162,11 +166,7 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
         // A runner that can read the request gives its verdict even on an edit it can't make sense of, with the
         // state logged. This one answered without one (a version from before edits): refused, not retried forever.
         const error = await refusal(res, "The machine");
-        services().holds.settleEdit(edit.id, {
-          applied: false,
-          error,
-          head: 0,
-        });
+        services().holds.settleEdit(edit.id, { applied: false, error, head: 0 });
       }
     }
   }
@@ -187,25 +187,13 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
     let reply: BridgeReply;
     try {
       if (request.method === "allocateNumber") {
-        reply = {
-          id: request.id,
-          ok: true,
-          result: { number: services().holds.allocateNumber() },
-        };
+        reply = { id: request.id, ok: true, result: { number: services().holds.allocateNumber() } };
       } else if (request.method === "callTool") {
         if (!callTool) throw new Error("This board can't run tools for a machine yet");
-        reply = {
-          id: request.id,
-          ok: true,
-          result: await callTool(CallToolParams.parse(request.params)),
-        };
+        reply = { id: request.id, ok: true, result: await callTool(CallToolParams.parse(request.params)) };
       } else {
         // A newer runner asking for something this board doesn't know: it falls back as if the board were away.
-        reply = {
-          id: request.id,
-          ok: false,
-          error: `This board doesn't know "${request.method}"`,
-        };
+        reply = { id: request.id, ok: false, error: `This board doesn't know "${request.method}"` };
       }
     } catch (error) {
       reply = { id: request.id, ok: false, error: messageOf(error) };
@@ -250,6 +238,7 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
     });
     if (!res.ok) throw new AppError("CONFLICT", await refusal(res, services().machines.get(machineId).name));
     const changes = ChangesResponse.parse(await res.json());
+    deps.autopilot?.observe(machineId, changes.autopilot);
     const madeThere = changes.entries.some((entry) => entry.kind === "created");
     const result = services().holds.apply(machineId, changes, madeThere ? await projectsByRemote() : undefined);
     // Said once per entry: the loop comes back to it until the board can read it.

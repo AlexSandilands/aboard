@@ -152,10 +152,7 @@ const OUTCOME_CLAUSE: Record<NonNullable<AutopilotRunFilter["outcome"]>, string>
 };
 
 /** The WHERE clause and bindings for a history filter (runs are aliased `r`). */
-function filterClause(filter: AutopilotRunFilter): {
-  where: string;
-  params: SQLInputValue[];
-} {
+function filterClause(filter: AutopilotRunFilter): { where: string; params: SQLInputValue[] } {
   const where: string[] = [];
   const params: SQLInputValue[] = [];
   if (filter.automation !== AUTOPILOT_ALL_RUNS) {
@@ -190,10 +187,7 @@ function filterClause(filter: AutopilotRunFilter): {
     params.push(like, like, like, like, like);
     if (taskNumber) params.push(taskNumber.prefix, taskNumber.number);
   }
-  return {
-    where: where.length > 0 ? `WHERE ${where.join(" AND ")}` : "",
-    params,
-  };
+  return { where: where.length > 0 ? `WHERE ${where.join(" AND ")}` : "", params };
 }
 
 /** Typed access to autopilot_runs, the engine's history. */
@@ -223,10 +217,7 @@ export function createAutopilotRunsRepo(sql: Sql) {
         limit + 1,
       );
       const page = rows.slice(0, limit);
-      return {
-        runs: page.map(toRun),
-        nextCursor: rows.length > limit ? encodeCursor(page[page.length - 1]!) : null,
-      };
+      return { runs: page.map(toRun), nextCursor: rows.length > limit ? encodeCursor(page[page.length - 1]!) : null };
     },
     /** The ids of every run matching the filter. */
     idsMatching(filter: AutopilotRunFilter): string[] {
@@ -468,16 +459,8 @@ export function createAutopilotRunsRepo(sql: Sql) {
       );
     },
     /** Each automation's latest real finished run: its status and when it finished. */
-    latestFinished(): {
-      automation: string;
-      status: AutopilotRunStatus;
-      at: string;
-    }[] {
-      return sql.all<{
-        automation: string;
-        status: AutopilotRunStatus;
-        at: string;
-      }>(
+    latestFinished(): { automation: string; status: AutopilotRunStatus; at: string }[] {
+      return sql.all<{ automation: string; status: AutopilotRunStatus; at: string }>(
         `SELECT automation, status, finished_at AS at FROM (
            SELECT automation, status, finished_at,
              ROW_NUMBER() OVER (PARTITION BY automation ORDER BY finished_at DESC, rowid DESC) AS n

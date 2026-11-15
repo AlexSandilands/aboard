@@ -17,11 +17,15 @@ afterEach(() => {
 
 type Pair = Awaited<ReturnType<typeof createBoardAndRunner>>;
 
-/** A headless agent that starts the task it was given, as a real one moves it out of Planned. */
-function agentOn(server: Pair["runner"], started: RunnerRequest[]): Runner {
+/** A headless agent that starts the task it was given, as a real one moves it out of Planned; or fails, when told to. */
+function agentOn(server: Pair["runner"], started: RunnerRequest[], fail: { next: boolean } = { next: false }): Runner {
   return {
     start(request) {
       started.push(request);
+      if (fail.next) {
+        fail.next = false;
+        return Promise.reject(new Error("The agent couldn't start"));
+      }
       server.services.tasks.move(request.run.taskId!, { status: "in_progress" }, "claude");
       return Promise.resolve({ runner: "headless", result: "Done" });
     },
@@ -59,10 +63,12 @@ async function setup(options: Parameters<typeof createBoardAndRunner>[0] = {}) {
 
   const onRunner: RunnerRequest[] = [];
   const onBoard: RunnerRequest[] = [];
+  /** Set to make the runner's next agent fail. */
+  const fail = { next: false };
   const runnerEngine = createAutopilotEngine({
     services: () => runner.services,
     bus: runner.bus,
-    runner: agentOn(runner, onRunner),
+    runner: agentOn(runner, onRunner, fail),
     placement: runnerPlacement(() => runner.services, runner.instanceId),
     reminders: false,
     log: { warn: () => {} },
@@ -95,6 +101,7 @@ async function setup(options: Parameters<typeof createBoardAndRunner>[0] = {}) {
     onBoard,
     runnerPass,
     boardPass,
+    fail,
   };
 }
 
@@ -290,5 +297,85 @@ describe("Autopilot on a machine", () => {
       machine: { name: "engine" },
     });
     expect(runs.find((r) => r.id === tried.id)?.dedupeKey).toBe(`retried:${tried.id}:start:x`);
+  });
+
+  it("retries a machine's failed run on the machine when it is retried on the board", async () => {
+    const { board, runner, machine, first, onRunner, runnerPass, sync, fail } = await setup();
+    await board.integrations.machineSync.handOver(first.id, machine.id, "user");
+    fail.next = true;
+    await runnerPass();
+    await sync();
+    const failed = board.services.autopilot.runsForTask(first.id).find((r) => r.status === "failed")!;
+    expect(failed.machine?.name).toBe("engine");
+
+    // Nothing runs again on its own: the key is taken on the machine.
+    await runnerPass();
+    expect(onRunner).toHaveLength(1);
+
+    board.services.autopilot.retry(failed.id, "user");
+    await sync();
+    expect(runner.services.autopilot.runsForTask(first.id)[0]!.dedupeKey).toMatch(/^retried:/);
+    await runnerPass();
+    expect(onRunner).toHaveLength(2);
+    expect(runner.services.tasks.summary(first.id).status).toBe("in_progress");
+  });
+
+  it("hands over what Autopilot already did on the task, which the machine counts", async () => {
+    const { board, runner, machine, first } = await setup();
+    const done = board.services.autopilot.record({
+      automation: "review_prs",
+      candidate: { dedupeKey: "review:pr:abc", summary: "review", taskId: first.id },
+      dryRun: false,
+    })!;
+    board.services.autopilot.finish(done.id, { status: "succeeded" });
+    await board.integrations.machineSync.handOver(first.id, machine.id, "user");
+    expect(runner.services.autopilot.hasRun("review_prs", "review:pr:abc", false)).toBe(true);
+    // History, not news: the machine doesn't send it back as its own.
+    expect(board.services.autopilot.runsForTask(first.id).find((r) => r.id === done.id)?.machine ?? null).toBeNull();
+  });
+
+  it("marks read on the board what the machine marked read", async () => {
+    const { board, runner, machine, first, sync } = await setup();
+    await board.integrations.machineSync.handOver(first.id, machine.id, "user");
+    runner.services.attention.request(first.id, "Which database?", "claude");
+    await sync();
+    runner.services.attention.clear(first.id, "user");
+    await sync();
+    expect(board.services.notifications.list().items).toMatchObject([
+      { kind: "agent_request", readAt: expect.any(String) },
+    ]);
+  });
+
+  it("doesn't raise twice what the board raised for its own edit", async () => {
+    const { board, machine, first, sync } = await setup();
+    await board.integrations.machineSync.handOver(first.id, machine.id, "user");
+    board.services.attention.request(first.id, "Look here", "user");
+    await sync();
+    await sync();
+    expect(board.services.notifications.list().items.filter((n) => n.kind === "agent_request")).toHaveLength(1);
+  });
+
+  it("sends the automation variables, the board's and the project's", async () => {
+    const { board, runner, machine, first, project, sync } = await setup();
+    board.services.settings.update({ automationVariables: [{ name: "jira_key", value: "APP" }] });
+    board.services.projects.update(project.id, { variables: [{ name: "team", value: "core" }] });
+    await board.integrations.machineSync.handOver(first.id, machine.id, "user");
+    await sync();
+    expect(runner.services.settings.get().automationVariables).toEqual([{ name: "jira_key", value: "APP" }]);
+    const there = runner.services.projects.get(runner.services.tasks.summary(first.id).projectId);
+    expect(there.variables).toEqual([{ name: "team", value: "core" }]);
+  });
+
+  it("takes the machine's word for what it has, and sends it again when it lost it", async () => {
+    const { board, machine, first, sync } = await setup();
+    await board.integrations.machineSync.handOver(first.id, machine.id, "user");
+    await sync();
+    expect(board.integrations.autopilotSync.machines()).toMatchObject([{ synced: true, pauseDelivered: true }]);
+    // A machine whose database was replaced says it has nothing.
+    board.integrations.autopilotSync.observe(machine.id, { revision: null, paused: false });
+    expect(board.integrations.autopilotSync.machines()).toMatchObject([{ synced: false, pauseDelivered: null }]);
+    await sync();
+    await sync();
+    expect(board.integrations.autopilotSync.machines()).toMatchObject([{ synced: true, pauseDelivered: true }]);
   });
 });

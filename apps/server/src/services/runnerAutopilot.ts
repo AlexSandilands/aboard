@@ -5,7 +5,7 @@ import {
   type CopiedProject,
   type MachineAutopilotAck,
 } from "@repo/contracts";
-import { AUTOPILOT_ENGINE_KEY, AUTOPILOT_PAUSED_KEY } from "./autopilot.ts";
+import { AUTOPILOT_ENGINE_KEY, AUTOPILOT_PAUSED_KEY } from "./autopilotKeys.ts";
 import type { Core } from "./core.ts";
 
 // A runner's side of Autopilot on the machine (docs/features/remote-machines.md#autopilot-on-the-machine): the board
@@ -106,6 +106,17 @@ export function createRunnerAutopilotService(core: Core): RunnerAutopilotService
         const [automation, projectId] = entry.split("\n") as [string, string];
         if (!repos.autopilotAutoPauses.get(automation, projectId)?.pausedAt) {
           repos.autopilotAutoPauses.pause(automation, projectId, at, PAUSED_ON_BOARD);
+        }
+      }
+
+      // The values custom automations read, the board's and each project's, under this runner's ids.
+      repos.settings.set("automationVariables", config.variables.board);
+      for (const mapping of repos.workingCopies.allProjects()) {
+        const project = repos.projects.get(mapping.projectId);
+        if (!project || mapping.boardId === null) continue;
+        const variables = config.variables.projects[mapping.boardId] ?? [];
+        if (JSON.stringify(variables) !== JSON.stringify(project.variables)) {
+          repos.projects.update({ ...project, variables });
         }
       }
 

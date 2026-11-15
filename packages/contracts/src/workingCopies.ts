@@ -251,27 +251,31 @@ const CreatedPayload = StatePayload.extend({
  */
 const RunPayload = z.object({ run: AutopilotRun });
 
-/** A notification the machine raised (format 2): the board raises it in its own inbox, by its own switches. */
-const NoticePayload = z.object({
-  notice: z.object({
-    kind: NotificationKind,
-    taskId: z.string().nullable(),
-    title: z.string(),
-    body: z.string(),
-    dedupeKey: z.string(),
+/**
+ * A notification the machine raised (format 2), which the board raises in its own inbox by its own switches; or one it
+ * marked read because its cause went (checks passing, a request cleared), which the board marks read too.
+ */
+const NoticePayload = z.union([
+  z.object({
+    notice: z.object({
+      kind: NotificationKind,
+      taskId: z.string().nullable(),
+      title: z.string(),
+      body: z.string(),
+      dedupeKey: z.string(),
+    }),
   }),
-});
+  z.object({
+    resolve: z.union([z.object({ keyPrefix: z.string() }), z.object({ taskId: z.string(), kind: NotificationKind })]),
+  }),
+]);
 
 /** A log entry in the current format. */
 export const ChangeLogEntry = z.discriminatedUnion("kind", [
   /** The task as it is after a change, with the activity the change logged. */
   z.object({ kind: z.literal("state"), ...entryBase(), payload: StatePayload }),
   /** A task made on the runner: the board creates it, held by that machine. */
-  z.object({
-    kind: z.literal("created"),
-    ...entryBase(),
-    payload: CreatedPayload,
-  }),
+  z.object({ kind: z.literal("created"), ...entryBase(), payload: CreatedPayload }),
   /** The task's last state as the runner gives it back; the board holds it again once this is applied. */
   z.object({
     kind: z.literal("released"),
@@ -280,7 +284,7 @@ export const ChangeLogEntry = z.discriminatedUnion("kind", [
   }),
   /** A run of the machine's Autopilot, as it now stands. `taskId` is its task's, or "" for a run with none. */
   z.object({ kind: z.literal("run"), ...entryBase(), payload: RunPayload }),
-  /** A notification the machine raised. `taskId` as for a run. */
+  /** A notification the machine raised or resolved. `taskId` as for a run. */
   z.object({
     kind: z.literal("notice"),
     ...entryBase(),
@@ -357,6 +361,11 @@ export const HandOverRequest = z.object({
   /** The task's recent activity, oldest first, so an agent on the runner reads the same handover notes. */
   events: z.array(CopiedEvent),
   references: z.array(TaskReference),
+  /**
+   * The task's finished Autopilot runs, so the machine's engine knows what was done (a head already reviewed, the
+   * rounds and fix attempts used). Absent from a board from before Autopilot ran on machines.
+   */
+  runs: z.array(AutopilotRun).optional(),
 });
 export type HandOverRequest = z.infer<typeof HandOverRequest>;
 
@@ -398,10 +407,7 @@ export const CallToolParams = z.object({
 });
 export type CallToolParams = z.infer<typeof CallToolParams>;
 
-export const CallToolReply = z.object({
-  text: z.string(),
-  isError: z.boolean(),
-});
+export const CallToolReply = z.object({ text: z.string(), isError: z.boolean() });
 export type CallToolReply = z.infer<typeof CallToolReply>;
 
 /** `GET /machine/changes?after=<id>&wait=<ms>`: the query. */
@@ -426,6 +432,11 @@ export const ChangesResponse = z.object({
   requests: z.array(BridgeRequest),
   /** Ids of every task the runner holds now. */
   held: z.array(z.string()),
+  /**
+   * The board's Autopilot as the runner has it: the revision it last took (null when it never got one) and whether
+   * it is paused. Absent from a runner from before Autopilot ran on machines.
+   */
+  autopilot: z.object({ revision: z.string().nullable(), paused: z.boolean() }).optional(),
 });
 export type ChangesResponse = z.infer<typeof ChangesResponse>;
 
@@ -452,6 +463,9 @@ export const HeldEditOp = z.enum([
   "reviews.openRound",
   "reviews.submit",
   "reviews.resolveFinding",
+  // A run the machine's own Autopilot made, retried or its flag dismissed on the board: the machine's engine owns it.
+  "autopilot.retry",
+  "autopilot.dismiss",
 ]);
 export type HeldEditOp = z.infer<typeof HeldEditOp>;
 

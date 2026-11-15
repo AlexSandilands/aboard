@@ -51,7 +51,17 @@ export function routeHeldEdits(
   const resolved = (refs: unknown): string[] =>
     Array.isArray(refs) ? refs.map((ref) => services.tasks.resolveId(String(ref))) : [];
 
-  const routes: { [K in "tasks" | "plans" | "links" | "attention" | "reviews"]: Record<string, Route> } = {
+  /**
+   * The task of a run on a task a machine holds: the machine's engine owns that task's work, and has the run too (its
+   * own, or the board's from before the hand-over, which came with the task), so a retry or dismiss is made there.
+   */
+  const ofHeldRun = (args: unknown[]): string | null => {
+    const taskId = repos.autopilotRuns.get(String(args[0]))?.taskId ?? null;
+    return taskId && repos.holds.get(taskId) ? taskId : null;
+  };
+
+  type Wrapped = "tasks" | "plans" | "links" | "attention" | "reviews" | "autopilot";
+  const routes: { [K in Wrapped]: Record<string, Route> } = {
     tasks: {
       update: {
         op: "tasks.update",
@@ -113,6 +123,11 @@ export function routeHeldEdits(
       openRound: { op: "reviews.openRound", taskOf: first },
       submit: { op: "reviews.submit", taskOf: first },
       resolveFinding: { op: "reviews.resolveFinding", taskOf: first },
+    },
+    // The machine's engine owns the run's work: only a retry there frees its key for that engine to act again.
+    autopilot: {
+      retry: { op: "autopilot.retry", taskOf: ofHeldRun },
+      dismiss: { op: "autopilot.dismiss", taskOf: ofHeldRun },
     },
   };
 

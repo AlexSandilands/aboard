@@ -43,6 +43,7 @@ import {
   type AutopilotRun,
   type AutopilotRunPage,
   type RunMachine,
+  AutomationVariables,
   type AutopilotLimits,
   type MachineAutopilotConfig,
   type UpdateAutopilotLimitsInput,
@@ -71,11 +72,10 @@ import type { Repos } from "../db/repos/index.ts";
 import type { RunDeleteFacts } from "../db/repos/autopilotRuns.ts";
 import { AppError } from "../errors.ts";
 import type { Core, Effects } from "./core.ts";
+import { AUTOPILOT_ENGINE_KEY, AUTOPILOT_PAUSED_KEY } from "./autopilotKeys.ts";
 import type { NotificationsService } from "./notifications.ts";
 
-/** Settings-table keys for the engine. Only the settings are exported in backups; pause stays with the machine. */
-export const AUTOPILOT_ENGINE_KEY = "autopilotEngine";
-export const AUTOPILOT_PAUSED_KEY = "autopilotPaused";
+export { AUTOPILOT_ENGINE_KEY, AUTOPILOT_PAUSED_KEY };
 /** The tuning hints the user dismissed, by id, newest last. Machine state like pause: not in backups. */
 export const AUTOPILOT_DISMISSED_HINTS_KEY = "autopilotDismissedHints";
 const DISMISSED_HINTS_MAX = 200;
@@ -89,10 +89,7 @@ export function loadAutopilotEngine(repos: Repos): AutopilotEngineSettings {
   const parsed = AutopilotEngineSettings.safeParse({
     ...DEFAULT_AUTOPILOT_ENGINE,
     ...stored,
-    agentDefaults: {
-      ...DEFAULT_AUTOPILOT_ENGINE.agentDefaults,
-      ...agentDefaults,
-    },
+    agentDefaults: { ...DEFAULT_AUTOPILOT_ENGINE.agentDefaults, ...agentDefaults },
   });
   return parsed.success ? parsed.data : DEFAULT_AUTOPILOT_ENGINE;
 }
@@ -509,10 +506,7 @@ export function createAutopilotService(
       const epic = repos.tasks.get(epicId);
       if (!epic || !countsAsScope(epic.id, epic.projectId)) continue;
       const resolved = resolveAutopilot(chainFor(all, automation.key, epic.projectId, epic.id));
-      states.set(epicId, {
-        on: resolved.enabled,
-        live: resolved.enabled && !resolved.preview,
-      });
+      states.set(epicId, { on: resolved.enabled, live: resolved.enabled && !resolved.preview });
     }
     return states;
   };
@@ -667,24 +661,14 @@ export function createAutopilotService(
         draftId: d.id,
         name: d.bundle.name,
         replaces: d.replaces
-          ? {
-              id: d.replaces,
-              name: repos.autopilotCustom.get(d.replaces)?.name ?? d.bundle.name,
-            }
+          ? { id: d.replaces, name: repos.autopilotCustom.get(d.replaces)?.name ?? d.bundle.name }
           : null,
         createdBy: d.createdBy,
         createdAt: d.createdAt,
       }));
     const setup = described.flatMap((a): AutopilotNeed[] =>
       a.blocked || a.needs
-        ? [
-            {
-              kind: "setup",
-              automation: a.key,
-              title: a.title,
-              reason: (a.blocked ?? a.needs)!,
-            },
-          ]
+        ? [{ kind: "setup", automation: a.key, title: a.title, reason: (a.blocked ?? a.needs)! }]
         : [],
     );
     // Other people's PRs Review PRs found clean that only the user can approve, while it still reviews them there: a row
@@ -740,10 +724,7 @@ export function createAutopilotService(
       spendUsd: real.reduce((sum, r) => sum + (r.costUsd ?? 0), 0),
       wouldRun: runs.length - real.length,
       gaveUp: { review: gaveUp("review"), comments: gaveUp("comments") },
-      lastGaveUp: {
-        review: gaveUpRuns("review")[0]?.id ?? null,
-        comments: gaveUpRuns("comments")[0]?.id ?? null,
-      },
+      lastGaveUp: { review: gaveUpRuns("review")[0]?.id ?? null, comments: gaveUpRuns("comments")[0]?.id ?? null },
       days: days.map((day, i) => {
         const end = days[i + 1]?.toISOString() ?? "\uffff";
         const start = day.toISOString();
@@ -941,12 +922,7 @@ export function createAutopilotService(
       return repos.autopilotSettings
         .all()
         .filter((s) => s.mode !== "inherit")
-        .map((s) => ({
-          scopeKind: s.scopeKind,
-          scopeId: s.scopeId,
-          automation: s.automation,
-          mode: s.mode,
-        }));
+        .map((s) => ({ scopeKind: s.scopeKind, scopeId: s.scopeId, automation: s.automation, mode: s.mode }));
     },
     setScope(kind, id, key, input, projectId) {
       const scopeId = checkScope(kind, id, projectId);
@@ -1061,9 +1037,7 @@ export function createAutopilotService(
       }
       core.write((fx) => {
         repos.autopilotAutoPauses.resume(automation, projectId, nowIso());
-        deps.notifications.resolve({
-          keyPrefix: `autopilot-paused:${automation}:${projectId}:`,
-        });
+        deps.notifications.resolve({ keyPrefix: `autopilot-paused:${automation}:${projectId}:` });
         fx.autopilot();
       });
       // Like lifting Pause all: what keeps its own schedule doesn't catch up on what passed while paused.
@@ -1075,10 +1049,7 @@ export function createAutopilotService(
       return page;
     },
     deleteRuns({ ids, filter, preview = false }) {
-      const weigh = (): {
-        deletable: string[];
-        kept: Map<AutopilotKeptReason, number>;
-      } => {
+      const weigh = (): { deletable: string[]; kept: Map<AutopilotKeptReason, number> } => {
         const asked = ids ?? repos.autopilotRuns.idsMatching(filter!);
         const now = Date.now();
         const deletable: string[] = [];
@@ -1283,6 +1254,16 @@ export function createAutopilotService(
         autoPaused: repos.autopilotAutoPauses
           .paused()
           .map((p) => ({ automation: p.automation, projectId: p.projectId })),
+        variables: {
+          // Read here, not through the settings service, which reads this one.
+          board: AutomationVariables.catch([]).parse(repos.settings.get("automationVariables") ?? []),
+          projects: Object.fromEntries(
+            repos.projects
+              .list()
+              .filter((p) => p.variables.length > 0)
+              .map((p) => [p.id, p.variables]),
+          ),
+        },
         pinnedProjects: [...new Set(pinnedHere.flatMap((key) => enabledProjects(key)))],
       };
     },
@@ -1361,13 +1342,7 @@ export function createAutopilotService(
           const error = `${BOARD_RESTARTED_ERROR} while this run was going`;
           // A run the board sent here is the board's to report: it fails it when this runner no longer knows the job.
           if (run.dedupeKey.startsWith(ADOPTED_PREFIX)) {
-            repos.autopilotRuns.update({
-              ...run,
-              status: "failed",
-              error,
-              finishedAt: at,
-              updatedAt: at,
-            });
+            repos.autopilotRuns.update({ ...run, status: "failed", error, finishedAt: at, updatedAt: at });
             continue;
           }
           // Only the PR automations are handed back (their keys follow the PR's head, so the engine re-checks that

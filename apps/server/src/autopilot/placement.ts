@@ -58,8 +58,9 @@ export function boardPlacement(
         return !hold || runsAutopilot(hold.machineId) === false;
       }
       const pinned = customOf(s, automation.key)?.machineId;
-      // Pinned to a machine the board no longer has: it runs here, rather than nowhere.
-      return !pinned || !s.machines.list().some((m) => m.id === pinned);
+      // Pinned to a machine the board no longer has, or one that doesn't run Autopilot (a runner from before it): it
+      // runs here, rather than nowhere.
+      return !pinned || !s.machines.list().some((m) => m.id === pinned) || runsAutopilot(pinned) === false;
     },
   };
 }

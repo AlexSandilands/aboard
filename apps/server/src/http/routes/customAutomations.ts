@@ -34,7 +34,7 @@ function assertShellFromBrowser(c: Context, action: CustomAction | undefined): v
  * agent can only draft one (draft_automation), which the user reviews and imports here, so it can't define work for
  * itself or a command to run.
  */
-export function registerCustomAutomationRoutes(app: Hono, { services, config }: AppContext): void {
+export function registerCustomAutomationRoutes(app: Hono, { services, integrations, config }: AppContext): void {
   const custom = services.customAutomations;
 
   app.get(
@@ -67,6 +67,12 @@ export function registerCustomAutomationRoutes(app: Hono, { services, config }: 
     "/api/autopilot/custom/:id/machine",
     handle(async (c) => {
       const { machineId } = await parseBody(c, z.object({ machineId: z.string().min(1).nullable() }));
+      if (machineId && integrations.machines.can(machineId, "autopilot") === false) {
+        throw new AppError(
+          "CONFLICT",
+          `${services.machines.get(machineId).name} runs a version from before Autopilot ran on machines; update it first`,
+        );
+      }
       return c.json(custom.setMachine(idParam(c), machineId));
     }),
   );

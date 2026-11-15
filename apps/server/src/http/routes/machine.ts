@@ -89,12 +89,7 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
     MACHINE_SESSION_PATH,
     handle((c) => {
       const { tokenId, board, pairedAt } = machinePairingOf(c);
-      return c.json({
-        tokenId,
-        board,
-        pairedAt,
-        machine: descriptor(),
-      } satisfies MachineSession);
+      return c.json({ tokenId, board, pairedAt, machine: descriptor() } satisfies MachineSession);
     }),
   );
   // The board unpairing itself: its token stops working at once.
@@ -170,6 +165,7 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
       const read = (): ChangesResponse => ({
         ...copies.changes(query.after, query.epoch),
         requests: bridge.take(),
+        autopilot: { revision: services.runnerAutopilot.revision(), paused: services.autopilot.status().paused },
       });
       let changes = read();
       if (changes.entries.length === 0 && changes.requests.length === 0 && query.wait > 0) {

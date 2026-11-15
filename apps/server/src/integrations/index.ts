@@ -124,10 +124,7 @@ export interface IntegrationOverrides {
   /** The clock for notifications (retention, quiet hours; read by the services, see createContext). */
   now?: () => Date;
   /** Reaching connected machines: `ssh`, the tunnel's ports, the network and name lookups. */
-  machines?: TunnelDeps & {
-    fetch?: typeof fetch;
-    resolve?: (hostname: string) => Promise<string[]>;
-  };
+  machines?: TunnelDeps & { fetch?: typeof fetch; resolve?: (hostname: string) => Promise<string[]> };
   /** A runner's own checks and update: the programs it probes for logins, and what an update downloads and runs. */
   runnerHost?: {
     logins?: Partial<LoginProbes>;
@@ -293,26 +290,14 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       ...(overrides.autopilotGit ? { runGit: overrides.autopilotGit } : {}),
       ...(overrides.runAgent ? { runAgent: overrides.runAgent } : {}),
       sessionLinked: refreshSession,
-      boardMcp: () => ({
-        url: `http://127.0.0.1:${deps.config.port}/mcp`,
-        token: deps.config.token ?? null,
-      }),
+      boardMcp: () => ({ url: `http://127.0.0.1:${deps.config.port}/mcp`, token: deps.config.token ?? null }),
       ...(isRunner
-        ? {
-            machine: () => ({
-              id: deps.config.instanceId,
-              name: deps.services().settings.get().machineName,
-            }),
-          }
+        ? { machine: () => ({ id: deps.config.instanceId, name: deps.services().settings.get().machineName }) }
         : {}),
       runTools: {
         mint: (runId, scope, ttlMs) => {
           const { token, revoke } = runTools.tokens.mint(runId, scope, ttlMs);
-          return {
-            url: `http://127.0.0.1:${deps.config.port}${RUN_TOOLS_PATH}`,
-            token,
-            revoke,
-          };
+          return { url: `http://127.0.0.1:${deps.config.port}${RUN_TOOLS_PATH}`, token, revoke };
         },
       },
       ...(overrides.log ? { log: overrides.log } : {}),
@@ -400,10 +385,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     secrets: machineSecrets,
     client: createMachineClient({
       secrets: machineSecrets,
-      board: () => ({
-        instanceId: deps.config.instanceId,
-        name: deps.services().settings.get().machineName,
-      }),
+      board: () => ({ instanceId: deps.config.instanceId, name: deps.services().settings.get().machineName }),
       ...(overrides.machines?.fetch ? { fetch: overrides.machines.fetch } : {}),
       ...(overrides.machines?.resolve ? { resolve: overrides.machines.resolve } : {}),
     }),
@@ -424,7 +406,10 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     services: deps.services,
     machines,
     work: remoteWork,
-    autopilot: { sync: (machineId) => autopilotSync.sync(machineId) },
+    autopilot: {
+      sync: (machineId) => autopilotSync.sync(machineId),
+      observe: (machineId, held) => autopilotSync.observe(machineId, held),
+    },
     ...(overrides.machineFor ? { machineFor: overrides.machineFor } : {}),
     bus: deps.bus,
     runGit: overrides.runGit ?? defaultRunGit,
@@ -616,10 +601,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       const resolved = await t3.resolveThread(input.value);
       if (!resolved) return { input };
       const { value: _value, ...rest } = input;
-      return {
-        input: { ...rest, t3Thread: resolved.ref },
-        ...(resolved.warning ? { warning: resolved.warning } : {}),
-      };
+      return { input: { ...rest, t3Thread: resolved.ref }, ...(resolved.warning ? { warning: resolved.warning } : {}) };
     },
     resumeCommand: (linkId, mode) => sessions.resumeCommand(linkId, mode),
     resumeSession: (linkId, input) => sessions.resume(linkId, input),

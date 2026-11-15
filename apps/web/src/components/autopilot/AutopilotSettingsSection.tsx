@@ -36,15 +36,9 @@ import { TimeInput } from "./TimeInput";
 import { VariablesSection } from "./VariablesSection";
 
 // The row's description says what Auto means, so the select uses the short names.
-const RUNNER_OPTIONS = RUNNER_CHOICES.map(({ value, short }) => ({
-  value,
-  label: short,
-}));
+const RUNNER_OPTIONS = RUNNER_CHOICES.map(({ value, short }) => ({ value, label: short }));
 
-const T3_ACCESS_OPTIONS: ReadonlyArray<{
-  value: AutopilotAgentDefaults["t3Access"];
-  label: string;
-}> = [
+const T3_ACCESS_OPTIONS: ReadonlyArray<{ value: AutopilotAgentDefaults["t3Access"]; label: string }> = [
   { value: "default", label: "T3 Code's default" },
   ...T3_RUNTIME_MODES.map((m) => ({ value: m.value, label: m.label })),
 ];

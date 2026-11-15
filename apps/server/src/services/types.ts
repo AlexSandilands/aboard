@@ -414,11 +414,7 @@ export interface ReviewsService {
   setRoundStatus(
     reviewId: string,
     status: Exclude<ReviewRoundStatus, "submitted">,
-    opts: {
-      actor: string;
-      error?: string;
-      from?: ReadonlyArray<ReviewRoundStatus>;
-    },
+    opts: { actor: string; error?: string; from?: ReadonlyArray<ReviewRoundStatus> },
   ): TaskReview | null;
 }
 

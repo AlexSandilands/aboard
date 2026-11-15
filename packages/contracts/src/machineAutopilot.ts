@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AutopilotEngineSettings, AutopilotSetting } from "./autopilot.ts";
+import { AutomationVariables } from "./automationVariables.ts";
 import { MachineConnection } from "./machines.ts";
 import { CopiedProject } from "./workingCopies.ts";
 
@@ -71,6 +72,13 @@ export const MachineAutopilotConfig = z.object({
    * failures, the machine's replayed runs included, so the pause is lifted in one place.
    */
   autoPaused: z.array(z.object({ automation: z.string(), projectId: z.string() })).default([]),
+  /**
+   * The values custom automations read (`{{vars.<name>}}`): the board's, and each project's own by the board's id.
+   * Without them an automation that names one runs nowhere on the machine.
+   */
+  variables: z
+    .object({ board: AutomationVariables, projects: z.record(z.string(), AutomationVariables) })
+    .default({ board: [], projects: {} }),
 });
 export type MachineAutopilotConfig = z.infer<typeof MachineAutopilotConfig>;
 
@@ -89,8 +97,8 @@ export const AutopilotMachine = z.object({
   ownLimits: z.boolean(),
   /** It has taken everything the board last changed: switches, automations, limits and Pause all. */
   synced: z.boolean(),
-  /** Whether Pause all, as it stands on the board, has reached it. */
-  pauseDelivered: z.boolean(),
+  /** Whether Pause all, as it stands on the board, has reached it; null until it has answered since the board started. */
+  pauseDelivered: z.boolean().nullable(),
   /** Its runs going now and started today, as the board has seen them. */
   activeRuns: z.number().int(),
   runsToday: z.number().int(),

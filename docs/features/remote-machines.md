@@ -759,10 +759,19 @@ the reminders. A runner from before this gets no config and the board keeps send
 by the board's project ids, which the runner maps to its own and keeps for projects it adopts later (a hand-over
 applies them again); the engine settings with the machine's limits laid in; the custom automations; Pause all; where
 automations paused themselves; and the projects a pinned automation runs in, which the runner clones in the background
-as for a hand-over. Each config is named by a `revision` (a hash of it). The board sends it on every round of the
-machine's log, at hand-over and soon after anything in Autopilot changes, when it differs from what the machine last
-took; the machine answers with the revision it took, and the runner keeps it in `runner_state`, so it runs by it after a
-restart with the board away. Models, review settings and providers go as before ([the board's settings](#work-on-the-machine)).
+as for a hand-over; and the automation variables, the board's and each project's, so a custom automation that reads
+one runs there too. Each config is named by a `revision` (a hash of it). The board sends it on every round of the
+machine's log, at hand-over and soon after anything in Autopilot changes, when it differs from what the machine has;
+the machine answers with the revision it took, and the runner keeps it in `runner_state`, so it runs by it after a
+restart with the board away. Every answer to the board's poll says which revision the runner has and whether it is
+paused (`ChangesResponse.autopilot`), so a board that restarted, or a runner whose database was replaced, is set right
+on the next round. Models, review settings and providers go as before ([the board's settings](#work-on-the-machine)).
+
+**What Autopilot did before the hand-over** goes with the task: its finished real runs (`HandOverRequest.runs`), as
+history the machine's engine counts (a head already reviewed, Review PRs' rounds, Fix PRs' attempts) and doesn't send
+back. **Retry and Dismiss** on a run of a held task (the panel's, Run history's, `retry_autopilot_run`) are edits
+like any other (`autopilot.retry`, `autopilot.dismiss`): applied on the board at once and on the machine, where its
+engine then picks the work up again.
 
 **Runs on the machine** are its own: in its own `autopilot_runs`, counted against its own limits, headless and from
 origin (`asRunnerRequest`, as a job is). The runner logs each one as it is written (`run` entries, change log format 2),
@@ -774,7 +783,10 @@ machine's runs apart (`usage(…, machineId)`). When the board had tried the sam
 
 **Notifications** raised on the runner go to the board as `notice` entries, before the runner's own switches; the board
 raises each by its own switches and dedupe key, so a request for attention, a failed run or failing checks on a held
-task reach the inbox. **Auto-pause** is the board's: it counts failures in a row over the runs it keeps, the
+task reach the inbox. What the runner marks read because its cause went (checks passing, a request cleared) goes the
+same way (`{resolve}`), logged when it marked something read there or is the first since a notification it covers was
+raised, since a poller resolves on every read. One raised while the runner applies the board's own edit isn't sent: the
+board raised it when it made the edit. **Auto-pause** is the board's: it counts failures in a row over the runs it keeps, the
 machine's included, and the pause goes down with the config; the runner never pauses by itself.
 
 **Pull requests.** While a machine that runs Autopilot holds a task, the board's poller leaves the task's PR links
@@ -796,13 +808,14 @@ apply and whether they have reached the machine (`GET /api/autopilot/machines`).
 worktree retention are shared.
 
 **Pause all** is part of the config, so it reaches a connected machine within a round. `pauseDelivered` is false while
-a machine hasn't taken the board's current pause state; the Autopilot page's status line and the header's Resume
+a machine hasn't taken the board's current pause state (null until it has answered since the board started); the Autopilot page's status line and the header's Resume
 button name such machines.
 
 **A scheduled automation pinned to a machine** (`autopilot_custom.machine_id`, **Runs on** in the automation's detail,
 `PUT /api/autopilot/custom/:id/machine`) runs there: the board's engine leaves it out, and the machine's engine runs
 it in its clone of each project it is on in, its agent, command or script with the machine's logins. Only a scheduled
-automation is pinned: one on tasks runs wherever each task is.
+automation is pinned: one on tasks runs wherever each task is. A machine that doesn't run Autopilot (a runner from before it) can't be
+picked, and one pinned before that was known runs on the board, as **Runs on** says.
 
 ### Tools on a machine
 

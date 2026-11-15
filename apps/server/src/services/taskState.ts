@@ -106,12 +106,7 @@ function writeReviews(repos: Repos, taskId: string, reviews: readonly CopiedRevi
     if (haveRounds.has(round.id)) repos.reviews.update(record);
     else repos.reviews.insert(record);
     for (const finding of findings) {
-      const row = {
-        ...finding,
-        taskId,
-        reviewId: round.id,
-        round: round.round,
-      };
+      const row = { ...finding, taskId, reviewId: round.id, round: round.round };
       if (haveFindings.has(finding.id)) repos.reviews.updateFinding(row);
       else repos.reviews.insertFinding(row);
     }
@@ -196,12 +191,7 @@ export function writeTaskState(
   const haveSteps = new Map(repos.plans.stepsFor([task.id]).map((s) => [s.id, s]));
   const havePhases = new Map(repos.plans.phasesFor([task.id]).map((p) => [p.id, p]));
   for (const phase of state.phases) {
-    const record = {
-      id: phase.id,
-      taskId: task.id,
-      title: phase.title,
-      position: phase.position,
-    };
+    const record = { id: phase.id, taskId: task.id, title: phase.title, position: phase.position };
     const stamps = { createdAt: phase.createdAt, updatedAt: phase.updatedAt };
     if (havePhases.has(phase.id)) repos.plans.updatePhase({ ...record, ...stamps });
     else repos.plans.insertPhase({ ...record, ...stamps });

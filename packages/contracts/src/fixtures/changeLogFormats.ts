@@ -442,5 +442,15 @@ export const CHANGE_LOG_FORMAT_FIXTURES: Readonly<Record<number, readonly unknow
         },
       },
     },
+    {
+      id: 6,
+      version: 2,
+      kind: "notice",
+      taskId: "5b0c7f0e-6a57-4c6f-9d0b-3f0c3a1a2f01",
+      at: "2026-11-15T09:40:00.000Z",
+      payload: {
+        resolve: { keyPrefix: "checks:link-1:" },
+      },
+    },
   ],
 };

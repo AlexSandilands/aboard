@@ -63,10 +63,7 @@ export function AutopilotTabs({ current }: { current: Tab }) {
     if (tab === current) return;
     if (tab === "automations") void navigate({ to: "/settings/$group", params: { group: "autopilot" } });
     else if (tab === "runs") {
-      void navigate({
-        to: "/settings/autopilot/runs/$automation",
-        params: { automation: AUTOPILOT_ALL_RUNS },
-      });
+      void navigate({ to: "/settings/autopilot/runs/$automation", params: { automation: AUTOPILOT_ALL_RUNS } });
     } else void navigate({ to: "/settings/autopilot/limits" });
   };
   return (
@@ -137,10 +134,7 @@ export function AutopilotAutomationsTab() {
   const quickSetup: QuickSetupState = {
     automations: overview.data?.automations ?? [],
     board: items.map((item) => item.entry),
-    projects: projects.map((p, i) => ({
-      title: p.title,
-      entries: scopes[i]?.data ?? [],
-    })),
+    projects: projects.map((p, i) => ({ title: p.title, entries: scopes[i]?.data ?? [] })),
   };
   // Not known until every project's scope has loaded: before that a project's own switch would be missed.
   const nothingOn = scopes.every((s) => s.data) && !listed.some((i) => !isOffEverywhere(i.reach));
@@ -186,12 +180,7 @@ export function AutopilotAutomationsTab() {
         params: { customId: custom.id },
         state: FROM_SETTINGS_LIST,
       });
-    } else
-      void navigate({
-        to: "/settings/$group",
-        params: { group: "autopilot" },
-        search: { automation: key },
-      });
+    } else void navigate({ to: "/settings/$group", params: { group: "autopilot" }, search: { automation: key } });
   }
 }
 
@@ -290,12 +279,7 @@ function NeedsYou({
                 size="xs"
                 variant="outline"
                 disabled={resume.isPending}
-                onClick={() =>
-                  resume.mutate({
-                    automation: pause.automation,
-                    projectId: pause.projectId,
-                  })
-                }
+                onClick={() => resume.mutate({ automation: pause.automation, projectId: pause.projectId })}
               >
                 Resume
               </Button>

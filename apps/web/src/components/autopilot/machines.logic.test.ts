@@ -104,5 +104,6 @@ describe("runsOnDescription", () => {
     );
     expect(runsOnDescription("m1", [machine({ connection: "unreachable" })]).tone).toBe("warning");
     expect(runsOnDescription("gone", [machine()]).text).toBe("Its machine was removed, so this board runs it.");
+    expect(runsOnDescription("m1", [machine({ runsAutopilot: false })]).text).toContain("so this board runs it until");
   });
 });

@@ -285,10 +285,7 @@ export function createCustomAutomationsService(
       const fill = { inputs, slots, projectIds };
       const named = (skill?: string | null) =>
         CreateCustomAutomationInput.parse({
-          ...bundleToDefinition(bundle, {
-            ...fill,
-            ...(skill === undefined ? {} : { skill }),
-          }),
+          ...bundleToDefinition(bundle, { ...fill, ...(skill === undefined ? {} : { skill }) }),
           name: freeName(bundle.name),
         });
       // Check everything before writing a skill, so a file that can't run leaves nothing behind.
@@ -395,10 +392,7 @@ export function createCustomAutomationsService(
       // Where it runs is the user's, not the draft's: its switches stay as they are, and so does Tasks in epics.
       const define = (skill?: string | null) => {
         const { name, trigger, filters, action } = CreateCustomAutomationInput.parse(
-          bundleToDefinition(bundle, {
-            ...fill,
-            ...(skill === undefined ? {} : { skill }),
-          }),
+          bundleToDefinition(bundle, { ...fill, ...(skill === undefined ? {} : { skill }) }),
         );
         // A schedule has no task, so it can't skip any.
         const epicTasks = trigger.kind === "schedule" || current.filters.epicTasks;
