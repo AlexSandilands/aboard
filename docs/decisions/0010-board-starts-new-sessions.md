@@ -1,6 +1,6 @@
 # 0010 The board may start a new agent session with the user's prompt
 
-Status: Accepted
+Status: Accepted; amended for sessions on a connected machine (below)
 
 ## Context
 
@@ -50,3 +50,20 @@ expands `%NAME%` even there.
 - Adding a harness that can start sessions means its new-session flags in `newSessionArgv` and a review of how it
   takes a prompt (a positional argument, `-i`).
 - A worktree made for a session is the user's: nothing removes it automatically.
+
+## Amendment: new sessions on a connected machine (#185)
+
+For a task a connected machine holds, `POST /api/tasks/:id/sessions` starts the session on that machine. The board
+asks the machine over BatchMode `ssh` whether it can (tmux, the CLI), then `POST /machine/sessions` has the machine
+make the worktree (from origin's copy of the base) or use its checkout and link the session to its copy of the task,
+and the terminal here opens `ssh -t` to the machine and tmux there with the command `newSessionArgv` builds, as
+[0009's amendment](0009-board-starts-local-processes.md#amendment-sessions-on-a-connected-machine-185) describes.
+
+- The prompt is made safe for this platform's command line first, as above, and then quoted for the machine's shells.
+- The CLI is given the runner's own MCP endpoint as a headless run there is (`--mcp-config` for Claude Code,
+  `-c mcp_servers.<id>.url` for Codex), decoded from base64 on the machine so the command line here carries no double
+  quote.
+- Images aren't sent, and a task worktree or a PR's branch isn't offered: those are folders of this machine.
+- tmux is required, not worked around: it is what keeps the session when the terminal here closes. A missing tmux, a
+  missing CLI or no way to ssh is refused before anything is made, with what to do, and points at a T3 Code thread on
+  the machine instead.

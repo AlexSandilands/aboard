@@ -371,7 +371,8 @@ function Composer({
             </ComposerControl>
           )}
           <div className="ms-auto flex shrink-0 items-center gap-1.5">
-            <AddImageControl state={images} />
+            {/* The CLI on a machine couldn't open a path of this one's. */}
+            {options?.machine ? null : <AddImageControl state={images} />}
             <button
               type="submit"
               aria-label="Start session"
@@ -433,6 +434,9 @@ function Composer({
                 : ` · no ${harnessLabel(harness)} model is set for ${options.model.source === "label" ? "it" : "this tier"} in Settings → Agents → Models`}
             </span>
           ) : null}
+          {options.machine
+            ? `Runs on ${options.machine.name}: opens over SSH in tmux there, so it keeps going when this terminal closes. `
+            : null}
           {options.namedWindow
             ? `Opens in the Windows Terminal window ${taskWindowName(taskNumberValue(task))}${selfLinks ? "." : ", which the session's link brings back while it runs."}`
             : "Opens in the terminal chosen in Settings → Integrations → Terminal."}
@@ -494,7 +498,9 @@ function WhereStrip({
       </Select>
       {where.mode === "current" ? (
         <span className="truncate px-2 text-xs text-muted-foreground" title={options.workspaceRoot ?? undefined}>
-          {options.workspaceRoot ?? "No project folder"}
+          {options.machine
+            ? `${options.machine.name}'s checkout of the project`
+            : (options.workspaceRoot ?? "No project folder")}
         </span>
       ) : (
         <span

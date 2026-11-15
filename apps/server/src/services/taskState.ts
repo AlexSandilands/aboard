@@ -69,7 +69,8 @@ export function readTaskState(repos: Repos, task: TaskRecord): TaskState {
       ref: row.ref_json,
       createdAt: row.created_at,
       auto: row.auto !== 0,
-      // A session on a machine is read there, so what was read goes with the task; any other link each side reads.
+      // A session or thread on a machine is read there, so what was read goes with the task; any other link each side
+      // reads.
       ...(onMachine(row) ? { snapshot: row.snapshot_json } : {}),
     })),
     blockedBy: relations.filter((r) => r.blockedId === task.id).map((r) => r.blockerId),
@@ -109,9 +110,12 @@ function writeReviews(repos: Repos, taskId: string, reviews: readonly CopiedRevi
   }
 }
 
-/** Whether a link is an agent session that ran on a connected machine: its ref names the machine. */
+/**
+ * Whether a link is an agent session that ran on a connected machine, or a thread in its T3 Code: its ref names the
+ * machine.
+ */
 function onMachine(row: { kind: string; ref_json: string | null }): boolean {
-  if (row.kind !== "agent_session" || !row.ref_json) return false;
+  if ((row.kind !== "agent_session" && row.kind !== "t3_thread") || !row.ref_json) return false;
   try {
     return Boolean((JSON.parse(row.ref_json) as { machine?: unknown }).machine);
   } catch {

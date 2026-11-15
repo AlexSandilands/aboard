@@ -18,6 +18,8 @@ import {
   MACHINE_JOBS_PATH,
   MACHINE_SETTINGS_PATH,
   MACHINE_TRANSCRIPT_PATH,
+  MACHINE_T3_PATH,
+  MACHINE_SESSIONS_PATH,
   MAX_ATTACHMENT_BYTES,
   MachineJobQuery,
   MachineJobRequest,
@@ -44,7 +46,7 @@ import { errorResponse, handle, idParam, noContent, parseBody, parseQuery } from
 /** How long a status answer waits for the login checks, which start programs and may reach for the network. */
 const STATUS_LOGINS_WAIT_MS = 4_000;
 
-const CAPABILITIES: MachineCapability[] = ["pairing", "status", "update", "tasks", "runs"];
+const CAPABILITIES: MachineCapability[] = ["pairing", "status", "update", "tasks", "runs", "t3", "sessions"];
 
 /**
  * The machine API (docs/features/remote-machines.md#the-machine-api). Every server says who it is; the rest is a
@@ -207,6 +209,16 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
       const { sessionId, cwd, offset } = await parseBody(c, MachineTranscriptRequest);
       return c.json(await integrations.readSessionTranscript({ sessionId, cwd }, offset));
     }),
+  );
+  // The board acting in this machine's T3 Code for a task held here; the body is checked by the handler.
+  app.post(
+    MACHINE_T3_PATH,
+    handle(async (c) => c.json((await integrations.runnerHost.interactive.t3(await c.req.json())) ?? null)),
+  );
+  // The folder and link of a CLI session the board opens here over SSH.
+  app.post(
+    MACHINE_SESSIONS_PATH,
+    handle(async (c) => c.json(await integrations.runnerHost.interactive.session(await c.req.json()))),
   );
   // One of a held task's pasted images, so the paths in the board's prompts resolve here.
   app.put(
