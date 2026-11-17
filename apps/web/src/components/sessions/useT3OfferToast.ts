@@ -62,7 +62,13 @@ export function useT3OfferToast() {
         type: "error",
         title,
         description: error instanceof Error ? error.message : String(error),
-        ...(action ? { actionProps: { children: action.label, onClick: () => take(toastId) } } : {}),
+        // The action's label is long: under the text, not beside it squeezing it.
+        ...(action
+          ? {
+              actionProps: { children: action.label, onClick: () => take(toastId) },
+              data: { actionLayout: "stacked-end" },
+            }
+          : {}),
       });
     },
     [actionFor, openSettings, openT3Launch],

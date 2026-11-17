@@ -242,14 +242,16 @@ export function t3Line(machine: Machine): T3Line {
     };
   }
   const badge = T3_BADGES[machine.t3.state];
+  if (shared) return { badge, text: shared, connect: false };
   const detail = machine.t3.detail ? asSentence(machine.t3.detail) : null;
-  const how = `Create a pairing link in T3 Code on ${name} under Settings → Connections, and paste it here.`;
+  const where = `in T3 Code on ${name} under Settings → Connections`;
   const texts: Record<MachineT3State, string> = {
     connected: `Threads of the tasks ${name} holds start in its own T3 Code.`,
     "read-only": `${detail ?? "This connection can only read threads."} Pair a link that allows “Operate tasks”.`,
-    "not-connected": `${name} has no connection to its T3 Code yet. ${how}`,
+    "not-connected": `${name} has no connection to its T3 Code yet. Create a pairing link ${where}, and paste it here.`,
     "not-running": `T3 Code isn't running on ${name}. Start it there, then connect it here.`,
-    error: `${detail ?? "T3 Code refused the connection."} ${how}`,
+    // T3 Code's own sentence already says to pair again.
+    error: `${detail ?? "T3 Code refused the connection."} Create a new pairing link ${where}.`,
   };
-  return { badge, text: shared ? `${texts[machine.t3.state]} ${shared}` : texts[machine.t3.state], connect: !shared };
+  return { badge, text: texts[machine.t3.state], connect: true };
 }

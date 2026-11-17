@@ -245,10 +245,14 @@ function T3Part({ machine }: { machine: Machine }) {
   };
   return (
     <Part title="T3 Code on the machine">
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        {line.badge ? <ToneBadge tone={line.badge.tone}>{line.badge.label}</ToneBadge> : null}
-        <span className="min-w-0 text-xs break-words text-muted-foreground">{line.text}</span>
-      </p>
+      <div className="flex items-start gap-2">
+        {line.badge ? (
+          <span className="shrink-0">
+            <ToneBadge tone={line.badge.tone}>{line.badge.label}</ToneBadge>
+          </span>
+        ) : null}
+        <p className="min-w-0 flex-1 pt-px text-xs break-words text-muted-foreground">{line.text}</p>
+      </div>
       {line.connect ? (
         <div className="flex flex-wrap items-center gap-2">
           <label htmlFor={inputId} className="sr-only">
@@ -258,7 +262,7 @@ function T3Part({ machine }: { machine: Machine }) {
             id={inputId}
             size="sm"
             type="password"
-            className="min-w-0 flex-1 basis-56"
+            className="min-w-0 flex-1 basis-40"
             placeholder="Pairing link or token"
             spellCheck={false}
             autoComplete="off"
