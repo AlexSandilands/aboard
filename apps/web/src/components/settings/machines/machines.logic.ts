@@ -236,6 +236,14 @@ export function t3Line(machine: Machine): T3Line {
     // No status read since the board started (or the last read failed): nothing is known yet.
     if (machine.runsInFlight === null)
       return { badge: null, text: shared ?? "Read once the machine answers.", connect: false };
+    // A newer runner can connect it; this board just can't read the state it reports.
+    if (machine.versionState === "newer") {
+      return {
+        badge: null,
+        text: shared ?? `${name} reports a state this board's version doesn't know; update the board to see it.`,
+        connect: !shared,
+      };
+    }
     return {
       badge: null,
       text:

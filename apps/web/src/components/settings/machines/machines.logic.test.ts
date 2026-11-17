@@ -218,6 +218,10 @@ describe("the machine's T3 Code", () => {
     });
   });
 
+  it("still lets a newer runner be connected when its state is one this board doesn't know", () => {
+    expect(t3Line(machine({ t3: null, versionState: "newer" }))).toMatchObject({ badge: null, connect: true });
+  });
+
   it("asks for an update on a runner that can't report it", () => {
     expect(t3Line(machine({ t3: null }))).toMatchObject({ badge: null, connect: false });
     expect(t3Line(machine({ t3: null })).text).toContain("update it first");
