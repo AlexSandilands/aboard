@@ -233,6 +233,9 @@ export function t3Line(machine: Machine): T3Line {
     ? `${name} runs tasks inside ${BRAND.name} there, which shares its T3 Code connection: connect T3 Code in ${BRAND.name}'s Settings on ${name}.`
     : null;
   if (!machine.t3) {
+    // No status read since the board started (or the last read failed): nothing is known yet.
+    if (machine.runsInFlight === null)
+      return { badge: null, text: shared ?? "Read once the machine answers.", connect: false };
     return {
       badge: null,
       text:
@@ -251,7 +254,7 @@ export function t3Line(machine: Machine): T3Line {
     "not-connected": `${name} has no connection to its T3 Code yet. Create a pairing link ${where}, and paste it here.`,
     "not-running": `T3 Code isn't running on ${name}. Start it there, then connect it here.`,
     // T3 Code's own sentence already says to pair again.
-    error: `${detail ?? "T3 Code refused the connection."} Create a new pairing link ${where}.`,
+    error: `${detail ?? "T3 Code refused the connection."} Make one ${where}.`,
   };
   return { badge, text: texts[machine.t3.state], connect: true };
 }

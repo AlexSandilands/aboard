@@ -402,9 +402,16 @@ describe("a machine's T3 Code as its status reports it", () => {
   it("says what is missing before what the token allows", () => {
     expect(machineT3Status(live({ detected: false }), true, "operate").state).toBe("not-running");
     expect(machineT3Status(live(), false, null).state).toBe("not-connected");
-    expect(machineT3Status(live({ liveStatus: "error", error: "Token expired or revoked" }), true, "operate")).toEqual({
+    const revoked = "Token expired or revoked. Paste a new pairing link";
+    expect(machineT3Status(live({ liveStatus: "error", error: revoked }), true, "operate")).toEqual({
       state: "error",
-      detail: "Token expired or revoked",
+      detail: revoked,
+    });
+    // T3 Code not answering for a moment isn't a refused token: no new pairing link is asked for.
+    const unreachable = "T3 Code unreachable: fetch failed";
+    expect(machineT3Status(live({ liveStatus: "error", error: unreachable }), true, "operate")).toEqual({
+      state: "not-running",
+      detail: unreachable,
     });
   });
 

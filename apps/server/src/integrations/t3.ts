@@ -263,6 +263,13 @@ function parseWire<T>(schema: z.ZodType<T>, value: unknown, what: string): T {
   return parsed.data;
 }
 
+const T3_TOKEN_REVOKED = "Token expired or revoked. Paste a new pairing link";
+const T3_TOKEN_SCOPE = "Token lacks the orchestration:read scope";
+
+/** Whether a live-status error is T3 Code refusing the token, as opposed to not answering or answering oddly. */
+export const isT3TokenRefusal = (message: string | null): boolean =>
+  message === T3_TOKEN_REVOKED || message === T3_TOKEN_SCOPE;
+
 /** GET /api/orchestration/shell with a bearer session token (scope orchestration:read). */
 export async function fetchShell(origin: string, token: string, fetchFn: FetchFn): Promise<ShellSnapshot> {
   let response: Response;
@@ -274,8 +281,8 @@ export async function fetchShell(origin: string, token: string, fetchFn: FetchFn
   } catch (error) {
     throw new ShellError(`T3 Code unreachable: ${messageOf(error)}`, true);
   }
-  if (response.status === 401) throw new ShellError("Token expired or revoked. Paste a new pairing link");
-  if (response.status === 403) throw new ShellError("Token lacks the orchestration:read scope");
+  if (response.status === 401) throw new ShellError(T3_TOKEN_REVOKED);
+  if (response.status === 403) throw new ShellError(T3_TOKEN_SCOPE);
   if (!response.ok) throw new ShellError(`T3 Code returned HTTP ${response.status}`);
   const parsed = ShellSnapshot.safeParse(await response.json().catch(() => null));
   if (!parsed.success) throw new ShellError("Unexpected response from T3 Code");

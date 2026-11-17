@@ -198,9 +198,15 @@ describe("the machine's T3 Code", () => {
     expect(line("not-running")).toMatchObject({ badge: { label: "Not running" }, connect: true });
     expect(line("error", "Token expired or revoked. Paste a new pairing link")).toMatchObject({
       badge: { label: "Connection refused", tone: "error" },
-      text: expect.stringMatching(
-        /^Token expired or revoked\. Paste a new pairing link\. Create a new pairing link in T3/,
-      ),
+      text: "Token expired or revoked. Paste a new pairing link. Make one in T3 Code on engine under Settings → Connections.",
+    });
+  });
+
+  it("says nothing of it before the machine's status has been read", () => {
+    expect(t3Line(machine({ t3: null, runsInFlight: null }))).toEqual({
+      badge: null,
+      text: "Read once the machine answers.",
+      connect: false,
     });
   });
 

@@ -275,6 +275,17 @@ describe("a session on a machine linking itself", () => {
     await link(pair, CODEX_B, cwd, "cccccccccccccccccc");
     expect(tmuxOf(pair, CODEX_B)).toBeNull();
     pair.clock.now = new Date(pair.clock.now.getTime() + 11 * 60_000);
+    await link(pair, "3e4f5a6b-2a43-4c55-9d3a-6f2c1e7d8a92", cwd);
+    expect(tmuxOf(pair, "3e4f5a6b-2a43-4c55-9d3a-6f2c1e7d8a92")).toBeNull();
+    // Its own token still finds it: the ten minutes only bound the guess.
+    await link(pair, CODEX_A, cwd, "aaaaaaaaaaaaaaaaaa");
+    expect(tmuxOf(pair, CODEX_A)).toBe("app-aaaaaaaaaaaa");
+  });
+
+  it("forgets a terminal whose session hasn't linked itself within the hour, token or not", async () => {
+    const pair = await setup();
+    const cwd = await opened(pair, "app-aaaaaaaaaaaa", "aaaaaaaaaaaaaaaaaa");
+    pair.clock.now = new Date(pair.clock.now.getTime() + 61 * 60_000);
     await link(pair, CODEX_A, cwd, "aaaaaaaaaaaaaaaaaa");
     expect(tmuxOf(pair, CODEX_A)).toBeNull();
   });

@@ -17,7 +17,7 @@ import { createWorktree } from "../../autopilot/worktrees.ts";
 import { AppError } from "../../errors.ts";
 import type { Services } from "../../services/types.ts";
 import type { RunGit } from "../backup.ts";
-import type { T3Integration } from "../t3.ts";
+import { isT3TokenRefusal, type T3Integration } from "../t3.ts";
 import { messageOf } from "../util.ts";
 
 // Interactive work a board starts on a task this runner holds (docs/features/remote-machines.md#interactive-work):
@@ -52,11 +52,13 @@ export interface SelfLinkingSession {
   launch?: string | undefined;
 }
 
+/** How long a terminal waits for the session the board gave its launch token to link itself. */
+const LAUNCH_TOKEN_WINDOW_MS = 60 * 60_000;
 /**
- * How long a terminal waits for its session to link itself. A session the board starts does it with its first message,
- * so a terminal still waiting after this is one whose session never will.
+ * How long a terminal may be guessed for a session that links itself without a token. A session the board starts does
+ * it with its first message, so a guess any later is more likely to be another session's.
  */
-const SELF_LINK_WINDOW_MS = 10 * 60_000;
+const SELF_LINK_GUESS_MS = 10 * 60_000;
 
 /** A terminal the board opened here for a session that links itself, until the session does. */
 interface AwaitingTerminal {
@@ -75,7 +77,12 @@ const SESSION_BRANCH_PREFIX = `${BRAND.id}/`;
 export function machineT3Status(status: T3IntegrationStatus, tokenSet: boolean, access: T3Access): MachineT3Status {
   if (!status.detected) return { state: "not-running", detail: null };
   if (!tokenSet) return { state: "not-connected", detail: null };
-  if (status.liveStatus === "error") return { state: "error", detail: status.error };
+  if (status.liveStatus === "error") {
+    // Only a refused token needs a new pairing link; T3 Code not answering (restarting, say) is said as it is.
+    return isT3TokenRefusal(status.error)
+      ? { state: "error", detail: status.error }
+      : { state: "not-running", detail: status.error };
+  }
   // Not polled yet counts as working: the poll runs every 20 seconds on a runner, and an error shows then.
   return { state: access === "read-only" ? "read-only" : "connected", detail: null };
 }
@@ -96,7 +103,7 @@ export function createRunnerInteractive(deps: {
   /** Terminals the board opened here for sessions that will link themselves, by their tmux session. */
   const awaiting = new Map<string, AwaitingTerminal>();
   const forgetStale = () => {
-    for (const [tmux, terminal] of awaiting) if (now() - terminal.at > SELF_LINK_WINDOW_MS) awaiting.delete(tmux);
+    for (const [tmux, terminal] of awaiting) if (now() - terminal.at > LAUNCH_TOKEN_WINDOW_MS) awaiting.delete(tmux);
   };
   /** Whether this machine has a link for the session already: it linked itself before, from its own terminal. */
   const linkedAlready = (harness: AgentHarness, sessionId: string): boolean =>
@@ -246,9 +253,12 @@ export function createRunnerInteractive(deps: {
       // The marked fallback, for a session that passed no token (a board or prompt from before them): only when it
       // can't be the wrong terminal, and never for a session linking itself again.
       const candidates = [...awaiting.values()].filter((t) => t.harness === session.harness && t.cwd === session.cwd);
-      if (candidates.length !== 1 || linkedAlready(session.harness, session.sessionId)) return null;
-      awaiting.delete(candidates[0]!.tmux);
-      return candidates[0]!.tmux;
+      const only = candidates.length === 1 ? candidates[0]! : null;
+      if (!only || now() - only.at > SELF_LINK_GUESS_MS || linkedAlready(session.harness, session.sessionId)) {
+        return null;
+      }
+      awaiting.delete(only.tmux);
+      return only.tmux;
     },
   };
 }

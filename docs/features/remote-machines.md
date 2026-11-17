@@ -929,8 +929,8 @@ for a pairing link (or token) made in T3 Code on that machine under Settings →
 | `connected`     | A token that works and allows starting threads, or isn't known not to         |
 | `read-only`     | A token that works but can't start threads                                     |
 | `not-connected` | No token                                                                       |
-| `not-running`   | T3 Code isn't found on the machine                                             |
-| `error`         | T3 Code refuses the token (expired or revoked); its sentence is in `detail`    |
+| `not-running`   | T3 Code isn't found on the machine, or doesn't answer (its sentence is in `detail`) |
+| `error`         | T3 Code refuses the token (expired or revoked, or too few scopes); its sentence is in `detail` |
 
 **Connect** posts to `POST /api/machines/:id/t3/connect`, which `machines.connectT3` sends straight to the machine
 (`POST /machine/t3/connect`, a route of its own: every op on `POST /machine/t3` is for a held task), then reads the
@@ -964,9 +964,10 @@ tmux and the CLI are there, so a machine it can't open on makes no worktree.
 
 A CLI that picks its own session id (Codex) links itself, so the machine can't record the terminal on a link it makes.
 For a machine with the `launchTokens` capability the board adds a `launch` token to the request and to the session's
-prompt; the machine keeps the terminal waiting under it (10 minutes), and the `link` tool on the machine gives that
+prompt; the machine keeps the terminal waiting under it for an hour, and the `link` tool on the machine gives that
 terminal to the session that passes the token, once, for the same task and CLI. Without a token it is matched only
-when exactly one terminal is waiting for that CLI and folder and the session isn't linked on the machine yet
+when exactly one terminal is waiting for that CLI and folder, opened in the last 10 minutes, and the session isn't
+linked on the machine yet
 ([agent sessions](agent-sessions.md#on-a-machine)).
 
 ### Tools on a machine
