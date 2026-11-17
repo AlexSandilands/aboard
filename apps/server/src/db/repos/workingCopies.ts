@@ -204,6 +204,9 @@ export function createWorkingCopiesRepo(sql: Sql) {
     state(key: string): string | null {
       return sql.get<{ value: string }>("SELECT value FROM runner_state WHERE key = ?", key)?.value ?? null;
     },
+    deleteState(key: string): void {
+      sql.run("DELETE FROM runner_state WHERE key = ?", key);
+    },
     setState(key: string, value: string): void {
       sql.run(
         "INSERT INTO runner_state (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",

@@ -185,6 +185,14 @@ export const startPlanned = defineAutomation({
     "Starts an agent on each Planned task whose Autopilot flag is On, once it has a plan and nothing blocks it.",
   needsAgent: true,
   needsRepo: true,
+  // A job that ended while the board restarted is judged as `act` judges a headless run: by whether its agent moved
+  // the task out of Planned, as the machine's log (read up to the job's end) says.
+  afterRestart: (started, { services, run }) => {
+    const task = services.tasks.summary(run.taskId!);
+    const patch = patchOf(started);
+    if (task.status === "planned") return failed(`the agent didn't move ${taskLabel(task)} out of Planned`, patch);
+    return { ...patch, summary: `Started ${taskLabel(task)} headless` };
+  },
   group: "ship",
   schema: ConfigSchema,
   fields: FIELDS,

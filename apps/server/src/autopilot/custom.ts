@@ -530,6 +530,8 @@ export function customAutomation(custom: CustomAutomation, deps: CustomAutomatio
     description: `${describeCustomTrigger(trigger)}: ${isAgent ? "start an agent" : action.kind === "script" ? "run a script" : "run a shell command"}.`,
     needsAgent: isAgent,
     background: !isAgent,
+    // An agent action does nothing with its agent's answer but record it.
+    ...(isAgent ? { afterRestart: "finish" as const } : {}),
     // A schedule has no task, so an epic has nothing to switch.
     epicScope: trigger.kind !== "schedule",
     blocked,

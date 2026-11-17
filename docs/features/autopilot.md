@@ -253,6 +253,9 @@ leave them out.
   returned an error, not one the process was killed during. In dev, `pnpm dev` and `pnpm sandbox` run the
   server under `tsx watch`, which restarts on edits but not on a file being read: `node --watch` also restarts
   on an NTFS last-access change, so an agent merely reading a server file would restart the board.
+- A run the board sent to a connected machine (its task held there) isn't failed by `recover`: it stays running and
+  the board reads its job on the machine again, ending the run by how the job ended and the automation's
+  `afterRestart` ([remote machines](remote-machines.md#after-a-restart)).
 
 ### Run history
 

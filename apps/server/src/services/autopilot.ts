@@ -297,15 +297,26 @@ export interface AutopilotService {
    * runner counts it as in flight, finds its session, and cleans up its worktree later.
    */
   adopt(run: AutopilotRun, projectId: string | null): AutopilotRun;
+  /** On a runner: a run its board sent here (see `adopt`), by the board's id; null when it never came. */
+  adopted(runId: string): AutopilotRun | null;
   /** Ends an adopted run, as quietly as it was kept. */
   settle(runId: string, status: "succeeded" | "failed", patch: RunPatch & { error?: string | null }): void;
   /**
    * Ends the runs a restart left queued or running as failed. A Review PRs or Fix PRs run is retried once, as by
    * `retry` (its key retired, no flag), so the engine redoes the work; a run whose work a restart already cut short
    * is flagged instead, which stops a loop when the run itself restarts the board. Any other run is flagged, since
-   * redoing it could launch an agent twice. Returns how many.
+   * redoing it could launch an agent twice.
+   *
+   * A run that was going on a machine (its task held there) is left running instead, saying so, and returned in
+   * `reattach`: its job may still be going there, and the board reads it again (remoteWork.reattach).
    */
-  recover(): number;
+  recover(): AutopilotRecovery;
+  /**
+   * Ends a run `recover` left running for re-attaching, whose machine says it never got it: nothing ran, so its key
+   * is retired as by `retry` (no flag) and the engine does the work again; unless a restart already cut the same work
+   * short, when it is flagged as a stranded run is. Returns the run as it ended.
+   */
+  retireUnstarted(runId: string): AutopilotRun;
   /**
    * Asks for a run of an automation in a project now (Orchestrate's Run now), publishing autopilot.changed so the
    * engine looks at once. The automation's `check` turns it into a candidate and clears it. Kept in memory: a restart
@@ -315,6 +326,14 @@ export interface AutopilotService {
   /** When a run was asked for and not yet cleared; null when none is waiting or it is older than RUN_REQUEST_TTL_MS. */
   runRequest(automation: string, projectId: string): string | null;
   clearRunRequest(automation: string, projectId: string): void;
+}
+
+/** What `recover` did with the runs a restart left going. */
+export interface AutopilotRecovery {
+  /** How many it ended. */
+  ended: number;
+  /** The runs left running for the board to re-attach to on the machine that holds their task. */
+  reattach: Array<{ run: AutopilotRun; machineId: string }>;
 }
 
 const RUN_LIMIT = 50;
@@ -590,6 +609,31 @@ export function createAutopilotService(
   /** Tells a runner's log about one of its own runs, inside the write that changed it. */
   const written = (run: AutopilotRun) => {
     if (!run.dedupeKey.startsWith(ADOPTED_PREFIX)) deps.runWritten?.(run);
+  };
+
+  /** Fails a run a restart cut short with its key retired as by `retry`, unflagged, so the engine does it again. */
+  const retireRestarted = (fx: Effects, run: AutopilotRun, error: string, at: string): AutopilotRun => {
+    const retired: AutopilotRun = {
+      ...run,
+      status: "failed",
+      error,
+      dedupeKey: retiredKey(run),
+      needsAttention: false,
+      finishedAt: at,
+      updatedAt: at,
+    };
+    repos.autopilotRuns.update(retired);
+    written(retired);
+    if (run.taskId) {
+      fx.log(run.taskId, AUTOPILOT_ACTOR, "autopilot_run", {
+        automation: run.automation,
+        title: titleOf(run.automation),
+        status: "retried",
+        reason: "restart",
+        summary: run.summary,
+      });
+    }
+    return retired;
   };
 
   const save = (run: AutopilotRun, opts: { log?: boolean } = {}): AutopilotRun => {
@@ -1368,6 +1412,10 @@ export function createAutopilotService(
       });
       return adopted;
     },
+    adopted(runId) {
+      const run = repos.autopilotRuns.get(runId);
+      return run?.dedupeKey.startsWith(ADOPTED_PREFIX) ? run : null;
+    },
     settle(runId, status, patch) {
       const at = nowIso();
       core.write((fx) => {
@@ -1387,7 +1435,8 @@ export function createAutopilotService(
     recover() {
       // A run replayed from a machine is that machine's to end: its restart wasn't this one.
       const stranded = repos.autopilotRuns.withStatus(AUTOPILOT_ACTIVE_STATUSES).filter((r) => !r.machine);
-      if (stranded.length === 0) return 0;
+      const reattach: AutopilotRecovery["reattach"] = [];
+      if (stranded.length === 0) return { ended: 0, reattach };
       const strandedIds = new Set(stranded.map((r) => r.id));
       core.write((fx) => {
         const at = nowIso();
@@ -1398,15 +1447,30 @@ export function createAutopilotService(
             repos.autopilotRuns.update({ ...run, status: "failed", error, finishedAt: at, updatedAt: at });
             continue;
           }
+          const onMachine = run.taskId ? repos.holds.get(run.taskId) : null;
+          // Sent to the machine as a job under the run's id, which goes on there: the board reads it again rather than
+          // fail it. A queued run was never sent, and a T3 one (a nudge) went to this machine's T3 Code.
+          if (onMachine && run.status === "running" && !run.dryRun && run.runner !== "t3") {
+            const name = repos.machines.get(onMachine.machineId)?.name ?? "the machine";
+            const waiting: AutopilotRun = {
+              ...run,
+              detail: `Re-attaching to ${name} after a board restart`,
+              updatedAt: at,
+            };
+            repos.autopilotRuns.update(waiting);
+            written(waiting);
+            if (run.taskId) fx.task(run.taskId);
+            reattach.push({ run: waiting, machineId: onMachine.machineId });
+            continue;
+          }
           // Only the PR automations are handed back (their keys follow the PR's head, so the engine re-checks that
           // the work is still needed; a Fix PRs run killed after its agent pushed may leave a second session to push
           // again, within its attempt cap). An agent launch (Start planned, Orchestrate) may have started something
           // nothing re-checks, so it is flagged for the user.
           // The key is retired as by `retry`, unless this work was cut short before: a run that itself restarts the
           // board must not loop. Runs stranded together don't make each other history.
-          // A run for a task a machine holds wasn't cut short there: its agent goes on, unobserved. Redoing the work
-          // would put a second agent on the same branch, so it is flagged for the user like any other launch.
-          const onMachine = run.taskId ? repos.holds.get(run.taskId) : null;
+          // A run for a task a machine holds that isn't re-attached may still have done something there (a nudge into
+          // a thread): redoing it is left to the user, like any other launch.
           if (
             RETRIED_AFTER_RESTART.has(run.automation) &&
             !onMachine &&
@@ -1417,26 +1481,7 @@ export function createAutopilotService(
             ) &&
             !restartedBefore(run)
           ) {
-            const retired: AutopilotRun = {
-              ...run,
-              status: "failed",
-              error,
-              dedupeKey: retiredKey(run),
-              needsAttention: false,
-              finishedAt: at,
-              updatedAt: at,
-            };
-            repos.autopilotRuns.update(retired);
-            written(retired);
-            if (run.taskId) {
-              fx.log(run.taskId, AUTOPILOT_ACTOR, "autopilot_run", {
-                automation: run.automation,
-                title: titleOf(run.automation),
-                status: "retried",
-                reason: "restart",
-                summary: run.summary,
-              });
-            }
+            retireRestarted(fx, run, error, at);
             continue;
           }
           const failed: AutopilotRun = {
@@ -1456,7 +1501,27 @@ export function createAutopilotService(
         }
         fx.autopilot();
       });
-      return stranded.length;
+      return { ended: stranded.length - reattach.length, reattach };
+    },
+    retireUnstarted(runId) {
+      const run = runOf(runId);
+      if (!AUTOPILOT_ACTIVE_STATUSES.includes(run.status)) {
+        throw new AppError("CONFLICT", `Run ${runId} is ${run.status}, not going`);
+      }
+      const error = `${BOARD_RESTARTED_ERROR} before this run reached the machine`;
+      if (!restartedBefore(run)) {
+        return core.write((fx) => {
+          const retired = retireRestarted(fx, run, error, nowIso());
+          fx.autopilot();
+          return retired;
+        });
+      }
+      // The same work was cut short by a restart before: a run that restarts the board itself mustn't loop.
+      const at = nowIso();
+      return save(
+        { ...run, status: "failed", error, needsAttention: run.taskId !== null, finishedAt: at, updatedAt: at },
+        { log: true },
+      );
     },
     requestRun(automation, projectId) {
       const key = requestKey(automation, projectId);

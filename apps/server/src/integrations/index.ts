@@ -1,6 +1,6 @@
 import { createUsageSweep } from "./usageSweep.ts";
 import { randomUUID } from "node:crypto";
-import { taskLabel, epicBranchName, planningSessionLabel, type T3ThreadRef } from "@repo/contracts";
+import { taskLabel, epicBranchName, planningSessionLabel, type AutopilotRun, type T3ThreadRef } from "@repo/contracts";
 import { createWorktreeCleanup } from "../autopilot/cleanup.ts";
 import { ensureEpicBranch } from "../autopilot/epicBranch.ts";
 import { createDigestGenerator } from "../autopilot/digest.ts";
@@ -43,6 +43,7 @@ import { createAutopilotSync } from "./machines/autopilotSync.ts";
 import { handOverAtStart } from "./machines/startOn.ts";
 import { taskRunsOn } from "../services/runOn.ts";
 import { createMachineJobs } from "./machines/jobs.ts";
+import { createReattacher } from "./machines/reattach.ts";
 import { createRemoteWork } from "./machines/remoteWork.ts";
 import { createRunnerInteractive } from "./machines/runnerInteractive.ts";
 import { withMachineThreads } from "./machines/remoteT3.ts";
@@ -300,6 +301,10 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       (overrides.log ?? console).warn(`[sessions] couldn't refresh ${sessionId}: ${messageOf(error)}`);
     });
   };
+  // An Autopilot run ended: its headless session shows it at once.
+  const runEnded = (run: AutopilotRun) => {
+    if (run.sessionId) refreshSession(run.sessionId);
+  };
   // One `git fetch` per repository at a time, across the runner's worktrees and the engine's own reads.
   const repoGate = createRepoGate();
   const localRunner =
@@ -372,9 +377,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       const url = await repoUrls(project.workspaceRoot);
       return url ? remoteRepo(url) : null;
     },
-    runEnded: (run) => {
-      if (run.sessionId) refreshSession(run.sessionId);
-    },
+    runEnded,
     boardUrl: () => boardUrlOf(deps.config),
     // Each candidate is one server's: a runner's Autopilot acts on the tasks it holds (remote-machines.md).
     placement: isRunner
@@ -442,6 +445,14 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     ...(overrides.now ? { now: overrides.now } : {}),
     ...(overrides.log ? { log: overrides.log } : {}),
   });
+  // Runs a restart left going on a machine: here, where both the job reads and the machine's log are in reach.
+  const reattacher = createReattacher({
+    services: deps.services,
+    work: remoteWork,
+    pump: (machineId) => machineSync.pump(machineId),
+    runEnded,
+    ...(overrides.log ? { log: overrides.log } : {}),
+  });
   const autopilotSync = createAutopilotSync({
     services: deps.services,
     machines,
@@ -504,6 +515,9 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     autopilotSync,
     runnerHost,
     remoteWork,
+    reattach: async (runs) => {
+      await Promise.all(runs.map(({ run, machineId }) => reattacher.reattach(run, machineId)));
+    },
     readSessionTranscript: (ref, offset) => transcripts.readSession(ref, offset),
     start() {
       if (!deps.config.pollers || started) return;
