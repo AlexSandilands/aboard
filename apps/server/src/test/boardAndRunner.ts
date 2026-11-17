@@ -29,6 +29,8 @@ export async function createBoardAndRunner(options: PairOptions = {}) {
     /** How many of the runner's next answers are lost on the way back, after the runner has acted on the request. */
     loseAnswers: 0,
     sent: [] as Array<{ path: string; method: string }>,
+    /** Changes the runner's answers on the way back: an older runner's descriptor, say. */
+    rewrite: null as ((path: string, res: Response) => Response | Promise<Response>) | null,
   };
   const cloned: Array<{ url: string; dir: string }> = [];
   const runner = createTestHarness({
@@ -65,7 +67,7 @@ export async function createBoardAndRunner(options: PairOptions = {}) {
       net.loseAnswers -= 1;
       throw new TypeError("fetch failed");
     }
-    return res;
+    return net.rewrite ? net.rewrite(url.pathname, res) : res;
   }) as typeof fetch;
 
   const remotes = options.remotes ?? {};

@@ -8,6 +8,7 @@ import type {
   LinkInput,
   Project,
   StartT3ThreadInput,
+  T3Access,
   T3ThreadSnapshot,
   TaskAttachment,
   TaskLink,
@@ -267,6 +268,7 @@ function fakeServices(
   const projects = [...(opts.projects ?? [])];
   const added: Array<{ taskId: string; input: LinkInput; actor: string; role?: "followup" }> = [];
   let token = opts.token ?? null;
+  let access: T3Access = null;
   const services: T3Services = {
     links: {
       listByKind: (kind) => (opts.links ?? []).filter((l) => l.kind === kind),
@@ -280,9 +282,14 @@ function fakeServices(
       get: () => ({ ...defaultSettings, t3TokenSet: Boolean(token) }),
       t3Token: () => token,
       update: (input) => {
-        if (input.t3Token !== undefined) token = input.t3Token;
+        if (input.t3Token !== undefined && input.t3Token !== token) {
+          token = input.t3Token;
+          access = null;
+        }
         return { ...defaultSettings, t3TokenSet: Boolean(token) };
       },
+      t3Access: () => access,
+      setT3Access: (next) => void (access = next),
     },
     tasks: {
       summary: (id) =>
@@ -554,6 +561,7 @@ describe("T3 connect", () => {
     expect(shellAuth).toBe("Bearer fresh");
     expect(result.settings.t3TokenSet).toBe(true);
     expect(result.t3.liveStatus).toBe("ok");
+    expect(services.settings.t3Access()).toBe("operate");
   });
 
   it("saves anything that isn't a pairing link as a token without an exchange", async () => {
@@ -568,6 +576,8 @@ describe("T3 connect", () => {
     await t3.connect("  cli-token  ");
     expect(exchanged).toBe(false);
     expect(services.settings.t3Token()).toBe("cli-token");
+    // A token pasted as it is says nothing about what it allows.
+    expect(services.settings.t3Access()).toBeNull();
   });
 
   it.each([
@@ -607,8 +617,11 @@ describe("T3 connect", () => {
         exchange: { status: 200, body: { access_token: "fresh", token_type: "Bearer", scope: "orchestration:read" } },
       }),
     });
+    services.settings.setT3Access("operate");
     const result = await t3.connect(LINK);
     expect(result.warning).toContain("Operate tasks");
+    // Kept, so the machine's status can say a thread can't be started from here.
+    expect(services.settings.t3Access()).toBe("read-only");
   });
 
   it("rejects a link that carries something other than a pairing code", async () => {

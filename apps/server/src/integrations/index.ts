@@ -487,6 +487,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       runGit: overrides.autopilotGit ?? defaultRunGit,
       worktreesDir: deps.config.worktreesDir,
       machine: thisMachine,
+      ...(deps.config.hostedBy ? { hosted: true } : {}),
     }),
   };
   let started = false;

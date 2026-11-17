@@ -1157,6 +1157,13 @@ export type ConnectT3Input = z.infer<typeof ConnectT3Input>;
 export const IntegrationsStatus = z.object({ t3: T3IntegrationStatus, gitHosts: z.array(GitHostStatus) });
 export type IntegrationsStatus = z.infer<typeof IntegrationsStatus>;
 
+/**
+ * What a T3 token allows: `operate` starts threads, `read-only` only reads them. Known only when it came from a
+ * pairing link, which says what it granted; null for a token pasted as it is.
+ */
+export const T3Access = z.enum(["operate", "read-only"]).nullable();
+export type T3Access = z.infer<typeof T3Access>;
+
 export const ConnectT3Result = z.object({
   settings: AppSettings,
   t3: T3IntegrationStatus,

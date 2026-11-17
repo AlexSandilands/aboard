@@ -18,7 +18,7 @@ import {
   ServerIcon,
   XIcon,
 } from "lucide-react";
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -27,7 +27,9 @@ import { formatRelativeTimeLabel } from "~/lib/timestampFormat";
 import { cn } from "~/lib/utils";
 import {
   useCheckMachine,
+  useConnectMachineT3,
   useDismissMachineInstall,
+  useMachineFocus,
   useMachines,
   useRemoveMachine,
   useRepairMachine,
@@ -44,6 +46,7 @@ import {
   loginName,
   machineSummary,
   moveRoute,
+  t3Line,
   untilLabel,
   versionLine,
   type BadgeTone,
@@ -216,6 +219,67 @@ function LoginsPart({ machine }: { machine: Machine }) {
       <Hint>
         Agents on {machine.name} use its own logins. Log in there yourself; the board checks again within a minute.
       </Hint>
+    </Part>
+  );
+}
+
+/** The machine's own T3 Code, where threads of the tasks it holds start, and connecting it from here. */
+function T3Part({ machine }: { machine: Machine }) {
+  const connect = useConnectMachineT3();
+  const [value, setValue] = useState("");
+  const [warning, setWarning] = useState<string | null>(null);
+  const line = t3Line(machine);
+  const inputId = useId();
+  const submit = () => {
+    const link = value.trim();
+    if (!link || connect.isPending) return;
+    setWarning(null);
+    connect.mutate(
+      { id: machine.id, value: link },
+      {
+        // The link is single use: it is cleared whether or not it worked.
+        onSettled: () => setValue(""),
+        onSuccess: (result) => setWarning(result.warning),
+      },
+    );
+  };
+  return (
+    <Part title="T3 Code on the machine">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {line.badge ? <ToneBadge tone={line.badge.tone}>{line.badge.label}</ToneBadge> : null}
+        <span className="min-w-0 text-xs break-words text-muted-foreground">{line.text}</span>
+      </p>
+      {line.connect ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor={inputId} className="sr-only">
+            Pairing link from T3 Code on {machine.name}
+          </label>
+          <Input
+            id={inputId}
+            size="sm"
+            type="password"
+            className="min-w-0 flex-1 basis-56"
+            placeholder="Pairing link or token"
+            spellCheck={false}
+            autoComplete="off"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+          />
+          <Button size="xs" disabled={!value.trim() || connect.isPending} onClick={submit}>
+            {connect.isPending ? "Connecting…" : machine.t3?.state === "connected" ? "Connect again" : "Connect"}
+          </Button>
+        </div>
+      ) : null}
+      {connect.error ? (
+        <Callout tone="error">
+          <p className="break-words">{asSentence(connect.error.message)}</p>
+        </Callout>
+      ) : warning ? (
+        <Callout tone="warning">
+          <p className="break-words">{asSentence(warning)}</p>
+        </Callout>
+      ) : null}
     </Part>
   );
 }
@@ -405,13 +469,25 @@ function MachineRow({
   open,
   asOf,
   onToggle,
+  onShown,
 }: {
   machine: Machine;
   open: boolean;
   asOf: number;
   onToggle: () => void;
+  /** It was brought into view for the user: it stays open once the focus is gone. */
+  onShown: () => void;
 }) {
   const summary = machineSummary(machine);
+  const t3Ref = useRef<HTMLDivElement>(null);
+  const focused = useMachineFocus((state) => state.id === machine.id);
+  // Sent here to connect this machine's T3 Code: bring that part into view, once.
+  useEffect(() => {
+    if (!focused || !open) return;
+    t3Ref.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    onShown();
+    useMachineFocus.getState().focus(null);
+  }, [focused, open, onShown]);
   return (
     <div data-machine={machine.id}>
       <button
@@ -454,6 +530,9 @@ function MachineRow({
           )}
           <VersionPart machine={machine} />
           <LoginsPart machine={machine} />
+          <div ref={t3Ref} className="scroll-mt-4">
+            <T3Part machine={machine} />
+          </div>
           <RoutesPart machine={machine} asOf={asOf} />
           <IdentityPart machine={machine} />
         </div>
@@ -534,6 +613,8 @@ function MachineList({
 }) {
   // What the user opened or closed; a machine they haven't touched opens by itself when it needs something.
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
+  // A machine the user was sent to opens, whatever they did with it before.
+  const focused = useMachineFocus((state) => state.id);
   // A finished install is the machine below it.
   const installs = data.installs.filter((install) => install.status !== "done");
   if (data.machines.length === 0 && installs.length === 0) {
@@ -559,7 +640,7 @@ function MachineList({
         <InstallRow key={install.id} install={install} onRetry={() => onAdd(install.target)} />
       ))}
       {data.machines.map((machine) => {
-        const open = toggled[machine.id] ?? machineSummary(machine).attention;
+        const open = focused === machine.id || (toggled[machine.id] ?? machineSummary(machine).attention);
         return (
           <MachineRow
             key={machine.id}
@@ -567,6 +648,7 @@ function MachineList({
             open={open}
             asOf={asOf}
             onToggle={() => setToggled((prev) => ({ ...prev, [machine.id]: !open }))}
+            onShown={() => setToggled((prev) => ({ ...prev, [machine.id]: true }))}
           />
         );
       })}

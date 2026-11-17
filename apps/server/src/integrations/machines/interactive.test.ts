@@ -1,8 +1,9 @@
-import type { StartSessionResult, StartT3ThreadInput } from "@repo/contracts";
+import type { StartSessionResult, StartT3ThreadInput, T3IntegrationStatus } from "@repo/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBoardAndRunner } from "../../test/boardAndRunner.ts";
 import type { ThreadLink } from "../t3.ts";
 import type { LaunchSpec } from "../terminal.ts";
+import { machineT3Status } from "./runnerInteractive.ts";
 import type { SpawnSsh } from "./ssh.ts";
 
 const stops: Array<() => void> = [];
@@ -299,5 +300,82 @@ describe("terminals for sessions on a machine", () => {
     const res = await t.board.request(`/api/links/${added.id}/resume`, { method: "POST", json: { mode: "resume" } });
     expect(res.status).toBe(409);
     expect(t.spawned).toEqual([]);
+  });
+});
+
+describe("a machine's T3 Code as its status reports it", () => {
+  const live = (over: Partial<T3IntegrationStatus> = {}): T3IntegrationStatus => ({
+    detected: true,
+    origin: "http://127.0.0.1:3773",
+    environmentId: "env",
+    label: null,
+    liveStatus: "ok",
+    error: null,
+    ...over,
+  });
+
+  it("says what is missing before what the token allows", () => {
+    expect(machineT3Status(live({ detected: false }), true, "operate").state).toBe("not-running");
+    expect(machineT3Status(live(), false, null).state).toBe("not-connected");
+    expect(machineT3Status(live({ liveStatus: "error", error: "Token expired or revoked" }), true, "operate")).toEqual({
+      state: "error",
+      detail: "Token expired or revoked",
+    });
+  });
+
+  it("is read-only only when the connection was made from a read-only link", () => {
+    expect(machineT3Status(live(), true, "read-only").state).toBe("read-only");
+    expect(machineT3Status(live(), true, "operate")).toEqual({ state: "connected", detail: null });
+    // A token pasted as it is, or one not polled yet, counts as able to start threads until T3 says otherwise.
+    expect(machineT3Status(live(), true, null).state).toBe("connected");
+    expect(machineT3Status(live({ liveStatus: "off" }), true, null).state).toBe("connected");
+  });
+});
+
+describe("connecting a machine's T3 Code from the board", () => {
+  const connect = (board: Awaited<ReturnType<typeof setup>>["board"], machineId: string, value: string) =>
+    board.request(`/api/machines/${machineId}/t3/connect`, { method: "POST", json: { value } });
+
+  it("passes the token straight to the machine and answers its status, read again, without the token", async () => {
+    const { board, runner, machine, net } = await setup();
+    expect(board.integrations.machines.list().machines[0]!.t3).toEqual({ state: "not-running", detail: null });
+    net.sent.length = 0;
+    const res = await connect(board, machine.id, "cli-token");
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).not.toContain("cli-token");
+    expect(JSON.parse(text)).toMatchObject({
+      machine: { id: machine.id, t3: { state: "not-running" } },
+      warning: null,
+    });
+    expect(runner.services.settings.t3Token()).toBe("cli-token");
+    // The board's own connection is untouched, and the machine's status was read again at once.
+    expect(board.services.settings.t3Token()).toBeNull();
+    const paths = net.sent.map((r) => r.path);
+    expect(paths.indexOf("/machine/status")).toBeGreaterThan(paths.indexOf("/machine/t3/connect"));
+  });
+
+  it("says the machine's own refusal", async () => {
+    const { board, machine } = await setup();
+    const res = await connect(board, machine.id, "t3code://app/pair#token=ABCDABCDABCD");
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("On engine: T3 Code is not running");
+  });
+
+  it("asks for an update first on a runner from before it, and sends it nothing", async () => {
+    const { board, machine, net, link } = await setup();
+    net.rewrite = async (path, res) => {
+      if (path !== "/machine/descriptor") return res;
+      const descriptor = (await res.json()) as { capabilities: string[] };
+      return Response.json({ ...descriptor, capabilities: descriptor.capabilities.filter((c) => c !== "t3Connect") });
+    };
+    await link(true);
+    net.sent.length = 0;
+    const res = await connect(board, machine.id, "cli-token");
+    expect(res.status).toBe(409);
+    expect(await res.text()).toContain(
+      "engine runs a version that can't connect its T3 Code from here; update it first",
+    );
+    expect(net.sent.some((r) => r.path === "/machine/t3/connect")).toBe(false);
   });
 });

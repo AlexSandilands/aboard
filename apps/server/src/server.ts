@@ -51,6 +51,11 @@ export async function startServer(config: Config): Promise<RunningServer> {
       if (input.t3Token !== undefined) hosted.syncT3Token();
       return result;
     };
+    const setT3Access = ctx.services.settings.setT3Access.bind(ctx.services.settings);
+    ctx.services.settings.setT3Access = (access) => {
+      setT3Access(access);
+      hosted.syncT3Token();
+    };
   }
   const app = createApp(ctx);
 

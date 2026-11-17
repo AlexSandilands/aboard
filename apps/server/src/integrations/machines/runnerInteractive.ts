@@ -2,11 +2,16 @@ import { join } from "node:path";
 import {
   BRAND,
   type AgentHarness,
+  ConnectMachineT3Input,
   MachineSessionRequest,
   MachineT3Request,
   taskLabel,
   taskNumberValue,
+  type ConnectMachineT3Result,
   type MachineSessionResult,
+  type MachineT3Status,
+  type T3Access,
+  type T3IntegrationStatus,
 } from "@repo/contracts";
 import { createWorktree } from "../../autopilot/worktrees.ts";
 import { AppError } from "../../errors.ts";
@@ -21,6 +26,13 @@ import { messageOf } from "../util.ts";
 
 export interface RunnerInteractive {
   t3(request: unknown): Promise<unknown>;
+  /** This machine's own T3 Code, as `/machine/status` reports it. */
+  t3Status(): MachineT3Status;
+  /**
+   * Connects this machine's T3 Code from a pairing link or token the board passed on (`POST /machine/t3/connect`).
+   * Refused on a runner a board hosts, which takes that board's connection.
+   */
+  connectT3(request: unknown): Promise<ConnectMachineT3Result>;
   session(request: unknown): Promise<MachineSessionResult>;
   /**
    * The tmux session the board opened for a session that links itself (Codex picks its own id), by its harness and
@@ -35,9 +47,20 @@ const SELF_LINK_WINDOW_MS = 60 * 60_000;
 /** The branch prefix of a session's worktree, as on a board (integrations/sessionLaunch.ts). */
 const SESSION_BRANCH_PREFIX = `${BRAND.id}/`;
 
+/** What `/machine/status` says of a T3 Code, from its integration's status and what the stored token allows. */
+export function machineT3Status(status: T3IntegrationStatus, tokenSet: boolean, access: T3Access): MachineT3Status {
+  if (!status.detected) return { state: "not-running", detail: null };
+  if (!tokenSet) return { state: "not-connected", detail: null };
+  if (status.liveStatus === "error") return { state: "error", detail: status.error };
+  // Not polled yet counts as working: the poll runs every 20 seconds on a runner, and an error shows then.
+  return { state: access === "read-only" ? "read-only" : "connected", detail: null };
+}
+
 export function createRunnerInteractive(deps: {
   services: () => Services;
-  t3: Pick<T3Integration, "launchOptions" | "startThread" | "launchTaskThread" | "sendToThread">;
+  t3: Pick<T3Integration, "launchOptions" | "startThread" | "launchTaskThread" | "sendToThread" | "status" | "connect">;
+  /** Set on a runner a board hosts: it uses that board's T3 Code connection, which overwrites its own. */
+  hosted?: boolean;
   runGit: RunGit;
   /** Where this runner keeps worktrees; sessions' go in its `sessions` folder, as on a board. */
   worktreesDir: string;
@@ -61,6 +84,11 @@ export function createRunnerInteractive(deps: {
       throw new AppError("CONFLICT", `${label} isn't held by this machine`);
     }
     return s.tasks.summary(taskId);
+  };
+
+  const t3Status = (): MachineT3Status => {
+    const settings = deps.services().settings;
+    return machineT3Status(deps.t3.status(), settings.t3Token() !== null, settings.t3Access());
   };
 
   return {
@@ -93,6 +121,21 @@ export function createRunnerInteractive(deps: {
           return { sent: true };
         }
       }
+    },
+
+    t3Status,
+
+    async connectT3(raw) {
+      const { value } = ConnectMachineT3Input.parse(raw);
+      if (deps.hosted) {
+        const name = deps.machine().name;
+        throw new AppError(
+          "CONFLICT",
+          `${name} runs tasks inside ${BRAND.name} there, which shares its T3 Code connection: connect T3 Code in ${BRAND.name}'s Settings on ${name}.`,
+        );
+      }
+      const result = await deps.t3.connect(value);
+      return { t3: t3Status(), warning: result.warning ?? null };
     },
 
     async session(raw) {
