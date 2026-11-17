@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   ApiErrorBody,
   MACHINE_JOBS_PATH,
@@ -18,7 +19,7 @@ import {
   type TaskSummary,
 } from "@repo/contracts";
 import { readRunnerOptions } from "../../autopilot/runnerOptions.ts";
-import type { Runner, RunnerRequest, RunPatch } from "../../autopilot/types.ts";
+import type { Runner, RunnerRequest, RunnerResult, RunPatch } from "../../autopilot/types.ts";
 import { defaultBranchOf } from "../../autopilot/worktrees.ts";
 import { AppError } from "../../errors.ts";
 import type { Services } from "../../services/types.ts";
@@ -48,6 +49,9 @@ const RETRY_MAX_MS = 30_000;
 const RUN_GRACE_MS = 15 * 60_000;
 const COMMAND_GRACE_MS = 5 * 60_000;
 
+/** A machine stayed silent past a job's grace period. */
+class MachineUnreachableError extends Error {}
+
 export interface RemoteWork {
   /** The machine holding a task, or null when the board holds it. */
   holder(taskId: string | null | undefined): { id: string; name: string } | null;
@@ -70,8 +74,22 @@ export interface RemoteWork {
   script(request: ScriptRequest): Promise<ScriptResult> | null;
   /** Reads a page of the transcript of a session that ran on a connected machine; null when it ran here. */
   transcript(ref: AgentSessionRef, offset: number): Promise<TranscriptRead> | null;
-  /** Sends the board's settings to a machine when they differ from what it was last sent. */
+  /**
+   * Reads again the job a run sent to a machine before the board restarted (its id is the run's), applying what it
+   * recorded from the start, until it ends: GET only, since a POST of an id the machine forgot would start a second
+   * agent. The machine is asked again while it can't be reached, until RUN_GRACE_MS from this board's start. Never
+   * throws: how the job ended is the answer.
+   */
+  reattach(machineId: string, runId: string, onUpdate: (patch: RunPatch) => void): Promise<JobEnding>;
+  /** Tells a machine the board has a job's outcome, so it may forget it. Never throws. */
+  forgetJob(machineId: string, jobId: string): void;
+  /** Sends the board's settings to a machine when they differ from what it was last sent, or what it says it has. */
   syncSettings(machineId: string): Promise<void>;
+  /**
+   * What a machine says, with its log, it has of the board's settings: the revision it last took (null for none), or
+   * undefined from a version that doesn't say. One that has another is sent them again.
+   */
+  observeSettings(machineId: string, revision: string | null | undefined): void;
   /**
    * Copies a task's pasted images to a machine, so the paths in its prompts resolve there. Never throws. `again`
    * sends them whatever was sent before: after a hand-over, since the machine drops a task's images with its copy.
@@ -88,6 +106,16 @@ export interface RemoteWork {
   ): Promise<string | null>;
 }
 
+/** How a job the board re-attached to ended (`RemoteWork.reattach`). */
+export type JobEnding =
+  | { kind: "done"; result: RunnerResult }
+  | { kind: "failed"; error: string }
+  /** The machine has no such job and never ran it: it never got the request. */
+  | { kind: "never_started" }
+  /** The machine has no such job and can't say whether it ran it (a version from before it could). */
+  | { kind: "unknown" }
+  | { kind: "unreachable"; error: string };
+
 export function createRemoteWork(deps: {
   services: () => Services;
   machines: Pick<MachinesIntegration, "request" | "can">;
@@ -98,6 +126,8 @@ export function createRemoteWork(deps: {
 }): RemoteWork {
   const log = deps.log ?? console;
   const now = deps.now ?? Date.now;
+  /** When this board started: a re-attach's grace period counts from it, since its machine routes come up after. */
+  const bootedAt = now();
   const sleep =
     deps.sleep ??
     ((ms: number) =>
@@ -107,6 +137,11 @@ export function createRemoteWork(deps: {
   const services = () => deps.services();
   /** Per machine, the settings last sent, so they go only when they change. */
   const sentSettings = new Map<string, string>();
+  /**
+   * Per machine that reports one, the revision of the board's settings it has: what it last said with its log, or
+   * what it was sent since. Absent for a machine that doesn't say (an older version).
+   */
+  const heldSettings = new Map<string, string | null>();
   /**
    * Images a machine has, as `<machine>:<image>`, so the send before each run of one hold skips them. Only good for
    * as long as the machine holds the task: a hand-over sends them all again.
@@ -172,31 +207,21 @@ export function createRemoteWork(deps: {
   };
 
   /**
-   * Starts a job on a machine and reads it to its end. A machine that can't be reached is asked again until it has
-   * been silent for `graceMs`: the job goes on there meanwhile, however long it has been going, so a link that drops
-   * late in a long run costs nothing. One that restarted has forgotten the job, which fails.
+   * How a job is asked about: one request, tried again while the machine can't be reached until it has been silent
+   * for `graceMs` (counted from `since` until it first answers), which then throws `MachineUnreachableError`. An answer
+   * that isn't a job's state throws.
    */
-  async function runJob(
-    machine: { id: string; name: string },
-    job: MachineJobRequest,
-    graceMs: number,
-    onUpdate: (patch: Record<string, unknown>) => void = () => {},
-  ): Promise<unknown> {
-    // Said before anything is sent: a runner from before work on a machine would only answer 404.
-    if (deps.machines.can(machine.id, "runs") === false) {
-      throw new Error(`${machine.name} runs a version that can't run things for a task; update it first`);
-    }
-    let lastAnswer = now();
+  const jobAsker = (machine: { id: string; name: string }, graceMs: number, since = now()) => {
+    let lastAnswer = since;
     let delay = RETRY_MIN_MS;
-    /** One request, tried again while the machine can't be reached. An answer that isn't a job's state throws. */
-    const ask = async (path: string, init: RequestInit | undefined, timeoutMs: number): Promise<MachineJobState> => {
+    return async (path: string, init: RequestInit | undefined, timeoutMs: number): Promise<MachineJobState> => {
       for (;;) {
         let res: Response;
         try {
           res = await deps.machines.request(machine.id, path, init, { timeoutMs });
         } catch (error) {
           if (now() + delay - lastAnswer > graceMs) {
-            throw new Error(
+            throw new MachineUnreachableError(
               `${machine.name} couldn't be reached, so what became of this is unknown: ${messageOf(error)}`,
               { cause: error },
             );
@@ -211,7 +236,16 @@ export function createRemoteWork(deps: {
         return MachineJobState.parse(await res.json());
       }
     };
-    let state = await ask(MACHINE_JOBS_PATH, json("POST", job), JOB_MARGIN_MS);
+  };
+
+  /** Reads a job from `state` on until it is no longer running, handing on each update once. Answers its last state. */
+  const follow = async (
+    jobId: string,
+    first: MachineJobState,
+    ask: ReturnType<typeof jobAsker>,
+    onUpdate: (patch: Record<string, unknown>) => void,
+  ): Promise<MachineJobState> => {
+    let state = first;
     let after = 0;
     for (;;) {
       for (const { seq, patch } of state.updates) {
@@ -219,40 +253,95 @@ export function createRemoteWork(deps: {
         after = seq;
         onUpdate(patch);
       }
-      if (state.state === "running") {
-        state = await ask(
-          `${machineJobPath(job.id)}?after=${after}&wait=${JOB_WAIT_MS}`,
-          undefined,
-          JOB_WAIT_MS + JOB_MARGIN_MS,
-        );
-        continue;
-      }
-      if (state.state === "unknown") {
-        throw new Error(`${machine.name} restarted while this was going, so it was cut short`);
-      }
-      // The board has the outcome: the machine needn't keep it.
-      void deps.machines.request(machine.id, machineJobPath(job.id), { method: "DELETE" }).catch(() => {});
-      if (state.state === "failed") {
-        if (state.error?.name === "InterpreterMissingError") {
-          throw new InterpreterMissingError(state.error.message.replace(/ not found on PATH$/, ""));
-        }
-        throw reviveJobError(state.error);
-      }
-      return state.result;
+      if (state.state !== "running") return state;
+      state = await ask(
+        `${machineJobPath(jobId)}?after=${after}&wait=${JOB_WAIT_MS}`,
+        undefined,
+        JOB_WAIT_MS + JOB_MARGIN_MS,
+      );
     }
+  };
+
+  const forgetJob: RemoteWork["forgetJob"] = (machineId, jobId) => {
+    void deps.machines.request(machineId, machineJobPath(jobId), { method: "DELETE" }).catch(() => {});
+  };
+
+  /**
+   * Starts a job on a machine and reads it to its end. A machine that can't be reached is asked again until it has
+   * been silent for `graceMs`: the job goes on there meanwhile, however long it has been going, so a link that drops
+   * late in a long run costs nothing. One that restarted has forgotten the job, which fails.
+   */
+  async function runJob(
+    machine: { id: string; name: string },
+    job: MachineJobRequest,
+    graceMs: number,
+    onUpdate: (patch: Record<string, unknown>) => void = () => {},
+  ): Promise<unknown> {
+    // Said before anything is sent: a runner from before work on a machine would only answer 404.
+    if (deps.machines.can(machine.id, "runs") === false) {
+      throw new Error(`${machine.name} runs a version that can't run things for a task; update it first`);
+    }
+    const ask = jobAsker(machine, graceMs);
+    const state = await follow(job.id, await ask(MACHINE_JOBS_PATH, json("POST", job), JOB_MARGIN_MS), ask, onUpdate);
+    if (state.state === "unknown") {
+      throw new Error(`${machine.name} restarted while this was going, so it was cut short`);
+    }
+    // The board has the outcome: the machine needn't keep it.
+    forgetJob(machine.id, job.id);
+    if (state.state === "failed") {
+      if (state.error?.name === "InterpreterMissingError") {
+        throw new InterpreterMissingError(state.error.message.replace(/ not found on PATH$/, ""));
+      }
+      throw reviveJobError(state.error);
+    }
+    return state.result;
   }
+
+  const reattach: RemoteWork["reattach"] = async (machineId, runId, onUpdate) => {
+    const machine = { id: machineId, name: services().machines.get(machineId).name };
+    // Not `can`: right after a start the board hasn't read what the machine can do yet.
+    const ask = jobAsker(machine, RUN_GRACE_MS, bootedAt);
+    let state: MachineJobState;
+    try {
+      state = await follow(
+        runId,
+        await ask(`${machineJobPath(runId)}?after=0`, undefined, JOB_MARGIN_MS),
+        ask,
+        onUpdate,
+      );
+    } catch (error) {
+      return error instanceof MachineUnreachableError
+        ? { kind: "unreachable", error: error.message }
+        : { kind: "failed", error: messageOf(error) };
+    }
+    if (state.state === "done") return { kind: "done", result: (state.result ?? { result: null }) as RunnerResult };
+    if (state.state === "failed") return { kind: "failed", error: reviveJobError(state.error).message };
+    return state.state === "unknown" && state.started === false ? { kind: "never_started" } : { kind: "unknown" };
+  };
 
   const jobId = (kind: MachineJobKind) => `${kind}-${crypto.randomUUID()}`;
 
   const syncSettings: RemoteWork["syncSettings"] = async (machineId) => {
     const settings = machineSettingsOf(services().settings.get());
+    // Of what is sent, not of what the machine ends up with: it keeps its own CLI paths and skips what it can't read.
+    const revision = createHash("sha256").update(JSON.stringify(settings)).digest("base64url").slice(0, 16);
     // With the version the machine was last seen on: one that was updated since (or reinstalled) is sent them again,
     // whatever it was sent before.
     const text = `${services().machines.get(machineId).version ?? ""}\n${JSON.stringify(settings)}`;
-    if (sentSettings.get(machineId) === text) return;
-    const res = await deps.machines.request(machineId, MACHINE_SETTINGS_PATH, json("PUT", { settings }));
+    // Also when a machine that says what it has has something else: its database was replaced at the same version.
+    const lost = heldSettings.has(machineId) && heldSettings.get(machineId) !== revision;
+    if (sentSettings.get(machineId) === text && !lost) return;
+    const res = await deps.machines.request(machineId, MACHINE_SETTINGS_PATH, json("PUT", { settings, revision }));
     // A machine from before this (a 404) works by its own settings until it is updated, which changes its version.
-    if (res.ok || res.status === 404) sentSettings.set(machineId, text);
+    if (res.ok || res.status === 404) {
+      sentSettings.set(machineId, text);
+      if (heldSettings.has(machineId)) heldSettings.set(machineId, revision);
+    }
+  };
+
+  const observeSettings: RemoteWork["observeSettings"] = (machineId, revision) => {
+    if (revision === undefined) heldSettings.delete(machineId);
+    else heldSettings.set(machineId, revision);
   };
 
   const unpushed: RemoteWork["unpushed"] = async (taskId, machineName, also = []) => {
@@ -471,7 +560,13 @@ export function createRemoteWork(deps: {
       })();
     },
 
+    reattach,
+
+    forgetJob,
+
     syncSettings,
+
+    observeSettings,
 
     sendImages,
 

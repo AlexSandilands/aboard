@@ -707,17 +707,16 @@ that, and for what the board starts by hand, the board decides and sends the wor
 **Jobs.** `POST /machine/jobs` takes `{id, kind, taskId, params}` and answers at once; the work goes on in the
 background (`integrations/machines/jobs.ts`). The board reads `GET /machine/jobs/:id?after=<seq>&wait=<ms>`, held
 open up to 8 seconds while nothing is new, until the job is `done` or `failed`, then deletes it. The same id sent
-twice starts one job. Jobs are in memory:
+twice starts one job. Jobs are in memory, and a run's outcome is also in the runner's record of the run (below):
 
-- A runner that restarted answers `unknown`, and the board fails the run with "<machine> restarted while this was
-  going". That is today's behaviour for a board's own restart; there is still no cancel.
+- A runner that restarted while a job was going answers that it was cut short, and the board fails the run with
+  "<machine> restarted while this was going". There is still no cancel.
 - A machine the board can't reach is asked again (2 seconds, doubling to 30) until it has been silent for 15
   minutes (5 for a command or a script), counted from its last answer and not from when the job began: a link that
   drops late in a long run costs nothing. The job goes on there meanwhile, and what the agent does to the task
   arrives through the log either way. The run's own timeout is kept on the machine, which stops the agent.
-- A board that restarts mid-run fails its run as it does a local one, and flags it: the job on the machine finishes
-  unobserved. A Review PRs or Fix PRs run, which a board otherwise redoes after a restart, is not redone for a held
-  task, since a second agent would work on the same branch beside the first.
+- A board that restarts mid-run reads the job again ([after a restart](#after-a-restart)) rather than failing the
+  run. It is never redone: a second agent would work on the same branch beside the first.
 - A machine that never said it can do this (no `runs` among its capabilities: a runner from before it) is refused
   before anything is sent, with "update it first". The board's own review watchdog keeps looking after such a
   machine's tasks.
@@ -727,6 +726,51 @@ twice starts one job. Jobs are in memory:
 | `run`    | A headless agent run: the `RunnerRequest` the board's runner would have taken                      |
 | `shell`  | A custom automation's command, in the machine's clone of the project                               |
 | `script` | A custom automation's script, the same way                                                         |
+
+#### After a restart
+
+`recover()` leaves a run that was going on a machine (its task held there, `running`, not a nudge into the board's
+own T3) running, with the detail "Re-attaching to <machine> after a board restart", and the server hands those to
+`Integrations.reattach` (`integrations/machines/reattach.ts`) once it is up. A queued run was never sent, and fails
+and is flagged as before. Each run's job is read again by the run's id with `GET /machine/jobs/:id?after=0`, never a
+`POST`: a POST of an id the machine forgot would start a second agent. Everything the job recorded is applied again
+from the start, and a machine that can't be reached is asked again as above, for 15 minutes counted from the board's
+start, since its machine routes come up after `recover()`.
+
+A job that is gone from the runner's memory (the runner restarted or updated since, or the 6 hours a finished job is
+kept are out) is answered from the runner's record of the run (`autopilot.adopted`, the row `runnerWork` keeps under
+the board's id):
+
+| On the runner                                    | It answers                                   | The board's run                                       |
+| ------------------------------------------------ | -------------------------------------------- | ----------------------------------------------------- |
+| The job, going or ended                          | The job                                      | Ends as below                                         |
+| A finished record, no job                        | `done` or `failed`, from the record          | Ends as below                                         |
+| A record its own restart failed (or still going) | `failed`: "<machine> restarted while this run was going, so it was cut short" | Failed and flagged |
+| No record                                        | `unknown` with `started: false`              | Nothing ran: retired as a hand retry, no flag         |
+| (an older runner) nothing                        | a plain `unknown`                            | Failed and flagged: it may have run                   |
+
+A run that never started is retired (`autopilot.retireUnstarted`, key `retried:<id>:<key>`), so the engine starts the
+work again; unless a restart already cut the same work short, when it is flagged, as `recover` does. A machine that
+stays unreachable past the grace period fails the run and flags it.
+
+Once a job's end is read (`done` or `failed`) the board reads that machine's log until it has no more, tried again for
+up to 15 minutes, and only then judges the run: the agent's move out of Planned reaches the board through the log, and
+a job that ended while the board was off would otherwise be judged against the board's stale copy of the task. Then
+the run ends through `autopilot.finish` and the engine's `runEnded` listener, and the job is deleted on the machine.
+
+The automation's `act`, which would have judged the answer, is gone after a restart, so each automation says how a
+re-attached run that ended well ends (`afterRestart` on `Automation`):
+
+| `afterRestart`  | Automations                                        | A job that ended well                                    |
+| --------------- | -------------------------------------------------- | -------------------------------------------------------- |
+| a function      | Start planned                                      | Succeeded, or failed and flagged if the task is still in Planned |
+| `finish`        | A custom automation that starts an agent           | Succeeded, with what the job recorded                    |
+| `flag` (default)| Everything else                                    | Failed and flagged: "It finished on <machine>, but what it answered wasn't acted on" |
+
+A job that failed fails the run and flags it, whatever the automation. In practice only Start planned lands here:
+a machine that runs Autopilot runs every other automation on the tasks it holds itself
+([Autopilot on the machine](#autopilot-on-the-machine)), and Start planned hands the task over as it starts. The
+errors of a restart start with "The board restarted", so they don't count toward an automation's auto-pause.
 
 **Runs.** The board's runner is wrapped (`remoteWork.runner`): a request whose task is held goes to its machine,
 anything else (a task the board holds, a run with no task, a nudge into a T3 thread) runs here. On the machine
@@ -753,7 +797,11 @@ machine reads too.
 works by (`MACHINE_SETTING_KEYS`): auto-review, the round limit, the board reviewer and its budget, the built-in
 review skill, the operation models, tiers and profiles, which providers are on, and ticket systems. They go with
 `PUT /machine/settings` before a hand-over and a run, and on the next poll after they change or after the machine
-turns up on another version (an update, a reinstall). Where each CLI is
+turns up on another version (an update, a reinstall). Each send carries a `revision` (a hash of what was sent),
+which the runner keeps in `runner_state` and reports with every answer to the poll (`ChangesResponse.settingsRevision`):
+a machine that reports another one, or none (its database was replaced at the same version), is sent them again on
+the next round. The revision is of what was sent, not of what the machine ended up with, which differs by design. A
+runner that reports none at all (an older one) is sent them only when they change or its version does. Where each CLI is
 (`cliPath`) stays the machine's own, and a review skill kept in a file on the board isn't sent. A board's Autopilot
 agent defaults (budget, timeout) are resolved on the board and travel in the run's options.
 
@@ -1131,8 +1179,13 @@ result line. Setting the board's own CLI path to `/bin/false` keeps the board fr
   it; under the board's ids in the ordinary tables, the tools and services are the ones a board runs.
 - **A job the board reads, not a request it holds open.** A run takes an hour and the link may drop in between; a
   job that outlives the request, read in short polls, survives that, and the same polling client already exists.
-- **Jobs in memory.** A runner's restart ends its agents anyway, so a stored job would only be a record of work that
-  is gone. The board fails the run with the reason, as it does its own after a restart.
+- **Jobs in memory, outcomes in the run's record.** A runner's restart ends its agents anyway, so a stored job would
+  only be a record of work that is gone. What a board that restarted needs, how a run ended, the runner already keeps
+  in the run it adopted, so a job gone from memory is answered from there.
+- **A re-attached run ends by its automation's `afterRestart`, not by its `act`.** The action's code that would have
+  judged the answer is gone with the process, and can't be entered again: the candidate isn't stored, and the guards
+  at the top of `act` would refuse a run already going. Redoing the work (a `retry` mode) was for Review PRs and Fix
+  PRs, which a board no longer sends to a machine that runs Autopilot.
 - **The board's settings are sent, not asked for.** Rules run on the machine while the board is away (a move to
   Review opens a round), so the machine needs them beforehand; asking the board at that moment would not work.
 - **Review rounds in the state, usage beside it.** Rounds are edited from both sides, so they travel both ways with
@@ -1252,8 +1305,9 @@ result line. Setting the board's own CLI path to `/bin/false` keeps the board fr
 | `apps/server/src/integrations/machines/checkouts.ts` | A runner's clones of the board's projects                  |
 | `apps/server/src/mcp/runnerTools.ts`    | The tools on a runner: what runs here, what is passed on, what is refused |
 | `packages/contracts/src/machineJobs.ts` | Jobs, the settings, transcript and image requests                    |
-| `apps/server/src/integrations/machines/remoteWork.ts` | The board's side: sending runs, commands and scripts, settings, images, the unpushed check, transcripts |
-| `apps/server/src/integrations/machines/runnerWork.ts` | The runner's side: what each job kind does, and taking the board's settings |
+| `apps/server/src/integrations/machines/remoteWork.ts` | The board's side: sending runs, commands and scripts, reading a run's job again after a restart, settings, images, the unpushed check, transcripts |
+| `apps/server/src/integrations/machines/runnerWork.ts` | The runner's side: what each job kind does, answering a job gone from memory from its record, and taking the board's settings |
+| `apps/server/src/integrations/machines/reattach.ts` | After a board restart: reading a run's job again on its machine and ending the run by how it ended |
 | `apps/server/src/integrations/machines/runnerInteractive.ts` | The runner's side of interactive work: `POST /machine/t3` on its own T3 Code, connecting it and its state (`machineT3Status`), `POST /machine/sessions` and the terminals waiting for a session to link itself (`terminalFor`) |
 | `apps/server/src/integrations/machines/remoteT3.ts` | The board's T3 Code with a held task's threads sent to its machine (`withMachineThreads`) |
 | `apps/server/src/integrations/remoteTerminal.ts` | A session on a machine: ssh route, tmux script, quoting, preflight (tested) |

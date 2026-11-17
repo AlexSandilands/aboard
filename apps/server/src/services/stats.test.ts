@@ -401,7 +401,7 @@ describe("stats.weekly", () => {
     })!;
     s.autopilot.start(stranded.id);
     clock(at(14, 11));
-    expect(s.autopilot.recover()).toBe(1);
+    expect(s.autopilot.recover().ended).toBe(1);
 
     expect(await values("friction.stalls.stale")).toMatchObject({ values: [0, 0, 1, 2], total: 3 });
     expect(await values("friction.stalls.waiting")).toMatchObject({ values: [0, 0, 0, 2], total: 2 });

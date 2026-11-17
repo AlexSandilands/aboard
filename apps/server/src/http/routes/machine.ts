@@ -187,6 +187,7 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
         ...copies.changes(query.after, query.epoch),
         requests: bridge.take(),
         autopilot: { revision: services.runnerAutopilot.revision(), paused: services.autopilot.status().paused },
+        settingsRevision: copies.settingsRevision(),
       });
       let changes = read();
       if (changes.entries.length === 0 && changes.requests.length === 0 && query.wait > 0) {
@@ -222,7 +223,7 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
     `${MACHINE_JOBS_PATH}/:id`,
     handle(async (c) => {
       const { after, wait } = parseQuery(c, MachineJobQuery);
-      return c.json(await jobs.read(idParam(c), after, wait));
+      return c.json(await work.read(idParam(c), after, wait));
     }),
   );
   app.delete(
@@ -259,7 +260,9 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
   app.put(
     MACHINE_SETTINGS_PATH,
     handle(async (c) => {
-      work.applySettings((await parseBody(c, MachineSettingsInput)).settings);
+      const { settings, revision } = await parseBody(c, MachineSettingsInput);
+      work.applySettings(settings);
+      if (revision !== undefined) copies.setSettingsRevision(revision);
       return noContent(c);
     }),
   );
