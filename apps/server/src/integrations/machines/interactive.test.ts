@@ -233,6 +233,32 @@ describe("terminals for sessions on a machine", () => {
     expect(((await command.json()) as { command: string }).command).toContain("--fork-session");
   });
 
+  it("name the board's machine when they can't open there, so the web can offer a T3 Code thread", async () => {
+    const { board, runner, task, machine, sync } = await withTerminal("no-tmux\nchecked\n");
+    const res = await board.request(`/api/tasks/${task.id}/sessions`, {
+      method: "POST",
+      json: { harness: "claude-code", mode: "work", prompt: "Go", model: null, workspace: { mode: "current" } },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { details: { t3: "offer", machineId: machine.id } } });
+
+    const added = runner.services.links.add(
+      task.id,
+      {
+        agentSession: {
+          harness: "claude-code",
+          sessionId: "0b9b8f9e-2a43-4c55-9d3a-6f2c1e7d8a90",
+          cwd: "/data/worktrees/app/1-abcd",
+          machine: { id: runner.instanceId, name: "engine" },
+        },
+      },
+      "autopilot",
+    );
+    await sync();
+    const resume = await board.request(`/api/links/${added.id}/resume`, { method: "POST", json: { mode: "resume" } });
+    expect(await resume.json()).toMatchObject({ error: { details: { t3: "offer", machineId: machine.id } } });
+  });
+
   it("record the tmux session of a session that links itself, so it is found again", async () => {
     const { board, runner, task, spawned, sync } = await withTerminal("checked\n");
     const res = await board.request(`/api/tasks/${task.id}/sessions`, {

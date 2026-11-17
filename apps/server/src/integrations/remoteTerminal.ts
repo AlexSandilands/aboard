@@ -6,6 +6,7 @@ import {
   SshTarget,
   type AgentHarness,
   type MachineRoute,
+  type MachineT3Offer,
 } from "@repo/contracts";
 import { AppError } from "../errors.ts";
 import { addressKind } from "../http/addresses.ts";
@@ -152,11 +153,11 @@ export interface RemotePreflight {
 /**
  * Asks the machine, over a non-interactive ssh, whether the session can open there: tmux, the folder and the CLI,
  * and whether its tmux session is still open. Throws a VALIDATION AppError with what to do when it can't; `details`
- * carries `{ t3: "offer" }`, since a T3 Code thread on the machine needs none of these.
+ * carries `{ t3: "offer", machineId }` (MachineT3Offer), since a T3 Code thread on the machine needs none of these.
  */
 export async function remotePreflight(
   spawn: SpawnSsh,
-  machineName: string,
+  machine: { id: string; name: string },
   route: SshRoute,
   /** `cwd` is left out for a session whose folder the machine is about to make. */
   check: { cwd?: string; harness: AgentHarness; exe: string; tmuxName: string },
@@ -178,7 +179,8 @@ export async function remotePreflight(
   child.onStderr((text) => (err += text));
   const timer = setTimeout(() => child.kill(), 20_000);
   const exit = await child.exit.finally(() => clearTimeout(timer));
-  const offer = { t3: "offer" };
+  const machineName = machine.name;
+  const offer = t3Offer(machine.id);
   const words = new Set(out.split(/\s+/));
   if (!words.has("checked")) {
     throw new AppError(
@@ -207,11 +209,14 @@ export async function remotePreflight(
   return { open: words.has("open") };
 }
 
+/** The `details` of an error a T3 Code thread on that machine would avoid: the web offers one, or to connect it. */
+const t3Offer = (machineId: string): MachineT3Offer => ({ t3: "offer", machineId });
+
 /** Why a machine has no way in for a terminal, as a sentence with what to do. */
-export function noSshRoute(machineName: string): AppError {
+export function noSshRoute(machine: { id: string; name: string }): AppError {
   return new AppError(
     "VALIDATION",
-    `There's no SSH route to ${machineName}: sessions there open over SSH. Add one under Settings → Integrations → Machines (or reach it over Tailscale), or start a T3 Code thread there instead.`,
-    { t3: "offer" },
+    `There's no SSH route to ${machine.name}: sessions there open over SSH. Add one under Settings → Integrations → Machines (or reach it over Tailscale), or start a T3 Code thread there instead.`,
+    t3Offer(machine.id),
   );
 }

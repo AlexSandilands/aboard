@@ -444,7 +444,7 @@ export function createSessionLaunch(deps: {
   ): Promise<StartSessionResult> => {
     const record = deps.services().machines.get(machine.id);
     const route = sshRouteOf(record.routes);
-    if (!route) throw noSshRoute(machine.name);
+    if (!route) throw noSshRoute(machine);
     if (input.attachmentIds?.length) {
       throw new AppError(
         "VALIDATION",
@@ -463,7 +463,7 @@ export function createSessionLaunch(deps: {
     const runId = randomUUID();
     const sessionId = AGENT_HARNESSES[input.harness].presetSessionId ? runId : null;
     const tmuxName = tmuxSessionName(runId);
-    await remotePreflight(deps.spawnSsh ?? spawnSsh, machine.name, route, {
+    await remotePreflight(deps.spawnSsh ?? spawnSsh, machine, route, {
       harness: input.harness,
       exe: ready.exe,
       tmuxName,
