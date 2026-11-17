@@ -1,4 +1,5 @@
 import { AUTOPILOT_REVIEW_PRS, AUTOPILOT_START_PLANNED, type AutopilotRun } from "@repo/contracts";
+import { AUTOPILOT_AUTO_ARCHIVE } from "../../autopilot/automations/autoArchive.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBoardAndRunner } from "../../test/boardAndRunner.ts";
 import type { JobUpdate } from "./jobs.ts";
@@ -100,6 +101,14 @@ describe("a board restart while a machine works on a run", () => {
     // Never sent, so nothing is going on the machine: failed and flagged as before.
     expect(runOf(queued.id)).toMatchObject({ status: "failed", needsAttention: true });
     expect(board.services.autopilot.runsForTask(own.id)[0]).toMatchObject({ status: "failed", needsAttention: true });
+  });
+
+  it("fails a run that started no agent as before: a command or script job goes under an id of its own", async () => {
+    const { going, restart, runOf } = await setup();
+    const run = going(AUTOPILOT_AUTO_ARCHIVE, "archive");
+    const { recovered } = restart();
+    expect(recovered.reattach).toEqual([]);
+    expect(runOf(run.id)).toMatchObject({ status: "failed", needsAttention: true });
   });
 
   it("reads a job still going to its end, with everything it recorded, and judges it once the log is read", async () => {

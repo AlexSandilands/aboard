@@ -1449,8 +1449,15 @@ export function createAutopilotService(
           }
           const onMachine = run.taskId ? repos.holds.get(run.taskId) : null;
           // Sent to the machine as a job under the run's id, which goes on there: the board reads it again rather than
-          // fail it. A queued run was never sent, and a T3 one (a nudge) went to this machine's T3 Code.
-          if (onMachine && run.status === "running" && !run.dryRun && run.runner !== "t3") {
+          // fail it. A queued run was never sent, a T3 one (a nudge) went to this machine's T3 Code, and a command or
+          // script goes as a job of its own id, which the machine can't be asked about by the run's.
+          if (
+            onMachine &&
+            run.status === "running" &&
+            !run.dryRun &&
+            run.runner !== "t3" &&
+            find(run.automation)?.needsAgent === true
+          ) {
             const name = repos.machines.get(onMachine.machineId)?.name ?? "the machine";
             const waiting: AutopilotRun = {
               ...run,
