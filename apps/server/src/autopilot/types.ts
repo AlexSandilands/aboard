@@ -165,6 +165,17 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
    * given those projects, or null. Shown on its row and under Needs you; its check skips them meanwhile.
    */
   needs?: (projects: readonly Project[]) => string | null;
+  /**
+   * How a run of it that a board restart left going on a machine ends once the board reads the job's end again
+   * (remote-machines.md#after-a-restart): its `act`, which would have judged the answer, is gone. `flag` (the default)
+   * records what the job did and flags the run, since what the action does with the answer never happened. `finish`
+   * takes a job that ended well as the run's success, for an action whose agent is the whole of the work; a function
+   * does the same with a judgement of its own, given the job's result. A job that failed fails the run either way.
+   */
+  afterRestart?:
+    | "flag"
+    | "finish"
+    | ((ended: RunnerResult, ctx: { services: Services; run: AutopilotRun }) => ActionResult);
   /** Parses the merged config; it should give every field a default. */
   schema: z.ZodType<C>;
   /** How the UI renders the config form. */

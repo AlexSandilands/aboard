@@ -239,3 +239,53 @@ describe("a run for a task a machine holds", () => {
     PROCESS_TEST_TIMEOUT,
   );
 });
+
+describe("the board's settings sent to a machine", () => {
+  function work() {
+    const puts: Array<{ revision?: string }> = [];
+    const remote = createRemoteWork({
+      services: () =>
+        ({
+          settings: { get: () => ({ autoReview: true, reviewSkill: { source: "builtin" } }) },
+          machines: { get: () => ({ name: "engine", version: "1.0.0" }) },
+        }) as never,
+      machines: {
+        request: (_id, _path, init) => {
+          puts.push(JSON.parse(init?.body as string) as { revision?: string });
+          return Promise.resolve(new Response(null, { status: 204 }));
+        },
+        can: () => true,
+      },
+      runGit: defaultRunGit,
+    });
+    return { remote, puts };
+  }
+
+  it("go again to a machine that says it has none, or others, but not on every round", async () => {
+    const { remote, puts } = work();
+    await remote.syncSettings("m");
+    const revision = puts[0]!.revision!;
+    expect(revision).toMatch(/^[\w-]{16}$/);
+    remote.observeSettings("m", revision);
+    await remote.syncSettings("m");
+    expect(puts).toHaveLength(1);
+    // Its database replaced: it has none.
+    remote.observeSettings("m", null);
+    await remote.syncSettings("m");
+    expect(puts).toHaveLength(2);
+    // Sent, so not again before it next says what it has.
+    await remote.syncSettings("m");
+    expect(puts).toHaveLength(2);
+    remote.observeSettings("m", "something-else");
+    await remote.syncSettings("m");
+    expect(puts).toHaveLength(3);
+  });
+
+  it("go to an older machine, which says nothing of them, only when they changed", async () => {
+    const { remote, puts } = work();
+    remote.observeSettings("m", undefined);
+    await remote.syncSettings("m");
+    await remote.syncSettings("m");
+    expect(puts).toHaveLength(1);
+  });
+});

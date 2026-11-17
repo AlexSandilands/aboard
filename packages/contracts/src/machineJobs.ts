@@ -5,7 +5,8 @@ import { StartT3ThreadInput, T3LaunchWorkspace, T3RuntimeMode } from "./t3Launch
 
 // Work a board has a connected machine do for a task it holds (docs/features/remote-machines.md#work-on-the-machine):
 // a headless run, a custom automation's command or script. The board starts a job and reads it until it ends; the
-// machine keeps it in memory, so a machine that restarts has forgotten it and the board fails the run.
+// machine keeps it in memory, and a run's outcome also in its record of the run, so a board that restarts can read a
+// run's job again (remote-machines.md#after-a-restart).
 
 export const MACHINE_JOBS_PATH = "/machine/jobs";
 /** `GET`: a job's state. `DELETE`: the board has the outcome, so the machine may forget it. */
@@ -49,6 +50,11 @@ export const MachineJobState = z.object({
   updates: z.array(z.object({ seq: z.number().int().positive(), patch: z.record(z.string(), z.unknown()) })),
   result: z.unknown().optional(),
   error: MachineJobError.optional(),
+  /**
+   * With `unknown`: false when the machine never ran a job by that id (it has no record of the run), so nothing was
+   * done. Absent from a machine that can't tell (an older version): it may have run.
+   */
+  started: z.boolean().optional(),
 });
 export type MachineJobState = z.infer<typeof MachineJobState>;
 
@@ -60,7 +66,14 @@ export const MachineJobQuery = z.object({
 export type MachineJobQuery = z.infer<typeof MachineJobQuery>;
 
 /** `PUT /machine/settings`: the board's settings a machine works by, as the board has them. Unknown keys are dropped. */
-export const MachineSettingsInput = z.object({ settings: z.record(z.string(), z.unknown()) });
+export const MachineSettingsInput = z.object({
+  settings: z.record(z.string(), z.unknown()),
+  /**
+   * Names what was sent, for the machine to report back with its log (`ChangesResponse.settingsRevision`), so a
+   * machine that lost them (its database replaced) is sent them again. Absent from an older board.
+   */
+  revision: z.string().optional(),
+});
 export type MachineSettingsInput = z.infer<typeof MachineSettingsInput>;
 
 /** `POST /machine/transcript`: a session that ran on the machine, by its id and the folder it ran in. */

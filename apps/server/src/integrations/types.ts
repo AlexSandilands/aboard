@@ -49,6 +49,7 @@ import type {
   TerminalInfo,
 } from "@repo/contracts";
 import type { DigestStart } from "../autopilot/digest.ts";
+import type { AutopilotRecovery } from "../services/autopilot.ts";
 import type { RunToolsContext } from "../mcp/runTools.ts";
 import type { PrAgentHints } from "./gitHost.ts";
 import type { MachinesIntegration } from "./machines/index.ts";
@@ -109,6 +110,11 @@ export interface Integrations {
   readonly autopilotSync: AutopilotSync;
   /** A board's work on its machines: runs, commands and transcripts for the tasks they hold. */
   readonly remoteWork: RemoteWork;
+  /**
+   * Reads again the jobs of the runs a restart left going on machines (`AutopilotService.recover`'s `reattach`) and
+   * ends each run by how its job ended. Resolves once all have ended; never throws.
+   */
+  reattach(runs: AutopilotRecovery["reattach"]): Promise<void>;
   /** A page of the transcript of a session on this machine, for the board a runner serves. */
   readSessionTranscript(ref: { sessionId: string; cwd: string }, offset: number): Promise<TranscriptRead>;
   /** Starts background discovery/pollers. */

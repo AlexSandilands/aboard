@@ -87,8 +87,9 @@ export async function startServer(config: Config): Promise<RunningServer> {
 
   const address = server.address();
   runtime.port = typeof address === "object" && address ? address.port : runtime.port;
-  // Runs a previous process left going can't be finished; flag them whether or not Autopilot runs now.
-  ctx.services.autopilot.recover();
+  // Runs a previous process left going can't be finished; flag them whether or not Autopilot runs now. Those going on
+  // a machine are read again there instead (remote-machines.md#after-a-restart).
+  const recovered = ctx.services.autopilot.recover();
   ctx.services.attachments.sweep();
   // The trash keeps deleted tasks for the retention setting; past it they go for good, checked now and hourly.
   const purgeTrash = () => {
@@ -108,6 +109,7 @@ export async function startServer(config: Config): Promise<RunningServer> {
   ctx.integrations.resumeImports();
   // Not a poller: it is how a task a machine holds stays the board's, so it runs whether or not the pollers do.
   if (runtime.role !== "runner") ctx.integrations.machineSync.start();
+  void ctx.integrations.reattach(recovered.reattach);
   const url = `http://${runtime.host}:${runtime.port}`;
   writeServerFile(runtime.homeDir, url);
   // Not awaited: the board is up whether or not its runner starts, which says why it didn't in Settings.
