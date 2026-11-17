@@ -1,5 +1,6 @@
 import {
   AutopilotRun,
+  BOARD_RESTARTED_ERROR,
   UpdateSettingsInput,
   taskLabel,
   type AppSettings,
@@ -86,6 +87,12 @@ const ScriptParams = z.object({
 export interface RunnerWork {
   /** Starts a job the board sent. Throws VALIDATION for one this version can't do, CONFLICT for a task not held here. */
   start(request: MachineJobRequest): MachineJobState;
+  /**
+   * A job's state, `after` an update and waiting up to `wait` ms as `MachineJobs.read`. A run's job this machine no
+   * longer has in memory (it restarted, or forgot it) is answered from its record of the run: how it ended, or that
+   * it never came (`started: false`).
+   */
+  read(id: string, after: number, wait: number): Promise<MachineJobState>;
   /** Takes the board's settings as this machine's own, keeping where its own CLIs are. */
   applySettings(settings: Record<string, unknown>): void;
 }
@@ -162,6 +169,41 @@ export function createRunnerWork(deps: {
 
   const handlers: Record<string, JobHandler> = { run, shell, script };
 
+  /** A run's job as its record here tells it, for one no longer in memory. */
+  const fromRecord = (id: string, after: number): MachineJobState => {
+    const s = deps.services();
+    const row = s.autopilot.adopted(id);
+    if (!row) return { id, state: "unknown", updates: [], started: false };
+    const patch: RunPatch = {
+      runner: row.runner,
+      sessionId: row.sessionId,
+      threadUrl: row.threadUrl,
+      worktreePath: row.worktreePath,
+      costUsd: row.costUsd,
+      detail: row.detail,
+      exitCode: row.exitCode,
+      model: row.model,
+    };
+    // Everything it recorded, as one update the board applies as it would the job's own.
+    const updates = after < 1 ? [{ seq: 1, patch: patch as Record<string, unknown> }] : [];
+    if (row.status === "succeeded") {
+      return { id, state: "done", updates, result: { ...patch, result: null } };
+    }
+    // Still going in the record, with no job: this machine restarted before its `recover` caught up with it.
+    const cutShort = row.status !== "failed" || (row.error ?? "").startsWith(BOARD_RESTARTED_ERROR);
+    const name = s.settings.get().machineName;
+    return {
+      id,
+      state: "failed",
+      updates,
+      error: {
+        message: cutShort
+          ? `${name} restarted while this run was going, so it was cut short`
+          : (row.error ?? "The run failed on the machine"),
+      },
+    };
+  };
+
   return {
     start(request) {
       const handler = handlers[request.kind];
@@ -179,6 +221,11 @@ export function createRunnerWork(deps: {
         throw new AppError("CONFLICT", `${label} isn't held by this machine, so nothing runs for it here`);
       }
       return deps.jobs.start(request, handler);
+    },
+
+    async read(id, after, wait) {
+      const state = await deps.jobs.read(id, after, wait);
+      return state.state === "unknown" ? fromRecord(id, after) : state;
     },
 
     applySettings(settings) {

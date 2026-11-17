@@ -42,8 +42,13 @@ const ENTRIES_PER_READ = 200;
 const EDIT_MEMORY_MS = 7 * 24 * 60 * 60 * 1000;
 /** Who wrote what a hand-over brings: the board. */
 const BOARD_ACTOR = "board";
+/** Where a runner keeps the revision of the board's settings it last took. */
+const SETTINGS_REVISION_KEY = "settings_revision";
 
 export interface WorkingCopiesService {
+  /** On a runner: the revision of the board's settings it last took (`PUT /machine/settings`); null when it never did. */
+  settingsRevision(): string | null;
+  setSettingsRevision(revision: string | null): void;
   /** What a task row is on this runner; null on a board, or for a task this database doesn't have. */
   role(taskId: string): WorkingCopyRole | null;
   /** The tasks this runner holds (not the ones it only references). */
@@ -436,6 +441,11 @@ export function createWorkingCopiesService(
       return { head: copies.head() };
     },
 
+    settingsRevision: () => repos.workingCopies.state(SETTINGS_REVISION_KEY),
+    setSettingsRevision(revision) {
+      if (revision === null) repos.workingCopies.deleteState(SETTINGS_REVISION_KEY);
+      else repos.workingCopies.setState(SETTINGS_REVISION_KEY, revision);
+    },
     changes(after, boardEpoch) {
       const own = epoch();
       const from = boardEpoch === own ? after : 0;

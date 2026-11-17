@@ -53,7 +53,7 @@ export interface MachineSyncDeps {
   services: () => Services;
   machines: Pick<MachinesIntegration, "request" | "list">;
   /** What a machine needs before it works on a task: the board's settings, and the task's images. */
-  work?: Pick<RemoteWork, "syncSettings" | "sendImages" | "unpushed">;
+  work?: Pick<RemoteWork, "syncSettings" | "observeSettings" | "sendImages" | "unpushed">;
   /** Sends a machine the board's Autopilot when it changed, so it runs the tasks it holds by it. */
   autopilot?: {
     sync(machineId: string): Promise<void>;
@@ -246,6 +246,8 @@ export function createMachineSync(deps: MachineSyncDeps): MachineSync {
     if (!res.ok) throw new AppError("CONFLICT", await refusal(res, services().machines.get(machineId).name));
     const changes = ChangesResponse.parse(await res.json());
     deps.autopilot?.observe(machineId, changes.autopilot);
+    // The next round sends the settings again if the machine has lost them.
+    deps.work?.observeSettings(machineId, changes.settingsRevision);
     const madeThere = changes.entries.some((entry) => entry.kind === "created");
     const result = services().holds.apply(machineId, changes, madeThere ? await projectsByRemote() : undefined);
     // Said once per entry: the loop comes back to it until the board can read it.

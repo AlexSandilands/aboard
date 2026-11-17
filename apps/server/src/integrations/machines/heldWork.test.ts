@@ -496,8 +496,28 @@ describe("the board's settings on a machine", () => {
   });
 });
 
+describe("the board's settings after a machine's are reset", () => {
+  it("are sent again though its version is the same", async () => {
+    const { runner, net, sync } = await setup();
+    const puts = () => net.sent.filter((r) => r.path === "/machine/settings" && r.method === "PUT").length;
+    await sync();
+    expect(runner.services.settings.get()).toMatchObject({ autoReview: true, headlessReviewEnabled: true });
+    // Its database replaced (or its settings put back by hand) without an update: nothing the board sees changes.
+    runner.services.settings.update({ autoReview: false, headlessReviewEnabled: false });
+    runner.services.workingCopies.setSettingsRevision(null);
+    await sync();
+    await sync();
+    expect(runner.services.settings.get()).toMatchObject({ autoReview: true, headlessReviewEnabled: true });
+    // Settled: it isn't sent them on every round.
+    const sent = puts();
+    await sync();
+    await sync();
+    expect(puts()).toBe(sent);
+  });
+});
+
 describe("a board restart while a machine works", () => {
-  it("flags the run instead of redoing it: the agent on the machine goes on", async () => {
+  it("leaves the run to be read again on the machine instead of redoing it: the agent there goes on", async () => {
     const { board, task } = await setup();
     const run = board.services.autopilot.record({
       automation: AUTOPILOT_REVIEW_PRS,
@@ -505,11 +525,12 @@ describe("a board restart while a machine works", () => {
       dryRun: false,
     })!;
     board.services.autopilot.start(run.id);
-    expect(board.services.autopilot.recover()).toBe(1);
+    const recovered = board.services.autopilot.recover();
+    expect(recovered.ended).toBe(0);
+    expect(recovered.reattach.map((r) => r.run.id)).toEqual([run.id]);
 
     const [after] = board.services.autopilot.runsForTask(task.id);
-    expect(after).toMatchObject({ status: "failed", needsAttention: true, dedupeKey: "review:pr:abc" });
-    expect(after!.error).toContain("It ran on engine, where its agent may still be working");
+    expect(after).toMatchObject({ status: "running", needsAttention: false, dedupeKey: "review:pr:abc" });
   });
 });
 

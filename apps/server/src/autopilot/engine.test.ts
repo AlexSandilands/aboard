@@ -795,7 +795,7 @@ describe("failures and attention", () => {
     it("are failed and retried once: key retired, no flag, the work free for the engine", () => {
       const { s, task } = setup();
       const run = strand(s, task, "k");
-      expect(s.autopilot.recover()).toBe(1);
+      expect(s.autopilot.recover().ended).toBe(1);
       expect(s.autopilot.runsForTask(task.id)).toMatchObject([
         {
           status: "failed",
@@ -809,7 +809,7 @@ describe("failures and attention", () => {
         s.tasks.detail(task.id).events.find((e) => e.type === "autopilot_run" && e.payload.status === "retried"),
       ).toMatchObject({ actor: "autopilot", payload: { reason: "restart" } });
       expect(s.autopilot.status().active).toEqual([]);
-      expect(s.autopilot.recover()).toBe(0);
+      expect(s.autopilot.recover().ended).toBe(0);
       // The key is free again, so the engine acts on the work once more.
       expect(strand(s, task, "k").dedupeKey).toBe("k");
     });
@@ -819,7 +819,7 @@ describe("failures and attention", () => {
       strand(s, task, "k");
       s.autopilot.recover();
       const again = strand(s, task, "k");
-      expect(s.autopilot.recover()).toBe(1);
+      expect(s.autopilot.recover().ended).toBe(1);
       expect(s.autopilot.runsForTask(task.id)[0]).toMatchObject({
         id: again.id,
         status: "failed",
@@ -849,7 +849,7 @@ describe("failures and attention", () => {
       const { s, task } = setup();
       const a = strand(s, task, "a");
       const b = strand(s, task, "b");
-      expect(s.autopilot.recover()).toBe(2);
+      expect(s.autopilot.recover().ended).toBe(2);
       expect(s.autopilot.runsForTask(task.id)).toMatchObject([
         { dedupeKey: `retried:${b.id}:b`, needsAttention: false },
         { dedupeKey: `retried:${a.id}:a`, needsAttention: false },

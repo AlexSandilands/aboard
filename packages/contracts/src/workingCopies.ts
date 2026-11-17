@@ -437,6 +437,11 @@ export const ChangesResponse = z.object({
    * it is paused. Absent from a runner from before Autopilot ran on machines.
    */
   autopilot: z.object({ revision: z.string().nullable(), paused: z.boolean() }).optional(),
+  /**
+   * The revision of the board's settings the runner last took (`PUT /machine/settings`); null when it has none. Absent
+   * from a runner from before it kept one.
+   */
+  settingsRevision: z.string().nullable().optional(),
 });
 export type ChangesResponse = z.infer<typeof ChangesResponse>;
 
