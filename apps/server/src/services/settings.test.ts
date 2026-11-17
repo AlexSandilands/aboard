@@ -264,3 +264,21 @@ describe("machine name", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("what the T3 token allows", () => {
+  it("is kept beside the token and cleared when the token changes", () => {
+    const h = createTestHarness();
+    const settings = h.services.settings;
+    expect(settings.t3Access()).toBeNull();
+    settings.update({ t3Token: "first" });
+    settings.setT3Access("read-only");
+    // Saving the same token again changes nothing it allows.
+    settings.update({ t3Token: "first" });
+    expect(settings.t3Access()).toBe("read-only");
+    settings.update({ t3Token: "second" });
+    expect(settings.t3Access()).toBeNull();
+    settings.setT3Access("operate");
+    settings.update({ t3Token: null });
+    expect(settings.t3Access()).toBeNull();
+  });
+});

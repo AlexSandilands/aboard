@@ -1,6 +1,7 @@
 import { hostname } from "node:os";
 import {
   HostedRunnerSetting,
+  T3Access,
   AGENT_HARNESSES,
   type AgentHarness,
   CliModel,
@@ -37,6 +38,8 @@ import type { SettingsService } from "./types.ts";
 
 /** Whether this board hosts a runner for another board (hostedRunner.ts). This machine's, so never exported. */
 const HOSTED_RUNNER_KEY = "hostedRunner";
+/** What the stored T3 token allows, known only when it came from a pairing link. This machine's, like the token. */
+const T3_ACCESS_KEY = "t3Access";
 
 type StoredSettings = Omit<AppSettings, "t3TokenSet" | "machineName" | "machineNameIsDefault"> & {
   t3Token: string | null;
@@ -358,7 +361,12 @@ export function createSettingsService(core: Core): SettingsService {
         if (input.githubPolling !== undefined) repos.settings.set("githubPolling", input.githubPolling);
         if (input.t3LinkTarget !== undefined) repos.settings.set("t3LinkTarget", input.t3LinkTarget);
         if (input.agentT3Threads !== undefined) repos.settings.set("agentT3Threads", input.agentT3Threads);
-        if (input.t3Token !== undefined) repos.settings.set("t3Token", blankToNull(input.t3Token));
+        if (input.t3Token !== undefined) {
+          const token = blankToNull(input.t3Token);
+          // What the old token allowed says nothing about a new one.
+          if (token !== load().t3Token) repos.settings.delete(T3_ACCESS_KEY);
+          repos.settings.set("t3Token", token);
+        }
         if (input.autoReview !== undefined) repos.settings.set("autoReview", input.autoReview);
         if (input.reviewSkill !== undefined) repos.settings.set("reviewSkill", input.reviewSkill);
         if (input.planSkill !== undefined) repos.settings.set("planSkill", input.planSkill);
@@ -436,6 +444,12 @@ export function createSettingsService(core: Core): SettingsService {
       return get();
     },
     t3Token: () => load().t3Token,
+    t3Access: () => T3Access.catch(null).parse(repos.settings.get(T3_ACCESS_KEY) ?? null),
+    setT3Access: (access) =>
+      core.write(() => {
+        if (access === null) repos.settings.delete(T3_ACCESS_KEY);
+        else repos.settings.set(T3_ACCESS_KEY, access);
+      }),
     hostedRunner: () =>
       HostedRunnerSetting.catch({ enabled: false, bind: "loopback" }).parse(
         repos.settings.get(HOSTED_RUNNER_KEY) ?? {},

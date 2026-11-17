@@ -21,6 +21,7 @@ import {
   MACHINE_SETTINGS_PATH,
   MACHINE_TRANSCRIPT_PATH,
   MACHINE_T3_PATH,
+  MACHINE_T3_CONNECT_PATH,
   MACHINE_SESSIONS_PATH,
   MAX_ATTACHMENT_BYTES,
   MACHINE_AUTOPILOT_PATH,
@@ -38,7 +39,7 @@ import {
   type MachineCapability,
   type MachineDescriptor,
   type MachineSession,
-  type MachineStatus,
+  type MachineStatusInput,
   type PairMachineResult,
 } from "@repo/contracts";
 import type { Hono } from "hono";
@@ -61,6 +62,8 @@ const CAPABILITIES: MachineCapability[] = [
   "t3",
   "sessions",
   "autopilot",
+  "t3Connect",
+  "launchTokens",
 ];
 
 /**
@@ -131,7 +134,8 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
         logins: await logins.loginsWithin(STATUS_LOGINS_WAIT_MS),
         update: updater.state(),
         selfUpdate: updater.available(),
-      } satisfies MachineStatus),
+        t3: integrations.runnerHost.interactive.t3Status(),
+      } satisfies MachineStatusInput),
     ),
   );
   // The board asking this runner to move to its version. A runner never updates by itself. The request and its
@@ -275,6 +279,15 @@ export function registerMachineRoutes(app: Hono, { services, integrations, confi
   app.post(
     MACHINE_T3_PATH,
     handle(async (c) => c.json((await integrations.runnerHost.interactive.t3(await c.req.json())) ?? null)),
+  );
+  // The board connecting this machine's own T3 Code. The pairing link or token is this machine's to keep, and the
+  // answer never carries it.
+  app.post(
+    MACHINE_T3_CONNECT_PATH,
+    handle(async (c) => {
+      c.header("cache-control", "no-store");
+      return c.json(await integrations.runnerHost.interactive.connectT3(await c.req.json()));
+    }),
   );
   // The folder and link of a CLI session the board opens here over SSH.
   app.post(

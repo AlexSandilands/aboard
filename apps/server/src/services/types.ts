@@ -2,6 +2,7 @@ import type { UsageService } from "./usage.ts";
 import type { RepoPrReviewsService } from "./repoPrReviews.ts";
 import type {
   HostedRunnerSetting,
+  T3Access,
   AgentSessionSnapshot,
   AppSettings,
   BoardSnapshot,
@@ -371,6 +372,12 @@ export interface SettingsService {
   update(input: UpdateSettingsInput): AppSettings;
   /** The stored T3 token (server-side only). */
   t3Token(): string | null;
+  /**
+   * What the stored token allows: `operate` starts threads, `read-only` only reads them; null when not known (a token
+   * pasted as it is). Cleared whenever the token changes.
+   */
+  t3Access(): T3Access;
+  setT3Access(access: T3Access): void;
   /** "Let other machines run tasks here" (hostedRunner.ts); not part of AppSettings, and never backed up. */
   hostedRunner(): HostedRunnerSetting;
   setHostedRunner(value: HostedRunnerSetting): void;

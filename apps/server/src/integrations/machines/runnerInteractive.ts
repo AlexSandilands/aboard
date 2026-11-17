@@ -2,17 +2,22 @@ import { join } from "node:path";
 import {
   BRAND,
   type AgentHarness,
+  ConnectMachineT3Input,
   MachineSessionRequest,
   MachineT3Request,
   taskLabel,
   taskNumberValue,
+  type ConnectMachineT3Result,
   type MachineSessionResult,
+  type MachineT3Status,
+  type T3Access,
+  type T3IntegrationStatus,
 } from "@repo/contracts";
 import { createWorktree } from "../../autopilot/worktrees.ts";
 import { AppError } from "../../errors.ts";
 import type { Services } from "../../services/types.ts";
 import type { RunGit } from "../backup.ts";
-import type { T3Integration } from "../t3.ts";
+import { isT3TokenRefusal, type T3Integration } from "../t3.ts";
 import { messageOf } from "../util.ts";
 
 // Interactive work a board starts on a task this runner holds (docs/features/remote-machines.md#interactive-work):
@@ -21,23 +26,72 @@ import { messageOf } from "../util.ts";
 
 export interface RunnerInteractive {
   t3(request: unknown): Promise<unknown>;
+  /** This machine's own T3 Code, as `/machine/status` reports it. */
+  t3Status(): MachineT3Status;
+  /**
+   * Connects this machine's T3 Code from a pairing link or token the board passed on (`POST /machine/t3/connect`).
+   * Refused on a runner a board hosts, which takes that board's connection.
+   */
+  connectT3(request: unknown): Promise<ConnectMachineT3Result>;
   session(request: unknown): Promise<MachineSessionResult>;
   /**
-   * The tmux session the board opened for a session that links itself (Codex picks its own id), by its harness and
-   * folder, so the link it makes here records it. Null when the board opened none there lately.
+   * The tmux session the board opened for a session that links itself (Codex picks its own id), so the link it makes
+   * here records it. By the launch token its prompt gave it when it passes one: single use, for the same task and CLI.
+   * Without one, guessed only when exactly one terminal for that CLI and folder is waiting, opened lately, and the
+   * session isn't linked here yet. Null otherwise: opening the link then resumes the session by its id.
    */
-  tmuxFor(harness: AgentHarness, cwd: string): string | null;
+  terminalFor(session: SelfLinkingSession): string | null;
 }
 
-/** How long a session that links itself has to do it, for its link to get the tmux session's name. */
-const SELF_LINK_WINDOW_MS = 60 * 60_000;
+/** A session linking itself on this machine, as the `link` tool has it. */
+export interface SelfLinkingSession {
+  taskId: string;
+  harness: AgentHarness;
+  sessionId: string;
+  cwd: string;
+  launch?: string | undefined;
+}
+
+/** How long a terminal waits for the session the board gave its launch token to link itself. */
+const LAUNCH_TOKEN_WINDOW_MS = 60 * 60_000;
+/**
+ * How long a terminal may be guessed for a session that links itself without a token. A session the board starts does
+ * it with its first message, so a guess any later is more likely to be another session's.
+ */
+const SELF_LINK_GUESS_MS = 10 * 60_000;
+
+/** A terminal the board opened here for a session that links itself, until the session does. */
+interface AwaitingTerminal {
+  tmux: string;
+  at: number;
+  taskId: string;
+  harness: AgentHarness;
+  cwd: string;
+  launch: string | null;
+}
 
 /** The branch prefix of a session's worktree, as on a board (integrations/sessionLaunch.ts). */
 const SESSION_BRANCH_PREFIX = `${BRAND.id}/`;
 
+/** What `/machine/status` says of a T3 Code, from its integration's status and what the stored token allows. */
+export function machineT3Status(status: T3IntegrationStatus, tokenSet: boolean, access: T3Access): MachineT3Status {
+  if (!status.detected) return { state: "not-running", detail: null };
+  if (!tokenSet) return { state: "not-connected", detail: null };
+  if (status.liveStatus === "error") {
+    // Only a refused token needs a new pairing link; T3 Code not answering (restarting, say) is said as it is.
+    return isT3TokenRefusal(status.error)
+      ? { state: "error", detail: status.error }
+      : { state: "not-running", detail: status.error };
+  }
+  // Not polled yet counts as working: the poll runs every 20 seconds on a runner, and an error shows then.
+  return { state: access === "read-only" ? "read-only" : "connected", detail: null };
+}
+
 export function createRunnerInteractive(deps: {
   services: () => Services;
-  t3: Pick<T3Integration, "launchOptions" | "startThread" | "launchTaskThread" | "sendToThread">;
+  t3: Pick<T3Integration, "launchOptions" | "startThread" | "launchTaskThread" | "sendToThread" | "status" | "connect">;
+  /** Set on a runner a board hosts: it uses that board's T3 Code connection, which overwrites its own. */
+  hosted?: boolean;
   runGit: RunGit;
   /** Where this runner keeps worktrees; sessions' go in its `sessions` folder, as on a board. */
   worktreesDir: string;
@@ -46,8 +100,22 @@ export function createRunnerInteractive(deps: {
   now?: () => number;
 }): RunnerInteractive {
   const now = deps.now ?? Date.now;
-  /** Sessions the board opened here that will link themselves: `<harness> <folder>` to their tmux session. */
-  const awaiting = new Map<string, { tmux: string; at: number }>();
+  /** Terminals the board opened here for sessions that will link themselves, by their tmux session. */
+  const awaiting = new Map<string, AwaitingTerminal>();
+  const forgetStale = () => {
+    for (const [tmux, terminal] of awaiting) if (now() - terminal.at > LAUNCH_TOKEN_WINDOW_MS) awaiting.delete(tmux);
+  };
+  /** Whether this machine has a link for the session already: it linked itself before, from its own terminal. */
+  const linkedAlready = (harness: AgentHarness, sessionId: string): boolean =>
+    deps
+      .services()
+      .links.listByKind("agent_session")
+      .some(
+        (l) =>
+          l.kind === "agent_session" &&
+          l.ref.harness === harness &&
+          l.ref.sessionId.toLowerCase() === sessionId.toLowerCase(),
+      );
   /** The task, checked to be one this machine holds: anything else is the board's to act on. */
   const held = (taskId: string) => {
     const s = deps.services();
@@ -61,6 +129,11 @@ export function createRunnerInteractive(deps: {
       throw new AppError("CONFLICT", `${label} isn't held by this machine`);
     }
     return s.tasks.summary(taskId);
+  };
+
+  const t3Status = (): MachineT3Status => {
+    const settings = deps.services().settings;
+    return machineT3Status(deps.t3.status(), settings.t3Token() !== null, settings.t3Access());
   };
 
   return {
@@ -93,6 +166,21 @@ export function createRunnerInteractive(deps: {
           return { sent: true };
         }
       }
+    },
+
+    t3Status,
+
+    async connectT3(raw) {
+      const { value } = ConnectMachineT3Input.parse(raw);
+      if (deps.hosted) {
+        const name = deps.machine().name;
+        throw new AppError(
+          "CONFLICT",
+          `${name} runs tasks inside ${BRAND.name} there, which shares its T3 Code connection: connect T3 Code in ${BRAND.name}'s Settings on ${name}.`,
+        );
+      }
+      const result = await deps.t3.connect(value);
+      return { t3: t3Status(), warning: result.warning ?? null };
     },
 
     async session(raw) {
@@ -140,17 +228,37 @@ export function createRunnerInteractive(deps: {
             request.actor,
           ).id
         : null;
-      if (!request.sessionId && request.tmux)
-        awaiting.set(`${request.harness} ${cwd}`, { tmux: request.tmux, at: now() });
+      if (!request.sessionId && request.tmux) {
+        awaiting.set(request.tmux, {
+          tmux: request.tmux,
+          at: now(),
+          taskId: task.id,
+          harness: request.harness,
+          cwd,
+          launch: request.launch ?? null,
+        });
+      }
       return { cwd, branch, linkId };
     },
 
-    tmuxFor(harness, cwd) {
-      const key = `${harness} ${cwd}`;
-      const found = awaiting.get(key);
-      if (!found) return null;
-      awaiting.delete(key);
-      return now() - found.at <= SELF_LINK_WINDOW_MS ? found.tmux : null;
+    terminalFor(session) {
+      forgetStale();
+      if (session.launch) {
+        // Exact: the token the board gave this terminal, for the task and CLI it opened it for, used once.
+        const found = [...awaiting.values()].find((t) => t.launch === session.launch);
+        if (!found || found.taskId !== session.taskId || found.harness !== session.harness) return null;
+        awaiting.delete(found.tmux);
+        return found.tmux;
+      }
+      // The marked fallback, for a session that passed no token (a board or prompt from before them): only when it
+      // can't be the wrong terminal, and never for a session linking itself again.
+      const candidates = [...awaiting.values()].filter((t) => t.harness === session.harness && t.cwd === session.cwd);
+      const only = candidates.length === 1 ? candidates[0]! : null;
+      if (!only || now() - only.at > SELF_LINK_GUESS_MS || linkedAlready(session.harness, session.sessionId)) {
+        return null;
+      }
+      awaiting.delete(only.tmux);
+      return only.tmux;
     },
   };
 }

@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
+  ApiErrorBody,
+  ConnectMachineT3Result,
+  MACHINE_T3_CONNECT_PATH,
+  type ConnectMachineT3Input,
+  type ConnectMachineT3Response,
   BRAND,
   MACHINE_INSTALL_STEPS,
   MACHINE_PROTOCOL_VERSION,
@@ -66,6 +71,11 @@ export interface MachinesIntegration {
   repair(id: string, code: string): Promise<Machine>;
   /** Asks the machine to update to this board's version; `now` doesn't wait for its runs. */
   requestUpdate(id: string, now: boolean): Promise<Machine>;
+  /**
+   * Connects the machine's own T3 Code with a pairing link or token made there, then reads its status again. The
+   * value is passed on and kept nowhere here.
+   */
+  connectT3(id: string, value: string): Promise<ConnectMachineT3Response>;
   /**
    * A request to a connected machine's API, over the route in use. Throws CONFLICT unless the machine is connected:
    * nothing is exchanged with one that is unreachable, unpaired or on another protocol version.
@@ -143,6 +153,7 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
       logins: record.logins,
       runsInFlight: entry?.status?.runsInFlight ?? null,
       selfUpdate: entry?.status?.selfUpdate ?? null,
+      t3: entry?.status?.t3 ?? null,
       updatesWithApp: entry?.updatesWithApp ?? false,
       update: update && update.state !== "idle" ? update : null,
       versionState: order === null ? null : order < 0 ? "older" : order > 0 ? "newer" : "same",
@@ -280,6 +291,19 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
     const url = entry.link.url();
     if (!url) throw new AppError("CONFLICT", `${machine.name} can't be reached right now.`);
     return url;
+  };
+
+  const request: MachinesIntegration["request"] = async (id, path, init, options) => {
+    const { machine, entry } = entryOf(id);
+    const state = entry.link.state();
+    if (state.connection !== "connected") {
+      throw new AppError("CONFLICT", `${machine.name} isn't connected. ${state.error ?? ""}`.trim());
+    }
+    try {
+      return await deps.client.request(targetOf(machine, reachableUrl(machine, entry)), path, init, options);
+    } catch (error) {
+      throw asAppError(error);
+    }
   };
 
   // Prefixes are stored in capitals; a caller that didn't come through the API's schema may not have them so.
@@ -537,20 +561,53 @@ export function createMachinesIntegration(deps: MachinesDeps): MachinesIntegrati
       return compose(machines().get(id));
     },
 
+    async connectT3(id, value) {
+      const { machine, entry } = entryOf(id);
+      if (entry.capabilities && !entry.capabilities.includes("t3Connect")) {
+        throw new AppError(
+          "CONFLICT",
+          `${machine.name} runs a version that can't connect its T3 Code from here; update it first`,
+        );
+      }
+      let res: Response;
+      try {
+        // Long enough for the machine to exchange a pairing link with its T3 Code and check the token.
+        res = await request(
+          id,
+          MACHINE_T3_CONNECT_PATH,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ value } satisfies ConnectMachineT3Input),
+          },
+          { timeoutMs: 30_000 },
+        );
+      } catch (error) {
+        // Never the request itself in a message: it carries the link.
+        throw error instanceof AppError ? error : new AppError("CONFLICT", `${machine.name}: ${messageOf(error)}`);
+      }
+      const body: unknown = await res.json().catch(() => null);
+      if (!res.ok) {
+        const refused = ApiErrorBody.safeParse(body);
+        if (refused.success) {
+          throw new AppError(refused.data.error.code, `On ${machine.name}: ${refused.data.error.message}`);
+        }
+        throw new AppError(
+          "CONFLICT",
+          res.status === 404
+            ? `${machine.name} runs a version that can't connect its T3 Code from here; update it first`
+            : `${machine.name} answered ${res.status}`,
+        );
+      }
+      const result = ConnectMachineT3Result.safeParse(body);
+      // The badge shows the status as the machine reports it now, not after the next half-minute check.
+      await entry.link.check();
+      return { machine: compose(machines().get(id)), warning: result.success ? result.data.warning : null };
+    },
+
     can: (id, capability) => live.get(id)?.capabilities?.includes(capability) ?? null,
 
-    async request(id, path, init, options) {
-      const { machine, entry } = entryOf(id);
-      const state = entry.link.state();
-      if (state.connection !== "connected") {
-        throw new AppError("CONFLICT", `${machine.name} isn't connected. ${state.error ?? ""}`.trim());
-      }
-      try {
-        return await deps.client.request(targetOf(machine, reachableUrl(machine, entry)), path, init, options);
-      } catch (error) {
-        throw asAppError(error);
-      }
-    },
+    request,
 
     start() {
       if (started) return;

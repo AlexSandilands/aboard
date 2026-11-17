@@ -238,7 +238,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
     always: deps.config.role === "runner",
     machine: (instanceId) => {
       const record = deps.services().machines.byInstance(instanceId);
-      return record ? { name: record.name, routes: record.routes } : null;
+      return record ? { id: record.id, name: record.name, routes: record.routes } : null;
     },
     ...(overrides.machines?.spawn ? { spawnSsh: overrides.machines.spawn } : {}),
     ...(overrides.processProbe ? { probe: overrides.processProbe } : {}),
@@ -498,6 +498,8 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       runGit: overrides.autopilotGit ?? defaultRunGit,
       worktreesDir: deps.config.worktreesDir,
       machine: thisMachine,
+      ...(deps.config.hostedBy ? { hosted: true } : {}),
+      ...(overrides.now ? { now: () => overrides.now!().getTime() } : {}),
     }),
   };
   let started = false;

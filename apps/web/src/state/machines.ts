@@ -3,6 +3,7 @@ import {
   HOSTED_RUNNER_PATH,
   type ConnectMachineInput,
   type ConnectMachineResult,
+  type ConnectMachineT3Response,
   type HostedRunnerPairingCode,
   type HostedRunnerStatus,
   type UpdateHostedRunnerInput,
@@ -11,6 +12,7 @@ import {
   type UpdateMachineInput,
 } from "@repo/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { create } from "zustand";
 import { toastManager } from "~/components/ui/toast";
 import { ApiError, api } from "~/lib/api";
 import { queryKeys } from "./queries";
@@ -87,6 +89,26 @@ export function useRequestMachineUpdate() {
     onError: failed("Couldn't ask the machine to update"),
   });
 }
+
+/**
+ * Connects the machine's own T3 Code with a pairing link or token made there. The T3 part shows a failure itself, so
+ * this raises no toast.
+ */
+export function useConnectMachineT3() {
+  return useMutation({
+    mutationFn: ({ id, value }: { id: string; value: string }) =>
+      api<ConnectMachineT3Response>(`/api/machines/${enc(id)}/t3/connect`, { method: "POST", body: { value } }),
+  });
+}
+
+/**
+ * A machine to open and bring into view on the Machines page, set by whatever sends the user there to do something
+ * about it (connecting its T3 Code). The page clears it once shown.
+ */
+export const useMachineFocus = create<{ id: string | null; focus: (id: string | null) => void }>((set) => ({
+  id: null,
+  focus: (id) => set({ id }),
+}));
 
 // --- This board's own runner, for another board (docs/features/remote-machines.md#a-board-that-is-also-a-runner) ---
 

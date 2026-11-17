@@ -32,7 +32,18 @@ describe("machine descriptor", () => {
       version: BRAND.version,
       protocolVersion: MACHINE_PROTOCOL_VERSION,
       role: "runner",
-      capabilities: ["pairing", "status", "update", "tasks", "runs", "t3", "sessions", "autopilot"],
+      capabilities: [
+        "pairing",
+        "status",
+        "update",
+        "tasks",
+        "runs",
+        "t3",
+        "sessions",
+        "autopilot",
+        "t3Connect",
+        "launchTokens",
+      ],
       paired: false,
     });
   });
@@ -124,6 +135,45 @@ describe("status and updates over the machine API", () => {
     // Its own version is nothing to do.
     const same = await update(bearer(token), { version: BRAND.version });
     expect(await same.json()).toMatchObject({ state: "idle" });
+  });
+});
+
+describe("the machine's own T3 Code over the machine API", () => {
+  it("is reported in the status", async () => {
+    const { remote, pair, bearer } = runner({ integrations: { runnerHost: { logins: { find: () => null } } } });
+    const { token } = await pair();
+    const res = await remote("/machine/status", { headers: bearer(token) });
+    // The harness's T3 home has no runtime file: T3 Code isn't running there.
+    expect(MachineStatus.parse(await res.json()).t3).toEqual({ state: "not-running", detail: null });
+  });
+
+  it("is connected by its board, which gets the state back and never the token", async () => {
+    const { h, remote, pair, bearer } = runner();
+    const connect = (headers: Record<string, string>, json: unknown) =>
+      remote("/machine/t3/connect", { method: "POST", headers, json });
+    expect((await connect({}, { value: "cli-token" })).status).toBe(401);
+    const { token } = await pair();
+    expect((await connect(bearer(token), { value: "  " })).status).toBe(400);
+    const res = await connect(bearer(token), { value: "cli-token" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const text = await res.text();
+    expect(text).not.toContain("cli-token");
+    expect(JSON.parse(text)).toEqual({ t3: { state: "not-running", detail: null }, warning: null });
+    expect(h.services.settings.t3Token()).toBe("cli-token");
+  });
+
+  it("is refused on a runner a board hosts, which shares that board's connection", async () => {
+    const { h, remote, pair, bearer } = runner({ hostedBy: randomUUID() });
+    const { token } = await pair();
+    const res = await remote("/machine/t3/connect", {
+      method: "POST",
+      headers: bearer(token),
+      json: { value: "cli-token" },
+    });
+    expect(res.status).toBe(409);
+    expect(await res.text()).toContain(`connect T3 Code in ${BRAND.name}'s Settings`);
+    expect(h.services.settings.t3Token()).toBeNull();
   });
 });
 

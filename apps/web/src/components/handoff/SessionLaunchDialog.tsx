@@ -26,8 +26,8 @@ import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } fro
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Spinner } from "~/components/ui/spinner";
-import { toastManager } from "~/components/ui/toast";
 import { cn } from "~/lib/utils";
+import { useT3OfferToast } from "~/components/sessions/useT3OfferToast";
 import { useStartSession } from "~/state/mutations";
 import {
   useAgentModels,
@@ -226,6 +226,7 @@ function Composer({
   // The models the CLI lists, for the picker; anything else can still be typed while the scan runs or if it fails.
   const scanned = useAgentModels(true);
   const start = useStartSession({ silent: true });
+  const offerToast = useT3OfferToast();
   // Whether the model shown is the hand-off's own: not when it inherits, nor when its custom model was since deleted
   // and the task's own model stands in.
   const modelSettings = useSettingsSelect(selectModelSettings);
@@ -319,8 +320,8 @@ function Composer({
           // beside the one the command uses.
           onDone();
         },
-        onError: (error) =>
-          toastManager.add({ type: "error", title: "Couldn't start the session", description: error.message }),
+        // Starting a T3 Code thread instead, or connecting the machine's first, closes this dialog.
+        onError: (error) => void offerToast("Couldn't start the session", error, task.id, onDone),
       },
     );
   };

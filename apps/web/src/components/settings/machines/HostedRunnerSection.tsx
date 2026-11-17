@@ -93,7 +93,7 @@ export function HostedRunnerSection() {
       <SettingsRow
         id="integrations.machines.runner"
         title="Let other machines run tasks here"
-        description={`Another board pairs with this machine and runs its tasks here, beside this board's own. Its tasks never appear on this board, and the runner updates with ${BRAND.name}.`}
+        description={`Another board pairs with this machine and runs its tasks here, beside this board's own. Its tasks never appear on this board. The runner updates with ${BRAND.name}, and its T3 Code threads use this board's T3 Code connection.`}
         status={
           <span className="flex min-w-0 items-baseline gap-2">
             <StatusDot tone={line.tone} label={line.label} className="translate-y-[-1px]" />

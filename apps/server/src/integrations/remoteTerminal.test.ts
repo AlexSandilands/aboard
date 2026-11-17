@@ -103,34 +103,36 @@ describe("the command that opens a session on a machine", () => {
   });
 });
 
+const ENGINE = { id: "m1", name: "engine" };
+
 describe("asking the machine first", () => {
   const check = { cwd: "/w/app", harness: "claude-code" as const, exe: "claude", tmuxName: "app-0b9b8f9e2a43" };
 
   it("says whether the session's tmux session is open", async () => {
     const { spawn, calls } = fakeSsh("open\nchecked\n");
-    await expect(remotePreflight(spawn, "engine", { target: "engine", port: null }, check)).resolves.toEqual({
+    await expect(remotePreflight(spawn, ENGINE, { target: "engine", port: null }, check)).resolves.toEqual({
       open: true,
     });
     expect(calls[0]).toContain("BatchMode=yes");
     await expect(
-      remotePreflight(fakeSsh("checked\n").spawn, "engine", { target: "engine", port: null }, check),
+      remotePreflight(fakeSsh("checked\n").spawn, ENGINE, { target: "engine", port: null }, check),
     ).resolves.toEqual({ open: false });
   });
 
   it("says what to install, or how ssh failed, and offers T3 Code", async () => {
     const route = { target: "engine", port: null };
-    await expect(remotePreflight(fakeSsh("no-tmux\nchecked\n").spawn, "engine", route, check)).rejects.toMatchObject({
+    await expect(remotePreflight(fakeSsh("no-tmux\nchecked\n").spawn, ENGINE, route, check)).rejects.toMatchObject({
       message: expect.stringContaining("tmux isn't installed on engine"),
-      details: { t3: "offer" },
+      details: { t3: "offer", machineId: "m1" },
     });
-    await expect(remotePreflight(fakeSsh("no-cli\nchecked\n").spawn, "engine", route, check)).rejects.toThrow(
+    await expect(remotePreflight(fakeSsh("no-cli\nchecked\n").spawn, ENGINE, route, check)).rejects.toThrow(
       "Claude Code (`claude`) isn't on the PATH of a login shell on engine",
     );
-    await expect(remotePreflight(fakeSsh("no-folder\nchecked\n").spawn, "engine", route, check)).rejects.toThrow(
+    await expect(remotePreflight(fakeSsh("no-folder\nchecked\n").spawn, ENGINE, route, check)).rejects.toThrow(
       "no longer exists on engine: /w/app",
     );
     await expect(
-      remotePreflight(fakeSsh("", 255, "me@engine: Permission denied (publickey).").spawn, "engine", route, check),
+      remotePreflight(fakeSsh("", 255, "me@engine: Permission denied (publickey).").spawn, ENGINE, route, check),
     ).rejects.toThrow(/SSH couldn't log in to engine.*a T3 Code thread there doesn't need it/);
   });
 });
@@ -177,11 +179,11 @@ describe.runIf(posix)("the scripts, run against a stand-in tmux", () => {
   it("is open only while the CLI still runs in the tmux session", async () => {
     const route = { target: "engine", port: null };
     const running = machine({ session: true, ended: false });
-    await expect(remotePreflight(running.spawn, "engine", route, check(running.bin))).resolves.toEqual({ open: true });
+    await expect(remotePreflight(running.spawn, ENGINE, route, check(running.bin))).resolves.toEqual({ open: true });
     const ended = machine({ session: true, ended: true });
-    await expect(remotePreflight(ended.spawn, "engine", route, check(ended.bin))).resolves.toEqual({ open: false });
+    await expect(remotePreflight(ended.spawn, ENGINE, route, check(ended.bin))).resolves.toEqual({ open: false });
     const none = machine({ session: false, ended: false });
-    await expect(remotePreflight(none.spawn, "engine", route, check(none.bin))).resolves.toEqual({ open: false });
+    await expect(remotePreflight(none.spawn, ENGINE, route, check(none.bin))).resolves.toEqual({ open: false });
   });
 
   it("ends a tmux session whose CLI has exited before opening it again, and marks it when the CLI exits", () => {
