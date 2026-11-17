@@ -32,7 +32,18 @@ describe("machine descriptor", () => {
       version: BRAND.version,
       protocolVersion: MACHINE_PROTOCOL_VERSION,
       role: "runner",
-      capabilities: ["pairing", "status", "update", "tasks", "runs", "t3", "sessions", "autopilot", "t3Connect"],
+      capabilities: [
+        "pairing",
+        "status",
+        "update",
+        "tasks",
+        "runs",
+        "t3",
+        "sessions",
+        "autopilot",
+        "t3Connect",
+        "launchTokens",
+      ],
       paired: false,
     });
   });
