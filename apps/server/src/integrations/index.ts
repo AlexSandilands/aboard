@@ -488,6 +488,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
       worktreesDir: deps.config.worktreesDir,
       machine: thisMachine,
       ...(deps.config.hostedBy ? { hosted: true } : {}),
+      ...(overrides.now ? { now: () => overrides.now!().getTime() } : {}),
     }),
   };
   let started = false;

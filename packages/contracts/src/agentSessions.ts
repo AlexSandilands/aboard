@@ -93,6 +93,11 @@ export interface HarnessInfo {
   /** Resumes into a new session that starts from this one's history; null when the harness can't. */
   forkArgs: ((sessionId: string) => string[]) | null;
   /**
+   * The same fork, into a session id it is given, so whoever starts it knows the new session's id before it runs;
+   * null when the harness can't be given one.
+   */
+  forkIntoArgs: ((sessionId: string, newId: string) => string[]) | null;
+  /**
    * Whether the CLI takes a session id it is given (`--session-id`), so the board can start a session and link it
    * before it runs. Codex picks its own: a Codex session the board starts is told to link itself (selfLinkLine).
    */
@@ -106,6 +111,8 @@ export const AGENT_HARNESSES: Record<AgentHarness, HarnessInfo> = {
     cli: "claude",
     resumeArgs: (id) => ["--resume", id],
     forkArgs: (id) => ["--resume", id, "--fork-session"],
+    // Claude Code takes `--session-id` with a resume only when it forks (checked on 2.1.325).
+    forkIntoArgs: (id, newId) => ["--resume", id, "--fork-session", "--session-id", newId],
     presetSessionId: true,
   },
   codex: {
@@ -116,6 +123,7 @@ export const AGENT_HARNESSES: Record<AgentHarness, HarnessInfo> = {
     cli: "codex",
     resumeArgs: (id) => ["resume", id],
     forkArgs: null,
+    forkIntoArgs: null,
     presetSessionId: false,
   },
   "copilot-cli": {
@@ -124,14 +132,23 @@ export const AGENT_HARNESSES: Record<AgentHarness, HarnessInfo> = {
     cli: "copilot",
     resumeArgs: (id) => [`--resume=${id}`],
     forkArgs: null,
+    forkIntoArgs: null,
     presetSessionId: true,
   },
 };
 
-/** The command that resumes (or forks) a session, as argv. Throws when the harness can't fork. */
-export function resumeArgv(ref: Pick<AgentSessionRef, "harness" | "sessionId">, mode: ResumeMode): string[] {
+/**
+ * The command that resumes (or forks) a session, as argv. A fork goes into `newId` when given one; pass it only when
+ * the harness can (`forkIntoArgs`). Throws when the harness can't fork.
+ */
+export function resumeArgv(
+  ref: Pick<AgentSessionRef, "harness" | "sessionId">,
+  mode: ResumeMode,
+  newId?: string,
+): string[] {
   const harness = AGENT_HARNESSES[ref.harness];
-  const args = mode === "fork" ? harness.forkArgs?.(ref.sessionId) : harness.resumeArgs(ref.sessionId);
+  const fork = () => (newId ? harness.forkIntoArgs?.(ref.sessionId, newId) : harness.forkArgs?.(ref.sessionId));
+  const args = mode === "fork" ? fork() : harness.resumeArgs(ref.sessionId);
   if (!args) throw new Error(`${harness.label} sessions can't be forked`);
   return [harness.cli, ...args];
 }
@@ -150,13 +167,16 @@ export function selfLinkLine(
   harness: AgentHarness,
   label: string,
   target: "the task" | "the epic" | "every task" = "the task",
+  /** The launch token of the terminal the board opened it in on a machine (LaunchToken), for the link to name it. */
+  launch?: string,
 ): string {
   const info = AGENT_HARNESSES[harness];
   const call = target === "every task" ? "link(task, agentSession: " : "link(agentSession: ";
   return (
     `The board started this ${info.label} session but couldn't link it, as ${info.label} picks its own session id: ` +
     `link it to ${target} yourself first with ${call}{harness: "${harness}", sessionId: $${info.idEnvVar}, ` +
-    `cwd: your working directory}, label: "${label}"), so it can be reopened from the board.`
+    `cwd: your working directory}, label: "${label}"${launch ? `, launch: "${launch}"` : ""}), so it can be ` +
+    "reopened from the board."
   );
 }
 
@@ -165,10 +185,29 @@ export function startedSessionLine(
   harness: AgentHarness | null,
   label: string,
   target: "the task" | "the epic" | "every task" = "the task",
+  launch?: string,
 ): string {
   return harness && !AGENT_HARNESSES[harness].presetSessionId
-    ? selfLinkLine(harness, label, target)
+    ? selfLinkLine(harness, label, target, launch)
     : `The board started this session and already linked it to ${target}; don't link it again.`;
+}
+
+/**
+ * A token the board makes for a terminal it opens on a machine for a session that links itself: the session passes it
+ * to `link` (`launch`), and the machine finds that terminal by it. It names no tmux session; only the board issues it.
+ */
+export const LaunchToken = z.string().regex(/^[a-z0-9]{8,64}$/, "A launch token the board gave");
+
+/**
+ * `prompt` with the launch token put in its self-link call (selfLinkLine), or, when it has no call the board wrote (the
+ * user rewrote it), a sentence after it saying to pass the token.
+ */
+export function withLaunchToken(prompt: string, harness: AgentHarness, launch: string): string {
+  const call = `sessionId: $${AGENT_HARNESSES[harness].idEnvVar}, cwd: your working directory}, label: "`;
+  const at = prompt.indexOf(call);
+  const end = at < 0 ? -1 : prompt.indexOf('")', at + call.length);
+  if (end >= 0) return `${prompt.slice(0, end + 1)}, launch: "${launch}"${prompt.slice(end + 1)}`;
+  return `${prompt}\n\nWhen you link this session, also pass launch: "${launch}" to link: it tells the board which terminal the session runs in.`;
 }
 
 export const canFork = (harness: AgentHarness): boolean => AGENT_HARNESSES[harness].forkArgs !== null;

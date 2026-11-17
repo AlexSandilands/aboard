@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -17,6 +17,7 @@ import {
   planTasksShortPrompt,
   sessionLabel,
   startedSessionLine,
+  withLaunchToken,
   StartPlanningSessionInput as StartPlanningSessionInputSchema,
   StartSessionInput as StartSessionInputSchema,
   taskWindowName,
@@ -120,6 +121,8 @@ export function shortPrompt(
   branch?: string,
   /** Pasted images, pointed at after the text: the full prompt, which also has them, is only on the clipboard. */
   images: readonly LaunchImage[] = [],
+  /** The launch token of a terminal on a machine, for a session that links itself (LaunchToken). */
+  launch?: string,
 ): string {
   const verb =
     mode === "plan"
@@ -143,6 +146,7 @@ export function shortPrompt(
       harness,
       sessionLabel(mode, taskNumberValue(task)),
       mode === "orchestrate" ? "the epic" : "the task",
+      launch,
     ) +
     (mode === "fix"
       ? ` Fix its failing checks, merge conflicts or requested changes, and push to that branch. Never force-push, never push to the default branch and never merge.`
@@ -162,13 +166,14 @@ export function handoffShortPrompt(
   harness: AgentHarness,
   platform: NodeJS.Platform,
   images: readonly LaunchImage[] = [],
+  launch?: string,
 ): string {
   const name = nameArgument(label, platform);
   const text =
     `This session is for the hand-off "${name}" on ${taskLabel(task)} from the ${BRAND.id} task board: call ` +
     `get_task("${task.id}") on the ${BRAND.id} MCP server to read the task, then wait. What to do is in a prompt I ` +
     "will paste next; until it arrives don't start on the task, change any file or move it on the board. " +
-    startedSessionLine(harness, name);
+    startedSessionLine(harness, name, "the task", launch);
   return fitShort(withAttachedImages(text, images), platform);
 }
 
@@ -221,7 +226,7 @@ export function createSessionLaunch(deps: {
   /** Refreshes a new session link's status, so the card shows it without waiting for the poll. */
   linked?: (linkId: string) => void;
   /** The machine holding a task, which makes a session's folder and link there; a board's only. */
-  remote?: () => Pick<RemoteWork, "holder" | "prepareSession">;
+  remote?: () => Pick<RemoteWork, "holder" | "prepareSession" | "can">;
   /** Runs `ssh` to ask a machine whether a session can open there. */
   spawnSsh?: SpawnSsh;
   log?: Logger;
@@ -463,6 +468,12 @@ export function createSessionLaunch(deps: {
     const runId = randomUUID();
     const sessionId = AGENT_HARNESSES[input.harness].presetSessionId ? runId : null;
     const tmuxName = tmuxSessionName(runId);
+    // A session that links itself is told a token for its link call, which the machine finds this terminal by; a
+    // machine from before launch tokens guesses it by the CLI and the folder instead.
+    const launchToken =
+      sessionId === null && deps.remote!().can(machine.id, "launchTokens") === true
+        ? randomBytes(9).toString("hex")
+        : undefined;
     await remotePreflight(deps.spawnSsh ?? spawnSsh, machine, route, {
       harness: input.harness,
       exe: ready.exe,
@@ -475,6 +486,7 @@ export function createSessionLaunch(deps: {
       sessionId,
       label,
       tmux: tmuxName,
+      ...(launchToken ? { launch: launchToken } : {}),
       workspace:
         workspace.mode === "new_worktree" ? { mode: "new_worktree", baseRef: workspace.baseRef } : { mode: "current" },
       actor,
@@ -483,15 +495,15 @@ export function createSessionLaunch(deps: {
       sessionId,
       model: input.model,
       effort,
-      prompt: input.prompt,
+      prompt: launchToken ? withLaunchToken(input.prompt, input.harness, launchToken) : input.prompt,
       cwd: prepared.cwd,
       branch: prepared.branch,
       label,
       windowTask: taskNumberValue(task),
       short: (platform) =>
         input.label
-          ? handoffShortPrompt(input.label, task, input.harness, platform)
-          : shortPrompt(input.mode, task, input.harness, platform),
+          ? handoffShortPrompt(input.label, task, input.harness, platform, [], launchToken)
+          : shortPrompt(input.mode, task, input.harness, platform, undefined, [], launchToken),
       taskIds: [task.id],
       actor,
       remote: {

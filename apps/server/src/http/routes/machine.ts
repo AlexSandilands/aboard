@@ -63,6 +63,7 @@ const CAPABILITIES: MachineCapability[] = [
   "sessions",
   "autopilot",
   "t3Connect",
+  "launchTokens",
 ];
 
 /**

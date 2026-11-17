@@ -7,10 +7,12 @@ import {
   canFork,
   isAbsolutePath,
   isRunningSession,
+  LaunchToken,
   resumeArgv,
   selfLinkLine,
   startedSessionLine,
   TerminalSetting,
+  withLaunchToken,
 } from "./agentSessions.ts";
 import { TaskLink } from "./schemas.ts";
 
@@ -87,6 +89,37 @@ describe("harness table", () => {
       "The board started this session and already linked it to the task; don't link it again.",
     );
     expect(startedSessionLine(null, "Orchestrating #4", "the epic")).toContain("already linked it to the epic");
+  });
+
+  it("forks into a session id it is given only where the CLI takes one", () => {
+    const NEW = "0b9b8f9e-2a43-4c55-9d3a-6f2c1e7d8a90";
+    expect(resumeArgv({ harness: "claude-code", sessionId: ID }, "fork", NEW)).toEqual([
+      "claude",
+      "--resume",
+      ID,
+      "--fork-session",
+      "--session-id",
+      NEW,
+    ]);
+    expect(AGENT_HARNESSES.codex.forkIntoArgs).toBeNull();
+    expect(AGENT_HARNESSES["copilot-cli"].forkIntoArgs).toBeNull();
+  });
+
+  it("puts a launch token into the self-link call, or says to pass it when the prompt has none", () => {
+    const token = "a1b2c3d4e5f6a7b8c9";
+    expect(LaunchToken.safeParse(token).success).toBe(true);
+    expect(LaunchToken.safeParse("app-0b9b8f9e2a43").success).toBe(false);
+    expect(selfLinkLine("codex", "Implementing #4", "the task", token)).toContain(
+      `label: "Implementing #4", launch: "${token}"), so it can be reopened`,
+    );
+    const prompt = `Let's work on #4. ${selfLinkLine("codex", "Implementing #4")} Then read the plan.`;
+    expect(withLaunchToken(prompt, "codex", token)).toBe(
+      `Let's work on #4. ${selfLinkLine("codex", "Implementing #4", "the task", token)} Then read the plan.`,
+    );
+    const rewritten = withLaunchToken("Just fix the bug.", "codex", token);
+    expect(rewritten).toMatch(
+      /^Just fix the bug\.\n\nWhen you link this session, also pass launch: "a1b2c3d4e5f6a7b8c9"/,
+    );
   });
 
   it("refuses to fork a Copilot session", () => {

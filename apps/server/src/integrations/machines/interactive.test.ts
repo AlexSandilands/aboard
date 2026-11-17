@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createBoardAndRunner } from "../../test/boardAndRunner.ts";
 import type { ThreadLink } from "../t3.ts";
 import type { LaunchSpec } from "../terminal.ts";
+import { tmuxSessionName } from "../remoteTerminal.ts";
 import { machineT3Status } from "./runnerInteractive.ts";
 import type { SpawnSsh } from "./ssh.ts";
 
@@ -233,6 +234,55 @@ describe("terminals for sessions on a machine", () => {
     expect(((await command.json()) as { command: string }).command).toContain("--fork-session");
   });
 
+  it("fork into a session id the board picks, and name the fork's tmux session from it", async () => {
+    const { board, runner, task, spawned, sync } = await withTerminal("checked\n");
+    const added = runner.services.links.add(
+      task.id,
+      {
+        agentSession: {
+          harness: "claude-code",
+          sessionId: "0b9b8f9e-2a43-4c55-9d3a-6f2c1e7d8a90",
+          cwd: "/data/worktrees/app/1-abcd",
+          machine: { id: runner.instanceId, name: "engine" },
+        },
+      },
+      "autopilot",
+    );
+    await sync();
+    const res = await board.request(`/api/links/${added.id}/resume`, { method: "POST", json: { mode: "fork" } });
+    expect(await res.json()).toMatchObject({ launched: true });
+    const run = JSON.stringify(spawned.at(-1));
+    const forkId = /--session-id[^0-9a-f]+([0-9a-f-]{36})/.exec(run)![1]!;
+    expect(run).toContain("--fork-session");
+    // The name opening the fork's own link falls back to, once the fork links itself under that id.
+    expect(run).toContain(`new-session -A -s ${tmuxSessionName(forkId)}`);
+  });
+
+  it("send a launch token only to a machine that takes one, and keep today's guess with one that doesn't", async () => {
+    const { board, runner, task, spawned, net, link } = await withTerminal("checked\n");
+    net.rewrite = async (path, res) => {
+      if (path !== "/machine/descriptor") return res;
+      const descriptor = (await res.json()) as { capabilities: string[] };
+      return Response.json({
+        ...descriptor,
+        capabilities: descriptor.capabilities.filter((c) => c !== "launchTokens"),
+      });
+    };
+    await link(true);
+    const res = await board.request(`/api/tasks/${task.id}/sessions`, {
+      method: "POST",
+      json: { harness: "codex", mode: "work", prompt: "Go", model: null, workspace: { mode: "current" } },
+    });
+    const body = (await res.json()) as StartSessionResult;
+    expect(res.status).toBe(201);
+    const run = JSON.stringify(spawned.at(-1));
+    expect(run).not.toContain("launch:");
+    // The machine was sent no token either: the session's link finds its terminal by the CLI and the folder.
+    const tmux = /new-session -A -s ([\w-]+)/.exec(run)![1]!;
+    const session = { taskId: task.id, harness: "codex" as const, sessionId: "1c2d3e4f-2a43-4c55-9d3a-6f2c1e7d8a90" };
+    expect(runner.integrations.runnerHost.interactive.terminalFor({ ...session, cwd: body.cwd })).toBe(tmux);
+  });
+
   it("name the board's machine when they can't open there, so the web can offer a T3 Code thread", async () => {
     const { board, runner, task, machine, sync } = await withTerminal("no-tmux\nchecked\n");
     const res = await board.request(`/api/tasks/${task.id}/sessions`, {
@@ -267,10 +317,19 @@ describe("terminals for sessions on a machine", () => {
     });
     const body = (await res.json()) as StartSessionResult;
     expect(body).toMatchObject({ launched: true, linkId: null });
-    const tmux = /new-session -A -s ([\w-]+)/.exec(JSON.stringify(spawned[0]))![1]!;
-    // What the runner's link tool asks when the Codex session links itself from that folder.
-    expect(runner.integrations.runnerHost.interactive.tmuxFor("codex", body.cwd)).toBe(tmux);
-    expect(runner.integrations.runnerHost.interactive.tmuxFor("codex", body.cwd)).toBeNull();
+    const run = JSON.stringify(spawned[0]);
+    const tmux = /new-session -A -s ([\w-]+)/.exec(run)![1]!;
+    // The prompt carries a token for the session's link call, which the machine finds its terminal by, once.
+    const launch = /launch: \\*"([a-f0-9]{18})/.exec(run)![1]!;
+    const session = {
+      taskId: task.id,
+      harness: "codex" as const,
+      sessionId: "1c2d3e4f-2a43-4c55-9d3a-6f2c1e7d8a90",
+      cwd: body.cwd,
+      launch,
+    };
+    expect(runner.integrations.runnerHost.interactive.terminalFor(session)).toBe(tmux);
+    expect(runner.integrations.runnerHost.interactive.terminalFor(session)).toBeNull();
 
     const linked = runner.services.links.add(
       task.id,
