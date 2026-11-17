@@ -349,8 +349,17 @@ closes or this machine sleeps; opening it again attaches to it (`integrations/re
 - **Asked first.** A BatchMode `ssh` (no prompts, 20 seconds) runs a short script on the machine: is tmux there, the
   folder, the CLI on a login shell's `PATH` (with `~/.local/bin`, `~/bin`, `~/.npm-global/bin`, `/opt/homebrew/bin`
   and `/usr/local/bin` added), and is the session's tmux session open. Each missing piece is a sentence with what to
-  do, offering a T3 Code thread on the machine instead (`details: {t3: "offer"}`); ssh's own failure goes through
-  `sshFailure`. Nothing is made on the machine before this passes.
+  do, offering a T3 Code thread on the machine instead (`details: {t3: "offer", machineId}`, `MachineT3Offer`, which
+  "no SSH route" carries too); ssh's own failure goes through `sshFailure`. Nothing is made on the machine before this
+  passes.
+- **The offer.** The web's error toasts for starting a session ("Couldn't start the session", `SessionLaunchDialog`)
+  and opening one ("Couldn't open the session", `useSessionActions`) read it through `useT3OfferToast`
+  (`t3OfferAction` in `components/sessions/t3Offer.logic.ts`): when that machine's T3 Code is `connected`, **Start a
+  T3 Code thread there** opens the T3 launch dialog, which sends a held task's thread to the machine; in any other
+  state, read-only included, **Connect T3 Code on <machine>** opens Settings → Machines at that machine's T3 part
+  ([remote machines](remote-machines.md#t3-code-on-the-machine)). There is no action once that machine no longer holds
+  the task: a session's link outlives the hold, and a thread for a task the board holds would start in the board's own
+  T3 Code.
 - **The command** is `ssh -t [-p <port>] -- <target> sh -lc '<script>'`. The script puts those folders on `PATH`, checks
   tmux, falls back to `TERM=xterm-256color` when the machine has no terminfo for the terminal here (kitty, Ghostty),
   `cd`s to the folder, ends the tmux session if its CLI has exited, and runs `exec tmux new-session -A -s <name> -c
@@ -362,13 +371,24 @@ closes or this machine sleeps; opening it again attaches to it (`integrations/re
   bash, fish and zsh.
 - **The tmux session's name** is `<brand>-<12 hex of an id>`: the session's id, or for one that picks its own id
   (Codex) the launch's. The machine records it on the link (`ref.tmux`, which only a runner sets): on the link it makes
-  for a board-started session, and, for one that links itself, on that link when it comes from the same harness and
-  folder within the hour (`tmuxFor`). Resume uses it, else the name from the session's id.
+  for a board-started session, and, for one that links itself, on that link (`terminalFor` in `runnerInteractive.ts`).
+  Resume uses it, else the name from the session's id.
+- **A session that links itself** is found by a launch token: the board makes one per terminal (`LaunchToken`), sends
+  it with `POST /machine/sessions` (`launch`), and puts it in the prompt's link call (`selfLinkLine`, or
+  `withLaunchToken` in a prompt the user rewrote). The `link` tool takes it as `agentSession.launch`, and the machine
+  gives the link that terminal: once, and only for the same task and CLI. A machine without the `launchTokens`
+  capability is sent none. A link with no token is matched only as a marked fallback: exactly one terminal waiting for
+  that CLI and folder, opened in the last 10 minutes, for a session id the machine has no link for yet (so a session
+  linking itself again can't take a new one's terminal). Otherwise the link names no terminal, and opening it resumes
+  the session by its id.
 - **The prompt** goes through tmux, whose client refuses a command over 16 KB, so a script over 14,000 characters
   (`REMOTE_SCRIPT_MAX`) starts the session with the short prompt, as an over-long command line here does
   ("The prompt is too long for tmux on the machine.").
 - **Resume** attaches when the CLI still runs in the tmux session, without the 409; a session running outside tmux (a headless run,
-  or one started on the machine) gets the 409 as here. **Fork** gets a tmux session of its own. **Copy resume command**
+  or one started on the machine) gets the 409 as here. **Fork** gets a tmux session of its own: where the CLI can fork
+  into an id it is given (`forkIntoArgs` in `AGENT_HARNESSES`: Claude Code's `--resume <id> --fork-session --session-id
+  <new>`), the board picks the id and names the tmux session from it, which is the name opening the fork's own link
+  falls back to, so nothing is recorded; another CLI's fork gets a random name. **Copy resume command**
   gives the ssh command. Headless runs' sessions work the same: their folder is the run's worktree on the machine.
 - **A new session** (`startOnMachine` in `sessionLaunch.ts`): after the check, `POST /machine/sessions` has the
   machine make a worktree under its data dir from origin's copy of the chosen base, or use its checkout, and link the
@@ -384,9 +404,8 @@ closes or this machine sleeps; opening it again attaches to it (`integrations/re
 - The CLI that runs is the machine's own; the path set in Settings is this machine's.
 
 Not done: bringing back a named Windows Terminal window for a session on a machine (attaching does the same),
-images, and finding a fork again: a fork runs in a tmux session of its own, and if its agent links it, that link names
-no tmux session, so opening it starts another. tmux itself was not run in the tests: the scripts run against a
-stand-in `tmux` that answers as one would.
+images, and finding again the fork of a CLI that can't be given its id. tmux itself was not run in the tests: the
+scripts run against a stand-in `tmux` that answers as one would.
 
 ### Names
 

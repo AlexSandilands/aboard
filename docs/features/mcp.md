@@ -26,7 +26,7 @@ steps current, group large features into epics, link the task's ticket and the T
 | `tools/read.ts`    | `board_overview`, `board_activity`, `list_projects`, `list_templates`, `list_tasks`, `get_task`, `epic_overview`, `get_handoff_prompt` (all read-only) |
 | `tools/tasks.ts`   | `add_to_backlog`, `create_task`, `create_epic`, `move_task`, `close_task`, `update_task`, `add_note`, `request_attention` |
 | `tools/plans.ts`   | `set_plan`, `update_plan`, `add_steps`, `update_step`                                                   |
-| `tools/links.ts`   | `link` (PR URL, ticket key or URL, URL, a T3 thread `{environmentId, threadId}` or bare thread ID; idempotent), `unlink` (a link's URL, ticket key or id) |
+| `tools/links.ts`   | `link` (PR URL, ticket key or URL, URL, a T3 thread `{environmentId, threadId}` or bare thread ID, or the agent's own session, with the `launch` token the board's first message gave it, if any; idempotent), `unlink` (a link's URL, ticket key or id) |
 | `tools/merge.ts`   | `merge_task_pr`: merges a task flagged for auto-merge's PR into the default branch (see [github-prs.md](github-prs.md#merge_task_pr)) |
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
 | `tools/transcripts.ts` | `get_session_transcript`: a condensed, redacted, paged transcript of a Claude Code session linked to the task (read-only; see [agent-sessions.md](agent-sessions.md#transcripts)) |
@@ -44,7 +44,10 @@ On a runner the same tools are served, wrapped by `mcp/runnerTools.ts`: they act
 pass a read of anything else to the board, and refuse a change to anything else
 ([remote machines](remote-machines.md#tools-on-a-machine)). A tool added here needs a place there: a read that the
 board may run for a machine goes in `RUNNER_READ_TOOLS`, one that only makes sense on the board in
-`BOARD_ONLY_TOOLS`; anything else is taken to act on the task its `task` argument names.
+`BOARD_ONLY_TOOLS`; anything else is taken to act on the task its `task` argument names. There, `link` with an
+`agentSession` also records the tmux session the board opened the session in, found by its `launch` token, or by a
+guarded fallback without one ([agent sessions](agent-sessions.md#on-a-machine)). The token appears only in a prompt
+the board writes (`selfLinkLine`), so the shipped skills don't mention it.
 
 `add_to_backlog`, `create_task` and `update_task` take `labels` (`update_task` replaces the list), and
 `list_tasks` filters by any of several `labels`. `board_overview` ends with **Labels in use** and their

@@ -18,8 +18,7 @@ holds, so a chain of tasks goes on while the board is off, and [a board that is 
 runner](#a-board-that-is-also-a-runner): one install, a laptop say, with its own board that another board can run
 tasks on.
 
-Not built yet: connecting a machine's own T3 Code from the board (it is set up on the machine). An image attached on
-the machine isn't sent to the board. What a user does is in the [guide](../guide/remote-machines.md).
+Not built yet: an image attached on the machine isn't sent to the board. What a user does is in the [guide](../guide/remote-machines.md).
 
 ## How it works
 
@@ -196,6 +195,7 @@ What a board says to a runner is under `/machine/`, apart from the board's own A
 | `POST /machine/transcript` | yes   | A page of the transcript of a session that ran on the machine               |
 | `PUT /machine/attachments/:id` | yes | One of a held task's pasted images                                        |
 | `POST /machine/t3`         | yes   | The board acting in the machine's T3 Code for a held task ([below](#t3-code-on-the-machine)) |
+| `POST /machine/t3/connect` | yes   | The board connecting the machine's own T3 Code with a pairing link or token ([below](#connecting-it-from-the-board)) |
 | `POST /machine/sessions`   | yes   | The folder and link of a CLI session the board opens there over ssh ([below](#terminals-on-the-machine)) |
 | `PUT /machine/autopilot`   | yes   | The board's Autopilot, for the machine's own engine ([below](#autopilot-on-the-machine)) |
 | `PUT /machine/references`  | yes   | The tasks held ones point at, as the board has them now                     |
@@ -397,7 +397,8 @@ While a machine is connected the board reads `GET /machine/status` on every chec
     { "name": "git", "state": "logged-out", "detail": "git has no way to push to GitHub. Run `gh auth setup-git` on the machine, or add an SSH key to GitHub." }
   ],
   "update": { "state": "idle", "targetVersion": null, "error": null },
-  "selfUpdate": true
+  "selfUpdate": true,
+  "t3": { "state": "connected", "detail": null }
 }
 ```
 
@@ -415,6 +416,9 @@ Each is `ok`, `logged-out`, `missing` (not on the `PATH`) or `unknown` (the chec
 saying what to run. The git check is about GitHub only, where the board's pull requests are. The checks start
 programs and one may reach for the network, so the status waits at most 4 seconds for them and otherwise answers
 with what was last known (`unknown` the first time); the check carries on for the next read.
+
+`t3` is the machine's own T3 Code ([below](#connecting-it-from-the-board)); a runner from before `t3Connect` leaves
+it out, and a state this board doesn't know drops only that part, as an unknown login does.
 
 ### Updates
 
@@ -914,6 +918,41 @@ these threads (another environment), `refreshLink` leaves them to the machine, a
 task's state like a session's (`taskState`). A thread whose task was taken back can't be messaged: only the machine
 talks to its T3 Code.
 
+#### Connecting it from the board
+
+A runner's T3 Code token was set on the machine alone. Settings → Machines now has a **T3 Code on the machine** part
+in each machine's card: a badge with the state `/machine/status` reports, a sentence saying what to do, and a field
+for a pairing link (or token) made in T3 Code on that machine under Settings → Connections.
+
+| State           | When                                                                           |
+| --------------- | ------------------------------------------------------------------------------ |
+| `connected`     | A token that works and allows starting threads, or isn't known not to         |
+| `read-only`     | A token that works but can't start threads                                     |
+| `not-connected` | No token                                                                       |
+| `not-running`   | T3 Code isn't found on the machine                                             |
+| `error`         | T3 Code refuses the token (expired or revoked); its sentence is in `detail`    |
+
+**Connect** posts to `POST /api/machines/:id/t3/connect`, which `machines.connectT3` sends straight to the machine
+(`POST /machine/t3/connect`, a route of its own: every op on `POST /machine/t3` is for a held task), then reads the
+machine's status again at once, so the badge doesn't wait for the half-minute check. The machine runs its own
+`t3.connect`, which exchanges a pairing link with its T3 Code, and answers its T3 state and any warning (a read-only
+link). The link or token passes through the board and is never stored, logged or returned there; the runner's answer
+is `no-store`. A refusal is the machine's sentence ("On engine: T3 Code is not running"); a runner without the
+`t3Connect` capability is asked to update first, and is sent nothing.
+
+**What a connection allows is kept.** Whether a token can start threads is known only from the pairing exchange's
+scopes, so `t3.connect` stores it beside the token (settings key `t3Access`: `operate`, `read-only`, or none for a
+token pasted as it is), cleared whenever the token changes. That is what lets the status say `read-only`, so the board
+doesn't offer a thread such a connection can't start. Like the token, it belongs to the machine and is never backed up.
+
+**A machine that is itself a board** (a hosted runner, `updatesWithApp`) shares that board's connection:
+`hostedRunner.syncT3Token` copies the board's token and what it allows at start and on every change, so a connect
+from elsewhere would work and then revert. Its runner refuses the connect, and the card says to connect T3 Code in
+that board's Settings instead. This board's own runner says the same under **Let other machines run tasks here**.
+
+A session that can't open in a terminal on the machine offers this too ([agent sessions](agent-sessions.md#on-a-machine)):
+a T3 Code thread there when its T3 Code is connected, else connecting it, which opens this part.
+
 #### Terminals on the machine
 
 A CLI session of a held task, and any session whose link names a machine, opens in a terminal on the board that runs
@@ -922,6 +961,13 @@ A CLI session of a held task, and any session whose link names a machine, opens 
 dir from origin's copy of the base (or use its clone), link the session to its copy with the machine named, and answer
 the folder, branch and link id (`integrations/machines/runnerInteractive.ts`). The board checks over ssh first that
 tmux and the CLI are there, so a machine it can't open on makes no worktree.
+
+A CLI that picks its own session id (Codex) links itself, so the machine can't record the terminal on a link it makes.
+For a machine with the `launchTokens` capability the board adds a `launch` token to the request and to the session's
+prompt; the machine keeps the terminal waiting under it (10 minutes), and the `link` tool on the machine gives that
+terminal to the session that passes the token, once, for the same task and CLI. Without a token it is matched only
+when exactly one terminal is waiting for that CLI and folder and the session isn't linked on the machine yet
+([agent sessions](agent-sessions.md#on-a-machine)).
 
 ### Tools on a machine
 
@@ -1207,7 +1253,7 @@ result line. Setting the board's own CLI path to `/bin/false` keeps the board fr
 | `packages/contracts/src/machineJobs.ts` | Jobs, the settings, transcript and image requests                    |
 | `apps/server/src/integrations/machines/remoteWork.ts` | The board's side: sending runs, commands and scripts, settings, images, the unpushed check, transcripts |
 | `apps/server/src/integrations/machines/runnerWork.ts` | The runner's side: what each job kind does, and taking the board's settings |
-| `apps/server/src/integrations/machines/runnerInteractive.ts` | The runner's side of interactive work: `POST /machine/t3` on its own T3 Code, `POST /machine/sessions` |
+| `apps/server/src/integrations/machines/runnerInteractive.ts` | The runner's side of interactive work: `POST /machine/t3` on its own T3 Code, connecting it and its state (`machineT3Status`), `POST /machine/sessions` and the terminals waiting for a session to link itself (`terminalFor`) |
 | `apps/server/src/integrations/machines/remoteT3.ts` | The board's T3 Code with a held task's threads sent to its machine (`withMachineThreads`) |
 | `apps/server/src/integrations/remoteTerminal.ts` | A session on a machine: ssh route, tmux script, quoting, preflight (tested) |
 | `apps/server/src/integrations/machines/jobs.ts` | A runner's jobs in memory, and the errors that travel        |
@@ -1223,8 +1269,9 @@ result line. Setting the board's own CLI path to `/bin/false` keeps the board fr
 | `apps/web/src/components/task/RunOn.tsx`, `runOn.logic.ts` | The panel's chip, the hand-off window's control, the card's number, the offline callout, the waiting marks |
 | `apps/web/src/components/settings/ProjectRunOnRow.tsx` | Project settings › Runs on                               |
 | `apps/server/src/test/boardAndRunner.ts` | A paired board and runner for tests, with a link that can be cut    |
-| `apps/web/src/components/settings/machines/` | The Machines section, the add dialog and their logic            |
-| `apps/web/src/state/machines.ts`        | The machines query and its mutations                                  |
+| `apps/web/src/components/settings/machines/` | The Machines section (with its T3 Code part, `t3Line`), the add dialog and their logic |
+| `apps/web/src/state/machines.ts`        | The machines query and its mutations, connecting a machine's T3 Code, the machine to bring into view |
+| `apps/web/src/components/sessions/t3Offer.logic.ts`, `useT3OfferToast.ts` | A session error's offer: a T3 Code thread on the machine, or connecting its T3 Code |
 | `apps/server/scripts/bundle.ts`         | The bundle, then the tarballs with `--tarballs`                       |
 | `apps/server/scripts/tarball.ts`        | The pinned Node, the launcher, the tarballs and their checksums       |
 | `apps/server/scripts/sandbox.ts`        | `--runner`; the board's free `brandEnv("RUNNER_PORT")`                |

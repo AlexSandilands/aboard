@@ -148,11 +148,14 @@ letter (**E**182), and its panel says where it is: **On engine**.
   terminal** for a session there, Autopilot's included. Your terminal connects with `ssh` and the session runs in
   `tmux` on the machine, so it keeps going when you close the terminal; opening it again picks it up where it is. This
   needs an SSH route to the machine (or Tailscale, where `ssh <its tailnet name>` works for you), key login without
-  a password prompt, and `tmux` and the CLI installed there. The board tells you which one is missing. Pasted images
-  can't go with such a session yet.
+  a password prompt, and `tmux` and the CLI installed there. The board tells you which one is missing, and offers a
+  T3 Code thread on the machine instead (or, when its T3 Code isn't connected yet, takes you to connect it). Pasted
+  images can't go with such a session yet.
 - **T3 Code threads** for the task start in the machine's own T3 Code, and open in your T3 Code app when that
-  machine is connected to it. Set up T3 Code and its token on the machine first, as on the board
-  ([T3 Code](t3-code.md)).
+  machine is connected to it. Run T3 Code on the machine, then connect it from **Settings → Integrations →
+  Machines**: open the machine, and under **T3 Code on the machine** paste a pairing link made in T3 Code there under
+  Settings → Connections (allow "Operate tasks", or threads can't be started). A machine that runs the board app
+  itself uses that app's T3 Code connection: connect it there.
 - **Some things wait until the task is back on the board**: archiving it, deleting it, moving it to another
   project, and moving it to another board.
 - **A task made on the machine while the board can't be reached** gets the machine's prefix in its number, like
