@@ -6,6 +6,7 @@ import {
   machineSummary,
   moveRoute,
   nameFromTarget,
+  t3Line,
   untilLabel,
   versionLine,
 } from "./machines.logic";
@@ -36,6 +37,7 @@ const machine = (over: Partial<Machine> = {}): Machine => ({
   ],
   runsInFlight: 0,
   selfUpdate: true,
+  t3: { state: "connected", detail: null },
   updatesWithApp: false,
   update: null,
   versionState: "same",
@@ -182,5 +184,53 @@ describe("the name of a machine added over SSH", () => {
   it("is the host part of the destination", () => {
     expect(nameFromTarget(" alex@engine ")).toBe("engine");
     expect(nameFromTarget("engine")).toBe("engine");
+  });
+});
+
+describe("the machine's T3 Code", () => {
+  it("names each state in its badge, and offers to connect", () => {
+    const line = (state: NonNullable<Machine["t3"]>["state"], detail: string | null = null) =>
+      t3Line(machine({ t3: { state, detail } }));
+    expect(line("connected")).toMatchObject({ badge: { label: "Connected", tone: "success" }, connect: true });
+    expect(line("read-only")).toMatchObject({ badge: { label: "Read-only", tone: "warning" }, connect: true });
+    expect(line("read-only").text).toContain("“Operate tasks”");
+    expect(line("not-connected").text).toContain("T3 Code on engine under Settings → Connections");
+    expect(line("not-running")).toMatchObject({ badge: { label: "Not running" }, connect: true });
+    expect(line("error", "Token expired or revoked. Paste a new pairing link")).toMatchObject({
+      badge: { label: "Connection refused", tone: "error" },
+      text: "Token expired or revoked. Paste a new pairing link. Make one in T3 Code on engine under Settings → Connections.",
+    });
+  });
+
+  it("says nothing of it before the machine's status has been read", () => {
+    expect(t3Line(machine({ t3: null, runsInFlight: null }))).toEqual({
+      badge: null,
+      text: "Read once the machine answers.",
+      connect: false,
+    });
+  });
+
+  it("isn't read until the machine is connected", () => {
+    expect(t3Line(machine({ connection: "unreachable", t3: null }))).toEqual({
+      badge: null,
+      text: "Read once the machine is connected.",
+      connect: false,
+    });
+  });
+
+  it("still lets a newer runner be connected when its state is one this board doesn't know", () => {
+    expect(t3Line(machine({ t3: null, versionState: "newer" }))).toMatchObject({ badge: null, connect: true });
+  });
+
+  it("asks for an update on a runner that can't report it", () => {
+    expect(t3Line(machine({ t3: null }))).toMatchObject({ badge: null, connect: false });
+    expect(t3Line(machine({ t3: null })).text).toContain("update it first");
+  });
+
+  it("sends a machine that is itself a board to that board's Settings", () => {
+    const line = t3Line(machine({ updatesWithApp: true }));
+    expect(line.connect).toBe(false);
+    expect(line.badge?.label).toBe("Connected");
+    expect(line.text).toMatch(/^engine runs tasks inside .+ there, which shares its T3 Code connection/);
   });
 });

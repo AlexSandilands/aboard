@@ -39,6 +39,8 @@ export function createTestHarness(
     instanceId?: string;
     /** `runner` builds the app a remote machine runs, with the machine API. */
     role?: Config["role"];
+    /** A runner a board hosts: the board's instance id. */
+    hostedBy?: Config["hostedBy"];
     bind?: Config["bind"];
     /** Where release files are: with it, a board from source (version 0.0.0) can install and update machines. */
     releaseUrl?: string;

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AgentHarness, AgentSessionRef } from "./agentSessions.ts";
+import { AgentHarness, AgentSessionRef, LaunchToken } from "./agentSessions.ts";
 import { ModelChoice } from "./modelProfiles.ts";
 import { StartT3ThreadInput, T3LaunchWorkspace, T3RuntimeMode } from "./t3Launch.ts";
 
@@ -144,6 +144,11 @@ export const MachineSessionRequest = z.object({
   label: z.string().min(1).max(200),
   /** The tmux session the board opens it in, recorded on the session's link so it is found again. */
   tmux: AgentSessionRef.shape.tmux,
+  /**
+   * For a session that links itself: the token its prompt gives it for the link call, which the machine finds this
+   * terminal by. Sent only to a machine with `launchTokens`.
+   */
+  launch: LaunchToken.optional(),
   /** A new worktree from a base (`origin/<branch>` or a branch name, read from origin after a fetch), or the checkout. */
   workspace: z.discriminatedUnion("mode", [
     z.object({ mode: z.literal("new_worktree"), baseRef: z.string().min(1).max(250).nullable() }),

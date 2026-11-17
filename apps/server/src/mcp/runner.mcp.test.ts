@@ -186,3 +186,107 @@ describe("a task made on a machine", () => {
     expect(fresh.runner.services.workingCopies.nextNumber()).toEqual({ prefix: "E", number: 42 });
   });
 });
+
+describe("a session on a machine linking itself", () => {
+  const CODEX_A = "1c2d3e4f-2a43-4c55-9d3a-6f2c1e7d8a90";
+  const CODEX_B = "2d3e4f5a-2a43-4c55-9d3a-6f2c1e7d8a91";
+
+  /** A terminal the board opened on the machine for a Codex session that will link itself. */
+  async function opened(pair: Awaited<ReturnType<typeof setup>>, tmux: string, launch?: string) {
+    const prepared = await pair.runner.integrations.runnerHost.interactive.session({
+      taskId: pair.held.id,
+      harness: "codex",
+      sessionId: null,
+      label: `Implementing #${pair.held.number}`,
+      tmux,
+      ...(launch ? { launch } : {}),
+      workspace: { mode: "current" },
+      actor: "user",
+    });
+    return prepared.cwd;
+  }
+
+  const link = (pair: Awaited<ReturnType<typeof setup>>, sessionId: string, cwd: string, launch?: string) =>
+    pair.agent.callTool({
+      name: "link",
+      arguments: {
+        task: `#${pair.held.number}`,
+        agentSession: { harness: "codex", sessionId, cwd, ...(launch ? { launch } : {}) },
+      },
+    });
+
+  const tmuxOf = (pair: Awaited<ReturnType<typeof setup>>, sessionId: string) => {
+    const found = pair.runner.services.links
+      .listByKind("agent_session")
+      .find((l) => l.kind === "agent_session" && l.ref.sessionId === sessionId);
+    return found?.kind === "agent_session" ? (found.ref.tmux ?? null) : undefined;
+  };
+
+  it("finds its terminal by the launch token, even with another waiting in the same folder", async () => {
+    const pair = await setup();
+    const cwd = await opened(pair, "app-aaaaaaaaaaaa", "aaaaaaaaaaaaaaaaaa");
+    await opened(pair, "app-bbbbbbbbbbbb", "bbbbbbbbbbbbbbbbbb");
+    expect(text(await link(pair, CODEX_B, cwd, "bbbbbbbbbbbbbbbbbb"))).toContain("Linked to");
+    expect(text(await link(pair, CODEX_A, cwd, "aaaaaaaaaaaaaaaaaa"))).toContain("Linked to");
+    expect(tmuxOf(pair, CODEX_B)).toBe("app-bbbbbbbbbbbb");
+    expect(tmuxOf(pair, CODEX_A)).toBe("app-aaaaaaaaaaaa");
+  });
+
+  it("takes the one terminal waiting in its folder when it passes no token", async () => {
+    const pair = await setup();
+    const cwd = await opened(pair, "app-aaaaaaaaaaaa");
+    await link(pair, CODEX_A, cwd);
+    expect(tmuxOf(pair, CODEX_A)).toBe("app-aaaaaaaaaaaa");
+  });
+
+  it("takes neither of two terminals waiting in its folder without a token", async () => {
+    const pair = await setup();
+    const cwd = await opened(pair, "app-aaaaaaaaaaaa");
+    await opened(pair, "app-bbbbbbbbbbbb");
+    await link(pair, CODEX_A, cwd);
+    expect(tmuxOf(pair, CODEX_A)).toBeNull();
+  });
+
+  it("doesn't take a new session's terminal when it links itself again", async () => {
+    const pair = await setup();
+    const cwd = (
+      await pair.runner.integrations.runnerHost.interactive.session({
+        taskId: pair.held.id,
+        harness: "codex",
+        sessionId: null,
+        label: "Implementing",
+        workspace: { mode: "current" },
+        actor: "user",
+      })
+    ).cwd;
+    await link(pair, CODEX_A, cwd);
+    expect(tmuxOf(pair, CODEX_A)).toBeNull();
+    // A new session opened in the same folder, then the old one links again before the new one does.
+    await opened(pair, "app-bbbbbbbbbbbb");
+    await link(pair, CODEX_A, cwd);
+    expect(tmuxOf(pair, CODEX_A)).toBeNull();
+    await link(pair, CODEX_B, cwd);
+    expect(tmuxOf(pair, CODEX_B)).toBe("app-bbbbbbbbbbbb");
+  });
+
+  it("guesses no terminal opened more than ten minutes ago, nor one for a token that isn't its own", async () => {
+    const pair = await setup();
+    const cwd = await opened(pair, "app-aaaaaaaaaaaa", "aaaaaaaaaaaaaaaaaa");
+    await link(pair, CODEX_B, cwd, "cccccccccccccccccc");
+    expect(tmuxOf(pair, CODEX_B)).toBeNull();
+    pair.clock.now = new Date(pair.clock.now.getTime() + 11 * 60_000);
+    await link(pair, "3e4f5a6b-2a43-4c55-9d3a-6f2c1e7d8a92", cwd);
+    expect(tmuxOf(pair, "3e4f5a6b-2a43-4c55-9d3a-6f2c1e7d8a92")).toBeNull();
+    // Its own token still finds it: the ten minutes only bound the guess.
+    await link(pair, CODEX_A, cwd, "aaaaaaaaaaaaaaaaaa");
+    expect(tmuxOf(pair, CODEX_A)).toBe("app-aaaaaaaaaaaa");
+  });
+
+  it("forgets a terminal whose session hasn't linked itself within the hour, token or not", async () => {
+    const pair = await setup();
+    const cwd = await opened(pair, "app-aaaaaaaaaaaa", "aaaaaaaaaaaaaaaaaa");
+    pair.clock.now = new Date(pair.clock.now.getTime() + 61 * 60_000);
+    await link(pair, CODEX_A, cwd, "aaaaaaaaaaaaaaaaaa");
+    expect(tmuxOf(pair, CODEX_A)).toBeNull();
+  });
+});

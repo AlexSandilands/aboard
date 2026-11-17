@@ -362,7 +362,7 @@ export function createAgentSessionsIntegration(deps: {
    * A connected machine by its instance id: its name and routes, for opening a session that lives there over ssh. Null
    * for a machine this board isn't connected to. A runner has none.
    */
-  machine?: (instanceId: string) => { name: string; routes: MachineRoute[] } | null;
+  machine?: (instanceId: string) => { id: string; name: string; routes: MachineRoute[] } | null;
   /** Runs `ssh` to ask a machine whether a session can open there. */
   spawnSsh?: SpawnSsh;
   probe?: ProcessProbe;
@@ -509,12 +509,15 @@ export function createAgentSessionsIntegration(deps: {
       );
     }
     const route = sshRouteOf(machine.routes);
-    if (!route) throw noSshRoute(machine.name);
-    // The name the machine recorded when the board opened it there (a Codex session's isn't its id's); a fork is a new
-    // session in a tmux session of its own.
-    const tmuxName = mode === "fork" ? tmuxSessionName(randomUUID()) : (ref.tmux ?? tmuxSessionName(ref.sessionId));
+    if (!route) throw noSshRoute(machine);
+    // The name the machine recorded when the board opened it there (a Codex session's isn't its id's). A fork is a new
+    // session in a tmux session of its own: where the CLI can fork into an id it is given, the board picks it and names
+    // the tmux session from it, which is the name opening the fork's own link falls back to, so nothing is recorded.
+    const forkId = mode === "fork" && AGENT_HARNESSES[ref.harness].forkIntoArgs ? randomUUID() : undefined;
+    const tmuxName =
+      mode === "fork" ? tmuxSessionName(forkId ?? randomUUID()) : (ref.tmux ?? tmuxSessionName(ref.sessionId));
     // The machine's own CLI, on its PATH: the path set here is this machine's.
-    const argv = resumeArgv(ref, mode);
+    const argv = resumeArgv(ref, mode, forkId);
     const script = remoteSessionScript({
       cwd: ref.cwd,
       argv,
@@ -533,7 +536,7 @@ export function createAgentSessionsIntegration(deps: {
     const there = onMachine(ref, mode);
     const { resolved, error, host: h } = terminal();
     const command = copyCommand(resolved?.shell ?? defaultShell(h.platform), there.command, deps.userHome);
-    const { open } = await remotePreflight(deps.spawnSsh ?? spawnSsh, there.machine.name, there.route, {
+    const { open } = await remotePreflight(deps.spawnSsh ?? spawnSsh, there.machine, there.route, {
       cwd: ref.cwd,
       harness: ref.harness,
       exe: there.argv[0]!,

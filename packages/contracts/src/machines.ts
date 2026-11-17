@@ -29,6 +29,10 @@ export const MachineCapability = z.enum([
   "t3",
   "sessions",
   "autopilot",
+  /** `POST /machine/t3/connect`: the board connects the machine's own T3 Code, and `/machine/status` reports it. */
+  "t3Connect",
+  /** `POST /machine/sessions` takes a `launch` token, and the `link` tool finds a terminal by it. */
+  "launchTokens",
 ]);
 export type MachineCapability = z.infer<typeof MachineCapability>;
 
@@ -124,6 +128,21 @@ export const MachineUpdateState = z.object({
 });
 export type MachineUpdateState = z.infer<typeof MachineUpdateState>;
 
+/**
+ * The machine's own T3 Code, as its runner sees it. `connected`: a token that works and allows starting threads (or
+ * isn't known not to). `read-only`: a token that works but can't start threads. `not-connected`: no token.
+ * `not-running`: T3 Code isn't found on the machine. `error`: T3 Code refuses the token, with its sentence in `detail`.
+ */
+export const MachineT3State = z.enum(["connected", "read-only", "not-connected", "not-running", "error"]);
+export type MachineT3State = z.infer<typeof MachineT3State>;
+
+export const MachineT3Status = z.object({
+  state: MachineT3State,
+  /** What T3 Code said, or what to do; null when there is nothing to add. */
+  detail: z.string().nullable(),
+});
+export type MachineT3Status = z.infer<typeof MachineT3Status>;
+
 /** `GET /machine/status`: what the board shows about a connected machine. */
 export const MachineStatus = z.object({
   version: z.string(),
@@ -138,8 +157,34 @@ export const MachineStatus = z.object({
   update: MachineUpdateState,
   /** Whether the runner can update itself: installed by the install script and running as its service. */
   selfUpdate: z.boolean(),
+  /**
+   * Its own T3 Code; null from a runner before `t3Connect`. A state this board doesn't know drops only this part, as
+   * with logins, so a newer runner's status stays readable.
+   */
+  t3: z
+    .unknown()
+    .optional()
+    .transform((value) => MachineT3Status.safeParse(value).data ?? null),
 });
 export type MachineStatus = z.infer<typeof MachineStatus>;
+/** What a runner sends, before the board's tolerant parse. */
+export type MachineStatusInput = z.input<typeof MachineStatus>;
+
+export const MACHINE_T3_CONNECT_PATH = "/machine/t3/connect";
+
+/**
+ * `POST /machine/t3/connect`, and the board's `POST /api/machines/:id/t3/connect`: a T3 pairing link (or code) made
+ * in the machine's own T3 Code, or a bearer token. It passes through the board, which never keeps it.
+ */
+export const ConnectMachineT3Input = z.object({ value: z.string().trim().min(1).max(4_000) });
+export type ConnectMachineT3Input = z.infer<typeof ConnectMachineT3Input>;
+
+/** What the runner answers: its T3 Code as it is now, and a warning (a read-only link) when there is one. */
+export const ConnectMachineT3Result = z.object({
+  t3: MachineT3Status,
+  warning: z.string().nullable(),
+});
+export type ConnectMachineT3Result = z.infer<typeof ConnectMachineT3Result>;
 
 /** A release version: what a runner may be asked to update to, and nothing that could name a path. */
 export const ReleaseVersion = z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/, "A version like 1.4.2");
@@ -280,6 +325,8 @@ export const Machine = z.object({
   logins: z.array(MachineLogin).nullable(),
   runsInFlight: z.number().int().nullable(),
   selfUpdate: z.boolean().nullable(),
+  /** Its own T3 Code, as it last reported it; null when not known (not reached yet, or a runner before `t3Connect`). */
+  t3: MachineT3Status.nullable(),
   /** Part of the board install on that machine, which updates it (MachineDescriptor.updatesWithApp); never asked to. */
   updatesWithApp: z.boolean(),
   /** The update this board asked for, as the runner last reported it; null when none was asked. */
@@ -375,6 +422,10 @@ export type RepairMachineInput = z.infer<typeof RepairMachineInput>;
 export const RequestMachineUpdateInput = z.object({ now: z.boolean().default(false) });
 export type RequestMachineUpdateInput = z.infer<typeof RequestMachineUpdateInput>;
 
+/** `POST /api/machines/:id/t3/connect` answers the machine, its status read again, and the runner's warning. */
+export const ConnectMachineT3Response = z.object({ machine: Machine, warning: z.string().nullable() });
+export type ConnectMachineT3Response = z.infer<typeof ConnectMachineT3Response>;
+
 /** `GET /api/machines`. */
 export const MachinesResponse = z.object({
   machines: z.array(Machine),
@@ -447,3 +498,10 @@ export const HostedRunnerPairingCode = z.object({
   tailscaleUrl: z.string().nullable(),
 });
 export type HostedRunnerPairingCode = z.infer<typeof HostedRunnerPairingCode>;
+
+/**
+ * The `details` of a session error on a machine that a T3 Code thread there would avoid (no ssh route, no tmux, the CLI
+ * missing): the web offers to start one, or to connect the machine's T3 Code first.
+ */
+export const MachineT3Offer = z.object({ t3: z.literal("offer"), machineId: z.string().min(1) });
+export type MachineT3Offer = z.infer<typeof MachineT3Offer>;

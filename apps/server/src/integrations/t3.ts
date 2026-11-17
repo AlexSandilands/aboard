@@ -17,6 +17,7 @@ import {
   type Project,
   resolveOperationChoice,
   type StartT3ThreadInput,
+  type T3Access,
   type T3IntegrationStatus,
   type T3LaunchOptions,
   type T3ModelCatalog,
@@ -262,6 +263,13 @@ function parseWire<T>(schema: z.ZodType<T>, value: unknown, what: string): T {
   return parsed.data;
 }
 
+const T3_TOKEN_REVOKED = "Token expired or revoked. Paste a new pairing link";
+const T3_TOKEN_SCOPE = "Token lacks the orchestration:read scope";
+
+/** Whether a live-status error is T3 Code refusing the token, as opposed to not answering or answering oddly. */
+export const isT3TokenRefusal = (message: string | null): boolean =>
+  message === T3_TOKEN_REVOKED || message === T3_TOKEN_SCOPE;
+
 /** GET /api/orchestration/shell with a bearer session token (scope orchestration:read). */
 export async function fetchShell(origin: string, token: string, fetchFn: FetchFn): Promise<ShellSnapshot> {
   let response: Response;
@@ -273,8 +281,8 @@ export async function fetchShell(origin: string, token: string, fetchFn: FetchFn
   } catch (error) {
     throw new ShellError(`T3 Code unreachable: ${messageOf(error)}`, true);
   }
-  if (response.status === 401) throw new ShellError("Token expired or revoked. Paste a new pairing link");
-  if (response.status === 403) throw new ShellError("Token lacks the orchestration:read scope");
+  if (response.status === 401) throw new ShellError(T3_TOKEN_REVOKED);
+  if (response.status === 403) throw new ShellError(T3_TOKEN_SCOPE);
   if (!response.ok) throw new ShellError(`T3 Code returned HTTP ${response.status}`);
   const parsed = ShellSnapshot.safeParse(await response.json().catch(() => null));
   if (!parsed.success) throw new ShellError("Unexpected response from T3 Code");
@@ -422,7 +430,7 @@ function openCopy(path: string): DatabaseSync {
 
 export interface T3Services {
   links: Pick<LinksService, "listByKind" | "setSnapshot" | "add">;
-  settings: Pick<SettingsService, "get" | "t3Token" | "update">;
+  settings: Pick<SettingsService, "get" | "t3Token" | "update" | "t3Access" | "setT3Access">;
   projects: Pick<ProjectsService, "list" | "create" | "get">;
   tasks: Pick<TasksService, "summary">;
   attachments: Pick<AttachmentsService, "forLaunch" | "claimIds">;
@@ -1196,17 +1204,26 @@ export function createT3Integration(deps: {
       }
       let bearer = value.trim();
       let warning: string | undefined;
+      // Known only from a pairing link's answer; a token pasted as it is says nothing about what it allows.
+      let access: T3Access = null;
       if (code) {
         await discover();
         if (!discovery.detected || !discovery.origin) throw new AppError("VALIDATION", "T3 Code is not running");
         const exchanged = await exchangePairingCode(discovery.origin, code, fetchFn);
         bearer = exchanged.token;
         // T3 grants whichever requested scopes the link allows, so a read-only link still pairs.
-        if (exchanged.scopes && !exchanged.scopes.includes("orchestration:operate")) {
+        if (exchanged.scopes) {
+          access = exchanged.scopes.includes("orchestration:operate") ? "operate" : "read-only";
+        }
+        if (access === "read-only") {
           warning = "Connected read-only. To start threads from tasks, pair a link that allows “Operate tasks”";
         }
       }
-      const settings = deps.services().settings.update({ t3Token: bearer });
+      const store = deps.services().settings;
+      // The token first: a new one clears what the old one allowed.
+      store.update({ t3Token: bearer });
+      store.setT3Access(access);
+      const settings = store.get();
       // A poll already in flight used the previous token; wait it out so the check uses the new one.
       await polling;
       await pollLive();

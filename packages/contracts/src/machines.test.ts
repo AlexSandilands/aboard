@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { BRAND, brandEnv } from "./brand.ts";
 import {
   ConnectMachineInput,
+  ConnectMachineT3Input,
   MachinePrefix,
+  MachineT3Offer,
   MachineStatus,
   SshTarget,
   UpdateMachineRequest,
@@ -87,6 +89,43 @@ describe("machine status", () => {
       selfUpdate: true,
     });
     expect(status.logins.map((l) => l.name)).toEqual(["gh"]);
+  });
+
+  const base = {
+    version: "1.4.2",
+    platform: "linux-x64",
+    runsInFlight: 0,
+    logins: [],
+    update: { state: "idle", targetVersion: null, error: null },
+    selfUpdate: true,
+  };
+
+  it("reads a runner's T3 Code, and one from before it reported none", () => {
+    expect(MachineStatus.parse(base).t3).toBeNull();
+    expect(MachineStatus.parse({ ...base, t3: { state: "read-only", detail: null } }).t3).toEqual({
+      state: "read-only",
+      detail: null,
+    });
+  });
+
+  it("drops only the T3 part when its state is one this version doesn't know", () => {
+    const status = MachineStatus.parse({ ...base, t3: { state: "sleeping", detail: null } });
+    expect(status.t3).toBeNull();
+    expect(status.version).toBe("1.4.2");
+  });
+});
+
+describe("connecting a machine's T3 Code", () => {
+  it("takes a pairing link or token, trimmed", () => {
+    expect(ConnectMachineT3Input.parse({ value: "  t3code://app/pair#token=ABC  " }).value).toBe(
+      "t3code://app/pair#token=ABC",
+    );
+    expect(ConnectMachineT3Input.safeParse({ value: "   " }).success).toBe(false);
+  });
+
+  it("reads the offer a session error carries only when it names the machine", () => {
+    expect(MachineT3Offer.safeParse({ t3: "offer", machineId: "m1" }).success).toBe(true);
+    expect(MachineT3Offer.safeParse({ t3: "offer" }).success).toBe(false);
   });
 });
 

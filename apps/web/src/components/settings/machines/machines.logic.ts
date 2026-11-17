@@ -1,5 +1,5 @@
 // Pure helpers for Settings › Integrations › Machines: what a machine's closed row says, and the sentences in it.
-import { BRAND, type Machine, type MachineLogin, type MachineRoute } from "@repo/contracts";
+import { BRAND, type Machine, type MachineLogin, type MachineRoute, type MachineT3State } from "@repo/contracts";
 import type { StatusTone } from "../settingsLayout";
 
 export type BadgeTone = "success" | "warning" | "error" | "info";
@@ -198,3 +198,71 @@ export function directRouteFrom(typed: string): MachineRoute | null {
 
 /** The name a machine added over SSH will get when none is typed: the host part of the destination. */
 export const nameFromTarget = (target: string): string => target.trim().split("@").pop() ?? "";
+
+/** How the machine's own T3 Code reads in its badge. */
+export const T3_BADGES: Record<MachineT3State, { tone: BadgeTone; label: string }> = {
+  connected: { tone: "success", label: "Connected" },
+  "read-only": { tone: "warning", label: "Read-only" },
+  "not-connected": { tone: "warning", label: "Not connected" },
+  "not-running": { tone: "info", label: "Not running" },
+  error: { tone: "error", label: "Connection refused" },
+};
+
+export interface T3Line {
+  badge: { tone: BadgeTone; label: string } | null;
+  text: string;
+  /** Whether the pairing-link input shows: not for a machine that takes another board's connection, or can't be asked. */
+  connect: boolean;
+}
+
+/** The "T3 Code on the machine" part: where the machine's own T3 Code stands, and whether it can be connected here. */
+export function t3Line(machine: Machine): T3Line {
+  const name = machine.name;
+  if (machine.connection !== "connected") {
+    return {
+      badge: null,
+      text:
+        machine.connection === "needs-update"
+          ? "Not read while the machine can't be talked to."
+          : "Read once the machine is connected.",
+      connect: false,
+    };
+  }
+  // A board on that machine runs it, and its own T3 Code connection is the one the runner uses.
+  const shared = machine.updatesWithApp
+    ? `${name} runs tasks inside ${BRAND.name} there, which shares its T3 Code connection: connect T3 Code in ${BRAND.name}'s Settings on ${name}.`
+    : null;
+  if (!machine.t3) {
+    // No status read since the board started (or the last read failed): nothing is known yet.
+    if (machine.runsInFlight === null)
+      return { badge: null, text: shared ?? "Read once the machine answers.", connect: false };
+    // A newer runner can connect it; this board just can't read the state it reports.
+    if (machine.versionState === "newer") {
+      return {
+        badge: null,
+        text: shared ?? `${name} reports a state this board's version doesn't know; update the board to see it.`,
+        connect: !shared,
+      };
+    }
+    return {
+      badge: null,
+      text:
+        shared ??
+        `${name} runs a version that can't connect its T3 Code from here; update it first, or connect it on ${name}.`,
+      connect: false,
+    };
+  }
+  const badge = T3_BADGES[machine.t3.state];
+  if (shared) return { badge, text: shared, connect: false };
+  const detail = machine.t3.detail ? asSentence(machine.t3.detail) : null;
+  const where = `in T3 Code on ${name} under Settings → Connections`;
+  const texts: Record<MachineT3State, string> = {
+    connected: `Threads of the tasks ${name} holds start in its own T3 Code.`,
+    "read-only": `${detail ?? "This connection can only read threads."} Pair a link that allows “Operate tasks”.`,
+    "not-connected": `${name} has no connection to its T3 Code yet. Create a pairing link ${where}, and paste it here.`,
+    "not-running": `T3 Code isn't running on ${name}. Start it there, then connect it here.`,
+    // T3 Code's own sentence already says to pair again.
+    error: `${detail ?? "T3 Code refused the connection."} Make one ${where}.`,
+  };
+  return { badge, text: texts[machine.t3.state], connect: true };
+}

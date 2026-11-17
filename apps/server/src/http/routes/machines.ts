@@ -1,5 +1,7 @@
 import {
   ConnectMachineInput,
+  ConnectMachineT3Input,
+  type ConnectMachineT3Response,
   HOSTED_RUNNER_PAIRING_PATH,
   HOSTED_RUNNER_PATH,
   UpdateHostedRunnerInput,
@@ -60,6 +62,14 @@ export function registerMachinesRoutes(app: Hono, { integrations, hostedRunner }
   app.post(
     "/api/machines/:id/pair",
     handle(async (c) => c.json(await machines.repair(idParam(c), (await parseBody(c, RepairMachineInput)).code))),
+  );
+  // Connects the machine's own T3 Code; the pairing link or token is passed on to it, never kept or returned here.
+  app.post(
+    "/api/machines/:id/t3/connect",
+    handle(async (c) => {
+      const { value } = await parseBody(c, ConnectMachineT3Input);
+      return c.json((await machines.connectT3(idParam(c), value)) satisfies ConnectMachineT3Response);
+    }),
   );
   app.post(
     "/api/machines/:id/update",

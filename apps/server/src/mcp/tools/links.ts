@@ -62,6 +62,12 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
                 .join(", ")}. Read that one variable with the shell; don't guess it.`,
             ),
             cwd: z.string().describe("Absolute path of the folder the session runs in (your cwd)."),
+            launch: z
+              .string()
+              .optional()
+              .describe(
+                "The launch token the board's first message gave this session, when it gave one. Pass it as given; leave it out otherwise.",
+              ),
           })
           .optional()
           .describe(`Your own ${HARNESS_NAMES} session, so the user can reopen it from the board.`),
@@ -102,10 +108,13 @@ export const registerLinkTools: ToolRegistrar = (server, { services, ctx, actor 
                           machine: { id: ctx.instanceId, name: services.settings.get().machineName },
                           // A session the board opened here in tmux, that links itself (Codex): where to find it.
                           ...tmuxOf(
-                            ctx.integrations.runnerHost.interactive.tmuxFor(
-                              agentSession.data.harness,
-                              agentSession.data.cwd,
-                            ),
+                            ctx.integrations.runnerHost.interactive.terminalFor({
+                              taskId: id,
+                              harness: agentSession.data.harness,
+                              sessionId: agentSession.data.sessionId,
+                              cwd: agentSession.data.cwd,
+                              launch: args.agentSession?.launch,
+                            }),
                           ),
                         }
                       : withoutTmux(agentSession.data),

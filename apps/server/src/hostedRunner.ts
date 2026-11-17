@@ -151,12 +151,15 @@ export function createHostedRunner(deps: HostedRunnerDeps): HostedRunner {
     deps.changed();
   }
 
-  /** The same T3 Code serves both: the runner reaches it with the board's token. */
+  /** The same T3 Code serves both: the runner reaches it with the board's token, and knows what that allows. */
   function syncT3Token(): void {
     if (!server) return;
-    const token = deps.boardServices().settings.t3Token();
+    const board = deps.boardServices().settings;
+    const token = board.t3Token();
+    const access = board.t3Access();
     const runnerSettings = server.ctx.services.settings;
     if (runnerSettings.t3Token() !== token) runnerSettings.update({ t3Token: token });
+    if (runnerSettings.t3Access() !== access) runnerSettings.setT3Access(access);
   }
 
   /**

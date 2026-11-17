@@ -361,6 +361,7 @@ function stubServices(tasks: StubTask[], projects: string[] = []): Services {
   const find = (ref: string) => tasks.find((t) => t.id === ref || `#${t.number}` === ref || String(t.number) === ref);
   let setting = { enabled: true, bind: "loopback" as const };
   let t3Token: string | null = null;
+  let t3Access: "operate" | "read-only" | null = null;
   return {
     tasks: {
       resolveId: (ref: string) => {
@@ -378,8 +379,13 @@ function stubServices(tasks: StubTask[], projects: string[] = []): Services {
       setHostedRunner: (next: typeof setting) => (setting = next),
       t3Token: () => t3Token,
       update: (input: { t3Token?: string | null }) => {
-        if (input.t3Token !== undefined) t3Token = input.t3Token;
+        if (input.t3Token !== undefined && input.t3Token !== t3Token) {
+          t3Token = input.t3Token;
+          t3Access = null;
+        }
       },
+      t3Access: () => t3Access,
+      setT3Access: (next: typeof t3Access) => (t3Access = next),
       get: () => ({ machineName: "laptop" }),
     },
   } as unknown as Services;
@@ -470,5 +476,19 @@ describe("which board a call belongs to", () => {
     board.settings.update({ t3Token: "second" });
     hosted.syncT3Token();
     expect(runner.settings.t3Token()).toBe("second");
+  });
+
+  it("copies what the board's T3 connection allows with its token", async () => {
+    const board = stubServices([]);
+    const runner = stubServices([]);
+    board.settings.update({ t3Token: "first" });
+    board.settings.setT3Access("read-only");
+    const hosted = await stubbed(board, runner);
+    expect(runner.settings.t3Access()).toBe("read-only");
+    board.settings.update({ t3Token: "second" });
+    board.settings.setT3Access("operate");
+    hosted.syncT3Token();
+    expect(runner.settings.t3Token()).toBe("second");
+    expect(runner.settings.t3Access()).toBe("operate");
   });
 });

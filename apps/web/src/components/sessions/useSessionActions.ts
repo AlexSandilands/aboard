@@ -6,6 +6,7 @@ import { api, ApiError } from "~/lib/api";
 import { useResumeSession } from "~/state/mutations";
 import { useDialogs } from "~/state/ui";
 import type { SessionLink } from "./sessions.logic";
+import { useT3OfferToast } from "./useT3OfferToast";
 
 /** Copies the command that resumes a session by hand, as the server builds it for this machine's shell. */
 export async function copyResumeCommand(linkId: string, mode: ResumeMode = "resume"): Promise<void> {
@@ -30,6 +31,7 @@ export async function copyResumeCommand(linkId: string, mode: ResumeMode = "resu
 export function useSessionActions(taskId: string) {
   const resume = useResumeSession({ silent: true });
   const openWarning = useDialogs((s) => s.openSessionWarning);
+  const offerToast = useT3OfferToast();
   const { mutate } = resume;
 
   const open = useCallback(
@@ -63,16 +65,12 @@ export function useSessionActions(taskId: string) {
               });
               return;
             }
-            toastManager.add({
-              type: "error",
-              title: "Couldn't open the session",
-              description: error instanceof Error ? error.message : String(error),
-            });
+            void offerToast("Couldn't open the session", error, taskId);
           },
         },
       );
     },
-    [mutate, openWarning, taskId],
+    [mutate, openWarning, offerToast, taskId],
   );
 
   return { open, pending: resume.isPending };

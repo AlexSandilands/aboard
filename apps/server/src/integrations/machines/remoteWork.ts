@@ -55,6 +55,8 @@ class MachineUnreachableError extends Error {}
 export interface RemoteWork {
   /** The machine holding a task, or null when the board holds it. */
   holder(taskId: string | null | undefined): { id: string; name: string } | null;
+  /** Whether the machine said it can do `capability`; null until it has answered once. */
+  can(machineId: string, capability: MachineCapability): boolean | null;
   /**
    * Has the machine holding the task act in its own T3 Code (`POST /machine/t3`) and answers what it said; null for a
    * task the board holds. Throws an AppError with the machine's own sentence when it refuses.
@@ -490,6 +492,7 @@ export function createRemoteWork(deps: {
 
   return {
     holder: holderOf,
+    can: (machineId, capability) => deps.machines.can(machineId, capability),
 
     t3(taskId, request) {
       const machine = holderOf(taskId);
