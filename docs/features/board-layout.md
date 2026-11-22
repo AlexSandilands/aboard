@@ -18,7 +18,7 @@ the task card's thread and session chips and start button ([epics.md](epics.md#o
 ### Where a task runs, on the card and panel
 
 A task that runs on a connected machine ([remote-machines.md](remote-machines.md#choosing-the-machine)) shows the
-machine's prefix in its card's number, `E182`, on the full card and the compact line (`MachineNumber` in
+machine's prefix in its card's number, `D182`, on the full card and the compact line (`MachineNumber` in
 `components/task/RunOn.tsx`), instead of a badge: the top row is full on busy epic cards. Outlined: it will start there;
 tinted: the machine holds it; an amber dot: edits made here wait for the machine; greyed and struck through: the machine
 can't be reached. Its title says it in words. In the panel the chip beside Status (`RunOnChip`) picks the machine
