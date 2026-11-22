@@ -113,18 +113,18 @@ machine stays there until you pull it back.
 ## Tasks a machine holds
 
 A task handed to a machine is worked on there, and the board follows along. Its card's number carries the machine's
-letter (**E**182), and its panel says where it is: **On engine**.
+letter (**D**182), and its panel says where it is: **On devbox**.
 
 - **What the machine does shows up on the board** as it happens. If the board was closed or the machine couldn't be
   reached, it catches up when they are connected again, in the order things happened there.
 - **You can still change the task on the board.** The change shows at once and is passed to the machine. While the
-  machine can't be reached the panel counts what is waiting, **On engine · 2 waiting**, marks the step you changed
-  with a clock and the activity line with "waiting for engine", and the card's letter gets an amber dot. Those changes
+  machine can't be reached the panel counts what is waiting, **On devbox · 2 waiting**, marks the step you changed
+  with a clock and the activity line with "waiting for devbox", and the card's letter gets an amber dot. Those changes
   are applied when it is back, after whatever happened there meanwhile. A change the machine can't apply any more (you
   checked off a step the agent had deleted) is taken back, and the task's activity says so.
 - **Autopilot runs on the machine, by itself.** The machine runs your Autopilot automations for the tasks it holds,
   with the switches you set on the board, even while this computer is off: it starts a flagged task once its
-  blockers are done, then reviews, fixes and merges its PR. Its runs show here with **on engine** once the board hears
+  blockers are done, then reviews, fixes and merges its PR. Its runs show here with **on devbox** once the board hears
   from it, and so do its notifications. The agent works in a worktree there, from what is on GitHub, with the
   machine's own logins. Push the task's branch before you hand it over; the board tells you when a branch of the task
   has commits that aren't pushed, since the machine can't see them. A run there is always headless, even where an
@@ -141,9 +141,9 @@ letter (**E**182), and its panel says where it is: **On engine**.
   settings; the findings show in the task's panel as usual, and Run review or resolving a finding on the board
   reaches the machine.
 - **A custom automation's command or script** for the task runs on the machine, in its copy of the project, as the
-  user the runner runs as. The run says "on engine".
+  user the runner runs as. The run says "on devbox".
 - **Sessions and tokens** of work on the machine show on the task: a session's status, its tokens (marked "on
-  engine" in Usage) and, for agents, its transcript.
+  devbox" in Usage) and, for agents, its transcript.
 - **New Claude Code, Codex or Copilot CLI sessions** from the hand-off menu run on the machine, and so does **Open in
   terminal** for a session there, Autopilot's included. Your terminal connects with `ssh` and the session runs in
   `tmux` on the machine, so it keeps going when you close the terminal; opening it again picks it up where it is. This
@@ -161,18 +161,18 @@ letter (**E**182), and its panel says where it is: **On engine**.
 - **A task made on the machine while the board can't be reached** gets the machine's prefix in its number, like
   `#E7`, and keeps it. Use it like any other number: `#E7` finds the task in search, and is a link in notes.
 
-**When the machine can't be reached**, the chip reads **engine · offline**, the card's letter is greyed and struck
+**When the machine can't be reached**, the chip reads **devbox · offline**, the card's letter is greyed and struck
 through, and the panel says since when, with **Try now**. The agent on the machine carries on meanwhile.
 
 ### Pulling a task back
 
-Click **On engine** in the task's panel and choose **Pull back to this machine…**, then **Pull back**. The machine gives
+Click **On devbox** in the task's panel and choose **Pull back to this machine…**, then **Pull back**. The machine gives
 the task back with everything it did, this machine fetches the task's branch, and its runs, reviews and sessions
 happen here from then on. While Autopilot is running something for the task on the machine, Pull back waits: the
 popover says so.
 
 Pulling back needs the machine, so its last changes come with the task. While it can't be reached the popover also
-offers **Take back without engine…**, which brings the task back at once and loses what the machine did since the
+offers **Take back without devbox…**, which brings the task back at once and loses what the machine did since the
 board last heard from it (commits it pushed are kept).
 
 ## Let this machine run another board's tasks
