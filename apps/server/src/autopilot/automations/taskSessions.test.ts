@@ -180,6 +180,9 @@ describe("Task sessions", () => {
     expect(sessions()[0]).toMatchObject({ workspace: { branch: "feat/thing" }, expectHead: SHA });
     expect(sessions()[0]!.prompt).toContain("your worktree starts from its branch `feat/thing`");
     expect(runs()[0]).toMatchObject({ status: "skipped", deferred: "head_moved" });
+    expect(s.tasks.detail(task.id).events.map((e) => e.payload.text)).toContain(
+      "Autopilot skipped the session Orchestrate asked for: the pull request moved on before it started. Ask for a new one if the task is still stalled.",
+    );
   });
 
   it("starts an integration epic's task from the epic's branch", async () => {

@@ -1,4 +1,5 @@
 import {
+  AUTOPILOT_ACTOR,
   AUTOPILOT_ORCHESTRATE,
   AUTOPILOT_TASK_SESSIONS,
   BRAND,
@@ -219,6 +220,13 @@ export const taskSessions = defineAutomation({
     } catch (error) {
       if (error instanceof RunAbandonedError) return { status: "skipped", summary: `Skipped ${ref}: ${error.message}` };
       if (error instanceof WorktreeHeadError) {
+        // Nothing runs this request again (a skipped session isn't retryable), so the next Orchestrate run is told.
+        services.tasks.addNote(
+          task.id,
+          "Autopilot skipped the session Orchestrate asked for: the pull request moved on before it started. Ask " +
+            "for a new one if the task is still stalled.",
+          AUTOPILOT_ACTOR,
+        );
         return {
           status: "skipped",
           ...(error.moved ? { deferred: "head_moved" as const } : {}),

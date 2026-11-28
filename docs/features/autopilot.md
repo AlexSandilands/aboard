@@ -1190,7 +1190,8 @@ and can be retried.
   force-push, push to the default branch or merge). `taskSessionPrompt` builds it.
 - **Workspace** (`sessionWorkspace`). A task with an open or draft PR on its own repository's branch with a known head
   works on that branch at that head (`workspace.branch` + `expectHead`; the prompt says to push there and not open
-  another PR). A head that moved before the agent started skips the run as Deferred: head moved. Otherwise a new
+  another PR). A head that moved before the agent started skips the run as Deferred: head moved, and notes on the task that
+  Orchestrate may ask again (a skipped session isn't retried). Otherwise a new
   branch from the default branch, or from an integration epic's branch (`prBase`); since an earlier session's work may
   be only in its own worktree, the prompt says to read the task's notes and activity first.
 - **Retrying.** A failed run (a CLI missing, T3 refusing) is flagged on the task. `retry_autopilot_run` frees its key,
