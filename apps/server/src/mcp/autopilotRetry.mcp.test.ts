@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { AUTOPILOT_FIX_PRS, fixPrs } from "../autopilot/automations/fixPrs.ts";
 import { AUTOPILOT_START_PLANNED, startPlanned } from "../autopilot/automations/startPlanned.ts";
 import { createTestHarness } from "../test/harness.ts";
 
@@ -48,7 +49,7 @@ describe("retrying an Autopilot run", () => {
   };
 
   beforeEach(async () => {
-    h = createTestHarness({ integrations: { automations: [startPlanned] } });
+    h = createTestHarness({ integrations: { automations: [startPlanned, fixPrs] } });
     agent = await connect(h);
     const project = h.services.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
     taskId = h.services.tasks.create({ projectId: project.id, title: "Thing" }).id;
@@ -81,6 +82,32 @@ describe("retrying an Autopilot run", () => {
     expect((await call("retry_autopilot_run", { task: "#1", automation: AUTOPILOT_START_PLANNED })).text).toContain(
       `no failed or skipped ${AUTOPILOT_START_PLANNED} Autopilot run`,
     );
+  });
+
+  it("gives Fix PRs a fresh budget only when asked, and not past its cap", async () => {
+    // The checks' budget gave up, then an attempt on comments (a budget of its own) failed.
+    const notice = endedRun(AUTOPILOT_FIX_PRS, "fix:gave_up:L1:review", "skipped");
+    const failed = endedRun(AUTOPILOT_FIX_PRS, "fix:pr:L1:abc:comments@1", "failed");
+
+    // The plain retry takes the failed attempt and leaves the notice: a fresh budget is never spent by default.
+    const plain = await call("retry_autopilot_run", { task: "#1", automation: "fix_prs" });
+    expect(plain.text).toContain("try again (do fix:pr:L1:abc:comments@1)");
+    expect(h.services.autopilot.runsForTask(taskId).find((r) => r.id === failed.id)?.dedupeKey).toMatch(/^retried:/);
+    const none = await call("retry_autopilot_run", { task: "#1" });
+    expect(none.isError).toBe(true);
+    expect(none.text).toContain("pass freshBudget: true");
+
+    expect((await call("retry_autopilot_run", { task: "#1", freshBudget: true })).text).toContain(
+      "try again (do fix:gave_up:L1:review)",
+    );
+    expect(h.services.autopilot.runsForTask(taskId).find((r) => r.id === notice.id)?.dedupeKey).toMatch(/^retried:/);
+    // Fix PRs gives up again under the same key, which the retry freed: one more grant, then the cap.
+    endedRun(AUTOPILOT_FIX_PRS, "fix:gave_up:L1:review", "skipped");
+    expect((await call("retry_autopilot_run", { task: "#1", freshBudget: true })).isError).toBe(false);
+    endedRun(AUTOPILOT_FIX_PRS, "fix:gave_up:L1:review", "skipped");
+    const capped = await call("retry_autopilot_run", { task: "#1", freshBudget: true });
+    expect(capped.isError).toBe(true);
+    expect(capped.text).toContain("Fix PRs has already been given 2 fresh budgets");
   });
 
   it("leaves a failed run alone once the same automation has run again since", async () => {

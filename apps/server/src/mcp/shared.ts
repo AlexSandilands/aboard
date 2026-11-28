@@ -24,6 +24,7 @@ import {
   unmergedEpicBranch,
 } from "@repo/contracts";
 import { deliveryHint, renderTaskShort, type ChildActivity, type SelfLinkAsk } from "./format.ts";
+import { fixPrsTrustedBots } from "../autopilot/automations/fixPrs.ts";
 import type { AppContext } from "../app.ts";
 import { boardUrlOf } from "../config.ts";
 import { AppError } from "../errors.ts";
@@ -435,6 +436,7 @@ export function taskResult(
   const project = safeProject(services, task.projectId);
   const progress = { now: Date.now(), ...(opts.closing ? { closing: true } : {}) };
   const { ticketSystems } = services.settings.get();
+  const trustedBots = fixPrsTrustedBots(services, task);
   const autoReview = services.reviews.effectiveAutoReview(task.id);
   // Planning one of an epic's tasks is when its shape shows, so set_plan and create_task ask about the epic too.
   const delivery =
@@ -453,6 +455,7 @@ export function taskResult(
         progress,
         autoReview,
         ticketSystems,
+        trustedBots,
       })
     : renderTaskShort(task, project, {
         ...selfLink,
@@ -460,6 +463,7 @@ export function taskResult(
         autoReview,
         deliveryHint: delivery,
         ticketSystems,
+        trustedBots,
         ...(opts.captureHint ? { captureHint: true } : {}),
       });
   return textResult(`${headline}\n\n${body}`);

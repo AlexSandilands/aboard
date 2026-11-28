@@ -1047,6 +1047,8 @@ export function renderTaskShort(
     progress?: { now: number; closing?: boolean };
     autoReview?: boolean;
     ticketSystems?: readonly TicketSystem[];
+    /** Fix PRs' trusted bots for the task, as get_task passes them, so the PR line reads the same in both. */
+    trustedBots?: readonly string[];
     selfLink?: SelfLinkAsk;
   } = {},
 ): string {

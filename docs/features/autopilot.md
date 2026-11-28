@@ -912,7 +912,8 @@ to fix a pull request linked to a task.
   cap, a daily cap or quiet hours don't hold it back. A gave-up run ends `skipped` (`output.gaveUp`), so it can be
   retried.
 
-  **A fresh budget.** Retrying a gave-up notice (the run's Retry, or `retry_autopilot_run`, which Orchestrate uses)
+  **A fresh budget.** Retrying a gave-up notice (the run's Retry, or `retry_autopilot_run(task, freshBudget: true)`,
+  which Orchestrate uses; a plain `retry_autopilot_run` leaves the notices alone, so it never spends one by mistake)
   gives that budget a fresh start: its attempts, and the no-action verdicts for `:no_action`, count only from the
   newest retried notice of the same budget on (`freshBudgets`, by the run list's order, since runs made in one
   millisecond share a `createdAt`). A retried `:review` or `:comments` notice also starts the per-head count again,
@@ -1069,7 +1070,8 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   on runs the current slot at once. The dedupe key is `orchestrate:<projectId>:<local slot stamp>`. A project with
   nothing to look at gets no run: it needs an unarchived task In Progress, in Review flagged for auto-merge, in Review
   with a PR stalled on review threads (`isStalledPr`: open, checks passing, mergeable, not approved, and a thread
-  whose newest comment isn't the account's; flagged for auto-merge or not), or under
+  whose newest comment isn't the account's; flagged for auto-merge or not, and not while a T3 thread on the task is
+  working or a Claude Code session on it is busy, since Orchestrate would only leave it alone), or under
   Needs attention (a failed Start planned run included), leaving out tasks waiting on the user (an `agent_request` or
   a thread asking for input). So an idle project, or one whose work all waits on the user, costs nothing. One run at a time per project: while one is queued or
   running, `check` returns nothing for it and the latest slot runs once it ends. The rule is
@@ -1102,9 +1104,9 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   token, in a temporary folder of its own outside the run's, removed afterwards) and pass it with
   `--strict-mcp-config --mcp-config`. On top of that, the `gh` reads in `ORCHESTRATE_TOOLS` (`gh pr view|checks|list|diff`, `gh run list|view`, `gh run rerun` for a flaky CI
   job, and exactly `gh api repos/*/*/pulls/*/comments`, with or without ` --paginate`, for the inline review threads
-  `gh pr view` doesn't show). A rule's `*` matches spaces too, so `ORCHESTRATE_DENIED_SHELL` denies `gh api` with
-  `-X`, `--method`, `-f`, `-F`, `--field`, `--raw-field` or `--input` anywhere after it (deny rules win): a write can't
-  hide between the allowed rule's parts. The rules match each command, and a compound one is refused if any part isn't allowed, so the prompt tells it to run each `gh` command on its own (no loops, pipes or `&&`) and that a refusal is about the command's shape, not that Bash is off. It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
+  `gh pr view` doesn't show). A rule's `*` matches spaces too, and gh takes combined short flags (`-iXDELETE`), so
+  `ORCHESTRATE_DENIED_SHELL` denies, anywhere after `gh api`, a word starting with `-` that holds an X, f or F, and
+  `--method` and `--input` (deny rules win): a write can't hide between the allowed rule's parts. The rules match each command, and a compound one is refused if any part isn't allowed, so the prompt tells it to run each `gh` command on its own (no loops, pipes or `&&`) and that a refusal is about the command's shape, not that Bash is off. It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
   for any task), `retry_autopilot_run` and `request_attention`. Because it reads text anyone can
   write (PR comments, CI logs), it gets only the board tools in `ORCHESTRATE_BOARD_TOOLS` (reads, `add_note`, `request_attention`, the
   thread tools, `retry_autopilot_run`); every other board tool is in `ORCHESTRATE_DENIED_TOOLS`
@@ -1128,10 +1130,10 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   local loop; a stalled or failed round is sent back to its review loop instead. A PR left red or conflicting by a
   merge into the default branch is a stall like any other. A **green PR stuck on review threads** is one too: a Review
   task whose PR is open, green, mergeable and not approved, with unanswered threads on `get_task`'s PR line. It is
-  left alone while a Fix PRs run on it is going or started since the last push; otherwise Orchestrate reads the
+  left alone while a Fix PRs run on it is going or started on its current head; otherwise Orchestrate reads the
   threads (`gh api …/comments`) and the conversation (`gh pr view --comments`), judges them, and takes the first of:
-  retry a failed Fix PRs run with attempts left; retry Fix PRs' gave-up notice for a fresh budget when the points look
-  fair and worth doing; message the task's thread (or start one) to fix or decline each thread, reply on each and
+  retry a failed Fix PRs run with attempts left; retry Fix PRs' gave-up notice for a fresh budget (`freshBudget: true`) when the points
+  look fair and worth doing; message the task's thread (or start one) to fix or decline each thread, reply on each and
   push, when Fix PRs hasn't acted or its fresh budgets are used up; `request_attention` once, naming the threads, when
   their authors have no repository access, only the user can decide, or nothing is left to try. Its handover says
   which it did for which PR and head, so the next run doesn't repeat it. It ends with a short status. **Extra instructions** (multi-line) are appended last and win where they differ.
