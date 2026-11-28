@@ -405,9 +405,9 @@ function PullRequestRow({
  * The task panel (and window) is the `@container`. Below these widths the PR row drops its least useful text
  * first: "checked … ago", then the review status's words, which become an icon with the text in its tooltip.
  */
-const NARROW_PANEL_HIDE = "@max-[520px]:hidden";
-const COMPACT_PANEL_HIDE = "@max-[440px]:hidden";
-const COMPACT_PANEL_SHOW = "hidden @max-[440px]:flex";
+const NARROW_PANEL_HIDE = "@max-[620px]:hidden";
+const COMPACT_PANEL_HIDE = "@max-[520px]:hidden";
+const COMPACT_PANEL_SHOW = "hidden @max-[520px]:flex";
 
 const REVIEW_STATUS = {
   approved: { text: "Approved", tone: "text-success-foreground", Icon: UserRoundCheckIcon },
@@ -423,8 +423,8 @@ function ReviewStatus({ snapshot }: { snapshot: PrSnapshot }) {
   const label = decision === "review_required" ? (prReviewLine(snapshot) ?? "Needs approval") : text;
   return (
     <>
-      <Hint label={label} className={COMPACT_PANEL_HIDE}>
-        <span className={tone}>{text}</span>
+      <Hint label={label} className={cn("min-w-0", COMPACT_PANEL_HIDE)}>
+        <span className={cn("truncate", tone)}>{text}</span>
       </Hint>
       <Hint label={label} className={COMPACT_PANEL_SHOW}>
         <Icon className={cn("size-3.5", tone)} />
