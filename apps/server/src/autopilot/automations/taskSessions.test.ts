@@ -1,4 +1,4 @@
-import { AUTOPILOT_ORCHESTRATE, type PlanInput, type PrSnapshot } from "@repo/contracts";
+import { AUTOPILOT_ORCHESTRATE, canRetryRun, type PlanInput, type PrSnapshot } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRepos } from "../../db/repos/index.ts";
 import { createTestHarness } from "../../test/harness.ts";
@@ -223,7 +223,31 @@ describe("Task sessions", () => {
     expect(runs().filter((r) => r.status === "succeeded")).toHaveLength(1);
   });
 
-  it("refuses to retry a skipped session: Orchestrate asks for a new one instead", async () => {
+  it("drops a waiting request once a machine whose Autopilot looks after the task takes it", async () => {
+    const { s, db, task, ask, pass, on, sessions } = setup();
+    on();
+    s.autopilot.setPaused(true);
+    const request = ask();
+    const machine = s.machines.add({
+      instanceId: "engine-2",
+      name: "engine",
+      routes: [{ kind: "ssh", target: "me@engine", port: null, remotePort: 4318 }],
+    });
+    createRepos(db).holds.insert({
+      taskId: task.id,
+      machineId: machine.id,
+      heldAt: new Date().toISOString(),
+      afterLogId: 0,
+    });
+    s.autopilot.setPaused(false);
+    await pass();
+    expect(sessions()).toEqual([]);
+    expect(s.taskSessions.get(request.id)!.droppedReason).toBe(
+      `#${task.number} is now held by engine, whose own Autopilot looks after it`,
+    );
+  });
+
+  it("refuses to retry a skipped session, in the service and in canRetryRun (the Retry buttons and the default pick)", async () => {
     const { s, task, ask, pass, on, runs } = setup();
     on();
     ask();
@@ -231,6 +255,8 @@ describe("Task sessions", () => {
     await pass();
     expect(runs()[0]).toMatchObject({ status: "skipped" });
     expect(() => s.autopilot.retry(runs()[0]!.id, "orchestrator")).toThrow(/nothing to retry/);
+    // The Retry buttons and retry_autopilot_run's default pick go by canRetryRun, which agrees.
+    expect(canRetryRun(runs()[0]!, runs())).toBe(false);
   });
 });
 

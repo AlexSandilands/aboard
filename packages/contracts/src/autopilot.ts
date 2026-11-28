@@ -723,8 +723,8 @@ export function isSupersededRun(
 }
 
 /**
- * Whether a run can be retried: a real run that ended failed or skipped, hasn't been retried already and, given the
- * runs around it, hasn't been superseded by a later run of its automation.
+ * Whether a run can be retried: a real run that ended failed or skipped (but not a skipped task session), hasn't been
+ * retried already and, given the runs around it, hasn't been superseded by a later run of its automation.
  */
 export const canRetryRun = (
   run: Pick<
@@ -735,6 +735,8 @@ export const canRetryRun = (
 ): boolean =>
   !run.dryRun &&
   (run.status === "failed" || run.status === "skipped") &&
+  // A skipped task session did nothing: Orchestrate asks for a new one instead (taskSessions.ts' retryRefusal).
+  !(run.automation === AUTOPILOT_TASK_SESSIONS && run.status === "skipped") &&
   !isRetried(run.dedupeKey) &&
   !isSupersededRun(run, others);
 

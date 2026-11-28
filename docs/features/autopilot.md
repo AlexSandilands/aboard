@@ -1195,8 +1195,9 @@ and can be retried.
   be only in its own worktree, the prompt says to read the task's notes and activity first.
 - **Retrying.** A failed run (a CLI missing, T3 refusing) is flagged on the task. `retry_autopilot_run` frees its key,
   so the request runs again on the next pass, within a day of the request; the run takes the request up again. A
-  skipped run (the task moved on, or got an agent) did nothing, so its retry is refused (`retryRefusal`): a new
-  session is asked for again, under the once-an-hour rule.
+  skipped run (the task moved on, or got an agent) did nothing, so it isn't retryable (`canRetryRun` in contracts, so
+  the Retry buttons and `retry_autopilot_run`'s default pick pass it over; `retryRefusal` gives the service's reason): a
+  new session is asked for again, under the once-an-hour rule.
 
 **Start planned tasks** (`start_planned`, #94; `automations/startPlanned.ts`). Needs an agent, so it counts against
 the caps and waits out quiet hours. Off until switched on. The headline automation: it starts an agent on a task.
