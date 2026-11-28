@@ -335,6 +335,12 @@ starts collapsed.
 PRs, then issues, tickets and other URLs, each kind in link order (`groupLinks`). Its header has **Copy link**
 and the list ends with **Add link**; pasting a T3 thread there still works, and the thread lands in Sessions.
 
+A PR row's status (merge conflicts, checks, "checked … ago", review decision) gives up text as the panel narrows, using
+the panel's own width (it is the `@container`): below 620px "checked … ago" goes (the refresh button's tooltip still
+says it), below 520px the review decision and the "Auto-merge on" badge become icons with their words in a tooltip. The title keeps a minimum width
+and the status clips instead of spilling under the Merge / Fix in slot, refresh button and menu (the panel's narrowest
+width is 380px).
+
 Row labels in Links and Sessions, and the session name and model in Usage rows (`PanelLabel`), are one line with an ellipsis. They clip on x (`overflow-x-clip`) instead of using `truncate`, whose `overflow: hidden` would turn the `overflow-y-visible` that keeps trimmed text from being cut into a scroll container. While a truncated label is hovered it pans to show its end, pauses, and jumps back (`label-pan` in `index.css`, distance from `labelPan` in `labelPan.logic.ts`); it stays still under `prefers-reduced-motion`.
 
 ### The task window
