@@ -186,6 +186,17 @@ describe("canRetryRun", () => {
     expect(isSupersededRun(later, [failed])).toBe(false);
   });
 
+  it("keeps Fix PRs' notice that it gave up retryable whatever Fix PRs does on the task since", () => {
+    const notice = run("a", "2026-10-18T01:00:00.000Z", {
+      automation: "fix_prs",
+      status: "skipped",
+      dedupeKey: "fix:gave_up:L1:review",
+    });
+    const later = run("b", "2026-10-18T02:00:00.000Z", { automation: "fix_prs", status: "succeeded" });
+    expect(canRetryRun(notice, [later, notice])).toBe(true);
+    expect(canRetryRun({ ...notice, dedupeKey: "fix:pr:L1:abc:checks" }, [later, notice])).toBe(false);
+  });
+
   it("goes by the list's order when two runs were made in the same millisecond", () => {
     const at = "2026-10-18T01:00:00.000Z";
     const failed = run("a", at);

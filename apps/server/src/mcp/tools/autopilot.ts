@@ -3,7 +3,9 @@ import {
   AUTOMATION_DRAFT_NOTE_MAX,
   AUTOMATION_DRAFT_TTL_DAYS,
   automationDraftPath,
+  AUTOPILOT_FIX_PRS,
   canRetryRun,
+  FIX_GAVE_UP_KEY_PREFIX,
   effectiveVariables,
   variableHasValue,
   variablesNamedBy,
@@ -12,6 +14,7 @@ import {
 import { z } from "zod";
 import { AppError } from "../../errors.ts";
 import type { Services } from "../../services/types.ts";
+import { FRESH_BUDGETS_PER_PR, freshBudgetRefusal } from "../../autopilot/automations/fixPrs.ts";
 import { actorField, boardUrl, run, taskField, taskResult, textResult, type ToolRegistrar } from "../shared.ts";
 
 /** One line per variable the draft reads that some project has no value for, or none. */
@@ -30,7 +33,8 @@ function missingVariables(services: Services, draft: AutomationDraft): string[] 
 /**
  * retry_autopilot_run, which lifts no limit but one (the engine decides whether there is still work, under the user's
  * switches, pause and caps; retrying Review PRs' "rounds used up" notice allows the PR one more review round, which its
- * description says to do only when the user asks), and draft_automation, which saves nothing that runs: only the user's import on the board's page
+ * description says to do only when the user asks, and retrying Fix PRs' "gave up" notice gives that budget a fresh
+ * start, at most FRESH_BUDGETS_PER_PR times), and draft_automation, which saves nothing that runs: only the user's import on the board's page
  * does. Neither switches Autopilot on or changes what it may do.
  */
 export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, actor }) => {
@@ -45,7 +49,12 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
         "limits. Rounds and attempts no longer count the retried run. Use it instead of pushing an empty commit to " +
         "re-trigger a review. Retry a run once its cause is gone: one that fails the same way again wastes a run. " +
         "Retrying Review PRs' notice that a PR changed after its last review round (or after its last conflict " +
-        "resolution review) allows that PR one more review: do that only when the user asks for it.",
+        "resolution review) allows that PR one more review: do that only when the user asks for it. Fix PRs' notices " +
+        'that it gave up on a PR ("Autopilot gave up on PR #…") are left alone unless you pass freshBudget: true, ' +
+        "which retries the newest one and gives that budget of attempts (or the attempts at that head commit) a fresh " +
+        `start, at most ${FRESH_BUDGETS_PER_PR} times per budget per PR, after which it is refused with the reason; ` +
+        "Fix PRs then nudges the task's live thread or starts a new session. Do that only when what is left on the PR " +
+        "looks fair and worth doing.",
       inputSchema: {
         task: taskField,
         automation: z
@@ -56,6 +65,12 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
           .describe(
             "Which automation's run, by key or title (e.g. review_prs or Review PRs). Default: the task's newest run that can be retried.",
           ),
+        freshBudget: z
+          .boolean()
+          .optional()
+          .describe(
+            "true: retry Fix PRs' newest notice that it gave up on the task's PR, giving it a fresh budget of attempts. automation is ignored.",
+          ),
         actor: actorField,
       },
     },
@@ -64,15 +79,47 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
         const taskId = services.tasks.resolveId(args.task);
         const titles = new Map(services.autopilot.automations().map((a) => [a.key, a.title]));
         const wanted = args.automation?.toLowerCase();
-        const runs = services.autopilot
-          .runsForTask(taskId)
-          .filter((r) => !r.dryRun)
-          .filter((r) => !wanted || r.automation === wanted || titles.get(r.automation)?.toLowerCase() === wanted);
+        const all = services.autopilot.runsForTask(taskId).filter((r) => !r.dryRun);
+        // Retrying one of these spends one of the PR's fresh budgets, so it is never the default pick.
+        const isNotice = (r: (typeof all)[number]) =>
+          r.automation === AUTOPILOT_FIX_PRS && r.dedupeKey.startsWith(FIX_GAVE_UP_KEY_PREFIX);
+        const runs = args.freshBudget
+          ? all.filter(isNotice)
+          : all.filter((r) => !wanted || r.automation === wanted || titles.get(r.automation)?.toLowerCase() === wanted);
         // A run the same automation has run again since (its next head, its next try) is history: the service refuses it.
-        const target = runs.find((r) => canRetryRun(r, runs));
+        // A notice for a head the PR has moved past grants nothing: the new head's attempts are counted afresh anyway.
+        const heads = new Set(
+          services.tasks
+            .summary(taskId)
+            .links.flatMap((l) => (l.kind === "pr" && l.snapshot?.headOid ? [l.snapshot.headOid] : [])),
+        );
+        const staleHead = (r: (typeof all)[number]) => {
+          const what = r.dedupeKey.slice(r.dedupeKey.lastIndexOf(":") + 1);
+          return /^[0-9a-f]{40}$/.test(what) && !heads.has(what);
+        };
+        const retryable = runs.filter((r) => canRetryRun(r, all) && (args.freshBudget ? !staleHead(r) : !isNotice(r)));
+        // The newest notice whose budget still has a fresh start to give; with none, the newest one's refusal says why.
+        const target = args.freshBudget
+          ? (retryable.find((r) => freshBudgetRefusal(r, all) === null) ?? null)
+          : (retryable[0] ?? null);
+        if (!target && args.freshBudget && retryable[0]) {
+          throw new AppError("CONFLICT", freshBudgetRefusal(retryable[0], all)!);
+        }
         if (!target) {
+          if (args.freshBudget) {
+            throw new AppError(
+              "NOT_FOUND",
+              "Fix PRs hasn't given up on this task's PR, so there is no budget to renew.",
+            );
+          }
           const which = args.automation ? `${args.automation} ` : "";
-          throw new AppError("NOT_FOUND", `This task has no failed or skipped ${which}Autopilot run to retry.`);
+          const notice = runs.some((r) => isNotice(r) && canRetryRun(r, all))
+            ? " Fix PRs gave up on its PR: pass freshBudget: true to give it a fresh budget, if what is left is worth it."
+            : "";
+          throw new AppError(
+            "NOT_FOUND",
+            `This task has no failed or skipped ${which}Autopilot run to retry.${notice}`,
+          );
         }
         const retried = services.autopilot.retry(target.id, actor(args.actor));
         const title = titles.get(retried.automation) ?? retried.automation;

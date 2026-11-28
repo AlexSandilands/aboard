@@ -176,6 +176,12 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
     | "flag"
     | "finish"
     | ((ended: RunnerResult, ctx: { services: Services; run: AutopilotRun }) => ActionResult);
+  /**
+   * Why a retry of this run of it is refused, beyond the board's own rules (a run that succeeded, was retried already
+   * or is history), given the runs on its task, newest first; null lets it through. Fix PRs caps the fresh budgets a
+   * retried "gave up" notice grants.
+   */
+  retryRefusal?: (run: AutopilotRun, runs: readonly AutopilotRun[]) => string | null;
   /** Parses the merged config; it should give every field a default. */
   schema: z.ZodType<C>;
   /** How the UI renders the config form. */

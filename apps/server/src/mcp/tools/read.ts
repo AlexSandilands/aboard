@@ -47,6 +47,7 @@ import {
 import { openRoundPointer } from "./reviews.ts";
 import { renderActivity } from "../activityFormat.ts";
 import { taskRunsOn } from "../../services/runOn.ts";
+import { fixPrsTrustedBots } from "../../autopilot/automations/fixPrs.ts";
 import type { Services } from "../../services/types.ts";
 
 const HOUR_MS = 3_600_000;
@@ -326,6 +327,7 @@ export const registerReadTools: ToolRegistrar = (server, { services, ctx, client
           autoReview: services.reviews.effectiveAutoReview(task.id),
           images: services.attachments.forTask(task.id),
           ticketSystems: services.settings.get().ticketSystems,
+          trustedBots: fixPrsTrustedBots(services, task),
           modelSettings: services.settings.get(),
           epicBranch: epicBranchOf(services, task),
           startsOn: startsOnOf(services, task),

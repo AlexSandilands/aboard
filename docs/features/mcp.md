@@ -31,7 +31,7 @@ steps current, group large features into epics, link the task's ticket and the T
 | `tools/reviews.ts` | `start_review`, `submit_review`, `resolve_finding` (see [local-review.md](local-review.md))             |
 | `tools/transcripts.ts` | `get_session_transcript`: a condensed, redacted, paged transcript of a Claude Code session linked to the task (read-only; see [agent-sessions.md](agent-sessions.md#transcripts)) |
 | `tools/threads.ts` | `start_task_thread`, `message_task_thread`: T3 Code threads for a task, in an epic or not (see [epics.md](epics.md#t3-code-threads)) |
-| `tools/autopilot.ts` | `retry_autopilot_run`: hands a task's failed or skipped Autopilot run back to the engine (see [autopilot.md](autopilot.md#a-pass)); `draft_automation`: keeps a custom automation, or with `replaces` a new version of one, as a draft for the user to import or apply (see [autopilot.md](autopilot.md#drafts)) |
+| `tools/autopilot.ts` | `retry_autopilot_run`: hands a task's failed or skipped Autopilot run back to the engine (see [autopilot.md](autopilot.md#a-pass)); retrying Review PRs' "rounds used up" notice allows one more round, and, with `freshBudget: true` only, Fix PRs' gave-up notice a fresh budget, up to two per budget per PR ([autopilot.md](autopilot.md#automations)); `draft_automation`: keeps a custom automation, or with `replaces` a new version of one, as a draft for the user to import or apply (see [autopilot.md](autopilot.md#drafts)) |
 | `tools/suggestions.ts` | `list_editable_prompts`, `get_editable_prompt`, `suggest_change`: proposed changes to prompts and skills, for the user to accept (see [suggestions.md](suggestions.md)) |
 
 A task is named by `"#42"`, `"42"` or its uuid, and one a connected machine numbered by `"#E7"` or `"E7"`
@@ -137,7 +137,10 @@ text when both are present.
   (`1.2 [x] Title  (id: …)   <- current`), step notes, review state, links and **Missing links**. `add_to_backlog`, `link` and `add_note`
   return one line; `start_review` and `submit_review` return the review brief or result.
 - `get_task` returns the same render plus recent activity (`events`, default 10) and a pointer when a
-  review round is waiting. It also lists the task's pasted **Images** with their absolute file paths, so an agent
+  review round is waiting. An open PR's link line ends with its unanswered review threads, who spoke last on them and
+  which of those have no repository access ("3 unanswered review threads (@coderabbitai, @bob; no repo access:
+  @stranger)"; `unansweredThreads`, with Fix PRs' trusted bots in the task's scope counted as having access), since
+  `gh pr view` doesn't show inline threads. Mutation results (`taskResult`) render it the same way. It also lists the task's pasted **Images** with their absolute file paths, so an agent
   can open a screenshot as a file ([attachments.md](attachments.md)). A **Usage** line after Progress gives the
   task's tokens and API-equivalent cost, the share of input read from cache, sessions shared with other tasks and
   tokens on models with no price ([token-usage.md](token-usage.md)).

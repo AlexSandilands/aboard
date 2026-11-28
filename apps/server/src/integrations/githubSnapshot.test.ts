@@ -299,12 +299,58 @@ describe("mapPrSnapshot", () => {
     };
     const snapshot = mapPrSnapshot(fakePr({ reviewThreads }), repo);
     expect(snapshot.reviewThreads).toEqual([
-      { id: "T1", canResolve: true, lastCommentId: 11, ownLast: true, lastReviewId: 900 },
-      { id: "T2", canResolve: true, lastCommentId: 20, ownLast: false, lastReviewId: 900 },
-      { id: "T4", canResolve: false, lastCommentId: 40, ownLast: false, lastReviewId: 900 },
+      {
+        id: "T1",
+        canResolve: true,
+        lastCommentId: 11,
+        ownLast: true,
+        lastReviewId: 900,
+        lastAuthor: "me",
+        lastTrusted: true,
+      },
+      {
+        id: "T2",
+        canResolve: true,
+        lastCommentId: 20,
+        ownLast: false,
+        lastReviewId: 900,
+        lastAuthor: "ana",
+        lastTrusted: true,
+      },
+      {
+        id: "T4",
+        canResolve: false,
+        lastCommentId: 40,
+        ownLast: false,
+        lastReviewId: 900,
+        lastAuthor: "ana",
+        lastTrusted: true,
+      },
     ]);
     expect(snapshot.unresolvedThreads).toBe(4);
     expect(snapshot.reviewComments!.map((c) => c.id)).toEqual([20, 40, 50]);
+  });
+
+  it("says whether the newest comment's author has access to the repository, and keeps a deleted one as empty", () => {
+    const outsider = { ...comment(60), authorAssociation: "NONE", author: { login: "stranger" } };
+    const ghost = { ...comment(70), authorAssociation: "CONTRIBUTOR", author: null };
+    const snapshot = mapPrSnapshot(
+      fakePr({
+        reviewThreads: {
+          nodes: [
+            { ...thread("T6", null), comments: { nodes: [comment(60), outsider] } },
+            { ...thread("T7", null), comments: { nodes: [ghost] } },
+            { ...thread("T8", null), comments: { nodes: [] } },
+          ],
+        },
+      }),
+      repo,
+    );
+    expect(snapshot.reviewThreads!.map((t) => [t.id, t.lastAuthor, t.lastTrusted])).toEqual([
+      ["T6", "stranger", false],
+      ["T7", "", false],
+      ["T8", null, false],
+    ]);
   });
 
   it("reads what Autopilot's newest reply says, and whose review opened the thread, on the fresh read", () => {

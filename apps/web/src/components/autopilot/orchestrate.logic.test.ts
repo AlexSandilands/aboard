@@ -115,6 +115,7 @@ describe("pillTimerAt", () => {
       attention: [],
       autoMerge: null,
       manual: false,
+      links: [],
     };
     expect(projectHasOrchestrateWork([task], "p")).toBe(true);
     expect(projectHasOrchestrateWork([task], "other")).toBe(false);

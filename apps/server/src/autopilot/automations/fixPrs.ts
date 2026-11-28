@@ -20,6 +20,8 @@ import {
   FIX_RESOLVE_KEY_PREFIX,
   fixGaveUpPrefix,
   fixRunKeyPrefix,
+  isRetried,
+  unretiredKey,
   prCommentReply,
   prDeclinedReply,
   prFixedReply,
@@ -77,6 +79,78 @@ export const CONFLICT_ATTEMPTS_PER_PR = 5;
  * no attempt, so this is what stops a long discussion from starting runs for ever: each costs money all the same.
  */
 export const NO_ACTION_RUNS_PER_PR = 20;
+
+/**
+ * Fresh budgets one PR can be given for each budget (and for each head commit's attempts): retrying Fix PRs' notice
+ * that it gave up grants one, so neither the user nor Orchestrate can keep a PR going for ever.
+ */
+export const FRESH_BUDGETS_PER_PR = 2;
+
+/**
+ * What a gave-up notice (`fix:gave_up:<link>:<what>`) says ran out on PR link `linkId`: a budget, or the attempts at
+ * one head commit (`head:<sha>`). The no-action notice is the comments budget's. Null for any other key.
+ */
+export function gaveUpScope(dedupeKey: string, linkId: string): string | null {
+  const prefix = `${FIX_GAVE_UP_KEY_PREFIX}${linkId}:`;
+  if (!dedupeKey.startsWith(prefix)) return null;
+  const what = dedupeKey.slice(prefix.length);
+  if (what === "review" || what === "comments" || what === "conflicts") return what;
+  if (what === "no_action") return "comments";
+  return what ? `head:${what}` : null;
+}
+
+/** The PR link and scope of a gave-up notice's key (`gaveUpScope`), or null for any other key. A link id has no colon. */
+function gaveUpNotice(dedupeKey: string): { linkId: string; scope: string } | null {
+  if (!dedupeKey.startsWith(FIX_GAVE_UP_KEY_PREFIX)) return null;
+  const rest = dedupeKey.slice(FIX_GAVE_UP_KEY_PREFIX.length);
+  const linkId = rest.slice(0, Math.max(0, rest.indexOf(":")));
+  const scope = linkId ? gaveUpScope(dedupeKey, linkId) : null;
+  return scope ? { linkId, scope } : null;
+}
+
+const SCOPE_TEXT: Record<string, string> = {
+  review: "fix attempts on checks and Autopilot's review",
+  comments: "fix attempts on people's comments",
+  conflicts: "conflict-only attempts",
+};
+
+/**
+ * Retrying a gave-up notice grants its budget a fresh start, up to `FRESH_BUDGETS_PER_PR` per budget (and per head
+ * commit) of a PR; past that, the PR is the user's to finish.
+ */
+export function freshBudgetRefusal(
+  run: Pick<AutopilotRun, "dedupeKey">,
+  runs: readonly Pick<AutopilotRun, "id" | "dedupeKey">[],
+): string | null {
+  const notice = gaveUpNotice(run.dedupeKey);
+  if (!notice) return null;
+  const granted = freshBudgets(runs, notice.linkId).get(notice.scope)?.granted ?? 0;
+  if (granted < FRESH_BUDGETS_PER_PR) return null;
+  const what = SCOPE_TEXT[notice.scope] ?? `fix attempts at ${shortSha(notice.scope.slice("head:".length))}`;
+  return (
+    `Fix PRs has already been given ${granted} fresh budgets of ${what} on this PR, the most it allows. ` +
+    "Fix what is left by hand, or ask the task's thread to (message_task_thread)."
+  );
+}
+
+/**
+ * The fresh budgets granted on PR link `linkId`, per scope (`gaveUpScope`): how many, and the newest retried notice
+ * that granted one. `runs` is newest first, as the board lists them; a scope's attempts count only from that notice on.
+ */
+export function freshBudgets(
+  runs: readonly Pick<AutopilotRun, "id" | "dedupeKey">[],
+  linkId: string,
+): Map<string, { granted: number; newest: string }> {
+  const out = new Map<string, { granted: number; newest: string }>();
+  for (const run of runs) {
+    if (!isRetried(run.dedupeKey)) continue;
+    const scope = gaveUpScope(unretiredKey(run.dedupeKey), linkId);
+    if (!scope) continue;
+    const had = out.get(scope);
+    out.set(scope, { granted: (had?.granted ?? 0) + 1, newest: had?.newest ?? run.id });
+  }
+  return out;
+}
 
 /**
  * The attempt budgets of one PR. `conflicts`: attempts that only merge the base branch in (`CONFLICT_ATTEMPTS_PER_PR`).
@@ -875,6 +949,7 @@ export const fixPrs = defineAutomation({
   schema: ConfigSchema,
   fields: FIELDS,
   defaults: DEFAULTS,
+  retryRefusal: freshBudgetRefusal,
   check: ({ services, projects, now }) =>
     projects.flatMap(({ project, config }): Candidate[] =>
       services.tasks.summaries({ projectId: project.id }).flatMap((task): Candidate[] => {
@@ -972,10 +1047,19 @@ export const fixPrs = defineAutomation({
 
           const noAction = config.onSummaries ? used.filter((f) => verdicts.get(f.run.id) === true) : [];
           const counting = used.filter((f) => !noAction.includes(f));
+          // A retried gave-up notice granted its budget a fresh start: only the attempts made after the newest one
+          // count. By the list's order, newest first: runs made in one millisecond share a createdAt.
+          const grants = freshBudgets(fixes, link.id);
+          const order = new Map(fixes.map((r, i) => [r.id, i]));
+          const after = (scope: string, run: AutopilotRun) => {
+            const grant = grants.get(scope)?.newest;
+            return grant === undefined || (order.get(run.id) ?? Infinity) < (order.get(grant) ?? Infinity);
+          };
+          const talkedTo = noAction.filter((f) => after("comments", f.run)).length;
           // Each budget counts its own attempts: main moving under the PR isn't the PR's doing, and a colleague's review
           // bot shouldn't leave no attempts for Autopilot's review loop, nor the other way round.
           const usedOf = (budget: FixBudget) =>
-            counting.filter((f) => attemptBudgets(f.triggers).includes(budget)).length;
+            counting.filter((f) => attemptBudgets(f.triggers).includes(budget) && after(budget, f.run)).length;
           const maxOf = (budget: FixBudget) =>
             budget === "conflicts"
               ? CONFLICT_ATTEMPTS_PER_PR
@@ -983,7 +1067,11 @@ export const fixPrs = defineAutomation({
                 ? config.commentAttempts
                 : config.attempts;
           const counted = counting.filter((f) => attemptBudget(f.triggers) !== "conflicts");
-          const atHead = counted.filter((f) => f.headOid === snapshot.headOid).length;
+          // A fresh budget is a fresh start at this head too, or the head's own limit would stop it at once.
+          const headScopes = ["review", "comments", `head:${snapshot.headOid}`];
+          const atHead = counted.filter(
+            (f) => f.headOid === snapshot.headOid && headScopes.every((scope) => after(scope, f.run)),
+          ).length;
           const gaveUp = (dedupeKey: string, reason: string): Candidate => ({
             dedupeKey,
             summary: `give up on PR #${ref.number}: ${reason}`,
@@ -993,7 +1081,7 @@ export const fixPrs = defineAutomation({
           });
           // A used-up budget gives up on its own triggers; the rest still go ahead. People's comments also stop once
           // too many runs on them ended in no action: raising the attempts wouldn't help, so it has a key of its own.
-          const talkedOut = noAction.length >= NO_ACTION_RUNS_PER_PR;
+          const talkedOut = talkedTo >= NO_ACTION_RUNS_PER_PR;
           const spent = (["review", "comments"] as const).filter(
             (b) => usedOf(b) >= maxOf(b) || (b === "comments" && talkedOut),
           );
@@ -1006,7 +1094,7 @@ export const fixPrs = defineAutomation({
               budget === "comments" && n < maxOf(budget)
                 ? gaveUp(
                     `${FIX_GAVE_UP_KEY_PREFIX}${link.id}:no_action`,
-                    `${noAction.length} runs on comments changed nothing and posted nothing, still to look at: ${still}`,
+                    `${talkedTo} runs on comments changed nothing and posted nothing, still to look at: ${still}`,
                   )
                 : gaveUp(
                     `${FIX_GAVE_UP_KEY_PREFIX}${link.id}:${budget}`,
@@ -1127,7 +1215,13 @@ export const fixPrs = defineAutomation({
       };
     }
     if ("gaveUp" in given) {
-      return { summary: `${fixGaveUpPrefix(given.number)} ${given.reason}`, needsAttention: true };
+      // Skipped, not succeeded: no fix was made, and a skipped run can be retried, which grants the budget a fresh start.
+      return {
+        status: "skipped",
+        summary: `${fixGaveUpPrefix(given.number)} ${given.reason}`,
+        output: { gaveUp: true },
+        needsAttention: true,
+      };
     }
     if ("resolve" in given) return resolveFixedThreads(given, gitHosts);
     const data = given;
@@ -1315,6 +1409,23 @@ async function resolveFixedThreads(
   };
 }
 
+/** Fix PRs' settings in the task's scope; undefined when the automation isn't registered. */
+function fixPrsConfig(
+  services: Services,
+  task: { projectId: string; parent: { id: string } | null },
+): Record<string, unknown> | undefined {
+  const automation = services.autopilot.automations().find((a) => a.key === AUTOPILOT_FIX_PRS);
+  return automation
+    ? (services.autopilot.resolve(automation, task.projectId, task.parent?.id ?? null).config ?? undefined)
+    : undefined;
+}
+
+/** Fix PRs' "Trusted bot reviewers" in the task's scope, parsed (`parseBotLogins`); none when it was never set. */
+export const fixPrsTrustedBots = (
+  services: Services,
+  task: { projectId: string; parent: { id: string } | null },
+): string[] => parseBotLogins(fixPrsConfig(services, task)?.trustedBots);
+
 /**
  * What "Fix in →" starts a session with: Fix PRs' prompt for what is wrong with the PR now, for a user who is watching
  * (`manual`). Every problem counts, whoever's it is and whether or not an automation has tried it, and review comments
@@ -1341,10 +1452,7 @@ export function manualFix(
       `PR #${ref.number} has nothing to fix: no failing checks, conflicts or requested changes`,
     );
   }
-  const automation = services.autopilot.automations().find((a) => a.key === AUTOPILOT_FIX_PRS);
-  const config = automation
-    ? services.autopilot.resolve(automation, task.projectId, task.parent?.id ?? null).config
-    : undefined;
+  const config = fixPrsConfig(services, task);
   // The newest review asking for changes, from someone with access to the repository or a bot listed in Fix PRs'
   // "Trusted bot reviewers": only those are read as a request.
   const bots = parseBotLogins(config?.trustedBots);
