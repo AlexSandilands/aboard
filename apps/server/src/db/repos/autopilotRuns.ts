@@ -7,7 +7,7 @@ import {
   AUTOPILOT_UNSTICK,
   CHECK_FAILED_KEY_PREFIX,
   FIX_GAVE_UP_KEY_PREFIX,
-  FIX_NO_ACTION_KEY_PREFIX,
+  FIX_VERDICT_KEY_PREFIX,
   FIX_RESOLVE_KEY_PREFIX,
   RETRIED_PREFIX,
   AutopilotRunDeferral,
@@ -446,7 +446,7 @@ export function createAutopilotRunsRepo(sql: Sql) {
       const noAgent = [
         FIX_GAVE_UP_KEY_PREFIX,
         FIX_RESOLVE_KEY_PREFIX,
-        FIX_NO_ACTION_KEY_PREFIX,
+        FIX_VERDICT_KEY_PREFIX,
         CHECK_FAILED_KEY_PREFIX,
       ].flatMap((prefix) => [`${prefix}%`, `${RETRIED_PREFIX}%:${prefix}%`]);
       return (

@@ -16,7 +16,7 @@ import {
   describeCounts,
   isReviewOfLink,
   FIX_GAVE_UP_KEY_PREFIX,
-  FIX_NO_ACTION_KEY_PREFIX,
+  FIX_VERDICT_KEY_PREFIX,
   FIX_RESOLVE_KEY_PREFIX,
   fixGaveUpPrefix,
   fixRunKeyPrefix,
@@ -119,7 +119,7 @@ export const attemptBudget = (keys: readonly string[]): FixBudget => attemptBudg
  * last activity (`attemptEndedAt`); without it the run's own end.
  *
  * Judged once, while the PR is as the run left it: a later push, or replies falling out of the poll's window, would
- * change the answer, so the check records a no-action verdict as a run of its own (`FIX_NO_ACTION_KEY_PREFIX`) and
+ * change the answer, so the check records its verdict, either way, as a run of its own (`FIX_VERDICT_KEY_PREFIX`) and
  * reads it back from there.
  */
 export function isNoAction(
@@ -154,8 +154,8 @@ const onCommentsOnly = (triggers: readonly string[]): boolean => {
 
 /**
  * When the agent of a finished attempt stopped: a run handed to a T3 thread (a nudge or a new thread) ends as soon as
- * the thread starts, so it is the thread's last activity. Null when that can't be told (the thread is gone, or T3
- * didn't say), so the attempt is never judged to have done nothing.
+ * the thread starts, so it is the thread's last activity. Null when that can't be told (the thread is gone, T3
+ * didn't say, or it has seen no activity since the hand-off), so the attempt is never judged to have done nothing.
  */
 export function attemptEndedAt(
   task: Pick<TaskSummary, "links">,
@@ -165,8 +165,9 @@ export function attemptEndedAt(
   if (run.runner !== "t3") return run.finishedAt;
   const thread = task.links.find((l) => l.kind === "t3_thread" && l.url === run.threadUrl);
   const last = thread?.kind === "t3_thread" ? thread.snapshot?.lastActivityAt : null;
-  if (!last) return null;
-  return Date.parse(last) > Date.parse(run.finishedAt) ? last : run.finishedAt;
+  // No activity seen since the hand-off: the board hasn't seen the agent work, so it can't tell when it stopped.
+  if (!last || !(Date.parse(last) > Date.parse(run.finishedAt))) return null;
+  return last;
 }
 
 /** A thread at its newest comment: a new comment on it makes it another thread to look at. */
@@ -225,9 +226,10 @@ interface FixData {
   stillOpen: FixTriggerKind[];
 }
 
-/** Records that the attempt `runId` ended in no action, so it used no attempt (`isNoAction`). */
-interface NoActionData {
-  noAction: true;
+/** Records whether the attempt `runId` ended in no action, so used no attempt (`isNoAction`), or did something. */
+interface VerdictData {
+  verdict: true;
+  noAction: boolean;
   number: number;
   runId: string;
 }
@@ -914,44 +916,42 @@ export const fixPrs = defineAutomation({
           const out: Candidate[] = [];
           // A run on people's comments that pushed nothing and posted nothing judged them discussion: it uses no
           // attempt, and doesn't count towards giving up at this head either. Only with Review summaries and PR
-          // comments on. The newest attempt is judged while the PR is as it left it, and a verdict is recorded once.
-          const verdictPrefix = `${FIX_NO_ACTION_KEY_PREFIX}${link.id}:`;
-          const judged = new Set(
-            fixes.flatMap((r) =>
-              r.dedupeKey.startsWith(verdictPrefix) ? [r.dedupeKey.slice(verdictPrefix.length)] : [],
-            ),
+          // comments on. The newest attempt is judged on the first read of the PR after it ended, and the verdict,
+          // either way, is recorded as a run of its own: judged later, a push or replies falling out of the poll's
+          // window would change the answer.
+          const verdictPrefix = `${FIX_VERDICT_KEY_PREFIX}${link.id}:`;
+          const verdicts = new Map(
+            fixes.flatMap((r) => {
+              if (!r.dedupeKey.startsWith(verdictPrefix)) return [];
+              const [runId, verdict] = r.dedupeKey.slice(verdictPrefix.length).split(":");
+              return runId ? [[runId, verdict === "no_action"] as const] : [];
+            }),
           );
           const endedAt = newest ? attemptEndedAt(task, newest.run) : null;
           const unjudged =
             config.onSummaries &&
             newest !== null &&
-            !judged.has(newest.run.id) &&
+            !verdicts.has(newest.run.id) &&
             newest.run.status === "succeeded" &&
-            onCommentsOnly(newest.triggers);
+            onCommentsOnly(newest.triggers) &&
+            snapshot.conversationComments !== undefined;
           // An end that can't be told (a T3 thread T3 says nothing about) is never judged: the attempt counts.
-          if (
-            unjudged &&
-            endedAt !== null &&
-            isNoAction({ ...newest, endedAt }, { snapshot, syncedAt: link.syncedAt, ownReviewIds })
-          ) {
-            judged.add(newest.run.id);
-            out.push({
-              dedupeKey: `${verdictPrefix}${newest.run.id}`,
-              summary: `note that an attempt on PR #${ref.number}'s comments changed nothing and posted nothing`,
-              taskId: task.id,
-              startsNoAgent: true,
-              data: { noAction: true, number: ref.number, runId: newest.run.id } satisfies NoActionData,
-            });
-          }
-          // Until the PR has been read since that attempt ended, it can't be judged, and starting the next one would
-          // leave it unjudged for good: wait for the next read (a poll, seconds away).
-          if (
-            unjudged &&
-            !judged.has(newest.run.id) &&
-            endedAt !== null &&
-            !(Date.parse(link.syncedAt ?? "") >= Date.parse(endedAt))
-          ) {
-            return out;
+          if (unjudged && endedAt !== null) {
+            if (Date.parse(link.syncedAt ?? "") >= Date.parse(endedAt)) {
+              const none = isNoAction({ ...newest, endedAt }, { snapshot, syncedAt: link.syncedAt, ownReviewIds });
+              verdicts.set(newest.run.id, none);
+              out.push({
+                dedupeKey: `${verdictPrefix}${newest.run.id}:${none ? "no_action" : "acted"}`,
+                summary: `note whether an attempt on PR #${ref.number}'s comments changed or answered anything`,
+                taskId: task.id,
+                startsNoAgent: true,
+                data: { verdict: true, noAction: none, number: ref.number, runId: newest.run.id } satisfies VerdictData,
+              });
+            } else {
+              // Until the PR has been read since that attempt ended, it can't be judged, and starting the next one
+              // would leave it unjudged for good: wait for the next read (a poll, seconds away).
+              return out;
+            }
           }
           const active = activeTriggers(snapshot, config, {
             review: currentPrReview(reviews, link.id, snapshot.headOid),
@@ -965,7 +965,7 @@ export const fixPrs = defineAutomation({
           const fresh = active.filter((t) => !handled.has(t.key) && (!epicBranch || t.kind === "conflict"));
           if (fresh.length === 0) return out;
 
-          const noAction = config.onSummaries ? used.filter((f) => judged.has(f.run.id)) : [];
+          const noAction = config.onSummaries ? used.filter((f) => verdicts.get(f.run.id) === true) : [];
           const counting = used.filter((f) => !noAction.includes(f));
           // Each budget counts its own attempts: main moving under the PR isn't the PR's doing, and a colleague's review
           // bot shouldn't leave no attempts for Autopilot's review loop, nor the other way round.
@@ -1112,11 +1112,13 @@ export const fixPrs = defineAutomation({
       }),
     ),
   act: async (candidate, { services, runner, gitHosts, config, run }): Promise<ActionResult> => {
-    const given = candidate.data as FixData | GaveUpData | ResolveData | NoActionData;
-    if ("noAction" in given) {
+    const given = candidate.data as FixData | GaveUpData | ResolveData | VerdictData;
+    if ("verdict" in given) {
       return {
         status: "skipped",
-        summary: `An attempt on PR #${given.number}'s comments changed nothing and posted nothing, so it used no attempt`,
+        summary: given.noAction
+          ? `An attempt on PR #${given.number}'s comments changed nothing and posted nothing, so it used no attempt`
+          : `An attempt on PR #${given.number}'s comments pushed or replied, so it used an attempt`,
       };
     }
     if ("gaveUp" in given) {

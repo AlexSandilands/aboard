@@ -1662,13 +1662,13 @@ describe("fix PRs: runs that end in no action", () => {
     // The next read of the PR finds it as the run left it: the verdict is recorded with no agent.
     setPr({ headCommittedAt: HEAD_AT, conversationComments: [], reviewComments: [comment(1)], updatedAt: "x" });
     await pass();
-    const verdict = runs().find((r) => r.dedupeKey.startsWith(`fix:no_action:${linkId()}:`));
+    const verdict = runs().find((r) => r.dedupeKey.startsWith(`fix:verdict:${linkId()}:`));
     expect(verdict).toMatchObject({
       status: "skipped",
       summary: "An attempt on PR #7's comments changed nothing and posted nothing, so it used no attempt",
     });
     expect(verdict!.dedupeKey).toBe(
-      `fix:no_action:${linkId()}:${runs().find((r) => r.dedupeKey.includes("comments@1"))!.id}`,
+      `fix:verdict:${linkId()}:${runs().find((r) => r.dedupeKey.includes("comments@1"))!.id}:no_action`,
     );
     // The user pushes: the head the run started from is gone, and the run still used no attempt.
     setPr({
@@ -1680,6 +1680,34 @@ describe("fix PRs: runs that end in no action", () => {
     await pass();
     expect(requests).toHaveLength(2);
     expect(requests[1]!.prompt).toContain("review-comment fix attempt 1 of at most 1");
+  });
+
+  it("record an attempt that replied too, so it isn't given back once the reply leaves the poll's window", async () => {
+    const { requests, setPr, pass, turnOn, runs, fixSettings, linkId } = setup();
+    fixSettings({ commentAttempts: 1 });
+    turnOn();
+    setPr({ headCommittedAt: HEAD_AT, conversationComments: [], reviewComments: [comment(1)] });
+    await pass();
+    // It replied on the thread (a review of the account's own, after it started).
+    const reply = review(50, { author: "me", own: true, state: "commented", submittedAt: "2099-01-01T00:00:00Z" });
+    setPr({ headCommittedAt: HEAD_AT, conversationComments: [], reviewComments: [comment(1)], reviews: [reply] });
+    await pass();
+    expect(runs().find((r) => r.dedupeKey.startsWith(`fix:verdict:${linkId()}:`))).toMatchObject({
+      dedupeKey: expect.stringMatching(/:acted$/),
+      summary: "An attempt on PR #7's comments pushed or replied, so it used an attempt",
+    });
+    // Later reviews push the reply out of the last 20 the poll reads: the attempt still counts.
+    setPr({
+      headCommittedAt: HEAD_AT,
+      conversationComments: [],
+      reviewComments: [comment(1), comment(2)],
+      reviews: [],
+    });
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(runs().find((r) => r.dedupeKey.includes("gave_up"))!.summary).toBe(
+      "Autopilot gave up on PR #7: 1 review-comment fix attempt used, still to fix: review comments",
+    );
   });
 
   it("give up once too many runs on one PR ended in no action, whatever the pushes in between", async () => {
@@ -1729,11 +1757,11 @@ describe("fix PRs: runs that end in no action", () => {
     holdRunner(null);
     await pass();
     expect(requests).toHaveLength(1);
-    expect(runs().some((r) => r.dedupeKey.startsWith(`fix:no_action:${linkId()}:`))).toBe(false);
+    expect(runs().some((r) => r.dedupeKey.startsWith(`fix:verdict:${linkId()}:`))).toBe(false);
     // The next read judges it no action, and the comment gets an attempt of its own.
     pr([1, 2]);
     await pass();
-    expect(runs().some((r) => r.dedupeKey.startsWith(`fix:no_action:${linkId()}:`))).toBe(true);
+    expect(runs().some((r) => r.dedupeKey.startsWith(`fix:verdict:${linkId()}:`))).toBe(true);
     expect(requests).toHaveLength(2);
     expect(requests[1]!.prompt).toContain("(comment ids 2)");
     expect(requests[1]!.prompt).toContain("review-comment fix attempt 1 of at most 1");
@@ -1754,7 +1782,7 @@ describe("fix PRs: runs that end in no action", () => {
     pr([1, 2]);
     await pass();
     expect(requests).toHaveLength(1);
-    expect(runs().some((r) => r.dedupeKey.startsWith(`fix:no_action:${linkId()}:`))).toBe(false);
+    expect(runs().some((r) => r.dedupeKey.startsWith(`fix:verdict:${linkId()}:`))).toBe(false);
     expect(runs()[0]!.summary).toBe(
       "Autopilot gave up on PR #7: 1 review-comment fix attempt used, still to fix: review comments",
     );
@@ -1788,7 +1816,8 @@ describe("fix PRs: runs that end in no action", () => {
     it("is a headless run's end, and a T3 thread's last activity when that is later", () => {
       expect(attemptEndedAt({ links: [] }, { ...run, runner: "headless", threadUrl: null })).toBe(run.finishedAt);
       expect(attemptEndedAt(withT3("2026-10-02T10:30:00Z") as never, run)).toBe("2026-10-02T10:30:00Z");
-      expect(attemptEndedAt(withT3("2026-10-02T09:00:00Z") as never, run)).toBe(run.finishedAt);
+      // No activity seen since the hand-off: the board can't tell when the agent stopped.
+      expect(attemptEndedAt(withT3("2026-10-02T09:00:00Z") as never, run)).toBeNull();
     });
 
     it("is unknown without the thread or its last activity", () => {
@@ -1807,7 +1836,7 @@ describe("fix PRs: runs that end in no action", () => {
     setPr({ headCommittedAt: HEAD_AT, conversationComments: [], reviewComments: [comment(1), comment(2)] });
     await pass();
     expect(requests).toHaveLength(1);
-    expect(runs().some((r) => r.dedupeKey.startsWith(`fix:no_action:${linkId()}:`))).toBe(false);
+    expect(runs().some((r) => r.dedupeKey.startsWith(`fix:verdict:${linkId()}:`))).toBe(false);
     expect(runs()[0]!.summary).toBe(
       "Autopilot gave up on PR #7: 1 review-comment fix attempt used, still to fix: review comments",
     );

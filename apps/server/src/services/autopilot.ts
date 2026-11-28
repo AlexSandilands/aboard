@@ -23,7 +23,7 @@ import {
   DEFAULT_AUTOPILOT_ENGINE,
   CHECK_FAILED_KEY_PREFIX,
   FIX_GAVE_UP_KEY_PREFIX,
-  FIX_NO_ACTION_KEY_PREFIX,
+  FIX_VERDICT_KEY_PREFIX,
   FIX_RESOLVE_KEY_PREFIX,
   isRetried,
   isSupersededRun,
@@ -682,7 +682,7 @@ export function createAutopilotService(
           agents.has(r.automation) &&
           !r.dedupeKey.startsWith(FIX_GAVE_UP_KEY_PREFIX) &&
           !r.dedupeKey.startsWith(FIX_RESOLVE_KEY_PREFIX) &&
-          !r.dedupeKey.startsWith(FIX_NO_ACTION_KEY_PREFIX) &&
+          !r.dedupeKey.startsWith(FIX_VERDICT_KEY_PREFIX) &&
           !r.dedupeKey.startsWith(CHECK_FAILED_KEY_PREFIX),
       ).length,
     };

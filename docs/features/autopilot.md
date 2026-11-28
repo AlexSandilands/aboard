@@ -916,12 +916,12 @@ to fix a pull request linked to a task.
   comment of its own. That is the agent judging the comments discussion, and needs no report from it. Only the newest
   attempt is judged, once the snapshot was read after it ended, and only on a snapshot with `conversationComments`,
   so older snapshots count every attempt as before. An attempt handed to a T3 thread ends when the thread starts, so
-  it is judged once the thread is idle, on a read after the thread's `lastActivityAt` (`attemptEndedAt`); without
-  that the attempt counts. Until such a read comes, a new attempt waits (a poll at most), so the one before isn't
-  left unjudged. A later push, or its
-  replies falling out of the poll's last 20 reviews and 10 comments, would change the answer, so a no-action verdict
-  is recorded as a run of its own, `fix:no_action:<linkId>:<runId>` (`FIX_NO_ACTION_KEY_PREFIX`, skipped, no agent,
-  left out of the caps), and read back from there. A reply the poll hasn't read yet when the verdict is taken can
+  it is judged once the thread is idle, on a read after the thread's `lastActivityAt` (`attemptEndedAt`); when T3
+  doesn't say, or has seen no activity since the hand-off, the attempt counts. Until such a read comes, a new attempt
+  waits (a poll at most), so the one before isn't left unjudged. It is judged on the first such read, and the
+  verdict, either way, is recorded as a run of its own, `fix:verdict:<linkId>:<runId>:no_action|acted`
+  (`FIX_VERDICT_KEY_PREFIX`, skipped, no agent, left out of the caps), and read back from there: judged later, a
+  push, or its replies falling out of the poll's last 20 reviews and 10 comments, would change the answer. A reply the poll hasn't read yet when the verdict is taken can
   still make a run look like no action. Such runs are left out of the budgets and of the per-head count (two
   discussion comments at one head mustn't give up), but they cost money, so after `NO_ACTION_RUNS_PER_PR` (20)
   verdicts on one PR a gave-up run `fix:gave_up:<linkId>:no_action` gives up on the comments' triggers.
