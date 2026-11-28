@@ -118,6 +118,11 @@ describe("merge_task_pr", () => {
     const result = await call("merge_task_pr", { task: `#${task.number}` });
     expect(result.isError).toBe(true);
     expect(result.text).toContain("the signed-in GitHub account can't merge it");
+    // A missing approval too: the account is the user's to fix, the approval only the reviewer's.
+    const needsApproval = await reviewTask({ autoMerge: true, pr: { reviewDecision: "REVIEW_REQUIRED" } });
+    const both = await call("merge_task_pr", { task: `#${needsApproval.number}` });
+    expect(both.text).toContain("the signed-in GitHub account can't merge it");
+    expect(both.text).not.toContain("approving review");
     expect(merges()).toEqual([]);
   });
 

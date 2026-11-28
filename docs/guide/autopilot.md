@@ -303,8 +303,9 @@ Ready means all of these hold:
 - its checks pass (a repository with no checks waits ten minutes after each push, in case they just haven't started);
 - it merges cleanly.
 
-Anything else waits. Where only you can settle it (GitHub wants an approving review, say), the task shows why under
-**Needs attention** and you get a notification.
+Anything else waits, including a pull request that still needs an approving review: that's how a pull request
+normally ends, so it doesn't ask for you. Where only you can settle it (the signed-in account can't merge, say, or
+the task has two open pull requests), the task shows why under **Needs attention** and you get a notification.
 
 It has two targets:
 
@@ -343,8 +344,9 @@ start means the epic stops every time a task is done. An epic can instead delive
   conflict for a task whose branch was built on another task's branch that hasn't merged yet; tasks normally start
   from the epic's branch once the tasks blocking them are Done, so it rarely comes up.
 - If the merge fails for a reason that may pass (another task's pull request merged into the branch first), it
-  tries again a couple of times. If GitHub won't let it merge (a branch rule wants an approving review, say), the task shows **Ready to merge into
-  the epic branch** under Needs attention and you get a notification. Merge it yourself.
+  tries again a couple of times. A pull request waiting for an approving review just waits, and merges once it's
+  approved. If GitHub won't let it merge for another reason (a branch rule the board can't see), the task shows
+  **Ready to merge into the epic branch** under Needs attention and you get a notification. Merge it yourself.
 - After the first merge it opens a **draft pull request** from the epic's branch into the default branch, links it
   on the epic and keeps its description listing every task with its pull request and reviews. If it conflicts with
   the default branch, Fix PRs merges the default branch in. **Only you merge that pull request.** When the task

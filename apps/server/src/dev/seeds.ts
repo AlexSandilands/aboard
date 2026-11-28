@@ -1328,7 +1328,7 @@ const autopilot: Scenario = (s, opts) => {
     });
   }
   // Merge ready PRs (Into main off): an epic delivering through a branch of its own, and Review tasks flagged
-  // Auto-merge, the last held for an approval only the user gives.
+  // Auto-merge, the last held by something only the user can settle (an account that can't merge).
   s.autopilot.setScope("board", null, "merge_epic_prs", { mode: "on" });
   const epic = s.tasks.summaries({}).find((t) => t.kind === "epic");
   if (epic) s.tasks.setDelivery(epic.id, "integration", epicBranchName(epic), "user");
@@ -1352,7 +1352,7 @@ const autopilot: Scenario = (s, opts) => {
       s.autopilot.start(run.id);
       s.autopilot.finish(run.id, {
         status: "skipped",
-        summary: `Ready to merge into main, but Autopilot won't merge ${taskLabel(held)} by itself: it still needs an approving review. Merge it yourself, or fix that.`,
+        summary: `Ready to merge into main, but Autopilot won't merge ${taskLabel(held)} by itself: the signed-in account can't merge it. Merge it yourself, or fix that.`,
         needsAttention: true,
       });
     }

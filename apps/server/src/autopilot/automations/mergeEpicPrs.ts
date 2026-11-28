@@ -57,6 +57,25 @@ function mergeRuns(runs: readonly AutopilotRun[], linkId: string, headOid: strin
 /** Merge failures that pass on their own besides GitHub's and the network's: a race with another merge or a push. */
 const MERGE_RACE = /base branch was modified|head branch was modified/i;
 
+/** GitHub refusing a merge because a branch rule wants an approving review: a wait for the reviewer, not the user's. */
+const NEEDS_APPROVAL = /approving review|review is required|reviews? required/i;
+
+/**
+ * Whether the PR waits for an approving review at this head: GitHub says one is required, or it refused a merge for
+ * want of one and the board hasn't read the PR since (so it isn't tried again on the same stale read).
+ */
+function awaitsApproval(link: PrLink, runs: readonly AutopilotRun[]): boolean {
+  if (link.snapshot?.reviewDecision === "review_required") return true;
+  const key = `merge:${link.id}:${link.snapshot?.headOid ?? ""}`;
+  return runs.some(
+    (r) =>
+      r.automation === AUTOPILOT_MERGE_EPIC_PRS &&
+      r.output?.approval === true &&
+      r.output.syncedAt === (link.syncedAt ?? null) &&
+      (r.dedupeKey === key || r.dedupeKey.startsWith(`${key}:`)),
+  );
+}
+
 interface EpicPrData {
   kind: "open_pr" | "update_pr";
   branch: string;
@@ -236,8 +255,9 @@ type MergeReadyConfig = z.infer<typeof schema>;
  * into epic branches). Two targets:
  * - Into epic branches, always on with it: for each epic delivered through an integration branch, merges a task's PR
  *   into the branch once `notMergeable` finds nothing in the way, with a merge commit if the repository allows one,
- *   else a squash, else a rebase (mergeIntoEpicBranch). Once per PR and head commit. GitHub refusing (branch rules
- *   wanting an approval) puts "Ready to merge into the epic branch" on the task and notifies. The merge moves the task
+ *   else a squash, else a rebase (mergeIntoEpicBranch). Once per PR and head commit. A PR waiting for an approving
+ *   review waits, flagging nothing; any other refusal from GitHub puts "Ready to merge into the epic branch" on the
+ *   task and notifies. The merge moves the task
  *   to Done, which unblocks what waits on it. It also opens a draft PR from the branch into the default branch once a
  *   task has merged, links it on the epic, and keeps its description listing the tasks. It never merges that PR.
  * - Into main, with `intoMain` on (off by default): tasks the user flagged for auto-merge, through merge_task_pr's own
@@ -291,6 +311,7 @@ function intoEpicBranches(services: Services, tasks: readonly TaskSummary[], now
       prsInto(task, branch).flatMap((link): Candidate[] => {
         const timing = { now: now.getTime(), headSince: headSeenSince(link, changes.get(link.id)) };
         if (notMergeable(services, task, link, branch, runsOf(task.id), timing) !== null) return [];
+        if (awaitsApproval(link, runsOf(task.id))) return [];
         const earlier = mergeRuns(runsOf(task.id), link.id, link.snapshot!.headOid!);
         if (earlier.settled || earlier.count >= MERGE_ATTEMPTS) return [];
         const data: MergeData = {
@@ -379,6 +400,13 @@ async function actEpic(
     const reason = notMergeable(services, task, link, data.branch, runs, timing);
     // Something changed since the check; the next pass looks again.
     if (reason) return { status: "skipped", summary: `Didn't merge PR #${data.number}: ${reason}`, output: RECHECK };
+    if (link.snapshot.reviewDecision === "review_required") {
+      return {
+        status: "skipped",
+        summary: `Didn't merge PR #${data.number}: it still needs an approving review`,
+        output: RECHECK,
+      };
+    }
     let method: string;
     try {
       ({ method } = await gitHosts.mergeIntoEpicBranch(link, { base: data.branch, headOid: data.headOid }));
@@ -391,6 +419,15 @@ async function actEpic(
         };
       }
       const message = messageOf(error);
+      // Waiting for an approval is how a PR normally ends: no flag, and no try used up. It is tried again once the
+      // board has read the PR since (awaitsApproval), by when GitHub usually says the review is required.
+      if (NEEDS_APPROVAL.test(message)) {
+        return {
+          status: "skipped",
+          summary: `Didn't merge PR #${data.number} into ${data.branch} yet: it still needs an approving review (${message})`,
+          output: { ...RECHECK, approval: true, syncedAt: link.syncedAt ?? null },
+        };
+      }
       // A race (another PR just merged into the branch, a push) or a network error may pass: try again next pass.
       const passing =
         (error instanceof AppError && error.code === "CONFLICT") ||
@@ -403,7 +440,7 @@ async function actEpic(
           output: RETRY,
         };
       }
-      // Branch rules wanting an approval, or tries used up: the user can still merge it by hand.
+      // Any other refusal (a rule the board can't see), or tries used up: the user can still merge it by hand.
       return {
         status: "skipped",
         summary: `Ready to merge into the epic branch: GitHub didn't let Autopilot merge PR #${data.number} into ${data.branch} (${message}). Merge it yourself.`,

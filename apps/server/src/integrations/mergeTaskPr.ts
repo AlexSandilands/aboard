@@ -19,9 +19,10 @@ const refuse = (task: TaskSummary, why: string) =>
 /**
  * Where a task flagged for auto-merge stands, by the rules merge_task_pr and Merge ready PRs' Into main share:
  * - `ready`: its one open PR passes the gate (notMergeable) and nothing else is in the way;
- * - `wait`: something that passes by itself or by an agent's work (a review, checks, a conflict to fix);
- * - `yours`: something only the user can settle (an approving review GitHub requires, an account that can't merge,
- *   two open PRs, a fork). `link` is the PR it is about, when there is one.
+ * - `wait`: something that passes by itself or by an agent's work (a review, checks, a conflict to fix, an approving
+ *   review GitHub requires);
+ * - `yours`: something only the user can settle (an account that can't merge, two open PRs, a fork). `link` is the PR
+ *   it is about, when there is one.
  */
 export type AutoMergeVerdict =
   | { kind: "ready"; link: PrLink; headOid: string; base: string }
@@ -83,19 +84,21 @@ export function autoMergeVerdict(services: Services, task: TaskSummary, now: num
   if (reason) return { kind: "wait", reason, link };
   // notMergeable passed, so the snapshot is there with a head and a base.
   const { headOid, baseRef } = snapshot as { headOid: string; baseRef: string };
+  // Before the review check: a PR that also needs an approval would otherwise hide this from the user as a wait.
+  if (snapshot?.canMerge === false) {
+    return { kind: "yours", reason: CANT_MERGE, link };
+  }
+  // Waiting for an approval is how a PR normally ends, so it is a wait: no hold, no attention flag.
   if (snapshot?.reviewDecision === "review_required") {
     const unresolved = snapshot.mergeState === "blocked" ? (snapshot.unresolvedThreads ?? 0) : 0;
     return {
-      kind: "yours",
+      kind: "wait",
       reason:
         unresolved > 0
           ? `it still needs an approving review, and it has ${describeUnresolved(unresolved)} the repository may require resolved`
           : "it still needs an approving review",
       link,
     };
-  }
-  if (snapshot?.canMerge === false) {
-    return { kind: "yours", reason: CANT_MERGE, link };
   }
   return { kind: "ready", link, headOid, base: baseRef };
 }

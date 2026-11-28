@@ -301,10 +301,48 @@ describe("merge into epic branch", () => {
     expect(merges).toHaveLength(1);
   });
 
-  it("flags the task Ready to merge into the epic branch when GitHub refuses, and notifies", async () => {
+  it("waits, flagging nothing, while GitHub says the PR needs an approving review", async () => {
+    const { s, task, setPr, toReview, pass, turnOn, runs, merges } = setup();
+    turnOn();
+    toReview();
+    setPr({ reviewDecision: "review_required", mergeState: "blocked" });
+    await pass();
+    expect(merges).toHaveLength(0);
+    expect(runs()).toEqual([]);
+    expect(s.tasks.summary(task.id).attention).toEqual([]);
+    setPr({ reviewDecision: "approved" });
+    await pass();
+    expect(merges).toHaveLength(1);
+  });
+
+  it("doesn't flag GitHub refusing a merge for want of an approval, and tries again once the PR is read again", async () => {
+    const { s, task, setPr, toReview, pass, turnOn, runs, merges, failMerge } = setup();
+    turnOn();
+    failMerge(new AppError("VALIDATION", "At least 1 approving review is required by reviewers with write access."));
+    toReview();
+    setPr();
+    await pass();
+    await pass();
+    expect(merges).toHaveLength(1);
+    expect(runs()[0]).toMatchObject({ status: "skipped", needsAttention: false, output: { approval: true } });
+    expect(runs()[0]!.summary).toContain("still needs an approving review");
+    expect(s.tasks.summary(task.id).attention).toEqual([]);
+    expect(s.notifications.list().items.some((n) => n.kind === "autopilot_failed")).toBe(false);
+    // Read again: still no approval, so it waits; approved, it merges.
+    setPr({ reviewDecision: "review_required", mergeState: "blocked", title: "read again" });
+    await pass();
+    expect(merges).toHaveLength(1);
+    failMerge(null);
+    setPr({ reviewDecision: "approved" });
+    await pass();
+    expect(merges).toHaveLength(2);
+    expect(s.tasks.summary(task.id).status).toBe("done");
+  });
+
+  it("flags the task Ready to merge into the epic branch when GitHub refuses for another reason, and notifies", async () => {
     const { s, task, setPr, toReview, pass, turnOn, runs, failMerge } = setup();
     turnOn();
-    failMerge(new AppError("VALIDATION", "At least 1 approving review is required"));
+    failMerge(new AppError("VALIDATION", 'Required status check "build" is expected'));
     toReview();
     setPr();
     await pass();
@@ -312,7 +350,7 @@ describe("merge into epic branch", () => {
     const summary = s.tasks.summary(task.id);
     expect(summary.status).toBe("review");
     expect(summary.attention.find((a) => a.kind === "autopilot")?.message).toMatch(
-      /^Ready to merge into the epic branch: .*approving review/,
+      /^Ready to merge into the epic branch: .*Required status check/,
     );
     expect(s.notifications.list().items.some((n) => n.kind === "autopilot_failed")).toBe(true);
   });
