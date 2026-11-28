@@ -116,6 +116,9 @@ describe("Orchestrate", () => {
     expect(request.deniedTools).toEqual(ORCHESTRATE_DENIED_TOOLS);
     expect(request.deniedTools).toContain(`mcp__${BRAND.id}__update_task`);
     expect(request.deniedTools).toContain(`mcp__${BRAND.id}__merge_task_pr`);
+    // It starts sessions only through its own run tool, bound to its project, which goes through Autopilot's limits.
+    expect(request.deniedTools).toContain(`mcp__${BRAND.id}__start_task_thread`);
+    expect(request.runTools).toEqual({ toolSet: "orchestrate", target: { kind: "project", projectId: project.id } });
     expect(request.outputSchema).toMatchObject({ required: ["summary", "handover"] });
     // The allow list takes plain commands only, so the prompt says so rather than leaving a refusal to read as "Bash is off".
     expect(request.prompt).toContain("Run each `gh` command on its own, one per Bash call");
@@ -260,10 +263,12 @@ describe("orchestratePrompt", () => {
     const prompt = orchestratePrompt({ project, instructions: "", handover: null });
     expect(prompt).toContain('board_overview(workspacePath "/work/alpha")');
     expect(prompt).toContain("Don't read or edit files in the project's folder (/work/alpha)");
-    for (const tool of ["message_task_thread", "start_task_thread", "retry_autopilot_run", "request_attention"]) {
+    for (const tool of ["message_task_thread", "start_task_session", "retry_autopilot_run", "request_attention"]) {
       expect(prompt).toContain(tool);
     }
-    expect(prompt).toContain("Never start a second thread on a task");
+    // Sessions go through Autopilot's runner and limits, so it never starts a T3 thread directly.
+    expect(prompt).not.toContain("start_task_thread");
+    expect(prompt).toContain("Never start a second session on a task");
     expect(prompt).toContain("never start one yourself");
     expect(prompt).toContain("leaves another open PR red or conflicting");
     expect(prompt).not.toContain("The user's own instructions");

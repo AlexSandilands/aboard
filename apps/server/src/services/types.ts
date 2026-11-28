@@ -1,5 +1,6 @@
 import type { UsageService } from "./usage.ts";
 import type { RepoPrReviewsService } from "./repoPrReviews.ts";
+import type { TaskSessionsService } from "./taskSessions.ts";
 import type {
   HostedRunnerSetting,
   T3Access,
@@ -102,6 +103,8 @@ export interface Services {
   skillSync: SkillSyncService;
   attention: AttentionService;
   repoPrReviews: RepoPrReviewsService;
+  /** Orchestrate's requests for a new agent session on a task, which Task sessions runs. */
+  taskSessions: TaskSessionsService;
   machineAuth: MachineAuthService;
   /** The machines this board is connected to, as stored. */
   machines: MachinesService;

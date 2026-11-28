@@ -156,6 +156,13 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
    */
   alwaysOn?: boolean;
   /**
+   * The key of the built-in automation it is part of (Task sessions, of Orchestrate). It has no switch or settings of
+   * its own: it is on, in Preview or off wherever that one is, its config is that one's (so give it the same schema and
+   * defaults), and the service refuses to switch it. The settings page doesn't list it; the run history lists its runs
+   * under that one's.
+   */
+  partOf?: string;
+  /**
    * Why it can't work as it is (a custom automation with an empty required tool slot), or null. The service refuses to
    * switch it on, the UI says why, and its check finds nothing meanwhile.
    */

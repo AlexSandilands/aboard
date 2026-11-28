@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  automationChoices,
   runSessionLink,
   shortSessionId,
   threadLinkLabel,
@@ -152,5 +153,26 @@ describe("run links", () => {
     expect(shortSessionId("6f1c2e0a-9d3b-4c52")).toBe("6f1c2e0a");
     expect(threadLinkLabel("t3code://threads/x")).toBe("Open in T3 Code");
     expect(threadLinkLabel("https://example.com/t")).toBe("Open thread");
+  });
+});
+
+describe("automationChoices", () => {
+  it("lists each part under the automation it belongs to, then the retired automations", () => {
+    const automations = [
+      { key: "start_planned", title: "Start planned tasks" },
+      { key: "orchestrate", title: "Orchestrate" },
+      { key: "digest", title: "Digest" },
+    ];
+    const parts = [{ key: "task_sessions", title: "Task sessions", description: "", partOf: "orchestrate" }];
+    const choices = automationChoices(automations, parts);
+    expect(choices.slice(0, 4)).toEqual([
+      { value: "start_planned", label: "Start planned tasks" },
+      { value: "orchestrate", label: "Orchestrate" },
+      { value: "task_sessions", label: "Orchestrate › Task sessions" },
+      { value: "digest", label: "Digest" },
+    ]);
+    expect(choices.slice(4).every((c) => c.label.endsWith("(retired)"))).toBe(true);
+    // A part whose automation isn't listed still has its runs.
+    expect(automationChoices([], parts)[0]).toEqual({ value: "task_sessions", label: "Task sessions" });
   });
 });

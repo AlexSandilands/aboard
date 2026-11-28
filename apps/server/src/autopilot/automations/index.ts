@@ -8,6 +8,7 @@ import { orchestrate } from "./orchestrate.ts";
 import { recurring } from "./recurring.ts";
 import { reviewPrs } from "./reviewPrs.ts";
 import { startPlanned } from "./startPlanned.ts";
+import { taskSessions } from "./taskSessions.ts";
 
 // One file per automation in this folder, each added here. The key is stored in settings and runs, so never
 // rename one.
@@ -21,6 +22,7 @@ export const AUTOMATIONS: readonly Automation[] = [
   fixPrs,
   mergeEpicPrs,
   orchestrate,
+  taskSessions,
   digest,
   improveAutomations,
 ];

@@ -43,6 +43,7 @@ import { createProjectsService } from "./projects.ts";
 import { createRelations, type RelationsModule } from "./relations.ts";
 import { createRecurringService } from "./recurring.ts";
 import { createRepoPrReviewsService } from "./repoPrReviews.ts";
+import { createTaskSessionsService } from "./taskSessions.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
 import { createSkillSyncService, type HarnessHomes } from "./skillSync.ts";
@@ -267,6 +268,11 @@ export function createServices(deps: ServiceDeps): Services {
     workingCopies,
     runnerAutopilot: createRunnerAutopilotService(core, { logRun: (run) => workingCopies.logRun(run) }),
     repoPrReviews: createRepoPrReviewsService(core, { notifications }),
+    taskSessions: createTaskSessionsService(core, {
+      tasks: () => all!.tasks,
+      projects,
+      runsForTask: (taskId) => all!.autopilot.runsForTask(taskId, 20),
+    }),
     autopilot: createAutopilotService(core, {
       automations,
       notifications,

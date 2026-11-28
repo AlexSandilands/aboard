@@ -549,6 +549,30 @@ describe("Autopilot runner", { timeout: PROCESS_TEST_TIMEOUT }, () => {
       expect(session).toMatchObject({ ref: { harness: "codex", sessionId: CODEX_ID } });
     });
 
+    // What Task sessions asks for (taskSessions.ts): only the runner choice, on the taskRun operation.
+    it("runs an Auto session with T3 Code down on whichever provider the user set for task runs, naming no CLI", async () => {
+      const { h, jobs, launches, start } = setup({
+        agent: async (job) => {
+          for (const line of codexOutput) job.onStdoutLine?.(line);
+          return codexOutput.join("\n");
+        },
+      });
+      // Only Codex is set up: nothing in the request names it.
+      h.services.settings.update({ providers: [{ id: "codex", enabled: true, cliPath: "/opt/codex" }] });
+      const out = await start({ label: "Task sessions", options: { runner: "auto" } });
+      expect(launches).toEqual([]);
+      expect(jobs[0]).toMatchObject({ command: "codex", label: "Codex" });
+      expect(out).toMatchObject({ runner: "headless", sessionId: CODEX_ID });
+    });
+
+    it("starts a T3 thread for a session whose runner is T3 Code", async () => {
+      const { jobs, launches, start } = setup({ t3: T3_UP });
+      const out = await start({ label: "Task sessions", options: { runner: "t3" } });
+      expect(jobs).toEqual([]);
+      expect(launches).toHaveLength(1);
+      expect(out).toMatchObject({ runner: "t3" });
+    });
+
     it("passes the model's Codex effort on, and none for a typed model or a profile without one", async () => {
       const effortOf = async (profile: object, typed?: string) => {
         const { h, task, jobs, start } = setup({ agent: async () => codexOutput.join("\n") });

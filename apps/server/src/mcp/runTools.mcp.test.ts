@@ -272,3 +272,70 @@ describe("/mcp/run/:token", () => {
     }
   });
 });
+
+describe("Orchestrate's run tools", () => {
+  let h: Harness;
+  beforeEach(() => {
+    h = createTestHarness({ token: "board-secret" });
+  });
+  afterEach(() => h.db.close());
+
+  const plan = { phases: [{ title: "Do", steps: [{ title: "it" }] }] };
+
+  it("gives an Orchestrate run start_task_session bound to its project, and no other agent sees it", async () => {
+    const s = h.services;
+    const alpha = s.projects.create({ title: "Alpha", workspaceRoot: "/work/alpha" });
+    const beta = s.projects.create({ title: "Beta", workspaceRoot: "/work/beta" });
+    const task = s.tasks.create({ projectId: alpha.id, title: "Stalled", plan });
+    s.tasks.move(task.id, { status: "in_progress" }, "agent");
+    const elsewhere = s.tasks.create({ projectId: beta.id, title: "Elsewhere", plan });
+    s.tasks.move(elsewhere.id, { status: "in_progress" }, "agent");
+
+    const { token } = h.integrations.runTools.tokens.mint(
+      "orchestrate-run",
+      { toolSet: "orchestrate", target: { kind: "project", projectId: alpha.id } },
+      60_000,
+    );
+    const client = await connect(h, token);
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(RUN_TOOL_NAMES.orchestrate);
+
+    const asked = await client.callTool({
+      name: "start_task_session",
+      arguments: { task: `#${task.number}`, note: "Answer the review threads and push." },
+    });
+    expect((asked as CallToolResult).isError).toBeFalsy();
+    expect(text(asked)).toContain(`Asked for a new agent session on #${task.number} "Stalled"`);
+    const [request] = s.taskSessions.open();
+    expect(request).toMatchObject({
+      taskId: task.id,
+      note: "Answer the review threads and push.",
+      actor: "autopilot",
+      requestedByRunId: "orchestrate-run",
+      runId: null,
+    });
+
+    // Once per task per hour, and never outside its project.
+    const again = await client.callTool({
+      name: "start_task_session",
+      arguments: { task: `#${task.number}`, note: "x" },
+    });
+    expect(text(again)).toMatch(/^CONFLICT: Not started: a session was already asked for/);
+    const other = await client.callTool({
+      name: "start_task_session",
+      arguments: { task: `#${elsewhere.number}`, note: "x" },
+    });
+    expect(text(other)).toContain("isn't in the project this run looks after");
+    await client.close();
+
+    // The board's own endpoint, which every other agent uses, has no such tool.
+    const board = new Client({ name: "claude-code", version: "1.0.0" });
+    await board.connect(
+      new StreamableHTTPClientTransport(new URL("http://127.0.0.1:4317/mcp"), {
+        fetch: fetchVia(h),
+        requestInit: { headers: { authorization: "Bearer board-secret" } },
+      }),
+    );
+    expect((await board.listTools()).tools.map((t) => t.name)).not.toContain("start_task_session");
+    await board.close();
+  });
+});

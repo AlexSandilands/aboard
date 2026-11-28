@@ -1,7 +1,6 @@
 import {
   taskNumberValue,
   AUTOPILOT_ALL_RUNS,
-  RETIRED_AUTOMATION_TITLES,
   RUN_DELETE_IDS_MAX,
   type AutopilotRun,
   type AutopilotRunFilter,
@@ -30,6 +29,7 @@ import { useAutopilotOverview, useBoard } from "~/state/queries";
 import { automationTitle } from "./autopilot.logic";
 import { cn } from "~/lib/utils";
 import {
+  automationChoices,
   deleteTitle,
   describeRunFilter,
   isNarrowed,
@@ -72,7 +72,10 @@ export function RunHistory({
   const overview = useAutopilotOverview();
   const board = useBoard();
   const projects = board.data?.projects.filter((p) => p.archivedAt === null) ?? [];
-  const catalogue = overview.data?.automations ?? [];
+  // Parts (Task sessions) aren't in the list of automations, but their runs are here, under their own names.
+  const parts = overview.data?.parts;
+  const automations = overview.data?.automations;
+  const catalogue = useMemo(() => [...(automations ?? []), ...(parts ?? [])], [automations, parts]);
   const title = automation === AUTOPILOT_ALL_RUNS ? null : automationTitle(catalogue, automation);
 
   // A preset's "last 7 days" is counted from when the filters last changed, so the list doesn't shift as the clock
@@ -112,11 +115,7 @@ export function RunHistory({
   const projectTitle = (id: string | null) => projects.find((p) => p.id === id)?.title ?? null;
   const automationItems = [
     { value: AUTOPILOT_ALL_RUNS, label: "All automations" },
-    ...catalogue.map((a) => ({ value: a.key, label: a.title })),
-    // Retired ones still have runs worth finding, under their old names.
-    ...Object.entries(RETIRED_AUTOMATION_TITLES)
-      .filter(([key]) => !catalogue.some((a) => a.key === key))
-      .map(([key, label]) => ({ value: key, label: `${label} (retired)` })),
+    ...automationChoices(automations ?? [], parts ?? []),
   ];
   if (!automationItems.some((i) => i.value === automation)) {
     automationItems.push({ value: automation, label: automationTitle(catalogue, automation) });

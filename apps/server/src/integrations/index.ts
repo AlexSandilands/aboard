@@ -168,6 +168,7 @@ export function createIntegrations(deps: IntegrationDeps, overrides: Integration
   const runTools: RunToolsContext = {
     tokens: createRunTokens(),
     gitHost: overrides.gitHost ? () => overrides.gitHost! : (host) => hosts.forHost(host),
+    services: deps.services,
   };
   const isRunner = deps.config.role === "runner";
   /** This server as a link made on it names it, on a runner. */

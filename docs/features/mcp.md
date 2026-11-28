@@ -215,9 +215,14 @@ text when both are present.
 A second, separate server: `POST /mcp/run` serves one headless Autopilot run the tools of its operation, bound to its
 target, with a run token as its credential (`mcp/runTools.ts`, [ADR 0013](../decisions/0013-board-served-run-tools.md)).
 Today that is the PR review set: `pr_overview`, `pr_files`, `pr_diff` and `pr_comments`, read-only and paged, and
-for another person's PR the same plus `pr_threads` and `repo_issue` (`repoPrReview`). These tools are not in the
-board's `/mcp` server, and the board's tools are not in a run's. Their descriptions follow the rules below, and the
-review prompts (`reviewPrompt`, and `repoPrPrompt` for other people's PRs) are the places that tell agents about them. See
+for another person's PR the same plus `pr_threads` and `repo_issue` (`repoPrReview`). An Orchestrate run gets the
+`orchestrate` set, bound to its project: only `start_task_session(task, note)`, which asks the board for a new agent
+session on a stalled task In Progress or in Review and is refused, with the reason, for manual, Planned, blocked or
+busy tasks, tasks in other projects, and a second ask within the hour; the board's Task sessions automation runs it
+([autopilot.md](autopilot.md#task-sessions), [ADR 0018](../decisions/0018-run-tools-may-ask-the-board.md)). These
+tools are not in the board's `/mcp` server, so no other agent sees them, and the board's tools are not in a run's.
+Their descriptions follow the rules below, and the prompts that use them (`reviewPrompt`, `repoPrPrompt` for other
+people's PRs, `orchestratePrompt`) are the places that tell agents about them. See
 [autopilot.md](autopilot.md#run-tools).
 
 ### board_activity

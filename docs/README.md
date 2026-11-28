@@ -107,6 +107,7 @@ files under each app.
 - [0015 A runner's machine API takes paired tokens, and may listen beyond loopback](decisions/0015-machine-api-auth.md)
 - [0016 A machine that holds a task orders its changes, and its log holds states](decisions/0016-held-tasks-single-writer.md)
 - [0017 A board may host a runner in its own process, with a store of its own](decisions/0017-board-hosts-a-runner.md)
+- [0018 A run tool may ask the board for work, bound to the run's scope](decisions/0018-run-tools-may-ask-the-board.md)
 
 ### Reference
 

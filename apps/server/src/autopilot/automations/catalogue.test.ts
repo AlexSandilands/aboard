@@ -14,6 +14,7 @@ describe("the built-in catalogue", () => {
       "review_prs",
       "fix_prs",
       "merge_epic_prs",
+      "task_sessions",
     ]);
   });
 
