@@ -387,7 +387,11 @@ describe("Merge ready PRs: Into main", () => {
     failMerge(new AppError("CONFLICT", "The PR moved on to abc1234 since it was checked"));
     await pass();
     expect(runs(task.id)[0]).toMatchObject({ status: "skipped", output: { retry: true } });
-    failMerge(new AppError("VALIDATION", "GitHub says the PR can't be merged yet (BLOCKED): a branch rule"));
+    // A refusal the refreshed PR doesn't explain (it still reads ready). The host's own BLOCKED refusal refreshes to a
+    // blocked PR, which the gate waits on silently, as it does before any merge is tried.
+    failMerge(
+      new AppError("VALIDATION", "Repository rule violations found: changes must be made through a merge queue"),
+    );
     await pass();
     expect(runs(task.id)[0]).toMatchObject({
       status: "skipped",
