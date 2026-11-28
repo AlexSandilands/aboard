@@ -404,6 +404,38 @@ const threads: Scenario = (s, opts) => {
     reviewDecision: "review_required",
     mergeable: "conflicting",
   });
+  // Waiting for an approval: the card's tooltip and the panel's hint name the threads that may be holding it back.
+  const reviewThread = (id: string, lastAuthor: string, ownLast = false) => ({
+    id,
+    canResolve: true,
+    lastCommentId: 1,
+    ownLast,
+    lastReviewId: null,
+    lastAuthor,
+    lastTrusted: !ownLast && lastAuthor !== "coderabbitai",
+  });
+  pr("review", "PR green, needs approval, review threads open", {
+    state: "open",
+    checks: "passing",
+    reviewDecision: "review_required",
+    mergeable: "mergeable",
+    ...mergeable,
+    reviewThreads: [
+      reviewThread("RT1", "coderabbitai"),
+      reviewThread("RT2", "coderabbitai"),
+      reviewThread("RT3", "sandbox-user", true),
+      reviewThread("RT4", "ana"),
+    ],
+    unresolvedThreads: 4,
+  });
+  pr("review", "PR green, needs approval, no threads", {
+    state: "open",
+    checks: "passing",
+    reviewDecision: "review_required",
+    mergeable: "mergeable",
+    ...mergeable,
+    reviewThreads: [],
+  });
   pr("done", "PR merged", { state: "merged", checks: "passing", reviewDecision: "approved", mergeable: "unknown" });
   pr("in_progress", "PR closed without merging", {
     state: "closed",

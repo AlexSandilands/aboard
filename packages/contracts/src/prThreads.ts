@@ -50,3 +50,61 @@ export const isStalledPr = (snapshot: PrSnapshot | null | undefined): boolean =>
   snapshot.mergeable === "mergeable" &&
   snapshot.reviewDecision !== "approved" &&
   unansweredThreads(snapshot).length > 0;
+
+/** Why a PR waiting for an approving review may not get one: its unresolved review threads, as `approvalBlock` reads them. */
+export interface ApprovalBlock {
+  /** Unresolved review threads. */
+  threads: number;
+  /** Of those, the ones whose newest comment is someone else's: waiting on a reply. */
+  waiting: number;
+  /** Of those, the ones the signed-in account answered last (Autopilot fixed or declined the point): waiting on the reviewer. */
+  answered: number;
+  /** Who spoke last on the waiting threads, once each, in thread order; "" for a deleted account. */
+  authors: string[];
+}
+
+/**
+ * Why an open PR that needs an approving review hasn't got one, from its unresolved review threads: a reviewer bot
+ * usually won't approve while they are open. Null for a PR that isn't waiting for an approval. A snapshot stored
+ * before the threads were read gives only their count.
+ */
+export function approvalBlock(snapshot: PrSnapshot | null | undefined): ApprovalBlock | null {
+  if (!snapshot || snapshot.state !== "open" || snapshot.reviewDecision !== "review_required") return null;
+  const threads = snapshot.reviewThreads;
+  if (!threads) return { threads: snapshot.unresolvedThreads ?? 0, waiting: 0, answered: 0, authors: [] };
+  const waiting = threads.filter((t) => !t.ownLast);
+  const authors = [...new Set(waiting.flatMap((t) => (t.lastAuthor == null ? [] : [t.lastAuthor])))];
+  return { threads: threads.length, waiting: waiting.length, answered: threads.length - waiting.length, authors };
+}
+
+/** How many authors `approvalBlockReason` names before "and N more". */
+const SHOWN_AUTHORS = 3;
+
+/**
+ * The threads holding an approval back, in words, or null when there are none: "2 unresolved review threads
+ * (@coderabbitai, @bob) may be holding it back: 1 waiting on a reply, 1 answered and waiting on the reviewer".
+ */
+export function approvalBlockReason(block: ApprovalBlock | null): string | null {
+  if (!block || block.threads === 0) return null;
+  const names = block.authors.map((a) => (a ? `@${a}` : "a deleted account"));
+  const shown = names.slice(0, SHOWN_AUTHORS).join(", ");
+  const more = names.length - SHOWN_AUTHORS;
+  const who = names.length === 0 ? "" : ` (${more > 0 ? `${shown} and ${more} more` : shown})`;
+  const parts = [
+    block.waiting > 0 ? `${block.waiting} waiting on a reply` : "",
+    block.answered > 0 ? `${block.answered} answered and waiting on the reviewer` : "",
+  ].filter(Boolean);
+  const count = `${block.threads} unresolved review thread${block.threads === 1 ? "" : "s"}`;
+  return `${count}${who} may be holding it back${parts.length > 0 ? `: ${parts.join(", ")}` : ""}`;
+}
+
+/**
+ * The review line for a PR waiting on an approval, as the board shows it: "Needs approval", or "Needs approval · " and
+ * the reason (`approvalBlockReason`). Null for a PR that isn't waiting for one.
+ */
+export function approvalBlockText(snapshot: PrSnapshot | null | undefined): string | null {
+  const block = approvalBlock(snapshot);
+  if (!block) return null;
+  const reason = approvalBlockReason(block);
+  return reason ? `Needs approval · ${reason}` : "Needs approval";
+}

@@ -1,4 +1,4 @@
-import { classifyLink, type T3ThreadSnapshot, type TaskLink } from "@repo/contracts";
+import { classifyLink, type PrSnapshot, type T3ThreadSnapshot, type TaskLink } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
   checkedAgoLabel,
@@ -6,6 +6,7 @@ import {
   groupLinks,
   orderLinks,
   previewRows,
+  prReviewLine,
   threadDetails,
   threadModelsDiffer,
   unrecognisedLinkHint,
@@ -294,5 +295,46 @@ describe("checkedAgoLabel", () => {
     expect(checkedAgoLabel(null, now)).toBeNull();
     expect(checkedAgoLabel("not a date", now)).toBeNull();
     expect(checkedAgoLabel(ago(-10_000), now)).toBe("checked just now");
+  });
+});
+
+describe("prReviewLine", () => {
+  const snapshot = (over: Partial<PrSnapshot>): PrSnapshot => ({
+    state: "open",
+    title: "Add the thing",
+    checks: "passing",
+    reviewDecision: "review_required",
+    mergeable: "mergeable",
+    headRef: "feat/thing",
+    updatedAt: null,
+    reviewThreads: [],
+    ...over,
+  });
+  const reviewThread = (id: string, lastAuthor: string, ownLast = false) => ({
+    id,
+    canResolve: true,
+    lastCommentId: 1,
+    ownLast,
+    lastReviewId: null,
+    lastAuthor,
+  });
+
+  it("says what the review is waiting on, or how it ended", () => {
+    expect(prReviewLine(snapshot({}))).toBe("Needs approval");
+    expect(
+      prReviewLine(snapshot({ reviewThreads: [reviewThread("T1", "coderabbitai"), reviewThread("T2", "me", true)] })),
+    ).toBe(
+      "Needs approval · 2 unresolved review threads (@coderabbitai) may be holding it back: 1 waiting on a reply, 1 answered and waiting on the reviewer",
+    );
+    expect(prReviewLine(snapshot({ reviewDecision: "changes_requested" }))).toBe("Changes requested");
+    expect(prReviewLine(snapshot({ reviewDecision: "approved" }))).toBe("Approved");
+    expect(prReviewLine(snapshot({ state: "draft" }))).toBe("Needs approval");
+  });
+
+  it("is nothing for a merged or closed PR, or one with no review decision", () => {
+    expect(prReviewLine(snapshot({ state: "merged", reviewDecision: "approved" }))).toBeNull();
+    expect(prReviewLine(snapshot({ state: "closed" }))).toBeNull();
+    expect(prReviewLine(snapshot({ reviewDecision: null }))).toBeNull();
+    expect(prReviewLine(null)).toBeNull();
   });
 });
