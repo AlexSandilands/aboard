@@ -105,8 +105,8 @@ and **Details** opens the full list of changes. **View on GitHub** opens the rel
 - Tick **Don't show after updates**, or turn off **Show release notes after updating** in Board → Desktop app, and
   it won't open by itself again.
 - **Release notes → View** in the same section opens them any time, for every version.
-- The notes are read from GitHub. Offline, the dialog says so and **View on GitHub** opens them in the browser once
-  you're back.
+- The notes are read from GitHub. Offline, the dialog says so, with **Try again**, and opens again on the next
+  launch.
 - The first version with release notes starts counting from itself, so they open from the update after it.
 
 ## Models

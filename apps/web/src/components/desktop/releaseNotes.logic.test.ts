@@ -1,6 +1,7 @@
 import type { DesktopBridge, DesktopRelease } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  closeAction,
   defaultRelease,
   detailsSummary,
   groupReleases,
@@ -118,5 +119,22 @@ describe("releaseNotesBridge", () => {
       setShowReleaseNotes: () => {},
     };
     expect(releaseNotesBridge(full)).toBe(full);
+  });
+});
+
+describe("closeAction", () => {
+  it("marks the update's notes seen, passing the opt-out on", () => {
+    expect(closeAction("update", false, false)).toEqual({ dismiss: true, stopShowing: false });
+    expect(closeAction("update", false, true)).toEqual({ dismiss: true, stopShowing: true });
+  });
+
+  it("leaves them for the next launch when they couldn't be loaded, unless the user opted out", () => {
+    expect(closeAction("update", true, false)).toBeNull();
+    expect(closeAction("update", true, true)).toEqual({ dismiss: true, stopShowing: true });
+  });
+
+  it("tells the shell nothing when opened from Settings", () => {
+    expect(closeAction("history", false, true)).toBeNull();
+    expect(closeAction("history", true, false)).toBeNull();
   });
 });

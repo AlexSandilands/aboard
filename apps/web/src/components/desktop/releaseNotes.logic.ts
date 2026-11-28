@@ -91,3 +91,18 @@ export function releaseNotesBridge(bridge: DesktopBridge | null): ReleaseNotesBr
   }
   return bridge as ReleaseNotesBridge;
 }
+
+/**
+ * What closing the dialog tells the shell. From Settings, nothing: the checkbox there applies at once. After an
+ * update, `dismiss` marks this version seen, except when the notes couldn't be loaded, so they open again on the
+ * next launch; "Don't show after updates" is passed on either way.
+ */
+export function closeAction(
+  mode: ReleaseNotesMode,
+  loadFailed: boolean,
+  stopShowing: boolean,
+): { dismiss: boolean; stopShowing: boolean } | null {
+  if (mode === "history") return null;
+  if (loadFailed && !stopShowing) return null;
+  return { dismiss: true, stopShowing };
+}

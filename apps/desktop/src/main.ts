@@ -51,6 +51,7 @@ import { ServerStartError, connectServer, type BoardServer, type ServerOptions }
 import {
   allowSubFrameNavigation,
   decideNavigation,
+  dismissedPrefs,
   initialUpdateState,
   isDesktopTheme,
   noticeFeedUrl,
@@ -329,11 +330,8 @@ function currentWhatsNew(): DesktopWhatsNew {
 /** The dialog closed: this version's notes are seen. "Don't show after updates" also turns them off. */
 function dismissWhatsNew(stopShowing: boolean): void {
   whatsNewSince = null;
-  const showReleaseNotes = stopShowing ? false : prefs.showReleaseNotes;
-  // A build whose updates are off never shows them by itself, so it keeps no version.
-  const lastSeenVersion = updates.mode === "disabled" ? prefs.lastSeenVersion : BRAND.version;
-  if (lastSeenVersion === prefs.lastSeenVersion && showReleaseNotes === prefs.showReleaseNotes) return;
-  savePrefs({ ...prefs, lastSeenVersion, showReleaseNotes }, "release notes choice");
+  const next = dismissedPrefs(prefs, BRAND.version, updates.mode, stopShowing);
+  if (next) savePrefs(next, "release notes choice");
 }
 
 function openReleaseNotes(): void {

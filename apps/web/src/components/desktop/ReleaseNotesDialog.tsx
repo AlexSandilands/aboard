@@ -2,7 +2,7 @@ import { DesktopReleaseList, type DesktopRelease } from "@repo/contracts";
 import { ChevronRightIcon, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Markdown } from "~/components/markdown/Markdown";
-import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
 import {
@@ -16,6 +16,7 @@ import {
 import { Spinner } from "~/components/ui/spinner";
 import { useDialogs } from "~/state/ui";
 import {
+  closeAction,
   defaultRelease,
   detailsSummary,
   groupReleases,
@@ -51,15 +52,20 @@ export function ReleaseNotesDialog({
   const close = useDialogs((s) => s.closeReleaseNotes);
   // After an update the box is "Don't show after updates", applied when the dialog closes.
   const [stopShowing, setStopShowing] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  // Try again remounts the content, which asks the shell again; the shell keeps no failure, so it asks GitHub.
+  const [attempt, setAttempt] = useState(0);
   const mode: ReleaseNotesMode = dialog?.mode ?? "history";
 
   const onOpenChange = (open: boolean) => {
     if (open || !dialog) return;
-    if (dialog.mode === "update") {
-      bridge.dismissWhatsNew(stopShowing);
-      if (stopShowing) onShowReleaseNotesChange(false);
-      setStopShowing(false);
+    const action = closeAction(dialog.mode, loadFailed, stopShowing);
+    if (action) {
+      bridge.dismissWhatsNew(action.stopShowing);
+      if (action.stopShowing) onShowReleaseNotesChange(false);
     }
+    setStopShowing(false);
+    setLoadFailed(false);
     close();
   };
 
@@ -68,10 +74,13 @@ export function ReleaseNotesDialog({
       <DialogPopup className="h-[min(40rem,100%)] max-w-3xl" bottomStickOnMobile>
         {dialog ? (
           <ReleaseNotesContent
+            key={attempt}
             bridge={bridge}
             mode={mode}
             since={dialog.mode === "update" ? dialog.since : null}
             currentVersion={currentVersion}
+            onLoadFailedChange={setLoadFailed}
+            onRetry={() => setAttempt((n) => n + 1)}
             footer={
               <label className="flex cursor-pointer items-center gap-2 text-muted-foreground text-sm">
                 <input
@@ -100,6 +109,8 @@ function ReleaseNotesContent({
   mode,
   since,
   currentVersion,
+  onLoadFailedChange,
+  onRetry,
   footer,
   onClose,
 }: {
@@ -107,6 +118,8 @@ function ReleaseNotesContent({
   mode: ReleaseNotesMode;
   since: string | null;
   currentVersion: string;
+  onLoadFailedChange: (failed: boolean) => void;
+  onRetry: () => void;
   footer: React.ReactNode;
   onClose: () => void;
 }) {
@@ -127,13 +140,15 @@ function ReleaseNotesContent({
       } catch {
         next = { status: "error", error: "The app couldn't read the releases.", url: null };
       }
-      if (live) setLoaded(next);
+      if (!live) return;
+      setLoaded(next);
+      onLoadFailedChange(next.status === "error");
     };
     void load();
     return () => {
       live = false;
     };
-  }, [bridge]);
+  }, [bridge, onLoadFailedChange]);
 
   const groups = useMemo(
     () => groupReleases(loaded.status === "ok" ? loaded.releases : [], mode === "update" ? since : null),
@@ -180,6 +195,11 @@ function ReleaseNotesContent({
                 {loaded.error}
                 {loaded.url ? " View on GitHub opens them in the browser." : null}
               </AlertDescription>
+              <AlertAction>
+                <Button size="sm" variant="outline" onClick={onRetry}>
+                  Try again
+                </Button>
+              </AlertAction>
             </Alert>
           ) : release ? (
             <ReleaseNotes release={release} />

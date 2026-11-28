@@ -1,6 +1,5 @@
-import type { DesktopRelease } from "@repo/contracts";
 import { describe, expect, it } from "vitest";
-import { parseGitHubReleases, pendingWhatsNew, releasesBetween } from "./shell.logic.ts";
+import { dismissedPrefs, parseGitHubReleases, pendingWhatsNew } from "./shell.logic.ts";
 
 const entry = (tag: string, extra: Record<string, unknown> = {}) => ({
   tag_name: tag,
@@ -52,19 +51,6 @@ describe("parseGitHubReleases", () => {
   });
 });
 
-describe("releasesBetween", () => {
-  const list = ["0.13.0", "0.12.0", "0.11.0", "0.10.0"].map((version) => ({ version }) as DesktopRelease);
-
-  it("is the releases after from, up to and including to", () => {
-    expect(releasesBetween(list, "0.11.0", "0.13.0").map((r) => r.version)).toEqual(["0.13.0", "0.12.0"]);
-    expect(releasesBetween(list, "0.10.0", "0.12.0").map((r) => r.version)).toEqual(["0.12.0", "0.11.0"]);
-  });
-
-  it("is empty when nothing is newer", () => {
-    expect(releasesBetween(list, "0.13.0", "0.13.0")).toEqual([]);
-  });
-});
-
 describe("pendingWhatsNew", () => {
   const prefs = (lastSeenVersion: string | null, showReleaseNotes = true) => ({ lastSeenVersion, showReleaseNotes });
 
@@ -89,5 +75,30 @@ describe("pendingWhatsNew", () => {
   it("never shows or records in a build whose updates are off", () => {
     expect(pendingWhatsNew(prefs("0.11.0"), "0.13.0", "disabled")).toEqual({ since: null, record: false });
     expect(pendingWhatsNew(prefs(null), "0.0.0", "self-update")).toEqual({ since: null, record: false });
+  });
+});
+
+describe("dismissedPrefs", () => {
+  const prefs = { trayIcon: "colour", lastSeenVersion: "0.11.0", showReleaseNotes: true };
+
+  it("records the running version as seen, keeping the other prefs", () => {
+    expect(dismissedPrefs(prefs, "0.13.0", "self-update", false)).toEqual({ ...prefs, lastSeenVersion: "0.13.0" });
+  });
+
+  it("also turns the notes off with Don't show after updates", () => {
+    expect(dismissedPrefs(prefs, "0.13.0", "notice-only", true)).toEqual({
+      ...prefs,
+      lastSeenVersion: "0.13.0",
+      showReleaseNotes: false,
+    });
+  });
+
+  it("keeps no version in a build whose updates are off, but still takes the opt-out", () => {
+    expect(dismissedPrefs(prefs, "0.0.0", "disabled", false)).toBeNull();
+    expect(dismissedPrefs(prefs, "0.0.0", "disabled", true)).toEqual({ ...prefs, showReleaseNotes: false });
+  });
+
+  it("is null when nothing changes", () => {
+    expect(dismissedPrefs({ ...prefs, lastSeenVersion: "0.13.0" }, "0.13.0", "self-update", false)).toBeNull();
   });
 });

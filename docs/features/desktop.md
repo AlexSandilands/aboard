@@ -159,7 +159,7 @@ version last seen. The same dialog opens any time from Settings → Desktop app 
   (no `lastSeenVersion`, which includes an install from before release notes), a downgrade, or an update with the
   notes off only records the running version and shows nothing. Builds whose updates are off (dev, sandbox, from
   source) neither show nor record. Closing the dialog (`dismissWhatsNew`) sets `lastSeenVersion` to the running
-  version; its **Don't show after updates** box also turns `showReleaseNotes` off, as does the **Show release notes
+  version (`dismissedPrefs`); its **Don't show after updates** box also turns `showReleaseNotes` off, as does the **Show release notes
   after updating** switch in Settings.
 - **Where the notes come from** (`apps/desktop/src/releases.ts`). The shell reads
   `api.github.com/repos/<owner>/<repo>/releases` (`BRAND_REPOSITORY`) with `net.fetch` and a 20-second timeout, the
@@ -174,7 +174,8 @@ version last seen. The same dialog opens any time from Settings → Desktop app 
   through `Markdown` (images off), then a folded **Details** with the generated list. After an update the list puts
   "New since vX" (each with a dot) above "Earlier" and opens on the newest; from Settings it opens on the running
   version. A release with no Highlights says so and opens its Details. Below `sm` the list is a strip above the notes.
-  If GitHub can't be reached the dialog says why, and **View on GitHub** opens the releases page instead.
+  If GitHub can't be reached the dialog says why, offers **Try again**, and **View on GitHub** opens the releases page
+  instead; closing it then leaves the version unseen (`closeAction`), so the notes open again on the next launch.
 - **Bridge.** `getWhatsNew` (`DesktopWhatsNew`: the running version, `since`, `showReleaseNotes`), `listReleases`
   (`DesktopReleaseList`), `dismissWhatsNew(stopShowing)` and `setShowReleaseNotes`, all optional, so the page shows
   neither the dialog nor its Settings rows in a shell from before them. `useReleaseNotes` asks once per page load and

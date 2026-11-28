@@ -406,11 +406,6 @@ export function parseGitHubReleases(value: unknown): DesktopRelease[] | null {
   return releases.sort(byVersionDesc);
 }
 
-/** The releases after `from` up to and including `to`: what's new to someone who last saw `from` and now runs `to`. */
-export function releasesBetween(list: readonly DesktopRelease[], from: string, to: string): DesktopRelease[] {
-  return list.filter((release) => isNewerVersion(release.version, from) && !isNewerVersion(release.version, to));
-}
-
 /**
  * Whether this launch should open the release notes by itself, and whether to record the running version as seen
  * now. A fresh install (nothing seen yet) records it and shows nothing; so does a downgrade, or an update with the
@@ -427,4 +422,21 @@ export function pendingWhatsNew(
   if (seen === null || seen === currentVersion) return { since: null, record: seen === null };
   if (prefs.showReleaseNotes && isNewerVersion(currentVersion, seen)) return { since: seen, record: false };
   return { since: null, record: true };
+}
+
+/**
+ * The prefs after the release notes dialog closes: the running version counts as seen, and "Don't show after updates"
+ * turns the notes off. A build whose updates are off never shows them by itself, so it keeps no version. Null when
+ * nothing changes, so nothing is written.
+ */
+export function dismissedPrefs<T extends { lastSeenVersion: string | null; showReleaseNotes: boolean }>(
+  prefs: T,
+  currentVersion: string,
+  mode: DesktopUpdateMode,
+  stopShowing: boolean,
+): T | null {
+  const showReleaseNotes = stopShowing ? false : prefs.showReleaseNotes;
+  const lastSeenVersion = mode === "disabled" ? prefs.lastSeenVersion : currentVersion;
+  if (lastSeenVersion === prefs.lastSeenVersion && showReleaseNotes === prefs.showReleaseNotes) return null;
+  return { ...prefs, lastSeenVersion, showReleaseNotes };
 }
