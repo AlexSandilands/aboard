@@ -106,3 +106,54 @@ export function closeAction(
   if (loadFailed && !stopShowing) return null;
   return { dismiss: true, stopShowing };
 }
+
+/** The colour a Highlights group's heading gets: the board's success, info and warning tones. */
+export type HighlightTone = "success" | "info" | "warning";
+
+export interface HighlightSection {
+  /** The `###` heading's text, or null for anything written before the first one. */
+  heading: string | null;
+  /** Null for a heading the format doesn't name, which stays neutral. */
+  tone: HighlightTone | null;
+  body: string;
+}
+
+const TONES: Record<string, HighlightTone> = {
+  new: "success",
+  added: "success",
+  features: "success",
+  improved: "info",
+  changed: "info",
+  fixed: "warning",
+  fixes: "warning",
+};
+
+/**
+ * Splits Highlights at their `###` headings, so the dialog can draw New, Improved and Fixed as tinted pills
+ * (docs/features/releases.md#release-notes). Text before the first heading is a section with no heading; a `###`
+ * inside a code fence doesn't split.
+ */
+export function highlightSections(highlights: string): HighlightSection[] {
+  const sections: HighlightSection[] = [];
+  let current: HighlightSection = { heading: null, tone: null, body: "" };
+  const lines: string[] = [];
+  let fenced = false;
+  const flush = () => {
+    current.body = lines.join("\n").trim();
+    if (current.heading !== null || current.body) sections.push(current);
+    lines.length = 0;
+  };
+  for (const line of highlights.split("\n")) {
+    if (/^\s*(```|~~~)/.test(line)) fenced = !fenced;
+    const match = fenced ? null : /^###\s+(.+?)\s*#*\s*$/.exec(line);
+    if (match) {
+      flush();
+      const heading = match[1]!;
+      current = { heading, tone: TONES[heading.toLowerCase()] ?? null, body: "" };
+    } else {
+      lines.push(line);
+    }
+  }
+  flush();
+  return sections;
+}

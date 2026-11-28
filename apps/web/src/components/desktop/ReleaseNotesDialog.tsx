@@ -2,6 +2,7 @@ import { DesktopReleaseList, type DesktopRelease } from "@repo/contracts";
 import { ChevronRightIcon, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Markdown } from "~/components/markdown/Markdown";
+import { Badge } from "~/components/ui/badge";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "~/components/ui/collapsible";
@@ -20,6 +21,7 @@ import {
   defaultRelease,
   detailsSummary,
   groupReleases,
+  highlightSections,
   releaseDate,
   releaseNotesHeading,
   type ReleaseNotesBridge,
@@ -294,7 +296,7 @@ function ReleaseNotes({ release }: { release: DesktopRelease }) {
         ) : null}
       </div>
       {release.highlights ? (
-        <Markdown images={false}>{release.highlights}</Markdown>
+        <Highlights markdown={release.highlights} />
       ) : (
         <p className="text-muted-foreground text-sm italic">
           This release has no highlights, only the list of changes.
@@ -317,5 +319,29 @@ function ReleaseNotes({ release }: { release: DesktopRelease }) {
         </Collapsible>
       ) : null}
     </article>
+  );
+}
+
+/** The Highlights, with New, Improved and Fixed as tinted pills above their bullets; other headings stay plain. */
+function Highlights({ markdown }: { markdown: string }) {
+  const sections = useMemo(() => highlightSections(markdown), [markdown]);
+  return (
+    <div className="flex flex-col gap-4">
+      {sections.map((section, index) => (
+        // oxlint-disable-next-line react/no-array-index-key -- sections are derived from fixed text and never reorder
+        <section key={index} className="flex flex-col gap-1.5">
+          {section.heading === null ? null : section.tone ? (
+            <h4 className="m-0">
+              <Badge variant={section.tone} className="rounded-full px-2 font-semibold tracking-wide">
+                {section.heading}
+              </Badge>
+            </h4>
+          ) : (
+            <h4 className="m-0 font-semibold text-sm">{section.heading}</h4>
+          )}
+          {section.body ? <Markdown images={false}>{section.body}</Markdown> : null}
+        </section>
+      ))}
+    </div>
   );
 }

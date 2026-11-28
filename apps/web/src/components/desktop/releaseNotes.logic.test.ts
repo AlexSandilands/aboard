@@ -5,6 +5,7 @@ import {
   defaultRelease,
   detailsSummary,
   groupReleases,
+  highlightSections,
   isLaterVersion,
   releaseDate,
   releaseNotesBridge,
@@ -136,5 +137,36 @@ describe("closeAction", () => {
   it("tells the shell nothing when opened from Settings", () => {
     expect(closeAction("history", false, true)).toBeNull();
     expect(closeAction("history", true, false)).toBeNull();
+  });
+});
+
+describe("highlightSections", () => {
+  it("splits at each ### heading and tones the ones the format names", () => {
+    expect(highlightSections("### New\n- One\n\n### Improved\n- Two\n### Fixed\n- Three")).toEqual([
+      { heading: "New", tone: "success", body: "- One" },
+      { heading: "Improved", tone: "info", body: "- Two" },
+      { heading: "Fixed", tone: "warning", body: "- Three" },
+    ]);
+  });
+
+  it("keeps text before the first heading, and leaves other headings neutral", () => {
+    expect(highlightSections("A short intro.\n\n### Under the hood\n- Faster")).toEqual([
+      { heading: null, tone: null, body: "A short intro." },
+      { heading: "Under the hood", tone: null, body: "- Faster" },
+    ]);
+  });
+
+  it("matches the heading's case loosely and ignores closing hashes", () => {
+    expect(highlightSections("### FIXED ###\n- One")[0]).toMatchObject({ heading: "FIXED", tone: "warning" });
+  });
+
+  it("doesn't split inside a code fence", () => {
+    expect(highlightSections("### New\n```md\n### not a heading\n```")).toEqual([
+      { heading: "New", tone: "success", body: "```md\n### not a heading\n```" },
+    ]);
+  });
+
+  it("is one plain section without headings", () => {
+    expect(highlightSections("Just a note.")).toEqual([{ heading: null, tone: null, body: "Just a note." }]);
   });
 });

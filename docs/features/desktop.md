@@ -171,7 +171,8 @@ version last seen. The same dialog opens any time from Settings → Desktop app 
   run is far below that, and a 403 says so.
 - **The dialog** (`components/desktop/ReleaseNotesDialog.tsx`, mounted once in `AppShell` by `ReleaseNotesHost`,
   driven by `useDialogs().releaseNotes`). Versions on the left, the selected release on the right: its Highlights
-  through `Markdown` (images off), then a folded **Details** with the generated list. After an update the list puts
+  through `Markdown` (images off), split at their `###` headings (`highlightSections`) so New, Improved and Fixed
+  show as green, blue and amber pills (other headings stay plain), then a folded **Details** with the generated list. After an update the list puts
   "New since vX" (each with a dot) above "Earlier" and opens on the newest; from Settings it opens on the running
   version. A release with no Highlights says so and opens its Details. Below `sm` the list is a strip above the notes.
   If GitHub can't be reached the dialog says why, offers **Try again**, and **View on GitHub** opens the releases page
