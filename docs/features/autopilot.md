@@ -1130,7 +1130,9 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   local loop; a stalled or failed round is sent back to its review loop instead. A PR left red or conflicting by a
   merge into the default branch is a stall like any other. A **green PR stuck on review threads** is one too: a Review
   task whose PR is open, green, mergeable and not approved, with unanswered threads on `get_task`'s PR line. It is
-  left alone while a Fix PRs run on it is going or started on its current head; otherwise Orchestrate reads the
+  left alone while a Fix PRs run on it is going, or one that succeeded started on its current head less than a run's
+  interval ago (a failed or cut-short run, a gave-up notice, or an older run that left threads unanswered doesn't
+  hold it, so the steps below stay reachable at the same head); otherwise Orchestrate reads the
   threads (`gh api …/comments`) and the conversation (`gh pr view --comments`), judges them, and takes the first of:
   retry a failed Fix PRs run with attempts left; retry Fix PRs' gave-up notice for a fresh budget (`freshBudget: true`) when the points
   look fair and worth doing; message the task's thread (or start one) to fix or decline each thread, reply on each and
