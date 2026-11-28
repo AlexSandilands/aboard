@@ -163,7 +163,7 @@ describe("mapPrSnapshot", () => {
       id,
       isResolved: false,
       viewerCanResolve: true,
-      root: { nodes: [{ databaseId: n * 10, pullRequestReview: { databaseId: 900 } }] },
+      root: { nodes: [{ databaseId: n * 10, author: { login: "ana" }, pullRequestReview: { databaseId: 900 } }] },
       comments: { nodes: [comment(n * 10), ...(reply !== null ? [comment(n * 10 + 1, true)] : [])] },
       latest: {
         nodes: [
@@ -222,20 +222,70 @@ Fixed in 8bbe435: renamed it.`,
       { ...thread("T6", null), latest: { nodes: [{ body: prFixedReply("abc1234"), viewerDidAuthor: false }] } },
     ]);
     expect(
-      details.map(({ id, reply, fixedIn, rootCommentId, rootReviewId }) => ({
+      details.map(({ id, reply, fixedIn, rootCommentId, rootReviewId, rootAuthor, speakers }) => ({
         id,
+        rootAuthor,
+        speakers,
         reply,
         fixedIn,
         rootCommentId,
         rootReviewId,
       })),
     ).toEqual([
-      { id: "T1", reply: "fixed", fixedIn: "abc1234", rootCommentId: 10, rootReviewId: 900 },
-      { id: "T2", reply: "declined", fixedIn: null, rootCommentId: 20, rootReviewId: 900 },
-      { id: "T3", reply: "fixed", fixedIn: "8bbe435", rootCommentId: 30, rootReviewId: 900 },
-      { id: "T4", reply: "other", fixedIn: null, rootCommentId: 40, rootReviewId: 900 },
-      { id: "T5", reply: null, fixedIn: null, rootCommentId: 50, rootReviewId: 900 },
-      { id: "T6", reply: null, fixedIn: null, rootCommentId: 60, rootReviewId: 900 },
+      {
+        id: "T1",
+        rootAuthor: "ana",
+        speakers: ["ana"],
+        reply: "fixed",
+        fixedIn: "abc1234",
+        rootCommentId: 10,
+        rootReviewId: 900,
+      },
+      {
+        id: "T2",
+        rootAuthor: "ana",
+        speakers: ["ana"],
+        reply: "declined",
+        fixedIn: null,
+        rootCommentId: 20,
+        rootReviewId: 900,
+      },
+      {
+        id: "T3",
+        rootAuthor: "ana",
+        speakers: ["ana"],
+        reply: "fixed",
+        fixedIn: "8bbe435",
+        rootCommentId: 30,
+        rootReviewId: 900,
+      },
+      {
+        id: "T4",
+        rootAuthor: "ana",
+        speakers: ["ana"],
+        reply: "other",
+        fixedIn: null,
+        rootCommentId: 40,
+        rootReviewId: 900,
+      },
+      {
+        id: "T5",
+        rootAuthor: "ana",
+        speakers: ["ana"],
+        reply: null,
+        fixedIn: null,
+        rootCommentId: 50,
+        rootReviewId: 900,
+      },
+      {
+        id: "T6",
+        rootAuthor: "ana",
+        speakers: ["ana"],
+        reply: null,
+        fixedIn: null,
+        rootCommentId: 60,
+        rootReviewId: 900,
+      },
     ]);
   });
 

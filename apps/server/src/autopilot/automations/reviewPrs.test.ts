@@ -985,6 +985,8 @@ describe("review PRs: verdict, threshold and hand-off", () => {
       lastReviewId: rootReviewId,
       rootCommentId,
       rootReviewId,
+      rootAuthor: "ana",
+      speakers: ["ana"],
       reply: null,
       fixedIn: null,
     });
