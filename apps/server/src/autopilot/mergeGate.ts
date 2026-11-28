@@ -27,6 +27,44 @@ export const NO_CHECKS_WAIT_MS = 10 * 60_000;
 
 export const isPrLink = (link: TaskLink): link is PrLink => link.kind === "pr" && link.ref !== null;
 
+/** GitHub refusing a merge because a branch rule wants an approving review: the reviewer's to give, not the user's. */
+export const NEEDS_APPROVAL = /approving review|review is required|reviews? required/i;
+
+/**
+ * A skipped merge run's output when GitHub refused for want of an approval GitHub's read didn't show. It counts as a
+ * try (so a refusal that never passes ends flagged after the last one), and records the PR as the host last read it,
+ * so the next try waits for something to change there (a review bumps the PR's `updatedAt`).
+ */
+export const approvalRefusal = (link: TaskLink) => {
+  const snapshot = link.kind === "pr" ? link.snapshot : null;
+  return {
+    retry: true,
+    approval: true,
+    prUpdatedAt: snapshot?.updatedAt ?? null,
+    reviewDecision: snapshot?.reviewDecision ?? null,
+  };
+};
+
+/**
+ * Whether the PR waits for an approving review: GitHub says one is required, or it refused a merge at this head for
+ * want of one (a run under `key`, `<prefix>:<linkId>:<headOid>`) and the PR hasn't changed on GitHub since.
+ */
+export function awaitsApproval(link: PrLink, runs: readonly AutopilotRun[], automation: string, key: string): boolean {
+  const snapshot = link.snapshot;
+  if (snapshot?.reviewDecision === "review_required") return true;
+  return runs.some(
+    (r) =>
+      r.automation === automation &&
+      !r.dryRun &&
+      (r.dedupeKey === key || r.dedupeKey.startsWith(`${key}:`)) &&
+      r.output?.approval === true &&
+      // Without the PR's own time there's nothing to wait on: the next pass tries again, as a counted try.
+      r.output.prUpdatedAt !== null &&
+      r.output.prUpdatedAt === (snapshot?.updatedAt ?? null) &&
+      r.output.reviewDecision === (snapshot?.reviewDecision ?? null),
+  );
+}
+
 /** When the board first saw the PR at its current head: the head's move, else the link's creation. */
 export const headSeenSince = (link: PrLink, changes: PrChanges | undefined): number =>
   Date.parse(changes?.newHead ?? link.createdAt);

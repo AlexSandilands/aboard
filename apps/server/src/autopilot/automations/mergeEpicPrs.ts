@@ -16,7 +16,15 @@ import { messageOf } from "../../integrations/util.ts";
 import { isTransientHostError } from "../../integrations/gitHost.ts";
 import type { GitHostActions } from "../../integrations/gitHosts.ts";
 import type { Services } from "../../services/types.ts";
-import { headSeenSince, isPrLink, notMergeable, type PrLink } from "../mergeGate.ts";
+import {
+  approvalRefusal,
+  awaitsApproval,
+  headSeenSince,
+  isPrLink,
+  NEEDS_APPROVAL,
+  notMergeable,
+  type PrLink,
+} from "../mergeGate.ts";
 import { defineAutomation, type ActionResult, type Candidate } from "../types.ts";
 import { holdAction, mainCandidates, mainMergeAction, type MainHoldData, type MainMergeData } from "./mergeIntoMain.ts";
 
@@ -236,8 +244,9 @@ type MergeReadyConfig = z.infer<typeof schema>;
  * into epic branches). Two targets:
  * - Into epic branches, always on with it: for each epic delivered through an integration branch, merges a task's PR
  *   into the branch once `notMergeable` finds nothing in the way, with a merge commit if the repository allows one,
- *   else a squash, else a rebase (mergeIntoEpicBranch). Once per PR and head commit. GitHub refusing (branch rules
- *   wanting an approval) puts "Ready to merge into the epic branch" on the task and notifies. The merge moves the task
+ *   else a squash, else a rebase (mergeIntoEpicBranch). Once per PR and head commit. A PR waiting for an approving
+ *   review waits, flagging nothing; any other refusal from GitHub puts "Ready to merge into the epic branch" on the
+ *   task and notifies. The merge moves the task
  *   to Done, which unblocks what waits on it. It also opens a draft PR from the branch into the default branch once a
  *   task has merged, links it on the epic, and keeps its description listing the tasks. It never merges that PR.
  * - Into main, with `intoMain` on (off by default): tasks the user flagged for auto-merge, through merge_task_pr's own
@@ -292,6 +301,7 @@ function intoEpicBranches(services: Services, tasks: readonly TaskSummary[], now
         const timing = { now: now.getTime(), headSince: headSeenSince(link, changes.get(link.id)) };
         if (notMergeable(services, task, link, branch, runsOf(task.id), timing) !== null) return [];
         const earlier = mergeRuns(runsOf(task.id), link.id, link.snapshot!.headOid!);
+        if (awaitsApproval(link, runsOf(task.id), AUTOPILOT_MERGE_EPIC_PRS, earlier.key)) return [];
         if (earlier.settled || earlier.count >= MERGE_ATTEMPTS) return [];
         const data: MergeData = {
           kind: "merge",
@@ -379,6 +389,13 @@ async function actEpic(
     const reason = notMergeable(services, task, link, data.branch, runs, timing);
     // Something changed since the check; the next pass looks again.
     if (reason) return { status: "skipped", summary: `Didn't merge PR #${data.number}: ${reason}`, output: RECHECK };
+    if (link.snapshot.reviewDecision === "review_required") {
+      return {
+        status: "skipped",
+        summary: `Didn't merge PR #${data.number}: it still needs an approving review`,
+        output: RECHECK,
+      };
+    }
     let method: string;
     try {
       ({ method } = await gitHosts.mergeIntoEpicBranch(link, { base: data.branch, headOid: data.headOid }));
@@ -391,6 +408,15 @@ async function actEpic(
         };
       }
       const message = messageOf(error);
+      // Waiting for an approval is how a PR normally ends: no flag. The next try waits for the PR to change on GitHub
+      // (awaitsApproval, from the link as the merge's refresh left it); the last one still flags.
+      if (NEEDS_APPROVAL.test(message) && data.attempt < MERGE_ATTEMPTS) {
+        return {
+          status: "skipped",
+          summary: `Didn't merge PR #${data.number} into ${data.branch} yet (try ${data.attempt} of ${MERGE_ATTEMPTS}): it still needs an approving review (${message})`,
+          output: approvalRefusal(services.links.get(link.id)),
+        };
+      }
       // A race (another PR just merged into the branch, a push) or a network error may pass: try again next pass.
       const passing =
         (error instanceof AppError && error.code === "CONFLICT") ||
@@ -403,7 +429,7 @@ async function actEpic(
           output: RETRY,
         };
       }
-      // Branch rules wanting an approval, or tries used up: the user can still merge it by hand.
+      // Any other refusal (a rule the board can't see), or tries used up: the user can still merge it by hand.
       return {
         status: "skipped",
         summary: `Ready to merge into the epic branch: GitHub didn't let Autopilot merge PR #${data.number} into ${data.branch} (${message}). Merge it yourself.`,

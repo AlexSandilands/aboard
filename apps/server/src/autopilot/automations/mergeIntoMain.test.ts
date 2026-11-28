@@ -47,13 +47,18 @@ function setup() {
   const merged: Array<{ linkId: string; input: DefaultBranchMergeInput }> = [];
   const reread: string[] = [];
   let mergeError: Error | null = null;
+  /** Runs on a failed merge before it throws, as the real one's refresh of the link does. */
+  let onFail: ((link: TaskLink) => void) | null = null;
   const h = createTestHarness({ integrations: { automations: [mergeEpicPrs] } });
   const s = h.services;
   // The real mergeTaskPr, over a fake host merge: what Into main calls in the app.
   const merges = {
     mergeIntoDefaultBranch: async (link: TaskLink, input: DefaultBranchMergeInput) => {
       merged.push({ linkId: link.id, input });
-      if (mergeError) throw mergeError;
+      if (mergeError) {
+        onFail?.(link);
+        throw mergeError;
+      }
       tick();
       s.links.setSnapshot(link.id, snapshot({ state: "merged", headOid: input.headOid }));
     },
@@ -116,7 +121,10 @@ function setup() {
     runs,
     merged,
     reread,
-    failMerge: (e: Error | null) => (mergeError = e),
+    failMerge: (e: Error | null, refresh: ((link: TaskLink) => void) | null = null) => {
+      mergeError = e;
+      onFail = refresh;
+    },
   };
 }
 
@@ -274,24 +282,101 @@ describe("Merge ready PRs: Into main", () => {
     expect(merged.map((m) => m.linkId)).toEqual([linkOf(blocker.id)]);
   });
 
-  it("flags a task only the user can unblock once per head, and nothing is tried", async () => {
-    const { s, flaggedTask, setPr, pass, turnOn, runs, merged } = setup();
+  it("waits, flagging nothing, while a PR only needs an approving review, and merges it once approved", async () => {
+    const { s, flaggedTask, setPr, pass, turnOn, runs, merged, linkOf } = setup();
     const task = flaggedTask(4);
-    setPr(task.id, { reviewDecision: "review_required", mergeState: "blocked" });
+    setPr(task.id, { reviewDecision: "review_required", mergeState: "blocked", unresolvedThreads: 2 });
     turnOn();
     await pass();
     await pass();
     expect(merged).toEqual([]);
+    expect(runs(task.id)).toEqual([]);
+    expect(s.tasks.summary(task.id).attention).toEqual([]);
+    setPr(task.id, { reviewDecision: "approved" });
+    await pass();
+    expect(merged.map((m) => m.linkId)).toEqual([linkOf(task.id)]);
+  });
+
+  it("waits, flagging nothing, when the host refuses a merge for want of an approval its read didn't show", async () => {
+    const { s, flaggedTask, setPr, pass, turnOn, runs, merged, failMerge } = setup();
+    const task = flaggedTask(4);
+    setPr(task.id, { updatedAt: "2026-11-01T10:00:00Z" });
+    turnOn();
+    failMerge(new AppError("VALIDATION", "At least 1 approving review is required by reviewers with write access."));
+    await pass();
+    await pass();
+    expect(merged).toHaveLength(1);
     expect(runs(task.id)).toEqual([
       expect.objectContaining({
         status: "skipped",
-        needsAttention: true,
-        summary: expect.stringContaining(
-          `won't merge #${s.tasks.summary(task.id).number} by itself: it still needs an approving review`,
-        ),
+        needsAttention: false,
+        output: expect.objectContaining({ approval: true }),
       }),
     ]);
-    expect(s.tasks.summary(task.id).attention.length).toBeGreaterThan(0);
+    expect(s.tasks.summary(task.id).attention).toEqual([]);
+    failMerge(null);
+    setPr(task.id, { updatedAt: "2026-11-01T11:00:00Z", reviewDecision: "approved" });
+    await pass();
+    expect(merged).toHaveLength(2);
+    expect(s.tasks.summary(task.id).status).toBe("done");
+  });
+
+  it("doesn't flag the host's blocked refusal when the refreshed PR turns out to need an approval", async () => {
+    const { s, flaggedTask, setPr, pass, turnOn, runs, merged, failMerge } = setup();
+    const task = flaggedTask(4);
+    setPr(task.id);
+    turnOn();
+    // The real refusal before the merge, and its refresh showing what GitHub now says.
+    failMerge(
+      new AppError(
+        "VALIDATION",
+        "GitHub says the PR can't be merged yet (BLOCKED): a branch rule such as a required approval or an up-to-date branch isn't met",
+      ),
+      (link) => s.links.setSnapshot(link.id, snapshot({ reviewDecision: "review_required", mergeState: "blocked" })),
+    );
+    await pass();
+    await pass();
+    expect(merged).toHaveLength(1);
+    expect(runs(task.id)).toEqual([
+      expect.objectContaining({
+        status: "skipped",
+        needsAttention: false,
+        summary: expect.stringContaining("it still needs an approving review"),
+      }),
+    ]);
+    expect(s.tasks.summary(task.id).attention).toEqual([]);
+  });
+
+  it("flags a task only the user can unblock once per head, and nothing is tried", async () => {
+    const { s, flaggedTask, setPr, pass, turnOn, runs, merged } = setup();
+    // Can't merge, even while it also needs an approval: the approval mustn't hide what only the user can fix.
+    const cantMerge = flaggedTask(4);
+    setPr(cantMerge.id, { canMerge: false, reviewDecision: "review_required", mergeState: "blocked" });
+    const fork = flaggedTask(5);
+    setPr(fork.id, { isCrossRepository: true });
+    const twoPrs = flaggedTask(6);
+    s.links.add(twoPrs.id, { value: "https://github.com/acme/app/pull/66" }, "agent");
+    for (const link of s.tasks.summary(twoPrs.id).links) s.links.setSnapshot(link.id, snapshot());
+    turnOn();
+    await pass();
+    await pass();
+    expect(merged).toEqual([]);
+    const reasons: Array<[string, string]> = [
+      [cantMerge.id, "the signed-in account can't merge it"],
+      [fork.id, "comes from a fork"],
+      [twoPrs.id, "it has 2 open pull requests linked"],
+    ];
+    for (const [id, reason] of reasons) {
+      expect(runs(id)).toEqual([
+        expect.objectContaining({
+          status: "skipped",
+          needsAttention: true,
+          summary: expect.stringContaining(`won't merge #${s.tasks.summary(id).number} by itself: `),
+        }),
+      ]);
+      expect(runs(id)[0]!.summary).toContain(reason);
+      expect(s.tasks.summary(id).attention.length).toBeGreaterThan(0);
+    }
   });
 
   it("tries a race again, and flags a merge the host keeps refusing or a target it may never merge into", async () => {
@@ -302,7 +387,11 @@ describe("Merge ready PRs: Into main", () => {
     failMerge(new AppError("CONFLICT", "The PR moved on to abc1234 since it was checked"));
     await pass();
     expect(runs(task.id)[0]).toMatchObject({ status: "skipped", output: { retry: true } });
-    failMerge(new AppError("VALIDATION", "GitHub says the PR can't be merged yet (BLOCKED): a branch rule"));
+    // A refusal the refreshed PR doesn't explain (it still reads ready). The host's own BLOCKED refusal refreshes to a
+    // blocked PR, which the gate waits on silently, as it does before any merge is tried.
+    failMerge(
+      new AppError("VALIDATION", "Repository rule violations found: changes must be made through a merge queue"),
+    );
     await pass();
     expect(runs(task.id)[0]).toMatchObject({
       status: "skipped",
