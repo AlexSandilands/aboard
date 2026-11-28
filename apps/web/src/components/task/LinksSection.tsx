@@ -20,13 +20,16 @@ import {
   EllipsisIcon,
   GitMergeIcon,
   GitPullRequestArrowIcon,
+  EyeIcon,
   GlobeIcon,
+  MessageSquareWarningIcon,
   PlusIcon,
   RefreshCwIcon,
   SquareTerminalIcon,
   TicketIcon,
   Trash2Icon,
   TriangleAlertIcon,
+  UserRoundCheckIcon,
   WrenchIcon,
 } from "lucide-react";
 import { useEffect, useState, type FC, type ReactNode } from "react";
@@ -354,9 +357,11 @@ function PullRequestRow({
     >
       <GitPullRequestArrowIcon className={cn("size-4 shrink-0", state?.tone ?? "text-muted-foreground")} />
       {link.ref ? <span className="shrink-0 tabular-nums text-muted-foreground">#{link.ref.number}</span> : null}
-      <PanelLabel className="flex-1">{title}</PanelLabel>
+      <PanelLabel className="min-w-16 flex-1">{title}</PanelLabel>
       {snapshot ? (
-        <span className="flex shrink-0 items-center gap-1.5 text-xs font-normal">
+        // Shrinks and clips rather than spilling under the action slot, refresh button and menu when even the
+        // icons don't fit.
+        <span className="flex min-w-0 shrink items-center gap-1.5 overflow-hidden text-xs font-normal">
           {snapshot.state === "open" && snapshot.autoMerge ? (
             <Badge variant="info" size="sm">
               Auto-merge on
@@ -380,19 +385,46 @@ function PullRequestRow({
               <CircleDashedIcon className="size-3.5 text-warning" />
             </Hint>
           ) : null}
-          {checkedAgo ? <span className="text-muted-foreground/80 tabular-nums">{checkedAgo}</span> : null}
-          {snapshot.reviewDecision === "approved" ? (
-            <span className="text-success-foreground">Approved</span>
-          ) : snapshot.reviewDecision === "changes_requested" ? (
-            <span className="text-warning-foreground">Changes requested</span>
-          ) : snapshot.reviewDecision === "review_required" ? (
-            <Hint label={prReviewLine(snapshot) ?? "Needs approval"}>
-              <span className="text-muted-foreground">Review required</span>
-            </Hint>
+          {/* The refresh button's tooltip repeats it, so it goes first when the panel is narrow. */}
+          {checkedAgo ? (
+            <span className={cn("text-muted-foreground/80 tabular-nums", NARROW_PANEL_HIDE)}>{checkedAgo}</span>
           ) : null}
+          <ReviewStatus snapshot={snapshot} />
         </span>
       ) : null}
     </RowWithMenu>
+  );
+}
+
+/*
+ * The task panel (and window) is the `@container`. Below these widths the PR row drops its least useful text
+ * first: "checked … ago", then the review status's words, which become an icon with the text in its tooltip.
+ */
+const NARROW_PANEL_HIDE = "@max-[520px]:hidden";
+const COMPACT_PANEL_HIDE = "@max-[440px]:hidden";
+const COMPACT_PANEL_SHOW = "hidden @max-[440px]:flex";
+
+const REVIEW_STATUS = {
+  approved: { text: "Approved", tone: "text-success-foreground", Icon: UserRoundCheckIcon },
+  changes_requested: { text: "Changes requested", tone: "text-warning-foreground", Icon: MessageSquareWarningIcon },
+  review_required: { text: "Review required", tone: "text-muted-foreground", Icon: EyeIcon },
+} as const;
+
+/** The PR's review decision: words in a wide panel, an icon with the words in its tooltip in a narrow one. */
+function ReviewStatus({ snapshot }: { snapshot: PrSnapshot }) {
+  const decision = snapshot.reviewDecision;
+  if (decision !== "approved" && decision !== "changes_requested" && decision !== "review_required") return null;
+  const { text, tone, Icon } = REVIEW_STATUS[decision];
+  const label = decision === "review_required" ? (prReviewLine(snapshot) ?? "Needs approval") : text;
+  return (
+    <>
+      <Hint label={label} className={COMPACT_PANEL_HIDE}>
+        <span className={tone}>{text}</span>
+      </Hint>
+      <Hint label={decision === "review_required" ? label : text} className={COMPACT_PANEL_SHOW}>
+        <Icon className={cn("size-3.5", tone)} />
+      </Hint>
+    </>
   );
 }
 
@@ -473,10 +505,10 @@ function IssueRow({ link, onRemove }: { link: Extract<TaskLink, { kind: "issue" 
   );
 }
 
-function Hint({ label, children }: { label: string; children: ReactNode }) {
+function Hint({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
   return (
     <Tooltip>
-      <TooltipTrigger render={<span className="flex" aria-label={label} />}>{children}</TooltipTrigger>
+      <TooltipTrigger render={<span className={cn("flex", className)} aria-label={label} />}>{children}</TooltipTrigger>
       <TooltipPopup>{label}</TooltipPopup>
     </Tooltip>
   );
