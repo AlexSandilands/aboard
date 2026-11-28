@@ -25,6 +25,7 @@ import { mergeButtonLabel } from "~/components/merge/merge.logic";
 import { HarnessIcon, SessionMenuItems, T3Icon } from "~/components/sessions/SessionParts";
 import { sessionStatusPresentation, sessionTitle, type SessionLink } from "~/components/sessions/sessions.logic";
 import { useSessionActions } from "~/components/sessions/useSessionActions";
+import { prReviewLine } from "~/components/task/links.logic";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Spinner } from "~/components/ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -120,6 +121,7 @@ export function PrStatusChip({
   const Icon = state?.Icon ?? Link2Icon;
   const checks = snapshot && snapshot.checks !== "none" ? CHECKS[snapshot.checks] : null;
   const number = link.ref?.number;
+  const review = prReviewLine(snapshot);
   return (
     <Tooltip>
       <TooltipTrigger
@@ -135,6 +137,7 @@ export function PrStatusChip({
           {state || checks ? (
             <span className="text-muted-foreground">{[state?.label, checks?.label].filter(Boolean).join(" · ")}</span>
           ) : null}
+          {review ? <span className="text-muted-foreground">{review}</span> : null}
           {mergeAction === "armed" ? <span className="text-muted-foreground">Auto-merge on</span> : null}
         </span>
       </TooltipPopup>

@@ -91,7 +91,7 @@ query and mapping are `githubSnapshot.ts`):
 | `isCrossRepository` | Whether the head branch is in a fork; Autopilot's PR review skips those                           |
 | `reviews`          | The last 20 submitted reviews, oldest first: `id` (databaseId), `author`, `state`, `submittedAt`, `own` (`viewerDidAuthor`), `trusted`, `hasBody` (it has a summary: a reply on a thread is an empty commented review), `marked` (its first line carries Autopilot's or a fix session's mark, `isAutopilotMarked`) and `commitOid` (the head it was submitted on) |
 | `reviewComments`   | Comments on the last 30 review threads that aren't resolved and that the signed-in account didn't answer last (the last 5 of each), oldest first: `id`, `author`, `createdAt`, `reviewId`, `own`, `trusted` |
-| `reviewThreads`    | Those threads that aren't resolved: `id` (node id), `canResolve`, `lastCommentId`, `ownLast`, `lastReviewId`, `lastAuthor` and `lastTrusted` (the newest comment, whether it is the signed-in account's, the review it is in, who wrote it, `""` for a deleted account, and whether they are `trusted`). `unansweredThreads` (contracts) lists the ones whose newest comment isn't the account's, counting Fix PRs' trusted bots as trusted; `get_task`'s PR line shows them, and `isStalledPr` reads them |
+| `reviewThreads`    | Those threads that aren't resolved: `id` (node id), `canResolve`, `lastCommentId`, `ownLast`, `lastReviewId`, `lastAuthor` and `lastTrusted` (the newest comment, whether it is the signed-in account's, the review it is in, who wrote it, `""` for a deleted account, and whether they are `trusted`). `unansweredThreads` (contracts) lists the ones whose newest comment isn't the account's, counting Fix PRs' trusted bots as trusted; `get_task`'s PR line shows them, `isStalledPr` reads them, and `approvalBlock` says why an approval is missing |
 | `unresolvedThreads` | How many of the threads read aren't resolved                                                     |
 | `conversationComments` | The last 10 comments on the PR's conversation (not inline ones), oldest first: `id`, `author`, `createdAt`, `own`, `trusted`, `marked` |
 | `headCommittedAt`  | When the head commit was committed: a conversation comment after it hasn't been answered by a push |
@@ -131,8 +131,18 @@ threads the account answered last, then `reviewThreads(ref)` and `resolveReviewT
 it fixed; Review PRs resolves its own threads a later round confirms fixed the same way.
 
 A repository can require every conversation resolved before a merge. When GitHub says the PR is blocked and it has
-unresolved threads, the merge gate, merge_task_pr's refusals and the refusal at merge time say "N unresolved review
-conversations", apart from a missing approval.
+unresolved threads, the merge gate and the refusal at merge time say "N unresolved review conversations", apart from a
+missing approval.
+
+When the approval is what's missing, the threads are often why: a reviewer bot won't approve while its points are
+open. `approvalBlock` (contracts, `prThreads.ts`) reads `reviewThreads` of an open PR whose `reviewDecision` is
+`review_required` and splits them into **waiting on a reply** (the newest comment is someone else's) and **answered,
+waiting on the reviewer** (`ownLast`: Autopilot or the user replied), naming who spoke last on the waiting ones, three
+then "and N more". `approvalBlockReason` puts it in words, and every place uses it: merge_task_pr's refusal ("it still
+needs an approving review, and 2 unresolved review threads (@coderabbitai) may be holding it back: 1 waiting on a
+reply, 1 answered and waiting on the reviewer"), `get_task`'s PR line (which adds ", N answered review threads waiting
+on the reviewer" after the unanswered ones), and the card's PR chip tooltip and the panel's PR row
+([board-layout.md](board-layout.md#links-on-cards)). A snapshot from before the threads were read gives only the count.
 
 ### Attention
 
@@ -196,7 +206,7 @@ below are `autoMergeVerdict`, which both share.
   ([Autopilot's gate](autopilot.md#merge-ready-prs)) gives a reason: not in Review, PR not open or a draft,
   local review going or blocking/major findings open, a Review PRs or Fix PRs run going, Review PRs (when on) not
   clean at the head, changes requested, checks not passing (or none for 10 minutes), not cleanly mergeable, GitHub saying it is blocked (a required check not reported yet) unless only a review is missing. Also when
-  an approving review is still required, the account can't merge, or the repo doesn't allow the method asked for.
+  an approving review is still required (with the unresolved threads that may be why, `approvalBlockReason`), the account can't merge, or the repo doesn't allow the method asked for.
 - **Merging.** `mergeIntoDefaultBranch` (`integrations/prMerge.ts`) reads the PR fresh with the host's `mergeTarget`, runs `checkAutopilotMergeTarget` with
   `into: "default"` (the base must be GitHub's default branch, and still the one the snapshot showed), stops with a
   `CONFLICT` and refreshes the link if the head moved, refuses unless GitHub's `mergeStateStatus` is `CLEAN`,

@@ -62,6 +62,7 @@ import {
   ISSUE_STATE,
   isWebUrl,
   groupLinks,
+  prReviewLine,
   unrecognisedLinkHint,
   ticketLinkHref,
   type PlainLink,
@@ -385,7 +386,9 @@ function PullRequestRow({
           ) : snapshot.reviewDecision === "changes_requested" ? (
             <span className="text-warning-foreground">Changes requested</span>
           ) : snapshot.reviewDecision === "review_required" ? (
-            <span className="text-muted-foreground">Review required</span>
+            <Hint label={prReviewLine(snapshot) ?? "Needs approval"}>
+              <span className="text-muted-foreground">Review required</span>
+            </Hint>
           ) : null}
         </span>
       ) : null}

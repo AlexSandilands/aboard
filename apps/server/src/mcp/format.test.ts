@@ -277,15 +277,21 @@ describe("linkText for pull requests", () => {
       ],
     });
     expect(linkText(link, [], ["coderabbitai"])).toBe(
-      "PR acme/app#7 (open, checks passing, review required, 4 unanswered review threads (@coderabbitai, @bob; no repo access: @stranger)) https://github.com/acme/app/pull/7",
+      "PR acme/app#7 (open, checks passing, review required, 4 unanswered review threads (@coderabbitai, @bob; no repo access: @stranger), 1 answered review thread waiting on the reviewer) https://github.com/acme/app/pull/7",
     );
     // Without the trusted bots list, the bot is one more author with no access.
     expect(linkText(link)).toContain("4 unanswered review threads (@bob; no repo access: @coderabbitai, @stranger)");
   });
 
-  it("says nothing of threads once they are all answered, the PR is merged, or no author was read", () => {
-    expect(linkText(pr({ reviewThreads: [thread("T1", { ownLast: true })] }))).toBe(
-      "PR acme/app#7 (open, checks passing, review required) https://github.com/acme/app/pull/7",
+  it("counts the answered threads on a PR that still needs an approval: the reviewer may be holding it for them", () => {
+    expect(linkText(pr({ reviewThreads: [thread("T1", { ownLast: true, lastAuthor: "me" }), thread("T2")] }))).toBe(
+      "PR acme/app#7 (open, checks passing, review required, 1 unanswered review thread (@bob), 1 answered review thread waiting on the reviewer) https://github.com/acme/app/pull/7",
+    );
+  });
+
+  it("says nothing of threads once they are all answered on an approved PR, the PR is merged, or no author was read", () => {
+    expect(linkText(pr({ reviewDecision: "approved", reviewThreads: [thread("T1", { ownLast: true })] }))).toBe(
+      "PR acme/app#7 (open, checks passing, approved) https://github.com/acme/app/pull/7",
     );
     expect(linkText(pr({ state: "merged", reviewThreads: [thread("T1")] }))).not.toContain("unanswered");
     expect(linkText(pr({ reviewThreads: [thread("T1", { lastAuthor: undefined })] }))).toContain(

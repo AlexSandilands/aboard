@@ -1,9 +1,16 @@
-import { taskLabel, pickMergeMethod, type MergeMethod, type TaskSummary } from "@repo/contracts";
+import {
+  approvalBlock,
+  approvalBlockReason,
+  taskLabel,
+  pickMergeMethod,
+  type MergeMethod,
+  type TaskSummary,
+} from "@repo/contracts";
 import { headSeenSince, isPrLink, notMergeable, type PrLink } from "../autopilot/mergeGate.ts";
 import { AppError } from "../errors.ts";
 import type { Services } from "../services/types.ts";
 import type { GitHosts } from "./gitHosts.ts";
-import { describeUnresolved, type PrMerges } from "./prMerge.ts";
+import type { PrMerges } from "./prMerge.ts";
 
 export interface MergeTaskPrResult {
   task: TaskSummary;
@@ -90,15 +97,9 @@ export function autoMergeVerdict(services: Services, task: TaskSummary, now: num
   }
   // Waiting for an approval is how a PR normally ends, so it is a wait: no hold, no attention flag.
   if (snapshot?.reviewDecision === "review_required") {
-    const unresolved = snapshot.mergeState === "blocked" ? (snapshot.unresolvedThreads ?? 0) : 0;
-    return {
-      kind: "wait",
-      reason:
-        unresolved > 0
-          ? `it still needs an approving review, and it has ${describeUnresolved(unresolved)} the repository may require resolved`
-          : "it still needs an approving review",
-      link,
-    };
+    // Unresolved threads are often why it hasn't got one: a reviewer bot won't approve while they are open.
+    const why = approvalBlockReason(approvalBlock(snapshot));
+    return { kind: "wait", reason: `it still needs an approving review${why ? `, and ${why}` : ""}`, link };
   }
   return { kind: "ready", link, headOid, base: baseRef };
 }

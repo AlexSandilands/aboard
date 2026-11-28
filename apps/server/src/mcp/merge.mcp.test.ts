@@ -184,7 +184,32 @@ describe("merge_task_pr", () => {
     const unapproved = await reviewTask({ autoMerge: true, pr: { ...threads, reviewDecision: "REVIEW_REQUIRED" } });
     blocked(unapproved.id, {});
     expect((await call("merge_task_pr", { task: `#${unapproved.number}` })).text).toContain(
-      "it still needs an approving review, and it has 2 unresolved review conversations the repository may require resolved",
+      "it still needs an approving review, and 2 unresolved review threads may be holding it back: 2 waiting on a reply",
+    );
+
+    // With who spoke last read, the reason names them and tells the threads Autopilot answered apart.
+    const comment = (id: number, login: string, own = false) => ({
+      databaseId: id,
+      createdAt: "2026-01-01T00:00:00Z",
+      authorAssociation: "NONE",
+      viewerDidAuthor: own,
+      author: { login },
+      pullRequestReview: null,
+    });
+    const named = await reviewTask({
+      autoMerge: true,
+      pr: {
+        reviewDecision: "REVIEW_REQUIRED",
+        reviewThreads: {
+          nodes: [
+            { id: "T1", isResolved: false, comments: { nodes: [comment(1, "coderabbitai")] } },
+            { id: "T2", isResolved: false, comments: { nodes: [comment(2, "bob"), comment(3, "me", true)] } },
+          ],
+        },
+      },
+    });
+    expect((await call("merge_task_pr", { task: `#${named.number}` })).text).toContain(
+      "it still needs an approving review, and 2 unresolved review threads (@coderabbitai) may be holding it back: 1 waiting on a reply, 1 answered and waiting on the reviewer",
     );
 
     // The poll didn't see it blocked, but GitHub's fresh read before the merge does.

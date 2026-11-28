@@ -42,6 +42,7 @@ import {
   ticketLabel,
   type TicketSystem,
   unansweredThreads,
+  approvalBlock,
 } from "@repo/contracts";
 import { redact } from "../integrations/claudeTranscript.ts";
 import type { SessionTranscript } from "../integrations/sessionTranscript.ts";
@@ -122,6 +123,16 @@ function unansweredText(snapshot: PrSnapshot, trustedBots: readonly string[]): s
 }
 
 /**
+ * On a PR that needs an approval, the unresolved threads the user's account answered last (Autopilot fixed or declined
+ * the point): ", 1 answered review thread waiting on the reviewer". A reviewer bot may hold its approval until it
+ * resolves them, so they explain a PR that waits with nothing unanswered.
+ */
+function answeredText(snapshot: PrSnapshot): string {
+  const answered = approvalBlock(snapshot)?.answered ?? 0;
+  return answered > 0 ? `, ${answered} answered review thread${answered === 1 ? "" : "s"} waiting on the reviewer` : "";
+}
+
+/**
  * One link, for agents. `ticketSystems` names a ticket's system ("<System> KEY"); without them it shows its id.
  * `trustedBots` (Fix PRs' list, parsed) counts those review bots as having repository access.
  */
@@ -139,7 +150,7 @@ export function linkText(
         ? ` (${s.state}, checks ${s.checks}${optionalChecksText(s.optionalChecks)}${s.reviewDecision ? `, ${s.reviewDecision.replace("_", " ")}` : ""}${
             s.mergeable === "conflicting" ? ", conflicts" : ""
           }${s.mergeState === "blocked" || s.mergeState === "behind" ? `, merge ${s.mergeState}` : ""}${
-            s.state === "open" || s.state === "draft" ? unansweredText(s, trustedBots) : ""
+            s.state === "open" || s.state === "draft" ? `${unansweredText(s, trustedBots)}${answeredText(s)}` : ""
           })`
         : "";
       return `PR ${name}${state}${label} ${link.url}`;

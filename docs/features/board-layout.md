@@ -499,6 +499,13 @@ with no snapshot yet counts as active, since it may be. The first ticket key sho
 top row. Settled and archived threads, other ticket keys and plain URLs appear in the panel only, where
 inactive threads are dimmed.
 
+A PR chip's tooltip (`PrStatusChip`) gives the PR's title, its state and checks, and for an open or draft PR its review
+(`prReviewLine` in `task/links.logic.ts`): "Approved", "Changes requested", or "Needs approval" followed by the
+unresolved review threads that may be holding the approval back (`approvalBlockText` in contracts:
+"Needs approval · 2 unresolved review threads (@coderabbitai) may be holding it back: 1 waiting on a reply, 1 answered
+and waiting on the reviewer"). The chip itself looks the same whatever the review: waiting for an approval is how a PR
+normally ends. The panel's PR row puts the same text in a hint on **Review required**.
+
 ### The card menu
 
 Right-click, the Menu key or Shift+F10 on a card (or an epic's header, in its band or as a finished epic's card) opens its menu: **Move to**

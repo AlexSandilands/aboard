@@ -1,7 +1,9 @@
 import {
+  approvalBlockText,
   isT3ThreadId,
   type ClassifiedLink,
   type IssueSnapshot,
+  type PrSnapshot,
   type T3IntegrationStatus,
   type T3ThreadSnapshot,
   type T3ThreadStatus,
@@ -256,4 +258,24 @@ export function checkedAgoLabel(syncedAt: string | null, nowMs: number): string 
   if (minutes < 60) return `checked ${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   return hours < 24 ? `checked ${hours}h ago` : `checked ${Math.floor(hours / 24)}d ago`;
+}
+
+/**
+ * An open PR's review state in words, for the card chip's tooltip and the panel's "Review required" hint: "Approved",
+ * "Changes requested", or "Needs approval" with the unresolved threads that may be holding it back
+ * (`approvalBlockText`). Null for a closed or merged PR, or one with no review decision.
+ */
+export function prReviewLine(snapshot: PrSnapshot | null | undefined): string | null {
+  if (!snapshot || (snapshot.state !== "open" && snapshot.state !== "draft")) return null;
+  switch (snapshot.reviewDecision) {
+    case "approved":
+      return "Approved";
+    case "changes_requested":
+      return "Changes requested";
+    case "review_required":
+      // approvalBlockText reads only open PRs; a draft isn't asking for a review yet.
+      return approvalBlockText(snapshot) ?? "Needs approval";
+    default:
+      return null;
+  }
 }
