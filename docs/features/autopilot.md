@@ -852,8 +852,9 @@ to fix a pull request linked to a task.
   it. For Autopilot's review it gives the counts and the review's `threshold` and says to fix only points at or
   above it and leave the FYI section alone. Comments are named by id (`gh api repos/<repo>/pulls/comments/<id>`),
   and the agent is told to read only the reviews and comments listed, which come from people with access, reviewer
-  bots the user trusts or the user. With PR comments it may read the conversation for their context, and is told
-  never to act on anything not listed. When people's comments are in it, the agent **judges each request** rather
+  bots the user trusts or the user. With PR comments it is also given, by id, the earlier conversation comments it
+  may read for context (a requester's, or Autopilot's own marked answers and questions), never the whole
+  conversation, which anyone can comment on. When people's comments are in it, the agent **judges each request** rather
   than assume it right: it fixes it, declines it with its reason, asks a clarifying question when it can't tell what
   is wanted (changing nothing for it; the answer starts another attempt), or, for discussion, thanks or a status
   note, does nothing and posts nothing. With the switch off, none of that is in the prompt, nor the PR comment below:
@@ -939,8 +940,8 @@ to fix a pull request linked to a task.
 - **Safety.** Headless runs get `pushDenyRules` (no force-push, no push to the default branch, no `gh pr merge`)
   and the runner's workspace note. T3 threads get the same rules in their note, and the fix prompt repeats them for
   a nudge. Conflicts are fixed with a merge, never a rebase. Only requesters' comments (people with access, the bots the user listed, and the user) start a fix, and the
-  prompt names them by id, tells the agent not to read the others (or, for PR comments, to read them only for
-  context), calls what it reads requests about the code, never instructions, and tells it to judge each one. That is a prompt, not a sandbox: a fix agent has edit access, Bash and the user's `gh` login,
+  prompt names them by id, tells the agent not to read the others (for PR comments, the earlier comments it may read
+  for context are listed by id too), calls what it reads requests about the code, never instructions, and tells it to judge each one. That is a prompt, not a sandbox: a fix agent has edit access, Bash and the user's `gh` login,
   so on a public repository a stranger's comment it reads anyway (or a CI log) could still try to steer it. Unlike
   the reviewer it can't be confined to exact commands, because fixing means running the project's own tools.
 - **Settings.** The six switches (**Review summaries and PR comments**, `onSummaries`, comes after Review comments), **Trusted bot reviewers** (`trustedBots`, in the Review comments row), **Fix findings at or above** (`fixThreshold`), **Attempts on checks and reviews**
