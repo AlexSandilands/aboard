@@ -87,7 +87,17 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
           ? all.filter(isNotice)
           : all.filter((r) => !wanted || r.automation === wanted || titles.get(r.automation)?.toLowerCase() === wanted);
         // A run the same automation has run again since (its next head, its next try) is history: the service refuses it.
-        const retryable = runs.filter((r) => canRetryRun(r, all) && (args.freshBudget || !isNotice(r)));
+        // A notice for a head the PR has moved past grants nothing: the new head's attempts are counted afresh anyway.
+        const heads = new Set(
+          services.tasks
+            .summary(taskId)
+            .links.flatMap((l) => (l.kind === "pr" && l.snapshot?.headOid ? [l.snapshot.headOid] : [])),
+        );
+        const staleHead = (r: (typeof all)[number]) => {
+          const what = r.dedupeKey.slice(r.dedupeKey.lastIndexOf(":") + 1);
+          return /^[0-9a-f]{40}$/.test(what) && !heads.has(what);
+        };
+        const retryable = runs.filter((r) => canRetryRun(r, all) && (args.freshBudget ? !staleHead(r) : !isNotice(r)));
         // The newest notice whose budget still has a fresh start to give; with none, the newest one's refusal says why.
         const target = args.freshBudget
           ? (retryable.find((r) => freshBudgetRefusal(r, all) === null) ?? null)

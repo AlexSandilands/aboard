@@ -87,6 +87,8 @@ describe("retrying an Autopilot run", () => {
   it("gives Fix PRs a fresh budget only when asked, and not past its cap", async () => {
     // The checks' budget gave up, then an attempt on comments (a budget of its own) failed.
     const notice = endedRun(AUTOPILOT_FIX_PRS, "fix:gave_up:L1:review", "skipped");
+    // A head the task's PR has moved past (it has no PR at all here): never the one renewed.
+    endedRun(AUTOPILOT_FIX_PRS, `fix:gave_up:L1:${"a".repeat(40)}`, "skipped");
     const failed = endedRun(AUTOPILOT_FIX_PRS, "fix:pr:L1:abc:comments@1", "failed");
 
     // The plain retry takes the failed attempt and leaves the notice: a fresh budget is never spent by default.
