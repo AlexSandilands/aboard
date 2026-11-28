@@ -273,6 +273,11 @@ export interface ReviewThreadDetail extends PrReviewThreadInfo {
   /** Who started the thread, to resolve a listed review bot's thread once Autopilot declines its point. */
   rootAuthor: string | null;
   /**
+   * The logins of everyone but the signed-in account who commented: the root and the newest comments read. A listed
+   * bot's declined thread is resolved only when nobody else spoke on it.
+   */
+  speakers: string[];
+  /**
    * The newest comment is Autopilot's (the signed-in account, starting with its mark): a reply saying it was fixed
    * (`fixedIn` is the commit) or declined, or something else of Autopilot's, such as its own review comment. Null when
    * someone else spoke last.

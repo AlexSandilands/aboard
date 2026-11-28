@@ -226,6 +226,13 @@ export function mapReviewThreadDetails(nodes: ReadonlyArray<ReviewThreadNode | n
       rootCommentId: root?.databaseId ?? null,
       rootReviewId: root?.pullRequestReview?.databaseId ?? null,
       rootAuthor: root?.author?.login ?? null,
+      // Everyone but the signed-in account who spoke: the root and the newest comments read (a deleted account is "").
+      speakers: [
+        ...new Set([
+          ...(root ? [root.author?.login ?? ""] : []),
+          ...thread.comments.nodes.flatMap((c) => (c && c.viewerDidAuthor !== true ? [c.author?.login ?? ""] : [])),
+        ]),
+      ],
       reply: reply?.kind ?? null,
       fixedIn: reply?.kind === "fixed" ? reply.sha : null,
     };

@@ -808,7 +808,9 @@ to fix a pull request linked to a task.
   comma separated, default empty). GitHub often marks a review bot installed as an app NONE, so without the list its
   points never start a fix. The list is opt-in per login: nobody marked NONE is trusted otherwise, since some bots post
   comments that need no answer. Logins are compared with `normalizeLogin` (`packages/contracts/src/repoPrReview.ts`):
-  lower-cased, without a leading `@` or the `[bot]` suffix GitHub's REST API adds and GraphQL leaves off. A listed bot's
+  lower-cased, without a leading `@` or the `[bot]` suffix GitHub's REST API adds and GraphQL leaves off. The snapshot
+  doesn't carry whether an author is a Bot, so a listed login matches any account with that name, a machine user's
+  too (an app's own name can't be taken by a user, but a login without an app behind it can). A listed bot's
   comments and requests for changes are `comments` and `changes` triggers like a person's, so they count against
   `commentAttempts`, and the `ownLast` rule above still keeps two bots from ping-ponging. **Fix in →** picks a listed
   bot's changes-requested review too.
@@ -849,7 +851,9 @@ to fix a pull request linked to a task.
   of the commits. A thread a listed **trusted bot reviewer** started (`rootAuthor`, the root comment's login, read
   only on this fresh read) is also resolved when its newest comment is Autopilot's `declined: <reason>` reply: bots
   rarely come back to resolve a thread, an open one blocks a repository that requires conversations resolved, and the
-  reason stays readable on the resolved thread. A person's declined thread stays open for them. The candidate carries
+  reason stays readable on the resolved thread. Only when nobody but listed bots spoke on it (`speakers`: the root's
+  and the newest five comments' authors other than the signed-in account): a thread a person started or joined stays
+  open for them. The candidate carries
   the parsed list (`ResolveData.trustedBots`). The others (a person's declined thread, the user's own words,
   Autopilot's review comment) go on the run's `output.settled` as `thread@newestCommentId` and aren't read again until
   someone comments; one whose commit isn't on the PR is read again after the next push. So a bot's declined thread

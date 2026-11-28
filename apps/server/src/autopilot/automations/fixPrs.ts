@@ -487,7 +487,7 @@ const FIELDS: AutopilotField[] = [
     label: "Review comments",
     kind: "boolean",
     help: "Address new comments from people with access and the bots you trust.",
-    info: "New review comments from people with access to the repository. Your own don't count: Autopilot posts as you. GitHub can mark a review bot as having no access: list its login in the box, comma separated, and its comments and requests for changes count too, against Attempts on comments. Autopilot also resolves a listed bot's thread once it declines the point.",
+    info: "New review comments from people with access to the repository. Your own don't count: Autopilot posts as you. GitHub can mark a review bot as having no access: list its login in the box, comma separated, and its comments and requests for changes count too, against Attempts on comments. Autopilot also resolves a listed bot's thread once it declines the point, unless a person joined it.",
   },
   {
     key: "trustedBots",
@@ -498,7 +498,7 @@ const FIELDS: AutopilotField[] = [
     inRowOf: "onComments",
     placeholder: "Trusted bot logins",
     help: "Bot logins counted as people with access, comma separated.",
-    info: "Review comments and requests for changes from these logins are addressed like those of people with access, though GitHub may mark a review bot as having none. Their fixes count against Attempts on comments. Once Autopilot declines a point a listed bot raised, it resolves the thread too.",
+    info: "Review comments and requests for changes from these logins are addressed like those of people with access, though GitHub may mark a review bot as having none. Their fixes count against Attempts on comments. Once Autopilot declines a point a listed bot raised, it resolves the thread too, unless a person joined it. A login matches any account with that name, a machine user's too.",
   },
   {
     key: "onAutopilotReview",
@@ -883,8 +883,8 @@ const threads = (n: number) => `${n} review thread${n === 1 ? "" : "s"}`;
  * Resolves the threads the check found answered "fixed in <sha>", read fresh from GitHub first: each must still be
  * unresolved, still end with Autopilot's reply, and name a commit among the PR's newest 100. A thread someone answered
  * since, or whose commit never reached the PR, stays open. A thread a trusted bot reviewer started is resolved on a
- * "declined" reply too: the bot rarely comes back to it, and an open thread can block the merge. A person's stays open
- * for them to read the reason.
+ * "declined" reply too, when nobody but listed bots spoke on it: the bot rarely comes back to it, and an open thread
+ * can block the merge. One a person started or joined stays open for them to read the reason.
  */
 async function resolveFixedThreads(
   data: ResolveData,
@@ -897,7 +897,14 @@ async function resolveFixedThreads(
   const fixed = read.filter((t) => t.reply === "fixed" && t.fixedIn && t.canResolve);
   const onPr = fixed.filter((t) => commits.some((c) => c.startsWith(t.fixedIn!)));
   const bots = data.trustedBots ?? [];
-  const declined = read.filter((t) => t.reply === "declined" && t.canResolve && isListedBot(t.rootAuthor, bots));
+  // Only when nobody but listed bots spoke: a person who joined the thread reads the reason and resolves it.
+  const declined = read.filter(
+    (t) =>
+      t.reply === "declined" &&
+      t.canResolve &&
+      isListedBot(t.rootAuthor, bots) &&
+      t.speakers.every((login) => isListedBot(login, bots)),
+  );
   const toResolve = [...onPr, ...declined];
   const notOnPr = fixed.length - onPr.length;
   const missing = notOnPr > 0 ? `; ${threads(notOnPr)} left open: the commit isn't on the PR` : "";

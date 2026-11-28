@@ -82,6 +82,8 @@ const thread = (id: string, over: Partial<ReviewThreadDetail> = {}): ReviewThrea
   reply: "fixed",
   fixedIn: SHA_B.slice(0, 7),
   ...over,
+  // Whoever started it, alone, unless the test says who else spoke.
+  speakers: over.speakers ?? [over.rootAuthor ?? "ana"],
 });
 
 /** The same thread as the poll keeps it: no bodies. */
@@ -1033,6 +1035,28 @@ describe("fix PRs: resolving threads it fixed", () => {
     });
     // T1 wasn't settled before it was resolved; the person's and the bot's other thread are, until someone comments.
     expect(runs()[0]!.output).toEqual({ settled: ["T2@10", "T3@10"] });
+  });
+
+  it("leaves a listed bot's declined thread open when a person joined it", async () => {
+    const { setPr, pass, turnOn, runs, resolved, setThreadState } = setup();
+    turnOn({ trustedBots: "review-bot" });
+    const joined = thread("T1", {
+      reply: "declined",
+      fixedIn: null,
+      rootAuthor: "review-bot",
+      speakers: ["review-bot", "ana"],
+    });
+    const bots = thread("T2", {
+      reply: "declined",
+      fixedIn: null,
+      rootAuthor: "review-bot",
+      speakers: ["review-bot", "Review-Bot[bot]"],
+    });
+    setThreadState({ threads: [joined, bots] });
+    setPr({ reviewThreads: [polled(joined), polled(bots)] });
+    await pass();
+    expect(resolved).toEqual(["T2"]);
+    expect(runs()[0]!.output).toEqual({ settled: ["T1@10"] });
   });
 
   it("names both kinds when it resolves a fixed thread and a bot's declined one", async () => {

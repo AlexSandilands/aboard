@@ -200,7 +200,8 @@ the PR's branch and replies on each thread, starting with Autopilot's mark and "
 - **Resolve threads it fixed** (on by default): Autopilot resolves each thread it replied it fixed once that commit is
   on the PR, so a repository that requires every conversation resolved can merge. Threads it declined stay open for
   the reviewer, except a trusted bot reviewer's: bots rarely come back to resolve, so Autopilot resolves those once it
-  has replied why it declined, and the reason stays on the thread. It also catches up on threads it fixed before. From its second round, **Review PRs** resolves its own
+  has replied why it declined, and the reason stays on the thread. If a person joined the thread, it stays open for
+  them. It also catches up on threads it fixed before. From its second round, **Review PRs** resolves its own
   earlier threads once it confirms the point is fixed.
 
 - Each reason is acted on once. A new failure on a new commit, or a newer comment, is a new reason.
