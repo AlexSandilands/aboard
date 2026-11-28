@@ -224,6 +224,12 @@ export async function mainMergeAction(
     if (error instanceof AppError && message.startsWith("Didn't merge")) {
       return { status: "skipped", summary: message, output: RECHECK };
     }
+    // The merge refreshed the link before it failed: when the task now has a reason to wait (an approval GitHub
+    // requires, say, which the host's own blocked refusal doesn't name), that is a re-check, not the user's.
+    const after = autoMergeVerdict(services, services.tasks.summary(task.id), Date.now());
+    if (after.kind === "wait") {
+      return { status: "skipped", summary: `Didn't merge PR #${data.number}: ${after.reason}`, output: RECHECK };
+    }
     // A required approval GitHub's read didn't show: wait for the reviewer (awaitsApproval), flagging only the last try.
     if (NEEDS_APPROVAL.test(message) && data.attempt < MAIN_MERGE_ATTEMPTS) {
       return {

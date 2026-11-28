@@ -47,13 +47,18 @@ function setup() {
   const merged: Array<{ linkId: string; input: DefaultBranchMergeInput }> = [];
   const reread: string[] = [];
   let mergeError: Error | null = null;
+  /** Runs on a failed merge before it throws, as the real one's refresh of the link does. */
+  let onFail: ((link: TaskLink) => void) | null = null;
   const h = createTestHarness({ integrations: { automations: [mergeEpicPrs] } });
   const s = h.services;
   // The real mergeTaskPr, over a fake host merge: what Into main calls in the app.
   const merges = {
     mergeIntoDefaultBranch: async (link: TaskLink, input: DefaultBranchMergeInput) => {
       merged.push({ linkId: link.id, input });
-      if (mergeError) throw mergeError;
+      if (mergeError) {
+        onFail?.(link);
+        throw mergeError;
+      }
       tick();
       s.links.setSnapshot(link.id, snapshot({ state: "merged", headOid: input.headOid }));
     },
@@ -116,7 +121,10 @@ function setup() {
     runs,
     merged,
     reread,
-    failMerge: (e: Error | null) => (mergeError = e),
+    failMerge: (e: Error | null, refresh: ((link: TaskLink) => void) | null = null) => {
+      mergeError = e;
+      onFail = refresh;
+    },
   };
 }
 
@@ -311,6 +319,32 @@ describe("Merge ready PRs: Into main", () => {
     await pass();
     expect(merged).toHaveLength(2);
     expect(s.tasks.summary(task.id).status).toBe("done");
+  });
+
+  it("doesn't flag the host's blocked refusal when the refreshed PR turns out to need an approval", async () => {
+    const { s, flaggedTask, setPr, pass, turnOn, runs, merged, failMerge } = setup();
+    const task = flaggedTask(4);
+    setPr(task.id);
+    turnOn();
+    // The real refusal before the merge, and its refresh showing what GitHub now says.
+    failMerge(
+      new AppError(
+        "VALIDATION",
+        "GitHub says the PR can't be merged yet (BLOCKED): a branch rule such as a required approval or an up-to-date branch isn't met",
+      ),
+      (link) => s.links.setSnapshot(link.id, snapshot({ reviewDecision: "review_required", mergeState: "blocked" })),
+    );
+    await pass();
+    await pass();
+    expect(merged).toHaveLength(1);
+    expect(runs(task.id)).toEqual([
+      expect.objectContaining({
+        status: "skipped",
+        needsAttention: false,
+        summary: expect.stringContaining("it still needs an approving review"),
+      }),
+    ]);
+    expect(s.tasks.summary(task.id).attention).toEqual([]);
   });
 
   it("flags a task only the user can unblock once per head, and nothing is tried", async () => {

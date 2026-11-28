@@ -907,7 +907,9 @@ Autopilot explains integration branches and gives each target a sentence, its ga
   `expectedHeadOid` (the flag and gate again, then `mergeIntoDefaultBranch`: `checkAutopilotMergeTarget` with
   `into: "default"`, the host's fresh merge state, the head). Its note on the task says "with Autopilot's Merge ready
   PRs". Then it rereads (`rereadPr`, the poller's `reread`) the repository's other open PRs of flagged tasks. A
-  refusal from `mergeTaskPr` (something changed since the re-check) skips as a re-check; a race, "try again in a
+  refusal from `mergeTaskPr` (something changed since the re-check) skips as a re-check, and so does any refusal
+  after which the refreshed link gives a `wait` verdict (the host's own "can't be merged yet (BLOCKED)" refusal for a
+  PR that turns out to need an approval); a race, "try again in a
   minute" or a network error retries; anything else ends "Ready to merge into main: … Merge it yourself." flagged;
   `MergeTargetError` fails the run, flagged.
 
