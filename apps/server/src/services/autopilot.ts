@@ -1198,9 +1198,12 @@ export function createAutopilotService(
           run.status === "succeeded" ? "This run succeeded, so there is nothing to retry" : "This run is still going",
         );
       }
-      if (isSupersededRun(run, runsAround(run))) {
+      const around = runsAround(run);
+      if (isSupersededRun(run, around)) {
         throw new AppError("CONFLICT", "The automation has run again since, so this run's work is history");
       }
+      const refusal = find(run.automation)?.retryRefusal?.(run, around) ?? null;
+      if (refusal) throw new AppError("CONFLICT", refusal);
       const retired: AutopilotRun = {
         ...run,
         dedupeKey: retiredKey(run),

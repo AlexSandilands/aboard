@@ -218,7 +218,8 @@ the PR's branch and replies on each thread, starting with Autopilot's mark and "
   thread Autopilot answered last doesn't send it back. A run that changed nothing and posted nothing (it judged the
   comments discussion) uses no attempt; after 20 of those on one PR it gives up all the same. When
   one runs out the card says "Autopilot gave up" under Needs attention and you get a notification; the other still
-  goes on.
+  goes on. **Retry** on that run gives it a fresh set of attempts, up to twice per PR for each; after that, the PR is
+  yours to finish.
 - It never force-pushes, pushes to the default branch or merges. PRs from forks are skipped, since their branch
   isn't on `origin`.
 - To fix a PR yourself, use **Fix in** on its row ([Fixing a PR](using-the-board.md#fixing-a-pr)). While Fix PRs is on for
@@ -392,6 +393,10 @@ its work moving, like a T3 Code thread you'd leave watching the board:
 - it nudges a task's thread that has gone quiet, or starts one when the task has none working;
 - it retries an Autopilot run that failed or was cut short (a review lost to a board restart, say);
 - it tells a thread to fix failing checks or conflicts, and re-runs a flaky CI job once;
+- it picks up a pull request that is green but not approved and has review threads nobody answered, flagged for
+  auto-merge or not: it reads the threads, then retries Fix PRs (with a fresh set of attempts when the points look
+  fair), asks the task's thread to fix or decline each one, or, for reviewers without access to the repository, asks
+  you;
 - it lists the pull requests that look ready to merge. It never merges: [Merge ready PRs](#merge-ready-prs) does that;
 - it flags a task under **Needs attention** when only you can decide something.
 

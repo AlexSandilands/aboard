@@ -21,6 +21,9 @@ export const reviewsTaskPrs = (resolved: { source: string; config: Record<string
 /** The fix automation's key (docs/features/autopilot.md#fix-prs), which acts on the reviews' hand-off. */
 export const AUTOPILOT_FIX_PRS = "fix_prs";
 
+/** The start of the dedupe key of every run that records Fix PRs giving up (`fix:gave_up:<link>[:<head>|:conflicts]`). */
+export const FIX_GAVE_UP_KEY_PREFIX = "fix:gave_up:";
+
 /** The first line of the review's summary, and so how a reader tells Autopilot's review from the user's own. */
 export const prReviewHeader = (): string => `📋 ${BRAND.name} Autopilot review`;
 

@@ -5,6 +5,8 @@ import {
   type PlanPhase,
   type StepStatus,
   type TaskDetail,
+  type PrReviewThreadInfo,
+  type PrSnapshot,
   type TaskLink,
   type TaskStatus,
   type TaskSummary,
@@ -229,6 +231,69 @@ describe("linkText for tickets", () => {
       "Jira ABC-1 https://old.example.com/browse/ABC-1",
     );
     expect(linkText(ticket("ABC-1"), [])).toBe("jira ABC-1");
+  });
+});
+
+describe("linkText for pull requests", () => {
+  const pr = (snapshot: Partial<PrSnapshot> | null): TaskLink => ({
+    id: "l",
+    taskId: "t",
+    kind: "pr",
+    url: "https://github.com/acme/app/pull/7",
+    label: null,
+    syncedAt: null,
+    createdAt: "",
+    ref: { host: "github.com", repo: "acme/app", number: 7 },
+    snapshot: snapshot && {
+      state: "open",
+      title: "Add the thing",
+      checks: "passing",
+      reviewDecision: "review_required",
+      mergeable: "mergeable",
+      headRef: "feat/thing",
+      updatedAt: null,
+      ...snapshot,
+    },
+  });
+  const thread = (id: string, over: Partial<PrReviewThreadInfo> = {}): PrReviewThreadInfo => ({
+    id,
+    canResolve: true,
+    lastCommentId: 1,
+    ownLast: false,
+    lastReviewId: null,
+    lastAuthor: "bob",
+    lastTrusted: true,
+    ...over,
+  });
+
+  it("lists the unanswered review threads, who spoke last, and who has no access to the repository", () => {
+    const link = pr({
+      reviewThreads: [
+        thread("T1", { lastAuthor: "coderabbitai", lastTrusted: false }),
+        thread("T2"),
+        thread("T3"),
+        thread("T4", { lastAuthor: "stranger", lastTrusted: false }),
+        thread("T5", { ownLast: true, lastAuthor: "me" }),
+      ],
+    });
+    expect(linkText(link, [], ["coderabbitai"])).toBe(
+      "PR acme/app#7 (open, checks passing, review required, 4 unanswered review threads (@coderabbitai, @bob; no repo access: @stranger)) https://github.com/acme/app/pull/7",
+    );
+    // Without the trusted bots list, the bot is one more author with no access.
+    expect(linkText(link)).toContain("4 unanswered review threads (@bob; no repo access: @coderabbitai, @stranger)");
+  });
+
+  it("says nothing of threads once they are all answered, the PR is merged, or no author was read", () => {
+    expect(linkText(pr({ reviewThreads: [thread("T1", { ownLast: true })] }))).toBe(
+      "PR acme/app#7 (open, checks passing, review required) https://github.com/acme/app/pull/7",
+    );
+    expect(linkText(pr({ state: "merged", reviewThreads: [thread("T1")] }))).not.toContain("unanswered");
+    expect(linkText(pr({ reviewThreads: [thread("T1", { lastAuthor: undefined })] }))).toContain(
+      ", 1 unanswered review thread)",
+    );
+    expect(linkText(pr({ reviewThreads: [thread("T1", { lastAuthor: "", lastTrusted: false })] }))).toContain(
+      "1 unanswered review thread (no repo access: a deleted account)",
+    );
   });
 });
 

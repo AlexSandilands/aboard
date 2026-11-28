@@ -283,6 +283,10 @@ export const PrReviewThreadInfo = z.object({
   ownLast: z.boolean(),
   /** The review the newest comment was posted in: one of Autopilot's own reviews is a point, not a reply. */
   lastReviewId: z.number().int().nullable(),
+  /** Who wrote the newest comment ("" for a deleted account). Optional so snapshots stored before it was read still parse. */
+  lastAuthor: z.string().nullable().optional(),
+  /** The newest comment's author has repository access (owner, member or collaborator). */
+  lastTrusted: z.boolean().optional(),
 });
 export type PrReviewThreadInfo = z.infer<typeof PrReviewThreadInfo>;
 

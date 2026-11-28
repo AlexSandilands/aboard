@@ -206,7 +206,8 @@ it, since retrying would redo nothing yet drop it from the rounds and attempts. 
 `retried` under the caller. The old key is free, so the next pass acts on it again if `check` still finds the work,
 under the switches, pause, quiet hours and caps as usual: retrying lifts no limit, which is why agents may call it.
 Automations that count runs by key (Review PRs' rounds, Fix PRs' attempts, Merge ready PRs' tries) no longer
-count the retried one. This replaces pushing an empty commit to get a new head reviewed after a board restart failed
+count the retried one. An automation can refuse a retry with a reason of its own (`Automation.retryRefusal`, given
+the runs on the task): Fix PRs caps the fresh budgets its gave-up notices grant (see Fix PRs under [Automations](#automations)). This replaces pushing an empty commit to get a new head reviewed after a board restart failed
 the review. Dry-run runs are deduped
 apart from real ones (the unique key is automation, dedupe key and `dry_run`), so turning dry-run off doesn't
 hide work it only previewed.
@@ -908,7 +909,19 @@ to fix a pull request linked to a task.
   attempt); past the per-head limit, `fix:gave_up:<linkId>:<headOid>`. Each ends flagged "Autopilot gave up on PR #N:
   …". That puts it under Needs attention, logs the run on the task and sends an `autopilot_failed` notification. A
   new head commit starts the per-head count again. The gave-up candidate sets `startsNoAgent`, so a full concurrency
-  cap, a daily cap or quiet hours don't hold it back. (Before the budgets were split the key was
+  cap, a daily cap or quiet hours don't hold it back. A gave-up run ends `skipped` (`output.gaveUp`), so it can be
+  retried.
+
+  **A fresh budget.** Retrying a gave-up notice (the run's Retry, or `retry_autopilot_run`, which Orchestrate uses)
+  gives that budget a fresh start: its attempts, and the no-action verdicts for `:no_action`, count only from the
+  newest retried notice of the same budget on (`freshBudgets`, by the run list's order, since runs made in one
+  millisecond share a `createdAt`). A retried `:review` or `:comments` notice also starts the per-head count again,
+  and a retried `:<headOid>` notice does that alone. The next pass then acts on the triggers it had dropped, through
+  the runner as usual (a nudge to the live thread, or a new session). At most `FRESH_BUDGETS_PER_PR` (2) per budget,
+  or per head commit, on a PR: the next retry is refused with the reason (`freshBudgetRefusal`, through
+  `retryRefusal`), from the board and from an agent alike. A gave-up notice never counts as superseded
+  (`isSupersededRun`): Fix PRs' other runs on the task, such as another budget's attempt or a read of its threads,
+  don't answer it. (Before the budgets were split the key was
   `fix:gave_up:<linkId>`; a PR given up on under it gets a fresh look.)
 
   **Runs that end in no action** use no attempt, with **Review summaries and PR comments** on (`isNoAction`): an
@@ -1054,7 +1067,9 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
 - **When.** Every `everyMinutes` (default 30, 5 to 1440) from local midnight (`latestMinutesSlot`), per project it's
   on in (`epicScope: false`: it has no task). Only the latest slot counts, so downtime catches up once, and switching it
   on runs the current slot at once. The dedupe key is `orchestrate:<projectId>:<local slot stamp>`. A project with
-  nothing to look at gets no run: it needs an unarchived task In Progress, in Review flagged for auto-merge, or under
+  nothing to look at gets no run: it needs an unarchived task In Progress, in Review flagged for auto-merge, in Review
+  with a PR stalled on review threads (`isStalledPr`: open, checks passing, mergeable, not approved, and a thread
+  whose newest comment isn't the account's; flagged for auto-merge or not), or under
   Needs attention (a failed Start planned run included), leaving out tasks waiting on the user (an `agent_request` or
   a thread asking for input). So an idle project, or one whose work all waits on the user, costs nothing. One run at a time per project: while one is queued or
   running, `check` returns nothing for it and the latest slot runs once it ends. The rule is
@@ -1085,8 +1100,11 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   needs (`--tools Read,Grep,Glob,Bash`, so a global WebFetch allow rule finds no tool) and no MCP server but this
   board's. `boardTools` makes the runner write an MCP config naming only the board (`boardMcpConfig`, with its API
   token, in a temporary folder of its own outside the run's, removed afterwards) and pass it with
-  `--strict-mcp-config --mcp-config`. On top of that, the `gh` reads in `ORCHESTRATE_TOOLS` (`gh pr view|checks|list|diff`, `gh run list|view`, and `gh run rerun` for a flaky CI
-  job). The rules match each command, and a compound one is refused if any part isn't allowed, so the prompt tells it to run each `gh` command on its own (no loops, pipes or `&&`) and that a refusal is about the command's shape, not that Bash is off. It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
+  `--strict-mcp-config --mcp-config`. On top of that, the `gh` reads in `ORCHESTRATE_TOOLS` (`gh pr view|checks|list|diff`, `gh run list|view`, `gh run rerun` for a flaky CI
+  job, and exactly `gh api repos/*/*/pulls/*/comments`, with or without ` --paginate`, for the inline review threads
+  `gh pr view` doesn't show). A rule's `*` matches spaces too, so `ORCHESTRATE_DENIED_SHELL` denies `gh api` with
+  `-X`, `--method`, `-f`, `-F`, `--field`, `--raw-field` or `--input` anywhere after it (deny rules win): a write can't
+  hide between the allowed rule's parts. The rules match each command, and a compound one is refused if any part isn't allowed, so the prompt tells it to run each `gh` command on its own (no loops, pipes or `&&`) and that a refusal is about the command's shape, not that Bash is off. It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
   for any task), `retry_autopilot_run` and `request_attention`. Because it reads text anyone can
   write (PR comments, CI logs), it gets only the board tools in `ORCHESTRATE_BOARD_TOOLS` (reads, `add_note`, `request_attention`, the
   thread tools, `retry_autopilot_run`); every other board tool is in `ORCHESTRATE_DENIED_TOOLS`
@@ -1108,7 +1126,15 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   round is activity (a reviewer can run for 40+ minutes and write nothing to the board). A Review task with no PR
   is asked for one only when `get_task` says the loop has ended, since with auto-review the PR is opened after the
   local loop; a stalled or failed round is sent back to its review loop instead. A PR left red or conflicting by a
-  merge into the default branch is a stall like any other. It ends with a short status. **Extra instructions** (multi-line) are appended last and win where they differ.
+  merge into the default branch is a stall like any other. A **green PR stuck on review threads** is one too: a Review
+  task whose PR is open, green, mergeable and not approved, with unanswered threads on `get_task`'s PR line. It is
+  left alone while a Fix PRs run on it is going or started since the last push; otherwise Orchestrate reads the
+  threads (`gh api …/comments`) and the conversation (`gh pr view --comments`), judges them, and takes the first of:
+  retry a failed Fix PRs run with attempts left; retry Fix PRs' gave-up notice for a fresh budget when the points look
+  fair and worth doing; message the task's thread (or start one) to fix or decline each thread, reply on each and
+  push, when Fix PRs hasn't acted or its fresh budgets are used up; `request_attention` once, naming the threads, when
+  their authors have no repository access, only the user can decide, or nothing is left to try. Its handover says
+  which it did for which PR and head, so the next run doesn't repeat it. It ends with a short status. **Extra instructions** (multi-line) are appended last and win where they differ.
 - **Memory.** The scheduled agents' handover ([custom automations](#custom-automations)):
   `scheduledHandoverParts` ends the prompt, `lastHandover("orchestrate", projectId)` supplies the last one, and the
   run keeps its `ScheduledAgentRunOutput`. Its settings section lists each project's latest runs with their summary

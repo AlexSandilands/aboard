@@ -12,6 +12,7 @@ import {
 import { z } from "zod";
 import { AppError } from "../../errors.ts";
 import type { Services } from "../../services/types.ts";
+import { FRESH_BUDGETS_PER_PR } from "../../autopilot/automations/fixPrs.ts";
 import { actorField, boardUrl, run, taskField, taskResult, textResult, type ToolRegistrar } from "../shared.ts";
 
 /** One line per variable the draft reads that some project has no value for, or none. */
@@ -30,7 +31,8 @@ function missingVariables(services: Services, draft: AutomationDraft): string[] 
 /**
  * retry_autopilot_run, which lifts no limit but one (the engine decides whether there is still work, under the user's
  * switches, pause and caps; retrying Review PRs' "rounds used up" notice allows the PR one more review round, which its
- * description says to do only when the user asks), and draft_automation, which saves nothing that runs: only the user's import on the board's page
+ * description says to do only when the user asks, and retrying Fix PRs' "gave up" notice gives that budget a fresh
+ * start, at most FRESH_BUDGETS_PER_PR times), and draft_automation, which saves nothing that runs: only the user's import on the board's page
  * does. Neither switches Autopilot on or changes what it may do.
  */
 export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, actor }) => {
@@ -45,7 +47,11 @@ export const registerAutopilotTools: ToolRegistrar = (server, { services, ctx, a
         "limits. Rounds and attempts no longer count the retried run. Use it instead of pushing an empty commit to " +
         "re-trigger a review. Retry a run once its cause is gone: one that fails the same way again wastes a run. " +
         "Retrying Review PRs' notice that a PR changed after its last review round (or after its last conflict " +
-        "resolution review) allows that PR one more review: do that only when the user asks for it.",
+        "resolution review) allows that PR one more review: do that only when the user asks for it. Retrying Fix " +
+        'PRs\' notice that it gave up on a PR ("Autopilot gave up on PR #…") gives that budget of attempts (or the ' +
+        `attempts at that head commit) a fresh start, at most ${FRESH_BUDGETS_PER_PR} times per budget per PR, then ` +
+        "the retry is refused; Fix PRs then nudges the task's live thread or starts a new session. Do it only when " +
+        "what is left looks fair and worth doing.",
       inputSchema: {
         task: taskField,
         automation: z

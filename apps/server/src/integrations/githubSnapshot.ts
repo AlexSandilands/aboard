@@ -248,6 +248,8 @@ export function mapReviewThreads(nodes: ReadonlyArray<ReviewThreadNode | null> |
         lastCommentId: newest?.databaseId ?? null,
         ownLast: newest?.viewerDidAuthor === true,
         lastReviewId: newest?.pullRequestReview?.databaseId ?? null,
+        lastAuthor: newest ? (newest.author?.login ?? "") : null,
+        lastTrusted: TRUSTED.has(newest?.authorAssociation?.toUpperCase() ?? ""),
       },
     ];
   });

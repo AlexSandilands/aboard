@@ -570,6 +570,8 @@ describe("review threads", () => {
           lastCommentId: null,
           ownLast: false,
           lastReviewId: null,
+          lastAuthor: null,
+          lastTrusted: false,
           rootCommentId: null,
           rootReviewId: null,
           rootAuthor: null,

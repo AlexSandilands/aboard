@@ -2,6 +2,8 @@ import { taskLabel } from "./taskNumbers.ts";
 import { z } from "zod";
 import { OperationId, OperationNeed, RunModelRecord } from "./operations.ts";
 import { T3RuntimeMode } from "./t3Launch.ts";
+import { AUTOPILOT_FIX_PRS, FIX_GAVE_UP_KEY_PREFIX } from "./prReview.ts";
+import { isStalledPr } from "./prThreads.ts";
 import type { TaskSummary } from "./schemas.ts";
 
 // Autopilot: a rule engine in the server that runs a catalogue of automations (docs/decisions/0008-autopilot-engine.md).
@@ -613,20 +615,25 @@ export type OrchestrateHold = z.infer<typeof OrchestrateHold>;
 const WAITING_ON_USER = new Set(["agent_request", "session_needs_input"]);
 
 /**
- * A task Orchestrate has a reason to look at: work going on, something wrong with it (a failed start included), or a
- * Review task it may merge. One waiting on the user isn't, nor a Review task with nothing wrong that only the user
- * merges, or a project whose work all waits on them would start a paid run every slot. Planned tasks are Start
- * planned's to start, so they count only once flagged. Manual tasks are the user's, so they never count. A project with
- * none of these is idle: its slots don't run.
+ * A task Orchestrate has a reason to look at: work going on, something wrong with it (a failed start included), a
+ * Review task it may merge, or a Review task whose PR is green but stuck on review threads nobody answered
+ * (`isStalledPr`), flagged for auto-merge or not. One waiting on the user isn't, nor a Review task with nothing wrong
+ * that only the user merges, or a project whose work all waits on them would start a paid run every slot; a stuck PR
+ * stops counting once every thread ends with the user's (or Autopilot's) reply. Planned tasks are Start planned's to
+ * start, so they count only once flagged. Manual tasks are the user's, so they never count. A project with none of
+ * these is idle: its slots don't run.
  */
 export const orchestrateNeedsLooking = (
-  t: Pick<TaskSummary, "archivedAt" | "status" | "attention" | "autoMerge" | "manual">,
+  t: Pick<TaskSummary, "archivedAt" | "status" | "attention" | "autoMerge" | "manual" | "links">,
 ): boolean =>
   t.archivedAt === null &&
   !t.manual &&
   t.status !== "done" &&
   !t.attention.some((a) => WAITING_ON_USER.has(a.kind)) &&
-  (t.status === "in_progress" || (t.status === "review" && t.autoMerge === true) || t.attention.length > 0);
+  (t.status === "in_progress" ||
+    (t.status === "review" &&
+      (t.autoMerge === true || t.links.some((l) => l.kind === "pr" && isStalledPr(l.snapshot)))) ||
+    t.attention.length > 0);
 
 /** `GET /api/autopilot/orchestrate/:projectId`: Orchestrate in one project, for its section of the lane popover. */
 export const OrchestrateState = z.object({
@@ -665,9 +672,12 @@ export const unretiredKey = (dedupeKey: string): string =>
  * (rowid) tells them apart. A run not in the list is compared by time.
  */
 export function isSupersededRun(
-  run: Pick<AutopilotRun, "id" | "automation" | "taskId" | "projectId" | "createdAt">,
+  run: Pick<AutopilotRun, "id" | "automation" | "taskId" | "projectId" | "createdAt" | "dedupeKey">,
   others: readonly Pick<AutopilotRun, "id" | "automation" | "taskId" | "projectId" | "dryRun" | "createdAt">[],
 ): boolean {
+  // Fix PRs' notice that it gave up stands until retried, which grants its budget a fresh start: Fix PRs' other runs
+  // on the task (another budget's attempt, a read of its threads) don't answer it.
+  if (run.automation === AUTOPILOT_FIX_PRS && run.dedupeKey.startsWith(FIX_GAVE_UP_KEY_PREFIX)) return false;
   const at = others.findIndex((o) => o.id === run.id);
   const later = at >= 0 ? others.slice(0, at) : others.filter((o) => o.createdAt > run.createdAt);
   return later.some(

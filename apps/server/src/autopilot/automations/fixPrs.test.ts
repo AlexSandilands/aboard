@@ -33,6 +33,9 @@ import {
   fixDedupeKey,
   fixPrompt,
   fixPrs,
+  freshBudgetRefusal,
+  FRESH_BUDGETS_PER_PR,
+  gaveUpScope,
   isNoAction,
   manualFix,
   NO_ACTION_RUNS_PER_PR,
@@ -638,7 +641,8 @@ describe("fix PRs: limits", () => {
     await pass();
     expect(requests).toHaveLength(2);
     const gaveUp = runs()[0]!;
-    expect(gaveUp).toMatchObject({ status: "succeeded", needsAttention: true });
+    // Skipped, so it can be retried for a fresh start (below in "fresh budgets").
+    expect(gaveUp).toMatchObject({ status: "skipped", needsAttention: true });
     expect(gaveUp.summary).toBe(
       "Autopilot gave up on PR #7: 2 fix attempts at a1b2c3d didn't change the PR, still to fix: review comments",
     );
@@ -828,6 +832,102 @@ describe("fix PRs: limits", () => {
     expect(runs()).toHaveLength(1);
     expect(runs()[0]).toMatchObject({ dryRun: true, status: "skipped" });
     expect(runs()[0]!.summary).toBe("Would fix PR #7 at a1b2c3d: failing checks (attempt 1 of 3)");
+  });
+});
+
+describe("fix PRs: fresh budgets", () => {
+  const isNotice = (key: string, what: string) => key.startsWith("fix:gave_up:") && key.endsWith(`:${what}`);
+
+  it("gives a used-up budget a fresh start when its notice is retried, twice per PR, then refuses", async () => {
+    const { requests, setPr, pass, turnOn, runs, s, fixSettings } = setup();
+    fixSettings({ attempts: 1 });
+    turnOn();
+    setPr({ checks: "failing" });
+    await pass();
+    setPr({ checks: "failing", headOid: SHA_B });
+    await pass();
+    expect(requests).toHaveLength(1);
+    const notice = () => runs().find((r) => isNotice(r.dedupeKey, "review"))!;
+    expect(notice()).toMatchObject({ status: "skipped", needsAttention: true });
+    expect(notice().summary).toBe("Autopilot gave up on PR #7: 1 fix attempt used, still to fix: failing checks");
+
+    // Retried: the checks at this head get an attempt, as the first of a new budget.
+    s.autopilot.retry(notice().id, "user");
+    await pass();
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.prompt).toContain("This is fix attempt 1 of at most 1 on this PR.");
+    // That budget is used up too, so a new failure gives up again.
+    setPr({ checks: "failing", headOid: SHA_C });
+    await pass();
+    expect(requests).toHaveLength(2);
+    expect(notice().status).toBe("skipped");
+
+    s.autopilot.retry(notice().id, "user");
+    await pass();
+    expect(requests).toHaveLength(3);
+    // A head of its own: the checks at SHA_A were handled by the first attempt.
+    setPr({ checks: "failing", headOid: "d".repeat(40) });
+    await pass();
+    expect(requests).toHaveLength(3);
+    // The third grant is refused, from the board and from an agent alike.
+    expect(() => s.autopilot.retry(notice().id, "user")).toThrow(
+      `Fix PRs has already been given ${FRESH_BUDGETS_PER_PR} fresh budgets of fix attempts on checks and Autopilot's review on this PR`,
+    );
+  });
+
+  it("counts the attempts at a head afresh when that head's notice is retried", async () => {
+    const { requests, setPr, pass, turnOn, runs, s } = setup();
+    turnOn();
+    setPr({ checks: "failing" });
+    await pass();
+    setPr({ checks: "failing", reviewComments: [comment(1)] });
+    await pass();
+    setPr({ checks: "failing", reviewComments: [comment(1), comment(2)] });
+    await pass();
+    expect(requests).toHaveLength(2);
+    const notice = runs().find((r) => isNotice(r.dedupeKey, SHA_A))!;
+    expect(notice.summary).toContain("2 fix attempts at a1b2c3d didn't change the PR");
+    s.autopilot.retry(notice.id, "user");
+    await pass();
+    expect(requests).toHaveLength(3);
+    expect(requests[2]!.prompt).toContain(`at head commit ${SHA_A}`);
+  });
+
+  it("keeps a notice retryable while Fix PRs goes on working on the PR's other budgets", async () => {
+    const { requests, setPr, pass, turnOn, runs, s, fixSettings } = setup();
+    fixSettings({ attempts: 1 });
+    turnOn();
+    setPr({ checks: "failing" });
+    await pass();
+    setPr({ checks: "failing", headOid: SHA_B, mergeable: "conflicting" });
+    await pass();
+    // The checks are given up on; the conflict, a budget of its own, gets an attempt after the notice.
+    expect(requests).toHaveLength(2);
+    const notice = runs().find((r) => isNotice(r.dedupeKey, "review"))!;
+    expect(runs()[0]!.id).not.toBe(notice.id);
+    expect(() => s.autopilot.retry(notice.id, "user")).not.toThrow();
+  });
+
+  it("reads which budget a notice's key gave up on", () => {
+    expect(gaveUpScope("fix:gave_up:L1:review", "L1")).toBe("review");
+    expect(gaveUpScope("fix:gave_up:L1:no_action", "L1")).toBe("comments");
+    expect(gaveUpScope(`fix:gave_up:L1:${SHA_A}`, "L1")).toBe(`head:${SHA_A}`);
+    expect(gaveUpScope("fix:gave_up:L2:review", "L1")).toBeNull();
+    expect(gaveUpScope("fix:pr:L1:abc:checks", "L1")).toBeNull();
+    const retired = (id: string, key: string) => ({ id, dedupeKey: `retried:${id}:${key}` });
+    const head = `fix:gave_up:L1:${SHA_A}`;
+    expect(freshBudgetRefusal({ dedupeKey: head }, [retired("r1", head)])).toBeNull();
+    expect(freshBudgetRefusal({ dedupeKey: head }, [retired("r2", head), retired("r1", head)])).toContain(
+      "fresh budgets of fix attempts at a1b2c3d",
+    );
+    // Another budget's grants, or another head's, don't count.
+    expect(
+      freshBudgetRefusal({ dedupeKey: head }, [
+        retired("r2", "fix:gave_up:L1:review"),
+        retired("r1", `fix:gave_up:L1:${SHA_B}`),
+      ]),
+    ).toBeNull();
+    expect(freshBudgetRefusal({ dedupeKey: "fix:pr:L1:abc:checks" }, [])).toBeNull();
   });
 });
 

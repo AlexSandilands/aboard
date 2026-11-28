@@ -41,6 +41,7 @@ import {
   ticketHref,
   ticketLabel,
   type TicketSystem,
+  unansweredThreads,
 } from "@repo/contracts";
 import { redact } from "../integrations/claudeTranscript.ts";
 import type { SessionTranscript } from "../integrations/sessionTranscript.ts";
@@ -99,8 +100,36 @@ function optionalChecksText(optional: PrSnapshot["optionalChecks"]): string {
   return parts.length > 0 ? ` (${parts.join(", ")})` : "";
 }
 
-/** One link, for agents. `ticketSystems` names a ticket's system ("<System> KEY"); without them it shows its id. */
-export function linkText(link: TaskLink, ticketSystems: readonly TicketSystem[] = []): string {
+/** "@bob", or "a deleted account" for GitHub's ghost. */
+const loginText = (login: string | null): string => (login ? `@${login}` : "a deleted account");
+
+/**
+ * The PR's unanswered review threads and who spoke last on them: ", 3 unanswered review threads (@coderabbitai, @bob;
+ * no repo access: @stranger)". An orchestrator reads PRs with `gh pr view`, which doesn't show inline threads. Threads
+ * read before the author was kept name nobody.
+ */
+function unansweredText(snapshot: PrSnapshot, trustedBots: readonly string[]): string {
+  const threads = unansweredThreads(snapshot, trustedBots);
+  if (threads.length === 0) return "";
+  const named = threads.filter((t) => t.author !== null);
+  const trusted = [...new Set(named.filter((t) => t.trusted).map((t) => loginText(t.author)))];
+  const untrusted = [...new Set(named.filter((t) => !t.trusted).map((t) => loginText(t.author)))];
+  const who = [trusted.join(", "), untrusted.length > 0 ? `no repo access: ${untrusted.join(", ")}` : ""]
+    .filter(Boolean)
+    .join("; ");
+  const count = `${threads.length} unanswered review thread${threads.length === 1 ? "" : "s"}`;
+  return `, ${count}${who ? ` (${who})` : ""}`;
+}
+
+/**
+ * One link, for agents. `ticketSystems` names a ticket's system ("<System> KEY"); without them it shows its id.
+ * `trustedBots` (Fix PRs' list, parsed) counts those review bots as having repository access.
+ */
+export function linkText(
+  link: TaskLink,
+  ticketSystems: readonly TicketSystem[] = [],
+  trustedBots: readonly string[] = [],
+): string {
   const label = link.label ? ` "${link.label}"` : "";
   switch (link.kind) {
     case "pr": {
@@ -109,7 +138,9 @@ export function linkText(link: TaskLink, ticketSystems: readonly TicketSystem[] 
       const state = s
         ? ` (${s.state}, checks ${s.checks}${optionalChecksText(s.optionalChecks)}${s.reviewDecision ? `, ${s.reviewDecision.replace("_", " ")}` : ""}${
             s.mergeable === "conflicting" ? ", conflicts" : ""
-          }${s.mergeState === "blocked" || s.mergeState === "behind" ? `, merge ${s.mergeState}` : ""})`
+          }${s.mergeState === "blocked" || s.mergeState === "behind" ? `, merge ${s.mergeState}` : ""}${
+            s.state === "open" || s.state === "draft" ? unansweredText(s, trustedBots) : ""
+          })`
         : "";
       return `PR ${name}${state}${label} ${link.url}`;
     }
@@ -835,6 +866,8 @@ export function renderTaskDetail(
     images?: ReadonlyArray<{ path: string; filename: string; size: number }>;
     /** The configured ticket systems, which name ticket links and find the keys a task hasn't linked. */
     ticketSystems?: readonly TicketSystem[];
+    /** Fix PRs' "Trusted bot reviewers" for the task, parsed: the PR line doesn't call them authors without access. */
+    trustedBots?: readonly string[];
     /** The tier and custom model settings, to say when a label picks the task's model ("Runs on"). */
     modelSettings?: ModelSettings;
     /** For a Done task: its epic's branch while its code is only there (epicBranchOf), so it isn't read as on main. */
@@ -957,7 +990,7 @@ export function renderTaskDetail(
 
   if (task.links.length) {
     lines.push("", "Links:");
-    for (const link of task.links) lines.push(`- ${linkText(link, opts.ticketSystems)}`);
+    for (const link of task.links) lines.push(`- ${linkText(link, opts.ticketSystems, opts.trustedBots)}`);
   }
   const reminder = opts.selfLink && !task.manual && task.status !== "done" && !task.archivedAt ? opts.selfLink : null;
   const missing = missingLinkHints(

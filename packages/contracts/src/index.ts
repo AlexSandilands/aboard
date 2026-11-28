@@ -15,6 +15,7 @@ export * from "./ticketSystems.ts";
 export * from "./ticketPresets.ts";
 export * from "./merge.ts";
 export * from "./prFix.ts";
+export * from "./prThreads.ts";
 export * from "./runThreads.ts";
 export * from "./planMarkdown.ts";
 export * from "./desktop.ts";
