@@ -363,9 +363,14 @@ function PullRequestRow({
         // icons don't fit.
         <span className="flex min-w-0 shrink items-center gap-1.5 overflow-hidden text-xs font-normal">
           {snapshot.state === "open" && snapshot.autoMerge ? (
-            <Badge variant="info" size="sm">
-              Auto-merge on
-            </Badge>
+            <>
+              <Badge variant="info" size="sm" className={COMPACT_PANEL_HIDE}>
+                Auto-merge on
+              </Badge>
+              <Hint label="Auto-merge on" className={COMPACT_PANEL_SHOW}>
+                <GitMergeIcon className="size-3.5 text-info-foreground" />
+              </Hint>
+            </>
           ) : null}
           {snapshot.mergeable === "conflicting" ? (
             <Hint label="Merge conflicts">
@@ -421,7 +426,7 @@ function ReviewStatus({ snapshot }: { snapshot: PrSnapshot }) {
       <Hint label={label} className={COMPACT_PANEL_HIDE}>
         <span className={tone}>{text}</span>
       </Hint>
-      <Hint label={decision === "review_required" ? label : text} className={COMPACT_PANEL_SHOW}>
+      <Hint label={label} className={COMPACT_PANEL_SHOW}>
         <Icon className={cn("size-3.5", tone)} />
       </Hint>
     </>
