@@ -153,7 +153,7 @@ same transcripts and run output, into the runner's own `session_usage`. Each ent
 carries the task's rows whole (`usage`: the rows of the sessions it links and of its own runs there), and the
 board writes them over what that machine sent before (`replaceFromMachine`), so an entry applied twice changes
 nothing. They are stored with `machine_id`, the board's machine they came from; `TaskUsageRow.machine` is its name,
-which the panel shows as "on engine". The rows are priced on the board, like its own. Nothing on the board rereads
+which the panel shows as "on devbox". The rows are priced on the board, like its own. Nothing on the board rereads
 them: their files aren't here ([remote machines](remote-machines.md#sessions-usage-and-transcripts)).
 
 ## Decisions

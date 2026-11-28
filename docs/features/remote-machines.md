@@ -204,7 +204,7 @@ What a board says to a runner is under `/machine/`, apart from the board's own A
 {
   "id": "<id>",
   "instanceId": "bf549746-2379-4a1c-98c5-6cb10f70aafb",
-  "name": "engine",
+  "name": "devbox",
   "version": "1.4.2",
   "protocolVersion": 1,
   "role": "runner",
@@ -233,7 +233,7 @@ Pairing starts on the runner, with a login there:
 
 ```text
 $ <id>-server pair
-Pairing code for engine: N5PA-RV5M-TS7J
+Pairing code for devbox: N5PA-RV5M-TS7J
 It works once, within 10 minutes, and replaces any earlier code.
 ```
 
@@ -309,8 +309,8 @@ prefix, and puts the route just used first. A prefix asked for that another mach
 anything is installed or a code is spent; one taken while an install ran is replaced by a suggested one, since the
 machine is paired by then. If storing a newly paired machine fails, its token is dropped again.
 
-**The prefix** is one to three capitals or digits starting with a letter, suggested from the name (`engine` → `E`,
-then `EN`, …) and unique among the board's machines. Tasks made on the machine while the board can't be reached
+**The prefix** is one to three capitals or digits starting with a letter, suggested from the name (`devbox` → `D`,
+then `DE`, …) and unique among the board's machines. Tasks made on the machine while the board can't be reached
 will be numbered with it, so once one is (`machines.fixPrefix`, called by the later task that numbers them) it
 can't change. Until then `PATCH /api/machines/:id` changes it, the name and the routes.
 
@@ -601,9 +601,9 @@ wrapper, in one write:
 2. queues it in `held_edits`: the method's name, its arguments, the ids it gave what it made (a step, a link), and
    the activity entries it wrote.
 
-`hold.waiting` counts the queued edits the machine hasn't answered, and the panel's chip reads `On engine · 2 waiting`.
+`hold.waiting` counts the queued edits the machine hasn't answered, and the panel's chip reads `On devbox · 2 waiting`.
 `hold.waitingSteps` (the steps an `updateStep` or `moveStep` edit names) and `hold.waitingEvents` (the activity those
-edits wrote here) let the panel mark them: a clock beside the step, and "waiting for engine" in place of the
+edits wrote here) let the panel mark them: a clock beside the step, and "waiting for devbox" in place of the
 entry's age.
 The edits are sent in order (`POST /machine/edits`), straight away while the machine is connected, and before the
 next read of its log otherwise. The runner runs the same method with the same arguments, handing out the same ids
@@ -645,15 +645,15 @@ machine), then this machine. A machine the board no longer has counts as no choi
   (the task stays in Backlog or Planned). Once a machine holds the task, its threads and sessions start there
   ([interactive work](#interactive-work)).
 - **What the board shows.** The task panel's chip beside Status picks the machine before the task starts ("Run on
-  engine", a menu of the project's default, this machine and each machine with how it is) and, once held, is the hold
-  ("On engine", "On engine · 2 waiting", "engine · offline") with Pull back in its popover. The hand-off window has the
+  devbox", a menu of the project's default, this machine and each machine with how it is) and, once held, is the hold
+  ("On devbox", "On devbox · 2 waiting", "devbox · offline") with Pull back in its popover. The hand-off window has the
   same choice in the strip under the composer, and it saves onto the task. A card's number carries the machine's
-  prefix (`E182`): outlined for a task that will start there, tinted while held, with an amber dot while edits wait,
+  prefix (`D182`): outlined for a task that will start there, tinted while held, with an amber dot while edits wait,
   greyed and struck through while the machine can't be reached. Project settings › General has Runs on. All of it
   shows only once a machine is connected and the project has a folder.
 - **A machine that can't be reached** greys the chip and the card's prefix, and the panel says since when, with Try
   now (`POST /api/machines/:id/check`). It is not an attention flag: the agent there carries on.
-- **What agents see.** `get_task` says `Machine: engine (…)` for a task that will start on one, and `Held by: engine
+- **What agents see.** `get_task` says `Machine: devbox (…)` for a task that will start on one, and `Held by: devbox
   (…)` once it has, and that only the user changes it.
 
 A task-less scheduled automation's own machine pin is #184's, with Autopilot on the machine: a job today needs a held
@@ -684,7 +684,7 @@ hand-over carries the project's id, title, `origin` URL and `host/owner/repo`. T
 up by the board's id, then by repository (`copied_projects`); when it has none it clones the URL into
 `<data dir>/repos/<host-owner-repo>` (`integrations/machines/checkouts.ts`) with the machine's own git credentials,
 and makes its project there. The URL has to name a repository on a host over https, ssh or git (nothing git would
-take for an option or a command), and the folder's name comes from the URL itself. A clone that fails refuses the hand-over with git's reason ("engine can't clone
+take for an option or a command), and the folder's name comes from the URL itself. A clone that fails refuses the hand-over with git's reason ("devbox can't clone
 git@github.com:acme/app.git: fatal: Could not read from remote repository."), and nothing is handed over. A
 project with no repository becomes a project with no folder. A task made on the runner names its project the same
 way, which is how the board finds its own.
@@ -778,7 +778,7 @@ anything else (a task the board holds, a run with no task, a nudge into a T3 thr
 (`<data dir>/worktrees`), with the push guard and, for a run that has them, run tools minted and served by the
 runner itself. Three things differ from a run on a board:
 
-- It is always headless. An automation set to T3 Code still runs, and its detail says "Ran headless on engine".
+- It is always headless. An automation set to T3 Code still runs, and its detail says "Ran headless on devbox".
 - It starts from origin's copy of its base, after a fetch: the default branch, the epic's integration branch
   (`prBase`) or the base the automation named, by the rules a board uses. Nothing names `origin/main`.
 - The agent gets the runner's own MCP endpoint (`http://127.0.0.1:<runner port>/mcp`) on top of the CLI's own
@@ -894,7 +894,7 @@ history) goes in the config (`retried`, for a week) and the runner retires the s
 **Runs on the machine** are its own: in its own `autopilot_runs`, counted against its own limits, headless and from
 origin (`asRunnerRequest`, as a job is). The runner logs each one as it is written (`run` entries, change log format 2),
 and the board keeps it under the same id with `machine_id` and `machine_name` set (`autopilot.keepFromMachine`). A run
-the board sent as a job isn't logged: the board has it. Such runs show "on engine" in the run history and the task's
+the board sent as a job isn't logged: the board has it. Such runs show "on devbox" in the run history and the task's
 Autopilot section. The board's limits, `recover` and worktree cleanup leave them out, and the board counts each
 machine's runs apart (`usage(…, machineId)`). Nor do the board's own one-at-a-time checks (a
 scheduled agent's slot, Merge ready PRs' repository) count them. When the machine is removed, or its log comes from a
@@ -961,7 +961,7 @@ acts on a task's thread reaches the right T3 Code without knowing there is a mac
 | A thread's workspace, retrying its preparation            | Not known here: none, and "retry it there"                                  |
 
 After a start the board reads the machine's log at once (`pump`), so the link is on the board when the dialog's call
-returns. A refusal comes back as the machine's own sentence, prefixed "On engine:". The board's own T3 poll skips
+returns. A refusal comes back as the machine's own sentence, prefixed "On devbox:". The board's own T3 poll skips
 these threads (another environment), `refreshLink` leaves them to the machine, and their snapshot travels with the
 task's state like a session's (`taskState`). A thread whose task was taken back can't be messaged: only the machine
 talks to its T3 Code.
@@ -985,7 +985,7 @@ for a pairing link (or token) made in T3 Code on that machine under Settings →
 machine's status again at once, so the badge doesn't wait for the half-minute check. The machine runs its own
 `t3.connect`, which exchanges a pairing link with its T3 Code, and answers its T3 state and any warning (a read-only
 link). The link or token passes through the board and is never stored, logged or returned there; the runner's answer
-is `no-store`. A refusal is the machine's sentence ("On engine: T3 Code is not running"); a runner without the
+is `no-store`. A refusal is the machine's sentence ("On devbox: T3 Code is not running"); a runner without the
 `t3Connect` capability is asked to update first, and is sent nothing.
 
 **What a connection allows is kept.** Whether a token can start threads is known only from the pairing exchange's

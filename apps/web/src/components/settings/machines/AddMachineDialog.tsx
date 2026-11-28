@@ -155,7 +155,7 @@ export function AddMachineDialog({
                       size="sm"
                       autoFocus
                       value={target}
-                      placeholder="alex@engine"
+                      placeholder="user@host"
                       spellCheck={false}
                       onChange={(e) => setTarget(e.target.value)}
                     />
