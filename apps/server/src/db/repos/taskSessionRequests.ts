@@ -85,11 +85,14 @@ export function createTaskSessionRequestsRepo(sql: Sql) {
         0
       );
     },
-    /** Drops a request still waiting, with the reason; false when it no longer was. */
+    /**
+     * Drops a request not dropped yet, with the reason; false when it already was. One taken up is only dropped once
+     * its run was retried, so no run of it is going.
+     */
     drop(id: string, at: string, reason: string): boolean {
       return (
         sql.run(
-          "UPDATE task_session_requests SET dropped_at = ?, dropped_reason = ? WHERE id = ? AND run_id IS NULL AND dropped_at IS NULL",
+          "UPDATE task_session_requests SET dropped_at = ?, dropped_reason = ? WHERE id = ? AND dropped_at IS NULL",
           at,
           reason,
           id,

@@ -226,6 +226,62 @@ describe("Task sessions", () => {
     expect(runs().filter((r) => r.status === "succeeded")).toHaveLength(1);
   });
 
+  it("refuses to retry a failed session whose request could no longer run, instead of reporting success", async () => {
+    const failing = () => {
+      const t = setup({ agent: () => Promise.reject(new Error("CLI missing")) });
+      t.on();
+      t.ask();
+      return t;
+    };
+
+    // More than a day after the request: its note may no longer fit, and the check no longer looks at it.
+    const old = failing();
+    await old.pass();
+    vi.setSystemTime(Date.now() + 25 * 60 * MINUTE);
+    expect(() => old.s.autopilot.retry(old.runs()[0]!.id, "orchestrator")).toThrow(/more than a day old/);
+    expect(old.runs()[0]).toMatchObject({ needsAttention: true });
+
+    // Orchestrate switched off in the project since.
+    const off = failing();
+    await off.pass();
+    off.s.autopilot.setScope("board", null, AUTOPILOT_ORCHESTRATE, { mode: "off" });
+    expect(() => off.s.autopilot.retry(off.runs()[0]!.id, "orchestrator")).toThrow(/Orchestrate is off/);
+
+    // A machine whose own Autopilot looks after the task has taken it since.
+    const held = failing();
+    await held.pass();
+    const machine = held.s.machines.add({
+      instanceId: "engine-3",
+      name: "engine",
+      routes: [{ kind: "ssh", target: "me@engine", port: null, remotePort: 4318 }],
+    });
+    createRepos(held.db).holds.insert({
+      taskId: held.task.id,
+      machineId: machine.id,
+      heldAt: new Date().toISOString(),
+      afterLogId: 0,
+    });
+    expect(() => held.s.autopilot.retry(held.runs()[0]!.id, "orchestrator")).toThrow(/now held by engine/);
+  });
+
+  it("drops a retried request with a note when Orchestrate goes off in its project before it runs", async () => {
+    const { s, project, task, ask, pass, on, sessions, runs } = setup({
+      agent: () => Promise.reject(new Error("CLI missing")),
+    });
+    on();
+    const request = ask();
+    await pass();
+    s.autopilot.retry(runs()[0]!.id, "orchestrator");
+    // Off here only: with it off everywhere the engine runs no check at all, as for Orchestrate's own Run now.
+    s.autopilot.setScope("project", project.id, AUTOPILOT_ORCHESTRATE, { mode: "off" });
+    await pass();
+    expect(sessions()).toHaveLength(1);
+    expect(s.taskSessions.get(request.id)).toMatchObject({ droppedReason: "Orchestrate is off in its project" });
+    expect(s.tasks.detail(task.id).events.map((e) => e.payload.text)).toContain(
+      "Autopilot dropped Orchestrate's request for a new session: Orchestrate is off in its project.",
+    );
+  });
+
   it("drops a waiting request once a machine whose Autopilot looks after the task takes it", async () => {
     const { s, db, task, ask, pass, on, sessions } = setup();
     on();

@@ -5,6 +5,7 @@ import {
   BRAND,
   taskHandoffPrompt,
   taskLabel,
+  type AutopilotRun,
   type TaskLink,
   type TaskSummary,
 } from "@repo/contracts";
@@ -14,6 +15,7 @@ import {
   sessionRefusal,
   taskSessionKey,
   TASK_SESSION_REQUEST_TTL_MS,
+  TASK_SESSION_RETRY_MS,
   type TaskSessionRequest,
 } from "../../services/taskSessions.ts";
 import {
@@ -90,6 +92,41 @@ const taskOf = (services: Services, request: TaskSessionRequest): TaskSummary | 
   }
 };
 
+/** The request a run of Task sessions was for, from its dedupe key (`task_sessions:<requestId>`). */
+const requestIdOf = (dedupeKey: string): string | null => {
+  const prefix = taskSessionKey("");
+  return dedupeKey.startsWith(prefix) ? dedupeKey.slice(prefix.length) || null : null;
+};
+
+const ASK_AGAIN = "ask for a new session with start_task_session if the task is still stalled";
+
+/**
+ * Why a run of Task sessions can't be retried, or null. A skipped run did nothing (the task moved on, or got an
+ * agent). A failed one is retried by running its request again, which only works while the request is open (not
+ * dropped, from the last TASK_SESSION_RETRY_MS) and could run: its task not held by a machine whose Autopilot looks
+ * after it, and Orchestrate on in its project. Refused otherwise, so a retry never reports success for nothing.
+ */
+export function retryRefusal(run: AutopilotRun, services: Services | undefined): string | null {
+  if (run.status === "skipped") return `That session was skipped, so there is nothing to retry: ${ASK_AGAIN}`;
+  // Without the board's services (a test catalogue) only the run itself can be judged.
+  if (!services) return null;
+  const id = requestIdOf(run.dedupeKey);
+  const request = id ? services.taskSessions.get(id) : null;
+  if (!request || request.droppedAt !== null) {
+    return `Its request was dropped${request?.droppedReason ? ` (${request.droppedReason})` : ""}: ${ASK_AGAIN}`;
+  }
+  if (Date.now() - Date.parse(request.createdAt) > TASK_SESSION_RETRY_MS) {
+    return `Its request is more than a day old, so its note may no longer fit: ${ASK_AGAIN}`;
+  }
+  const machine = services.taskSessions.heldElsewhere(request.taskId);
+  if (machine) return `The task is now held by ${machine}, whose own Autopilot looks after it`;
+  const self = services.autopilot.automations().find((a) => a.key === AUTOPILOT_TASK_SESSIONS);
+  if (self && !services.autopilot.resolve(self, request.projectId).enabled) {
+    return "Orchestrate is off in the task's project, so no session would start";
+  }
+  return null;
+}
+
 /**
  * Task sessions: one Autopilot run per request Orchestrate's start_task_session made, which starts a new agent session
  * on the task through the runner, on the runner its Sessions it starts setting picks and, headless, on the provider and
@@ -109,12 +146,7 @@ export const taskSessions = defineAutomation({
   schema: orchestrateSchema,
   fields: [],
   defaults: orchestrateDefaults,
-  // A skipped run did nothing (the task moved on, or got an agent): a new session is Orchestrate's to ask for again,
-  // under the once-an-hour rule, rather than a retry's.
-  retryRefusal: (run) =>
-    run.status === "skipped"
-      ? "That session was skipped, so there is nothing to retry: ask for a new one with start_task_session"
-      : null,
+  retryRefusal: (run, _runs, services) => retryRefusal(run, services),
   check: ({ services, projects, engine, now }) => {
     const on = new Map(projects.map((scope) => [scope.project.id, scope]));
     const candidates: Array<{ candidate: Candidate; preview: boolean }> = [];
@@ -131,7 +163,9 @@ export const taskSessions = defineAutomation({
         services.taskSessions.drop(request.id, "it waited too long for room to run");
         continue;
       }
-      const machine = waiting ? services.taskSessions.heldElsewhere(task.id) : null;
+      // These hold a retried request too (its run failed, and the user or Orchestrate retried it): it would never run,
+      // and the retry said it would, so it is dropped with a note rather than left to expire unseen.
+      const machine = services.taskSessions.heldElsewhere(task.id);
       if (machine) {
         services.taskSessions.drop(
           request.id,
@@ -141,7 +175,7 @@ export const taskSessions = defineAutomation({
       }
       const scope = on.get(task.projectId);
       if (!scope) {
-        if (waiting) services.taskSessions.drop(request.id, "Orchestrate is off in its project");
+        services.taskSessions.drop(request.id, "Orchestrate is off in its project");
         continue;
       }
       candidates.push({

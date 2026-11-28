@@ -282,6 +282,7 @@ export function createServices(deps: ServiceDeps): Services {
     autopilot: createAutopilotService(core, {
       automations,
       notifications,
+      services: () => all!,
       // Recurring rules keep their own schedule, and custom automations only act on what happens from now: switching
       // one on, or lifting Pause all, doesn't catch up.
       onEnabled: (automation, projectIds) => {

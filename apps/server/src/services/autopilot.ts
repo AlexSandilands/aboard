@@ -75,6 +75,7 @@ import { AppError } from "../errors.ts";
 import type { Core, Effects } from "./core.ts";
 import { AUTOPILOT_ENGINE_KEY, AUTOPILOT_PAUSED_KEY } from "./autopilotKeys.ts";
 import type { NotificationsService } from "./notifications.ts";
+import type { Services } from "./types.ts";
 
 export { AUTOPILOT_ENGINE_KEY, AUTOPILOT_PAUSED_KEY };
 /** The tuning hints the user dismissed, by id, newest last. Machine state like pause: not in backups. */
@@ -402,6 +403,8 @@ export function createAutopilotService(
      * replays and sends the pause back with its settings, so there is one place the user resumes it.
      */
     autoPause?: boolean;
+    /** The board's services, for an automation's `retryRefusal` that reads beyond the runs (Task sessions). */
+    services?: () => Services;
   },
 ): AutopilotService {
   const { repos } = core;
@@ -1228,7 +1231,7 @@ export function createAutopilotService(
       if (isSupersededRun(run, around)) {
         throw new AppError("CONFLICT", "The automation has run again since, so this run's work is history");
       }
-      const refusal = find(run.automation)?.retryRefusal?.(run, around) ?? null;
+      const refusal = find(run.automation)?.retryRefusal?.(run, around, deps.services?.()) ?? null;
       if (refusal) throw new AppError("CONFLICT", refusal);
       const retired: AutopilotRun = {
         ...run,

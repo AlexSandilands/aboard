@@ -1198,7 +1198,11 @@ and can be retried.
   so the request runs again on the next pass, within a day of the request; the run takes the request up again. A
   skipped run (the task moved on, or got an agent) did nothing, so it isn't retryable (`canRetryRun` in contracts, so
   the Retry buttons and `retry_autopilot_run`'s default pick pass it over; `retryRefusal` gives the service's reason): a
-  new session is asked for again, under the once-an-hour rule.
+  new session is asked for again, under the once-an-hour rule. A failed run's retry is refused too, with the reason,
+  when its request couldn't run again: dropped, more than a day old (`TASK_SESSION_RETRY_MS`), its task now held by a
+  machine whose Autopilot looks after it, or Orchestrate off in its project (`retryRefusal` gets the board's services
+  for this, as its third argument). A retried request that can no longer run by the next pass (Orchestrate switched
+  off in its project, or a machine took the task) is dropped with a note on the task, like a waiting one.
 
 **Start planned tasks** (`start_planned`, #94; `automations/startPlanned.ts`). Needs an agent, so it counts against
 the caps and waits out quiet hours. Off until switched on. The headline automation: it starts an agent on a task.
