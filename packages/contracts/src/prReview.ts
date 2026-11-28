@@ -27,21 +27,36 @@ export const prReviewHeader = (): string => `📋 ${BRAND.name} Autopilot review
 /** The short mark at the start of each inline comment. */
 export const prReviewMarker = (): string => `📋 ${BRAND.name} Autopilot`;
 
+/**
+ * The mark a session the user started with "Fix in →" puts at the start of its replies. Autopilot posts as the user, and
+ * so does that session: without a mark of its own, its replies would read as the user's own requests.
+ */
+export const prFixSessionMarker = (): string => `📋 ${BRAND.name} · fix session`;
+
+/** The first line of Fix PRs' one PR comment answering review summaries and PR comments, which have no thread. */
+export const prCommentReply = (): string => `${prReviewMarker()} · reply`;
+
 /** The first line of Fix PRs' reply on a thread it fixed: the server resolves the thread once `sha` is on the PR. */
 export const prFixedReply = (sha: string): string => `${prReviewMarker()} · fixed in ${sha}`;
+
+/** The first line of Fix PRs' reply on a thread whose point it needs clarified; the answer starts another attempt. */
+export const prQuestionReply = (): string => `${prReviewMarker()} · question`;
 
 /** The first line of Fix PRs' reply on a thread it won't fix; the thread stays open for the reviewer. */
 export const prDeclinedReply = (reason: string): string => `${prReviewMarker()} · declined: ${reason}`;
 
 /**
  * What a comment carrying Autopilot's mark says, from its first line after the mark: fixed (with the commit), declined,
- * or something else (its own review comment, say). Null for a comment without the mark. Lenient about the separator,
- * so replies written before the format was fixed ("📋 … Autopilot" then "Fixed in abc1234" on the next line) count.
+ * or something else (its own review comment, say). A fix session's reply (`prFixSessionMarker`) is always something
+ * else: the user watches that session and resolves its threads. Null for a comment without either mark. Lenient about
+ * the separator, so replies written before the format was fixed ("📋 … Autopilot" then "Fixed in abc1234" on the next
+ * line) count.
  */
 export function parseAutopilotReply(
   body: string,
 ): { kind: "fixed"; sha: string } | { kind: "declined" } | { kind: "other" } | null {
   const text = body.trimStart();
+  if (text.startsWith(prFixSessionMarker())) return { kind: "other" };
   const marker = prReviewMarker();
   if (!text.startsWith(marker)) return null;
   const first =
@@ -54,6 +69,12 @@ export function parseAutopilotReply(
   const fixed = /^fixed in\s+`?([0-9a-f]{7,40})\b/i.exec(first);
   return fixed ? { kind: "fixed", sha: fixed[1]!.toLowerCase() } : { kind: "other" };
 }
+
+/**
+ * Whether a comment or review starts with Autopilot's mark or a fix session's: posted by the board's agents, which post
+ * as the user, rather than written by the user.
+ */
+export const isAutopilotMarked = (body: string | null | undefined): boolean => parseAutopilotReply(body ?? "") !== null;
 
 /** The dedupe key of the review of one PR link at one head commit. */
 export const prReviewDedupeKey = (linkId: string, headOid: string): string => `review:pr:${linkId}:${headOid}`;

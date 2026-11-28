@@ -83,7 +83,7 @@ export type DismissHintInput = z.infer<typeof DismissHintInput>;
 /** Real runs of the week before Orchestrate is told it runs more often than it needs in a project. */
 export const ORCHESTRATE_BUSY_RUNS = 40;
 /** The most attempts Fix PRs allows per budget (its `attempts` and `commentAttempts` fields). */
-const MAX_PR_ROUNDS = 10;
+const MAX_PR_ROUNDS = { attempts: 10, commentAttempts: 20 } as const;
 /** The longest Orchestrate interval, in minutes. */
 const MAX_ORCHESTRATE_MINUTES = 1440;
 
@@ -148,7 +148,7 @@ export function automationHints(input: AutomationHintInput): AutopilotHint[] {
   for (const { budget, count, field, what } of budgets) {
     const cap = boardConfig[field];
     const newest = week.lastGaveUp[budget];
-    if (typeof cap !== "number" || count < 2 || cap >= MAX_PR_ROUNDS || !newest) continue;
+    if (typeof cap !== "number" || count < 2 || cap >= MAX_PR_ROUNDS[field] || !newest) continue;
     hints.push({
       // Keyed by the newest give-up, not the cap: raising the cap dismisses it, and only a give-up after that (at the
       // new cap) brings it back, though the week still counts the older ones.

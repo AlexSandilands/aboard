@@ -7,6 +7,7 @@ import {
   AUTOPILOT_UNSTICK,
   CHECK_FAILED_KEY_PREFIX,
   FIX_GAVE_UP_KEY_PREFIX,
+  FIX_VERDICT_KEY_PREFIX,
   FIX_RESOLVE_KEY_PREFIX,
   RETRIED_PREFIX,
   AutopilotRunDeferral,
@@ -437,15 +438,17 @@ export function createAutopilotRunsRepo(sql: Sql) {
     },
     /**
      * Real runs of these automations that started at or after `since`, leaving out the ones that start no agent: Fix
-     * PRs give-ups and thread resolving, and failed check scripts, retried or not. Only the runs made where
+     * PRs give-ups, thread resolving and no-action records, and failed check scripts, retried or not. Only the runs made where
      * `machineId` says: null for this server's own, a machine's id for the runs replayed from it.
      */
     startedSince(automations: readonly string[], since: string, machineId: string | null = null): number {
       // A retried run's key is `retried:<id>:<key>`, and an id has no colon.
-      const noAgent = [FIX_GAVE_UP_KEY_PREFIX, FIX_RESOLVE_KEY_PREFIX, CHECK_FAILED_KEY_PREFIX].flatMap((prefix) => [
-        `${prefix}%`,
-        `${RETRIED_PREFIX}%:${prefix}%`,
-      ]);
+      const noAgent = [
+        FIX_GAVE_UP_KEY_PREFIX,
+        FIX_RESOLVE_KEY_PREFIX,
+        FIX_VERDICT_KEY_PREFIX,
+        CHECK_FAILED_KEY_PREFIX,
+      ].flatMap((prefix) => [`${prefix}%`, `${RETRIED_PREFIX}%:${prefix}%`]);
       return (
         sql.get<{ n: number }>(
           `SELECT COUNT(*) AS n FROM autopilot_runs WHERE dry_run = 0 AND started_at >= ? AND machine_id IS ?

@@ -1,4 +1,11 @@
-import { prFixedReply, prReviewMarker, type PrSnapshot } from "@repo/contracts";
+import {
+  prCommentReply,
+  prFixedReply,
+  prFixSessionMarker,
+  prReviewHeader,
+  prReviewMarker,
+  type PrSnapshot,
+} from "@repo/contracts";
 import { describe, expect, it } from "vitest";
 import { fakePr } from "../test/fakeGithub.ts";
 import { mapPrSnapshot, mapReviewThreadDetails, pollQuery } from "./githubSnapshot.ts";
@@ -40,6 +47,8 @@ describe("mapPrSnapshot", () => {
       reviewComments: [],
       reviewThreads: [],
       unresolvedThreads: 0,
+      conversationComments: [],
+      headCommittedAt: null,
     });
     expect(mapPrSnapshot(fakePr({ isCrossRepository: true }), repo).isCrossRepository).toBe(true);
     expect(mapPrSnapshot(fakePr({ isDraft: true }), repo).state).toBe("draft");
@@ -65,6 +74,8 @@ describe("mapPrSnapshot", () => {
           authorAssociation: "MEMBER",
           viewerDidAuthor: false,
           author: { login: "ana" },
+          body: "Please split this up.",
+          commit: { oid: "head-0" },
         },
         { databaseId: 12, state: "PENDING", submittedAt: null, viewerDidAuthor: true, author: { login: "me" } },
         null,
@@ -75,6 +86,8 @@ describe("mapPrSnapshot", () => {
           authorAssociation: "NONE",
           viewerDidAuthor: false,
           author: null,
+          body: "  \n",
+          commit: { oid: "head-1" },
         },
         {
           databaseId: 14,
@@ -83,10 +96,23 @@ describe("mapPrSnapshot", () => {
           authorAssociation: "OWNER",
           viewerDidAuthor: true,
           author: { login: "me" },
+          body: `${prReviewHeader()}\n\nLooks fine.`,
+          commit: null,
+        },
+        {
+          databaseId: 15,
+          state: "COMMENTED",
+          submittedAt: "2026-10-01T14:00:00Z",
+          authorAssociation: "OWNER",
+          viewerDidAuthor: true,
+          author: { login: "me" },
+          body: "Can we also rename the flag?",
+          commit: { oid: "head-1" },
         },
       ],
     };
-    expect(mapPrSnapshot(fakePr({ reviews }), repo).reviews).toEqual([
+    const mapped = mapPrSnapshot(fakePr({ reviews }), repo).reviews;
+    expect(mapped).toEqual([
       {
         id: 11,
         author: "ana",
@@ -94,10 +120,89 @@ describe("mapPrSnapshot", () => {
         submittedAt: "2026-10-01T11:00:00Z",
         own: false,
         trusted: true,
+        hasBody: true,
+        marked: false,
+        commitOid: "head-0",
       },
-      { id: 13, author: null, state: "commented", submittedAt: "2026-10-01T12:00:00Z", own: false, trusted: false },
-      { id: 14, author: "me", state: "commented", submittedAt: "2026-10-01T13:00:00Z", own: true, trusted: true },
+      // A reply on a thread: an empty commented review.
+      {
+        id: 13,
+        author: null,
+        state: "commented",
+        submittedAt: "2026-10-01T12:00:00Z",
+        own: false,
+        trusted: false,
+        hasBody: false,
+        marked: false,
+        commitOid: "head-1",
+      },
+      // Autopilot's review, posted as the user: its header carries the mark.
+      {
+        id: 14,
+        author: "me",
+        state: "commented",
+        submittedAt: "2026-10-01T13:00:00Z",
+        own: true,
+        trusted: true,
+        hasBody: true,
+        marked: true,
+        commitOid: null,
+      },
+      // The user's own words.
+      {
+        id: 15,
+        author: "me",
+        state: "commented",
+        submittedAt: "2026-10-01T14:00:00Z",
+        own: true,
+        trusted: true,
+        hasBody: true,
+        marked: false,
+        commitOid: "head-1",
+      },
     ]);
+    // The body itself is never kept.
+    expect(JSON.stringify(mapped)).not.toContain("split");
+  });
+
+  it("maps the newest conversation comments without their bodies, and the head commit's date", () => {
+    const comment = (id: number, extra: Record<string, unknown> = {}) => ({
+      databaseId: id,
+      createdAt: `2026-10-01T1${id}:00:00Z`,
+      authorAssociation: "MEMBER",
+      viewerDidAuthor: false,
+      author: { login: "ana" },
+      body: "Could this use the shared helper?",
+      ...extra,
+    });
+    const comments = {
+      nodes: [
+        comment(1),
+        comment(2, { authorAssociation: "NONE", author: { login: "drive-by" } }),
+        comment(3, { viewerDidAuthor: true, authorAssociation: "OWNER", author: { login: "me" }, body: "Rename it" }),
+        comment(4, {
+          viewerDidAuthor: true,
+          author: { login: "me" },
+          body: `${prCommentReply()}\n\nFixed in abc1234.`,
+        }),
+        comment(5, { viewerDidAuthor: true, author: { login: "me" }, body: `${prFixSessionMarker()}\n\nDone.` }),
+        null,
+        { ...comment(6), databaseId: null },
+        comment(7, { author: null, body: null }),
+      ],
+    };
+    const commits = { nodes: [{ commit: { committedDate: "2026-10-01T09:30:00Z", statusCheckRollup: null } }] };
+    const snapshot = mapPrSnapshot(fakePr({ comments, commits }), repo);
+    expect(snapshot.headCommittedAt).toBe("2026-10-01T09:30:00Z");
+    expect(snapshot.conversationComments).toEqual([
+      { id: 1, author: "ana", createdAt: "2026-10-01T11:00:00Z", own: false, trusted: true, marked: false },
+      { id: 2, author: "drive-by", createdAt: "2026-10-01T12:00:00Z", own: false, trusted: false, marked: false },
+      { id: 3, author: "me", createdAt: "2026-10-01T13:00:00Z", own: true, trusted: true, marked: false },
+      { id: 4, author: "me", createdAt: "2026-10-01T14:00:00Z", own: true, trusted: true, marked: true },
+      { id: 5, author: "me", createdAt: "2026-10-01T15:00:00Z", own: true, trusted: true, marked: true },
+      { id: 7, author: null, createdAt: "2026-10-01T17:00:00Z", own: false, trusted: true, marked: false },
+    ]);
+    expect(JSON.stringify(snapshot)).not.toContain("shared helper");
   });
 
   it("maps comments on unresolved threads, oldest first, with their review", () => {
@@ -138,14 +243,21 @@ describe("mapPrSnapshot", () => {
     ]);
   });
 
-  it("asks for the reviews and the newest 30 threads, without bodies", () => {
+  it("asks for the reviews, the newest 10 conversation comments and the newest 30 threads, without thread bodies", () => {
     const { query } = pollQuery([1]);
-    expect(query).toContain("reviews(last: 20)");
+    expect(query).toContain(
+      "reviews(last: 20) { nodes { databaseId state submittedAt authorAssociation viewerDidAuthor author { login } body commit { oid } } }",
+    );
+    expect(query).toContain(
+      "comments(last: 10) { nodes { databaseId createdAt authorAssociation viewerDidAuthor author { login } body } }",
+    );
+    expect(query).toContain("commit { committedDate statusCheckRollup");
     expect(query).toContain("reviewThreads(last: 30) { nodes { id isResolved viewerCanResolve");
-    expect(query).toContain("viewerDidAuthor");
-    expect(query).not.toContain("body");
-    // One comments connection per thread: each is a request in GitHub's rate-limit cost, and the poll runs often.
-    expect(query.match(/comments\(/g)).toHaveLength(1);
+    // Bodies only of reviews and conversation comments, which are one connection each.
+    expect(query.match(/\bbody\b/g)).toHaveLength(2);
+    // One comments connection per thread, and one for the conversation: each is a request in GitHub's rate-limit
+    // cost, and the poll runs often.
+    expect(query.match(/comments\(/g)).toHaveLength(2);
   });
 
   const comment = (id: number, own = false) => ({

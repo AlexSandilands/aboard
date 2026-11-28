@@ -233,6 +233,13 @@ export const PrReviewInfo = z.object({
   own: z.boolean(),
   /** The author is an owner, member or collaborator of the repository. */
   trusted: z.boolean(),
+  // The three below are optional so snapshots stored before they were read still parse. The body itself is never kept.
+  /** The review has a summary. A reply on a review thread is an empty commented review. */
+  hasBody: z.boolean().optional(),
+  /** Its summary's first line carries Autopilot's mark (`isAutopilotMarked`): Autopilot's, or a fix session's. */
+  marked: z.boolean().optional(),
+  /** The head commit the review was submitted on. */
+  commitOid: z.string().nullable().optional(),
 });
 export type PrReviewInfo = z.infer<typeof PrReviewInfo>;
 
@@ -247,6 +254,19 @@ export const PrReviewCommentInfo = z.object({
   trusted: z.boolean(),
 });
 export type PrReviewCommentInfo = z.infer<typeof PrReviewCommentInfo>;
+
+/** A comment on the PR's conversation (not an inline one). No body: the snapshot only says who wrote what when. */
+export const PrConversationCommentInfo = z.object({
+  /** GitHub's databaseId. */
+  id: z.number().int(),
+  author: z.string().nullable(),
+  createdAt: IsoDate,
+  own: z.boolean(),
+  trusted: z.boolean(),
+  /** Its first line carries Autopilot's mark (`isAutopilotMarked`): Autopilot's, or a fix session's. */
+  marked: z.boolean(),
+});
+export type PrConversationCommentInfo = z.infer<typeof PrConversationCommentInfo>;
 
 /**
  * A review thread that isn't resolved, as the poll reads it: no bodies. A thread whose newest comment is the signed-in
@@ -324,6 +344,10 @@ export const PrSnapshot = z.object({
   reviewThreads: z.array(PrReviewThreadInfo).optional(),
   /** How many of the threads read are unresolved: a repository can require them all resolved before a merge. */
   unresolvedThreads: z.number().int().nonnegative().optional(),
+  /** The newest comments on the PR's conversation (of the last 10), oldest first. */
+  conversationComments: z.array(PrConversationCommentInfo).optional(),
+  /** When the head commit was committed: a conversation comment after it hasn't been answered by a push. */
+  headCommittedAt: IsoDate.nullable().optional(),
 });
 export type PrSnapshot = z.infer<typeof PrSnapshot>;
 

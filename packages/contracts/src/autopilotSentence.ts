@@ -89,6 +89,7 @@ export function automationSentence(
         config.onConflicts !== false && "conflicts",
         config.onChangesRequested !== false && "a review requesting changes",
         config.onComments !== false && "new review comments",
+        config.onSummaries !== false && "review summaries or PR comments asking for changes",
         config.onAutopilotReview !== false &&
           `findings from Autopilot's review at ${str(config, "fixThreshold", "major")} or above`,
       ].filter((t): t is string => typeof t === "string");
