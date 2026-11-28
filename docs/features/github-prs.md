@@ -89,18 +89,23 @@ query and mapping are `githubSnapshot.ts`):
 | `canMerge`         | The signed-in account has `WRITE`, `MAINTAIN` or `ADMIN` on the repo                               |
 | `headOid`          | The head commit, checked again before merging                                                      |
 | `isCrossRepository` | Whether the head branch is in a fork; Autopilot's PR review skips those                           |
-| `reviews`          | The last 20 submitted reviews, oldest first: `id` (databaseId), `author`, `state`, `submittedAt`, `own` (`viewerDidAuthor`), `trusted` |
+| `reviews`          | The last 20 submitted reviews, oldest first: `id` (databaseId), `author`, `state`, `submittedAt`, `own` (`viewerDidAuthor`), `trusted`, `hasBody` (it has a summary: a reply on a thread is an empty commented review), `marked` (its first line carries Autopilot's or a fix session's mark, `isAutopilotMarked`) and `commitOid` (the head it was submitted on) |
 | `reviewComments`   | Comments on the last 30 review threads that aren't resolved and that the signed-in account didn't answer last (the last 5 of each), oldest first: `id`, `author`, `createdAt`, `reviewId`, `own`, `trusted` |
 | `reviewThreads`    | Those threads that aren't resolved: `id` (node id), `canResolve`, `lastCommentId`, `ownLast` and `lastReviewId` (the newest comment, whether it is the signed-in account's, and the review it is in) |
 | `unresolvedThreads` | How many of the threads read aren't resolved                                                     |
+| `conversationComments` | The last 10 comments on the PR's conversation (not inline ones), oldest first: `id`, `author`, `createdAt`, `own`, `trusted`, `marked` |
+| `headCommittedAt`  | When the head commit was committed: a conversation comment after it hasn't been answered by a push |
 
-`trusted` means the author is an `OWNER`, `MEMBER` or `COLLABORATOR` of the repository. The poll reads no bodies and
-one comments connection per thread: each connection is a request in GitHub's rate-limit cost, and the poll reads up to
-25 PRs every 20 seconds. What resolving a thread needs (its first comment, its newest comment's body to match
+`trusted` means the author is an `OWNER`, `MEMBER` or `COLLABORATOR` of the repository. The poll reads one comments
+connection per thread, and one for the conversation: each connection is a request in GitHub's rate-limit cost, and the
+poll reads up to 25 PRs every 20 seconds. It reads the bodies of reviews and conversation comments only to set
+`hasBody` and `marked`, and never keeps them; it reads no thread bodies. Bodies cost no rate-limit points, only
+download: measured on this repository's PRs, one PR costs 1 point before and after, ten cost 3 before and 4 after,
+and 25 cost 9 either way, while the answer for 25 grew from about 43 KB to 141 KB, mostly long review summaries. What resolving a thread needs (its first comment, its newest comment's body to match
 Autopilot's marked reply with `parseAutopilotReply`, the PR's newest 100 commits) is read fresh by `reviewThreads(ref)`
 (`ReviewThreadDetail`), only when there is a thread to look at, and never goes into a prompt.
 
-`optionalChecks`, `mergeState` and the last ten are optional, so snapshots stored by the old `gh pr view` poller still parse (and offer
+`optionalChecks`, `mergeState` and the last twelve are optional, so snapshots stored by the old `gh pr view` poller still parse (and offer
 no merge until the next poll). `links.setSnapshot` stores the snapshot, and publishes the card only
 when it changed.
 
@@ -119,8 +124,9 @@ posted. Its errors read "GitHub couldn't post the review: …" and keep their re
 this through `ctx.gitHosts` (`gitHostActions`), which sends each call to the host the PR is on. See
 [Autopilot](autopilot.md#automations).
 
-**Fix PRs** reads `checks`, `mergeable`, `reviewDecision`, `reviews` and `reviewComments` to decide when a PR needs
-fixing, and leaves out what `own` marks: Autopilot posts under the same login. It reads `reviewThreads` to find
+**Fix PRs** reads `checks`, `mergeable`, `reviewDecision`, `reviews`, `reviewComments`, `conversationComments` and
+`headCommittedAt` to decide when a PR needs fixing. Autopilot posts under the same login, so it leaves out what `own`
+marks, except the user's own words in summaries and conversation comments, which `marked` tells from Autopilot's. It reads `reviewThreads` to find
 threads the account answered last, then `reviewThreads(ref)` and `resolveReviewThread` to resolve the ones it replied
 it fixed; Review PRs resolves its own threads a later round confirms fixed the same way.
 

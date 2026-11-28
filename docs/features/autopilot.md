@@ -331,8 +331,9 @@ How each automation is doing, on its detail in Settings → Autopilot and in Nee
 - **Tuning hints** are rules, no model: pure functions in `autopilotHealth.ts` the overview runs for every automation
   that is on somewhere (`hints` in `AutopilotOverview`). Each has a stable `id` naming the situation, a tone, its text
   and one action (`AutopilotHintAction`):
-  - Fix PRs gave up on 2 or more PRs this week at an attempt cap below 10 → **Raise to N+1** (Fix PRs' `attempts` or
-    `commentAttempts`, set in its board config).
+  - Fix PRs gave up on 2 or more PRs this week at an attempt cap below its maximum (10 for `attempts`, 20 for
+    `commentAttempts`) → **Raise to N+1** (set in its board config). A give-up for too many runs that ended in no
+    action (`:no_action`) isn't counted: more attempts wouldn't help.
   - 3 or more of the last 5 runs failed (board restarts aside) → **Ask an agent to fix**, which copies
     `fixAutomationPrompt` and dismisses the hint until the next failure.
   - Start planned tasks is on but no ready Planned task (a plan, not blocked, not manual) in its projects is flagged,
@@ -795,10 +796,27 @@ to fix a pull request linked to a task.
   - changes requested: while `reviewDecision` is `changes_requested`, the newest `changes_requested` review from a
     trusted author (below) that isn't Autopilot's: `changes@<reviewId>`. The user's own counts: Autopilot only comments;
   - review comments: comments on unresolved threads that aren't `own`, are from a trusted author, aren't in one of Autopilot's
-    reviews, and are newer than the newest comment an earlier attempt was given: `comments@<newestId>`. Autopilot
-    posts as the user, so the user's own comments can't be told from its replies and never count. A thread whose
-    newest comment is the user's account's (`ownLast`: Autopilot's reply, or the user's own) is left out altogether:
-    it was answered, and asking again would let two review bots ping-pong;
+    reviews, and are newer than the newest comment an earlier attempt was given: `comments@<newestId>`. The poll
+    reads no thread bodies, so it can't tell the user's own comments from Autopilot's replies (Autopilot posts as the
+    user): a thread whose newest comment is the user's account's (`ownLast`) is left out of the poll's comments
+    altogether: it was answered, and asking again would let two review bots ping-pong. With **Review summaries and PR
+    comments** on, the fresh thread read below tells the user's own words apart, and they join this trigger;
+  - **review summaries and PR comments** (`onSummaries`), what is asked for outside an inline thread:
+    - a review summary: each reviewer's newest review, leaving out replies on threads (an empty commented review) and
+      Autopilot's own (marked, or one of its review ids), counts when it is `commented`, has a body (`hasBody`), is on
+      the current head (`commitOid`) and is from a requester (below): `summary@<newestReviewId>`. A summary the same
+      reviewer followed with an approval or a request for changes is superseded;
+    - PR comments: conversation comments (`conversationComments`, the newest 10) from a requester, posted after the
+      head commit (`headCommittedAt`: one from before was there when the last push was made) and newer than the
+      newest an earlier attempt was given: `conversation@<newestId>`;
+    - the user's own replies in threads: the resolving read (below) reports a thread whose newest comment is the
+      user's own, with no mark, in its output's `requests`; while it is still that thread's newest comment, the next
+      pass adds its id to the review comments trigger (`own` in the trigger, so the prompt says so).
+
+    A **requester** (`requestAuthor`) is a trusted author, or the user: a comment of the user's own counts unless its
+    first line carries the mark every post of the board's agents starts with (`isAutopilotMarked`): Autopilot's
+    (`prReviewMarker`, "📋 … Autopilot …") or a **Fix in →** session's (`prFixSessionMarker`, "📋 … · fix session").
+    Another agent posting as the user without a mark looks like the user; the agent's judgement (below) covers it;
   - Autopilot's review: `currentPrReview(...)` with `handoff: "fix"`: `review@<reviewId>`.
 
   Autopilot's own reviews are told apart by the `reviewId`s on Review PRs' runs.
@@ -830,20 +848,31 @@ to fix a pull request linked to a task.
   `prHead` says the PR moved (a force-push). The prompt has a section per trigger with the `gh` commands to read
   it. For Autopilot's review it gives the counts and the review's `threshold` and says to fix only points at or
   above it and leave the FYI section alone. Comments are named by id (`gh api repos/<repo>/pulls/comments/<id>`),
-  and the agent is told to read only the reviews and comments listed, which come from people with access or reviewer
-  bots the user trusts. The agent pushes to `headRef` and then replies on
+  and the agent is told to read only the reviews and comments listed, which come from people with access, reviewer
+  bots the user trusts or the user. With PR comments it may read the conversation for their context, and is told
+  never to act on anything not listed. When people's comments are in it, the agent **judges each request** rather
+  than assume it right: it fixes it, declines it with its reason, asks a clarifying question when it can't tell what
+  is wanted (changing nothing for it; the answer starts another attempt), or, for discussion, thanks or a status
+  note, does nothing and posts nothing. The agent pushes to `headRef` and then replies on
   each thread it was sent to, the reply's first line exactly `prFixedReply(sha)` ("📋 … Autopilot · fixed in <sha>")
-  for a point it fixed or `prDeclinedReply(reason)` for one it won't. The reply goes in a file posted with `gh api … -F body=@file`,
+  for a point it fixed, `prDeclinedReply(reason)` for one it won't, or `prQuestionReply()` for one it needs clarified.
+  What has no thread (review summaries, PR comments, and points of a request for changes' summary that no inline
+  comment makes) is answered in one PR comment whose first line is `prCommentReply()` ("📋 … Autopilot · reply"),
+  posted with `gh pr comment <url> --body-file <file>` (`PrAgentHints.prComment`), one line per point; nothing is
+  posted when none needs an answer. Replies go in a file posted with `gh api … -F body=@file`,
   because the `gh api *merge*` deny rule would refuse a command line that mentions merging. A custom **Fix skill**
   is inlined into the prompt. The run's `output` is `{ kind: "pr_fix", linkId, headOid, round, attempt, triggers,
   via: "nudge" | "t3" | "headless" }`.
 - **By hand.** The PR row's **Fix in →** starts the same kind of fix for the user ([GitHub PRs](github-prs.md#fixing-a-pr-by-hand)),
   with `manualFix`'s prompt, and the row shows this automation's state (running, gave up) in its action slot while it is on
-  for the task. Those sessions aren't runs: they don't count against the attempts or the caps, and Fix PRs does not see them
+  for the task. That session starts every reply and PR comment with `prFixSessionMarker()`, so Fix PRs doesn't take
+  them for the user's own requests (`parseAutopilotReply` reads them as `other`, which is settled, never resolved). Those sessions aren't runs: they don't count against the attempts or the caps, and Fix PRs does not see them
   (it may start an attempt of its own on the branch while one is at work).
-- **Resolving threads it fixed** (switch `resolveThreads`, on by default). The poll reads no bodies, so with no agent
+- **Resolving threads it fixed** (switch `resolveThreads`, on by default). The poll reads no thread bodies, so with no agent
   a candidate keyed `fix:resolve:<linkId>:<headOid>:<hash of thread@newest comment ids>` (`resolveDedupeKey`,
-  `startsNoAgent`) picks the snapshot's unresolved threads the account can resolve and answered last (`ownLast`), but
+  `startsNoAgent`) picks the snapshot's unresolved threads the account answered last (`ownLast`) and can resolve, or
+  any it answered last while **Review summaries and PR comments** is on (to find the user's own words; with
+  `resolveThreads` off it then resolves nothing, `ResolveData.resolveThreads`), but
   not one whose newest comment is in one of Autopilot's own reviews (a point it just raised, not a reply). The
   action reads them fresh with `reviewThreads` (`ReviewThreadDetail`: the newest comment's body, and the PR's newest 100
   commits) and resolves each whose newest comment is Autopilot's reply saying `fixed in <sha>` (`reply: "fixed"`,
@@ -856,7 +885,9 @@ to fix a pull request linked to a task.
   open for them. The candidate carries
   the parsed list (`ResolveData.trustedBots`). The others (a person's declined thread, the user's own words,
   Autopilot's review comment) go on the run's `output.settled` as `thread@newestCommentId` and aren't read again until
-  someone comments; one whose commit isn't on the PR is read again after the next push. So a bot's declined thread
+  someone comments; one whose commit isn't on the PR is read again after the next push. With **Review summaries and PR
+  comments** on (`ResolveData.requests`), the threads ending in the user's own words (no mark) are also listed in
+  `output.requests`, which the review comments trigger reads (above). So a bot's declined thread
   settled before the bot was listed stays open until someone comments on it again. A thread GitHub refuses to resolve flags the run under Needs attention;
   the ones that did resolve drop out of the next poll, so the refused ones form a new set and are tried once more. It doesn't wait for a fix or review of the PR to finish, isn't an attempt
   and isn't counted as an agent run (`FIX_RESOLVE_KEY_PREFIX` is left out of the caps like the give-ups). The fix
@@ -864,7 +895,8 @@ to fix a pull request linked to a task.
 - **Limits.** At most 2 attempts per head commit (`ATTEMPTS_PER_HEAD`), counting every attempt that wasn't skipped or
   conflict-only (below), and per PR as many as each budget allows (`FixBudget`; `attemptBudgets` reads an attempt's
   budgets back from its key): `review` (`attempts`, default 3) for Autopilot's review and failing checks, `comments`
-  (`commentAttempts`, default 5) for other people's comments and requests for changes, and `conflicts` (below). An
+  (`commentAttempts`, default 10, at most 20: `MAX_COMMENT_ATTEMPTS`) for people's comments, review summaries, PR
+  comments and requests for changes, and `conflicts` (below). An
   attempt given triggers of both uses one of each. A colleague's review bot thus can't use up the attempts Autopilot's own loop needs, nor
   the other way round. When a budget is used up, a gave-up run `fix:gave_up:<linkId>:review` or `:comments` gives up
   on that budget's triggers and the others still go ahead (a conflict that came with them becomes a conflict-only
@@ -873,6 +905,17 @@ to fix a pull request linked to a task.
   new head commit starts the per-head count again. The gave-up candidate sets `startsNoAgent`, so a full concurrency
   cap, a daily cap or quiet hours don't hold it back. (Before the budgets were split the key was
   `fix:gave_up:<linkId>`; a PR given up on under it gets a fresh look.)
+
+  **Runs that end in no action** use no attempt (`isNoAction`): an attempt whose budgets are only `comments` that
+  succeeded, left the head where it started, and was followed (before the next attempt started) by no reply of the
+  account's: no review of its own that isn't one of Autopilot's (a thread reply is one) and no marked PR comment of
+  its own. That is the agent judging the comments discussion, and needs no report from it. It is decided only once
+  the snapshot was read after the run ended, and only on a snapshot with `conversationComments`, so older snapshots
+  count every attempt as before. Such runs are left out of the budgets and of the per-head count (two discussion
+  comments at one head mustn't give up), but they cost money, so after `NO_ACTION_RUNS_PER_PR` (20) on one PR a
+  gave-up run `fix:gave_up:<linkId>:no_action` gives up on the comments' triggers. A T3 thread is judged once its run
+  has ended and the thread is idle; a reply the poll hasn't read yet can make a run look like no action until the next
+  poll.
 
   An attempt whose triggers were all `conflict@…` (read back from its key, so a failed one is classified too)
   counts against neither: main moving under the PR isn't the PR's doing, and every merge into the base can conflict
@@ -886,12 +929,12 @@ to fix a pull request linked to a task.
   epic's PR, fixed for conflicts only, uses only this budget.
 - **Safety.** Headless runs get `pushDenyRules` (no force-push, no push to the default branch, no `gh pr merge`)
   and the runner's workspace note. T3 threads get the same rules in their note, and the fix prompt repeats them for
-  a nudge. Conflicts are fixed with a merge, never a rebase. Only trusted authors' comments (people with access, and the bots the user listed) start a fix, and the
-  prompt names them by id, tells the agent not to read the others, and calls what it reads requests about the code,
-  never instructions. That is a prompt, not a sandbox: a fix agent has edit access, Bash and the user's `gh` login,
+  a nudge. Conflicts are fixed with a merge, never a rebase. Only requesters' comments (people with access, the bots the user listed, and the user) start a fix, and the
+  prompt names them by id, tells the agent not to read the others (or, for PR comments, to read them only for
+  context), calls what it reads requests about the code, never instructions, and tells it to judge each one. That is a prompt, not a sandbox: a fix agent has edit access, Bash and the user's `gh` login,
   so on a public repository a stranger's comment it reads anyway (or a CI log) could still try to steer it. Unlike
   the reviewer it can't be confined to exact commands, because fixing means running the project's own tools.
-- **Settings.** The five switches, **Trusted bot reviewers** (`trustedBots`, in the Review comments row), **Fix findings at or above** (`fixThreshold`), **Attempts on checks and reviews**
+- **Settings.** The six switches (**Review summaries and PR comments**, `onSummaries`, comes after Review comments), **Trusted bot reviewers** (`trustedBots`, in the Review comments row), **Fix findings at or above** (`fixThreshold`), **Attempts on checks and reviews**
   (`attempts`) and **Attempts on comments** (`commentAttempts`) up front; **Fix skill** (built-in: the prompt alone)
   and the shared runner fields, which take the board's [agent defaults](#agent-defaults), under Advanced.
 - **An integration epic's own PR.** For an epic delivered through an integration branch

@@ -106,7 +106,7 @@ describe("automationHints", () => {
     ]);
   });
 
-  it("raises the comment cap for review comments, and never past 10", () => {
+  it("raises the comment cap for review comments past 10, up to 20, and the other cap never past 10", () => {
     const comments = automationHints(
       input({ week: week({ gaveUp: { review: 0, comments: 2 }, lastGaveUp: { review: null, comments: "c2" } }) }),
     );
@@ -118,6 +118,12 @@ describe("automationHints", () => {
       }),
     );
     expect(capped).toEqual([]);
+    const gaveUpComments = week({ gaveUp: { review: 0, comments: 2 }, lastGaveUp: { review: null, comments: "c2" } });
+    const pastTen = automationHints(input({ week: gaveUpComments, boardConfig: { attempts: 3, commentAttempts: 10 } }));
+    expect(pastTen[0]?.action).toMatchObject({ key: "commentAttempts", value: 11 });
+    expect(automationHints(input({ week: gaveUpComments, boardConfig: { attempts: 3, commentAttempts: 20 } }))).toEqual(
+      [],
+    );
   });
 
   it("asks an agent to fix three failures in the last five runs", () => {

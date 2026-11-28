@@ -1,12 +1,13 @@
 import type {
   MergeMethod,
+  PrConversationCommentInfo,
   PrOptionalChecks,
   PrReviewCommentInfo,
   PrReviewInfo,
   PrReviewThreadInfo,
   PrSnapshot,
 } from "@repo/contracts";
-import { PrMergeState, parseAutopilotReply } from "@repo/contracts";
+import { PrMergeState, isAutopilotMarked, parseAutopilotReply } from "@repo/contracts";
 import { z } from "zod";
 import type { ReviewThreadDetail } from "./gitHost.ts";
 
@@ -39,6 +40,7 @@ const MergeMethodJson = z.string().transform((m) => m.toLowerCase());
 
 const Author = z.object({ login: z.string() }).nullish();
 
+/** A review. Its body is read only to tell whether it has one and carries Autopilot's mark: it is never kept. */
 const ReviewNode = z.object({
   databaseId: z.number().nullish(),
   state: z.string(),
@@ -46,6 +48,18 @@ const ReviewNode = z.object({
   authorAssociation: z.string().nullish(),
   viewerDidAuthor: z.boolean().nullish(),
   author: Author,
+  body: z.string().nullish(),
+  commit: z.object({ oid: z.string().nullish() }).nullish(),
+});
+
+/** A comment on the PR's conversation. Its body is read only for Autopilot's mark, as a review's is. */
+const ConversationCommentNode = z.object({
+  databaseId: z.number().nullish(),
+  createdAt: z.string(),
+  authorAssociation: z.string().nullish(),
+  viewerDidAuthor: z.boolean().nullish(),
+  author: Author,
+  body: z.string().nullish(),
 });
 
 const ReviewCommentNode = z.object({
@@ -102,6 +116,7 @@ export const GraphqlPr = z.object({
   updatedAt: z.string().nullish(),
   autoMergeRequest: z.object({ mergeMethod: MergeMethodJson.nullish() }).nullish(),
   reviews: z.object({ nodes: z.array(ReviewNode.nullable()) }).nullish(),
+  comments: z.object({ nodes: z.array(ConversationCommentNode.nullable()) }).nullish(),
   reviewThreads: z.object({ nodes: z.array(ReviewThreadNode.nullable()) }).nullish(),
   commits: z
     .object({
@@ -109,6 +124,7 @@ export const GraphqlPr = z.object({
         z
           .object({
             commit: z.object({
+              committedDate: z.string().nullish(),
               statusCheckRollup: z.object({ contexts: z.object({ nodes: z.array(RollupItem) }) }).nullish(),
             }),
           })
@@ -156,9 +172,32 @@ function mapReviews(nodes: ReadonlyArray<z.infer<typeof ReviewNode> | null> | un
         submittedAt: node.submittedAt ?? null,
         own: node.viewerDidAuthor ?? false,
         trusted: TRUSTED.has(node.authorAssociation?.toUpperCase() ?? ""),
+        hasBody: (node.body ?? "").trim() !== "",
+        marked: isAutopilotMarked(node.body),
+        commitOid: node.commit?.oid ?? null,
       },
     ];
   });
+}
+
+/** The conversation comments read, oldest first, without their bodies. */
+function mapConversationComments(
+  nodes: ReadonlyArray<z.infer<typeof ConversationCommentNode> | null> | undefined,
+): PrConversationCommentInfo[] {
+  return (nodes ?? []).flatMap((c): PrConversationCommentInfo[] =>
+    c && typeof c.databaseId === "number"
+      ? [
+          {
+            id: c.databaseId,
+            author: c.author?.login ?? null,
+            createdAt: c.createdAt,
+            own: c.viewerDidAuthor ?? false,
+            trusted: TRUSTED.has(c.authorAssociation?.toUpperCase() ?? ""),
+            marked: isAutopilotMarked(c.body),
+          },
+        ]
+      : [],
+  );
 }
 
 /** The thread's newest comment the poll read (GitHub lists them oldest first). */
@@ -346,7 +385,8 @@ export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnaps
   const merge = pr.mergeable?.toUpperCase();
   const mergeable: PrSnapshot["mergeable"] =
     merge === "MERGEABLE" ? "mergeable" : merge === "CONFLICTING" ? "conflicting" : "unknown";
-  const rollup = pr.commits?.nodes.at(-1)?.commit.statusCheckRollup?.contexts.nodes;
+  const headCommit = pr.commits?.nodes.at(-1)?.commit;
+  const rollup = headCommit?.statusCheckRollup?.contexts.nodes;
   const mergeMethods = allowedMergeMethods(repo);
   const optionalChecks = mapOptionalChecks(rollup);
   const mergeState = asMergeState(pr.mergeStateStatus);
@@ -372,6 +412,8 @@ export function mapPrSnapshot(input: GraphqlPr, repoInput: GraphqlRepo): PrSnaps
     reviewComments: mapReviewComments(pr.reviewThreads),
     reviewThreads: threads,
     unresolvedThreads: (pr.reviewThreads?.nodes ?? []).filter((t) => t && !t.isResolved).length,
+    conversationComments: mapConversationComments(pr.comments?.nodes),
+    headCommittedAt: headCommit?.committedDate ?? null,
   };
 }
 
@@ -401,9 +443,10 @@ const prFields = (
   numberVar: string,
 ) => `number title state isDraft reviewDecision mergeable mergeStateStatus headRefName baseRefName headRefOid isCrossRepository updatedAt
       autoMergeRequest { mergeMethod }
-      reviews(last: 20) { nodes { databaseId state submittedAt authorAssociation viewerDidAuthor author { login } } }
+      reviews(last: 20) { nodes { databaseId state submittedAt authorAssociation viewerDidAuthor author { login } body commit { oid } } }
+      comments(last: 10) { nodes { databaseId createdAt authorAssociation viewerDidAuthor author { login } body } }
       ${THREAD_FIELDS}
-      commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
+      commits(last: 1) { nodes { commit { committedDate statusCheckRollup { contexts(first: 100) { nodes {
         __typename
         ... on CheckRun { name databaseId checkSuite { app { databaseId } workflowRun { workflow { databaseId } } } status conclusion isRequired(pullRequestNumber: ${numberVar}) }
         ... on StatusContext { state isRequired(pullRequestNumber: ${numberVar}) }

@@ -228,7 +228,9 @@ export function githubAgentHints(pr: { host: string; repo: string; number: numbe
     review: (id: number) => `gh api ${api}/reviews/${id}${flag}`,
     reviewComments: (id: number) => `gh api ${api}/reviews/${id}/comments${flag}`,
     comment: `gh api repos/${pr.repo}/pulls/comments/<comment id>${flag}`,
+    conversationComment: `gh api repos/${pr.repo}/issues/comments/<comment id>${flag}`,
     reply: (file: string) => `gh api ${api}/comments/<comment id>/replies -F body=@${file}${flag}`,
+    prComment: (file: string) => `gh pr comment ${url} --body-file ${file}`,
   };
 }
 

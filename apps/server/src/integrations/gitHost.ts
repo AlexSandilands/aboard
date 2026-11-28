@@ -355,8 +355,12 @@ export interface PrAgentHints {
   reviewComments(reviewId: number): string;
   /** Reads one inline comment; `<comment id>` is left for the agent. */
   comment: string;
+  /** Reads one comment on the PR's conversation; `<comment id>` is left for the agent. */
+  conversationComment: string;
   /** Posts the reply written to `file` on a review thread; `<comment id>` is left for the agent. */
   reply(file: string): string;
+  /** Posts what is written to `file` as one comment on the PR's conversation. */
+  prComment(file: string): string;
 }
 
 /** What a host can do, so a caller says so up front instead of failing halfway. */

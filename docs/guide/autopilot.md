@@ -181,21 +181,28 @@ switch, all on by default:
 - **Failing checks**: the agent reads the failed run's log and fixes the cause.
 - **Merge conflicts**: it merges the base branch in. It never rebases, since it can't force-push.
 - **Changes requested**: a review asking for changes.
-- **Review comments**: new comments on review threads that aren't resolved. Autopilot posts as your own `gh`
-  account, so it can't tell your comments from its own replies, and only other people's comments count. They also
-  have to be from someone with access to the repository (an owner, member or collaborator), not just anyone who can
-  comment on it.
+- **Review comments**: new comments on review threads that aren't resolved. They have to be from someone with access
+  to the repository (an owner, member or collaborator), not just anyone who can comment on it.
 - **Trusted bot reviewers**, in the Review comments row: logins of review bots, comma separated, whose comments and
   requests for changes count as from someone with access. GitHub often marks a bot installed as an app as having no
   access, so without this its points are never fixed. Write `review-bot`, `@review-bot` or `review-bot[bot]`: they're
   the same. Their fixes count against **Attempts on comments**. Empty by default.
+- **Review summaries and PR comments**: what someone asks for outside a review thread: a reviewer's summary on the
+  latest commit (some review bots only comment there), comments on the PR's conversation since the last push, and
+  the points of a request for changes that aren't in any of its threads. **Your own comments count too**, in threads
+  as well. Autopilot posts as your own `gh` account, so it starts everything it writes with its mark ("📋 … Autopilot
+  …"), and a session you start with **Fix in** marks its replies "📋 … · fix session"; anything of yours without a
+  mark is read as yours.
 - **Autopilot's review**: when **Review PRs** found points at or above the **fix threshold**. The agent fixes only
   those and leaves the rest, and the FYI section, alone.
 
+The agent doesn't assume a comment is right. For each one it fixes it, declines it with its reason, asks you a
+question when it can't tell what is wanted (your answer sends it back), or leaves plain discussion alone.
+
 If the task's T3 Code thread is still there, it gets the fix as a message. Otherwise a new session starts on the
 PR's branch, using the runner you chose. Reasons that come up together go into one attempt. The agent pushes to
-the PR's branch and replies on each thread, starting with Autopilot's mark and "fixed in <commit>" or "declined:
-<reason>".
+the PR's branch and replies on each thread, starting with Autopilot's mark and "fixed in <commit>", "declined:
+<reason>" or "question". Summaries and PR comments have no thread, so it answers them in one PR comment.
 
 - **Resolve threads it fixed** (on by default): Autopilot resolves each thread it replied it fixed once that commit is
   on the PR, so a repository that requires every conversation resolved can merge. Threads it declined stay open for
@@ -206,16 +213,17 @@ the PR's branch and replies on each thread, starting with Autopilot's mark and "
 
 - Each reason is acted on once. A new failure on a new commit, or a newer comment, is a new reason.
 - It makes at most 2 attempts on one head commit. Per PR, fixes for Autopilot's review and failing checks get **Attempts
-  on checks and reviews** (3 by default), and fixes for other people's comments and requests for changes get
-  **Attempts on comments** (5 by default), so a colleague's review bot can't use up the attempts Autopilot's own review needs. A
-  thread your account answered last doesn't send it back. When
+  on checks and reviews** (3 by default), and fixes for people's comments, summaries and requests for changes get
+  **Attempts on comments** (10 by default, up to 20), so a colleague's review bot can't use up the attempts Autopilot's own review needs. A
+  thread Autopilot answered last doesn't send it back. A run that changed nothing and posted nothing (it judged the
+  comments discussion) uses no attempt; after 20 of those on one PR it gives up all the same. When
   one runs out the card says "Autopilot gave up" under Needs attention and you get a notification; the other still
   goes on.
 - It never force-pushes, pushes to the default branch or merges. PRs from forks are skipped, since their branch
   isn't on `origin`.
 - To fix a PR yourself, use **Fix in** on its row ([Fixing a PR](using-the-board.md#fixing-a-pr)). While Fix PRs is on for
   the task, the row says **Autopilot is fixing** or **Autopilot gave up** instead, with **Fix in** in its menu.
-- Its settings: the five switches (**Autopilot's review** with its **Fix findings at or above** severity beside it), the
+- Its settings: the six switches (**Autopilot's review** with its **Fix findings at or above** severity beside it), the
   two attempt limits, then under Advanced
   **Resolve threads it fixed**, a **Fix skill** to follow on top of the fix prompt, the model, the runner, the budget,
   the timeout and **T3 Code access**.

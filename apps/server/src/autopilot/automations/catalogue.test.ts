@@ -29,6 +29,7 @@ describe("the built-in catalogue", () => {
       "onChangesRequested",
       "onComments",
       "trustedBots",
+      "onSummaries",
       "onAutopilotReview",
       "fixThreshold",
       "attempts",

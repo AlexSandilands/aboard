@@ -49,6 +49,7 @@ describe("automationSentence", () => {
         onConflicts: true,
         onChangesRequested: false,
         onComments: false,
+        onSummaries: false,
         onAutopilotReview: false,
       }),
     ).toBe("When a task's PR has failing checks and conflicts, send an agent to fix it.");
@@ -58,9 +59,13 @@ describe("automationSentence", () => {
         onConflicts: false,
         onChangesRequested: false,
         onComments: false,
+        onSummaries: false,
         onAutopilotReview: false,
       }),
     ).toBe("Every trigger is off, so it never fixes anything.");
+    expect(say("fix_prs", { onChecks: false, onConflicts: false, onChangesRequested: false })).toContain(
+      "new review comments, review summaries or PR comments asking for changes",
+    );
     expect(say("fix_prs", { onChecks: false, onConflicts: false, fixThreshold: "minor" })).toContain(
       "findings from Autopilot's review at minor or above",
     );
