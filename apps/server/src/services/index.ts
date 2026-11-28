@@ -43,6 +43,7 @@ import { createProjectsService } from "./projects.ts";
 import { createRelations, type RelationsModule } from "./relations.ts";
 import { createRecurringService } from "./recurring.ts";
 import { createRepoPrReviewsService } from "./repoPrReviews.ts";
+import { createTaskSessionsService } from "./taskSessions.ts";
 import { createReviewsService } from "./reviews.ts";
 import { createSettingsService } from "./settings.ts";
 import { createSkillSyncService, type HarnessHomes } from "./skillSync.ts";
@@ -267,9 +268,21 @@ export function createServices(deps: ServiceDeps): Services {
     workingCopies,
     runnerAutopilot: createRunnerAutopilotService(core, { logRun: (run) => workingCopies.logRun(run) }),
     repoPrReviews: createRepoPrReviewsService(core, { notifications }),
+    taskSessions: createTaskSessionsService(core, {
+      tasks: () => all!.tasks,
+      projects,
+      runsForTask: (taskId) => all!.autopilot.runsForTask(taskId, 20),
+      // As boardPlacement: a machine whose answer is unknown counts as running Autopilot itself.
+      heldElsewhere: (taskId) => {
+        const hold = all!.holds.get(taskId);
+        if (!hold || (deps.machineRunsAutopilot?.(hold.machineId) ?? null) === false) return null;
+        return all!.machines.list().find((m) => m.id === hold.machineId)?.name ?? "a connected machine";
+      },
+    }),
     autopilot: createAutopilotService(core, {
       automations,
       notifications,
+      services: () => all!,
       // Recurring rules keep their own schedule, and custom automations only act on what happens from now: switching
       // one on, or lifting Pause all, doesn't catch up.
       onEnabled: (automation, projectIds) => {

@@ -156,6 +156,13 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
    */
   alwaysOn?: boolean;
   /**
+   * The key of the built-in automation it is part of (Task sessions, of Orchestrate). It has no switch or settings of
+   * its own: it is on, in Preview or off wherever that one is, its config is that one's (so give it the same schema and
+   * defaults), and the service refuses to switch it. The settings page doesn't list it; the run history lists its runs
+   * under that one's.
+   */
+  partOf?: string;
+  /**
    * Why it can't work as it is (a custom automation with an empty required tool slot), or null. The service refuses to
    * switch it on, the UI says why, and its check finds nothing meanwhile.
    */
@@ -178,10 +185,11 @@ export interface Automation<C extends AutomationConfig = AutomationConfig> {
     | ((ended: RunnerResult, ctx: { services: Services; run: AutopilotRun }) => ActionResult);
   /**
    * Why a retry of this run of it is refused, beyond the board's own rules (a run that succeeded, was retried already
-   * or is history), given the runs on its task, newest first; null lets it through. Fix PRs caps the fresh budgets a
-   * retried "gave up" notice grants.
+   * or is history), given the runs on its task, newest first, and the board's services (absent where the service has
+   * none, as in a test catalogue); null lets it through. Fix PRs caps the fresh budgets a retried "gave up" notice
+   * grants; Task sessions refuses a retry whose request could no longer run.
    */
-  retryRefusal?: (run: AutopilotRun, runs: readonly AutopilotRun[]) => string | null;
+  retryRefusal?: (run: AutopilotRun, runs: readonly AutopilotRun[], services?: Services) => string | null;
   /** Parses the merged config; it should give every field a default. */
   schema: z.ZodType<C>;
   /** How the UI renders the config form. */

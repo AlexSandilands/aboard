@@ -67,3 +67,25 @@ export function implementingThread(task: Pick<TaskSummary, "links">, now = Date.
     null
   );
 }
+
+/**
+ * What is at work on the task now, so a new session shouldn't start: its newest busy T3 thread (or one linked too
+ * recently for the poll to have read it), or a linked agent session that is busy. A follow-up thread (the user asking
+ * about finished work) and an archived or settled thread don't count. Null when nothing is.
+ */
+export function agentAtWorkOn(
+  task: Pick<TaskSummary, "links">,
+  now = Date.now(),
+): Extract<TaskLink, { kind: "t3_thread" | "agent_session" }> | null {
+  return (
+    task.links.findLast(
+      (l): l is Extract<TaskLink, { kind: "t3_thread" | "agent_session" }> =>
+        (l.kind === "t3_thread" &&
+          l.role !== "followup" &&
+          (l.snapshot
+            ? !l.snapshot.settled && !l.snapshot.archived && BUSY_THREAD.has(l.snapshot.status)
+            : now - Date.parse(l.createdAt) < JUST_STARTED_MS)) ||
+        (l.kind === "agent_session" && l.snapshot?.status === "busy"),
+    ) ?? null
+  );
+}

@@ -176,6 +176,12 @@ describe("canRetryRun", () => {
     expect(canRetryRun({ ...failed, dedupeKey: "retried:a:k" })).toBe(false);
   });
 
+  it("never retries a skipped task session, which did nothing, but does retry a failed one", () => {
+    const session = run("a", "2026-10-18T01:00:00.000Z", { automation: "task_sessions" });
+    expect(canRetryRun(session)).toBe(true);
+    expect(canRetryRun({ ...session, status: "skipped" })).toBe(false);
+  });
+
   it("refuses a run the same automation has made a real run on the task since", () => {
     const failed = run("a", "2026-10-18T01:00:00.000Z");
     const later = run("b", "2026-10-18T02:00:00.000Z", { status: "succeeded" });

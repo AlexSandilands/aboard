@@ -1,6 +1,7 @@
 import {
   taskLabel,
   AUTOPILOT_START_PLANNED,
+  AUTOPILOT_TASK_SESSIONS,
   ReviewSkillRef,
   t3RunWorking,
   taskHandoffPrompt,
@@ -100,10 +101,13 @@ function unattendedNote(skill: ReviewSkillRef): string {
   return lines.join("\n");
 }
 
+/** The automations whose T3 runs end once their thread is up, with the agent still at work on the task. */
+const STARTS_AGENTS: ReadonlySet<string> = new Set([AUTOPILOT_START_PLANNED, AUTOPILOT_TASK_SESSIONS]);
+
 /**
- * How many agents Start planned started are still working. A headless run is a running run, which the engine counts
+ * How many agents Start planned and Task sessions started are still working. A headless run is a running run, which the engine counts
  * itself. A T3 run ends once its thread has started, so this counts the tasks (In Progress, In Review where the agent
- * runs its review loop, or still Planned when the thread hasn't moved them yet) whose latest Start planned run began a
+ * runs its review loop, or still Planned when the thread hasn't moved them yet) whose latest such run began a
  * T3 thread that is still busy: working, waiting on subagents, or waiting on the user, and not settled or archived. A
  * snapshot only counts as evidence when the live poll took it after the run ended: the launch-time poll sees a thread
  * that hasn't run yet ("idle"). Without one, or when the poll stopped refreshing it, the thread counts for ten minutes
@@ -121,7 +125,7 @@ export function workingAgents(services: Services, now: Date): number {
     if (task.kind === "epic" || task.archivedAt !== null) return false;
     const run = services.autopilot
       .runsForTask(task.id, 20)
-      .find((r) => r.automation === AUTOPILOT_START_PLANNED && !r.dryRun && r.status !== "queued");
+      .find((r) => STARTS_AGENTS.has(r.automation) && !r.dryRun && r.status !== "queued");
     // A run a machine's Autopilot made takes that machine's room, not this server's.
     return run && !run.machine ? t3RunWorking(task, run, at) : false;
   }).length;

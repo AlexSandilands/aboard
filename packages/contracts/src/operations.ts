@@ -228,7 +228,8 @@ export const OPERATIONS: Record<OperationId, OperationInfo> = {
   prFix: { label: "PR fix", needs: ["edit"], taskScoped: true, default: INHERIT },
   orchestrate: {
     label: "Orchestrate",
-    needs: ["untrusted", "toolRules"],
+    // Run tools for start_task_session (ADR 0018).
+    needs: ["untrusted", "toolRules", "runTools"],
     taskScoped: false,
     default: { tier: "standard" },
   },

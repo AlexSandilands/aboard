@@ -1,6 +1,8 @@
 import {
   AutopilotRunOutcome,
   KEPT_REASON_TEXT,
+  RETIRED_AUTOMATION_TITLES,
+  type AutopilotAutomationPart,
   type AutopilotRun,
   type AutopilotRunFilter,
   type DeleteAutopilotRunsResult,
@@ -163,3 +165,26 @@ export const shortSessionId = (sessionId: string): string => sessionId.slice(0, 
 /** The Thread row's link text: a T3 Code deep link opens there; any other URL is just the thread. */
 export const threadLinkLabel = (url: string): string =>
   url.startsWith("t3code://") ? "Open in T3 Code" : "Open thread";
+
+/**
+ * The history's Automation choices: every automation in the list's order, each followed by the parts of it (Task
+ * sessions under Orchestrate, as "Orchestrate › Task sessions"), then the retired ones that still have runs.
+ */
+export function automationChoices(
+  automations: ReadonlyArray<{ key: string; title: string }>,
+  parts: readonly AutopilotAutomationPart[],
+): Array<{ value: string; label: string }> {
+  const listed = new Set([...automations.map((a) => a.key), ...parts.map((p) => p.key)]);
+  return [
+    ...automations.flatMap((a) => [
+      { value: a.key, label: a.title },
+      ...parts.filter((p) => p.partOf === a.key).map((p) => ({ value: p.key, label: `${a.title} › ${p.title}` })),
+    ]),
+    // A part whose automation isn't listed (a test catalogue) still has its runs.
+    ...parts.filter((p) => !automations.some((a) => a.key === p.partOf)).map((p) => ({ value: p.key, label: p.title })),
+    // Retired ones still have runs worth finding, under their old names.
+    ...Object.entries(RETIRED_AUTOMATION_TITLES)
+      .filter(([key]) => !listed.has(key))
+      .map(([key, label]) => ({ value: key, label: `${label} (retired)` })),
+  ];
+}

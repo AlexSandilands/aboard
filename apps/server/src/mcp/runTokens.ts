@@ -12,10 +12,19 @@ export const RUN_SERVER_NAME = `${BRAND.id}-run`;
 export const RUN_TOKEN_ENV = brandEnv("RUN_TOKEN");
 
 /** The tool sets a run can be given, one per kind of operation. */
-export type RunToolSet = "prReview" | "repoPrReview";
+export type RunToolSet = "prReview" | "repoPrReview" | "orchestrate";
 
-/** What a run's tools read. Every tool of the set is bound to it: none takes a target of its own. */
-export type RunTarget = { kind: "pr" } & PrRef;
+/** The pull request a PR set's tools read. */
+export type PrRunTarget = { kind: "pr" } & PrRef;
+
+/** The project an Orchestrate run looks after: the only one its tools reach. */
+export interface ProjectRunTarget {
+  kind: "project";
+  projectId: string;
+}
+
+/** What a run's tools are bound to. Every tool of the set is bound to it: none takes a target of its own. */
+export type RunTarget = PrRunTarget | ProjectRunTarget;
 
 export interface RunToolScope {
   toolSet: RunToolSet;

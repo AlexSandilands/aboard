@@ -75,6 +75,7 @@ import { AppError } from "../errors.ts";
 import type { Core, Effects } from "./core.ts";
 import { AUTOPILOT_ENGINE_KEY, AUTOPILOT_PAUSED_KEY } from "./autopilotKeys.ts";
 import type { NotificationsService } from "./notifications.ts";
+import type { Services } from "./types.ts";
 
 export { AUTOPILOT_ENGINE_KEY, AUTOPILOT_PAUSED_KEY };
 /** The tuning hints the user dismissed, by id, newest last. Machine state like pause: not in backups. */
@@ -402,6 +403,8 @@ export function createAutopilotService(
      * replays and sends the pause back with its settings, so there is one place the user resumes it.
      */
     autoPause?: boolean;
+    /** The board's services, for an automation's `retryRefusal` that reads beyond the runs (Task sessions). */
+    services?: () => Services;
   },
 ): AutopilotService {
   const { repos } = core;
@@ -424,6 +427,14 @@ export function createAutopilotService(
   const titleOf = (key: string) => automationTitleOf(deps.automations(), key);
 
   const epicScoped = (a: Pick<Automation, "epicScope">) => a.epicScope ?? true;
+
+  // Built-in parts (Task sessions) never change, and no custom automation is one, so the map is made once.
+  let partsOf: ReadonlyMap<string, string> | null = null;
+  /** The key whose settings an automation goes by: its own, or for a part (`partOf`) the automation it is part of. */
+  const switchKey = (key: string): string => {
+    partsOf ??= new Map(deps.automations().flatMap((a) => (a.partOf ? [[a.key, a.partOf] as const] : [])));
+    return partsOf.get(key) ?? key;
+  };
 
   const automationOf = (key: string): Automation => {
     const automation = find(key);
@@ -464,10 +475,11 @@ export function createAutopilotService(
   /** Settings from least to most specific scope for a project (or just the board), and for an epic in it. */
   const chainFor = (
     all: readonly AutopilotSetting[],
-    automation: string,
+    key: string,
     projectId: string | null,
     epicId: string | null = null,
   ) => {
+    const automation = switchKey(key);
     const at = (kind: AutopilotScopeKind, id: string) =>
       all.find((s) => s.scopeKind === kind && s.scopeId === id && s.automation === automation);
     return [
@@ -491,7 +503,7 @@ export function createAutopilotService(
     const board = loadAutopilotEngine(repos).agentDefaults;
     return deps
       .automations()
-      .filter((automation) => kind !== "epic" || epicScoped(automation))
+      .filter((automation) => !automation.partOf && (kind !== "epic" || epicScoped(automation)))
       .map((automation) => {
         const own = all.find((s) => s.scopeKind === kind && s.scopeId === id && s.automation === automation.key);
         const resolved = resolveAutopilot(
@@ -822,6 +834,8 @@ export function createAutopilotService(
     const dismissed = new Set(dismissedHints());
     const all = [...engineHints({ engine, today, date: localDate(core.now()) })];
     for (const automation of deps.automations()) {
+      // A part's hints would point at settings it doesn't have.
+      if (automation.partOf) continue;
       const projects = enabledProjects(automation.key);
       const board = resolveAutopilot(chainFor(repos.autopilotSettings.all(), automation.key, null));
       if (projects.length === 0 && !board.enabled) continue;
@@ -883,6 +897,8 @@ export function createAutopilotService(
    */
   const autoPauseAfter = (run: AutopilotRun) => {
     if (deps.autoPause === false || run.dryRun || !run.projectId) return;
+    // A part has no switch to resume it from; each failure is flagged on its task instead.
+    if (find(run.automation)?.partOf) return;
     const current = repos.autopilotAutoPauses.get(run.automation, run.projectId);
     if (current?.pausedAt) return;
     const streak = failureStreak(
@@ -918,8 +934,14 @@ export function createAutopilotService(
       const engine = loadAutopilotEngine(repos);
       const automations = deps
         .automations()
+        .filter((automation) => !automation.partOf)
         .map((automation) =>
           describeAutomation(automation, needsOf(automation), defaultsOf(automation, engine.agentDefaults)),
+        );
+      const parts = deps
+        .automations()
+        .flatMap((a) =>
+          a.partOf ? [{ key: a.key, title: a.title, description: a.description, partOf: a.partOf }] : [],
         );
       const agents = deps
         .automations()
@@ -930,6 +952,7 @@ export function createAutopilotService(
         paused: loadAutopilotStatus(repos).paused,
         engine,
         automations,
+        parts,
         today: { agentRuns: started, spendUsd },
         needsYou: needsYou(automations),
         autoPaused: autoPaused(),
@@ -989,6 +1012,12 @@ export function createAutopilotService(
         throw new AppError("VALIDATION", `${automation.title} doesn't apply to epics`);
       }
       if (automation.alwaysOn) throw new AppError("VALIDATION", `${automation.title} has no switch: its rules do`);
+      if (automation.partOf) {
+        throw new AppError(
+          "VALIDATION",
+          `${automation.title} is part of ${titleOf(automation.partOf)}: set that instead`,
+        );
+      }
       if (input.mode && isOnMode(input.mode) && automation.blocked) {
         throw new AppError("VALIDATION", automation.blocked);
       }
@@ -1202,7 +1231,7 @@ export function createAutopilotService(
       if (isSupersededRun(run, around)) {
         throw new AppError("CONFLICT", "The automation has run again since, so this run's work is history");
       }
-      const refusal = find(run.automation)?.retryRefusal?.(run, around) ?? null;
+      const refusal = find(run.automation)?.retryRefusal?.(run, around, deps.services?.()) ?? null;
       if (refusal) throw new AppError("CONFLICT", refusal);
       const retired: AutopilotRun = {
         ...run,

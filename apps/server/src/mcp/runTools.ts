@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { z } from "zod";
-import { BRAND, parseReviewMarker, prReviewMarker } from "@repo/contracts";
+import { AUTOPILOT_ACTOR, BRAND, parseReviewMarker, prReviewMarker, taskLabel } from "@repo/contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
@@ -13,8 +13,10 @@ import {
   type HostPr,
   type HostPrFile,
 } from "../integrations/gitHost.ts";
-import { run, textResult } from "./shared.ts";
-import { RUN_SERVER_NAME, type RunGrant, type RunTokens, type RunToolSet } from "./runTokens.ts";
+import type { Services } from "../services/types.ts";
+import { TASK_SESSION_NOTE_MAX, TASK_SESSION_REQUEST_TTL_MS } from "../services/taskSessions.ts";
+import { run, taskField, textResult } from "./shared.ts";
+import { RUN_SERVER_NAME, type PrRunTarget, type RunGrant, type RunTokens, type RunToolSet } from "./runTokens.ts";
 
 // Board-served run tools (docs/decisions/0013-board-served-run-tools.md): `/mcp/run`, called with a run's token,
 // serves that headless run the tools of its operation, bound to its target, so any CLI that takes one MCP server is
@@ -24,6 +26,7 @@ import { RUN_SERVER_NAME, type RunGrant, type RunTokens, type RunToolSet } from 
 export const RUN_TOOL_NAMES: Record<RunToolSet, readonly string[]> = {
   prReview: ["pr_overview", "pr_files", "pr_diff", "pr_comments"],
   repoPrReview: ["pr_overview", "pr_files", "pr_diff", "pr_comments", "pr_threads", "repo_issue"],
+  orchestrate: ["start_task_session"],
 };
 
 /**
@@ -39,6 +42,14 @@ export interface RunToolsContext {
   tokens: RunTokens;
   /** The reads of the git host serving `host`, or null when no kind the board knows does. */
   gitHost(host: string): RunHost | null;
+  /** The board's services, for a set that asks the board for work (Orchestrate's). */
+  services(): Services;
+}
+
+/** The pull request a PR set's grant is bound to. */
+function prOf(grant: RunGrant): PrRunTarget {
+  if (grant.target.kind !== "pr") throw new Error(`The ${grant.toolSet} tools are bound to a pull request`);
+  return grant.target;
 }
 
 const UNTRUSTED =
@@ -101,7 +112,8 @@ function commentHead(c: HostComment): string {
 
 /** The PR review set: read the one pull request the run reviews. */
 function registerPrReviewTools(server: McpServer, grant: RunGrant, host: GitHostReads): void {
-  const ref = { host: grant.target.host, repo: grant.target.repo, number: grant.target.number };
+  const target = prOf(grant);
+  const ref = { host: target.host, repo: target.repo, number: target.number };
   const files = () => cached(grant, "files", () => host.listFiles(ref));
   const readOnly = { readOnlyHint: true, openWorldHint: false };
 
@@ -214,7 +226,8 @@ const isAutopilotPost = (body: string): boolean =>
  */
 function registerRepoPrReviewTools(server: McpServer, grant: RunGrant, host: RunHost): void {
   registerPrReviewTools(server, grant, host);
-  const ref = { host: grant.target.host, repo: grant.target.repo, number: grant.target.number };
+  const target = prOf(grant);
+  const ref = { host: target.host, repo: target.repo, number: target.number };
   const readOnly = { readOnlyHint: true, openWorldHint: false };
 
   server.registerTool(
@@ -295,19 +308,79 @@ function registerRepoPrReviewTools(server: McpServer, grant: RunGrant, host: Run
   );
 }
 
-const TOOL_SETS: Record<RunToolSet, (server: McpServer, grant: RunGrant, host: RunHost) => void> = {
-  prReview: registerPrReviewTools,
-  repoPrReview: registerRepoPrReviewTools,
+/**
+ * Orchestrate's set: asks the board for a new agent session on a task in the run's project. It writes only a request,
+ * which the Task sessions automation runs under the user's switches and limits; the run itself starts nothing.
+ */
+function registerOrchestrateTools(server: McpServer, grant: RunGrant, services: Services): void {
+  if (grant.target.kind !== "project") throw new Error("The orchestrate tools are bound to a project");
+  const { projectId } = grant.target;
+  const hours = TASK_SESSION_REQUEST_TTL_MS / 3_600_000;
+  server.registerTool(
+    "start_task_session",
+    {
+      title: "Start a new agent session on a stalled task",
+      description:
+        "Ask for a new agent session on a task In Progress or in Review that has stalled with no agent on it: no " +
+        "live T3 thread to message, and nothing Fix PRs or a retry would cover. The session starts with the task's " +
+        "hand-off prompt and your note, on the runner and provider the user set for task runs (T3 Code or a headless " +
+        "CLI), on the task's open PR branch when it has one, else on a new branch. It starts on a later Autopilot " +
+        `pass, as an Autopilot run under the user's pause, quiet hours and caps, which may hold it for up to ${hours} ` +
+        "hours. Refused, with the reason, for a manual task, an epic, a task in Planned (Start planned's to start), " +
+        "Backlog or Done, a blocked task, one with a T3 thread or agent session working on it (message the thread " +
+        "instead), one an Autopilot run is working on, one outside this project, and one a session was already " +
+        "asked for on in the last hour.",
+      inputSchema: {
+        task: taskField,
+        note: z
+          .string()
+          .min(1)
+          .max(TASK_SESSION_NOTE_MAX)
+          .describe(
+            'What the session should do, in a few sentences: what is left and why it stalled, e.g. "Answer the 3 ' +
+              'unanswered review threads on PR #7 (fix or decline each, reply on each) and push." The session is ' +
+              "told the note is yours, not the user's.",
+          ),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    ({ task, note }) =>
+      run(() => {
+        const request = services.taskSessions.request({
+          taskId: services.tasks.resolveId(task),
+          note,
+          actor: AUTOPILOT_ACTOR,
+          projectId,
+          requestedByRunId: grant.runId,
+        });
+        const summary = services.tasks.summary(request.taskId);
+        const ref = `${taskLabel(summary)} "${summary.title}"`;
+        return textResult(
+          `Asked for a new agent session on ${ref}. Autopilot's Task sessions starts it on a later pass, as an ` +
+            `Autopilot run under the user's limits (it may wait up to ${hours} hours for room, and is dropped after). ` +
+            `Don't message the task's thread or ask again this run: look at ${taskLabel(summary)} again on a later run, ` +
+            "and mention it in your handover.",
+        );
+      }),
+  );
+}
+
+type ToolSetContext = { grant: RunGrant; host: RunHost | null; services: Services };
+
+const TOOL_SETS: Record<RunToolSet, (server: McpServer, ctx: ToolSetContext) => void> = {
+  prReview: (server, { grant, host }) => registerPrReviewTools(server, grant, host!),
+  repoPrReview: (server, { grant, host }) => registerRepoPrReviewTools(server, grant, host!),
+  orchestrate: (server, { grant, services }) => registerOrchestrateTools(server, grant, services),
 };
 
-function createRunServer(grant: RunGrant, host: RunHost): McpServer {
-  const server = new McpServer(
-    { name: RUN_SERVER_NAME, version: "0.1.0" },
-    {
-      instructions: `Read-only tools for one ${BRAND.name} Autopilot run, bound to ${grant.target.repo}#${grant.target.number}. They read nothing else and write nothing.`,
-    },
-  );
-  TOOL_SETS[grant.toolSet](server, grant, host);
+function createRunServer(ctx: ToolSetContext): McpServer {
+  const { grant } = ctx;
+  const instructions =
+    grant.target.kind === "pr"
+      ? `Read-only tools for one ${BRAND.name} Autopilot run, bound to ${grant.target.repo}#${grant.target.number}. They read nothing else and write nothing.`
+      : `Tools for one ${BRAND.name} Autopilot Orchestrate run, bound to its project. They reach no other project.`;
+  const server = new McpServer({ name: RUN_SERVER_NAME, version: "0.1.0" }, { instructions });
+  TOOL_SETS[grant.toolSet](server, ctx);
   return server;
 }
 
@@ -334,9 +407,12 @@ export function registerRunMcp(app: Hono, ctx: () => RunToolsContext): void {
     const token = bearer(c.req.header("authorization"));
     const grant = token ? tokens.resolve(token) : null;
     if (!grant) return rpcError(401, "This run's tools are not available: its token is missing, unknown or expired.");
-    const host = ctx().gitHost(grant.target.host);
-    if (!host) return rpcError(404, `No git host the board knows serves ${grant.target.host}.`);
-    const server = createRunServer(grant, host);
+    let host: RunHost | null = null;
+    if (grant.target.kind === "pr") {
+      host = ctx().gitHost(grant.target.host);
+      if (!host) return rpcError(404, `No git host the board knows serves ${grant.target.host}.`);
+    }
+    const server = createRunServer({ grant, host, services: ctx().services() });
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,

@@ -28,6 +28,7 @@ import { createSql } from "./sql.ts";
 import { createSuggestionsRepo } from "./suggestions.ts";
 import { createTemplatesRepo } from "./templates.ts";
 import { createTasksRepo } from "./tasks.ts";
+import { createTaskSessionRequestsRepo } from "./taskSessionRequests.ts";
 import { createWorkingCopiesRepo } from "./workingCopies.ts";
 
 /** All table repositories over one database. */
@@ -58,6 +59,7 @@ export function createRepos(db: Db) {
     social: createSocialRepo(sql),
     suggestions: createSuggestionsRepo(sql),
     repoPrReviews: createRepoPrReviewsRepo(sql),
+    taskSessionRequests: createTaskSessionRequestsRepo(sql),
     sessionUsage: createSessionUsageRepo(sql),
     machineAuth: createMachineAuthRepo(sql),
     machines: createMachinesRepo(sql),

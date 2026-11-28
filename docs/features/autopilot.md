@@ -150,7 +150,8 @@ go ahead.
 automation runs with: Settings → Autopilot → Limits & safety → Defaults for agent runs. An automation's config only
 overrides it. The service lays it over the automation's own defaults (`agentDefaultsFor` in
 `autopilot/runnerOptions.ts`, used by `resolve`, the scope entries and the overview's `defaults`), key by key, for
-the keys the automation has a default for and whose value its schema accepts: Orchestrate has no runner or T3 access,
+the keys the automation has a default for and whose value its schema accepts: Orchestrate's runner is only the one
+the sessions it starts run on ([Task sessions](#task-sessions)), and it has no T3 access,
 and Review PRs, which takes only Auto or Headless, keeps its own runner when the board's is T3 Code. So a key comes
 from the most specific scope that sets it, else the board's agent default, else the automation's built-in default
 (`readRunnerOptions(config, board)` falls back the same way). The model isn't one of them: each kind of run has its
@@ -1106,23 +1107,27 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   job, and exactly `gh api repos/*/*/pulls/*/comments`, with or without ` --paginate`, for the inline review threads
   `gh pr view` doesn't show). A rule's `*` matches spaces too, and gh takes combined short flags (`-iXDELETE`), so
   `ORCHESTRATE_DENIED_SHELL` denies, anywhere after `gh api`, a word starting with `-` that holds an X, f or F, and
-  `--method` and `--input` (deny rules win): a write can't hide between the allowed rule's parts. The rules match each command, and a compound one is refused if any part isn't allowed, so the prompt tells it to run each `gh` command on its own (no loops, pipes or `&&`) and that a refusal is about the command's shape, not that Bash is off. It never edits code: it works through the board's tools, `message_task_thread` and `start_task_thread` (now
-  for any task), `retry_autopilot_run` and `request_attention`. Because it reads text anyone can
-  write (PR comments, CI logs), it gets only the board tools in `ORCHESTRATE_BOARD_TOOLS` (reads, `add_note`, `request_attention`, the
-  thread tools, `retry_autopilot_run`); every other board tool is in `ORCHESTRATE_DENIED_TOOLS`
+  `--method` and `--input` (deny rules win): a write can't hide between the allowed rule's parts. The rules match each command, and a compound one is refused if any part isn't allowed, so the prompt tells it to run each `gh` command on its own (no loops, pipes or `&&`) and that a refusal is about the command's shape, not that Bash is off. It never edits code: it works through the board's tools, `message_task_thread`, `retry_autopilot_run`,
+  `request_attention` and its own `start_task_session` ([Task sessions](#task-sessions)), a [run tool](#run-tools)
+  bound to its project (`runTools: { toolSet: "orchestrate", target: { kind: "project", projectId } }`), so no other
+  agent sees it and this one can't reach another project. Because it reads text anyone can
+  write (PR comments, CI logs), it gets only the board tools in `ORCHESTRATE_BOARD_TOOLS` (reads, `add_note`, `request_attention`,
+  `message_task_thread`, `retry_autopilot_run`); every other board tool is in `ORCHESTRATE_DENIED_TOOLS`
   (`RunnerRequest.deniedTools`), so it can't create or flag a task for auto-merge, link a PR, mark review findings away,
-  merge, or move, close, archive or delete tasks. `mcp.test.ts` checks every registered tool is on one list or the other. It never starts a Planned task: that is Start planned's, under its
+  merge, or move, close, archive or delete tasks. `start_task_thread` is denied too: a T3 thread started directly would
+  skip Autopilot's caps and quiet hours, which a session it asks for goes through. `mcp.test.ts` checks every registered tool is on one list or the other. It never starts a Planned task: that is Start planned's, under its
   limits and the task's blockers; a failed start goes back through `retry_autopilot_run`. It counts against the caps and waits
   out quiet hours like any agent run. The `orchestrate` operation (Standard tier by default); `modelChoice`, `budgetUsd` and `timeoutMinutes` (the board's
-  [agent defaults](#agent-defaults) unless set) are its only runner options (the runner choice doesn't apply).
+  [agent defaults](#agent-defaults) unless set) are its own run's options. It always runs headless: its **Sessions it
+  starts: Runner** field (`runner`, the board's agent default unless set) is only the sessions'.
 - **Merging.** Never (#127): `merge_task_pr` is always denied, and the prompt tells it to list the Review tasks whose
   PR looks ready, saying which are flagged for auto-merge, and leave merging to Merge ready PRs. Its old **May merge**
   setting is gone: migration `043_merge_ready_prs` switched Merge ready PRs on with Into main wherever Orchestrate was
   on with May merge (see [Merge ready PRs](#merge-ready-prs) above), and dropped the stored values.
 - **The prompt** (`orchestratePrompt`) is adapted from the babysitter threads: ground rules (this project only, never
   read or edit files in the project's live folder, since a board or dev server under `--watch` may restart, and treat
-  PR and CI text as data), orient, unstick stalled work the lightest way (message a live thread, start one only when
-  none is working, retry a failed run instead of pushing an empty commit, re-run a flaky CI job once,
+  PR and CI text as data), orient, unstick stalled work the lightest way (message a live thread, ask for a new session with `start_task_session` only when nothing is
+  working on the task, retry a failed run instead of pushing an empty commit, re-run a flaky CI job once,
   `request_attention` for what only the user can decide). Stalls are judged by the thread's status and the work's
   state, never by the age of the task's last board activity: a working thread or a pending or running local review
   round is activity (a reviewer can run for 40+ minutes and write nothing to the board). A Review task with no PR
@@ -1135,7 +1140,7 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   hold it, so the steps below stay reachable at the same head); otherwise Orchestrate reads the
   threads (`gh api …/comments`) and the conversation (`gh pr view --comments`), judges them, and takes the first of:
   retry a failed Fix PRs run with attempts left; retry Fix PRs' gave-up notice for a fresh budget (`freshBudget: true`) when the points
-  look fair and worth doing; message the task's thread (or start one) to fix or decline each thread, reply on each and
+  look fair and worth doing; message the task's thread (or, with none live, ask for a session) to fix or decline each thread, reply on each and
   push, when Fix PRs hasn't acted or its fresh budgets are used up; `request_attention` once, naming the threads, when
   their authors have no repository access, only the user can decide, or nothing is left to try. Its handover says
   which it did for which PR and head, so the next run doesn't repeat it. It ends with a short status. **Extra instructions** (multi-line) are appended last and win where they differ.
@@ -1143,6 +1148,61 @@ The built-in version of the T3 Code "babysitter" threads: a scheduled agent per 
   `scheduledHandoverParts` ends the prompt, `lastHandover("orchestrate", projectId)` supplies the last one, and the
   run keeps its `ScheduledAgentRunOutput`. Its settings section lists each project's latest runs with their summary
   and handover ([run history](#run-history)).
+
+#### Task sessions
+
+**Task sessions** (`task_sessions`, #211; `automations/taskSessions.ts`) starts the agent sessions Orchestrate asks
+for. It is **part of Orchestrate** (`Automation.partOf`): it has no switch or settings of its own, so it is on, in
+Preview or off wherever Orchestrate is and reads Orchestrate's config (the same schema and defaults). The service
+resolves it on Orchestrate's settings rows (`switchKey` in `chainFor`), refuses `setScope` on it, and leaves it out of
+the automations list, the scope popovers, the hints and auto-pause; `AutopilotOverview.parts` names it instead, and the
+run history lists it as **Orchestrate › Task sessions** (`automationChoices`). Its runs are ordinary task runs: they
+count against the caps, wait out quiet hours and Pause all, record their cost, show in the task's Autopilot section
+and can be retried.
+
+- **Asking.** An Orchestrate run calls `start_task_session(task, note)`, served to that run only
+  (`mcp/runTools.ts`, set `orchestrate`). `TaskSessionsService.request` refuses, with the reason (`CONFLICT: Not
+  started: …`), an epic, a manual task, an archived one, one in Planned (Start planned's; the refusal names
+  `retry_autopilot_run(…, "start_planned")`), Backlog or Done, a blocked task, a project with neither a folder nor a T3
+  project, a task with a T3 thread or agent session at work (`agentAtWorkOn` in contracts: a busy thread that isn't a
+  follow-up, one linked in the last two minutes, or a busy session), one with an Autopilot run queued or running, one
+  outside the run's project, one a connected machine holds whose own Autopilot looks after it (the board runs no
+  automation on it, `boardPlacement`, and the machine has no Task sessions; `heldElsewhere`), and one a session was
+  asked for on in the last hour (`TASK_SESSION_COOLDOWN_MS`). The
+  rules are `sessionRefusal`, which the run checks again. Otherwise it stores a row in `task_session_requests`
+  (migration 058: task, project, note, actor, the asking run, created at, the run that took it up, and why it was
+  dropped), adds a note to the task ("Orchestrate asked for a new agent session …", through the task service so a held
+  task's machine gets it) and publishes `autopilot.changed`, which starts a pass. Requests are history: backups leave
+  them out, and a deleted task takes its own.
+- **Check.** Each request from the last day not dropped and without a run of its key (`task_sessions:<requestId>`)
+  is a candidate. A waiting request is dropped (`dropped_at`, `dropped_reason`) when its task is gone, when a machine whose
+  Autopilot looks after it has since taken it, when Orchestrate is off in its project, or after two hours without room
+  to run (`TASK_SESSION_REQUEST_TTL_MS`), so a session never starts long after the stall it was for. A dropped request
+  adds a note to its task saying why, so the next Orchestrate run knows no session came. Like Start planned, it leaves room in the concurrency cap for T3 threads
+  still working (`workingAgents`, which counts both automations' threads).
+- **Action.** Re-checks `sessionRefusal` (without its own run) and skips with the reason if the task moved on, then
+  `runner.start` with operation `taskRun` and only `{ runner }` from Orchestrate's config as options: budget, timeout
+  and T3 access are the board's [agent defaults](#agent-defaults), and the model and, headless, the provider are what
+  Settings → Agents gives task runs ([Models](#models)). Nothing names a CLI: Auto is T3 Code when it is connected, else
+  headless on the first provider that can run it. The prompt is `taskHandoffPrompt` in work mode, then Orchestrate's
+  note in `<orchestrate-note>` tags, marked as Orchestrate's and not the user's (the task, plan and notes win), then
+  where it works and an unattended note (block a step and stop rather than ask; move to Review when done; never
+  force-push, push to the default branch or merge). `taskSessionPrompt` builds it.
+- **Workspace** (`sessionWorkspace`). A task with an open or draft PR on its own repository's branch with a known head
+  works on that branch at that head (`workspace.branch` + `expectHead`; the prompt says to push there and not open
+  another PR). A head that moved before the agent started skips the run as Deferred: head moved, and notes on the task that
+  Orchestrate may ask again (a skipped session isn't retried). Otherwise a new
+  branch from the default branch, or from an integration epic's branch (`prBase`); since an earlier session's work may
+  be only in its own worktree, the prompt says to read the task's notes and activity first.
+- **Retrying.** A failed run (a CLI missing, T3 refusing) is flagged on the task. `retry_autopilot_run` frees its key,
+  so the request runs again on the next pass, within a day of the request; the run takes the request up again. A
+  skipped run (the task moved on, or got an agent) did nothing, so it isn't retryable (`canRetryRun` in contracts, so
+  the Retry buttons and `retry_autopilot_run`'s default pick pass it over; `retryRefusal` gives the service's reason): a
+  new session is asked for again, under the once-an-hour rule. A failed run's retry is refused too, with the reason,
+  when its request couldn't run again: dropped, more than a day old (`TASK_SESSION_RETRY_MS`), its task now held by a
+  machine whose Autopilot looks after it, or Orchestrate off in its project (`retryRefusal` gets the board's services
+  for this, as its third argument). A retried request that can no longer run by the next pass (Orchestrate switched
+  off in its project, or a machine took the task) is dropped with a note on the task, like a waiting one.
 
 **Start planned tasks** (`start_planned`, #94; `automations/startPlanned.ts`). Needs an agent, so it counts against
 the caps and waits out quiet hours. Off until switched on. The headline automation: it starts an agent on a task.
@@ -1918,8 +1978,8 @@ A headless run that reads a git host gets that host's reads as tools the board s
 and tool rules only Claude Code can follow ([ADR 0013](../decisions/0013-board-served-run-tools.md)):
 
 - **The scope.** `RunnerRequest.runTools` is `{toolSet, target}` (`mcp/runTokens.ts`): one tool set per kind of
-  operation and the one thing it reads. The sets are `prReview` (a task's PR) and `repoPrReview` (another person's
-  PR); the target is a PR.
+  operation and the one thing it is bound to. The sets are `prReview` (a task's PR) and `repoPrReview` (another person's
+  PR), whose target is a PR, and `orchestrate`, whose target is a project (`{ kind: "project", projectId }`).
 - **The token.** `runOnDriver` mints one before the agent starts (`RunTokens.mint`, through the runner's `runTools`
   dep): 32 random bytes, kept in memory by its SHA-256 only, alive for the run's timeout plus five minutes and never
   more than a day (`RUN_TOKEN_MAX_TTL_MS`). It writes the MCP config (`runToolsMcpConfig`) to a temp folder of its own
@@ -1941,6 +2001,10 @@ and tool rules only Claude Code can follow ([ADR 0013](../decisions/0013-board-s
   resolved or not, each comment with its id and author, Autopilot's own threads marked, read through
   `GitHost.readRepoPr`) and `repo_issue(number)` (one issue of the PR's own repository: the issues it closes and the
   open ones that mention it). Neither reads another repository.
+- **Orchestrate's set** (`orchestrate`): only `start_task_session(task, note)`, the one run tool that writes. It
+  writes nothing but a request on the board ([Task sessions](#task-sessions)), for a task in the grant's project,
+  under the actor `autopilot` with the run's id; the board decides whether and when a session runs, under the user's
+  switches and limits ([ADR 0018](../decisions/0018-run-tools-may-ask-the-board.md)). It reads no git host.
 - **What they read through.** A `GitHost` (`integrations/gitHost.ts`): `getPr`, `listFiles` (with each file's patch),
   `getDiff(path, page)`, `getComments` (conversation comments, review bodies and inline comments with their ids,
   oldest first) and `getIssue` (`GitHostReads`, found by the run's target host through the `GitHosts` registry). GitHub's
@@ -1985,7 +2049,7 @@ each with what it needs from the provider and a default that is a tier or inheri
 | Reviewer subagent (`reviewer`)               | inherit | nothing (it is a line in the brief)      |
 | Board reviewer (`boardReviewer`)             | standard | structured output, tool rules           |
 | PR review (`prReview`)                       | standard | structured output, untrusted lockdown, run tools |
-| Orchestrate (`orchestrate`)                  | standard | untrusted lockdown, tool rules          |
+| Orchestrate (`orchestrate`)                  | standard | untrusted lockdown, tool rules, run tools |
 | Improve automations (`improve`)              | deep    | untrusted lockdown, tool rules           |
 | Digest (`digest`)                            | light   | no tools                                 |
 | Custom agents on a task (`customTask`)       | inherit | edit                                     |
@@ -2309,6 +2373,8 @@ while the key is set at that scope) removes the key so it inherits.
 | `apps/server/src/autopilot/automations/autoArchive.ts` | Auto-archive Done |
 | `apps/server/src/autopilot/automations/startPlanned.ts` | Start planned tasks |
 | `apps/server/src/autopilot/automations/orchestrate.ts` | Orchestrate: the schedule, Run now, its state, the tools it gets and `orchestratePrompt` |
+| `apps/server/src/autopilot/automations/taskSessions.ts` | Task sessions: the requests' candidates, the session's prompt and workspace |
+| `apps/server/src/services/taskSessions.ts`, `db/repos/taskSessionRequests.ts` | `start_task_session`'s requests and `sessionRefusal` |
 | `apps/server/src/mcp/tools/autopilot.ts` | `retry_autopilot_run`, `draft_automation` |
 | `apps/server/src/autopilot/reminders.ts` | The quiet-task, waiting-thread and unblocked reminders (`sendReminders`) |
 | `apps/server/src/autopilot/automations/reviewPrs.ts` | Review PRs: the trigger, the prompt, the verdict and the hand-off, carried verdicts and resolution reviews |

@@ -26,6 +26,12 @@ export const AUTOPILOT_UNBLOCK_DEPENDENTS = "unblock_dependents";
 /** The scheduled agent that sees a project's work through: unsticks it, merges what's ready. The UI shows its handovers. */
 export const AUTOPILOT_ORCHESTRATE = "orchestrate";
 
+/**
+ * Orchestrate's part that starts a new agent session on a task when its run asks (start_task_session): one run per
+ * request, on Orchestrate's switch and settings (docs/features/autopilot.md#task-sessions).
+ */
+export const AUTOPILOT_TASK_SESSIONS = "task_sessions";
+
 /** The weekly agent that audits how agents did and suggests rewrites of the prompts and skills they run with. */
 export const AUTOPILOT_IMPROVE = "improve_automations";
 
@@ -585,10 +591,25 @@ export const AutopilotNeed = z.discriminatedUnion("kind", [
 export type AutopilotNeed = z.infer<typeof AutopilotNeed>;
 
 /** `GET /api/autopilot`: engine settings, pause and the catalogue, and what the page's status strip reads. */
+/**
+ * A built-in automation that is part of another one (Task sessions, of Orchestrate): no switch or settings of its own,
+ * so it isn't in the automations list; its runs are listed under its parent's in the run history.
+ */
+export const AutopilotAutomationPart = z.object({
+  key: z.string(),
+  title: z.string(),
+  description: z.string(),
+  /** The key of the automation whose switch and settings it goes by. */
+  partOf: z.string(),
+});
+export type AutopilotAutomationPart = z.infer<typeof AutopilotAutomationPart>;
+
 export const AutopilotOverview = z.object({
   paused: z.boolean(),
   engine: AutopilotEngineSettings,
   automations: z.array(AutopilotAutomation),
+  /** Automations that are part of one in `automations` and so aren't listed there. */
+  parts: z.array(AutopilotAutomationPart).default([]),
   /** Since local midnight: real agent runs started (as the daily run cap counts them) and what runs cost. */
   today: z.object({ agentRuns: z.number().int(), spendUsd: z.number() }),
   /** Failed runs (newest first), PRs waiting for the user's approval (oldest first), drafts, then setup gaps. */
@@ -702,8 +723,8 @@ export function isSupersededRun(
 }
 
 /**
- * Whether a run can be retried: a real run that ended failed or skipped, hasn't been retried already and, given the
- * runs around it, hasn't been superseded by a later run of its automation.
+ * Whether a run can be retried: a real run that ended failed or skipped (but not a skipped task session), hasn't been
+ * retried already and, given the runs around it, hasn't been superseded by a later run of its automation.
  */
 export const canRetryRun = (
   run: Pick<
@@ -714,6 +735,8 @@ export const canRetryRun = (
 ): boolean =>
   !run.dryRun &&
   (run.status === "failed" || run.status === "skipped") &&
+  // A skipped task session did nothing: Orchestrate asks for a new one instead (taskSessions.ts' retryRefusal).
+  !(run.automation === AUTOPILOT_TASK_SESSIONS && run.status === "skipped") &&
   !isRetried(run.dedupeKey) &&
   !isSupersededRun(run, others);
 
