@@ -1,20 +1,25 @@
-import { ExternalLinkIcon, RotateCwIcon } from "lucide-react";
+import { ExternalLinkIcon, RotateCwIcon, ScrollTextIcon } from "lucide-react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
 import { SettingsRow, SettingsSection } from "~/components/settings/settingsLayout";
 import { useNow } from "~/hooks/useNow";
+import { useDialogs } from "~/state/ui";
 import { updateStatusView } from "./desktopUpdate.logic";
 import { useDesktopUpdate, type DesktopUpdate } from "./useDesktopUpdate";
+import { useReleaseNotes, type ReleaseNotes } from "./useReleaseNotes";
 
 /** Settings → Board → Desktop app: the app's version and its updates. Only in the desktop shell. */
 export function DesktopAppSection() {
   const update = useDesktopUpdate();
+  // Null in a shell from before release notes, which then has no rows for them.
+  const notes = useReleaseNotes();
   if (!update) return null;
-  return <DesktopAppRows update={update} />;
+  return <DesktopAppRows update={update} notes={notes} />;
 }
 
-function DesktopAppRows({ update }: { update: DesktopUpdate }) {
+function DesktopAppRows({ update, notes }: { update: DesktopUpdate; notes: ReleaseNotes | null }) {
+  const openReleaseNotes = useDialogs((s) => s.openReleaseNotes);
   const { state } = update;
   // Keeps "Checked 12 minutes ago" current while the page is open.
   const now = useNow(60_000, state.status === "up-to-date");
@@ -106,6 +111,33 @@ function DesktopAppRows({ update }: { update: DesktopUpdate }) {
           />
         }
       />
+      {notes ? (
+        <>
+          <SettingsRow
+            id="board.desktop.release-notes"
+            title="Release notes"
+            description="What each version brought, newest first, from the project's GitHub releases."
+            control={
+              <Button size="sm" variant="outline" onClick={() => openReleaseNotes({ mode: "history" })}>
+                <ScrollTextIcon />
+                View
+              </Button>
+            }
+          />
+          <SettingsRow
+            id="board.desktop.show-release-notes"
+            title="Show release notes after updating"
+            description="Opens them on the first launch of a new version, with everything since the version you last saw."
+            control={
+              <Switch
+                aria-label="Show release notes after updating"
+                checked={notes.whatsNew.showReleaseNotes}
+                onCheckedChange={notes.setShowReleaseNotes}
+              />
+            }
+          />
+        </>
+      ) : null}
     </SettingsSection>
   );
 }

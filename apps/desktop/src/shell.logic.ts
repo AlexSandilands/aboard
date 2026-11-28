@@ -1,8 +1,11 @@
 import {
   BRAND,
+  GitHubApiRelease,
   Health,
+  splitReleaseNotes,
   type DesktopBadge,
   type DesktopNotification,
+  type DesktopRelease,
   type DesktopTheme,
   type DesktopUpdateMode,
   type DesktopUpdateState,
@@ -266,12 +269,22 @@ export function reduceUpdate(state: DesktopUpdateState, event: UpdateEvent): Des
 const OFFLINE =
   /\b(404|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|net::ERR_[A-Z_]+|fetch failed|socket hang up)\b/i;
 
-/** A check's or download's failure as one sentence for Settings. */
-export function describeUpdateError(error: unknown): string {
+/** A failure as one sentence: `offline` when it was the network, or else the error's first line. */
+function describeError(error: unknown, offline: string): string {
   const message = error instanceof Error ? error.message : String(error);
-  if (OFFLINE.test(message)) return "Couldn't reach GitHub, or the release isn't up yet. Tries again within the hour.";
+  if (OFFLINE.test(message)) return offline;
   const first = message.split("\n").find((line) => line.trim()) ?? "Unknown error";
   return first.length > 200 ? `${first.slice(0, 199)}…` : first;
+}
+
+/** A check's or download's failure as one sentence for Settings. */
+export function describeUpdateError(error: unknown): string {
+  return describeError(error, "Couldn't reach GitHub, or the release isn't up yet. Tries again within the hour.");
+}
+
+/** Why the release notes couldn't be read, for the dialog. */
+export function describeReleasesError(error: unknown): string {
+  return describeError(error, "Couldn't reach GitHub.");
 }
 
 /** The `version:` of an electron-builder feed (`latest-linux.yml`), without a YAML parser. */
@@ -354,4 +367,64 @@ export function updateNotification(state: DesktopUpdateState): { title: string; 
     return { title: `${BRAND.name} v${state.version} is available`, body: how };
   }
   return null;
+}
+
+/** Newest first; anything that isn't a release version sorts last. */
+function byVersionDesc(a: DesktopRelease, b: DesktopRelease): number {
+  if (isNewerVersion(a.version, b.version)) return -1;
+  if (isNewerVersion(b.version, a.version)) return 1;
+  return 0;
+}
+
+/**
+ * The published releases in a GitHub API response, newest first. Drafts and prereleases are dropped, and so is any tag
+ * that isn't `v<semver>`: the rolling `pacman` release (docs/features/releases.md) and anything hand-made. An entry
+ * that doesn't fit the shape is skipped, not fatal; a response that isn't a list is null.
+ */
+export function parseGitHubReleases(value: unknown): DesktopRelease[] | null {
+  if (!Array.isArray(value)) return null;
+  const releases: DesktopRelease[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const parsed = GitHubApiRelease.safeParse(entry);
+    if (!parsed.success) continue;
+    const release = parsed.data;
+    if (release.draft || release.prerelease) continue;
+    const version = /^v(\d+\.\d+\.\d+)$/.exec(release.tag_name)?.[1];
+    if (!version || !isReleaseVersion(version) || seen.has(version)) continue;
+    seen.add(version);
+    const { highlights, details } = splitReleaseNotes(release.body);
+    releases.push({
+      version,
+      name: release.name?.trim() || `v${version}`,
+      publishedAt: release.published_at ?? null,
+      url: release.html_url,
+      highlights,
+      details,
+    });
+  }
+  return releases.sort(byVersionDesc);
+}
+
+/** The releases after `from` up to and including `to`: what's new to someone who last saw `from` and now runs `to`. */
+export function releasesBetween(list: readonly DesktopRelease[], from: string, to: string): DesktopRelease[] {
+  return list.filter((release) => isNewerVersion(release.version, from) && !isNewerVersion(release.version, to));
+}
+
+/**
+ * Whether this launch should open the release notes by itself, and whether to record the running version as seen
+ * now. A fresh install (nothing seen yet) records it and shows nothing; so does a downgrade, or an update with the
+ * notes turned off, so turning them back on later doesn't open a backlog of releases. Builds whose updates are off
+ * (dev, sandbox, from source) do neither.
+ */
+export function pendingWhatsNew(
+  prefs: { lastSeenVersion: string | null; showReleaseNotes: boolean },
+  currentVersion: string,
+  mode: DesktopUpdateMode,
+): { since: string | null; record: boolean } {
+  if (mode === "disabled" || !isReleaseVersion(currentVersion)) return { since: null, record: false };
+  const seen = prefs.lastSeenVersion;
+  if (seen === null || seen === currentVersion) return { since: null, record: seen === null };
+  if (prefs.showReleaseNotes && isNewerVersion(currentVersion, seen)) return { since: seen, record: false };
+  return { since: null, record: true };
 }

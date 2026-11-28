@@ -96,6 +96,19 @@ Where each automation runs in each project is its **Where it runs** table, or th
 - **Check for updates automatically** (here or in the tray) stops the hourly check. **Check now** still works.
 - The first release with updates can't update an older install: install it by hand once.
 
+### What's new after an update
+
+The first time the app starts on a new version, it shows the **release notes** for every version since the one you
+last saw: the new ones are marked with a dot and listed first, newest selected. Each version has its highlights,
+and **Details** opens the full list of changes. **View on GitHub** opens the release page.
+
+- Tick **Don't show after updates**, or turn off **Show release notes after updating** in Board → Desktop app, and
+  it won't open by itself again.
+- **Release notes → View** in the same section opens them any time, for every version.
+- The notes are read from GitHub. Offline, the dialog says so and **View on GitHub** opens them in the browser once
+  you're back.
+- The first version with release notes starts counting from itself, so they open from the update after it.
+
 ## Models
 
 Every place you choose a model uses the same picker: the providers you added down the side, a search over their

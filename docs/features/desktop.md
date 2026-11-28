@@ -148,6 +148,42 @@ in the background, and installs only when you click **Restart to update**.
   builds an app that checks; `brandEnv("UPDATE_FEED_URL")` set to a URL while packaging (test builds only, see
   `package.ts`) points it at a `generic` feed you serve yourself, with a newer build's AppImage and `latest-linux.yml`.
 
+### Release notes
+
+After an update, the first launch on the new version opens a **release notes dialog** with every release since the
+version last seen. The same dialog opens any time from Settings → Desktop app → **Release notes** as the whole history.
+
+- **When it opens** (`pendingWhatsNew` in `shell.logic.ts`, at start in `main.ts`). The shell keeps `lastSeenVersion`
+  in `prefs.json`. On the first launch of a newer version, with `showReleaseNotes` on (default), the releases after
+  `lastSeenVersion` up to the running one are new, on every desktop install, self-updating or not. A fresh install
+  (no `lastSeenVersion`, which includes an install from before release notes), a downgrade, or an update with the
+  notes off only records the running version and shows nothing. Builds whose updates are off (dev, sandbox, from
+  source) neither show nor record. Closing the dialog (`dismissWhatsNew`) sets `lastSeenVersion` to the running
+  version; its **Don't show after updates** box also turns `showReleaseNotes` off, as does the **Show release notes
+  after updating** switch in Settings.
+- **Where the notes come from** (`apps/desktop/src/releases.ts`). The shell reads
+  `api.github.com/repos/<owner>/<repo>/releases` (`BRAND_REPOSITORY`) with `net.fetch` and a 20-second timeout, the
+  first time the page asks, and keeps the list for the run; a failure isn't kept, so opening the dialog again retries.
+  `parseGitHubReleases` checks each entry (`GitHubApiRelease` in contracts) and drops drafts, prereleases, the
+  `pacman` release and any tag that isn't `vX.Y.Z`; releases newer than the running version are left out. Each body is
+  split with `splitReleaseNotes` (contracts) at `## Details`, or `## What's Changed` in releases from before the format
+  ([releases](releases.md#release-notes)). Unauthenticated, GitHub allows 60 requests an hour per address; one per
+  run is far below that, and a 403 says so.
+- **The dialog** (`components/desktop/ReleaseNotesDialog.tsx`, mounted once in `AppShell` by `ReleaseNotesHost`,
+  driven by `useDialogs().releaseNotes`). Versions on the left, the selected release on the right: its Highlights
+  through `Markdown` (images off), then a folded **Details** with the generated list. After an update the list puts
+  "New since vX" (each with a dot) above "Earlier" and opens on the newest; from Settings it opens on the running
+  version. A release with no Highlights says so and opens its Details. Below `sm` the list is a strip above the notes.
+  If GitHub can't be reached the dialog says why, and **View on GitHub** opens the releases page instead.
+- **Bridge.** `getWhatsNew` (`DesktopWhatsNew`: the running version, `since`, `showReleaseNotes`), `listReleases`
+  (`DesktopReleaseList`), `dismissWhatsNew(stopShowing)` and `setShowReleaseNotes`, all optional, so the page shows
+  neither the dialog nor its Settings rows in a shell from before them. `useReleaseNotes` asks once per page load and
+  validates what comes back. The tray's "vX available: release notes" item and the notice-only **Release notes**
+  button still open the GitHub page (`openReleaseNotes`).
+- **Trying it.** A sandbox shell honours `brandEnv("WHATS_NEW_SINCE")`: `<PREFIX>_WHATS_NEW_SINCE=0.9.0 pnpm sandbox
+  --desktop` opens the dialog as if updated from v0.9.0, with the real releases from GitHub. It is read only when
+  the shell is a sandbox shell.
+
 ### Building and packaging
 
 - `scripts/build.ts`: esbuild bundles `src/main.ts` (ESM) and `src/preload.ts` (CJS, since the preload is
@@ -205,8 +241,10 @@ home; `--desktop` waits a few seconds and reports the log if the shell exits at 
 | File                                  | What it does                                                     |
 | ------------------------------------- | ---------------------------------------------------------------- |
 | `apps/desktop/src/main.ts`            | Window, tray, single instance, quit, theme IPC                   |
-| `apps/desktop/src/desktopPrefs.ts`    | `prefs.json`: tray icon style, auto-check, last notified update  |
+| `apps/desktop/src/desktopPrefs.ts`    | `prefs.json`: tray icon style, auto-check, last notified update, release notes seen and shown |
 | `apps/desktop/src/updater.ts`         | `Updater`: checks, downloads, installs; the update state         |
+| `apps/desktop/src/releases.ts`        | `ReleaseFeed`: the published releases from the GitHub API, once per run |
+| `apps/web/src/components/desktop/ReleaseNotesDialog.tsx` | The release notes dialog; `ReleaseNotesHost` opens it after an update |
 | `apps/desktop/src/icon.ts`            | Window, tray and menu icon images                                |
 | `apps/desktop/src/server.ts`          | `connectServer`: probe, attach, spawn, stop                      |
 | `apps/desktop/src/shell.logic.ts`     | Pure helpers (tested): health check, navigation, log tail, update mode and state |

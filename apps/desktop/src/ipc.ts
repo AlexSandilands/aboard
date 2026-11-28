@@ -13,3 +13,9 @@ export const CHECK_FOR_UPDATES_CHANNEL = "desktop:check-for-updates";
 export const INSTALL_UPDATE_CHANNEL = "desktop:install-update";
 export const SET_AUTO_CHECK_UPDATES_CHANNEL = "desktop:set-auto-check-updates";
 export const OPEN_RELEASE_NOTES_CHANNEL = "desktop:open-release-notes";
+/** Page to main (invoke): whether this launch opens the release notes (`DesktopWhatsNew`). */
+export const GET_WHATS_NEW_CHANNEL = "desktop:get-whats-new";
+/** Page to main (invoke): the published releases (`DesktopReleaseList`). */
+export const LIST_RELEASES_CHANNEL = "desktop:list-releases";
+export const DISMISS_WHATS_NEW_CHANNEL = "desktop:dismiss-whats-new";
+export const SET_SHOW_RELEASE_NOTES_CHANNEL = "desktop:set-show-release-notes";

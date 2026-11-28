@@ -388,6 +388,13 @@ interface DialogsState {
   sessionWarning: { taskId: string; linkId: string; snapshot: AgentSessionSnapshot | null } | null;
   /** The save or rename dialog for a saved view: `save` stores the board's current filters, `rename` renames the view. */
   viewDialog: { kind: "save" } | { kind: "rename"; viewId: string } | null;
+  /**
+   * The desktop app's release notes: `update` after an update, with the version the user last saw (`since`), or
+   * `history` from Settings.
+   */
+  releaseNotes: { mode: "update"; since: string } | { mode: "history" } | null;
+  openReleaseNotes: (dialog: NonNullable<DialogsState["releaseNotes"]>) => void;
+  closeReleaseNotes: () => void;
   setDigestOpen: (open: boolean) => void;
   openViewDialog: (dialog: NonNullable<DialogsState["viewDialog"]>) => void;
   closeViewDialog: () => void;
@@ -432,6 +439,7 @@ export function anyDialogOpen(state: DialogsState): boolean {
   return (
     state.digestOpen ||
     state.viewDialog !== null ||
+    state.releaseNotes !== null ||
     state.t3Launch !== null ||
     state.planPicker !== null ||
     state.planSession !== null ||
@@ -447,6 +455,7 @@ export function anyDialogOpen(state: DialogsState): boolean {
 export const useDialogs = create<DialogsState>()((set) => ({
   digestOpen: false,
   viewDialog: null,
+  releaseNotes: null,
   t3Launch: null,
   sessionLaunch: null,
   planPicker: null,
@@ -460,6 +469,8 @@ export const useDialogs = create<DialogsState>()((set) => ({
   setDigestOpen: (digestOpen) => set({ digestOpen }),
   openViewDialog: (viewDialog) => set({ viewDialog }),
   closeViewDialog: () => set({ viewDialog: null }),
+  openReleaseNotes: (releaseNotes) => set({ releaseNotes }),
+  closeReleaseNotes: () => set({ releaseNotes: null }),
   openT3Launch: (taskId, fixLinkId, preset) =>
     set({ t3Launch: { kind: "task", taskId, ...(fixLinkId ? { fixLinkId } : {}), ...(preset ? { preset } : {}) } }),
   openProjectT3Launch: (projectId) => set({ t3Launch: { kind: "project", projectId } }),

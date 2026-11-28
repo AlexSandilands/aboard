@@ -214,6 +214,18 @@ const WRITTEN: ReadonlyArray<Draft> = [
     "Checks an hour apart and downloads new versions in the background. Nothing installs until you restart.",
     ["auto-update", "automatic updates", "background", "tray"],
   ),
+  draft(
+    "board.desktop.release-notes",
+    "Release notes",
+    "What each version of the desktop app brought, newest first, from the project's GitHub releases.",
+    ["release notes", "changelog", "what's new", "whats new", "history", "versions"],
+  ),
+  draft(
+    "board.desktop.show-release-notes",
+    "Show release notes after updating",
+    "Opens the release notes on the first launch of a new version.",
+    ["release notes", "what's new", "after update", "changelog"],
+  ),
   // Board › Data
   draft("board.data.backup", "Backup", "Writes the board as JSON into a git repo and commits when it changes.", [
     "git",
