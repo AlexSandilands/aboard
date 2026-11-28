@@ -10,7 +10,13 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-const DEFAULTS = { trayIcon: "colour", autoCheckUpdates: true, notifiedUpdate: null };
+const DEFAULTS = {
+  trayIcon: "colour",
+  autoCheckUpdates: true,
+  notifiedUpdate: null,
+  lastSeenVersion: null,
+  showReleaseNotes: true,
+};
 
 describe("parsePrefs", () => {
   it("keeps a known tray icon style", () => {
@@ -33,6 +39,25 @@ describe("parsePrefs", () => {
     expect(parsePrefs({ autoCheckUpdates: "no", notifiedUpdate: 3 })).toEqual(DEFAULTS);
   });
 
+  it("keeps the release notes settings, showing them unless told not to", () => {
+    expect(parsePrefs({ lastSeenVersion: "0.11.0", showReleaseNotes: false })).toEqual({
+      ...DEFAULTS,
+      lastSeenVersion: "0.11.0",
+      showReleaseNotes: false,
+    });
+    expect(parsePrefs({ lastSeenVersion: 11, showReleaseNotes: "no" })).toEqual(DEFAULTS);
+    expect(parsePrefs({ lastSeenVersion: "x".repeat(51) })).toEqual(DEFAULTS);
+  });
+
+  it("reads a file from before release notes as a fresh install that shows them", () => {
+    expect(parsePrefs({ trayIcon: "white", autoCheckUpdates: false, notifiedUpdate: "1.5.0" })).toEqual({
+      ...DEFAULTS,
+      trayIcon: "white",
+      autoCheckUpdates: false,
+      notifiedUpdate: "1.5.0",
+    });
+  });
+
   it("reads a file from before update settings with them on", () => {
     expect(parsePrefs({ trayIcon: "white" })).toEqual({ ...DEFAULTS, trayIcon: "white" });
   });
@@ -45,7 +70,13 @@ describe("readPrefs and writePrefs", () => {
 
   it("round trips, creating the directory", () => {
     const nested = join(dir, "profile");
-    const prefs = { trayIcon: "black", autoCheckUpdates: false, notifiedUpdate: "1.5.0" } as const;
+    const prefs = {
+      trayIcon: "black",
+      autoCheckUpdates: false,
+      notifiedUpdate: "1.5.0",
+      lastSeenVersion: "1.4.0",
+      showReleaseNotes: false,
+    } as const;
     writePrefs(nested, prefs);
     expect(readPrefs(nested)).toEqual(prefs);
     expect(readdirSync(nested)).toEqual(["prefs.json"]);

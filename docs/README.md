@@ -75,7 +75,7 @@ files under each app.
 - [Agent sessions](features/agent-sessions.md): linked Claude Code, Codex and Copilot CLI sessions, their status, resuming them in a terminal
 - [Local review](features/local-review.md): the review loop before a PR
 - [Desktop app](features/desktop.md): the Electron shell
-- [Releases](features/releases.md): cutting a release, the installers and the pacman repo CI builds for it
+- [Releases](features/releases.md): cutting a release (by hand or with the release skill), the release notes format the desktop app reads, the installers and the pacman repo CI builds for it
 - [Remote machines](features/remote-machines.md): the runner role, the headless server release with its own Node, the background service, and held tasks: working copies, the change log, replay and machine-prefixed numbers
 - [GitHub setup](features/github-setup.md): the rulesets on `main` and release tags, repo options, Dependabot, applying them
 - [Notifications](features/notifications.md): the attention inbox, OS pop-ups, badges

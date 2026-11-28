@@ -65,6 +65,87 @@ export const DesktopUpdateState = z.object({
 export type DesktopUpdateState = z.infer<typeof DesktopUpdateState>;
 
 /**
+ * A published release as the release notes dialog shows it. The shell reads the GitHub release and splits its body
+ * with `splitReleaseNotes`: `highlights` is the user-facing Markdown (empty when the release has none), `details` the
+ * generated list of pull requests.
+ */
+export const DesktopRelease = z.object({
+  /** `1.4.2`, without the tag's `v`. */
+  version: z.string(),
+  name: z.string(),
+  /** ISO 8601, or null when GitHub gives none. */
+  publishedAt: z.string().nullable(),
+  /** The release page. */
+  url: z.string(),
+  highlights: z.string(),
+  details: z.string(),
+});
+export type DesktopRelease = z.infer<typeof DesktopRelease>;
+
+/**
+ * Every published release up to the running version, newest first; or why they couldn't be read, with the page that
+ * lists them on GitHub instead.
+ */
+export const DesktopReleaseList = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), releases: z.array(DesktopRelease) }),
+  z.object({ ok: z.literal(false), error: z.string(), url: z.string().nullable() }),
+]);
+export type DesktopReleaseList = z.infer<typeof DesktopReleaseList>;
+
+/**
+ * Whether the release notes dialog should open by itself. `since` is the version the user last saw when this launch is
+ * the first on a newer one (the releases after it, up to `currentVersion`, are new); null otherwise: a fresh install,
+ * the same version, updates turned off by the build, or `showReleaseNotes` off.
+ */
+export const DesktopWhatsNew = z.object({
+  currentVersion: z.string(),
+  since: z.string().nullable(),
+  /** Show the release notes after an update (prefs; the dialog's checkbox and the Settings switch). */
+  showReleaseNotes: z.boolean(),
+});
+export type DesktopWhatsNew = z.infer<typeof DesktopWhatsNew>;
+
+/**
+ * The fields of an entry in GitHub's `GET /repos/{owner}/{repo}/releases` that the shell reads for the release notes;
+ * the rest is ignored. Here rather than in the shell, which has no zod of its own.
+ */
+export const GitHubApiRelease = z.object({
+  tag_name: z.string(),
+  name: z.string().nullable().optional(),
+  body: z.string().nullable().optional(),
+  draft: z.boolean().optional(),
+  prerelease: z.boolean().optional(),
+  published_at: z.string().nullable().optional(),
+  html_url: z.string(),
+});
+
+/** A release body split into what the dialog shows first and the generated list it folds away. */
+export interface ReleaseNotesParts {
+  highlights: string;
+  details: string;
+}
+
+/** A line that starts the generated part: `## Details`, or `## What's Changed` in releases from before the format. */
+const DETAILS_HEADING = /^##[ \t]+(details|what['’]s changed)[ \t]*#*[ \t]*$/im;
+const HIGHLIGHTS_HEADING = /^##[ \t]+highlights[ \t]*#*[ \t]*$/im;
+
+/**
+ * Splits a release body (docs/features/releases.md: `## Highlights`, then `## Details`) at its Details heading. The
+ * headings themselves are dropped. A body with neither heading is all highlights, as a hand-written one would be.
+ */
+export function splitReleaseNotes(body: string | null | undefined): ReleaseNotesParts {
+  const text = (body ?? "").replace(/\r\n?/g, "\n");
+  const details = DETAILS_HEADING.exec(text);
+  const head = details ? text.slice(0, details.index) : text;
+  const tail = details ? text.slice(details.index + details[0].length) : "";
+  const highlights = HIGHLIGHTS_HEADING.exec(head);
+  return {
+    highlights: (highlights ? head.slice(highlights.index + highlights[0].length) : head).trim(),
+    details: tail.trim(),
+  };
+}
+
+/**
  * The unread count as the shell shows it: a number on the taskbar button and a dot on the tray icon. Windows has no
  * numeric badge API, only an overlay image, so the page draws one (`overlay`, a PNG data URL) and the shell applies it.
  */
@@ -102,6 +183,19 @@ export interface DesktopBridge {
   setAutoCheckUpdates?(enabled: boolean): void;
   /** Opens the release page of the newer version (or the releases list) in the browser. */
   openReleaseNotes?(): void;
+  /**
+   * The release notes dialog. Optional, like the update methods: a shell from before release notes has none, and
+   * the page then never opens the dialog. `getWhatsNew` says whether this launch should open it (see
+   * `DesktopWhatsNew`); `listReleases` fetches the published releases from GitHub, once per run.
+   */
+  getWhatsNew?(): Promise<DesktopWhatsNew>;
+  listReleases?(): Promise<DesktopReleaseList>;
+  /**
+   * The dialog was closed: the running version counts as seen, so it doesn't open again until the next update.
+   * `stopShowing` (the dialog's "Don't show after updates") also turns `showReleaseNotes` off.
+   */
+  dismissWhatsNew?(stopShowing: boolean): void;
+  setShowReleaseNotes?(enabled: boolean): void;
 }
 
 /** The ports the user's own board runs on (`pnpm dev`, the desktop app). A sandbox never uses them. */

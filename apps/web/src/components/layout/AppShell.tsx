@@ -10,6 +10,7 @@ import {
   useSetTaskExpanded,
   useTaskExpanded,
 } from "~/components/board/boardNavigation";
+import { ReleaseNotesHost } from "~/components/desktop/ReleaseNotesHost";
 import { UpdatePill } from "~/components/desktop/UpdatePill";
 import { useNotificationDelivery } from "~/components/notifications/useNotificationDelivery";
 import { AppDialogs } from "~/components/settings/AppDialogs";
@@ -79,6 +80,7 @@ export function AppShell({
       <AppDialogs />
       <ThemeEditorHost />
       <UpdatePill />
+      <ReleaseNotesHost />
     </SidebarProvider>
   );
 }

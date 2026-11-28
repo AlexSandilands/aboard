@@ -7,4 +7,6 @@ dist/
 coverage/
 *.tsbuildinfo
 release/
+# The repo's release skill, not a build output.
+!.claude/skills/release/
 .claude/worktrees/

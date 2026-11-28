@@ -1,0 +1,23 @@
+# Groups the notes GitHub generates for a release (the "Details" part of a release body, see
+# docs/features/releases.md#release-notes). Categories go by label; the release skill sorts what's left by the
+# Conventional Commit type in each PR title.
+changelog:
+  exclude:
+    labels:
+      - dependencies
+      - skip-changelog
+    authors:
+      - dependabot
+      - dependabot[bot]
+  categories:
+    - title: Features
+      labels:
+        - enhancement
+        - feature
+    - title: Fixes
+      labels:
+        - bug
+        - fix
+    - title: Other changes
+      labels:
+        - "*"

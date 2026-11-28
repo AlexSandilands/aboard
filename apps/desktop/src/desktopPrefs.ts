@@ -12,9 +12,21 @@ export interface DesktopPrefs {
   autoCheckUpdates: boolean;
   /** The newest version an OS notification has announced, so each version is announced once, across restarts. */
   notifiedUpdate: string | null;
+  /** The version whose release notes the user has seen (or that was installed fresh); null until the first launch. */
+  lastSeenVersion: string | null;
+  /** Open the release notes on the first launch after an update. */
+  showReleaseNotes: boolean;
 }
 
-const DEFAULTS: DesktopPrefs = { trayIcon: "colour", autoCheckUpdates: true, notifiedUpdate: null };
+const DEFAULTS: DesktopPrefs = {
+  trayIcon: "colour",
+  autoCheckUpdates: true,
+  notifiedUpdate: null,
+  lastSeenVersion: null,
+  showReleaseNotes: true,
+};
+
+const version = (value: unknown): string | null => (typeof value === "string" && value.length <= 50 ? value : null);
 const FILE = "prefs.json";
 
 /** Keeps what is valid and defaults the rest, so a hand-edited or older file never stops the shell starting. */
@@ -24,8 +36,9 @@ export function parsePrefs(value: unknown): DesktopPrefs {
   return {
     trayIcon: trayIcon ?? DEFAULTS.trayIcon,
     autoCheckUpdates: typeof raw.autoCheckUpdates === "boolean" ? raw.autoCheckUpdates : DEFAULTS.autoCheckUpdates,
-    notifiedUpdate:
-      typeof raw.notifiedUpdate === "string" && raw.notifiedUpdate.length <= 50 ? raw.notifiedUpdate : null,
+    notifiedUpdate: version(raw.notifiedUpdate),
+    lastSeenVersion: version(raw.lastSeenVersion),
+    showReleaseNotes: typeof raw.showReleaseNotes === "boolean" ? raw.showReleaseNotes : DEFAULTS.showReleaseNotes,
   };
 }
 

@@ -10,6 +10,7 @@ import {
   type DesktopBadge,
   type DesktopNotification,
   type DesktopUpdateState,
+  type DesktopWhatsNew,
 } from "@repo/contracts";
 import {
   BrowserWindow,
@@ -30,14 +31,18 @@ import { TRAY_ICON_STYLES, readPrefs, writePrefs, type DesktopPrefs, type TrayIc
 import { appIcon, menuIcon, trayIcon } from "./icon.ts";
 import {
   CHECK_FOR_UPDATES_CHANNEL,
+  DISMISS_WHATS_NEW_CHANNEL,
   GET_UPDATE_STATE_CHANNEL,
+  GET_WHATS_NEW_CHANNEL,
   INSTALL_UPDATE_CHANNEL,
+  LIST_RELEASES_CHANNEL,
   NOTIFICATION_CLICK_CHANNEL,
   NOTIFY_CHANNEL,
   OPEN_RELEASE_NOTES_CHANNEL,
   SET_AUTO_CHECK_UPDATES_CHANNEL,
   SET_BACKGROUND_CHANNEL,
   SET_BADGE_CHANNEL,
+  SET_SHOW_RELEASE_NOTES_CHANNEL,
   SET_THEME_CHANNEL,
   UPDATE_STATE_CHANNEL,
 } from "./ipc.ts";
@@ -46,6 +51,7 @@ import { ServerStartError, connectServer, type BoardServer, type ServerOptions }
 import {
   allowSubFrameNavigation,
   decideNavigation,
+  dismissedPrefs,
   initialUpdateState,
   isDesktopTheme,
   noticeFeedUrl,
@@ -53,10 +59,12 @@ import {
   parseBackgroundColor,
   parseDesktopBadge,
   parseDesktopNotification,
+  pendingWhatsNew,
   updateMenuItem,
   updateMode,
   updateNotification,
 } from "./shell.logic.ts";
+import { ReleaseFeed } from "./releases.ts";
 import { syncTitleBar, titleBarOptions } from "./titleBar.ts";
 import { Updater } from "./updater.ts";
 
@@ -120,6 +128,22 @@ const updates = updateMode({
   platform: process.platform,
   appImage: process.env.APPIMAGE,
   version: BRAND.version,
+});
+
+const whatsNew = pendingWhatsNew(prefs, BRAND.version, updates.mode);
+// A fresh install, a downgrade or an update with the notes off: this version counts as seen from the start.
+if (whatsNew.record) savePrefs({ ...prefs, lastSeenVersion: BRAND.version }, "release notes version");
+/**
+ * The version the user last saw, while this launch's release notes are still to be shown: the page opens the dialog
+ * when it loads, until it is closed. A sandbox shell can fake an update from an older version to try the dialog
+ * (`<PREFIX>_WHATS_NEW_SINCE=0.11.0 pnpm sandbox --desktop`); its updates are off, so nothing else would open it.
+ */
+let whatsNewSince: string | null = (sandbox ? process.env[brandEnv("WHATS_NEW_SINCE")] : undefined) || whatsNew.since;
+
+const releaseFeed = new ReleaseFeed({
+  repo: BRAND_REPOSITORY,
+  currentVersion: BRAND.version,
+  fetch: (input, init) => net.fetch(input instanceof URL ? input.href : input, init),
 });
 
 /** electron-builder's .deb and .rpm name themselves in `resources/package-type`; the tarball has none. */
@@ -297,6 +321,17 @@ function setAutoCheckUpdates(enabled: boolean): void {
   savePrefs({ ...prefs, autoCheckUpdates: enabled }, "update check choice");
   updater.setAutoCheck(enabled);
   refreshTrayMenu();
+}
+
+function currentWhatsNew(): DesktopWhatsNew {
+  return { currentVersion: BRAND.version, since: whatsNewSince, showReleaseNotes: prefs.showReleaseNotes };
+}
+
+/** The dialog closed: this version's notes are seen. "Don't show after updates" also turns them off. */
+function dismissWhatsNew(stopShowing: boolean): void {
+  whatsNewSince = null;
+  const next = dismissedPrefs(prefs, BRAND.version, updates.mode, stopShowing);
+  if (next) savePrefs(next, "release notes choice");
 }
 
 function openReleaseNotes(): void {
@@ -592,6 +627,16 @@ if (app.requestSingleInstanceLock()) {
   });
   ipcMain.on(OPEN_RELEASE_NOTES_CHANNEL, (event) => {
     if (fromBoard(event)) openReleaseNotes();
+  });
+  ipcMain.handle(GET_WHATS_NEW_CHANNEL, (event) => (fromBoard(event) ? currentWhatsNew() : null));
+  ipcMain.handle(LIST_RELEASES_CHANNEL, (event) => (fromBoard(event) ? releaseFeed.list() : null));
+  ipcMain.on(DISMISS_WHATS_NEW_CHANNEL, (event, stopShowing: unknown) => {
+    if (typeof stopShowing === "boolean" && fromBoard(event)) dismissWhatsNew(stopShowing);
+  });
+  ipcMain.on(SET_SHOW_RELEASE_NOTES_CHANNEL, (event, enabled: unknown) => {
+    if (typeof enabled === "boolean" && fromBoard(event)) {
+      savePrefs({ ...prefs, showReleaseNotes: enabled }, "release notes choice");
+    }
   });
   ipcMain.on(SET_BACKGROUND_CHANNEL, (event, value: unknown) => {
     const color = parseBackgroundColor(value);

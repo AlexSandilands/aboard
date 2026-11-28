@@ -50,6 +50,8 @@ export const SETTINGS_GROUPS: ReadonlyArray<SettingsGroupDef> = [
         "check for updates",
         "restart to update",
         "release notes",
+        "what's new",
+        "changelog",
       ]),
       section("board.data", "Data", ["backup", "git", "machine name", "archived projects", "restore"]),
     ],

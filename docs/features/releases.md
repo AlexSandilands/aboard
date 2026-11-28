@@ -8,6 +8,12 @@ machine.
 
 ### Cutting a release
 
+The quick way is the repo's **release skill** (`.claude/skills/release/SKILL.md`): ask an agent in this repo to draft
+the next release. It finds the last release, suggests the version by the rules below, writes the notes in the format
+[below](#release-notes) and creates a **draft** release; you read it on GitHub and publish it. It never publishes.
+
+By hand:
+
 1. On GitHub, **Releases → Draft a new release**.
 2. **Choose a tag** and type the next version, `vMAJOR.MINOR.PATCH`: `v1.4.2`. Target `main`. Which number to
    raise, from the last release:
@@ -15,8 +21,9 @@ machine.
    - **minor** (`v1.5.0`) when it adds something;
    - **major** (`v2.0.0`) when it breaks something people or agents rely on: an MCP tool or argument removed, a
      setting that has to be redone.
-3. **Generate release notes**, edit them if you like, and **Publish release**. If the generator offers the
-   `pacman` release as the previous tag, pick the last version instead.
+3. **Generate release notes**, put a `## Highlights` section above them and rename the generator's
+   `## What's Changed` to `## Details` ([release notes](#release-notes)), then **Publish release**. If the generator
+   offers the `pacman` release as the previous tag, pick the last version instead.
 
 Publishing starts `.github/workflows/release.yml`. When it finishes, the release has:
 
@@ -34,6 +41,42 @@ Publishing starts `.github/workflows/release.yml`. When it finishes, the release
 | `latest.yml`, `latest-linux.yml`                 | The update feed the installed app reads             |
 
 and the pacman repo serves the new version, so `pacman -Syu` picks it up.
+
+### Release notes
+
+The desktop app shows each release's body after an update ([desktop](desktop.md#release-notes)), so bodies have
+two parts:
+
+```markdown
+## Highlights
+
+### New
+
+- **Saved views in the board header.** Save the filters you use and switch between them.
+
+### Improved
+
+- …
+
+### Fixed
+
+- …
+
+## Details
+
+<GitHub's generated list of pull requests>
+```
+
+The app splits the body at the `## Details` line (`splitReleaseNotes` in `packages/contracts/src/desktop.ts`): it shows
+what comes before, without the `## Highlights` heading, and folds what comes after away. A body from before the
+format, which starts at `## What's Changed`, splits there and shows no Highlights; one with neither heading is all
+Highlights. Highlights are for people using the app: what they can now do, in plain words, with no PR numbers.
+
+`.github/release.yml` groups the generated list by label (Features, Fixes, Other changes) and leaves out
+dependency bumps. Few PRs carry those labels, so the release skill also sorts the lines by their Conventional
+Commit type.
+
+Editing a published release's notes on GitHub changes what the app shows from its next start.
 
 ### Versions
 
@@ -214,6 +257,9 @@ above every semver version (`2026.11.13` > `1.0.0`), so nothing moves from one t
 
 ## Decisions
 
+- **Release notes are written for the app.** Each body has user-facing Highlights above the generated list, and
+  the app reads them from the releases API rather than from a file in the repo, so a release's notes can be fixed
+  after it ships. A skill drafts them because it can read every PR; the user still reads and publishes.
 - **Releases start from GitHub's release page.** Writing the notes, choosing the tag and publishing happen in
   one place, and the notes come from GitHub's generator. The cost is that the release is visible for a few
   minutes before its files are attached.
@@ -264,6 +310,7 @@ above every semver version (`2026.11.13` > `1.0.0`), so nothing moves from one t
 | `vYYYY.M.N`, a counter within the month           | Any number of releases a day, but the version no longer says the date, and it isn't semver's meaning either |
 | `vYYYY.MDD.N`, the date and a counter within the day | Works everywhere and sorts after the date versions, but it's an unusual form to read and type      |
 | `vYYYY.M.D.N`, a fourth number                    | electron-builder rejects it: not semver                                                               |
+| release-please, semantic-release or Changesets    | They replace the draft-and-publish flow with a release PR or a tag from CI, or add a changeset file to every PR |
 | A nightly channel beside the releases             | Solves a different problem; a same-day fix needs a second release, not a second channel               |
 | Semver with a pacman `epoch=1`                    | Lets pacman upgrade from the date versions by itself, but the epoch stays in the package for good; not worth it with one known install |
 | The pacman repo on GitHub Pages                   | Pages serves a branch, so every package would stay in the git history                                 |
@@ -276,6 +323,8 @@ above every semver version (`2026.11.13` > `1.0.0`), so nothing moves from one t
 | File                                 | What it does                                                                     |
 | ------------------------------------ | -------------------------------------------------------------------------------- |
 | `.github/workflows/release.yml`      | Packages on Windows and Linux, uploads to the release, updates pacman and the AUR |
+| `.github/release.yml`                | How GitHub groups the generated notes                                            |
+| `.claude/skills/release/SKILL.md`    | Drafts the next release, with its notes, for the user to publish                 |
 | `.github/scripts/pacman-repo.sh`     | Builds and signs the pacman repo's package and database                          |
 | `packaging/pacman-signing-key.asc`   | The public key the repo is signed with                                           |
 | `packaging/install-arch.sh`          | What Arch users run: trusts the key, adds the repo, installs the package         |
