@@ -315,28 +315,43 @@ describe("merge into epic branch", () => {
     expect(merges).toHaveLength(1);
   });
 
-  it("doesn't flag GitHub refusing a merge for want of an approval, and tries again once the PR is read again", async () => {
+  it("doesn't flag GitHub refusing a merge for want of an approval, and tries again once the PR changes", async () => {
     const { s, task, setPr, toReview, pass, turnOn, runs, merges, failMerge } = setup();
     turnOn();
     failMerge(new AppError("VALIDATION", "At least 1 approving review is required by reviewers with write access."));
     toReview();
-    setPr();
+    setPr({ updatedAt: "2026-11-01T10:00:00Z" });
     await pass();
+    // Read again with nothing changed on GitHub: still waiting, so no second try.
+    setPr({ updatedAt: "2026-11-01T10:00:00Z", title: "read again" });
     await pass();
     expect(merges).toHaveLength(1);
     expect(runs()[0]).toMatchObject({ status: "skipped", needsAttention: false, output: { approval: true } });
     expect(runs()[0]!.summary).toContain("still needs an approving review");
     expect(s.tasks.summary(task.id).attention).toEqual([]);
     expect(s.notifications.list().items.some((n) => n.kind === "autopilot_failed")).toBe(false);
-    // Read again: still no approval, so it waits; approved, it merges.
-    setPr({ reviewDecision: "review_required", mergeState: "blocked", title: "read again" });
-    await pass();
-    expect(merges).toHaveLength(1);
+    // A review changes the PR on GitHub: it is tried again, and merges.
     failMerge(null);
-    setPr({ reviewDecision: "approved" });
+    setPr({ updatedAt: "2026-11-01T11:00:00Z" });
     await pass();
     expect(merges).toHaveLength(2);
     expect(s.tasks.summary(task.id).status).toBe("done");
+  });
+
+  it("flags an approval refusal that never passes on the last try", async () => {
+    const { s, task, setPr, toReview, pass, turnOn, runs, merges, failMerge } = setup();
+    turnOn();
+    failMerge(new AppError("VALIDATION", "At least 1 approving review is required"));
+    toReview();
+    for (let i = 1; i <= MERGE_ATTEMPTS; i++) {
+      setPr({ updatedAt: `2026-11-01T1${i}:00:00Z` });
+      await pass();
+    }
+    expect(merges).toHaveLength(MERGE_ATTEMPTS);
+    expect(runs()[0]).toMatchObject({ status: "skipped", needsAttention: true });
+    expect(s.tasks.summary(task.id).attention.find((a) => a.kind === "autopilot")?.message).toMatch(
+      /^Ready to merge into the epic branch: .*approving review/,
+    );
   });
 
   it("flags the task Ready to merge into the epic branch when GitHub refuses for another reason, and notifies", async () => {

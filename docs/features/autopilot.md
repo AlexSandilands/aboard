@@ -924,7 +924,8 @@ Autopilot explains integration branches and gives each target a sentence, its ga
   the head (`PrChanges.newHead`, else the link's creation: GitHub reports no checks for a moment after a push); and
   GitHub says it merges cleanly and isn't blocked on a check or rule (only a missing review is left to GitHub). A PR
   GitHub says still needs an approving review (`reviewDecision` `review_required`) waits, with no run, and so does
-  one GitHub refused for want of an approval until the board reads it again (`awaitsApproval`). The dedupe key is `merge:<linkId>:<headOid>`. The action re-checks all
+  one GitHub refused for want of an approval, until the PR changes on GitHub (`awaitsApproval` in `mergeGate.ts`).
+  The dedupe key is `merge:<linkId>:<headOid>`. The action re-checks all
   of it, then calls `ctx.gitHosts.mergeIntoEpicBranch` (`integrations/prMerge.ts`): a fresh read (the host's `mergeTarget`) of the PR and the repository's default
   branch, `checkAutopilotMergeTarget` (refuses the default branch, a base that isn't an `epic/` branch, and a PR
   retargeted since the check, with `MergeTargetError`), and `mergePullRequest` at `expectedHeadOid`. The method comes from the repository's `mergeCommitAllowed`,
@@ -941,10 +942,12 @@ Autopilot explains integration branches and gives each target a sentence, its ga
 - **Refused.** A failure another try may get past (another PR merged into the branch first, a push, GitHub still
   computing mergeability, the network) ends the run skipped with `output.retry`, and the next pass tries the same
   head again under `merge:<linkId>:<headOid>:<n>`, up to `MERGE_ATTEMPTS` (3). A refusal for a missing approving
-  review (`NEEDS_APPROVAL`, "At least 1 approving review is required…") ends it skipped as a re-check with
-  `output.approval` and the link's `syncedAt`, unflagged and not counted as a try, and the PR waits for its next read
-  (`awaitsApproval`). Anything else, or the last try failing, ends it skipped with `needsAttention` and "Ready to merge
-  into the epic branch: … Merge it yourself." as the task's attention reason, and the engine notifies. A `MergeTargetError`
+  review that GitHub's read didn't show (`NEEDS_APPROVAL`, "At least 1 approving review is required…") also ends it
+  skipped and unflagged, as a counted try, with `approvalRefusal`'s output: the PR's `updatedAt` and `reviewDecision`
+  as the merge's refresh left them. The next try waits until one of them changes (`awaitsApproval`; a review bumps
+  `updatedAt`), so the PR isn't retried every pass; Into main does the same under `main:`. Anything else, or the last
+  try failing, ends it skipped with `needsAttention` and "Ready to merge into the epic branch: … Merge it yourself." as
+  the task's attention reason, and the engine notifies. A `MergeTargetError`
   fails the run, flagged.
 - **The epic's PR.** Once a task PR has merged into the branch and the epic has no PR from it, it opens a draft PR
   from the branch into the default branch (`ensureEpicPr`: an open one already there is used instead) and links it

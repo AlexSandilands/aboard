@@ -16,7 +16,15 @@ import { messageOf } from "../../integrations/util.ts";
 import { isTransientHostError } from "../../integrations/gitHost.ts";
 import type { GitHostActions } from "../../integrations/gitHosts.ts";
 import type { Services } from "../../services/types.ts";
-import { headSeenSince, isPrLink, notMergeable, type PrLink } from "../mergeGate.ts";
+import {
+  approvalRefusal,
+  awaitsApproval,
+  headSeenSince,
+  isPrLink,
+  NEEDS_APPROVAL,
+  notMergeable,
+  type PrLink,
+} from "../mergeGate.ts";
 import { defineAutomation, type ActionResult, type Candidate } from "../types.ts";
 import { holdAction, mainCandidates, mainMergeAction, type MainHoldData, type MainMergeData } from "./mergeIntoMain.ts";
 
@@ -56,25 +64,6 @@ function mergeRuns(runs: readonly AutopilotRun[], linkId: string, headOid: strin
 
 /** Merge failures that pass on their own besides GitHub's and the network's: a race with another merge or a push. */
 const MERGE_RACE = /base branch was modified|head branch was modified/i;
-
-/** GitHub refusing a merge because a branch rule wants an approving review: a wait for the reviewer, not the user's. */
-const NEEDS_APPROVAL = /approving review|review is required|reviews? required/i;
-
-/**
- * Whether the PR waits for an approving review at this head: GitHub says one is required, or it refused a merge for
- * want of one and the board hasn't read the PR since (so it isn't tried again on the same stale read).
- */
-function awaitsApproval(link: PrLink, runs: readonly AutopilotRun[]): boolean {
-  if (link.snapshot?.reviewDecision === "review_required") return true;
-  const key = `merge:${link.id}:${link.snapshot?.headOid ?? ""}`;
-  return runs.some(
-    (r) =>
-      r.automation === AUTOPILOT_MERGE_EPIC_PRS &&
-      r.output?.approval === true &&
-      r.output.syncedAt === (link.syncedAt ?? null) &&
-      (r.dedupeKey === key || r.dedupeKey.startsWith(`${key}:`)),
-  );
-}
 
 interface EpicPrData {
   kind: "open_pr" | "update_pr";
@@ -311,8 +300,8 @@ function intoEpicBranches(services: Services, tasks: readonly TaskSummary[], now
       prsInto(task, branch).flatMap((link): Candidate[] => {
         const timing = { now: now.getTime(), headSince: headSeenSince(link, changes.get(link.id)) };
         if (notMergeable(services, task, link, branch, runsOf(task.id), timing) !== null) return [];
-        if (awaitsApproval(link, runsOf(task.id))) return [];
         const earlier = mergeRuns(runsOf(task.id), link.id, link.snapshot!.headOid!);
+        if (awaitsApproval(link, runsOf(task.id), AUTOPILOT_MERGE_EPIC_PRS, earlier.key)) return [];
         if (earlier.settled || earlier.count >= MERGE_ATTEMPTS) return [];
         const data: MergeData = {
           kind: "merge",
@@ -419,13 +408,13 @@ async function actEpic(
         };
       }
       const message = messageOf(error);
-      // Waiting for an approval is how a PR normally ends: no flag, and no try used up. It is tried again once the
-      // board has read the PR since (awaitsApproval), by when GitHub usually says the review is required.
-      if (NEEDS_APPROVAL.test(message)) {
+      // Waiting for an approval is how a PR normally ends: no flag. The next try waits for the PR to change on GitHub
+      // (awaitsApproval, from the link as the merge's refresh left it); the last one still flags.
+      if (NEEDS_APPROVAL.test(message) && data.attempt < MERGE_ATTEMPTS) {
         return {
           status: "skipped",
-          summary: `Didn't merge PR #${data.number} into ${data.branch} yet: it still needs an approving review (${message})`,
-          output: { ...RECHECK, approval: true, syncedAt: link.syncedAt ?? null },
+          summary: `Didn't merge PR #${data.number} into ${data.branch} yet (try ${data.attempt} of ${MERGE_ATTEMPTS}): it still needs an approving review (${message})`,
+          output: approvalRefusal(services.links.get(link.id)),
         };
       }
       // A race (another PR just merged into the branch, a push) or a network error may pass: try again next pass.

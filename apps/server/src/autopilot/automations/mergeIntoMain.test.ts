@@ -289,6 +289,30 @@ describe("Merge ready PRs: Into main", () => {
     expect(merged.map((m) => m.linkId)).toEqual([linkOf(task.id)]);
   });
 
+  it("waits, flagging nothing, when the host refuses a merge for want of an approval its read didn't show", async () => {
+    const { s, flaggedTask, setPr, pass, turnOn, runs, merged, failMerge } = setup();
+    const task = flaggedTask(4);
+    setPr(task.id, { updatedAt: "2026-11-01T10:00:00Z" });
+    turnOn();
+    failMerge(new AppError("VALIDATION", "At least 1 approving review is required by reviewers with write access."));
+    await pass();
+    await pass();
+    expect(merged).toHaveLength(1);
+    expect(runs(task.id)).toEqual([
+      expect.objectContaining({
+        status: "skipped",
+        needsAttention: false,
+        output: expect.objectContaining({ approval: true }),
+      }),
+    ]);
+    expect(s.tasks.summary(task.id).attention).toEqual([]);
+    failMerge(null);
+    setPr(task.id, { updatedAt: "2026-11-01T11:00:00Z", reviewDecision: "approved" });
+    await pass();
+    expect(merged).toHaveLength(2);
+    expect(s.tasks.summary(task.id).status).toBe("done");
+  });
+
   it("flags a task only the user can unblock once per head, and nothing is tried", async () => {
     const { s, flaggedTask, setPr, pass, turnOn, runs, merged } = setup();
     // Can't merge, even while it also needs an approval: the approval mustn't hide what only the user can fix.

@@ -7,7 +7,7 @@ import { autoMergeVerdict } from "../../integrations/mergeTaskPr.ts";
 import { MergeTargetError } from "../../integrations/prMerge.ts";
 import { messageOf } from "../../integrations/util.ts";
 import type { Services } from "../../services/types.ts";
-import { isPrLink, type PrLink } from "../mergeGate.ts";
+import { approvalRefusal, awaitsApproval, isPrLink, NEEDS_APPROVAL, type PrLink } from "../mergeGate.ts";
 import type { ActionResult, Candidate } from "../types.ts";
 
 // Merge ready PRs' Into main (docs/features/autopilot.md#merge-ready-prs): a task the user flagged for auto-merge has
@@ -84,7 +84,8 @@ const flagged = (tasks: readonly TaskSummary[]) =>
  * Into main's candidates in one project: at most one merge per repository (the first ready PR, a task before those it
  * blocks, then by number), none in a repository where one is already queued or running, and none for a PR the board
  * hasn't read since the latest merge into its base there (that merge may have left it conflicting). A flagged task held
- * by something only the user can settle (a required approval, two open PRs) gets one notice per PR head and reason.
+ * by something only the user can settle (an account that can't merge, two open PRs) gets one notice per PR head and
+ * reason. One waiting for an approving review makes nothing.
  */
 export function mainCandidates(services: Services, tasks: readonly TaskSummary[], now: Date): Candidate[] {
   const all = flagged(tasks).filter((t) => intoMainOn(services, t));
@@ -143,8 +144,10 @@ export function mainCandidates(services: Services, tasks: readonly TaskSummary[]
     if (busy.has(repo) || taken.has(repo)) continue;
     const since = lastMerge.get(`${repo}#${base}`);
     if (since !== undefined && !(Date.parse(link.syncedAt ?? "") > since)) continue;
-    const earlier = mainRuns(services.autopilot.runsForTask(task.id, 200), link.id, headOid);
+    const runs = services.autopilot.runsForTask(task.id, 200);
+    const earlier = mainRuns(runs, link.id, headOid);
     if (earlier.settled || earlier.count >= MAIN_MERGE_ATTEMPTS) continue;
+    if (awaitsApproval(link, runs, AUTOPILOT_MERGE_EPIC_PRS, earlier.key)) continue;
     taken.add(repo);
     const data: MainMergeData = {
       kind: "main_merge",
@@ -220,6 +223,14 @@ export async function mainMergeAction(
     // The task's own refusal: something changed between the re-check and the merge. The next pass looks again.
     if (error instanceof AppError && message.startsWith("Didn't merge")) {
       return { status: "skipped", summary: message, output: RECHECK };
+    }
+    // A required approval GitHub's read didn't show: wait for the reviewer (awaitsApproval), flagging only the last try.
+    if (NEEDS_APPROVAL.test(message) && data.attempt < MAIN_MERGE_ATTEMPTS) {
+      return {
+        status: "skipped",
+        summary: `Didn't merge PR #${data.number} into ${data.base} yet (try ${data.attempt} of ${MAIN_MERGE_ATTEMPTS}): it still needs an approving review (${message})`,
+        output: approvalRefusal(services.links.get(verdict.link.id)),
+      };
     }
     const passing =
       (error instanceof AppError && error.code === "CONFLICT") || PASSING.test(message) || isTransientHostError(error);
