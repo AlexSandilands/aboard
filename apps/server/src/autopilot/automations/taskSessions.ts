@@ -58,7 +58,7 @@ export function taskSessionPrompt(input: { task: TaskSummary; boardUrl: string; 
   const { task } = input;
   const pr = sessionPr(task);
   const where = pr
-    ? `Your worktree is on the branch of the task's open pull request (${pr.link.url}), \`${pr.branch}\`: commit there and push to it. Don't open another pull request.`
+    ? `Your work goes on the task's open pull request (${pr.link.url}): your worktree starts from its branch \`${pr.branch}\`, and the workspace note below says how to push to it. Don't open another pull request.`
     : "Work from earlier sessions may only be on their own branches or worktrees, which you can't see: read the task's notes, steps and activity (get_task) first, and pick up from what they say is done.";
   return [
     taskHandoffPrompt({ task, boardUrl: input.boardUrl, mode: "work", linkedThread: true }),
@@ -108,6 +108,12 @@ export const taskSessions = defineAutomation({
   schema: orchestrateSchema,
   fields: [],
   defaults: orchestrateDefaults,
+  // A skipped run did nothing (the task moved on, or got an agent): a new session is Orchestrate's to ask for again,
+  // under the once-an-hour rule, rather than a retry's.
+  retryRefusal: (run) =>
+    run.status === "skipped"
+      ? "That session was skipped, so there is nothing to retry: ask for a new one with start_task_session"
+      : null,
   check: ({ services, projects, engine, now }) => {
     const on = new Map(projects.map((scope) => [scope.project.id, scope]));
     const candidates: Array<{ candidate: Candidate; preview: boolean }> = [];
@@ -122,6 +128,14 @@ export const taskSessions = defineAutomation({
       }
       if (waiting && now.getTime() - Date.parse(request.createdAt) > TASK_SESSION_REQUEST_TTL_MS) {
         services.taskSessions.drop(request.id, "it waited too long for room to run");
+        continue;
+      }
+      const machine = waiting ? services.taskSessions.heldElsewhere(task.id) : null;
+      if (machine) {
+        services.taskSessions.drop(
+          request.id,
+          `${taskLabel(task)} is now held by ${machine}, whose own Autopilot looks after it`,
+        );
         continue;
       }
       const scope = on.get(task.projectId);

@@ -1,5 +1,6 @@
 import { AUTOPILOT_ORCHESTRATE, type PlanInput, type PrSnapshot } from "@repo/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createRepos } from "../../db/repos/index.ts";
 import { createTestHarness } from "../../test/harness.ts";
 import { createAutopilotEngine, type AutopilotEngine } from "../engine.ts";
 import { WorktreeHeadError, type RunnerRequest, type RunnerResult } from "../types.ts";
@@ -124,6 +125,10 @@ describe("Task sessions", () => {
     const dropped = ask(elsewhere.id);
     await pass();
     expect(s.taskSessions.get(dropped.id)).toMatchObject({ droppedReason: "Orchestrate is off in its project" });
+    // The task says so, for the next Orchestrate run that reads it.
+    expect(s.tasks.detail(elsewhere.id).events.map((e) => e.payload.text)).toContain(
+      "Autopilot dropped Orchestrate's request for a new session: Orchestrate is off in its project.",
+    );
 
     s.autopilot.setPaused(true);
     const held = ask();
@@ -173,7 +178,7 @@ describe("Task sessions", () => {
     ask();
     await pass();
     expect(sessions()[0]).toMatchObject({ workspace: { branch: "feat/thing" }, expectHead: SHA });
-    expect(sessions()[0]!.prompt).toContain("`feat/thing`: commit there and push to it");
+    expect(sessions()[0]!.prompt).toContain("your worktree starts from its branch `feat/thing`");
     expect(runs()[0]).toMatchObject({ status: "skipped", deferred: "head_moved" });
   });
 
@@ -217,11 +222,22 @@ describe("Task sessions", () => {
     expect(sessions()).toHaveLength(2);
     expect(runs().filter((r) => r.status === "succeeded")).toHaveLength(1);
   });
+
+  it("refuses to retry a skipped session: Orchestrate asks for a new one instead", async () => {
+    const { s, task, ask, pass, on, runs } = setup();
+    on();
+    ask();
+    s.tasks.move(task.id, { status: "done" }, "user");
+    await pass();
+    expect(runs()[0]).toMatchObject({ status: "skipped" });
+    expect(() => s.autopilot.retry(runs()[0]!.id, "orchestrator")).toThrow(/nothing to retry/);
+  });
 });
 
 describe("start_task_session's refusals", () => {
   it("refuses manual, Planned, blocked, busy and recently asked-for tasks, and other projects", () => {
-    const { s, project, other, task, ask } = setup();
+    const { s, db, project, other, task, ask } = setup();
+    const h = { db };
     const refused = (fn: () => unknown) => {
       try {
         fn();
@@ -254,6 +270,22 @@ describe("start_task_session's refusals", () => {
     s.tasks.move(busy.id, { status: "in_progress" }, "agent");
     s.links.add(busy.id, { value: "t3code://threads/env/thread-1" }, "agent");
     expect(refused(() => ask(busy.id))).toMatch(/already has a T3 thread working on it/);
+
+    // A task a connected machine holds is that machine's Autopilot's: the board would never run the session.
+    const held = s.tasks.create({ projectId: project.id, title: "Held", plan });
+    s.tasks.move(held.id, { status: "in_progress" }, "agent");
+    const machine = s.machines.add({
+      instanceId: "engine-1",
+      name: "engine",
+      routes: [{ kind: "ssh", target: "me@engine", port: null, remotePort: 4318 }],
+    });
+    createRepos(h.db).holds.insert({
+      taskId: held.id,
+      machineId: machine.id,
+      heldAt: new Date().toISOString(),
+      afterLogId: 0,
+    });
+    expect(refused(() => ask(held.id))).toMatch(/is held by engine, whose own Autopilot looks after it/);
 
     expect(refused(() => ask())).toBeNull();
     expect(refused(() => ask())).toMatch(/already asked for .* one session per task per hour/);

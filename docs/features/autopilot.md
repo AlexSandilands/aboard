@@ -1166,16 +1166,19 @@ and can be retried.
   `retry_autopilot_run(…, "start_planned")`), Backlog or Done, a blocked task, a project with neither a folder nor a T3
   project, a task with a T3 thread or agent session at work (`agentAtWorkOn` in contracts: a busy thread that isn't a
   follow-up, one linked in the last two minutes, or a busy session), one with an Autopilot run queued or running, one
-  outside the run's project, and one a session was asked for on in the last hour (`TASK_SESSION_COOLDOWN_MS`). The
+  outside the run's project, one a connected machine holds whose own Autopilot looks after it (the board runs no
+  automation on it, `boardPlacement`, and the machine has no Task sessions; `heldElsewhere`), and one a session was
+  asked for on in the last hour (`TASK_SESSION_COOLDOWN_MS`). The
   rules are `sessionRefusal`, which the run checks again. Otherwise it stores a row in `task_session_requests`
   (migration 058: task, project, note, actor, the asking run, created at, the run that took it up, and why it was
   dropped), adds a note to the task ("Orchestrate asked for a new agent session …", through the task service so a held
   task's machine gets it) and publishes `autopilot.changed`, which starts a pass. Requests are history: backups leave
   them out, and a deleted task takes its own.
 - **Check.** Each request from the last day not dropped and without a run of its key (`task_sessions:<requestId>`)
-  is a candidate. A waiting request is dropped (`dropped_at`, `dropped_reason`) when its task is gone, when Orchestrate
-  is off in its project, or after two hours without room to run (`TASK_SESSION_REQUEST_TTL_MS`), so a session never
-  starts long after the stall it was for. Like Start planned, it leaves room in the concurrency cap for T3 threads
+  is a candidate. A waiting request is dropped (`dropped_at`, `dropped_reason`) when its task is gone, when a machine whose
+  Autopilot looks after it has since taken it, when Orchestrate is off in its project, or after two hours without room
+  to run (`TASK_SESSION_REQUEST_TTL_MS`), so a session never starts long after the stall it was for. A dropped request
+  adds a note to its task saying why, so the next Orchestrate run knows no session came. Like Start planned, it leaves room in the concurrency cap for T3 threads
   still working (`workingAgents`, which counts both automations' threads).
 - **Action.** Re-checks `sessionRefusal` (without its own run) and skips with the reason if the task moved on, then
   `runner.start` with operation `taskRun` and only `{ runner }` from Orchestrate's config as options: budget, timeout
@@ -1191,7 +1194,9 @@ and can be retried.
   branch from the default branch, or from an integration epic's branch (`prBase`); since an earlier session's work may
   be only in its own worktree, the prompt says to read the task's notes and activity first.
 - **Retrying.** A failed run (a CLI missing, T3 refusing) is flagged on the task. `retry_autopilot_run` frees its key,
-  so the request runs again on the next pass, within a day of the request; the run takes the request up again.
+  so the request runs again on the next pass, within a day of the request; the run takes the request up again. A
+  skipped run (the task moved on, or got an agent) did nothing, so its retry is refused (`retryRefusal`): a new
+  session is asked for again, under the once-an-hour rule.
 
 **Start planned tasks** (`start_planned`, #94; `automations/startPlanned.ts`). Needs an agent, so it counts against
 the caps and waits out quiet hours. Off until switched on. The headline automation: it starts an agent on a task.

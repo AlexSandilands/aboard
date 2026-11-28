@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   agentAtWorkOn,
   AUTOPILOT_ACTIVE_STATUSES,
+  AUTOPILOT_ACTOR,
   AUTOPILOT_TASK_SESSIONS,
   taskLabel,
   type AutopilotRun,
@@ -88,8 +89,17 @@ export interface TaskSessionsService {
   open(): TaskSessionRequest[];
   /** Marks the request taken up by the run (again, for a retry); false when it was dropped. */
   take(id: string, runId: string): boolean;
-  /** Drops a waiting request with the reason; false when it no longer waited. */
+  /**
+   * Drops a waiting request with the reason, and notes it on the task so the next Orchestrate run knows no session
+   * came; false when it no longer waited.
+   */
   drop(id: string, reason: string): boolean;
+  /**
+   * The name of the connected machine holding the task whose own Autopilot looks after it, or null. The board doesn't
+   * run its automations on such a task (autopilot/placement.ts), and the machine has no Task sessions, so a request
+   * there would never run.
+   */
+  heldElsewhere(taskId: string): string | null;
 }
 
 export function createTaskSessionsService(
@@ -98,6 +108,8 @@ export function createTaskSessionsService(
     tasks: () => TasksService;
     projects: ProjectsService;
     runsForTask: (taskId: string) => AutopilotRun[];
+    /** The connected machine holding the task whose own Autopilot looks after it (boardPlacement's rule), or null. */
+    heldElsewhere: (taskId: string) => string | null;
   },
 ): TaskSessionsService {
   const { repos } = core;
@@ -117,6 +129,14 @@ export function createTaskSessionsService(
       const project = deps.projects.get(task.projectId);
       const refusal = sessionRefusal(task, project, deps.runsForTask(task.id), now);
       if (refusal) throw new AppError("CONFLICT", `Not started: ${refusal}.`);
+      const machine = deps.heldElsewhere(task.id);
+      if (machine) {
+        throw new AppError(
+          "CONFLICT",
+          `Not started: ${taskLabel(task)} is held by ${machine}, whose own Autopilot looks after it. Message its ` +
+            "thread, or request_attention if nothing is working on it.",
+        );
+      }
       const since = new Date(now - TASK_SESSION_COOLDOWN_MS).toISOString();
       const recent = repos.taskSessionRequests.forTaskSince(task.id, since)[0];
       if (recent) {
@@ -155,12 +175,24 @@ export function createTaskSessionsService(
       });
     },
     drop(id, reason) {
-      return core.write((fx) => {
-        const dropped = repos.taskSessionRequests.drop(id, core.now().toISOString(), reason);
-        if (dropped) fx.autopilot();
-        return dropped;
+      const dropped = core.write((fx) => {
+        const done = repos.taskSessionRequests.drop(id, core.now().toISOString(), reason);
+        if (done) fx.autopilot();
+        return done;
       });
+      const request = dropped ? repos.taskSessionRequests.get(id) : null;
+      if (request && repos.tasks.get(request.taskId)) {
+        deps
+          .tasks()
+          .addNote(
+            request.taskId,
+            `Autopilot dropped Orchestrate's request for a new session: ${reason}.`,
+            AUTOPILOT_ACTOR,
+          );
+      }
+      return dropped;
     },
+    heldElsewhere: (taskId) => deps.heldElsewhere(taskId),
   };
 }
 

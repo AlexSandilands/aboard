@@ -272,6 +272,12 @@ export function createServices(deps: ServiceDeps): Services {
       tasks: () => all!.tasks,
       projects,
       runsForTask: (taskId) => all!.autopilot.runsForTask(taskId, 20),
+      // As boardPlacement: a machine whose answer is unknown counts as running Autopilot itself.
+      heldElsewhere: (taskId) => {
+        const hold = all!.holds.get(taskId);
+        if (!hold || (deps.machineRunsAutopilot?.(hold.machineId) ?? null) === false) return null;
+        return all!.machines.list().find((m) => m.id === hold.machineId)?.name ?? "a connected machine";
+      },
     }),
     autopilot: createAutopilotService(core, {
       automations,
