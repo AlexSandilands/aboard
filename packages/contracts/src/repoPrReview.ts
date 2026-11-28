@@ -167,6 +167,26 @@ export function parseLogins(text: unknown): string[] {
   return [...new Set(logins)];
 }
 
+/**
+ * A bot's login as one name: lower-cased, without a leading `@` or the `[bot]` suffix that GitHub's REST API adds and
+ * its GraphQL API leaves off, so `@Reviewer[bot]` and `reviewer` match.
+ */
+export const normalizeLogin = (login: string): string =>
+  login
+    .trim()
+    .replace(/^@/, "")
+    .replace(/\[bot\]$/i, "")
+    .toLowerCase();
+
+/** Bot logins from a comma or whitespace separated list (Fix PRs' "Trusted bot reviewers"), normalized, each once. */
+export const parseBotLogins = (text: unknown): string[] => [
+  ...new Set(parseLogins(text).map(normalizeLogin).filter(Boolean)),
+];
+
+/** Whether the author is one of these bot logins (`parseBotLogins`). */
+export const isListedBot = (author: string | null | undefined, bots: readonly string[]): boolean =>
+  !!author && bots.length > 0 && bots.includes(normalizeLogin(author));
+
 /** Path patterns from a comma or newline separated list. */
 export function parsePathPatterns(text: unknown): string[] {
   if (typeof text !== "string") return [];

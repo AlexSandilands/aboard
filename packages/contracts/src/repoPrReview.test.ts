@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SENSITIVE_PATHS,
+  isListedBot,
   matchesPathPattern,
+  normalizeLogin,
+  parseBotLogins,
   parseControlCommand,
   parseLogins,
   parsePathPatterns,
@@ -52,6 +55,17 @@ describe("markers and commands", () => {
     expect(parseControlCommand("/autopilot resume")).toBe("resume");
     expect(parseControlCommand("please /autopilot stop")).toBeNull();
     expect(parseControlCommand("/autopilot stopped")).toBeNull();
+  });
+
+  it("normalizes bot logins: case, a leading @ and the REST [bot] suffix", () => {
+    expect(normalizeLogin(" @Reviewer[bot] ")).toBe("reviewer");
+    expect(parseBotLogins("@Reviewer[bot], reviewer\nother-BOT")).toEqual(["reviewer", "other-bot"]);
+    const bots = parseBotLogins("reviewer");
+    expect(isListedBot("Reviewer[bot]", bots)).toBe(true);
+    expect(isListedBot("reviewer", bots)).toBe(true);
+    expect(isListedBot("someone", bots)).toBe(false);
+    expect(isListedBot(null, bots)).toBe(false);
+    expect(isListedBot("reviewer", [])).toBe(false);
   });
 
   it("parses logins and keys reviews by head, resume and reply", () => {

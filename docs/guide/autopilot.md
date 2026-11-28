@@ -185,6 +185,10 @@ switch, all on by default:
   account, so it can't tell your comments from its own replies, and only other people's comments count. They also
   have to be from someone with access to the repository (an owner, member or collaborator), not just anyone who can
   comment on it.
+- **Trusted bot reviewers**, in the Review comments row: logins of review bots, comma separated, whose comments and
+  requests for changes count as from someone with access. GitHub often marks a bot installed as an app as having no
+  access, so without this its points are never fixed. Write `review-bot`, `@review-bot` or `review-bot[bot]`: they're
+  the same. Their fixes count against **Attempts on comments**. Empty by default.
 - **Autopilot's review**: when **Review PRs** found points at or above the **fix threshold**. The agent fixes only
   those and leaves the rest, and the FYI section, alone.
 
@@ -195,7 +199,8 @@ the PR's branch and replies on each thread, starting with Autopilot's mark and "
 
 - **Resolve threads it fixed** (on by default): Autopilot resolves each thread it replied it fixed once that commit is
   on the PR, so a repository that requires every conversation resolved can merge. Threads it declined stay open for
-  the reviewer. It also catches up on threads it fixed before. From its second round, **Review PRs** resolves its own
+  the reviewer, except a trusted bot reviewer's: bots rarely come back to resolve, so Autopilot resolves those once it
+  has replied why it declined, and the reason stays on the thread. It also catches up on threads it fixed before. From its second round, **Review PRs** resolves its own
   earlier threads once it confirms the point is fixed.
 
 - Each reason is acted on once. A new failure on a new commit, or a newer comment, is a new reason.

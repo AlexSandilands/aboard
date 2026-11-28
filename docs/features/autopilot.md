@@ -793,8 +793,8 @@ to fix a pull request linked to a task.
   - failing checks: `checks@<headOid>`;
   - merge conflicts: `conflict@<headOid>`;
   - changes requested: while `reviewDecision` is `changes_requested`, the newest `changes_requested` review from a
-    `trusted` author that isn't Autopilot's: `changes@<reviewId>`. The user's own counts: Autopilot only comments;
-  - review comments: comments on unresolved threads that aren't `own`, are `trusted`, aren't in one of Autopilot's
+    trusted author (below) that isn't Autopilot's: `changes@<reviewId>`. The user's own counts: Autopilot only comments;
+  - review comments: comments on unresolved threads that aren't `own`, are from a trusted author, aren't in one of Autopilot's
     reviews, and are newer than the newest comment an earlier attempt was given: `comments@<newestId>`. Autopilot
     posts as the user, so the user's own comments can't be told from its replies and never count. A thread whose
     newest comment is the user's account's (`ownLast`: Autopilot's reply, or the user's own) is left out altogether:
@@ -802,6 +802,16 @@ to fix a pull request linked to a task.
   - Autopilot's review: `currentPrReview(...)` with `handoff: "fix"`: `review@<reviewId>`.
 
   Autopilot's own reviews are told apart by the `reviewId`s on Review PRs' runs.
+
+  A **trusted author** (`trustedAuthor`) is one with access to the repository (`trusted`: `authorAssociation` OWNER,
+  MEMBER or COLLABORATOR, `TRUSTED` in `githubSnapshot.ts`) or a login in **Trusted bot reviewers** (`trustedBots`,
+  comma separated, default empty). GitHub often marks a review bot installed as an app NONE, so without the list its
+  points never start a fix. The list is opt-in per login: nobody marked NONE is trusted otherwise, since some bots post
+  comments that need no answer. Logins are compared with `normalizeLogin` (`packages/contracts/src/repoPrReview.ts`):
+  lower-cased, without a leading `@` or the `[bot]` suffix GitHub's REST API adds and GraphQL leaves off. A listed bot's
+  comments and requests for changes are `comments` and `changes` triggers like a person's, so they count against
+  `commentAttempts`, and the `ownLast` rule above still keeps two bots from ping-ponging. **Fix in →** picks a listed
+  bot's changes-requested review too.
 - **Batching and dedupe.** One candidate per PR link carries every trigger that hasn't fired yet, with the key
   `fix:pr:<linkId>:<headOid>:<trigger keys joined by +>`. Earlier attempts' triggers are read back from their keys
   (`parseFixKey`), so a failed attempt, which leaves no output, still counts what it was given; a skipped one didn't
@@ -818,7 +828,8 @@ to fix a pull request linked to a task.
   `prHead` says the PR moved (a force-push). The prompt has a section per trigger with the `gh` commands to read
   it. For Autopilot's review it gives the counts and the review's `threshold` and says to fix only points at or
   above it and leave the FYI section alone. Comments are named by id (`gh api repos/<repo>/pulls/comments/<id>`),
-  and the agent is told to read only the reviews and comments listed. The agent pushes to `headRef` and then replies on
+  and the agent is told to read only the reviews and comments listed, which come from people with access or reviewer
+  bots the user trusts. The agent pushes to `headRef` and then replies on
   each thread it was sent to, the reply's first line exactly `prFixedReply(sha)` ("📋 … Autopilot · fixed in <sha>")
   for a point it fixed or `prDeclinedReply(reason)` for one it won't. The reply goes in a file posted with `gh api … -F body=@file`,
   because the `gh api *merge*` deny rule would refuse a command line that mentions merging. A custom **Fix skill**
@@ -835,9 +846,14 @@ to fix a pull request linked to a task.
   action reads them fresh with `reviewThreads` (`ReviewThreadDetail`: the newest comment's body, and the PR's newest 100
   commits) and resolves each whose newest comment is Autopilot's reply saying `fixed in <sha>` (`reply: "fixed"`,
   `parseAutopilotReply`, lenient enough for replies written before the format was fixed) with that sha prefixing one
-  of the commits. The others (declined, the user's own words, Autopilot's review comment) go on the run's
-  `output.settled` as `thread@newestCommentId` and aren't read again until someone comments; one whose commit isn't on
-  the PR is read again after the next push. A thread GitHub refuses to resolve flags the run under Needs attention;
+  of the commits. A thread a listed **trusted bot reviewer** started (`rootAuthor`, the root comment's login, read
+  only on this fresh read) is also resolved when its newest comment is Autopilot's `declined: <reason>` reply: bots
+  rarely come back to resolve a thread, an open one blocks a repository that requires conversations resolved, and the
+  reason stays readable on the resolved thread. A person's declined thread stays open for them. The candidate carries
+  the parsed list (`ResolveData.trustedBots`). The others (a person's declined thread, the user's own words,
+  Autopilot's review comment) go on the run's `output.settled` as `thread@newestCommentId` and aren't read again until
+  someone comments; one whose commit isn't on the PR is read again after the next push. So a bot's declined thread
+  settled before the bot was listed stays open until someone comments on it again. A thread GitHub refuses to resolve flags the run under Needs attention;
   the ones that did resolve drop out of the next poll, so the refused ones form a new set and are tried once more. It doesn't wait for a fix or review of the PR to finish, isn't an attempt
   and isn't counted as an agent run (`FIX_RESOLVE_KEY_PREFIX` is left out of the caps like the give-ups). The fix
   prompt tells the agent not to resolve threads itself; with the switch off it says the reviewer does.
@@ -866,12 +882,12 @@ to fix a pull request linked to a task.
   epic's PR, fixed for conflicts only, uses only this budget.
 - **Safety.** Headless runs get `pushDenyRules` (no force-push, no push to the default branch, no `gh pr merge`)
   and the runner's workspace note. T3 threads get the same rules in their note, and the fix prompt repeats them for
-  a nudge. Conflicts are fixed with a merge, never a rebase. Only trusted authors' comments start a fix, and the
+  a nudge. Conflicts are fixed with a merge, never a rebase. Only trusted authors' comments (people with access, and the bots the user listed) start a fix, and the
   prompt names them by id, tells the agent not to read the others, and calls what it reads requests about the code,
   never instructions. That is a prompt, not a sandbox: a fix agent has edit access, Bash and the user's `gh` login,
   so on a public repository a stranger's comment it reads anyway (or a CI log) could still try to steer it. Unlike
   the reviewer it can't be confined to exact commands, because fixing means running the project's own tools.
-- **Settings.** The five switches, **Fix findings at or above** (`fixThreshold`), **Attempts on checks and reviews**
+- **Settings.** The five switches, **Trusted bot reviewers** (`trustedBots`, in the Review comments row), **Fix findings at or above** (`fixThreshold`), **Attempts on checks and reviews**
   (`attempts`) and **Attempts on comments** (`commentAttempts`) up front; **Fix skill** (built-in: the prompt alone)
   and the shared runner fields, which take the board's [agent defaults](#agent-defaults), under Advanced.
 - **An integration epic's own PR.** For an epic delivered through an integration branch

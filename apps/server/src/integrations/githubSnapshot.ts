@@ -69,6 +69,7 @@ const ReviewThreadNode = z.object({
         z
           .object({
             databaseId: z.number().nullish(),
+            author: Author,
             pullRequestReview: z.object({ databaseId: z.number().nullish() }).nullish(),
           })
           .nullable(),
@@ -224,6 +225,7 @@ export function mapReviewThreadDetails(nodes: ReadonlyArray<ReviewThreadNode | n
       ...info,
       rootCommentId: root?.databaseId ?? null,
       rootReviewId: root?.pullRequestReview?.databaseId ?? null,
+      rootAuthor: root?.author?.login ?? null,
       reply: reply?.kind ?? null,
       fixedIn: reply?.kind === "fixed" ? reply.sha : null,
     };
@@ -384,7 +386,7 @@ const THREAD_FIELDS = `reviewThreads(last: 30) { nodes { id isResolved viewerCan
  * comment and its newest one's body, only to match Autopilot's marked reply. Never put in a prompt.
  */
 const THREAD_DETAIL_FIELDS = `reviewThreads(last: 100) { nodes { id isResolved viewerCanResolve
-        root: comments(first: 1) { nodes { databaseId pullRequestReview { databaseId } } }
+        root: comments(first: 1) { nodes { databaseId author { login } pullRequestReview { databaseId } } }
         ${COMMENT_FIELDS}
         latest: comments(last: 1) { nodes { body viewerDidAuthor } }
       } }`;

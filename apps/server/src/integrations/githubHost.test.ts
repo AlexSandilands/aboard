@@ -572,6 +572,7 @@ describe("review threads", () => {
           lastReviewId: null,
           rootCommentId: null,
           rootReviewId: null,
+          rootAuthor: null,
           reply: "fixed",
           fixedIn: "abc1234",
         },

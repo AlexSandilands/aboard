@@ -270,6 +270,8 @@ export interface ReviewThreadDetail extends PrReviewThreadInfo {
   /** The thread's first comment and the review it was posted in, to tell Autopilot's own review threads. */
   rootCommentId: number | null;
   rootReviewId: number | null;
+  /** Who started the thread, to resolve a listed review bot's thread once Autopilot declines its point. */
+  rootAuthor: string | null;
   /**
    * The newest comment is Autopilot's (the signed-in account, starting with its mark): a reply saying it was fixed
    * (`fixedIn` is the commit) or declined, or something else of Autopilot's, such as its own review comment. Null when
