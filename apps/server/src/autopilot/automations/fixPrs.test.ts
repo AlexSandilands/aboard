@@ -29,6 +29,7 @@ import { RunAbandonedError, WorktreeHeadError, type Runner, type RunnerRequest, 
 import {
   attemptBudget,
   attemptBudgets,
+  attemptEndedAt,
   fixDedupeKey,
   fixPrompt,
   fixPrs,
@@ -1709,6 +1710,94 @@ describe("fix PRs: runs that end in no action", () => {
     });
   });
 
+  it("wait for a read of the PR after the last attempt ended before starting the next, so it can be judged", async () => {
+    const { requests, setPr, pass, engine, turnOn, runs, fixSettings, holdRunner, linkId } = setup();
+    fixSettings({ commentAttempts: 1 });
+    turnOn();
+    const pr = (ids: number[]) =>
+      setPr({ headCommittedAt: HEAD_AT, conversationComments: [], reviewComments: ids.map((id) => comment(id)) });
+    let release = () => {};
+    holdRunner(new Promise<void>((resolve) => (release = resolve)));
+    pr([1]);
+    await engine.pass();
+    // A comment comes in while the attempt is at work: that read is older than the attempt's end.
+    pr([1, 2]);
+    // So the attempt's end is a clock tick after that read.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    release();
+    await engine.idle();
+    holdRunner(null);
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(runs().some((r) => r.dedupeKey.startsWith(`fix:no_action:${linkId()}:`))).toBe(false);
+    // The next read judges it no action, and the comment gets an attempt of its own.
+    pr([1, 2]);
+    await pass();
+    expect(runs().some((r) => r.dedupeKey.startsWith(`fix:no_action:${linkId()}:`))).toBe(true);
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.prompt).toContain("(comment ids 2)");
+    expect(requests[1]!.prompt).toContain("review-comment fix attempt 1 of at most 1");
+  });
+
+  it("never count an attempt handed to a T3 thread as no action when T3 doesn't say when it last worked", async () => {
+    const { requests, setPr, pass, turnOn, runs, fixSettings, withThread, threadIs, linkId } = setup();
+    fixSettings({ commentAttempts: 1 });
+    turnOn();
+    withThread("idle");
+    const pr = (ids: number[]) =>
+      setPr({ headCommittedAt: HEAD_AT, conversationComments: [], reviewComments: ids.map((id) => comment(id)) });
+    pr([1]);
+    await pass();
+    expect(requests[0]!.kind).toBe("nudge");
+    // T3's poll sees the thread idle again, with no last activity.
+    threadIs("idle");
+    pr([1, 2]);
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(runs().some((r) => r.dedupeKey.startsWith(`fix:no_action:${linkId()}:`))).toBe(false);
+    expect(runs()[0]!.summary).toBe(
+      "Autopilot gave up on PR #7: 1 review-comment fix attempt used, still to fix: review comments",
+    );
+  });
+
+  it("keep when the PR was read for each attempt, so a PR comment after it is still news", async () => {
+    const { setPr, pass, turnOn, runs } = setup();
+    turnOn();
+    setPr({ reviewComments: [comment(1)] });
+    await pass();
+    expect(runs()[0]!.output).toMatchObject({ kind: "pr_fix", prReadAt: expect.any(String) });
+  });
+
+  describe("attemptEndedAt", () => {
+    const withT3 = (lastActivityAt?: string) => ({
+      links: [
+        {
+          id: "l",
+          taskId: "t",
+          url: "t3code://threads/env/thread-1",
+          label: null,
+          syncedAt: null,
+          createdAt: "2026-10-01T00:00:00Z",
+          kind: "t3_thread" as const,
+          snapshot: { title: "T", status: "idle" as const, ...(lastActivityAt ? { lastActivityAt } : {}) },
+        },
+      ],
+    });
+    const run = { runner: "t3", threadUrl: "t3code://threads/env/thread-1", finishedAt: "2026-10-02T10:00:00Z" };
+
+    it("is a headless run's end, and a T3 thread's last activity when that is later", () => {
+      expect(attemptEndedAt({ links: [] }, { ...run, runner: "headless", threadUrl: null })).toBe(run.finishedAt);
+      expect(attemptEndedAt(withT3("2026-10-02T10:30:00Z") as never, run)).toBe("2026-10-02T10:30:00Z");
+      expect(attemptEndedAt(withT3("2026-10-02T09:00:00Z") as never, run)).toBe(run.finishedAt);
+    });
+
+    it("is unknown without the thread or its last activity", () => {
+      expect(attemptEndedAt({ links: [] }, run)).toBeNull();
+      expect(attemptEndedAt(withT3() as never, run)).toBeNull();
+      expect(attemptEndedAt({ links: [] }, { ...run, finishedAt: null })).toBeNull();
+    });
+  });
+
   it("aren't told apart with the switch off: every attempt counts", async () => {
     const { requests, setPr, pass, turnOn, runs, fixSettings, linkId } = setup();
     fixSettings({ commentAttempts: 1 });
@@ -1757,6 +1846,8 @@ describe("fix PRs: runs that end in no action", () => {
 
     it("counts a run until the snapshot was read after it, or when it has no conversation comments", () => {
       expect(isNoAction(base, pr({}, "2026-10-02T10:04:00Z"))).toBe(false);
+      // A T3 thread worked on after its run ended: the read must come after that.
+      expect(isNoAction({ ...base, endedAt: "2026-10-02T10:30:00Z" }, pr())).toBe(false);
       expect(isNoAction(base, { ...pr(), snapshot: snapshot() })).toBe(false);
     });
 

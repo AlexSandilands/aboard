@@ -115,6 +115,9 @@ export const attemptBudget = (keys: readonly string[]): FixBudget => attemptBudg
  * has the conversation comments, so a snapshot from before they were read counts every attempt as before. An attempt
  * that also answered checks or Autopilot's review, or that failed, always counts.
  *
+ * `endedAt` is when the agent stopped: a run handed to a T3 thread ends when the thread starts, so it is the thread's
+ * last activity (`attemptEndedAt`); without it the run's own end.
+ *
  * Judged once, while the PR is as the run left it: a later push, or replies falling out of the poll's window, would
  * change the answer, so the check records a no-action verdict as a run of its own (`FIX_NO_ACTION_KEY_PREFIX`) and
  * reads it back from there.
@@ -124,16 +127,16 @@ export function isNoAction(
     run: Pick<AutopilotRun, "status" | "startedAt" | "finishedAt">;
     headOid: string;
     triggers: string[];
+    endedAt?: string | null;
   },
   pr: { snapshot: PrSnapshot; syncedAt: string | null; ownReviewIds: ReadonlySet<number> },
 ): boolean {
   const { run } = attempt;
   const { snapshot } = pr;
   if (run.status !== "succeeded" || !run.startedAt || !run.finishedAt) return false;
-  const budgets = attemptBudgets(attempt.triggers);
-  if (budgets.length !== 1 || budgets[0] !== "comments") return false;
+  if (!onCommentsOnly(attempt.triggers)) return false;
   if (attempt.headOid !== snapshot.headOid || snapshot.conversationComments === undefined) return false;
-  if (!(Date.parse(pr.syncedAt ?? "") >= Date.parse(run.finishedAt))) return false;
+  if (!(Date.parse(pr.syncedAt ?? "") >= Date.parse(attempt.endedAt ?? run.finishedAt))) return false;
   const from = Date.parse(run.startedAt);
   const after = (at: string | null) => at !== null && Date.parse(at) >= from;
   const commented = snapshot.conversationComments.some((c) => c.own && c.marked && after(c.createdAt));
@@ -141,6 +144,29 @@ export function isNoAction(
     (r) => r.own && after(r.submittedAt) && (r.id === null || !pr.ownReviewIds.has(r.id)),
   );
   return !commented && !replied;
+}
+
+/** Whether an attempt counts against nothing but people's comments, so it may end in no action. */
+const onCommentsOnly = (triggers: readonly string[]): boolean => {
+  const budgets = attemptBudgets(triggers);
+  return budgets.length === 1 && budgets[0] === "comments";
+};
+
+/**
+ * When the agent of a finished attempt stopped: a run handed to a T3 thread (a nudge or a new thread) ends as soon as
+ * the thread starts, so it is the thread's last activity. Null when that can't be told (the thread is gone, or T3
+ * didn't say), so the attempt is never judged to have done nothing.
+ */
+export function attemptEndedAt(
+  task: Pick<TaskSummary, "links">,
+  run: Pick<AutopilotRun, "runner" | "threadUrl" | "finishedAt">,
+): string | null {
+  if (!run.finishedAt) return null;
+  if (run.runner !== "t3") return run.finishedAt;
+  const thread = task.links.find((l) => l.kind === "t3_thread" && l.url === run.threadUrl);
+  const last = thread?.kind === "t3_thread" ? thread.snapshot?.lastActivityAt : null;
+  if (!last) return null;
+  return Date.parse(last) > Date.parse(run.finishedAt) ? last : run.finishedAt;
 }
 
 /** A thread at its newest comment: a new comment on it makes it another thread to look at. */
@@ -178,6 +204,8 @@ export type FixTrigger =
 
 interface FixData {
   linkId: string;
+  /** When the PR was read for this attempt (the link's `syncedAt`); left out by attempts queued before it was kept. */
+  prReadAt?: string | null;
   url: string;
   host: string;
   repo: string;
@@ -799,6 +827,13 @@ const FIELDS: AutopilotField[] = [
 ];
 
 /** What a finished fix attempt leaves on its run. */
+/**
+ * When the PR was read for an attempt: a PR comment posted after it wasn't given to the attempt. Its output says;
+ * without one (a failed run leaves none), when it was decided, a poll later at most.
+ */
+const attemptReadAt = (run: Pick<AutopilotRun, "createdAt" | "output">): string =>
+  typeof run.output?.prReadAt === "string" ? run.output.prReadAt : run.createdAt;
+
 export interface FixRunOutput {
   kind: "pr_fix";
   linkId: string;
@@ -807,6 +842,8 @@ export interface FixRunOutput {
   attempt: number;
   triggers: string[];
   via: "nudge" | "t3" | "headless";
+  /** When the PR was read for the attempt, so a PR comment after it is still news (`attemptReadAt`). */
+  prReadAt?: string;
 }
 
 const isActive = (run: AutopilotRun) => run.status === "queued" || run.status === "running";
@@ -884,11 +921,18 @@ export const fixPrs = defineAutomation({
               r.dedupeKey.startsWith(verdictPrefix) ? [r.dedupeKey.slice(verdictPrefix.length)] : [],
             ),
           );
-          if (
+          const endedAt = newest ? attemptEndedAt(task, newest.run) : null;
+          const unjudged =
             config.onSummaries &&
-            newest &&
+            newest !== null &&
             !judged.has(newest.run.id) &&
-            isNoAction(newest, { snapshot, syncedAt: link.syncedAt, ownReviewIds })
+            newest.run.status === "succeeded" &&
+            onCommentsOnly(newest.triggers);
+          // An end that can't be told (a T3 thread T3 says nothing about) is never judged: the attempt counts.
+          if (
+            unjudged &&
+            endedAt !== null &&
+            isNoAction({ ...newest, endedAt }, { snapshot, syncedAt: link.syncedAt, ownReviewIds })
           ) {
             judged.add(newest.run.id);
             out.push({
@@ -899,6 +943,16 @@ export const fixPrs = defineAutomation({
               data: { noAction: true, number: ref.number, runId: newest.run.id } satisfies NoActionData,
             });
           }
+          // Until the PR has been read since that attempt ended, it can't be judged, and starting the next one would
+          // leave it unjudged for good: wait for the next read (a poll, seconds away).
+          if (
+            unjudged &&
+            !judged.has(newest.run.id) &&
+            endedAt !== null &&
+            !(Date.parse(link.syncedAt ?? "") >= Date.parse(endedAt))
+          ) {
+            return out;
+          }
           const active = activeTriggers(snapshot, config, {
             review: currentPrReview(reviews, link.id, snapshot.headOid),
             ownReviewIds,
@@ -906,7 +960,7 @@ export const fixPrs = defineAutomation({
             sinceSummary: newestHandled(handled, "summary"),
             sinceConversation: newestHandled(handled, "conversation"),
             ownThreadReplies,
-            lastAttemptAt: newest?.run.createdAt ?? null,
+            lastAttemptAt: newest ? attemptReadAt(newest.run) : null,
           });
           const fresh = active.filter((t) => !handled.has(t.key) && (!epicBranch || t.kind === "conflict"));
           if (fresh.length === 0) return out;
@@ -998,6 +1052,7 @@ export const fixPrs = defineAutomation({
             attempt: atHead + 1,
             triggers: left,
             stillOpen: [...new Set(active.filter((t) => handled.has(t.key)).map((t) => t.kind))],
+            prReadAt: link.syncedAt,
           };
           out.push({
             dedupeKey: fixDedupeKey(link.id, snapshot.headOid, left),
@@ -1156,6 +1211,7 @@ export const fixPrs = defineAutomation({
       attempt: data.attempt,
       triggers: data.triggers.map((t) => t.key),
       via,
+      ...(data.prReadAt ? { prReadAt: data.prReadAt } : {}),
     };
     const { result: _result, output: _output, ...patch } = started;
     const how =

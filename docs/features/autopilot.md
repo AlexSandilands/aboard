@@ -807,9 +807,11 @@ to fix a pull request linked to a task.
       the current head (`commitOid`) and is from a requester (below): `summary@<newestReviewId>`. A summary the same
       reviewer followed with an approval or a request for changes is superseded;
     - PR comments: conversation comments (`conversationComments`, the newest 10) from a requester, posted after the
-      head commit (`headCommittedAt`: one from before was there when the last push was made) or after the newest
-      attempt was decided (`lastAttemptAt`: one posted while an attempt was at work wasn't given to it, though its
-      push is newer), and newer than the newest an earlier attempt was given: `conversation@<newestId>`;
+      head commit (`headCommittedAt`: one from before was there when the last push was made) or after the PR was
+      read for the newest attempt (`lastAttemptAt`, the attempt's `output.prReadAt`, else when it was decided: one
+      posted while an attempt was at work wasn't given to it, though its push is newer), and newer than the newest an
+      earlier attempt was given: `conversation@<newestId>`. So a push of the user's after an attempt doesn't count as
+      answering the comments posted since that attempt: they start a run, and the agent judges them;
     - the user's own replies in threads: the resolving read (below) reports a thread whose newest comment is the
       user's own, with no mark, in its output's `requests`; while it is still that thread's newest comment, the next
       pass adds its id to the review comments trigger (`own` in the trigger, so the prompt says so).
@@ -912,8 +914,11 @@ to fix a pull request linked to a task.
   attempt whose budgets are only `comments` that succeeded, left the head where it started, and was followed by no
   reply of the account's: no review of its own that isn't one of Autopilot's (a thread reply is one) and no marked PR
   comment of its own. That is the agent judging the comments discussion, and needs no report from it. Only the newest
-  attempt is judged, once the snapshot was read after it ended (a T3 thread's, once the thread is idle) and only on a
-  snapshot with `conversationComments`, so older snapshots count every attempt as before. A later push, or its
+  attempt is judged, once the snapshot was read after it ended, and only on a snapshot with `conversationComments`,
+  so older snapshots count every attempt as before. An attempt handed to a T3 thread ends when the thread starts, so
+  it is judged once the thread is idle, on a read after the thread's `lastActivityAt` (`attemptEndedAt`); without
+  that the attempt counts. Until such a read comes, a new attempt waits (a poll at most), so the one before isn't
+  left unjudged. A later push, or its
   replies falling out of the poll's last 20 reviews and 10 comments, would change the answer, so a no-action verdict
   is recorded as a run of its own, `fix:no_action:<linkId>:<runId>` (`FIX_NO_ACTION_KEY_PREFIX`, skipped, no agent,
   left out of the caps), and read back from there. A reply the poll hasn't read yet when the verdict is taken can
