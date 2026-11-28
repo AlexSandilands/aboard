@@ -40,6 +40,12 @@ export const FIX_GAVE_UP_KEY_PREFIX = "fix:gave_up:";
  */
 export const FIX_RESOLVE_KEY_PREFIX = "fix:resolve:";
 
+/**
+ * The start of the dedupe key of every run recording that a Fix PRs attempt on people's comments ended in no action,
+ * so it used no attempt (`fix:no_action:<link>:<run id>`). It starts no agent.
+ */
+export const FIX_NO_ACTION_KEY_PREFIX = "fix:no_action:";
+
 /** The merge buttons: `armed` is a badge and a menu item of its own, not a slot. */
 export type PrMergeButton = Exclude<PrMergeAction, "armed">;
 

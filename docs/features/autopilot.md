@@ -807,8 +807,9 @@ to fix a pull request linked to a task.
       the current head (`commitOid`) and is from a requester (below): `summary@<newestReviewId>`. A summary the same
       reviewer followed with an approval or a request for changes is superseded;
     - PR comments: conversation comments (`conversationComments`, the newest 10) from a requester, posted after the
-      head commit (`headCommittedAt`: one from before was there when the last push was made) and newer than the
-      newest an earlier attempt was given: `conversation@<newestId>`;
+      head commit (`headCommittedAt`: one from before was there when the last push was made) or after the newest
+      attempt was decided (`lastAttemptAt`: one posted while an attempt was at work wasn't given to it, though its
+      push is newer), and newer than the newest an earlier attempt was given: `conversation@<newestId>`;
     - the user's own replies in threads: the resolving read (below) reports a thread whose newest comment is the
       user's own, with no mark, in its output's `requests`; while it is still that thread's newest comment, the next
       pass adds its id to the review comments trigger (`own` in the trigger, so the prompt says so).
@@ -853,7 +854,8 @@ to fix a pull request linked to a task.
   never to act on anything not listed. When people's comments are in it, the agent **judges each request** rather
   than assume it right: it fixes it, declines it with its reason, asks a clarifying question when it can't tell what
   is wanted (changing nothing for it; the answer starts another attempt), or, for discussion, thanks or a status
-  note, does nothing and posts nothing. The agent pushes to `headRef` and then replies on
+  note, does nothing and posts nothing. With the switch off, none of that is in the prompt, nor the PR comment below:
+  it is as before. The agent pushes to `headRef` and then replies on
   each thread it was sent to, the reply's first line exactly `prFixedReply(sha)` ("📋 … Autopilot · fixed in <sha>")
   for a point it fixed, `prDeclinedReply(reason)` for one it won't, or `prQuestionReply()` for one it needs clarified.
   What has no thread (review summaries, PR comments, and points of a request for changes' summary that no inline
@@ -906,16 +908,18 @@ to fix a pull request linked to a task.
   cap, a daily cap or quiet hours don't hold it back. (Before the budgets were split the key was
   `fix:gave_up:<linkId>`; a PR given up on under it gets a fresh look.)
 
-  **Runs that end in no action** use no attempt (`isNoAction`): an attempt whose budgets are only `comments` that
-  succeeded, left the head where it started, and was followed (before the next attempt started) by no reply of the
-  account's: no review of its own that isn't one of Autopilot's (a thread reply is one) and no marked PR comment of
-  its own. That is the agent judging the comments discussion, and needs no report from it. It is decided only once
-  the snapshot was read after the run ended, and only on a snapshot with `conversationComments`, so older snapshots
-  count every attempt as before. Such runs are left out of the budgets and of the per-head count (two discussion
-  comments at one head mustn't give up), but they cost money, so after `NO_ACTION_RUNS_PER_PR` (20) on one PR a
-  gave-up run `fix:gave_up:<linkId>:no_action` gives up on the comments' triggers. A T3 thread is judged once its run
-  has ended and the thread is idle; a reply the poll hasn't read yet can make a run look like no action until the next
-  poll.
+  **Runs that end in no action** use no attempt, with **Review summaries and PR comments** on (`isNoAction`): an
+  attempt whose budgets are only `comments` that succeeded, left the head where it started, and was followed by no
+  reply of the account's: no review of its own that isn't one of Autopilot's (a thread reply is one) and no marked PR
+  comment of its own. That is the agent judging the comments discussion, and needs no report from it. Only the newest
+  attempt is judged, once the snapshot was read after it ended (a T3 thread's, once the thread is idle) and only on a
+  snapshot with `conversationComments`, so older snapshots count every attempt as before. A later push, or its
+  replies falling out of the poll's last 20 reviews and 10 comments, would change the answer, so a no-action verdict
+  is recorded as a run of its own, `fix:no_action:<linkId>:<runId>` (`FIX_NO_ACTION_KEY_PREFIX`, skipped, no agent,
+  left out of the caps), and read back from there. A reply the poll hasn't read yet when the verdict is taken can
+  still make a run look like no action. Such runs are left out of the budgets and of the per-head count (two
+  discussion comments at one head mustn't give up), but they cost money, so after `NO_ACTION_RUNS_PER_PR` (20)
+  verdicts on one PR a gave-up run `fix:gave_up:<linkId>:no_action` gives up on the comments' triggers.
 
   An attempt whose triggers were all `conflict@…` (read back from its key, so a failed one is classified too)
   counts against neither: main moving under the PR isn't the PR's doing, and every merge into the base can conflict

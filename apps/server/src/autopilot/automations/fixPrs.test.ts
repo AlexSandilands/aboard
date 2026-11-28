@@ -1541,6 +1541,20 @@ describe("fix PRs: review summaries and PR comments", () => {
     expect(requests[1]!.prompt).toContain("(comment ids 7)");
   });
 
+  it("answers a PR comment posted while an attempt was at work, though that attempt's push is newer", async () => {
+    const { requests, setPr, pass, turnOn } = setup();
+    turnOn();
+    setPr({ headCommittedAt: HEAD_AT, conversationComments: [], reviewComments: [comment(1)] });
+    await pass();
+    expect(requests).toHaveLength(1);
+    // Posted after the attempt was decided; its push lands a few minutes later.
+    const during = convo(9, { createdAt: "2099-01-01T00:00:00Z" });
+    setPr({ headOid: SHA_B, headCommittedAt: "2099-01-01T00:05:00Z", conversationComments: [during] });
+    await pass();
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.prompt).toContain("(comment ids 9)");
+  });
+
   it("answers the user's own reply in a thread on the pass after the fresh read finds it, never a fix session's", async () => {
     const { requests, setPr, pass, turnOn, runs, setThreadState } = setup();
     turnOn();
@@ -1591,6 +1605,19 @@ describe("fix PRs: review summaries and PR comments", () => {
     expect(requests).toHaveLength(1);
     expect(requests[0]!.prompt).not.toContain("PR comments");
     expect(requests[0]!.prompt).not.toContain("gh pr comment");
+    expect(requests[0]!.prompt).not.toContain("Judge each request");
+    expect(requests[0]!.prompt).not.toContain("· question");
+  });
+
+  it("with the switch off, asks nothing new of a request for changes", async () => {
+    const { requests, setPr, pass, turnOn } = setup();
+    turnOn({ onSummaries: false });
+    setPr({ reviewDecision: "changes_requested", reviews: [review(5)] });
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.prompt).not.toContain("Its summary may ask for things");
+    expect(requests[0]!.prompt).not.toContain("gh pr comment");
+    expect(requests[0]!.prompt).not.toContain("Judge each request");
   });
 });
 
@@ -1620,25 +1647,81 @@ describe("fix PRs: runs that end in no action", () => {
     at([1, 2, 3, 4], { reviews: [reply] });
     await pass();
     expect(requests).toHaveLength(3);
-    expect(runs()[0]!.summary).toBe(
+    expect(runs().find((r) => r.dedupeKey.includes("gave_up"))!.summary).toBe(
       "Autopilot gave up on PR #7: 1 review-comment fix attempt used, still to fix: review comments",
     );
   });
 
-  it("give up once too many runs on one PR ended in no action", async () => {
+  it("are judged once and recorded, so a later push doesn't make them count", async () => {
+    const { requests, setPr, pass, turnOn, runs, fixSettings, linkId } = setup();
+    fixSettings({ commentAttempts: 1 });
+    turnOn();
+    setPr({ headCommittedAt: HEAD_AT, conversationComments: [], reviewComments: [comment(1)] });
+    await pass();
+    // The next read of the PR finds it as the run left it: the verdict is recorded with no agent.
+    setPr({ headCommittedAt: HEAD_AT, conversationComments: [], reviewComments: [comment(1)], updatedAt: "x" });
+    await pass();
+    const verdict = runs().find((r) => r.dedupeKey.startsWith(`fix:no_action:${linkId()}:`));
+    expect(verdict).toMatchObject({
+      status: "skipped",
+      summary: "An attempt on PR #7's comments changed nothing and posted nothing, so it used no attempt",
+    });
+    expect(verdict!.dedupeKey).toBe(
+      `fix:no_action:${linkId()}:${runs().find((r) => r.dedupeKey.includes("comments@1"))!.id}`,
+    );
+    // The user pushes: the head the run started from is gone, and the run still used no attempt.
+    setPr({
+      headOid: SHA_B,
+      headCommittedAt: HEAD_AT,
+      conversationComments: [],
+      reviewComments: [comment(1), comment(2)],
+    });
+    await pass();
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.prompt).toContain("review-comment fix attempt 1 of at most 1");
+  });
+
+  it("give up once too many runs on one PR ended in no action, whatever the pushes in between", async () => {
     const { requests, setPr, pass, turnOn, runs, linkId } = setup();
     turnOn();
     const ids: number[] = [];
+    let headOid = SHA_A;
     for (let i = 1; i <= NO_ACTION_RUNS_PER_PR + 1; i++) {
       ids.push(i);
-      setPr({ headCommittedAt: HEAD_AT, conversationComments: [], reviewComments: ids.map((id) => comment(id)) });
+      const pr = () =>
+        setPr({
+          headOid,
+          headCommittedAt: HEAD_AT,
+          conversationComments: [],
+          reviewComments: ids.map((id) => comment(id)),
+        });
+      pr();
       await pass();
+      // The next read finds the PR as the run left it, and records the verdict.
+      pr();
+      await pass();
+      // Now and then someone else pushes: the verdicts already recorded stand.
+      if (i % 5 === 0) headOid = headOid === SHA_A ? SHA_B : SHA_A;
     }
     expect(requests).toHaveLength(NO_ACTION_RUNS_PER_PR);
-    expect(runs()[0]).toMatchObject({
-      dedupeKey: `fix:gave_up:${linkId()}:no_action`,
+    expect(runs().find((r) => r.dedupeKey === `fix:gave_up:${linkId()}:no_action`)).toMatchObject({
       summary: `Autopilot gave up on PR #7: ${NO_ACTION_RUNS_PER_PR} runs on comments changed nothing and posted nothing, still to look at: review comments`,
     });
+  });
+
+  it("aren't told apart with the switch off: every attempt counts", async () => {
+    const { requests, setPr, pass, turnOn, runs, fixSettings, linkId } = setup();
+    fixSettings({ commentAttempts: 1 });
+    turnOn({ onSummaries: false });
+    setPr({ headCommittedAt: HEAD_AT, conversationComments: [], reviewComments: [comment(1)] });
+    await pass();
+    setPr({ headCommittedAt: HEAD_AT, conversationComments: [], reviewComments: [comment(1), comment(2)] });
+    await pass();
+    expect(requests).toHaveLength(1);
+    expect(runs().some((r) => r.dedupeKey.startsWith(`fix:no_action:${linkId()}:`))).toBe(false);
+    expect(runs()[0]!.summary).toBe(
+      "Autopilot gave up on PR #7: 1 review-comment fix attempt used, still to fix: review comments",
+    );
   });
 
   describe("isNoAction", () => {
@@ -1675,13 +1758,6 @@ describe("fix PRs: runs that end in no action", () => {
     it("counts a run until the snapshot was read after it, or when it has no conversation comments", () => {
       expect(isNoAction(base, pr({}, "2026-10-02T10:04:00Z"))).toBe(false);
       expect(isNoAction(base, { ...pr(), snapshot: snapshot() })).toBe(false);
-    });
-
-    it("leaves what came after the next attempt started to that attempt", () => {
-      const later = "2026-10-02T11:01:00Z";
-      const replied = pr({ reviews: [review(53, { own: true, state: "commented", submittedAt: later })] });
-      expect(isNoAction(base, replied)).toBe(false);
-      expect(isNoAction({ ...base, until: "2026-10-02T11:00:00Z" }, replied)).toBe(true);
     });
 
     it("ignores Autopilot's own review, the user's unmarked comment and anything from before the run", () => {

@@ -16,6 +16,7 @@ import {
   describeCounts,
   isReviewOfLink,
   FIX_GAVE_UP_KEY_PREFIX,
+  FIX_NO_ACTION_KEY_PREFIX,
   FIX_RESOLVE_KEY_PREFIX,
   fixGaveUpPrefix,
   fixRunKeyPrefix,
@@ -107,19 +108,22 @@ export function attemptBudgets(keys: readonly string[]): FixBudget[] {
 export const attemptBudget = (keys: readonly string[]): FixBudget => attemptBudgets(keys)[0]!;
 
 /**
- * Whether a finished attempt on people's comments ended in no action: the agent judged them discussion, pushed nothing
- * and posted nothing. Read from the snapshot, so the agent reports nothing: the head is still the one it started from,
- * and no reply of the account's (a thread reply is a review of its own; Autopilot's PR comment carries its mark)
- * appeared between its start and `until`, the next attempt's start, which owns what came after. Only once the snapshot was read after the run ended, and only when it has the
- * conversation comments, so a snapshot from before they were read counts every attempt as before. An attempt that also
- * answered checks or Autopilot's review, or that failed, always counts.
+ * Whether the newest finished attempt on people's comments ended in no action: the agent judged them discussion,
+ * pushed nothing and posted nothing. Read from the snapshot, so the agent reports nothing: the head is still the one
+ * it started from, and no reply of the account's (a thread reply is a review of its own; Autopilot's PR comment
+ * carries its mark) appeared since it started. Only once the snapshot was read after the run ended, and only when it
+ * has the conversation comments, so a snapshot from before they were read counts every attempt as before. An attempt
+ * that also answered checks or Autopilot's review, or that failed, always counts.
+ *
+ * Judged once, while the PR is as the run left it: a later push, or replies falling out of the poll's window, would
+ * change the answer, so the check records a no-action verdict as a run of its own (`FIX_NO_ACTION_KEY_PREFIX`) and
+ * reads it back from there.
  */
 export function isNoAction(
   attempt: {
     run: Pick<AutopilotRun, "status" | "startedAt" | "finishedAt">;
     headOid: string;
     triggers: string[];
-    until?: string | null;
   },
   pr: { snapshot: PrSnapshot; syncedAt: string | null; ownReviewIds: ReadonlySet<number> },
 ): boolean {
@@ -131,8 +135,7 @@ export function isNoAction(
   if (attempt.headOid !== snapshot.headOid || snapshot.conversationComments === undefined) return false;
   if (!(Date.parse(pr.syncedAt ?? "") >= Date.parse(run.finishedAt))) return false;
   const from = Date.parse(run.startedAt);
-  const to = attempt.until ? Date.parse(attempt.until) : Infinity;
-  const after = (at: string | null) => at !== null && Date.parse(at) >= from && Date.parse(at) < to;
+  const after = (at: string | null) => at !== null && Date.parse(at) >= from;
   const commented = snapshot.conversationComments.some((c) => c.own && c.marked && after(c.createdAt));
   const replied = (snapshot.reviews ?? []).some(
     (r) => r.own && after(r.submittedAt) && (r.id === null || !pr.ownReviewIds.has(r.id)),
@@ -192,6 +195,13 @@ interface FixData {
   triggers: FixTrigger[];
   /** Triggers an earlier attempt was given that still hold, for context. */
   stillOpen: FixTriggerKind[];
+}
+
+/** Records that the attempt `runId` ended in no action, so it used no attempt (`isNoAction`). */
+interface NoActionData {
+  noAction: true;
+  number: number;
+  runId: string;
 }
 
 interface GaveUpData {
@@ -300,6 +310,11 @@ export interface TriggerContext {
    * thread read (the poll reads no thread bodies, so it can't tell them from Autopilot's replies).
    */
   ownThreadReplies?: readonly number[];
+  /**
+   * When the newest attempt on the PR was decided: a PR comment posted after that wasn't given to it, even if that
+   * attempt's push is newer than the comment.
+   */
+  lastAttemptAt?: string | null;
 }
 
 /**
@@ -378,8 +393,12 @@ export function activeTriggers(
       });
     }
     // A comment from before the head commit was there when the last push was made; one after it hasn't been answered
-    // by a push. A snapshot from before the date was read has none, so nothing counts.
-    const since = Date.parse(snapshot.headCommittedAt ?? "");
+    // by a push. One posted while an attempt was at work wasn't given to it, though its push came later: those count
+    // from when the newest attempt was decided. A snapshot from before the date was read has none, so nothing counts.
+    const since = Math.min(
+      Date.parse(snapshot.headCommittedAt ?? ""),
+      context.lastAttemptAt ? Date.parse(context.lastAttemptAt) : Infinity,
+    );
     const comments = Number.isNaN(since)
       ? []
       : (snapshot.conversationComments ?? []).filter(
@@ -437,6 +456,12 @@ export interface FixPromptInput {
   budget?: FixBudget;
   /** Autopilot resolves the threads the agent replied it fixed (Fix PRs' "Resolve threads it fixed"). */
   resolveThreads?: boolean;
+  /**
+   * Fix PRs' "Review summaries and PR comments": the agent judges each request (it may ask, or leave discussion alone)
+   * and answers what has no thread, a request for changes' summary included, in one PR comment. Off, the prompt is as
+   * it was before that switch.
+   */
+  summaries?: boolean;
   triggers: readonly FixTrigger[];
   stillOpen: readonly FixTriggerKind[];
   skill: ReviewSkillRef;
@@ -473,6 +498,7 @@ export function fixPrompt({
   conflictOnly = false,
   budget = conflictOnly ? "conflicts" : "review",
   resolveThreads = false,
+  summaries = false,
   triggers,
   stillOpen,
   skill,
@@ -507,7 +533,7 @@ export function fixPrompt({
             trigger.reviewId === null
               ? `- **Changes requested.** Find the review with \`${hints.conversation}\` and read its inline comments with \`${hints.inlineComments}\`.`
               : `- **Changes requested**${trigger.author ? ` by @${trigger.author}` : ""}. Read the review with \`${hints.review(trigger.reviewId)}\` and its comments with \`${hints.reviewComments(trigger.reviewId)}\`.`
-          } Its summary may ask for things none of its inline comments does: deal with those too, and answer them in the PR comment described below.`,
+          }${summaries ? " Its summary may ask for things none of its inline comments does: deal with those too, and answer them in the PR comment described below." : ""}`,
         );
         break;
       case "comments": {
@@ -556,10 +582,11 @@ export function fixPrompt({
   }
   const replyFile = manual ? "fix-reply.md" : "autopilot-reply.md";
   const kinds = new Set(triggers.map((t) => t.kind));
-  const people = triggers.some((t) => PEOPLE_TRIGGERS.has(t.kind));
+  // With the switch off, only the old triggers come and the prompt says what it always said.
+  const people = summaries && triggers.some((t) => PEOPLE_TRIGGERS.has(t.kind));
   const whose = triggers.some(hasUsersOwn) ? "the user's own or " : "";
   // Summaries, conversation comments and a request's summary have no thread: they are answered in one PR comment.
-  const prComment = kinds.has("summary") || kinds.has("conversation") || kinds.has("changes");
+  const prComment = summaries && (kinds.has("summary") || kinds.has("conversation") || kinds.has("changes"));
   const marker = manual ? prFixSessionMarker() : prCommentReply();
   lines.push(
     "",
@@ -843,6 +870,35 @@ export const fixPrs = defineAutomation({
           // A skipped attempt did nothing, so what it was given hasn't been handled.
           const used = ofLink.filter((f) => f.run.status !== "skipped");
           const handled = new Set(used.flatMap((f) => f.triggers));
+          const newest = used.reduce<(typeof used)[number] | null>(
+            (latest, f) => (!latest || f.run.createdAt > latest.run.createdAt ? f : latest),
+            null,
+          );
+          const out: Candidate[] = [];
+          // A run on people's comments that pushed nothing and posted nothing judged them discussion: it uses no
+          // attempt, and doesn't count towards giving up at this head either. Only with Review summaries and PR
+          // comments on. The newest attempt is judged while the PR is as it left it, and a verdict is recorded once.
+          const verdictPrefix = `${FIX_NO_ACTION_KEY_PREFIX}${link.id}:`;
+          const judged = new Set(
+            fixes.flatMap((r) =>
+              r.dedupeKey.startsWith(verdictPrefix) ? [r.dedupeKey.slice(verdictPrefix.length)] : [],
+            ),
+          );
+          if (
+            config.onSummaries &&
+            newest &&
+            !judged.has(newest.run.id) &&
+            isNoAction(newest, { snapshot, syncedAt: link.syncedAt, ownReviewIds })
+          ) {
+            judged.add(newest.run.id);
+            out.push({
+              dedupeKey: `${verdictPrefix}${newest.run.id}`,
+              summary: `note that an attempt on PR #${ref.number}'s comments changed nothing and posted nothing`,
+              taskId: task.id,
+              startsNoAgent: true,
+              data: { noAction: true, number: ref.number, runId: newest.run.id } satisfies NoActionData,
+            });
+          }
           const active = activeTriggers(snapshot, config, {
             review: currentPrReview(reviews, link.id, snapshot.headOid),
             ownReviewIds,
@@ -850,24 +906,12 @@ export const fixPrs = defineAutomation({
             sinceSummary: newestHandled(handled, "summary"),
             sinceConversation: newestHandled(handled, "conversation"),
             ownThreadReplies,
+            lastAttemptAt: newest?.run.createdAt ?? null,
           });
           const fresh = active.filter((t) => !handled.has(t.key) && (!epicBranch || t.kind === "conflict"));
-          if (fresh.length === 0) return [];
+          if (fresh.length === 0) return out;
 
-          // A run on people's comments that pushed nothing and posted nothing judged them discussion: it uses no
-          // attempt, and doesn't count towards giving up at this head either.
-          const started = used
-            .filter((f) => f.run.startedAt !== null)
-            .sort(
-              (a, b) =>
-                a.run.startedAt!.localeCompare(b.run.startedAt!) || a.run.createdAt.localeCompare(b.run.createdAt),
-            );
-          const noAction = started.filter((f, i) =>
-            isNoAction(
-              { ...f, until: started[i + 1]?.run.startedAt ?? null },
-              { snapshot, syncedAt: link.syncedAt, ownReviewIds },
-            ),
-          );
+          const noAction = config.onSummaries ? used.filter((f) => judged.has(f.run.id)) : [];
           const counting = used.filter((f) => !noAction.includes(f));
           // Each budget counts its own attempts: main moving under the PR isn't the PR's doing, and a colleague's review
           // bot shouldn't leave no attempts for Autopilot's review loop, nor the other way round.
@@ -888,7 +932,6 @@ export const fixPrs = defineAutomation({
             startsNoAgent: true,
             data: { gaveUp: true, number: ref.number, reason } satisfies GaveUpData,
           });
-          const out: Candidate[] = [];
           // A used-up budget gives up on its own triggers; the rest still go ahead. People's comments also stop once
           // too many runs on them ended in no action: raising the attempts wouldn't help, so it has a key of its own.
           const talkedOut = noAction.length >= NO_ACTION_RUNS_PER_PR;
@@ -1014,7 +1057,13 @@ export const fixPrs = defineAutomation({
       }),
     ),
   act: async (candidate, { services, runner, gitHosts, config, run }): Promise<ActionResult> => {
-    const given = candidate.data as FixData | GaveUpData | ResolveData;
+    const given = candidate.data as FixData | GaveUpData | ResolveData | NoActionData;
+    if ("noAction" in given) {
+      return {
+        status: "skipped",
+        summary: `An attempt on PR #${given.number}'s comments changed nothing and posted nothing, so it used no attempt`,
+      };
+    }
     if ("gaveUp" in given) {
       return { summary: `${fixGaveUpPrefix(given.number)} ${given.reason}`, needsAttention: true };
     }
@@ -1043,6 +1092,7 @@ export const fixPrs = defineAutomation({
       conflictOnly: data.conflictOnly,
       budget: data.budget,
       resolveThreads: config.resolveThreads,
+      summaries: config.onSummaries,
       triggers: data.triggers,
       stillOpen: data.stillOpen,
       skill: config.skill,
@@ -1252,6 +1302,7 @@ export function manualFix(
     triggers,
     stillOpen: [],
     skill: skill?.success ? skill.data : { source: "builtin" },
+    summaries: config?.onSummaries !== false,
     manual: true,
     hints: hintsFor(ref),
     ...(harness ? { harness } : {}),
